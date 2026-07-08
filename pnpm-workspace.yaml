@@ -1,0 +1,24 @@
+packages:
+  - apps/api
+  - apps/admin-web
+  - packages/shared
+
+onlyBuiltDependencies:
+  - "@nestjs/core"
+  - "@prisma/client"
+  - "@prisma/engines"
+  - "@scarf/scarf"
+  - esbuild
+  - msgpackr-extract
+  - prisma
+  - sharp
+
+allowBuilds:
+  "@nestjs/core": true
+  "@prisma/client": true
+  "@prisma/engines": true
+  "@scarf/scarf": true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  sharp: true

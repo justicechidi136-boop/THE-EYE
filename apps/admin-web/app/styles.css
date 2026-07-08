@@ -1,0 +1,30 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f3f6f8;
+  color: #172026;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.leaflet-grid {
+  background:
+    linear-gradient(90deg, rgba(23, 32, 38, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(23, 32, 38, 0.08) 1px, transparent 1px),
+    #e7edf0;
+  background-size: 30px 30px;
+}

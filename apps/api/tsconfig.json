@@ -1,0 +1,15 @@
+﻿{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2022",
+    "outDir": "./dist",
+    "strict": false,
+    "baseUrl": ".",
+    "paths": {
+      "@the-eye/shared": ["../../packages/shared/src/index.ts"]
+    },
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "skipLibCheck": true
+  }
+}

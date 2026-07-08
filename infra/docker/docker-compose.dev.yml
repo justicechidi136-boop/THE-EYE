@@ -1,0 +1,37 @@
+services:
+  api:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://the_eye:change_me_postgres@postgres-postgis:5432/the_eye?schema=public}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    volumes:
+      - ../../apps/api/src:/app/apps/api/src
+      - ../../apps/api/prisma:/app/apps/api/prisma
+      - ../../packages/shared/src:/app/packages/shared/src
+
+  admin-web:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/v1}
+      NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-ws://localhost:7880}
+    ports:
+      - "${ADMIN_WEB_PORT:-3000}:3000"
+    volumes:
+      - ../../apps/admin-web/app:/app/apps/admin-web/app
+      - ../../apps/admin-web/components:/app/apps/admin-web/components
+      - ../../apps/admin-web/lib:/app/apps/admin-web/lib
+      - ../../apps/admin-web/public:/app/apps/admin-web/public
+      - ../../packages/shared/src:/app/packages/shared/src
+
+  nginx:
+    profiles: ["proxy"]

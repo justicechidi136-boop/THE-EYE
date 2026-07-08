@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/coverage
+.git
+.agents
+.codex
+.env
+.env.*
+!.env.example
+npm-debug.log*
+Dockerfile*
+infra/docker/data

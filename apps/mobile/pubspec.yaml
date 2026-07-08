@@ -1,0 +1,23 @@
+﻿name: the_eye_mobile
+description: Citizen mobile app for THE EYE public safety platform.
+publish_to: "none"
+version: 0.1.0+1
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  firebase_core: ^3.9.0
+  firebase_messaging: ^15.1.6
+  geolocator: ^13.0.2
+  google_maps_flutter: ^2.10.0
+  http: ^1.2.2
+  url_launcher: ^6.3.1
+  livekit_client: ^2.3.6
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true

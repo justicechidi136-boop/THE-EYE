@@ -1,0 +1,18 @@
+{
+  "name": "the-eye-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/api", "apps/admin-web", "packages/shared"],
+  "scripts": {
+    "dev:api": "pnpm --filter @the-eye/api run start:dev",
+    "dev:admin": "pnpm --filter @the-eye/admin-web run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "test:backend": "pnpm --filter @the-eye/api run test",
+    "test:mobile:smoke": "node scripts/mobile-smoke-test.cjs",
+    "test:admin:smoke": "node scripts/admin-build-smoke.cjs",
+    "test:docker:smoke": "node scripts/docker-compose-smoke.cjs",
+    "verify:smoke": "pnpm run test:mobile:smoke && pnpm run test:admin:smoke && pnpm run test:docker:smoke"
+  },
+  "engines": { "node": ">=20" }
+}

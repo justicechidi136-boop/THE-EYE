@@ -1,0 +1,1394 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  Active
+  Suspended
+  Deactivated
+}
+
+enum KycStatus {
+  Pending
+  Verified
+  Rejected
+  Expired
+}
+
+enum IncidentStatus {
+  Submitted
+  Received
+  Verifying
+  Verified
+  Assigned
+  Responding
+  Resolved
+  Closed
+  FalseReport
+}
+
+enum IncidentPriority {
+  P1LifeThreatening
+  P2ActiveCrimeAccident
+  P3SuspiciousActivity
+  P4GeneralSafety
+}
+
+enum IncidentType {
+  Emergency
+  Crime
+  Accident
+  Fire
+  Medical
+  CommunitySafety
+  Kidnapping
+  Abuse
+  SuspiciousActivity
+  MissingPerson
+  StolenVehicle
+  SOS
+}
+
+enum MediaType {
+  Image
+  Video
+  Audio
+  Document
+  LiveVideoRecording
+}
+
+enum BroadcastStatus {
+  Draft
+  PendingApproval
+  Published
+  Expired
+  Cancelled
+  Rejected
+}
+
+enum BroadcastType {
+  Emergency
+  Crime
+  Accident
+  MissingPerson
+  StolenVehicle
+  GovernmentAlert
+  CommunityWarning
+}
+
+enum BroadcastDeliveryStatus {
+  Queued
+  Sent
+  Delivered
+  Failed
+  Read
+}
+
+enum CommunityLevel {
+  Country
+  State
+  LGA
+  Ward
+  Community
+  Estate
+  Street
+}
+
+enum CommunityVisibility {
+  Public
+  Private
+}
+
+enum CommunityMembershipStatus {
+  Pending
+  Approved
+  Rejected
+  Left
+  Suspended
+}
+
+enum CommunityRoleName {
+  CommunityModerator
+  EstateAdmin
+  SecurityCoordinator
+  PoliceLiaison
+  VolunteerCoordinator
+  VerifiedVolunteer
+  Resident
+}
+
+enum CommunityPostType {
+  SuspiciousActivity
+  LostChild
+  MissingPerson
+  CrimeAlert
+  AccidentAlert
+  FireAlert
+  FloodWarning
+  CommunityAnnouncement
+  SecurityMeeting
+  PatrolUpdate
+}
+
+enum CommunityVerificationStatus {
+  PendingVerification
+  Verified
+  Disputed
+  FalseInformation
+}
+
+enum CommunityReactionType {
+  Confirm
+  Helpful
+  Praying
+  Dispute
+  Seen
+}
+
+enum CommunityChannelType {
+  General
+  Emergency
+  Security
+  Volunteers
+  WomenSafety
+  Parents
+  BusinessOwners
+}
+
+enum VolunteerType {
+  Doctor
+  Nurse
+  FirstAid
+  Lawyer
+  SecurityVolunteer
+  FireVolunteer
+  SearchAndRescue
+  BloodDonor
+}
+
+enum PatrolStatus {
+  Scheduled
+  Active
+  Completed
+  Cancelled
+}
+
+enum NotificationStatus {
+  Pending
+  Sent
+  Delivered
+  Failed
+  Read
+}
+
+enum ReportStatus {
+  Draft
+  Generated
+  Reviewed
+  Published
+  Archived
+}
+
+enum EscalationStatus {
+  Pending
+  Notified
+  Acknowledged
+  Resolved
+  Cancelled
+}
+model User {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  email                 String?                @unique
+  phone                 String?                @unique
+  passwordHash          String?                @map("password_hash")
+  googleId              String?                @unique @map("google_id")
+  phoneVerifiedAt       DateTime?              @map("phone_verified_at") @db.Timestamptz(6)
+  status                UserStatus             @default(Active)
+  isTrustedReporter     Boolean                @default(false) @map("is_trusted_reporter")
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  profile               Profile?
+  kycRecords            KycRecord[]
+  emergencyContacts     EmergencyContact[]
+  reportedIncidents     Incident[]             @relation("IncidentReporter")
+  uploadedMedia         IncidentMedia[]         @relation("MediaUploader")
+  verifications         IncidentVerification[]
+  timelineEvents        IncidentTimeline[]
+  statusChanges         IncidentStatusHistory[] @relation("StatusChangedBy")
+  vehicles              Vehicle[]
+  stolenVehicleReports  StolenVehicleReport[]
+  missingPersonReports  MissingPersonReport[]
+  notifications         Notification[]
+  pushTokens            UserPushToken[]
+  broadcastDeliveries   BroadcastDelivery[]
+  groupMessages         GroupMessage[]
+  smartwatchDevices     SmartwatchDevice[]
+  sosEvents             SosEvent[]
+  auditLogs             AuditLog[]              @relation("AuditActor")
+  trustedReporter       TrustedReporter?
+  refreshTokens         RefreshToken[]
+  phoneOtps             PhoneOtp[]
+  passwordResetTokens   PasswordResetToken[]
+  mediaAccessLogs       IncidentMediaAccessLog[]
+  communityMemberships  CommunityMembership[]
+  communityPosts        CommunityPost[]
+  communityPostMedia    CommunityPostMedia[]
+  communityComments     CommunityPostComment[]
+  communityReactions    CommunityPostReaction[]
+  communityVerifications CommunityVerification[]
+  communityMessages     CommunityMessage[]
+  volunteerProfile      VolunteerProfile?
+  patrolAssignments     PatrolAssignment[]
+  patrolCheckpoints     PatrolCheckpoint[]
+  patrolReports         PatrolReport[]
+
+  @@map("users")
+}
+
+model Profile {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @map("user_id") @db.Uuid
+  firstName   String    @map("first_name")
+  lastName    String    @map("last_name")
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  gender      String?
+  address     String?
+  country     String
+  state       String
+  lga         String
+  avatarUrl   String?   @map("avatar_url")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([country, state, lga])
+  @@map("profiles")
+}
+
+model KycRecord {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  documentType   String    @map("document_type")
+  documentNumber String?   @map("document_number")
+  documentHash   String    @map("document_hash")
+  status         KycStatus @default(Pending)
+  reviewedBy     String?   @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  rejectionReason String?  @map("rejection_reason")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("kyc_records")
+}
+
+model EmergencyContact {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  name         String
+  phone        String
+  relationship String
+  priority     Int      @default(1)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("emergency_contacts")
+}
+
+model Jurisdiction {
+  id              String          @id @default(uuid()) @db.Uuid
+  country         String
+  state           String
+  lga             String
+  name            String
+  boundary        Unsupported("geography(MultiPolygon,4326)")?
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  agencies        Agency[]
+  adminUsers      AdminUser[]
+  policeStations  PoliceStation[]
+  broadcasts      Broadcast[]
+  incidents       Incident[]
+  neighborhoodGroups NeighborhoodGroup[]
+  communities     Community[]
+
+  @@unique([country, state, lga])
+  @@index([country, state, lga])
+  @@map("jurisdictions")
+}
+
+model Agency {
+  id             String          @id @default(uuid()) @db.Uuid
+  jurisdictionId String          @map("jurisdiction_id") @db.Uuid
+  name           String
+  type           String
+  phone          String?
+  email          String?
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  jurisdiction   Jurisdiction    @relation(fields: [jurisdictionId], references: [id])
+  adminUsers     AdminUser[]
+  incidents      Incident[]
+  policeStations PoliceStation[]
+
+  @@index([jurisdictionId, type])
+  @@map("agencies")
+}
+
+model AdminRole {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String      @unique
+  permissions String[]    @default([])
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  adminUsers  AdminUser[]
+
+  @@map("admin_roles")
+}
+
+model AdminUser {
+  id             String       @id @default(uuid()) @db.Uuid
+  roleId         String       @map("role_id") @db.Uuid
+  agencyId       String?      @map("agency_id") @db.Uuid
+  jurisdictionId String       @map("jurisdiction_id") @db.Uuid
+  email          String       @unique
+  passwordHash   String       @map("password_hash")
+  displayName    String       @map("display_name")
+  country        String
+  state          String
+  lga            String
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  role           AdminRole    @relation(fields: [roleId], references: [id])
+  agency         Agency?      @relation(fields: [agencyId], references: [id])
+  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id])
+  assignedIncidents Incident[] @relation("IncidentAssignedAdmin")
+  broadcastsCreated Broadcast[] @relation("BroadcastCreator")
+  broadcastsApproved Broadcast[] @relation("BroadcastApprover")
+  reports        Report[]
+  auditLogs      AuditLog[]    @relation("AuditAdminActor")
+  refreshTokens RefreshToken[]
+
+  @@index([country, state, lga])
+  @@index([jurisdictionId])
+  @@map("admin_users")
+}
+
+model Incident {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  reporterId          String?                 @map("reporter_id") @db.Uuid
+  jurisdictionId      String                  @map("jurisdiction_id") @db.Uuid
+  assignedAgencyId    String?                 @map("assigned_agency_id") @db.Uuid
+  assignedAdminId     String?                 @map("assigned_admin_id") @db.Uuid
+  type                IncidentType
+  status              IncidentStatus          @default(Submitted)
+  priority            IncidentPriority        @default(P4GeneralSafety)
+  title               String
+  description         String?
+  address             String?
+  country             String
+  state               String
+  lga                 String
+  latitude            Decimal                 @db.Decimal(9, 6)
+  longitude           Decimal                 @db.Decimal(9, 6)
+  gpsLocation         Unsupported("geography(Point,4326)") @map("gps_location")
+  manualLatitude      Decimal?                @map("manual_latitude") @db.Decimal(9, 6)
+  manualLongitude     Decimal?                @map("manual_longitude") @db.Decimal(9, 6)
+  manualGpsLocation   Unsupported("geography(Point,4326)")? @map("manual_gps_location")
+  manualAddress       String?                 @map("manual_address")
+  manualLocationAdjusted Boolean              @default(false) @map("manual_location_adjusted")
+  isAnonymous         Boolean                 @default(false) @map("is_anonymous")
+  notifyEmergencyContacts Boolean             @default(false) @map("notify_emergency_contacts")
+  submittedAt         DateTime                @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  metadata            Json                    @default("{}")
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  resolvedAt          DateTime?               @map("resolved_at") @db.Timestamptz(6)
+  closedAt            DateTime?               @map("closed_at") @db.Timestamptz(6)
+  reporter            User?                   @relation("IncidentReporter", fields: [reporterId], references: [id])
+  jurisdiction        Jurisdiction            @relation(fields: [jurisdictionId], references: [id])
+  assignedAgency      Agency?                 @relation(fields: [assignedAgencyId], references: [id])
+  assignedAdmin       AdminUser?              @relation("IncidentAssignedAdmin", fields: [assignedAdminId], references: [id])
+  media               IncidentMedia[]
+  verifications       IncidentVerification[]
+  timeline            IncidentTimeline[]
+  statusHistory       IncidentStatusHistory[]
+  notifications       Notification[]
+  liveVideoSessions   LiveVideoSession[]
+  liveVideoLocationUpdates LiveVideoLocationUpdate[]
+  sosEvents           SosEvent[]
+  reports             Report[]
+  broadcasts          Broadcast[]
+  communityPosts      CommunityPost[]
+
+  @@index([country, state, lga])
+  @@index([status, priority, createdAt])
+  @@index([jurisdictionId, status])
+  @@map("incidents")
+}
+
+model IncidentMedia {
+  id           String       @id @default(uuid()) @db.Uuid
+  incidentId   String       @map("incident_id") @db.Uuid
+  uploaderId   String       @map("uploader_id") @db.Uuid
+  mediaType    MediaType    @map("media_type")
+  bucket       String
+  objectKey    String       @map("object_key")
+  contentType  String       @map("content_type")
+  sizeBytes    BigInt?      @map("size_bytes")
+  fileHash     String       @map("file_hash")
+  capturedAt   DateTime     @map("captured_at") @db.Timestamptz(6)
+  uploadedAt   DateTime     @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  latitude     Decimal      @db.Decimal(9, 6)
+  longitude    Decimal      @db.Decimal(9, 6)
+  gpsLocation  Unsupported("geography(Point,4326)") @map("gps_location")
+  metadata     Json         @default("{}")
+  incident     Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  uploader     User         @relation("MediaUploader", fields: [uploaderId], references: [id])
+  accessLogs   IncidentMediaAccessLog[]
+
+  @@unique([fileHash])
+  @@index([incidentId])
+  @@index([uploaderId])
+  @@map("incident_media")
+}
+
+model IncidentMediaAccessLog {
+  id          String        @id @default(uuid()) @db.Uuid
+  mediaId     String        @map("media_id") @db.Uuid
+  accessorId  String?       @map("accessor_id") @db.Uuid
+  adminUserId String?       @map("admin_user_id") @db.Uuid
+  action      String
+  reason      String?
+  ipAddress   String?       @map("ip_address") @db.Inet
+  userAgent   String?       @map("user_agent")
+  accessedAt  DateTime      @default(now()) @map("accessed_at") @db.Timestamptz(6)
+  media       IncidentMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  accessor    User?         @relation(fields: [accessorId], references: [id])
+
+  @@index([mediaId, accessedAt])
+  @@index([accessorId])
+  @@map("incident_media_access_logs")
+}
+
+model IncidentVerification {
+  id           String    @id @default(uuid()) @db.Uuid
+  incidentId   String    @map("incident_id") @db.Uuid
+  verifierId   String?   @map("verifier_id") @db.Uuid
+  method       String
+  result       String
+  confidence   Decimal?  @db.Decimal(5, 2)
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  incident     Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  verifier     User?     @relation(fields: [verifierId], references: [id])
+
+  @@index([incidentId, result])
+  @@map("incident_verifications")
+}
+
+model IncidentTimeline {
+  id          String   @id @default(uuid()) @db.Uuid
+  incidentId  String   @map("incident_id") @db.Uuid
+  actorId     String?  @map("actor_id") @db.Uuid
+  actorType   String   @map("actor_type")
+  eventType   String   @map("event_type")
+  message     String
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  actor       User?    @relation(fields: [actorId], references: [id])
+
+  @@index([incidentId, createdAt])
+  @@map("incident_timeline")
+}
+
+model IncidentStatusHistory {
+  id          String          @id @default(uuid()) @db.Uuid
+  incidentId  String          @map("incident_id") @db.Uuid
+  fromStatus  IncidentStatus? @map("from_status")
+  toStatus    IncidentStatus  @map("to_status")
+  changedById String?         @map("changed_by_id") @db.Uuid
+  note        String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  incident    Incident        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  changedBy   User?           @relation("StatusChangedBy", fields: [changedById], references: [id])
+
+  @@index([incidentId, createdAt])
+  @@map("incident_status_history")
+}
+
+model Broadcast {
+  id             String          @id @default(uuid()) @db.Uuid
+  jurisdictionId String?         @map("jurisdiction_id") @db.Uuid
+  incidentId      String?         @map("incident_id") @db.Uuid
+  creatorAdminId String          @map("creator_admin_id") @db.Uuid
+  approverAdminId String?        @map("approver_admin_id") @db.Uuid
+  type           BroadcastType
+  title          String
+  body           String
+  status         BroadcastStatus @default(Draft)
+  priority       IncidentPriority @default(P4GeneralSafety)
+  requiresApproval Boolean       @default(true) @map("requires_approval")
+  autoPublished    Boolean       @default(false) @map("auto_published")
+  targetRadiusMeters Int?        @map("target_radius_meters")
+  targetArea     Unsupported("geography(MultiPolygon,4326)")? @map("target_area")
+  targetCenter   Unsupported("geography(Point,4326)")? @map("target_center")
+  rejectedReason String?         @map("rejected_reason")
+  publishedAt    DateTime?       @map("published_at") @db.Timestamptz(6)
+  expiresAt      DateTime?       @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  jurisdiction   Jurisdiction?   @relation(fields: [jurisdictionId], references: [id])
+  incident        Incident?       @relation(fields: [incidentId], references: [id])
+  creator        AdminUser       @relation("BroadcastCreator", fields: [creatorAdminId], references: [id])
+  approver       AdminUser?      @relation("BroadcastApprover", fields: [approverAdminId], references: [id])
+  notifications  Notification[]
+  deliveries     BroadcastDelivery[]
+  communityPosts CommunityPost[]
+
+  @@index([status, publishedAt])
+  @@index([type, status])
+  @@index([jurisdictionId])
+  @@index([incidentId])
+  @@map("broadcasts")
+}
+
+model BroadcastDelivery {
+  id             String                  @id @default(uuid()) @db.Uuid
+  broadcastId    String                  @map("broadcast_id") @db.Uuid
+  userId         String                  @map("user_id") @db.Uuid
+  notificationId String?                 @map("notification_id") @db.Uuid
+  distanceMeters Decimal?                @map("distance_meters") @db.Decimal(10, 2)
+  status         BroadcastDeliveryStatus @default(Queued)
+  channel        String                  @default("push")
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt         DateTime?               @map("sent_at") @db.Timestamptz(6)
+  readAt         DateTime?               @map("read_at") @db.Timestamptz(6)
+  broadcast      Broadcast               @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification?           @relation(fields: [notificationId], references: [id])
+
+  @@unique([broadcastId, userId])
+  @@index([userId, status, createdAt])
+  @@index([broadcastId, status])
+  @@map("broadcast_deliveries")
+}
+
+model Vehicle {
+  id            String                @id @default(uuid()) @db.Uuid
+  ownerId       String?               @map("owner_id") @db.Uuid
+  plateNumber   String                @unique @map("plate_number")
+  vin           String?               @unique
+  make          String
+  model         String
+  color         String?
+  year          Int?
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  owner         User?                 @relation(fields: [ownerId], references: [id])
+  stolenReports StolenVehicleReport[]
+
+  @@index([ownerId])
+  @@map("vehicles")
+}
+
+model StolenVehicleReport {
+  id           String       @id @default(uuid()) @db.Uuid
+  vehicleId    String       @map("vehicle_id") @db.Uuid
+  reporterId   String?      @map("reporter_id") @db.Uuid
+  incidentId   String?      @map("incident_id") @db.Uuid
+  status       String       @default("Open")
+  lastSeenAt   DateTime?    @map("last_seen_at") @db.Timestamptz(6)
+  lastSeenArea String?      @map("last_seen_area")
+  latitude     Decimal?     @db.Decimal(9, 6)
+  longitude    Decimal?     @db.Decimal(9, 6)
+  gpsLocation  Unsupported("geography(Point,4326)")? @map("gps_location")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  vehicle      Vehicle      @relation(fields: [vehicleId], references: [id])
+  reporter     User?        @relation(fields: [reporterId], references: [id])
+
+  @@index([status, createdAt])
+  @@map("stolen_vehicle_reports")
+}
+
+model MissingPersonReport {
+  id             String   @id @default(uuid()) @db.Uuid
+  reporterId     String?  @map("reporter_id") @db.Uuid
+  incidentId     String?  @map("incident_id") @db.Uuid
+  fullName       String   @map("full_name")
+  age            Int?
+  gender         String?
+  description    String
+  lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  lastSeenAddress String? @map("last_seen_address")
+  latitude       Decimal? @db.Decimal(9, 6)
+  longitude      Decimal? @db.Decimal(9, 6)
+  gpsLocation    Unsupported("geography(Point,4326)")? @map("gps_location")
+  status         String   @default("Open")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  reporter       User?    @relation(fields: [reporterId], references: [id])
+
+  @@index([status, createdAt])
+  @@map("missing_person_reports")
+}
+
+model PoliceStation {
+  id             String       @id @default(uuid()) @db.Uuid
+  agencyId       String?      @map("agency_id") @db.Uuid
+  jurisdictionId String       @map("jurisdiction_id") @db.Uuid
+  name           String
+  phone          String?
+  address        String
+  agencyType     String       @default("police") @map("agency_type")
+  latitude       Decimal      @db.Decimal(9, 6)
+  longitude      Decimal      @db.Decimal(9, 6)
+  gpsLocation    Unsupported("geography(Point,4326)") @map("gps_location")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  agency         Agency?      @relation(fields: [agencyId], references: [id])
+  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id])
+
+  @@index([jurisdictionId])
+  @@index([agencyType])
+  @@map("police_stations")
+}
+
+model Notification {
+  id          String             @id @default(uuid()) @db.Uuid
+  userId      String?            @map("user_id") @db.Uuid
+  adminUserId String?            @map("admin_user_id") @db.Uuid
+  incidentId  String?            @map("incident_id") @db.Uuid
+  broadcastId String?            @map("broadcast_id") @db.Uuid
+  type        String             @default("IncidentStatusUpdate")
+  priority    String             @default("Normal")
+  channel     String
+  title       String
+  body        String
+  status      NotificationStatus @default(Pending)
+  provider    String?
+  providerMessageId String?      @map("provider_message_id")
+  error       String?
+  targetLatitude Decimal?        @map("target_latitude") @db.Decimal(9, 6)
+  targetLongitude Decimal?       @map("target_longitude") @db.Decimal(9, 6)
+  targetLocation Unsupported("geography(Point,4326)")? @map("target_location")
+  targetRadiusMeters Int?        @map("target_radius_meters")
+  metadata    Json               @default("{}")
+  sentAt      DateTime?          @map("sent_at") @db.Timestamptz(6)
+  readAt      DateTime?          @map("read_at") @db.Timestamptz(6)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  user        User?              @relation(fields: [userId], references: [id])
+  incident    Incident?          @relation(fields: [incidentId], references: [id])
+  broadcast   Broadcast?         @relation(fields: [broadcastId], references: [id])
+  broadcastDeliveries BroadcastDelivery[]
+  communityId String? @map("community_id") @db.Uuid
+  community   Community? @relation(fields: [communityId], references: [id])
+  deliveryLogs NotificationDeliveryLog[]
+
+  @@index([userId, status, createdAt])
+  @@index([adminUserId, status, createdAt])
+  @@index([incidentId])
+  @@index([type, priority, createdAt])
+  @@index([communityId, createdAt])
+  @@map("notifications")
+}
+
+model NotificationDeliveryLog {
+  id                String    @id @default(uuid()) @db.Uuid
+  notificationId    String    @map("notification_id") @db.Uuid
+  channel           String
+  provider          String
+  status            String
+  attempt           Int       @default(1)
+  providerMessageId String?   @map("provider_message_id")
+  error             String?
+  requestPayload    Json?     @map("request_payload")
+  responsePayload   Json?     @map("response_payload")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz(6)
+  deliveredAt       DateTime? @map("delivered_at") @db.Timestamptz(6)
+  notification      Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId, createdAt])
+  @@index([channel, status, createdAt])
+  @@map("notification_delivery_logs")
+}
+
+model UserPushToken {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  token       String   @unique
+  platform    String
+  deviceId    String?  @map("device_id")
+  provider    String   @default("firebase-cloud-messaging")
+  isActive    Boolean  @default(true) @map("is_active")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([platform])
+  @@map("user_push_tokens")
+}
+
+model NeighborhoodGroup {
+  id             String       @id @default(uuid()) @db.Uuid
+  jurisdictionId String       @map("jurisdiction_id") @db.Uuid
+  name           String
+  description    String?
+  createdById    String?      @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id])
+  messages       GroupMessage[]
+
+  @@index([jurisdictionId])
+  @@map("neighborhood_groups")
+}
+
+model GroupMessage {
+  id        String             @id @default(uuid()) @db.Uuid
+  groupId   String             @map("group_id") @db.Uuid
+  senderId  String             @map("sender_id") @db.Uuid
+  message   String
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  group     NeighborhoodGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender    User               @relation(fields: [senderId], references: [id])
+
+  @@index([groupId, createdAt])
+  @@map("group_messages")
+}
+
+model Community {
+  id             String              @id @default(uuid()) @db.Uuid
+  parentId       String?             @map("parent_id") @db.Uuid
+  jurisdictionId String?             @map("jurisdiction_id") @db.Uuid
+  name           String
+  level          CommunityLevel
+  visibility     CommunityVisibility @default(Public)
+  country        String
+  state          String?
+  lga            String?
+  ward           String?
+  estate         String?
+  street         String?
+  description    String?
+  boundary       Unsupported("geography(MultiPolygon,4326)")?
+  center         Unsupported("geography(Point,4326)")?
+  createdById    String?             @map("created_by_id") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  parent         Community?          @relation("CommunityTree", fields: [parentId], references: [id])
+  children       Community[]         @relation("CommunityTree")
+  jurisdiction   Jurisdiction?       @relation(fields: [jurisdictionId], references: [id])
+  roles          CommunityRole[]
+  memberships    CommunityMembership[]
+  posts          CommunityPost[]
+  channels       CommunityChannel[]
+  volunteerProfiles VolunteerProfile[]
+  patrolSchedules PatrolSchedule[]
+  notifications  Notification[]
+
+  @@index([parentId])
+  @@index([country, state, lga, ward])
+  @@index([level, visibility])
+  @@map("communities")
+}
+
+model CommunityRole {
+  id          String            @id @default(uuid()) @db.Uuid
+  communityId String            @map("community_id") @db.Uuid
+  name        CommunityRoleName
+  permissions String[]          @default([])
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  community   Community         @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  memberships CommunityMembership[]
+
+  @@unique([communityId, name])
+  @@index([name])
+  @@map("community_roles")
+}
+
+model CommunityMembership {
+  id           String                    @id @default(uuid()) @db.Uuid
+  communityId  String                    @map("community_id") @db.Uuid
+  userId       String                    @map("user_id") @db.Uuid
+  roleId       String?                   @map("role_id") @db.Uuid
+  status       CommunityMembershipStatus @default(Pending)
+  requestedAt  DateTime                  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  approvedById String?                   @map("approved_by_id") @db.Uuid
+  approvedAt   DateTime?                 @map("approved_at") @db.Timestamptz(6)
+  leftAt       DateTime?                 @map("left_at") @db.Timestamptz(6)
+  community    Community                 @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user         User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         CommunityRole?            @relation(fields: [roleId], references: [id])
+
+  @@unique([communityId, userId])
+  @@index([userId, status])
+  @@index([communityId, status])
+  @@map("community_memberships")
+}
+
+model CommunityPost {
+  id              String                      @id @default(uuid()) @db.Uuid
+  communityId     String                      @map("community_id") @db.Uuid
+  authorId        String                      @map("author_id") @db.Uuid
+  incidentId      String?                     @map("incident_id") @db.Uuid
+  broadcastId     String?                     @map("broadcast_id") @db.Uuid
+  type            CommunityPostType
+  title           String
+  body            String
+  verificationStatus CommunityVerificationStatus @default(PendingVerification) @map("verification_status")
+  confidenceScore Decimal                     @default(0.00) @map("confidence_score") @db.Decimal(5, 2)
+  latitude        Decimal?                    @db.Decimal(9, 6)
+  longitude       Decimal?                    @db.Decimal(9, 6)
+  gpsLocation     Unsupported("geography(Point,4326)")? @map("gps_location")
+  isEscalated     Boolean                     @default(false) @map("is_escalated")
+  createdAt       DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  community       Community                   @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  author          User                        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  incident        Incident?                   @relation(fields: [incidentId], references: [id])
+  broadcast       Broadcast?                  @relation(fields: [broadcastId], references: [id])
+  media           CommunityPostMedia[]
+  comments        CommunityPostComment[]
+  reactions       CommunityPostReaction[]
+  verifications   CommunityVerification[]
+
+  @@index([communityId, createdAt])
+  @@index([verificationStatus, confidenceScore])
+  @@index([incidentId])
+  @@index([broadcastId])
+  @@map("community_posts")
+}
+
+model CommunityPostMedia {
+  id          String        @id @default(uuid()) @db.Uuid
+  postId      String        @map("post_id") @db.Uuid
+  uploaderId  String        @map("uploader_id") @db.Uuid
+  mediaType   MediaType     @map("media_type")
+  bucket      String
+  objectKey   String        @map("object_key")
+  contentType String        @map("content_type")
+  fileHash    String        @map("file_hash")
+  capturedAt  DateTime?     @map("captured_at") @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  post        CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  uploader    User          @relation(fields: [uploaderId], references: [id])
+
+  @@unique([fileHash])
+  @@index([postId])
+  @@map("community_post_media")
+}
+
+model CommunityPostComment {
+  id        String        @id @default(uuid()) @db.Uuid
+  postId    String        @map("post_id") @db.Uuid
+  authorId  String        @map("author_id") @db.Uuid
+  body      String
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User          @relation(fields: [authorId], references: [id])
+
+  @@index([postId, createdAt])
+  @@map("community_post_comments")
+}
+
+model CommunityPostReaction {
+  id        String                @id @default(uuid()) @db.Uuid
+  postId    String                @map("post_id") @db.Uuid
+  userId    String                @map("user_id") @db.Uuid
+  type      CommunityReactionType
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  post      CommunityPost         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId, type])
+  @@index([postId, type])
+  @@map("community_post_reactions")
+}
+
+model CommunityVerification {
+  id          String                      @id @default(uuid()) @db.Uuid
+  postId      String                      @map("post_id") @db.Uuid
+  verifierId  String?                     @map("verifier_id") @db.Uuid
+  status      CommunityVerificationStatus
+  confidence  Decimal                     @db.Decimal(5, 2)
+  signals     Json                        @default("{}")
+  note        String?
+  createdAt   DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  post        CommunityPost               @relation(fields: [postId], references: [id], onDelete: Cascade)
+  verifier    User?                       @relation(fields: [verifierId], references: [id])
+
+  @@index([postId, createdAt])
+  @@index([status, confidence])
+  @@map("community_verifications")
+}
+
+model CommunityChannel {
+  id          String               @id @default(uuid()) @db.Uuid
+  communityId String               @map("community_id") @db.Uuid
+  type        CommunityChannelType
+  name        String
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  community   Community            @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  messages    CommunityMessage[]
+
+  @@unique([communityId, type])
+  @@map("community_channels")
+}
+
+model CommunityMessage {
+  id        String           @id @default(uuid()) @db.Uuid
+  channelId String           @map("channel_id") @db.Uuid
+  senderId  String           @map("sender_id") @db.Uuid
+  body      String
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  channel   CommunityChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender    User             @relation(fields: [senderId], references: [id])
+
+  @@index([channelId, createdAt])
+  @@map("community_messages")
+}
+
+model VolunteerProfile {
+  id          String          @id @default(uuid()) @db.Uuid
+  userId      String          @unique @map("user_id") @db.Uuid
+  communityId String?         @map("community_id") @db.Uuid
+  types       VolunteerType[] @default([])
+  verified    Boolean         @default(false)
+  available   Boolean         @default(true)
+  latitude    Decimal?        @db.Decimal(9, 6)
+  longitude   Decimal?        @db.Decimal(9, 6)
+  gpsLocation Unsupported("geography(Point,4326)")? @map("gps_location")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community   Community?      @relation(fields: [communityId], references: [id])
+  assignments PatrolAssignment[]
+
+  @@index([communityId, verified, available])
+  @@map("volunteer_profiles")
+}
+
+model PatrolSchedule {
+  id          String       @id @default(uuid()) @db.Uuid
+  communityId String       @map("community_id") @db.Uuid
+  title       String
+  status      PatrolStatus @default(Scheduled)
+  startsAt    DateTime     @map("starts_at") @db.Timestamptz(6)
+  endsAt      DateTime     @map("ends_at") @db.Timestamptz(6)
+  route       Unsupported("geography(LineString,4326)")?
+  createdById String?      @map("created_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  community   Community    @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  assignments PatrolAssignment[]
+  checkpoints PatrolCheckpoint[]
+  reports     PatrolReport[]
+
+  @@index([communityId, status, startsAt])
+  @@map("patrol_schedules")
+}
+
+model PatrolAssignment {
+  id          String           @id @default(uuid()) @db.Uuid
+  scheduleId  String           @map("schedule_id") @db.Uuid
+  volunteerId String           @map("volunteer_id") @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  assignedAt  DateTime         @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  schedule    PatrolSchedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  volunteer   VolunteerProfile @relation(fields: [volunteerId], references: [id])
+  user        User             @relation(fields: [userId], references: [id])
+
+  @@unique([scheduleId, userId])
+  @@map("patrol_assignments")
+}
+
+model PatrolCheckpoint {
+  id          String         @id @default(uuid()) @db.Uuid
+  scheduleId  String         @map("schedule_id") @db.Uuid
+  submittedById String       @map("submitted_by_id") @db.Uuid
+  label       String
+  latitude    Decimal        @db.Decimal(9, 6)
+  longitude   Decimal        @db.Decimal(9, 6)
+  gpsLocation Unsupported("geography(Point,4326)") @map("gps_location")
+  checkedAt   DateTime       @default(now()) @map("checked_at") @db.Timestamptz(6)
+  schedule    PatrolSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  submittedBy User           @relation(fields: [submittedById], references: [id])
+
+  @@index([scheduleId, checkedAt])
+  @@map("patrol_checkpoints")
+}
+
+model PatrolReport {
+  id          String         @id @default(uuid()) @db.Uuid
+  scheduleId  String         @map("schedule_id") @db.Uuid
+  submittedById String       @map("submitted_by_id") @db.Uuid
+  summary     String
+  issuesFound Boolean        @default(false) @map("issues_found")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  schedule    PatrolSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  submittedBy User           @relation(fields: [submittedById], references: [id])
+
+  @@index([scheduleId, createdAt])
+  @@map("patrol_reports")
+}
+
+model LiveVideoSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  incidentId  String    @map("incident_id") @db.Uuid
+  roomName    String    @unique @map("room_name")
+  livekitRoomId String? @map("livekit_room_id")
+  createdById String?   @map("created_by_id") @db.Uuid
+  status      String    @default("Active")
+  lowBandwidthMode Boolean @default(false) @map("low_bandwidth_mode")
+  participantIdentity String? @map("participant_identity")
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
+  endedAt     DateTime? @map("ended_at") @db.Timestamptz(6)
+  recordingMediaId String? @map("recording_media_id") @db.Uuid
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  incident    Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  locationUpdates LiveVideoLocationUpdate[]
+
+  @@index([incidentId])
+  @@index([status, startedAt])
+  @@map("live_video_sessions")
+}
+
+model LiveVideoLocationUpdate {
+  id                 String           @id @default(uuid()) @db.Uuid
+  liveVideoSessionId String           @map("live_video_session_id") @db.Uuid
+  incidentId         String           @map("incident_id") @db.Uuid
+  latitude           Decimal          @db.Decimal(9, 6)
+  longitude          Decimal          @db.Decimal(9, 6)
+  accuracy           Decimal?         @db.Decimal(8, 2)
+  speed              Decimal?         @db.Decimal(8, 2)
+  heading            Decimal?         @db.Decimal(8, 2)
+  altitude           Decimal?         @db.Decimal(8, 2)
+  gpsLocation        Unsupported("geography(Point,4326)") @map("gps_location")
+  capturedAt         DateTime         @map("captured_at") @db.Timestamptz(6)
+  receivedAt         DateTime         @default(now()) @map("received_at") @db.Timestamptz(6)
+  sourceDeviceId     String?          @map("source_device_id")
+  liveVideoSession   LiveVideoSession @relation(fields: [liveVideoSessionId], references: [id], onDelete: Cascade)
+  incident           Incident         @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([liveVideoSessionId, capturedAt])
+  @@index([incidentId, capturedAt])
+  @@map("live_video_location_updates")
+}
+
+model SmartwatchDevice {
+  id                    String   @id @default(uuid()) @db.Uuid
+  userId                String   @map("user_id") @db.Uuid
+  deviceId              String   @unique @map("device_id")
+  serialNumber          String?  @unique @map("serial_number")
+  imei                  String?  @unique
+  eid                   String?  @unique
+  simNumber             String?  @map("sim_number")
+  provider              String
+  displayName           String?  @map("display_name")
+  model                 String?
+  deviceSecretHash      String?  @map("device_secret_hash")
+  deviceCertificate     String?  @map("device_certificate")
+  publicKey             String?  @map("public_key")
+  connectivityMode      String   @default("PairedPhone") @map("connectivity_mode")
+  preferredMode         String   @default("PairedPhone") @map("preferred_mode")
+  failoverEnabled       Boolean  @default(true) @map("failover_enabled")
+  pairingMethod         String   @default("PairingCode") @map("pairing_method")
+  pairingCodeHash       String?  @map("pairing_code_hash")
+  pairedPhoneDeviceId   String?  @map("paired_phone_device_id")
+  cellularProvider      String?  @map("cellular_provider")
+  phoneNumber           String?  @map("phone_number")
+  batteryLevel          Int?     @map("battery_level")
+  signalStrength        Int?     @map("signal_strength")
+  firmwareVersion       String?  @map("firmware_version")
+  firmwareSignatureStatus String @default("Unknown") @map("firmware_signature_status")
+  lastLatitude          Decimal? @map("last_latitude") @db.Decimal(9, 6)
+  lastLongitude         Decimal? @map("last_longitude") @db.Decimal(9, 6)
+  lastGpsLocation       Unsupported("geography(Point,4326)")? @map("last_gps_location")
+  lastGpsAccuracy       Decimal? @map("last_gps_accuracy") @db.Decimal(7, 2)
+  lastGpsAt             DateTime? @map("last_gps_at") @db.Timestamptz(6)
+  lastSeenAt            DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  criticalAlertsEnabled Boolean  @default(true) @map("critical_alerts_enabled")
+  isActive              Boolean  @default(true) @map("is_active")
+  isOnline              Boolean  @default(false) @map("is_online")
+  remoteDisabledAt      DateTime? @map("remote_disabled_at") @db.Timestamptz(6)
+  remoteWipedAt         DateTime? @map("remote_wiped_at") @db.Timestamptz(6)
+  metadata              Json     @default("{}")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sosEvents             SosEvent[]
+  gpsTracks             SmartwatchGpsTrack[]
+  offlineEvents         SmartwatchOfflineEvent[]
+  firmwareUpdates       SmartwatchFirmwareUpdate[]
+
+  @@index([userId])
+  @@index([connectivityMode, isActive])
+  @@index([isOnline, lastSeenAt])
+  @@index([serialNumber])
+  @@index([imei])
+  @@map("smartwatch_devices")
+}
+
+model SosEvent {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  deviceId         String?   @map("device_id") @db.Uuid
+  incidentId       String?   @map("incident_id") @db.Uuid
+  status           String    @default("Active")
+  sourceMode       String    @default("PairedPhone") @map("source_mode")
+  emergencyMode    String    @default("NormalSOS") @map("emergency_mode")
+  batteryLevel     Int?      @map("battery_level")
+  signalStrength   Int?      @map("signal_strength")
+  latitude         Decimal   @db.Decimal(9, 6)
+  longitude        Decimal   @db.Decimal(9, 6)
+  accuracy         Decimal?  @db.Decimal(7, 2)
+  speed            Decimal?  @db.Decimal(7, 2)
+  heading          Decimal?  @db.Decimal(6, 2)
+  altitude         Decimal?  @db.Decimal(8, 2)
+  gpsLocation      Unsupported("geography(Point,4326)") @map("gps_location")
+  sourceDeviceId   String?   @map("source_device_id")
+  triggeredAt      DateTime  @default(now()) @map("triggered_at") @db.Timestamptz(6)
+  receivedAt       DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  familyNotifiedAt DateTime? @map("family_notified_at") @db.Timestamptz(6)
+  resolvedAt       DateTime? @map("resolved_at") @db.Timestamptz(6)
+  metadata         Json      @default("{}")
+  user             User      @relation(fields: [userId], references: [id])
+  device           SmartwatchDevice? @relation(fields: [deviceId], references: [id])
+  incident         Incident? @relation(fields: [incidentId], references: [id])
+
+  @@index([userId, triggeredAt])
+  @@index([incidentId])
+  @@index([status, triggeredAt])
+  @@map("sos_events")
+}
+
+model SmartwatchGpsTrack {
+  id          String   @id @default(uuid()) @db.Uuid
+  deviceId    String   @map("device_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  sosEventId  String?  @map("sos_event_id") @db.Uuid
+  latitude    Decimal  @db.Decimal(9, 6)
+  longitude   Decimal  @db.Decimal(9, 6)
+  accuracy    Decimal? @db.Decimal(7, 2)
+  speed       Decimal? @db.Decimal(7, 2)
+  heading     Decimal? @db.Decimal(6, 2)
+  altitude    Decimal? @db.Decimal(8, 2)
+  gpsLocation Unsupported("geography(Point,4326)") @map("gps_location")
+  capturedAt  DateTime @map("captured_at") @db.Timestamptz(6)
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  sourceMode  String   @map("source_mode")
+  metadata    Json     @default("{}")
+  device      SmartwatchDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, capturedAt])
+  @@index([userId, capturedAt])
+  @@index([sosEventId])
+  @@map("smartwatch_gps_tracks")
+}
+
+model SmartwatchOfflineEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  deviceId    String   @map("device_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  eventType   String   @map("event_type")
+  payload     Json
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+  uploadedAt  DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(6)
+  status      String   @default("Pending")
+  device      SmartwatchDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, occurredAt])
+  @@index([status, uploadedAt])
+  @@map("smartwatch_offline_events")
+}
+
+model SmartwatchFirmwareRelease {
+  id          String   @id @default(uuid()) @db.Uuid
+  version     String   @unique
+  title       String
+  releaseNotes String? @map("release_notes")
+  downloadUrl String   @map("download_url")
+  fileHash    String   @map("file_hash")
+  signature   String
+  status      String   @default("Draft")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updates     SmartwatchFirmwareUpdate[]
+
+  @@index([status, publishedAt])
+  @@map("smartwatch_firmware_releases")
+}
+
+model SmartwatchFirmwareUpdate {
+  id          String   @id @default(uuid()) @db.Uuid
+  deviceId    String   @map("device_id") @db.Uuid
+  releaseId   String   @map("release_id") @db.Uuid
+  status      String   @default("Scheduled")
+  scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  rollbackOfId String? @map("rollback_of_id") @db.Uuid
+  metadata    Json     @default("{}")
+  device      SmartwatchDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  release     SmartwatchFirmwareRelease @relation(fields: [releaseId], references: [id])
+
+  @@index([deviceId, status])
+  @@index([releaseId, status])
+  @@map("smartwatch_firmware_updates")
+}
+
+model AuditLog {
+  id           String    @id @default(uuid()) @db.Uuid
+  sequence     BigInt?   @unique
+  actorUserId  String?   @map("actor_user_id") @db.Uuid
+  actorAdminId String?   @map("actor_admin_id") @db.Uuid
+  actorType    String    @map("actor_type")
+  action       String
+  entityType   String    @map("entity_type")
+  entityId     String?   @map("entity_id") @db.Uuid
+  reason       String?
+  ipAddress    String?   @map("ip_address") @db.Inet
+  userAgent    String?   @map("user_agent")
+  beforeState  Json?     @map("before_state")
+  afterState   Json?     @map("after_state")
+  metadata     Json      @default("{}")
+  previousHash String?    @map("previous_hash")
+  eventHash    String?    @unique @map("event_hash")
+  chainVersion Int        @default(1) @map("chain_version")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  actorUser    User?     @relation("AuditActor", fields: [actorUserId], references: [id])
+  actorAdmin   AdminUser? @relation("AuditAdminActor", fields: [actorAdminId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([actorAdminId, createdAt])
+  @@index([sequence])
+  @@index([eventHash])
+  @@map("audit_logs")
+}
+
+model Report {
+  id             String       @id @default(uuid()) @db.Uuid
+  incidentId     String?      @map("incident_id") @db.Uuid
+  generatedById  String       @map("generated_by_id") @db.Uuid
+  title          String
+  reportType     String       @map("report_type")
+  status         ReportStatus @default(Draft)
+  storageBucket  String?      @map("storage_bucket")
+  storageKey     String?      @map("storage_key")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  incident       Incident?    @relation(fields: [incidentId], references: [id])
+  generatedBy    AdminUser    @relation(fields: [generatedById], references: [id])
+
+  @@index([reportType, status])
+  @@map("reports")
+}
+
+model TrustedReporter {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @unique @map("user_id") @db.Uuid
+  trustScore      Decimal  @default(80.00) @map("trust_score") @db.Decimal(5, 2)
+  verificationLevel String @default("Community") @map("verification_level")
+  reportsSubmitted Int     @default(0) @map("reports_submitted")
+  reportsVerified  Int     @default(0) @map("reports_verified")
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([trustScore])
+  @@map("trusted_reporters")
+}
+
+model RefreshToken {
+  id            String     @id @default(uuid()) @db.Uuid
+  userId        String?    @map("user_id") @db.Uuid
+  adminUserId   String?    @map("admin_user_id") @db.Uuid
+  tokenHash     String     @unique @map("token_hash")
+  familyId      String     @map("family_id") @db.Uuid
+  expiresAt     DateTime   @map("expires_at") @db.Timestamptz(6)
+  revokedAt     DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  user          User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminUser     AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([adminUserId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PhoneOtp {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String?   @map("user_id") @db.Uuid
+  phone       String
+  codeHash    String    @map("code_hash")
+  purpose     String
+  attempts    Int       @default(0)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phone, purpose, expiresAt])
+  @@map("phone_otps")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("password_reset_tokens")
+}
+
+
+model EscalationRule {
+  id                            String              @id @default(uuid()) @db.Uuid
+  name                          String
+  incidentType                  IncidentType?        @map("incident_type")
+  priority                      IncidentPriority?
+  jurisdictionId                String?              @map("jurisdiction_id") @db.Uuid
+  agencyId                      String?              @map("agency_id") @db.Uuid
+  maxResponseTimeSeconds        Int                  @map("max_response_time_seconds")
+  escalationDestinationRole     String?              @map("escalation_destination_role")
+  escalationDestinationAdminId  String?              @map("escalation_destination_admin_id") @db.Uuid
+  escalationDestinationAgencyId String?              @map("escalation_destination_agency_id") @db.Uuid
+  isActive                      Boolean              @default(true) @map("is_active")
+  createdByAdminId              String?              @map("created_by_admin_id") @db.Uuid
+  createdAt                     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([incidentType, priority, isActive])
+  @@index([jurisdictionId, agencyId, isActive])
+  @@map("escalation_rules")
+}
+
+model IncidentEscalation {
+  id              String           @id @default(uuid()) @db.Uuid
+  incidentId      String           @map("incident_id") @db.Uuid
+  ruleId          String?          @map("rule_id") @db.Uuid
+  toAdminId       String?          @map("to_admin_id") @db.Uuid
+  toAgencyId      String?          @map("to_agency_id") @db.Uuid
+  destinationRole String?          @map("destination_role")
+  status          EscalationStatus @default(Pending)
+  reason          String
+  metadata        Json             @default("{}")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  acknowledgedAt  DateTime?        @map("acknowledged_at") @db.Timestamptz(6)
+
+  @@index([incidentId, createdAt])
+  @@index([status, createdAt])
+  @@map("incident_escalations")
+}
+
+
