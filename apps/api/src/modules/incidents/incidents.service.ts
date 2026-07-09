@@ -1,6 +1,7 @@
 ﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
-import { randomUUID } from "crypto";
+import { hashPassword, randomToken } from "../../common/auth/crypto";
+import { createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -134,12 +135,13 @@ export class IncidentsService {
   async presignMedia(id: string, dto: PresignIncidentMediaDto, actor?: JwtPayload) {
     await this.get(id, actor);
     if (!dto.fileName || !dto.contentType || !dto.mediaType) throw new BadRequestException("fileName, contentType, and mediaType are required");
+    validateEvidenceUpload(dto.contentType, dto.sizeBytes);
 
-    const objectKey = `incident-media/${id}/${randomUUID()}-${dto.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const objectKey = evidenceObjectKey(id, dto.fileName);
     return {
       bucket: process.env.S3_BUCKET ?? "the-eye",
       objectKey,
-      uploadUrl: `${process.env.S3_ENDPOINT ?? "http://localhost:9000"}/${process.env.S3_BUCKET ?? "the-eye"}/${objectKey}?presigned=replace-with-provider-signature`,
+      uploadUrl: createS3PresignedPutUrl(objectKey, 300),
       requiredHeaders: { "content-type": dto.contentType },
       expiresInSeconds: 300,
     };
@@ -420,7 +422,7 @@ export class IncidentsService {
     const user = await this.prisma.user.upsert({
       where: { email: "system@theeye.local" },
       update: {},
-      create: { email: "system@theeye.local", passwordHash: "system" },
+      create: { email: "system@theeye.local", passwordHash: hashPassword(randomToken()) },
     });
     return user.id;
   }

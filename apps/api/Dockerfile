@@ -17,6 +17,7 @@ CMD ["npm", "--workspace", "apps/api", "run", "start:dev"]
 FROM deps AS builder
 COPY . .
 RUN npm --workspace packages/shared run build
+RUN npm --workspace apps/api run prisma:generate
 RUN npm --workspace apps/api run build
 
 FROM base AS production
@@ -31,5 +32,5 @@ COPY --from=builder /app/node_modules ./node_modules
 WORKDIR /app
 USER nestjs
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 CMD node -e "require('http').get('http://127.0.0.1:4000/v1/docs',(r)=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
-CMD ["node", "apps/api/dist/main.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 CMD node -e "require('http').get('http://127.0.0.1:4000/v1/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+CMD ["node", "apps/api/dist/apps/api/src/main.js"]

@@ -1,5 +1,5 @@
 ﻿import { randomUUID } from "crypto";
-import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AdminRoleName, adminRolePermissions, userRolePermissions, UserRole } from "@the-eye/shared";
 import { hashOtp, hashPassword, hashToken, randomToken, verifyPassword } from "../../common/auth/crypto";
@@ -38,19 +38,22 @@ export class AuthService {
   }
 
   async googleLogin(dto: GoogleInput) {
-    if (!dto.email) throw new BadRequestException("Google email is required");
+    if (!dto.idToken) throw new BadRequestException("Google ID token is required");
+    const google = await this.verifyGoogleToken(dto.idToken);
+    if (dto.email && dto.email.toLowerCase() !== google.email.toLowerCase()) {
+      throw new UnauthorizedException("Google identity does not match the requested email");
+    }
 
-    const googleId = dto.googleId ?? dto.idToken ?? dto.email;
     const user = await this.prisma.user.upsert({
-      where: { email: dto.email },
-      update: { googleId },
+      where: { email: google.email },
+      update: { googleId: google.sub },
       create: {
-        email: dto.email,
-        googleId,
+        email: google.email,
+        googleId: google.sub,
         profile: {
           create: {
-            firstName: dto.firstName ?? "Google",
-            lastName: dto.lastName ?? "User",
+            firstName: dto.firstName ?? google.given_name ?? "Google",
+            lastName: dto.lastName ?? google.family_name ?? "User",
             country: "Nigeria",
             state: "Lagos",
             lga: "Ikeja",
@@ -116,7 +119,8 @@ export class AuthService {
       },
     });
 
-    return { ok: true, resetToken: token };
+    // TODO: Dispatch the raw token through the configured email provider.
+    return this.config.get<string>("ALLOW_DEV_AUTH_CODES") === "true" ? { ok: true, devResetToken: token } : { ok: true };
   }
 
   async confirmPasswordReset(token: string, newPassword: string) {
@@ -136,7 +140,12 @@ export class AuthService {
   }
 
   async requestPhoneOtp(phone: string, purpose: string) {
-    const code = this.config.get<string>("NODE_ENV") === "production" ? String(Math.floor(100000 + Math.random() * 900000)) : "123456";
+    const recentCount = await this.prisma.phoneOtp.count({
+      where: { phone, purpose, createdAt: { gt: new Date(Date.now() - 60_000) } },
+    });
+    if (recentCount >= 3) throw new HttpException("Too many OTP requests", HttpStatus.TOO_MANY_REQUESTS);
+
+    const code = String((parseInt(randomToken(4).slice(0, 8), 16) % 900000) + 100000);
     const user = await this.prisma.user.findUnique({ where: { phone } });
 
     await this.prisma.phoneOtp.create({
@@ -149,17 +158,21 @@ export class AuthService {
       },
     });
 
-    return { ok: true, devOtp: this.config.get<string>("NODE_ENV") === "production" ? undefined : code };
+    // TODO: Dispatch the raw code through the configured SMS provider.
+    return this.config.get<string>("ALLOW_DEV_AUTH_CODES") === "true" ? { ok: true, devOtp: code } : { ok: true };
   }
 
   async verifyPhoneOtp(phone: string, code: string, purpose: string) {
-    const codeHash = hashOtp(phone, code, purpose);
     const otp = await this.prisma.phoneOtp.findFirst({
-      where: { phone, purpose, codeHash, verifiedAt: null, expiresAt: { gt: new Date() } },
+      where: { phone, purpose, verifiedAt: null, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: "desc" },
     });
 
-    if (!otp) throw new BadRequestException("Invalid or expired OTP");
+    if (!otp || otp.attempts >= 5) throw new BadRequestException("Invalid or expired OTP");
+    if (otp.codeHash !== hashOtp(phone, code, purpose)) {
+      await this.prisma.phoneOtp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+      throw new BadRequestException("Invalid or expired OTP");
+    }
 
     const user = await this.prisma.user.upsert({
       where: { phone },
@@ -232,6 +245,28 @@ export class AuthService {
       jurisdictionId: admin.jurisdictionId,
     };
     return this.issueSession(payload, { adminUserId: admin.id }, familyId);
+  }
+
+  private async verifyGoogleToken(idToken: string) {
+    const clientId = this.config.get<string>("GOOGLE_OAUTH_CLIENT_ID");
+    if (!clientId) throw new UnauthorizedException("Google login is not configured");
+
+    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new UnauthorizedException("Invalid Google identity token");
+    const payload = await response.json() as {
+      aud?: string;
+      sub?: string;
+      email?: string;
+      email_verified?: string;
+      given_name?: string;
+      family_name?: string;
+    };
+    if (payload.aud !== clientId || !payload.sub || !payload.email || payload.email_verified !== "true") {
+      throw new UnauthorizedException("Untrusted Google identity token");
+    }
+    return payload as typeof payload & { sub: string; email: string };
   }
 
   private async issueSession(payload: JwtPayload, owner: { userId?: string; adminUserId?: string }, familyId?: string) {

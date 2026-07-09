@@ -10,6 +10,7 @@ const requiredRoutes = [
   '"/live-video"',
   '"/police-stations"',
   '"/notifications"',
+  '"/broadcasts"',
   '"/family"',
   '"/smartwatch"',
   '"/neighborhood-watch"',
@@ -21,6 +22,7 @@ const requiredScreens = [
   "class SmartwatchDeviceScreen",
   "class NearbyPoliceStationsScreen",
   "class LiveEmergencyVideoScreen",
+  "class BroadcastCenterScreen",
 ];
 
 const missing = [...requiredRoutes, ...requiredScreens].filter((needle) => !source.includes(needle));

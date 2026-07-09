@@ -15,12 +15,14 @@ import { NeighborhoodWatchModule } from "./neighborhood-watch/neighborhood-watch
 import { PoliceStationsModule } from "./police-stations/police-stations.module";
 import { LiveVideoModule } from "./live-video/live-video.module";
 import { SmartwatchModule } from "./smartwatch/smartwatch.module";
+import { validateEnvironment } from "../config/validate-env";
+import { HealthController } from "./health.controller";
 
 const redisDisabled = process.env.THE_EYE_DISABLE_REDIS === "1";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment }),
     ...(redisDisabled
       ? []
       : [
@@ -30,6 +32,7 @@ const redisDisabled = process.env.THE_EYE_DISABLE_REDIS === "1";
               connection: {
                 host: config.get<string>("REDIS_HOST", "localhost"),
                 port: config.get<number>("REDIS_PORT", 6379),
+                password: config.get<string>("REDIS_PASSWORD") || undefined,
               },
             }),
           }),
@@ -49,6 +52,7 @@ const redisDisabled = process.env.THE_EYE_DISABLE_REDIS === "1";
     LiveVideoModule,
     SmartwatchModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
 

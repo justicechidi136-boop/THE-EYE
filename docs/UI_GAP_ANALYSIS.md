@@ -42,6 +42,7 @@ Mobile app already included:
 
 5. Broadcast System
 - Existing: Admin broadcast queue supports emergency, crime, accident, missing person, stolen vehicle, government alert, and community warning with approval/geofence state.
+- Updated: Added a consolidated citizen Safety Broadcasts route covering emergency, missing person, stolen vehicle, crime, accident, and government alerts using the established mobile list-card pattern.
 - Remaining UI TODO: Add broadcast preview templates once final public alert copy rules are approved.
 
 6. Smartwatch / SOS Device
@@ -50,7 +51,7 @@ Mobile app already included:
 
 7. Admin Dashboard
 - Existing: Command dashboard includes live map, emergency queue, incident list, verification, broadcast, Neighborhood Watch, live video, smartwatch, audit, analytics, and role-scoped shell.
-- Updated: Added `Roles and permissions` admin page and navigation entry.
+- Updated: Added `Roles and permissions` admin page and reorganized the complete sidebar into responsive Operations, Public Alerts, Neighborhood Watch, Smartwatch, and Administration groups.
 
 8. Roles and Permissions
 - Gap: `Community Moderator` was missing from the mock role model and no dedicated RBAC matrix page existed.
@@ -81,5 +82,17 @@ Existing component patterns preserved:
 - Mobile `SafetyScaffold`
 - Mobile `ActionTile`
 - Mobile `SectionCard`
+- Mobile `ListTileCard`
 
 No existing working pages were removed.
+
+## Verification Report
+
+- Monorepo lint and TypeScript checks: passed.
+- Admin production build: passed, 33 generated routes.
+- Admin build smoke test: passed.
+- Mobile route/screen smoke test: passed.
+- Backend regression tests: passed, 37/37.
+- Local admin startup: Next.js reached ready state at `http://localhost:3000`.
+- Flutter SDK validation: not run because Flutter is not installed or available on this machine.
+- Live Figma re-inspection: blocked after the connected Starter account reached its MCP call limit; the existing inspected design inventory above remained the implementation reference.

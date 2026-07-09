@@ -1,4 +1,4 @@
-﻿CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE "UserStatus" AS ENUM ('Active', 'Suspended', 'Deactivated');

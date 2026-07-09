@@ -47,6 +47,7 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/report/suspicious-activity": (_) => const ReportScreen(type: ReportType.suspiciousActivity),
               "/missing-person": (_) => const MissingPersonBroadcastScreen(),
               "/stolen-vehicle": (_) => const StolenVehicleBroadcastScreen(),
+              "/broadcasts": (_) => const BroadcastCenterScreen(),
               "/police-stations": (_) => const NearbyPoliceStationsScreen(),
               "/notifications": (_) => const NotificationsScreen(),
               "/tracking": (_) => const IncidentTrackingScreen(),
@@ -363,7 +364,8 @@ class HomeScreen extends StatelessWidget {
               ActionTile("Police stations", Icons.location_on, Colors.green.shade700, () => Navigator.of(context).pushNamed("/police-stations")),
               ActionTile("SOS device", Icons.watch, Colors.red.shade800, () => Navigator.of(context).pushNamed("/smartwatch")),
               ActionTile("Neighborhood Watch", Icons.groups, Colors.teal.shade800, () => Navigator.of(context).pushNamed("/neighborhood-watch")),
-              ActionTile("Notifications", Icons.notifications_active, Colors.purple.shade700, () => Navigator.of(context).pushNamed("/notifications")),
+              ActionTile("Safety broadcasts", Icons.campaign, Colors.purple.shade700, () => Navigator.of(context).pushNamed("/broadcasts")),
+              ActionTile("Notifications", Icons.notifications_active, Colors.green.shade800, () => Navigator.of(context).pushNamed("/notifications")),
               ActionTile("Incident status", Icons.radar, Colors.cyan.shade800, () => Navigator.of(context).pushNamed("/tracking")),
             ],
           ),
@@ -684,6 +686,48 @@ class StolenVehicleBroadcastScreen extends StatelessWidget {
           AppScope.of(context).submitDraft("Stolen vehicle broadcast", "Stolen vehicle");
           Navigator.of(context).pushNamed("/tracking");
         },
+      ),
+    );
+  }
+}
+
+class BroadcastCenterScreen extends StatelessWidget {
+  const BroadcastCenterScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = [
+      ("Emergency broadcast", "P1", "Verified emergency near Allen Avenue", "1.2 km away", Icons.emergency, Colors.red.shade700),
+      ("Missing person broadcast", "P2", "Missing child last seen near Ikeja terminal", "Ikeja LGA", Icons.person_search, Colors.teal.shade700),
+      ("Stolen vehicle broadcast", "P2", "Silver Toyota Corolla, plate LAG-123-EYE", "Opebi and Allen Avenue", Icons.directions_car, Colors.blueGrey.shade700),
+      ("Crime broadcast", "P2", "Police response active near Allen Avenue", "2 km safety radius", Icons.local_police, Colors.indigo.shade700),
+      ("Accident broadcast", "P2", "Multi-vehicle collision affecting traffic", "Awolowo Way", Icons.car_crash, Colors.orange.shade800),
+      ("Government alert", "Official", "Temporary road closure for emergency response", "Lagos State", Icons.account_balance, Colors.green.shade800),
+    ];
+
+    return SafetyScaffold(
+      title: "Safety broadcasts",
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: [
+          const SectionCard(
+            title: "Alerts for your location",
+            child: Text("Verified emergency and government alerts are targeted using your current community and safety radius."),
+          ),
+          const SizedBox(height: 16),
+          ...alerts.map(
+            (alert) => ListTileCard(
+              leading: CircleAvatar(
+                backgroundColor: alert.$6.withOpacity(0.12),
+                foregroundColor: alert.$6,
+                child: Icon(alert.$5),
+              ),
+              title: alert.$1,
+              subtitle: "${alert.$2} - ${alert.$3}\n${alert.$4}",
+              trailing: const Icon(Icons.chevron_right),
+            ),
+          ),
+        ],
       ),
     );
   }

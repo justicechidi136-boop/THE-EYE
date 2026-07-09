@@ -41,6 +41,9 @@ export function verifyJwt(token: string, secret: string): JwtPayload & { exp: nu
   const [encodedHeader, encodedPayload, signature] = token.split(".");
   if (!encodedHeader || !encodedPayload || !signature) throw new Error("Invalid token");
 
+  const header = JSON.parse(Buffer.from(encodedHeader, "base64url").toString("utf8"));
+  if (header.alg !== "HS256" || header.typ !== "JWT") throw new Error("Unsupported token header");
+
   const expected = createHmac("sha256", secret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
   const expectedBuffer = Buffer.from(expected);
   const actualBuffer = Buffer.from(signature);
@@ -49,6 +52,9 @@ export function verifyJwt(token: string, secret: string): JwtPayload & { exp: nu
   }
 
   const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
-  if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) throw new Error("Token expired");
+  if (!payload.sub || !["user", "admin"].includes(payload.typ) || !Number.isInteger(payload.iat) || !Number.isInteger(payload.exp)) {
+    throw new Error("Invalid token payload");
+  }
+  if (payload.exp <= Math.floor(Date.now() / 1000)) throw new Error("Token expired");
   return payload;
 }
