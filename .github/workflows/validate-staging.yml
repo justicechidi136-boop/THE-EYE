@@ -165,7 +165,9 @@ jobs:
           export S3_SECRET_KEY="ci_s3_secret_key_32_chars_minimum"
           export CORS_ORIGINS="https://staging-admin.theeye.com.ng"
           export GOOGLE_OAUTH_CLIENT_ID="ci-google-oauth-client-id"
-          export METRICS_BEARER_TOKEN="ci_metrics_bearer_token_32_chars_min"
+          unset METRICS_BEARER_TOKEN
+          unset FCM_CLIENT_EMAIL
+          unset FCM_PRIVATE_KEY
           pnpm run test:backend
 
       - name: Build API
