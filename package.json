@@ -9,7 +9,7 @@
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "prisma:generate:api": "pnpm --filter @the-eye/api run prisma:generate",
-    "test:backend": "pnpm --filter @the-eye/api run test",
+    "test:backend": "pnpm --filter @the-eye/shared run build && pnpm --filter @the-eye/api run test",
     "test:security": "pnpm run test:backend && pnpm run test:docker:smoke && pnpm run test:deploy:env",
     "test:integration": "pnpm run test:backend && pnpm run test:mobile:contracts && pnpm run test:mobile:smoke && pnpm run test:mobile:dart && pnpm run test:admin:smoke && pnpm run test:admin:auth && pnpm run test:admin:live-video && pnpm run test:brand:theme && pnpm run test:docker:smoke && pnpm run test:deploy:env",
     "test:mobile:smoke": "node scripts/mobile-smoke-test.cjs",
