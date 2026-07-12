@@ -123,13 +123,21 @@ jobs:
 
       - name: Validate migrations against schema
         run: |
+          set -euo pipefail
+          export DATABASE_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20"
+          export DATABASE_DIRECT_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public"
+          export SHADOW_DATABASE_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/postgres"
           pnpm --filter @the-eye/api exec prisma migrate diff \
             --from-migrations prisma/migrations \
             --to-schema-datamodel prisma/schema.prisma \
-            --shadow-database-url "${DATABASE_DIRECT_URL}"
+            --shadow-database-url "${SHADOW_DATABASE_URL}"
 
       - name: Apply migrations
-        run: pnpm --filter @the-eye/api exec prisma migrate deploy
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20"
+          export DATABASE_DIRECT_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public"
+          pnpm --filter @the-eye/api exec prisma migrate deploy
 
       - name: Backend tests
         run: pnpm run test:backend
@@ -159,17 +167,17 @@ jobs:
 
       - name: Resolve NEXT_PUBLIC_API_BASE_URL
         run: |
+          set -euo pipefail
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
             echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in staging environment; using canonical fallback"
             URL="https://staging-api.theeye.com.ng"
           fi
-          case "$URL" in
-            *localhost*|*127.0.0.1*|*api.theeye.com.ng*)
-              echo "Staging NEXT_PUBLIC_API_BASE_URL must not use localhost or production API hosts"
-              exit 1
-              ;;
-          esac
+          URL="$URL" node -e "
+            import { validateStagingApiUrl } from './scripts/ci/production-readiness-report.mjs';
+            const result = validateStagingApiUrl(process.env.URL);
+            if (!result.ok) { console.error(result.reason); process.exit(1); }
+          "
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "CI_STAGING_API_URL=$URL" >> "$GITHUB_ENV"
 
@@ -191,6 +199,14 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - uses: actions/setup-java@v4
         with:
@@ -248,7 +264,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Running auth-provider manifest validation (always)"
-          pnpm run test:firebase:auth-providers
+          node scripts/validate-firebase-auth-providers.cjs
           if [ "${{ steps.mobile_gs_json.outputs.has_secret }}" != "true" ]; then
             echo "::warning::MOBILE_GOOGLE_SERVICES_JSON not set — skipped test:mobile:firebase and staging APK build"
             exit 0
@@ -271,6 +287,14 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - uses: actions/setup-java@v4
         with:
@@ -323,7 +347,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Running auth-provider manifest validation (always)"
-          pnpm run test:firebase:auth-providers
+          node scripts/validate-firebase-auth-providers.cjs
           if [ "${{ steps.watch_gs_json.outputs.has_secret }}" != "true" ]; then
             echo "::warning::WATCH_GOOGLE_SERVICES_JSON not set — skipped test:watch:firebase and staging APK build"
             exit 0
@@ -384,7 +408,7 @@ jobs:
           test "${FIREBASE_PROJECT_ID}" = "the-eye-2stg"
 
       - name: Auth provider manifest validation
-        run: pnpm run test:firebase:auth-providers
+        run: node scripts/validate-firebase-auth-providers.cjs
 
   docker:
     name: Docker admin image (staging)
@@ -396,19 +420,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Resolve NEXT_PUBLIC_API_BASE_URL
         run: |
+          set -euo pipefail
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
             echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in staging environment; using canonical fallback"
             URL="https://staging-api.theeye.com.ng"
           fi
-          case "$URL" in
-            *localhost*|*127.0.0.1*|*api.theeye.com.ng*)
-              echo "Staging NEXT_PUBLIC_API_BASE_URL must not use localhost or production API hosts"
-              exit 1
-              ;;
-          esac
+          URL="$URL" node -e "
+            import { validateStagingApiUrl } from './scripts/ci/production-readiness-report.mjs';
+            const result = validateStagingApiUrl(process.env.URL);
+            if (!result.ok) { console.error(result.reason); process.exit(1); }
+          "
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "CI_STAGING_API_URL=$URL" >> "$GITHUB_ENV"
 

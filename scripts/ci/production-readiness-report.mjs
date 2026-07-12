@@ -15,6 +15,8 @@ import { pathToFileURL } from "node:url";
 const PRODUCTION_PROJECT_ID = "the-eye-2pd-d0217";
 const STAGING_PROJECT_IDS = ["the-eye-2stg", "the-eye-29cff"];
 const CI_STATIC_COMPILE_API_URL = "https://production-ci-compile.theeye.internal";
+export const STAGING_CANONICAL_API_URL = "https://staging-api.theeye.com.ng";
+const PRODUCTION_API_HOST = "api.theeye.com.ng";
 
 const FORBIDDEN_API_URL_PATTERNS = [
   /localhost/i,
@@ -57,6 +59,41 @@ export function validateProductionApiUrl(url, options = {}) {
   }
 
   return { ok: true, ciCompileOnly: false };
+}
+
+/**
+ * @param {string | undefined | null} url
+ */
+export function validateStagingApiUrl(url) {
+  const trimmed = String(url ?? "").trim();
+
+  if (!trimmed) {
+    return { ok: false, reason: "Staging API URL is missing" };
+  }
+
+  if (!/^https:\/\//i.test(trimmed)) {
+    return { ok: false, reason: "Staging API URL must use HTTPS" };
+  }
+
+  let host;
+  try {
+    host = new URL(trimmed).hostname.toLowerCase();
+  } catch {
+    return { ok: false, reason: "Staging API URL is not a valid URL" };
+  }
+
+  if (host === "localhost" || host === "127.0.0.1") {
+    return { ok: false, reason: "Staging API URL must not use localhost" };
+  }
+
+  if (host === PRODUCTION_API_HOST) {
+    return {
+      ok: false,
+      reason: `Staging API URL must not use production API host (${PRODUCTION_API_HOST})`,
+    };
+  }
+
+  return { ok: true };
 }
 
 /**

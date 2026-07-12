@@ -5,8 +5,10 @@
  */
 import {
   buildReadinessReport,
+  STAGING_CANONICAL_API_URL,
   validateProductionApiUrl,
   validateProductionGoogleServicesJson,
+  validateStagingApiUrl,
 } from "./production-readiness-report.mjs";
 
 const STAGING_MOBILE_JSON = JSON.stringify({
@@ -137,6 +139,20 @@ scenario("E — Placeholder/staging API URL rejected", () => {
 
   const realProd = validateProductionApiUrl("https://api.theeye.com.ng");
   assert(realProd.ok && !realProd.ciCompileOnly, "accepts real production API URL");
+});
+
+scenario("F — Staging API URL isolation", () => {
+  const staging = validateStagingApiUrl(STAGING_CANONICAL_API_URL);
+  assert(staging.ok, "accepts canonical staging API URL");
+
+  const stagingWithPath = validateStagingApiUrl(`${STAGING_CANONICAL_API_URL}/v1`);
+  assert(stagingWithPath.ok, "accepts staging API URL with path");
+
+  const production = validateStagingApiUrl("https://api.theeye.com.ng");
+  assert(!production.ok, "rejects production API host for staging");
+
+  const localhost = validateStagingApiUrl("https://localhost:3000");
+  assert(!localhost.ok, "rejects localhost for staging");
 });
 
 console.log(`\n${"=".repeat(60)}`);
