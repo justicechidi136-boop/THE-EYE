@@ -14,8 +14,15 @@ export class AuditController {
 
   @Get()
   @RequirePermissions("audit:read")
-  list(@Req() request: any, @Query("action") action?: string, @Query("entityType") entityType?: string, @Query("entityId") entityId?: string) {
-    return this.audit.list(request.user, { action, entityType, entityId });
+  list(
+    @Req() request: any,
+    @Query("action") action?: string,
+    @Query("entityType") entityType?: string,
+    @Query("entityId") entityId?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.audit.list(request.user, { action, entityType, entityId }, { cursor, limit });
   }
 
   @Get("verify-chain")

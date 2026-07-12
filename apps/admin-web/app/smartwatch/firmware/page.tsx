@@ -1,8 +1,12 @@
 import { AppShell } from "../../../components/app-shell";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { firmwareReleases } from "../../../lib/mock-data";
+import { fetchFirmwareReleases } from "../../../lib/api/data";
 
-export default function WatchFirmwarePage() {
+export const dynamic = "force-dynamic";
+
+export default async function WatchFirmwarePage() {
+  const firmwareReleases = await fetchFirmwareReleases();
+
   return (
     <AppShell>
       <PageHeader eyebrow="Signed firmware management" title="Watch firmware" action={<StatusBadge tone="info">{firmwareReleases.length} releases</StatusBadge>} />
@@ -19,11 +23,11 @@ export default function WatchFirmwarePage() {
         <Panel title="Release history">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-muted">
+              <thead className="bg-surfaceMuted text-xs uppercase text-muted">
                 <tr><th className="px-4 py-3">Version</th><th className="px-4 py-3">Title</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Signature</th><th className="px-4 py-3">Devices</th><th className="px-4 py-3">Action</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {firmwareReleases.map((release) => (
+                {firmwareReleases.length ? firmwareReleases.map((release) => (
                   <tr key={release.version}>
                     <td className="px-4 py-3 font-semibold">{release.version}</td>
                     <td className="px-4 py-3">{release.title}</td>
@@ -32,7 +36,11 @@ export default function WatchFirmwarePage() {
                     <td className="px-4 py-3">{release.devices}</td>
                     <td className="px-4 py-3"><button className="rounded-md border border-line px-3 py-2 text-xs font-semibold">Schedule update</button></td>
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td className="px-4 py-6 text-muted" colSpan={6}>No firmware releases returned from the API yet.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

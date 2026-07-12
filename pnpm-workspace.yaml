@@ -1,6 +1,8 @@
 packages:
   - apps/api
   - apps/admin-web
+  - apps/mobile
+  - apps/watch
   - packages/shared
 
 onlyBuiltDependencies:

@@ -32,5 +32,5 @@ COPY --from=builder /app/node_modules ./node_modules
 WORKDIR /app
 USER nestjs
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 CMD node -e "require('http').get('http://127.0.0.1:4000/v1/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
-CMD ["node", "apps/api/dist/apps/api/src/main.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 CMD node -e "require('http').get('http://127.0.0.1:4000/v1/health/ready',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(r.statusCode===200?0:1));}).on('error',()=>process.exit(1))"
+CMD ["node", "--require", "apps/api/src/preload-env.cjs", "apps/api/dist/main.js"]

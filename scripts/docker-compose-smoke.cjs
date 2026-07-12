@@ -1,10 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 
-const composePath = path.join(__dirname, "..", "infra", "docker", "docker-compose.yml");
+const root = path.join(__dirname, "..");
+const composePath = path.join(root, "infra", "docker", "docker-compose.yml");
 const compose = fs.readFileSync(composePath, "utf8");
 
-const required = [
+const requiredServices = [
   "api:",
   "admin-web:",
   "postgres-postgis:",
@@ -14,24 +15,101 @@ const required = [
   "nginx:",
   "api-migrate:",
   "api-seed:",
+  "certbot:",
+  "prometheus:",
+];
+
+const requiredComposeMarkers = [
   "healthcheck:",
+  "127.0.0.1:",
+  "API_ORIGIN:",
+  "http://api:4000",
   "postgres_data:",
   "redis_data:",
   "minio_data:",
   "nginx_cache:",
+  "certbot_www:",
   "prisma:deploy",
   "db:seed",
+  "DATABASE_DIRECT_URL",
+  "THE_EYE_SERVER_NAME",
+  "THE_EYE_SSL_REDIRECT",
+  "THE_EYE_GENERATE_DEV_SSL",
+  "METRICS_BEARER_TOKEN:?",
+  "condition: service_healthy",
 ];
 
-const missing = required.filter((needle) => !compose.includes(needle));
-if (missing.length) {
-  console.error("Docker Compose smoke failed. Missing:", missing.join(", "));
+const missingServices = requiredServices.filter((needle) => !compose.includes(needle));
+const missingMarkers = requiredComposeMarkers.filter((needle) => !compose.includes(needle));
+if (missingServices.length || missingMarkers.length) {
+  console.error("Docker Compose smoke failed.");
+  if (missingServices.length) console.error("Missing services:", missingServices.join(", "));
+  if (missingMarkers.length) console.error("Missing markers:", missingMarkers.join(", "));
   process.exit(1);
 }
 
-const nginxConf = fs.readFileSync(path.join(__dirname, "..", "infra", "docker", "nginx", "conf.d", "the-eye.conf"), "utf8");
-if (!nginxConf.includes("ssl_certificate") || !nginxConf.includes("proxy_set_header Upgrade")) {
-  console.error("Docker Compose smoke failed. Nginx SSL or websocket readiness is missing.");
+const healthcheckCount = (compose.match(/healthcheck:/g) || []).length;
+if (healthcheckCount < 7) {
+  console.error(`Docker Compose smoke failed. Expected at least 7 healthchecks, found ${healthcheckCount}.`);
+  process.exit(1);
+}
+
+const nginxTemplate = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "render", "the-eye.conf.template"),
+  "utf8",
+);
+const nginxLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "the-eye-locations.conf"),
+  "utf8",
+);
+const nginxChecks = [
+  ["ssl_certificate", nginxTemplate, "HTTPS ssl_certificate"],
+  ["listen 443 ssl", nginxTemplate, "HTTPS listener"],
+  ["include /etc/nginx/snippets/ssl-params.conf", nginxTemplate, "SSL params snippet"],
+  ["include /etc/nginx/snippets/the-eye-locations.conf", nginxTemplate, "shared locations snippet"],
+  ["location = /metrics", nginxLocations, "metrics blocked"],
+  ["location /v1/", nginxLocations, "API /v1/ route"],
+  ["proxy_pass http://the_eye_api", nginxLocations, "API upstream"],
+  ["location /livekit/", nginxLocations, "LiveKit route"],
+  ["proxy_pass http://the_eye_livekit", nginxLocations, "LiveKit upstream"],
+  ["/.well-known/acme-challenge/", nginxTemplate, "ACME challenge path"],
+];
+for (const [needle, content, label] of nginxChecks) {
+  if (!content.includes(needle)) {
+    console.error(`Docker Compose smoke failed. Nginx config missing ${label}.`);
+    process.exit(1);
+  }
+}
+
+const entrypoint = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "entrypoint.d", "20-render-the-eye-conf.sh"),
+  "utf8",
+);
+if (!entrypoint.includes("THE_EYE_SSL_REDIRECT") || !entrypoint.includes("openssl req")) {
+  console.error("Docker Compose smoke failed. Nginx entrypoint SSL logic is incomplete.");
+  process.exit(1);
+}
+
+const backupScript = fs.readFileSync(path.join(root, "scripts", "backup-the-eye.ps1"), "utf8");
+const backupSh = fs.readFileSync(path.join(root, "scripts", "backup-the-eye.sh"), "utf8");
+const restoreScript = fs.readFileSync(path.join(root, "scripts", "restore-the-eye.ps1"), "utf8");
+const restoreSh = fs.readFileSync(path.join(root, "scripts", "restore-the-eye.sh"), "utf8");
+if (!backupScript.includes("pg_dump") || !backupScript.includes("postgres-postgis is not running")) {
+  console.error("Docker Compose smoke failed. Backup script validation failed.");
+  process.exit(1);
+}
+if (!backupSh.includes("pg_dump") || !restoreSh.includes("pg_restore")) {
+  console.error("Docker Compose smoke failed. Bash backup/restore scripts validation failed.");
+  process.exit(1);
+}
+if (!restoreScript.includes("pg_restore") || !restoreScript.includes("-Confirm")) {
+  console.error("Docker Compose smoke failed. Restore script validation failed.");
+  process.exit(1);
+}
+
+const certsIgnore = path.join(root, "infra", "docker", "nginx", "certs", "live", ".gitignore");
+if (!fs.existsSync(certsIgnore) || !fs.readFileSync(certsIgnore, "utf8").includes("*.pem")) {
+  console.error("Docker Compose smoke failed. TLS cert gitignore is missing.");
   process.exit(1);
 }
 

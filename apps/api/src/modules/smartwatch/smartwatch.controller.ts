@@ -4,6 +4,7 @@ import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../../common/auth/optional-jwt-auth.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import {
   RegisterSmartwatchDeviceDto,
   SendCriticalAlertDto,
@@ -14,6 +15,7 @@ import {
   SmartwatchSosDto,
   SmartwatchStandaloneLoginDto,
   UpdateSmartwatchStatusDto,
+  IssueSmartwatchPairingCodeDto,
 } from "./dto/smartwatch.dto";
 import { SmartwatchService } from "./smartwatch.service";
 
@@ -30,7 +32,19 @@ export class SmartwatchController {
     return this.smartwatch.registerDevice(dto, request.user);
   }
 
+  @Post("devices/pairing-codes")
+  @RateLimit("auth")
+  issuePairingCode(@Body() dto: IssueSmartwatchPairingCodeDto) {
+    return this.smartwatch.issuePairingCode(dto);
+  }
+
+  @Get("devices/:deviceId/pairing-status")
+  getPairingStatus(@Param("deviceId") deviceId: string) {
+    return this.smartwatch.getPairingStatus(deviceId);
+  }
+
   @Post("devices/standalone-login")
+  @RateLimit("auth")
   standaloneLogin(@Body() dto: SmartwatchStandaloneLoginDto) {
     return this.smartwatch.standaloneLogin(dto);
   }
@@ -96,6 +110,7 @@ export class SmartwatchController {
   }
 
   @UseGuards(OptionalJwtAuthGuard)
+  @RateLimit("sos")
   @Post("sos")
   triggerSos(@Body() dto: SmartwatchSosDto, @Req() request: any) {
     return this.smartwatch.triggerSos(dto, request.user);

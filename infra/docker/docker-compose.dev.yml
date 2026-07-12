@@ -5,7 +5,8 @@ services:
     environment:
       NODE_ENV: development
       PORT: 4000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://the_eye:change_me_postgres@postgres-postgis:5432/the_eye?schema=public}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://the_eye:change_me_postgres@postgres-postgis:5432/the_eye?schema=public&connection_limit=10&pool_timeout=20}
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-postgresql://the_eye:change_me_postgres@postgres-postgis:5432/the_eye?schema=public}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}

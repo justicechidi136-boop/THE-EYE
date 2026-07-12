@@ -1,0 +1,17 @@
+{
+  "name": "@the-eye/watch",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "clean": "flutter clean",
+    "pub-get": "flutter pub get",
+    "analyze": "flutter analyze lib test",
+    "test": "flutter test",
+    "validate:firebase": "node ../../scripts/validate-watch-firebase.cjs",
+    "build:apk:debug": "flutter build apk --flavor staging --debug",
+    "build:apk:staging": "flutter build apk --flavor staging --debug",
+    "build:apk:production": "flutter build apk --flavor production --release",
+    "build:appbundle:production": "flutter build appbundle --flavor production --release",
+    "doctor": "flutter doctor"
+  }
+}

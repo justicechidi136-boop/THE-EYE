@@ -15,14 +15,14 @@ export class NotificationsController {
 
   @Get()
   @RequirePermissions("incident:read")
-  list(@Req() request: any, @Query("unreadOnly") unreadOnly?: string) {
-    return this.notificationsService.listForActor(request.user, unreadOnly === "true");
+  list(@Req() request: any, @Query("unreadOnly") unreadOnly?: string, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return this.notificationsService.listForActor(request.user, unreadOnly === "true", { cursor, limit });
   }
 
   @Post("send")
   @RequirePermissions("auth:admin")
-  send(@Body() dto: CreateNotificationDto) {
-    return this.notificationsService.create(dto);
+  send(@Body() dto: CreateNotificationDto, @Req() request: any) {
+    return this.notificationsService.create(dto, request.user);
   }
 
   @Post("push-tokens")

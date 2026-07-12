@@ -1,14 +1,42 @@
-import { AppShell } from "../../../components/app-shell";
+import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { volunteers } from "../../../lib/mock-data";
+import { fetchVolunteers } from "../../../lib/api/data";
 
-export default function VolunteersPage() {
+export const dynamic = "force-dynamic";
+
+const VOLUNTEER_CATEGORIES = [
+  "Doctor", "Nurse", "Lawyer", "Fire Volunteer", "Security Volunteer",
+  "Search & Rescue", "Blood Donor", "Mechanical Rescue",
+];
+
+export default async function VolunteerNetworkPage() {
+  const volunteers = await fetchVolunteers();
+
   return (
-    <AppShell>
-      <PageHeader eyebrow="Emergency support network" title="Volunteer list" action={<StatusBadge tone="success">{volunteers.length} available</StatusBadge>} />
-      <Panel title="Nearby volunteers">
-        <div className="grid gap-3 md:grid-cols-3">{volunteers.map((volunteer) => <div key={volunteer.name} className="rounded-lg border border-line bg-slate-50 p-4"><p className="font-semibold">{volunteer.name}</p><p className="text-sm text-muted">{volunteer.type} - {volunteer.community}</p><div className="mt-3 flex gap-2"><StatusBadge tone="success">{volunteer.status}</StatusBadge><StatusBadge>{volunteer.distance}</StatusBadge></div></div>)}</div>
+    <>
+      <PageHeader
+        eyebrow="Volunteer network"
+        title="Volunteer Network"
+        action={<StatusBadge tone="success">{volunteers.length} volunteers</StatusBadge>}
+      />
+      <Panel title="Volunteer categories">
+        <div className="mb-4 flex flex-wrap gap-2">
+          {VOLUNTEER_CATEGORIES.map((cat) => (
+            <span key={cat} className="rounded-md border border-line bg-surfaceMuted px-3 py-1 text-xs font-semibold">{cat}</span>
+          ))}
+        </div>
+        <CsocDataTable
+          columns={["Volunteer", "Type", "Community", "Status", "Distance"]}
+          rows={volunteers.map((v, i) => [
+            v.name,
+            v.type,
+            v.community,
+            <StatusBadge key={`s-${i}`} tone={v.status === "Available" || v.status === "Verified" ? "success" : "neutral"}>{v.status}</StatusBadge>,
+            v.distance,
+          ])}
+          emptyMessage="No volunteers registered in assigned communities."
+        />
       </Panel>
-    </AppShell>
+    </>
   );
 }

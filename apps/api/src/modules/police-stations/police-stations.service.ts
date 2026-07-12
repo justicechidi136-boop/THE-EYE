@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { JwtPayload } from "../../common/auth/jwt";
+import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { parseNearestQuery, PoliceStationSearchQuery, NearestPoliceStationsQuery, UpsertPoliceStationDto, validatePoliceStationDto } from "./dto/police-station.dto";
 
 @Injectable()
 export class PoliceStationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async nearest(query: NearestPoliceStationsQuery) {
     const parsed = parseNearestQuery(query);
@@ -102,16 +106,12 @@ export class PoliceStationsService {
   }
 
   private audit(actor: JwtPayload, action: string, entityId: string, metadata: Record<string, unknown>) {
-    return this.prisma.auditLog.create({
-      data: {
-        actorAdminId: actor.typ === "admin" ? actor.sub : undefined,
-        actorUserId: actor.typ === "user" ? actor.sub : undefined,
-        actorType: actor.typ,
-        action,
-        entityType: "police_stations",
-        entityId,
-        metadata,
-      } as never,
+    return this.auditService.record({
+      actor,
+      action,
+      entityType: "police_stations",
+      entityId,
+      metadata,
     });
   }
 }

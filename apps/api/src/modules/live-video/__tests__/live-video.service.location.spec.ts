@@ -1,5 +1,6 @@
 import { ConfigService } from "@nestjs/config";
 import { ForbiddenException } from "@nestjs/common";
+import { createMetricsMock } from "../../../common/metrics/metrics.test-utils";
 import { LiveVideoService } from "../live-video.service";
 
 const superAdmin = { typ: "admin", sub: "admin-1", role: "Super Admin", email: "admin@theeye.local", permissions: ["incident:read"] } as any;
@@ -24,7 +25,8 @@ function buildService() {
   } as any;
   const tokens = { livekitUrl: jest.fn(), createToken: jest.fn() } as any;
   const config = { get: jest.fn((key: string, fallback: string) => key === "LIVE_LOCATION_LINK_SECRET" ? "secret" : fallback) } as unknown as ConfigService;
-  return { service: new LiveVideoService(prisma, tokens, config), prisma };
+  const auditService = { record: jest.fn().mockResolvedValue({ id: "audit-1" }) } as any;
+  return { service: new LiveVideoService(prisma, tokens, config, auditService, createMetricsMock()), prisma, auditService };
 }
 
 describe("LiveVideoService live location security", () => {
@@ -41,14 +43,27 @@ describe("LiveVideoService live location security", () => {
   });
 
   it("creates audit log when authorized admin opens signed live location", async () => {
-    const { service, prisma } = buildService();
+    const { service, auditService } = buildService();
     const latest = await service.latestLocation("session-1", scopedAdmin);
     const token = latest.signedOpenLocationUrl!.split("/").pop()!;
     const result = await service.openLiveLocation("session-1", token, scopedAdmin);
 
     expect(result.data.googleMaps).toContain("6.5244,3.3792");
-    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: "live_video.location_opened" }),
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "live_video.location_opened",
     }));
+  });
+
+  it("rejects admin view tokens for inactive sessions", async () => {
+    const { service, prisma } = buildService();
+    prisma.liveVideoSession.findUnique.mockResolvedValueOnce({
+      id: "session-1",
+      incidentId: "incident-1",
+      roomName: "eye-incident-1",
+      status: "Ended",
+      locationUpdates: [],
+      incident: { id: "INC-2026-000123", country: "Nigeria", state: "Lagos", lga: "Ikeja", assignedAgencyId: null },
+    });
+    await expect(service.adminViewToken("session-1", superAdmin)).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

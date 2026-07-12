@@ -9,15 +9,62 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   firebase_core: ^3.9.0
+  firebase_auth: ^5.3.4
   firebase_messaging: ^15.1.6
+  google_sign_in: ^6.2.2
+  sign_in_with_apple: ^6.1.4
+  flutter_local_notifications: ^18.0.1
   geolocator: ^13.0.2
   google_maps_flutter: ^2.10.0
   http: ^1.2.2
+  shared_preferences: ^2.3.3
   url_launcher: ^6.3.1
+  connectivity_plus: ^6.1.4
+  image_picker: ^1.1.2
+  file_picker: ^8.1.7
+  permission_handler: ^11.3.1
+  crypto: ^3.0.6
+  flutter_image_compress: ^2.3.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  uuid: ^4.5.1
+  google_fonts: ^6.2.1
   livekit_client: ^2.3.6
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/brand/the-eye-official-icon.png
+  adaptive_icon_background: "#0B0F14"
+  adaptive_icon_foreground: assets/images/brand/the-eye-official-icon-foreground.png
+  remove_alpha_ios: true
+  background_color_ios: "#0B0F14"
+  min_sdk_android: 21
+
+flutter_native_splash:
+  color: "#0B0F14"
+  image: assets/images/brand/the-eye-official-icon.png
+  android_12:
+    color: "#0B0F14"
+    image: assets/images/brand/the-eye-official-icon.png
+  android: true
+  ios: true
+  web: false
+
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/brand/the-eye-logomark-transparent.png
+    - assets/images/brand/the-eye-logo-lockup-dark-bg.png
+    - assets/images/brand/the-eye-app-icon-white.png
+    - assets/images/brand/the-eye-app-icon-dark-green.png
+    - assets/images/brand/the-eye-official-icon.png
+    - assets/images/brand/the-eye-official-icon-foreground.png
+    - assets/images/brand/the-eye-notification-icon.png
+    - assets/images/figma/otp-email-sent.png

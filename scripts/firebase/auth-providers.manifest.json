@@ -1,0 +1,116 @@
+{
+  "$schema": "./auth-providers.manifest.schema.json",
+  "version": 1,
+  "environments": {
+    "staging": {
+      "firebaseProjectId": "the-eye-2stg",
+      "firebaseAuthDomain": "the-eye-2stg.firebaseapp.com",
+      "firebaseWebAppDomain": "the-eye-2stg.web.app",
+      "gcpProjectNumber": "767357461507",
+      "authorizedDomains": [
+        "localhost",
+        "127.0.0.1",
+        "the-eye-2stg.firebaseapp.com",
+        "the-eye-2stg.web.app",
+        "staging-api.theeye.com.ng",
+        "staging-admin.theeye.com.ng"
+      ],
+      "apiBaseUrl": "https://staging-api.theeye.com.ng/v1",
+      "adminWebUrl": "https://staging-admin.theeye.com.ng",
+      "privacyPolicyUrl": "https://theeye.com.ng/privacy",
+      "supportEmail": "support@theeye.com.ng",
+      "apps": {
+        "mobile": {
+          "androidPackage": "com.theeye.app.staging",
+          "iosBundleId": "com.theeye.app.staging",
+          "androidAppId": "1:767357461507:android:325b76c7d73640b2919a36",
+          "iosAppId": "1:767357461507:ios:ed01b6493b1b5562919a36",
+          "webOAuthClientId": "767357461507-rvoedt7hr8452sehgi2qs3v8q69vovuj.apps.googleusercontent.com",
+          "androidOAuthClientId": null
+        },
+        "watch": {
+          "androidPackage": "com.theeye.watch.staging",
+          "androidAppId": "1:767357461507:android:2d3885701b0ab8db919a36",
+          "webOAuthClientId": null,
+          "androidOAuthClientId": null
+        }
+      },
+      "appleSignIn": {
+        "servicesId": "<YOUR_STAGING_APPLE_SERVICES_ID>",
+        "returnUrl": "https://the-eye-2stg.firebaseapp.com/__/auth/handler",
+        "teamId": "<YOUR_APPLE_TEAM_ID>",
+        "keyId": "<YOUR_APPLE_KEY_ID>",
+        "privateKeyPath": "<path-to-AuthKey_XXXX.p8>"
+      }
+    },
+    "production": {
+      "firebaseProjectId": "the-eye-2pd-d0217",
+      "firebaseAuthDomain": "the-eye-2pd-d0217.firebaseapp.com",
+      "firebaseWebAppDomain": "the-eye-2pd-d0217.web.app",
+      "gcpProjectNumber": "137367371675",
+      "authorizedDomains": [
+        "localhost",
+        "the-eye-2pd-d0217.firebaseapp.com",
+        "the-eye-2pd-d0217.web.app",
+        "api.theeye.com.ng",
+        "admin.theeye.ng",
+        "theeye.com.ng"
+      ],
+      "apiBaseUrl": "https://api.theeye.com.ng/v1",
+      "adminWebUrl": "https://admin.theeye.ng",
+      "privacyPolicyUrl": "https://theeye.com.ng/privacy",
+      "supportEmail": "support@theeye.com.ng",
+      "apps": {
+        "mobile": {
+          "androidPackage": "com.theeye.app",
+          "iosBundleId": "com.theeye.app",
+          "androidAppId": "1:137367371675:android:7c280f69a27799b3a2ab3e",
+          "iosAppId": "1:137367371675:ios:ec4f52caf970d4aea2ab3e",
+          "webOAuthClientId": "137367371675-7sikh2svb9k1c7ft8mqsmkmjpqpnav36.apps.googleusercontent.com",
+          "androidOAuthClientId": "137367371675-it4d63kmap5874h7qcsicvgla993imuj.apps.googleusercontent.com"
+        },
+        "watch": {
+          "androidPackage": "com.theeye.watch",
+          "androidAppId": "1:137367371675:android:d0366113589d4b80a2ab3e",
+          "webOAuthClientId": null,
+          "androidOAuthClientId": null
+        }
+      },
+      "appleSignIn": {
+        "servicesId": "<YOUR_PRODUCTION_APPLE_SERVICES_ID>",
+        "returnUrl": "https://the-eye-2pd-d0217.firebaseapp.com/__/auth/handler",
+        "teamId": "<YOUR_APPLE_TEAM_ID>",
+        "keyId": "<YOUR_APPLE_KEY_ID>",
+        "privateKeyPath": "<path-to-AuthKey_XXXX.p8>"
+      }
+    }
+  },
+  "forbiddenCrossReferences": {
+    "stagingMustNotContain": ["the-eye-2pd-d0217", "137367371675", "com.theeye.app\""],
+    "productionMustNotContain": ["the-eye-2stg", "the-eye-29cff", "767357461507", "997235004215", "com.theeye.app.staging", "com.theeye.watch.staging"]
+  },
+  "androidDebugFingerprints": {
+    "sha1": "5D:A2:E2:EB:FC:78:16:B9:C1:FE:78:0B:10:2F:D6:1F:0C:80:2A:C7",
+    "sha1Compact": "5da2e2ebfc7816b9c1fe780b102fd61f0c802ac7",
+    "sha256": "A6:E6:6C:CC:A4:FA:5D:62:17:B7:89:A2:FD:33:06:25:F4:11:D2:48:35:FA:6A:65:C8:68:8F:77:1D:80:32:CB"
+  },
+  "implementedProviders": {
+    "google": {
+      "surfaces": ["mobile-ios", "mobile-android"],
+      "flow": "firebase-client-then-api-exchange"
+    },
+    "apple": {
+      "surfaces": ["mobile-ios", "mobile-android"],
+      "flow": "firebase-client-then-api-exchange"
+    },
+    "emailPassword": {
+      "surfaces": ["mobile", "admin-web"],
+      "flow": "nestjs-only-not-firebase"
+    },
+    "phoneOtp": {
+      "surfaces": ["mobile"],
+      "flow": "nestjs-only-not-firebase"
+    }
+  },
+  "adminWebUsesFirebaseClient": false
+}

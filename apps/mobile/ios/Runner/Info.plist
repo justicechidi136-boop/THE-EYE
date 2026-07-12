@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+	<dict>
+		<key>NSCameraUsageDescription</key>
+		<string>THE EYE needs camera access so you can attach timestamped photo and video evidence to incident reports.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>THE EYE needs microphone access to record short video evidence for incident reports.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>THE EYE needs photo library access so you can attach existing photos, videos, and audio evidence to incident reports.</string>
+		<key>UIStatusBarHidden</key>
+		<false/>
+	</dict>
+</plist>

@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_DIRECT_URL")
 }
 
 enum UserStatus {
@@ -246,8 +247,25 @@ model User {
   patrolAssignments     PatrolAssignment[]
   patrolCheckpoints     PatrolCheckpoint[]
   patrolReports         PatrolReport[]
+  authAccounts          AuthAccount[]
 
   @@map("users")
+}
+
+model AuthAccount {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  provider        String
+  providerSubject String   @map("provider_subject")
+  providerEmail   String?  @map("provider_email")
+  emailVerified   Boolean  @default(false) @map("email_verified")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@map("auth_accounts")
 }
 
 model Profile {
@@ -719,18 +737,19 @@ model NotificationDeliveryLog {
 }
 
 model UserPushToken {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  token       String   @unique
-  platform    String
-  deviceId    String?  @map("device_id")
-  provider    String   @default("firebase-cloud-messaging")
-  isActive    Boolean  @default(true) @map("is_active")
-  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  token           String   @unique
+  platform        String
+  deviceId        String?  @map("device_id")
+  provider        String   @default("firebase-cloud-messaging")
+  appEnvironment  String   @default("development") @map("app_environment")
+  isActive        Boolean  @default(true) @map("is_active")
+  lastSeenAt      DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, isActive])
+  @@index([userId, isActive, appEnvironment])
   @@index([platform])
   @@map("user_push_tokens")
 }
@@ -1132,6 +1151,20 @@ model SmartwatchDevice {
   @@index([serialNumber])
   @@index([imei])
   @@map("smartwatch_devices")
+}
+
+model SmartwatchPairingSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  deviceId         String    @unique @map("device_id")
+  pairingCodeHash  String    @map("pairing_code_hash")
+  firebaseEnv      String    @map("firebase_env")
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt           DateTime? @map("used_at") @db.Timestamptz(6)
+  deviceSecretPlain String?  @map("device_secret_plain")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("smartwatch_pairing_sessions")
 }
 
 model SosEvent {

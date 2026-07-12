@@ -10,8 +10,13 @@ out/
 .env.local
 .env.production
 .env.development
+**/.env
+**/.env.local
 
-.DS_Store
+# Firebase service account keys (download from console; never commit)
+**/the-eye-29cff-*.json
+**/firebase-adminsdk-*.json
+
 Thumbs.db
 
 *.log

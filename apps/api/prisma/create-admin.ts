@@ -1,5 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import bcrypt = require('bcryptjs');
+import { AdminRoleName, adminRolePermissions } from "@the-eye/shared";
+import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../src/common/auth/crypto";
 
 const prisma = new PrismaClient();
 
@@ -7,37 +8,39 @@ async function main() {
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
   if (!email || !password) {
-    throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD are required');
+    throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD are required");
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = hashPassword(password);
+  const roleName = AdminRoleName.SuperAdmin;
+  const permissions = adminRolePermissions[roleName];
 
   const role = await prisma.adminRole.upsert({
-    where: { name: 'SUPER_ADMIN' },
+    where: { name: roleName },
     update: {
-      permissions: ['*'],
+      permissions,
     },
     create: {
-      name: 'SUPER_ADMIN',
-      permissions: ['*'],
+      name: roleName,
+      permissions,
     },
   });
 
   const jurisdiction = await prisma.jurisdiction.upsert({
     where: {
       country_state_lga: {
-        country: 'Nigeria',
-        state: 'All',
-        lga: 'All',
+        country: "Nigeria",
+        state: "All",
+        lga: "All",
       },
     },
     update: {},
-   create: {
-  name: 'Nigeria - All States',
-  country: 'Nigeria',
-  state: 'All',
-  lga: 'All',
-},
+    create: {
+      name: "Nigeria - All States",
+      country: "Nigeria",
+      state: "All",
+      lga: "All",
+    },
   });
 
   const admin = await prisma.adminUser.upsert({
@@ -46,10 +49,10 @@ async function main() {
       passwordHash,
       roleId: role.id,
       jurisdictionId: jurisdiction.id,
-      displayName: 'Super Admin',
-      country: 'Nigeria',
-      state: 'All',
-      lga: 'All',
+      displayName: "Super Admin",
+      country: "Nigeria",
+      state: "All",
+      lga: "All",
       isActive: true,
     },
     create: {
@@ -57,17 +60,18 @@ async function main() {
       passwordHash,
       roleId: role.id,
       jurisdictionId: jurisdiction.id,
-      displayName: 'Super Admin',
-      country: 'Nigeria',
-      state: 'All',
-      lga: 'All',
+      displayName: "Super Admin",
+      country: "Nigeria",
+      state: "All",
+      lga: "All",
       isActive: true,
     },
   });
 
-  console.log('Super admin created successfully');
-  console.log('Email:', email);
-  console.log('Admin ID:', admin.id);
+  console.log("Super admin created successfully");
+  console.log("Email:", email);
+  console.log("Admin ID:", admin.id);
+  console.log("Role:", roleName);
 }
 
 main()

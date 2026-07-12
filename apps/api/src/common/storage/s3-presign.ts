@@ -8,6 +8,8 @@ const allowedContentTypes = new Set([
   "application/pdf",
 ]);
 
+const evidenceKeyPattern = /^evidence\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
+
 function hmac(key: Buffer | string, value: string) {
   return createHmac("sha256", key).update(value).digest();
 }
@@ -28,7 +30,17 @@ export function evidenceObjectKey(ownerId: string, fileName: string) {
   return `evidence/${ownerId}/${randomUUID()}${extension}`;
 }
 
-export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900) {
+export function assertEvidenceObjectKey(incidentId: string, objectKey: string, bucket: string, contentType?: string) {
+  const expectedBucket = process.env.S3_BUCKET ?? "the-eye";
+  if (bucket !== expectedBucket) throw new BadRequestException("Evidence bucket mismatch");
+  if (!incidentId || objectKey.includes("..") || !objectKey.startsWith(`evidence/${incidentId}/`)) {
+    throw new BadRequestException("Evidence objectKey must remain under the incident upload prefix");
+  }
+  if (!evidenceKeyPattern.test(objectKey)) throw new BadRequestException("Invalid evidence object key format");
+  if (contentType) validateEvidenceUpload(contentType);
+}
+
+export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900, contentType?: string) {
   const endpoint = process.env.S3_ENDPOINT;
   const bucket = process.env.S3_BUCKET;
   const accessKey = process.env.S3_ACCESS_KEY;
@@ -37,6 +49,7 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900)
   if (!endpoint || !bucket || !accessKey || !secretKey) {
     throw new InternalServerErrorException("Evidence storage is not configured");
   }
+  if (contentType) validateEvidenceUpload(contentType);
 
   const now = new Date();
   const date = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
@@ -45,16 +58,20 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900)
   const credential = `${accessKey}/${scope}`;
   const url = new URL(endpoint);
   const canonicalUri = `/${encodePath(`${bucket}/${objectKey}`)}`;
+  const signedHeaders = contentType ? "content-type;host" : "host";
   const query = new URLSearchParams({
     "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
     "X-Amz-Credential": credential,
     "X-Amz-Date": date,
     "X-Amz-Expires": String(expiresSeconds),
-    "X-Amz-SignedHeaders": "host",
+    "X-Amz-SignedHeaders": signedHeaders,
   });
   query.sort();
 
-  const canonicalRequest = ["PUT", canonicalUri, query.toString(), `host:${url.host}\n`, "host", "UNSIGNED-PAYLOAD"].join("\n");
+  const canonicalHeaders = contentType
+    ? `content-type:${contentType}\nhost:${url.host}\n`
+    : `host:${url.host}\n`;
+  const canonicalRequest = ["PUT", canonicalUri, query.toString(), canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"].join("\n");
   const stringToSign = ["AWS4-HMAC-SHA256", date, scope, createHash("sha256").update(canonicalRequest).digest("hex")].join("\n");
   const signingKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, dateStamp), region), "s3"), "aws4_request");
   const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");

@@ -1,50 +1,25 @@
-﻿import { Body, Controller, Post } from "@nestjs/common";
+﻿import { Body, Controller, Delete, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
+import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
+import {
+  FirebaseExchangeDto,
+  FirebaseLinkDto,
+  GoogleLoginDto,
+  LoginDto,
+  PasswordResetConfirmDto,
+  PasswordResetRequestDto,
+  PhoneOtpRequestDto,
+  PhoneOtpVerifyDto,
+  RefreshDto,
+} from "./dto/auth.dto";
 import { AuthService } from "./auth.service";
-
-class LoginDto {
-  email?: string;
-  phone?: string;
-  password!: string;
-  admin?: boolean;
-}
-
-class GoogleLoginDto {
-  idToken?: string;
-  googleId?: string;
-  email!: string;
-  firstName?: string;
-  lastName?: string;
-}
-
-class RefreshDto {
-  refreshToken!: string;
-}
-
-class PasswordResetRequestDto {
-  email!: string;
-}
-
-class PasswordResetConfirmDto {
-  token!: string;
-  newPassword!: string;
-}
-
-class PhoneOtpRequestDto {
-  phone!: string;
-  purpose?: string;
-}
-
-class PhoneOtpVerifyDto {
-  phone!: string;
-  code!: string;
-  purpose?: string;
-}
 
 @ApiTags("auth")
 @Controller("auth")
+@RateLimit("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post("login")
   login(@Body() dto: LoginDto) {
@@ -54,6 +29,23 @@ export class AuthController {
   @Post("google")
   google(@Body() dto: GoogleLoginDto) {
     return this.authService.googleLogin(dto);
+  }
+
+  @Post("firebase/exchange")
+  exchangeFirebase(@Body() dto: FirebaseExchangeDto) {
+    return this.authService.exchangeFirebaseToken(dto);
+  }
+
+  @Post("providers/link")
+  @UseGuards(JwtAuthGuard)
+  linkProvider(@Req() request: { user: { sub: string } }, @Body() dto: FirebaseLinkDto) {
+    return this.authService.linkProvider(request.user.sub, dto);
+  }
+
+  @Delete("providers/:provider")
+  @UseGuards(JwtAuthGuard)
+  unlinkProvider(@Req() request: { user: { sub: string } }, @Param("provider") provider: string) {
+    return this.authService.unlinkProvider(request.user.sub, provider);
   }
 
   @Post("refresh")

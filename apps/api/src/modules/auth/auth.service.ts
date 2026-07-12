@@ -1,11 +1,26 @@
 ﻿import { randomUUID } from "crypto";
-import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Prisma } from "@prisma/client";
 import { AdminRoleName, adminRolePermissions, userRolePermissions, UserRole } from "@the-eye/shared";
+import type { VerifiedFirebaseIdentity } from "../../common/auth/firebase-id-token";
+import { FirebaseAuthVerifier } from "../../common/auth/firebase-auth.verifier";
 import { hashOtp, hashPassword, hashToken, randomToken, verifyPassword } from "../../common/auth/crypto";
-import { signJwt, verifyJwt, type JwtPayload } from "../../common/auth/jwt";
+import { parseTtl, signJwt, verifyJwt, type JwtPayload } from "../../common/auth/jwt";
+import { requireJwtAccessSecret, requireJwtRefreshSecret } from "../../common/auth/jwt-secrets";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import type { FirebaseExchangeDto, FirebaseLinkDto } from "./dto/auth.dto";
+import { isValidPhoneNumber, normalizePhoneNumber } from "./phone-normalize";
 
 const ADMIN_ROLE_NAMES = new Set<string>(Object.values(AdminRoleName));
 
@@ -27,9 +42,10 @@ type GoogleInput = {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-    private readonly audit: AuditService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService) private readonly config: ConfigService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(FirebaseAuthVerifier) private readonly firebaseVerifier: FirebaseAuthVerifier,
   ) {}
 
   async login(dto: LoginInput) {
@@ -66,12 +82,104 @@ export class AuthService {
     return this.issueUserSession(user);
   }
 
+  async exchangeFirebaseToken(dto: FirebaseExchangeDto) {
+    if (dto.provider !== "google.com" && dto.provider !== "apple.com") {
+      throw new BadRequestException("Unsupported auth provider");
+    }
+
+    const identity = await this.verifyFirebaseIdentity(dto.idToken, dto.provider);
+    const user = await this.resolveFirebaseUser(identity);
+    this.assertUserCanSignIn(user);
+
+    await this.audit.record({
+      actor: { sub: user.id, typ: "user", role: UserRole.Citizen, permissions: [] },
+      action: "auth.firebase.exchange",
+      entityType: "users",
+      entityId: user.id,
+      metadata: {
+        provider: identity.provider,
+        platform: dto.platform ?? null,
+        deviceId: dto.deviceId ?? null,
+        emailVerified: identity.emailVerified,
+      },
+    });
+
+    const profileComplete = this.isProfileComplete(user.profile ?? null);
+    const session = await this.issueUserSession(user);
+    return { ...session, profileComplete };
+  }
+
+  async linkProvider(userId: string, dto: FirebaseLinkDto) {
+    if (dto.provider !== "google.com" && dto.provider !== "apple.com") {
+      throw new BadRequestException("Unsupported auth provider");
+    }
+
+    const identity = await this.verifyFirebaseIdentity(dto.idToken, dto.provider);
+    const existing = await this.prisma.authAccount.findUnique({
+      where: { provider_providerSubject: { provider: identity.provider, providerSubject: identity.uid } },
+    });
+    if (existing && existing.userId !== userId) {
+      throw new ConflictException({
+        message: "This sign-in provider is already linked to another THE EYE account.",
+        code: "ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL",
+      });
+    }
+    if (existing?.userId === userId) return { ok: true };
+
+    await this.prisma.authAccount.create({
+      data: {
+        userId,
+        provider: identity.provider,
+        providerSubject: identity.uid,
+        providerEmail: identity.email ?? null,
+        emailVerified: identity.emailVerified,
+      },
+    });
+
+    if (identity.provider === "google.com") {
+      await this.prisma.user.update({ where: { id: userId }, data: { googleId: identity.uid } });
+    }
+
+    return { ok: true };
+  }
+
+  async unlinkProvider(userId: string, provider: string) {
+    if (provider !== "google.com" && provider !== "apple.com") {
+      throw new BadRequestException("Unsupported auth provider");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { authAccounts: true },
+    });
+    if (!user) throw new UnauthorizedException("User not found");
+
+    const remainingProviders = user.authAccounts.filter((account) => account.provider !== provider);
+    const hasPassword = Boolean(user.passwordHash);
+    const hasPhone = Boolean(user.phone);
+    if (!hasPassword && !hasPhone && remainingProviders.length === 0) {
+      throw new ForbiddenException("Keep at least one sign-in method before unlinking this provider.");
+    }
+
+    await this.prisma.authAccount.deleteMany({ where: { userId, provider } });
+    if (provider === "google.com") {
+      await this.prisma.user.update({ where: { id: userId }, data: { googleId: null } });
+    }
+    return { ok: true };
+  }
+
   async refresh(refreshToken: string) {
-    const payload = verifyJwt(refreshToken, this.config.get<string>("JWT_REFRESH_SECRET", "dev-refresh-secret"));
+    const payload = verifyJwt(refreshToken, requireJwtRefreshSecret(this.config));
     const tokenHash = hashToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
 
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+      if (stored?.revokedAt && stored.familyId) {
+        await this.prisma.refreshToken.updateMany({
+          where: { familyId: stored.familyId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
       throw new UnauthorizedException("Invalid refresh token");
     }
 
@@ -120,7 +228,7 @@ export class AuthService {
     });
 
     // TODO: Dispatch the raw token through the configured email provider.
-    return this.config.get<string>("ALLOW_DEV_AUTH_CODES") === "true" ? { ok: true, devResetToken: token } : { ok: true };
+    return this.allowDevAuthCodes() ? { ok: true, devResetToken: token } : { ok: true };
   }
 
   async confirmPasswordReset(token: string, newPassword: string) {
@@ -140,44 +248,54 @@ export class AuthService {
   }
 
   async requestPhoneOtp(phone: string, purpose: string) {
+    const normalizedPhone = normalizePhoneNumber(phone);
+    if (!isValidPhoneNumber(normalizedPhone)) throw new BadRequestException("Enter a valid phone number");
+
     const recentCount = await this.prisma.phoneOtp.count({
-      where: { phone, purpose, createdAt: { gt: new Date(Date.now() - 60_000) } },
+      where: { phone: normalizedPhone, purpose, createdAt: { gt: new Date(Date.now() - 60_000) } },
     });
-    if (recentCount >= 3) throw new HttpException("Too many OTP requests", HttpStatus.TOO_MANY_REQUESTS);
+    if (recentCount >= 3) throw new HttpException("Too many OTP requests. Wait a minute and try again.", HttpStatus.TOO_MANY_REQUESTS);
 
     const code = String((parseInt(randomToken(4).slice(0, 8), 16) % 900000) + 100000);
-    const user = await this.prisma.user.findUnique({ where: { phone } });
+    const user = await this.prisma.user.findUnique({ where: { phone: normalizedPhone } });
 
     await this.prisma.phoneOtp.create({
       data: {
         userId: user?.id,
-        phone,
+        phone: normalizedPhone,
         purpose,
-        codeHash: hashOtp(phone, code, purpose),
+        codeHash: hashOtp(normalizedPhone, code, purpose),
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
 
     // TODO: Dispatch the raw code through the configured SMS provider.
-    return this.config.get<string>("ALLOW_DEV_AUTH_CODES") === "true" ? { ok: true, devOtp: code } : { ok: true };
+    return this.allowDevAuthCodes() ? { ok: true, devOtp: code } : { ok: true };
   }
 
   async verifyPhoneOtp(phone: string, code: string, purpose: string) {
+    const normalizedPhone = normalizePhoneNumber(phone);
+    if (!isValidPhoneNumber(normalizedPhone)) throw new BadRequestException("Enter a valid phone number");
+
     const otp = await this.prisma.phoneOtp.findFirst({
-      where: { phone, purpose, verifiedAt: null, expiresAt: { gt: new Date() } },
+      where: { phone: normalizedPhone, purpose },
       orderBy: { createdAt: "desc" },
     });
 
-    if (!otp || otp.attempts >= 5) throw new BadRequestException("Invalid or expired OTP");
-    if (otp.codeHash !== hashOtp(phone, code, purpose)) {
+    if (!otp) throw new BadRequestException("No active OTP found. Request a new code.");
+    if (otp.verifiedAt) throw new BadRequestException("This OTP has already been used.");
+    if (otp.expiresAt <= new Date()) throw new BadRequestException("OTP expired. Request a new code.");
+    if (otp.attempts >= 5) throw new BadRequestException("OTP locked due to too many attempts.");
+
+    if (otp.codeHash !== hashOtp(normalizedPhone, code, purpose)) {
       await this.prisma.phoneOtp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
-      throw new BadRequestException("Invalid or expired OTP");
+      throw new BadRequestException("Invalid OTP code.");
     }
 
     const user = await this.prisma.user.upsert({
-      where: { phone },
+      where: { phone: normalizedPhone },
       update: { phoneVerifiedAt: new Date() },
-      create: { phone, phoneVerifiedAt: new Date() },
+      create: { phone: normalizedPhone, phoneVerifiedAt: new Date() },
       include: { trustedReporter: true },
     });
 
@@ -186,8 +304,11 @@ export class AuthService {
   }
 
   private async loginUser(dto: LoginInput) {
+    const normalizedPhone = dto.phone ? normalizePhoneNumber(dto.phone) : undefined;
+    if (dto.phone && !isValidPhoneNumber(normalizedPhone!)) throw new BadRequestException("Enter a valid phone number");
+
     const user = await this.prisma.user.findFirst({
-      where: { OR: [{ email: dto.email ?? undefined }, { phone: dto.phone ?? undefined }] },
+      where: { OR: [{ email: dto.email ?? undefined }, { phone: normalizedPhone ?? undefined }] },
       include: { trustedReporter: true },
     });
 
@@ -270,10 +391,11 @@ export class AuthService {
   }
 
   private async issueSession(payload: JwtPayload, owner: { userId?: string; adminUserId?: string }, familyId?: string) {
-    const accessToken = signJwt(payload, this.config.get<string>("JWT_ACCESS_SECRET", "dev-access-secret"), this.config.get<string>("JWT_ACCESS_TTL", "15m"));
-    const refreshPayload: JwtPayload = { sub: payload.sub, typ: payload.typ };
-    const refreshToken = signJwt(refreshPayload, this.config.get<string>("JWT_REFRESH_SECRET", "dev-refresh-secret"), this.config.get<string>("JWT_REFRESH_TTL", "30d"));
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const accessToken = signJwt(payload, requireJwtAccessSecret(this.config), this.config.get<string>("JWT_ACCESS_TTL", "15m"));
+    const refreshPayload: JwtPayload = { sub: payload.sub, typ: payload.typ, jti: randomUUID() };
+    const refreshTtl = this.config.get<string>("JWT_REFRESH_TTL", "30d");
+    const refreshToken = signJwt(refreshPayload, requireJwtRefreshSecret(this.config), refreshTtl);
+    const expiresAt = new Date(Date.now() + parseTtl(refreshTtl, 30 * 24 * 60 * 60) * 1000);
 
     await this.prisma.refreshToken.create({
       data: {
@@ -285,6 +407,193 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken, user: payload };
+  }
+
+  private async verifyFirebaseIdentity(idToken: string, expectedProvider: "google.com" | "apple.com") {
+    try {
+      return await this.firebaseVerifier.verify(idToken, expectedProvider);
+    } catch {
+      throw new UnauthorizedException("Invalid Firebase identity token");
+    }
+  }
+
+  private async resolveFirebaseUser(identity: VerifiedFirebaseIdentity) {
+    const linked = await this.prisma.authAccount.findUnique({
+      where: { provider_providerSubject: { provider: identity.provider, providerSubject: identity.uid } },
+      include: { user: { include: { profile: true, trustedReporter: true } } },
+    });
+    if (linked) return linked.user;
+
+    const normalizedEmail = identity.email ? this.normalizeEmail(identity.email) : undefined;
+    if (normalizedEmail && identity.emailVerified) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        include: { profile: true, trustedReporter: true, authAccounts: true },
+      });
+      if (existingUser) {
+        this.assertSafeProviderLink(existingUser, identity);
+        return this.linkFirebaseIdentityToUser(existingUser, identity);
+      }
+    }
+
+    if (identity.provider === "google.com" && normalizedEmail) {
+      const legacyUser = await this.prisma.user.findFirst({
+        where: { OR: [{ googleId: identity.uid }, { email: normalizedEmail }] },
+        include: { profile: true, trustedReporter: true, authAccounts: true },
+      });
+      if (legacyUser) {
+        this.assertSafeProviderLink(legacyUser, identity);
+        return this.linkFirebaseIdentityToUser(legacyUser, identity);
+      }
+    }
+
+    try {
+      return await this.createFirebaseCitizen(identity);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const raced = await this.prisma.authAccount.findUnique({
+          where: { provider_providerSubject: { provider: identity.provider, providerSubject: identity.uid } },
+          include: { user: { include: { profile: true, trustedReporter: true } } },
+        });
+        if (raced) return raced.user;
+      }
+      throw error;
+    }
+  }
+
+  private assertSafeProviderLink(
+    user: {
+      id: string;
+      passwordHash: string | null;
+      authAccounts: { provider: string; providerSubject: string }[];
+    },
+    identity: VerifiedFirebaseIdentity,
+  ) {
+    if (user.passwordHash) {
+      throw new ConflictException({
+        message:
+          "An account already exists with this email. Sign in with your original method, then link this provider from Settings.",
+        code: "ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL",
+      });
+    }
+
+    const hasDifferentCredential = user.authAccounts.some(
+      (account) => account.provider !== identity.provider || account.providerSubject !== identity.uid,
+    );
+    if (user.authAccounts.length > 0 && hasDifferentCredential) {
+      throw new ConflictException({
+        message:
+          "This email is linked to another sign-in method. Use your original sign-in method and link this provider from Settings.",
+        code: "ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL",
+      });
+    }
+  }
+
+  private async linkFirebaseIdentityToUser(
+    user: { id: string; profile: unknown | null; trustedReporter: unknown | null },
+    identity: VerifiedFirebaseIdentity,
+  ) {
+    await this.prisma.authAccount.upsert({
+      where: { provider_providerSubject: { provider: identity.provider, providerSubject: identity.uid } },
+      update: {
+        providerEmail: identity.email ?? null,
+        emailVerified: identity.emailVerified,
+      },
+      create: {
+        userId: user.id,
+        provider: identity.provider,
+        providerSubject: identity.uid,
+        providerEmail: identity.email ?? null,
+        emailVerified: identity.emailVerified,
+      },
+    });
+
+    if (identity.provider === "google.com") {
+      await this.prisma.user.update({ where: { id: user.id }, data: { googleId: identity.uid } });
+    }
+
+    return this.prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { profile: true, trustedReporter: true },
+    });
+  }
+
+  private async createFirebaseCitizen(identity: VerifiedFirebaseIdentity) {
+    const names = this.splitDisplayName(identity.name, identity.provider);
+    const email = identity.emailVerified && identity.email ? this.normalizeEmail(identity.email) : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          googleId: identity.provider === "google.com" ? identity.uid : null,
+          profile: {
+            create: {
+              firstName: names.firstName,
+              lastName: names.lastName,
+              country: "Nigeria",
+              state: "Lagos",
+              lga: "Ikeja",
+              avatarUrl: identity.picture ?? null,
+            },
+          },
+        },
+        include: { profile: true, trustedReporter: true },
+      });
+
+      await tx.authAccount.create({
+        data: {
+          userId: user.id,
+          provider: identity.provider,
+          providerSubject: identity.uid,
+          providerEmail: identity.email ?? null,
+          emailVerified: identity.emailVerified,
+        },
+      });
+
+      return user;
+    });
+  }
+
+  private assertUserCanSignIn(user: { status: string }) {
+    if (user.status === "Suspended") {
+      throw new ForbiddenException({
+        message: "Your THE EYE account is suspended. Contact support for assistance.",
+        code: "ACCOUNT_SUSPENDED",
+      });
+    }
+    if (user.status === "Deactivated") {
+      throw new ForbiddenException({
+        message: "Your THE EYE account is deactivated.",
+        code: "ACCOUNT_DEACTIVATED",
+      });
+    }
+  }
+
+  private isProfileComplete(profile: { firstName: string; lastName: string; country: string; state: string; lga: string } | null) {
+    if (!profile) return false;
+    const placeholderNames = new Set(["Google", "Apple", "Citizen"]);
+    if (placeholderNames.has(profile.firstName) || profile.lastName === "User") return false;
+    return Boolean(profile.firstName && profile.lastName && profile.country && profile.state && profile.lga);
+  }
+
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
+  private splitDisplayName(name: string | undefined, provider: "google.com" | "apple.com") {
+    if (!name?.trim()) {
+      return { firstName: provider === "apple.com" ? "Apple" : "Google", lastName: "User" };
+    }
+    const parts = name.trim().split(/\s+/);
+    return {
+      firstName: parts[0] ?? "Citizen",
+      lastName: parts.length > 1 ? parts.slice(1).join(" ") : "User",
+    };
+  }
+
+  private allowDevAuthCodes() {
+    return process.env.NODE_ENV === "development" && this.config.get<string>("ALLOW_DEV_AUTH_CODES") === "true";
   }
 }
 

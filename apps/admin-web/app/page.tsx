@@ -1,50 +1,61 @@
 import { AppShell } from "../components/app-shell";
-import { IncidentMap, IncidentTable } from "../components/incident-widgets";
-import { MetricCard, PageHeader, Panel, StatusBadge } from "../components/ui";
-import { broadcasts, currentRole, incidents, roleScope } from "../lib/mock-data";
+import { DashboardActivityFeeds, DashboardChart } from "../components/dashboard-widgets";
+import { MetricCard, PageHeader, StatusBadge } from "../components/ui";
+import { fetchBroadcasts, fetchIncidents, fetchLiveVideoSessions, fetchUsersDirectory } from "../lib/api/data";
+import { buildDashboardChart } from "../lib/dashboard-metrics";
+import { getAdminSession } from "../lib/session";
+import { roleScope } from "../lib/types/admin-views";
 
-export default function DashboardPage() {
-  const p1Count = incidents.filter((incident) => incident.priority === "P1").length;
-  const verifyingCount = incidents.filter((incident) => incident.status === "Verifying").length;
+export const dynamic = "force-dynamic";
+
+export default async function DashboardPage() {
+  const [session, incidents, broadcasts, users, liveSessions] = await Promise.all([
+    getAdminSession(),
+    fetchIncidents(),
+    fetchBroadcasts(),
+    fetchUsersDirectory(),
+    fetchLiveVideoSessions(),
+  ]);
+  const activeRole = session?.role ?? "State Admin";
+  const initials = session?.email?.slice(0, 2).toUpperCase() ?? "AD";
+  const chart = buildDashboardChart(incidents, users.length, liveSessions);
 
   return (
     <AppShell>
       <PageHeader
-        eyebrow={`${currentRole} command dashboard`}
-        title="Live public safety operations"
-        action={<StatusBadge tone="success">{roleScope[currentRole]}</StatusBadge>}
+        eyebrow="Command dashboard"
+        title="Dashboard"
+        action={
+          <div className="flex items-center gap-3">
+            <StatusBadge tone="info">Notifications</StatusBadge>
+            <div className="flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-eye text-sm font-bold text-white">{initials}</span>
+              <div>
+                <p className="text-sm font-semibold">{session?.email?.split("@")[0] ?? "Administrator"}</p>
+                <p className="text-xs text-muted">{activeRole}</p>
+              </div>
+            </div>
+          </div>
+        }
       />
 
-      <section className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Active incidents" value={String(incidents.length)} detail="Inside assigned jurisdiction" />
-        <MetricCard label="P1 emergencies" value={String(p1Count)} detail="Immediate escalation enabled" />
-        <MetricCard label="Verification queue" value={String(verifyingCount)} detail="System and crowd signals" />
-        <MetricCard label="Broadcast approvals" value={String(broadcasts.length)} detail="Pending safety communications" />
+      <section className="mb-5 grid gap-4 md:grid-cols-3">
+        <MetricCard label="Total Users" value={String(users.length)} detail="Registered citizens and admins" accent="eyeOrange" />
+        <MetricCard label="Total Report" value={String(incidents.length)} detail="Incidents in assigned scope" accent="eye" />
+        <MetricCard label="Total Live Videos" value={String(liveSessions.length)} detail="Active and recent sessions" accent="ink" />
       </section>
 
-      <section className="mb-5 grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
-        <IncidentMap incidents={incidents} />
-        <Panel title="Emergency priority queue">
-          <div className="grid gap-3">
-            {incidents.filter((incident) => incident.priority === "P1").map((incident) => (
-              <div key={incident.id} className="rounded-lg border border-line bg-slate-50 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{incident.title}</p>
-                    <p className="mt-1 text-sm text-muted">{incident.assignedAgency}</p>
-                  </div>
-                  <StatusBadge tone="danger">{incident.priority}</StatusBadge>
-                </div>
-                <p className="mt-3 text-sm text-muted">{incident.responseStatus}</p>
-              </div>
-            ))}
-          </div>
-        </Panel>
+      <section className="mb-5">
+        <DashboardChart chartData={chart.points} footnote={chart.footnote} />
       </section>
 
-      <Panel title="Incident list">
-        <IncidentTable incidents={incidents} />
-      </Panel>
+      <section className="mb-5">
+        <DashboardActivityFeeds incidents={incidents} />
+      </section>
+
+      <p className="text-xs text-muted">
+        Scope: {roleScope[activeRole as keyof typeof roleScope] ?? "Admin scope"} — {broadcasts.length} broadcasts in queue.
+      </p>
     </AppShell>
   );
 }

@@ -1,9 +1,13 @@
 import { AppShell } from "../../components/app-shell";
 import { IncidentMap, IncidentTable } from "../../components/incident-widgets";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { incidents } from "../../lib/mock-data";
+import { fetchIncidents } from "../../lib/api/data";
 
-export default function IncidentsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function IncidentsPage() {
+  const incidents = await fetchIncidents();
+
   return (
     <AppShell>
       <PageHeader eyebrow="Jurisdiction filtered" title="Incident list" action={<StatusBadge tone="info">{incidents.length} active</StatusBadge>} />

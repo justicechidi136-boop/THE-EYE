@@ -1,0 +1,205 @@
+# CI — fast feedback on pull requests.
+# Triggers: PRs targeting staging or main.
+# Does NOT use GitHub environments — no access to staging/production secrets.
+name: CI
+
+on:
+  pull_request:
+    branches: [staging, main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  # CI-safe public values only — never production secrets.
+  THE_EYE_APP_ENV: staging
+  FCM_PROJECT_ID: the-eye-2stg
+  FIREBASE_PROJECT_ID: the-eye-2stg
+  NEXT_PUBLIC_APP_ENV: staging
+  NEXT_PUBLIC_API_BASE_URL: https://ci-staging-api.example.test
+  CI_STAGING_API_URL: https://ci-staging-api.example.test
+  CI_PRODUCTION_API_URL: https://ci-production-api.example.test
+
+jobs:
+  api:
+    name: API lint & test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: the_eye
+          POSTGRES_USER: the_eye
+          POSTGRES_PASSWORD: ci_postgres_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U the_eye -d the_eye"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20
+      DATABASE_DIRECT_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ci_access_secret_32_chars_minimum
+      JWT_REFRESH_SECRET: ci_refresh_secret_32_chars_minimum
+      LIVE_LOCATION_LINK_SECRET: ci_live_location_secret_32_chars
+      LIVEKIT_API_KEY: ci_livekit_api_key_32_chars_minimum
+      LIVEKIT_API_SECRET: ci_livekit_api_secret_32_chars_minimum
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: the-eye
+      S3_ACCESS_KEY: ci_s3_access_key
+      S3_SECRET_KEY: ci_s3_secret_key_32_chars_minimum
+      CORS_ORIGINS: http://localhost:3000
+      GOOGLE_OAUTH_CLIENT_ID: ci-google-oauth-client-id
+      METRICS_BEARER_TOKEN: ci_metrics_bearer_token_32_chars_min
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @the-eye/api exec prisma generate
+
+      - name: Lint API
+        run: pnpm --filter @the-eye/api run lint
+
+      - name: Validate Prisma schema
+        run: pnpm --filter @the-eye/api exec prisma validate
+
+      - name: Apply migrations
+        run: pnpm --filter @the-eye/api exec prisma migrate deploy
+
+      - name: Backend tests
+        run: pnpm run test:backend
+
+  admin:
+    name: Admin lint & typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint admin-web
+        run: pnpm --filter @the-eye/admin-web run lint
+
+      - name: Admin smoke structure
+        run: pnpm run test:admin:smoke
+
+  mobile:
+    name: Mobile analyze & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm --dir apps/mobile run pub-get
+
+      - name: Analyze
+        run: pnpm run mobile:analyze
+
+      - name: Test
+        run: pnpm run mobile:test
+
+  watch:
+    name: Watch analyze & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm --dir apps/watch run pub-get
+
+      - name: Analyze
+        run: pnpm run watch:analyze
+
+      - name: Test
+        run: pnpm run watch:test
+
+  guards:
+    name: Firebase & deploy guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Staging Firebase ID guard (CI-safe)
+        run: |
+          set -euo pipefail
+          test "$THE_EYE_APP_ENV" = "staging"
+          test "$FCM_PROJECT_ID" = "the-eye-2stg"
+          test "$FIREBASE_PROJECT_ID" = "the-eye-2stg"
+          for forbidden in the-eye-2pd-d0217 the-eye-29cff; do
+            if echo "$FCM_PROJECT_ID $FIREBASE_PROJECT_ID" | grep -q "$forbidden"; then
+              echo "PR CI must not reference $forbidden"
+              exit 1
+            fi
+          done
+          echo "CI Firebase guard passed (staging project IDs only)."
+
+      - name: Firebase auth provider manifest
+        run: pnpm run test:firebase:auth-providers
+
+      - name: Deploy env documentation
+        run: pnpm run test:deploy:env
+
+      - name: Firebase production guard unit tests
+        run: pnpm run test:firebase:guard
+
+      - name: Load-test structure validation
+        run: pnpm run test:load:validate

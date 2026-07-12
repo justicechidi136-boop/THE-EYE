@@ -1,16 +1,22 @@
 import { AppShell } from "../../components/app-shell";
-import { IncidentTable } from "../../components/incident-widgets";
+import { IncidentMap, IncidentTable } from "../../components/incident-widgets";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { incidents } from "../../lib/mock-data";
+import { fetchIncidents } from "../../lib/api/data";
 
-export default function EmergencyPage() {
-  const emergencyIncidents = incidents.filter((incident) => incident.priority === "P1");
+export const dynamic = "force-dynamic";
+
+export default async function EmergencyPage() {
+  const incidents = (await fetchIncidents()).filter((incident) => incident.priority === "P1");
+
   return (
     <AppShell>
-      <PageHeader eyebrow="Immediate response" title="Emergency priority queue" action={<StatusBadge tone="danger">P1 life threatening</StatusBadge>} />
-      <Panel title="Unacknowledged and active emergencies">
-        <IncidentTable incidents={emergencyIncidents} />
-      </Panel>
+      <PageHeader eyebrow="P1 response" title="Emergency queue" action={<StatusBadge tone="danger">{incidents.length} active</StatusBadge>} />
+      <div className="grid gap-5">
+        <IncidentMap incidents={incidents} />
+        <Panel title="Life-threatening incidents">
+          <IncidentTable incidents={incidents} />
+        </Panel>
+      </div>
     </AppShell>
   );
 }

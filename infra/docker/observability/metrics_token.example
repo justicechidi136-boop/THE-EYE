@@ -1,0 +1,2 @@
+# Copy your METRICS_BEARER_TOKEN value here (no newline). Used by Prometheus profile only.
+# File path: infra/docker/observability/metrics_token

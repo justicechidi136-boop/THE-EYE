@@ -1,10 +1,14 @@
 import { AppShell } from "../../../components/app-shell";
 import { MetricCard, PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { smartwatchDevices } from "../../../lib/mock-data";
+import { fetchSmartwatchDevices } from "../../../lib/api/data";
 
-export default function WatchHealthPage() {
+export const dynamic = "force-dynamic";
+
+export default async function WatchHealthPage() {
+  const smartwatchDevices = await fetchSmartwatchDevices();
   const lowBattery = smartwatchDevices.filter((device) => device.battery < 20).length;
   const weakSignal = smartwatchDevices.filter((device) => device.signal < 30).length;
+
   return (
     <AppShell>
       <PageHeader eyebrow="Device health" title="Battery, signal, and last seen" action={<StatusBadge tone={lowBattery ? "warning" : "success"}>{lowBattery} low battery</StatusBadge>} />
@@ -16,7 +20,7 @@ export default function WatchHealthPage() {
       <Panel title="Health queue">
         <div className="grid gap-3">
           {smartwatchDevices.map((device) => (
-            <div key={device.id} className="grid gap-3 rounded-lg border border-line bg-white p-4 md:grid-cols-[1fr_140px_140px_180px]">
+            <div key={device.id} className="grid gap-3 rounded-lg border border-line bg-surface p-4 md:grid-cols-[1fr_140px_140px_180px]">
               <div>
                 <p className="font-semibold">{device.deviceId}</p>
                 <p className="text-sm text-muted">{device.owner} - {device.mode} - last seen {device.lastSeen}</p>

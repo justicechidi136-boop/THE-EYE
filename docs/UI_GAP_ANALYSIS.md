@@ -1,98 +1,169 @@
-# THE EYE UI Gap Analysis
+# THE EYE — UI Gap Analysis & Implementation Report
 
-Date: 2026-07-07
+**Date:** 2026-07-10  
+**Figma source:** [THE EYE (Copy)](https://www.figma.com/design/ZxyNNxUzsx3DiGjRwrCopr/THE-EYE--Copy-)  
+**Nodes:** `0:1` (mobile), `563:852` (admin)  
+**Brand:** `#009933` green, `#FF9933` orange, Montserrat typography  
+**Principle:** Extend existing Figma-aligned UI — no redesign, no brand change
 
-## Figma Source Reviewed
+---
 
-File: `THE EYE Copy`
+## 1. UI Gap Analysis (Figma vs Feature Requirements)
 
-Observed design patterns:
-- Mobile-first iPhone 13 mini screens for onboarding, sign in, OTP, password reset, home, live video, broadcast, police stations, services, reporting forms, settings, profile, Neighborhood Watch, and live chat.
-- Desktop admin dashboard at 1440px with fixed dark sidebar, white operational cards, charts, tables, login/verification flows, broadcast, users, services, emergencies, live chats, and settings.
-- Smartwatch mini screens at 184x224 for onboarding, location permission, stable/risk state, active threat, SOS sent, and report sent.
-- Primary colors: `#019934`, `#0B7E5D`, `#032221`, `#FFFFFF`, `#F1F7F6`, emergency red `#FF3B30`, warning orange `#FF6600`.
-- Typography: mostly Biennale, Inter, SF Pro Text, Roboto, and Lexend depending on screen family.
-- UI language: compact cards, rounded buttons, high-contrast emergency actions, dark command/safety surfaces, white content cards, concise labels, and location-first safety alerts.
+| # | Feature area | Figma / prior code | Gap before this pass | Status after update |
+|---|--------------|-------------------|----------------------|---------------------|
+| 1 | Emergency Reporting | 7 report routes + SOS FAB | API wiring pending | **Complete UI** — all 7 types + SOS preserved |
+| 2 | Incident Verification | Confidence % only | Missing badges, duplicate, witness panels | **Added** Verified/Pending/Disputed/False Information badges, duplicate + witness panels |
+| 3 | Live Video | Overlay + GPS links | No trail map, no session picker | **Added** session picker, movement trail map, Open Location |
+| 4 | Neighborhood Watch | 10 mobile + 9 admin routes | Nav orphans, no API | **Nav complete** — all NW modules in sidebar |
+| 5 | Broadcast | 6 mobile types | Community warning missing on mobile | **Added** community warning; admin compose form |
+| 6 | Smartwatch | Pair/modes/battery | No SOS history route | **Added** `/smartwatch/sos-history` + mobile SOS history list |
+| 7 | Admin Dashboard | Broad modules | Orphan routes, “The I” label, no RBAC nav | **Fixed** nav labels, all modules linked, role-scoped nav |
+| 8 | Roles (9) | All in `roleScope` | No UI enforcement | **Added** `nav-access.ts` role filtering |
+| 9 | Audit | Hash chain ledger | No evidence access logs | **Added** evidence access log panel on incident detail |
+| 10 | Notifications | Partial samples | Missing 6-type catalog | **Added** 6 notification types in mobile seed + admin type selector |
 
-## Current Codebase Coverage
+### Backend-dependent gaps (TODO preserved)
 
-Admin web already included:
-- Login, role-based shell, live incident map, incident list/detail, verification queue, emergency queue, broadcasts, missing persons, stolen vehicles, live video viewer, users, agencies, jurisdictions, audit logs, analytics, police locator, notifications, Neighborhood Watch modules, and smartwatch modules.
+- LiveKit real video player
+- Map SDK (Leaflet/Google) — CSS trail placeholder used
+- `POST /incidents/report`, `POST /broadcasts`, `POST /notifications/send` wiring
+- Verification duplicate/witness API endpoints
+- Phone OTP / Google SSO
 
-Mobile app already included:
-- Splash, login/register, home, persistent SOS action, emergency/crime/accident reports, live emergency video, broadcasts, nearby police stations, notifications, incident tracking, family safety circle, profile, settings, Neighborhood Watch, smartwatch, offline drafts, low-data mode, and high-contrast mode.
+---
 
-## Gaps Found And Updates Made
+## 2. Updated Screens
 
-1. Emergency Reporting
-- Gap: Mobile app exposed Emergency, Crime, and Accident, but Fire, Kidnapping, Abuse, and Suspicious Activity were not first-class routes.
-- Updated: Added report routes and home action tiles for Fire, Kidnapping, Abuse, and Suspicious Activity using the existing large-card mobile pattern.
+### Admin (`apps/admin-web`)
 
-2. Incident Verification
-- Existing: Admin verification queue shows confidence score, GPS accuracy, evidence count, and reporter status.
-- Remaining UI TODO: Duplicate cluster drilldown and nearby witness response detail can be expanded once backend returns richer verification signal payloads.
+| Screen | Changes |
+|--------|---------|
+| `/` | Figma dashboard metrics, chart, activity feeds |
+| `/login` | Figma centered auth card |
+| `/verification` | Verification badges, duplicate + witness panels, GPS links |
+| `/incidents`, `/incidents/[id]` | Verification column, status history, evidence access logs, trail map |
+| `/live-video` | Session picker, movement trail map |
+| `/audit` | Client-side filter component |
+| `/broadcasts` | Interactive create form |
+| `/notifications` | Type selector (6 alert types) |
+| `/smartwatch` | Device detail links |
+| Sidebar | Full module nav + role filtering |
 
-3. Live Video Reporting
-- Existing: Admin live video page includes permanent evidence overlay, date/time, GPS, accuracy, reporter ID/anonymous ID, Open Location, Copy Coordinates, movement trail, latest GPS, and map marker.
-- Remaining UI TODO: Replace placeholder video/map panels with LiveKit and map SDK components after production keys are available.
+### Mobile (`apps/mobile`)
 
-4. Neighborhood Watch
-- Existing: Admin and mobile both include communities, approvals, posts, verification, volunteers, patrols, map, analytics, feed, chat, alerts, and join flows.
-- Remaining UI TODO: Add richer moderation detail panels when backend membership/post audit endpoints are finalized.
+| Screen | Changes |
+|--------|---------|
+| `/login`, `/otp-verification` | Figma auth cards |
+| `/live-video` | Timestamp overlay, clickable GPS |
+| `/broadcasts` | 7 broadcast types incl. community warning |
+| `/notifications` | 6 notification type samples + timestamps |
+| `/tracking` | Verification status badges on incidents |
+| `/smartwatch` | Mode cards, companion preview, SOS history |
 
-5. Broadcast System
-- Existing: Admin broadcast queue supports emergency, crime, accident, missing person, stolen vehicle, government alert, and community warning with approval/geofence state.
-- Updated: Added a consolidated citizen Safety Broadcasts route covering emergency, missing person, stolen vehicle, crime, accident, and government alerts using the established mobile list-card pattern.
-- Remaining UI TODO: Add broadcast preview templates once final public alert copy rules are approved.
+---
 
-6. Smartwatch / SOS Device
-- Existing: Admin and mobile expose pairing, modes, battery, signal, firmware, live tracking, SOS events, health, and firmware pages.
-- Remaining UI TODO: Add real firmware upload/progress states after storage endpoint is wired.
+## 3. New Screens Created
 
-7. Admin Dashboard
-- Existing: Command dashboard includes live map, emergency queue, incident list, verification, broadcast, Neighborhood Watch, live video, smartwatch, audit, analytics, and role-scoped shell.
-- Updated: Added `Roles and permissions` admin page and reorganized the complete sidebar into responsive Operations, Public Alerts, Neighborhood Watch, Smartwatch, and Administration groups.
+| App | Route | Purpose |
+|-----|-------|---------|
+| Admin | `/login/verify` | Email token verification (Figma `597:1081`) |
+| Admin | `/login/forgot-password` | 3-step password reset |
+| Admin | `/settings` | Account preferences |
+| Admin | `/live-chats` | Citizen support threads |
+| Admin | `/sailing-permit` | Maritime permits |
+| Admin | `/job-vacancies` | Public recruitment |
+| Admin | `/smartwatch/sos-history` | SOS event history table |
+| Mobile | `/otp-verification` | OTP/token screen |
 
-8. Roles and Permissions
-- Gap: `Community Moderator` was missing from the mock role model and no dedicated RBAC matrix page existed.
-- Updated: Added Community Moderator to role scope data and created the `/roles` access matrix page.
+---
 
-9. Audit and Accountability
-- Existing: Admin audit page shows append-only hash chain, reasons, actors, entities, and chain status.
-- Remaining UI TODO: Add evidence access log detail drawer once evidence access endpoint returns per-file access events.
+## 4. Reusable Components Created
 
-10. Notifications
-- Existing: Admin notifications page covers FCM, SMS/email placeholders, in-app, location targeting, priority, read status, and delivery logs.
-- Remaining UI TODO: Add user-facing alert preference management after profile notification settings are finalized.
+| Component | Path | Used for |
+|-----------|------|----------|
+| `AuthLayout` | `components/auth-layout.tsx` | Figma admin auth shell |
+| `VerificationStatusBadge` | `components/verification-ui.tsx` | Verified/Pending/Disputed/False Information |
+| `DuplicateReportPanel` | `components/verification-ui.tsx` | Duplicate cluster detection |
+| `WitnessConfirmationPanel` | `components/verification-ui.tsx` | Nearby witness confirmation |
+| `EvidenceAccessLog` | `components/verification-ui.tsx` | Evidence access audit trail |
+| `LocationTrailMap` | `components/location-trail-map.tsx` | GPS trail + live marker |
+| `DashboardChart` | `components/dashboard-widgets.tsx` | Figma bar chart |
+| `DashboardActivityFeeds` | `components/dashboard-widgets.tsx` | Live Video + Reports feeds |
+| `AuditFilter` | `components/audit-filter.tsx` | Ledger filtering |
+| `BroadcastCreateForm` | `components/broadcast-create-form.tsx` | Broadcast composer |
+| `NotificationComposeForm` | `components/notification-compose-form.tsx` | Notification composer |
+| `_ModeCard` | `main.dart` | Paired vs standalone mode |
+| `SmartwatchCompanionPreview` | `main.dart` | 184×224 watch UI |
 
-## Figma-To-Code Alignment
+**Utilities:** `lib/verification.ts`, `lib/nav-access.ts`
 
-Updated code now uses Figma-derived admin colors:
-- `command`: `#032221`
-- `eye`: `#019934`
-- `eyeDeep`: `#0B7E5D`
-- `field`: `#F1F7F6`
+---
 
-Existing component patterns preserved:
-- `AppShell`
-- `PageHeader`
-- `Panel`
-- `MetricCard`
-- `StatusBadge`
-- Mobile `SafetyScaffold`
-- Mobile `ActionTile`
-- Mobile `SectionCard`
-- Mobile `ListTileCard`
+## 5. Updated Routing / Navigation
 
-No existing working pages were removed.
+### Mobile routes (31 + OTP)
 
-## Verification Report
+All prior routes preserved. Added: `/otp-verification`
 
-- Monorepo lint and TypeScript checks: passed.
-- Admin production build: passed, 33 generated routes.
-- Admin build smoke test: passed.
-- Mobile route/screen smoke test: passed.
-- Backend regression tests: passed, 37/37.
-- Local admin startup: Next.js reached ready state at `http://localhost:3000`.
-- Flutter SDK validation: not run because Flutter is not installed or available on this machine.
-- Live Figma re-inspection: blocked after the connected Starter account reached its MCP call limit; the existing inspected design inventory above remained the implementation reference.
+### Admin routes (39)
+
+Added: `/login/verify`, `/login/forgot-password`, `/settings`, `/live-chats`, `/sailing-permit`, `/job-vacancies`, `/smartwatch/sos-history`
+
+### Admin sidebar groups
+
+Menu → Reports → Other Services → Chats → Neighborhood Watch → Smartwatch → Administration → Settings → Logout
+
+Role-scoped via `lib/nav-access.ts` (Community Moderator, Oversight Auditor, Agency Admin, etc.)
+
+---
+
+## 6. Mobile Responsiveness
+
+- Existing `SafetyScaffold` + responsive grids preserved
+- Admin: `sm:` / `md:` / `lg:` / `xl:` breakpoints on all updated pages
+- Auth cards: `max-w-[454px]` centered layout
+- Tables: `overflow-x-auto` + `TableScrollHint` pattern
+
+---
+
+## 7. Admin Dashboard Layout
+
+Figma-aligned structure retained:
+- Dark command sidebar (`#032221`)
+- White operational cards on field background (`#F1F7F6`)
+- Green primary CTAs (`#009933`)
+- Orange accent metrics (`#FF9933`)
+- Montserrat typography
+
+---
+
+## 8. Build / Test Report
+
+| Check | Result |
+|-------|--------|
+| `pnpm run lint` | Pass |
+| TypeScript (`tsc --noEmit`) | Pass |
+| `pnpm run build` | Pass — 39 admin routes |
+| `pnpm run test:backend` | 88/88 pass |
+| `pnpm run test:admin:smoke` | Pass |
+| `pnpm run test:mobile:smoke` | Pass |
+
+**Local run:**
+- Admin: `pnpm run dev:admin` → http://localhost:3000
+- API: `pnpm run dev:api` → http://localhost:4000
+- Mobile: Flutter required for device run; smoke test validates routes
+
+---
+
+## Design Token Reference
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `eye` / `BrandColors.green` | `#009933` | CTAs, success, nav active |
+| `eyeOrange` / `BrandColors.orange` | `#FF9933` | Metrics, warnings |
+| `command` | `#032221` | Sidebar, ink headings |
+| `eyeDeep` | `#0B7E5D` | Auth background |
+| `field` | `#F1F7F6` | Page background |
+| `stroke` | `#AACBC4` | Input borders |
+| Font | Montserrat | Admin + mobile |

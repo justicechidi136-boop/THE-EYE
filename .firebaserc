@@ -1,0 +1,10 @@
+{
+  "projects": {
+    "default": "the-eye-29cff",
+    "development": "the-eye-29cff",
+    "staging": "the-eye-2stg",
+    "production": "the-eye-2pd-d0217"
+  },
+  "targets": {},
+  "etags": {}
+}

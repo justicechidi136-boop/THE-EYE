@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { LinkLiveVideoEvidenceDto, LiveVideoLocationUpdateDto, StartLiveVideoDto } from "./dto/live-video.dto";
 import { LiveVideoService } from "./live-video.service";
 
@@ -20,6 +21,7 @@ export class LiveVideoController {
   }
 
   @Post("incidents/:incidentId/start")
+  @RateLimit("liveStreamCreate")
   @RequirePermissions("incident:create")
   start(@Param("incidentId") incidentId: string, @Body() dto: StartLiveVideoDto, @Req() request: any) {
     return this.liveVideo.startIncidentLiveVideo(incidentId, dto, request.user);

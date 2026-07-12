@@ -1,6 +1,6 @@
 import { AppShell } from "../../components/app-shell";
 import { MetricCard, PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { rolePermissions } from "../../lib/mock-data";
+import { roleMatrixRows } from "../../lib/role-matrix";
 
 function modifyTone(value: string) {
   if (value === "No") return "danger";
@@ -9,13 +9,13 @@ function modifyTone(value: string) {
 }
 
 export default function RolesPage() {
-  const restrictedRoles = rolePermissions.filter((role) => role.canModifyIncidents !== "Yes").length;
+  const restrictedRoles = roleMatrixRows.filter((role) => role.canModifyIncidents !== "Yes").length;
 
   return (
     <AppShell>
       <PageHeader eyebrow="Role-based access control" title="Roles and permissions" action={<StatusBadge tone="success">Jurisdiction scoped</StatusBadge>} />
       <section className="mb-5 grid gap-4 md:grid-cols-3">
-        <MetricCard label="Admin roles" value={`${rolePermissions.length}`} detail="Includes community moderation and oversight" />
+        <MetricCard label="Admin roles" value={`${roleMatrixRows.length}`} detail="Includes community moderation and oversight" />
         <MetricCard label="Restricted roles" value={`${restrictedRoles}`} detail="Limited incident modification access" />
         <MetricCard label="Audit coverage" value="Every action" detail="Admin and moderator actions are logged" />
       </section>
@@ -23,7 +23,7 @@ export default function RolesPage() {
       <Panel title="Access matrix">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1120px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-muted">
+            <thead className="bg-surfaceMuted text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Scope</th>
@@ -34,7 +34,7 @@ export default function RolesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {rolePermissions.map((role) => (
+              {roleMatrixRows.map((role) => (
                 <tr key={role.role}>
                   <td className="px-4 py-3 font-semibold text-ink">{role.role}</td>
                   <td className="px-4 py-3 text-muted">{role.scope}</td>
@@ -47,6 +47,7 @@ export default function RolesPage() {
             </tbody>
           </table>
         </div>
+        <p className="mt-4 text-sm text-muted">Matrix sourced from `@the-eye/shared` role permissions and admin scope definitions.</p>
       </Panel>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-3">

@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { CreateCommunityDto, CreateCommunityPostDto, CreatePatrolScheduleDto, PatrolCheckpointDto, RegisterVolunteerDto, SendCommunityMessageDto, VerifyCommunityPostDto } from "./dto/neighborhood-watch.dto";
 import { NeighborhoodWatchService } from "./neighborhood-watch.service";
 
@@ -49,13 +50,25 @@ export class NeighborhoodWatchController {
     return this.neighborhoodWatch.leaveCommunity(communityId, request.user);
   }
 
+  @Get("posts")
+  @RequirePermissions("community:read")
+  listPosts(@Req() request: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return this.neighborhoodWatch.listPosts(request.user, { cursor, limit });
+  }
+
   @Get("communities/:communityId/feed")
   @RequirePermissions("community:read")
-  feed(@Param("communityId") communityId: string, @Req() request: any) {
-    return this.neighborhoodWatch.feed(communityId, request.user);
+  feed(
+    @Param("communityId") communityId: string,
+    @Req() request: any,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.neighborhoodWatch.feed(communityId, request.user, { cursor, limit });
   }
 
   @Post("communities/:communityId/posts")
+  @RateLimit("communityPostCreate")
   @RequirePermissions("community:post")
   createPost(@Param("communityId") communityId: string, @Body() dto: CreateCommunityPostDto, @Req() request: any) {
     return this.neighborhoodWatch.createPost(communityId, dto, request.user);

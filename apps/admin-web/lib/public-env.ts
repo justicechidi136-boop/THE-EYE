@@ -1,0 +1,227 @@
+/**
+ * Approved NEXT_PUBLIC_* accessors for admin-web.
+ * Values are validated once at module load; production Docker builds must receive
+ * build-args — never rely on .env.production.local inside images.
+ */
+
+export type AppEnv = "local" | "development" | "staging" | "production";
+
+const DEPLOYABLE_APP_ENVS = ["staging", "production"] as const;
+export type DeployableAppEnv = (typeof DEPLOYABLE_APP_ENVS)[number];
+
+const LOCAL_DEV_API_ORIGIN = "http://localhost:4000";
+const LOCAL_DEV_API_BASE_PATH = "/v1";
+
+const STAGING_LEAK_MARKERS = ["the-eye-2stg", "staging-api", "NEXT_PUBLIC_APP_ENV=staging"] as const;
+const PRODUCTION_LEAK_MARKERS = ["the-eye-2pd-d0217", "api.theeye.com.ng", "NEXT_PUBLIC_APP_ENV=production"] as const;
+const DEVELOPMENT_LEAK_MARKERS = ["the-eye-29cff", "NEXT_PUBLIC_APP_ENV=local", "NEXT_PUBLIC_APP_ENV=development"] as const;
+
+function isProductionNodeEnv(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function readRawAppEnv(): string | undefined {
+  const value = process.env.NEXT_PUBLIC_APP_ENV?.trim();
+  return value || undefined;
+}
+
+function readRawApiBaseUrl(): string | undefined {
+  const configured =
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_API_URL?.trim();
+  return configured || undefined;
+}
+
+function assertNoMarkers(snapshot: string, markers: readonly string[], message: string): void {
+  if (markers.some((marker) => snapshot.includes(marker))) {
+    throw new Error(message);
+  }
+}
+
+function collectPublicEnvSnapshot(): string {
+  return Object.entries(process.env)
+    .filter(([key]) => key.startsWith("NEXT_PUBLIC_"))
+    .map(([key, value]) => `${key}=${value ?? ""}`)
+    .join("\n");
+}
+
+function normalizeAppEnv(raw: string | undefined): AppEnv {
+  if (!raw) {
+    if (!isProductionNodeEnv()) return "local";
+    throw new Error(
+      "NEXT_PUBLIC_APP_ENV is required for production admin-web builds (local | development | staging | production)",
+    );
+  }
+
+  if (raw === "local" || raw === "development" || raw === "staging" || raw === "production") {
+    return raw;
+  }
+
+  throw new Error(
+    `NEXT_PUBLIC_APP_ENV must be one of local, development, staging, production (received "${raw}")`,
+  );
+}
+
+function isLocalAppEnv(appEnv: AppEnv): boolean {
+  return appEnv === "local" || appEnv === "development";
+}
+
+function isDeployableAppEnv(appEnv: AppEnv): appEnv is DeployableAppEnv {
+  return (DEPLOYABLE_APP_ENVS as readonly string[]).includes(appEnv);
+}
+
+function validateDeployableApiBaseUrl(appEnv: DeployableAppEnv, apiBaseUrl: string): void {
+  const lower = apiBaseUrl.toLowerCase();
+
+  if (!apiBaseUrl) {
+    throw new Error("NEXT_PUBLIC_API_BASE_URL is required for staging and production admin-web builds");
+  }
+
+  if (lower.includes("localhost") || lower.includes("127.0.0.1")) {
+    throw new Error(`${appEnv} admin-web builds must not use localhost API URLs`);
+  }
+
+  if (apiBaseUrl.startsWith("http://")) {
+    throw new Error(`${appEnv} admin-web builds must use HTTPS API URLs (received "${apiBaseUrl}")`);
+  }
+
+  if (apiBaseUrl.startsWith("https://")) {
+    if (appEnv === "staging") {
+      assertNoMarkers(
+        lower,
+        PRODUCTION_LEAK_MARKERS,
+        "Staging admin-web build must not target production API hosts",
+      );
+    }
+    if (appEnv === "production") {
+      assertNoMarkers(
+        lower,
+        STAGING_LEAK_MARKERS,
+        "Production admin-web build must not target staging API hosts",
+      );
+    }
+    return;
+  }
+
+  if (apiBaseUrl.startsWith("/")) {
+    return;
+  }
+
+  throw new Error(
+    `NEXT_PUBLIC_API_BASE_URL must be an absolute HTTPS URL or a relative path (received "${apiBaseUrl}")`,
+  );
+}
+
+function validatePublicEnvIsolation(appEnv: AppEnv): void {
+  if (!isProductionNodeEnv() || isLocalAppEnv(appEnv)) return;
+
+  const snapshot = collectPublicEnvSnapshot();
+
+  if (appEnv === "production") {
+    assertNoMarkers(
+      snapshot,
+      [...STAGING_LEAK_MARKERS, ...DEVELOPMENT_LEAK_MARKERS],
+      "Production admin-web build leaked staging/development NEXT_PUBLIC_* configuration",
+    );
+  }
+
+  if (appEnv === "staging") {
+    assertNoMarkers(
+      snapshot,
+      PRODUCTION_LEAK_MARKERS,
+      "Staging admin-web build leaked production NEXT_PUBLIC_* configuration",
+    );
+  }
+
+  if (isLocalAppEnv(appEnv)) {
+    throw new Error("NEXT_PUBLIC_APP_ENV must not be local/development for production admin-web builds");
+  }
+}
+
+function resolvePublicApiBaseUrlForEnv(appEnv: AppEnv): string {
+  const configured = readRawApiBaseUrl();
+
+  if (isDeployableAppEnv(appEnv)) {
+    if (!configured) {
+      throw new Error("NEXT_PUBLIC_API_BASE_URL is required for staging and production admin-web builds");
+    }
+    validateDeployableApiBaseUrl(appEnv, configured);
+    if (configured.startsWith("http://") || configured.startsWith("https://")) {
+      return configured.replace(/\/$/, "");
+    }
+    return configured;
+  }
+
+  if (configured) {
+    if (configured.startsWith("http://") || configured.startsWith("https://")) {
+      return configured.replace(/\/$/, "");
+    }
+    const origin = process.env.API_ORIGIN?.trim() || LOCAL_DEV_API_ORIGIN;
+    return `${origin.replace(/\/$/, "")}${configured.startsWith("/") ? configured : `/${configured}`}`;
+  }
+
+  return `${LOCAL_DEV_API_ORIGIN}${LOCAL_DEV_API_BASE_PATH}`;
+}
+
+function resolveAppEnvLabel(appEnv: AppEnv): string {
+  switch (appEnv) {
+    case "production":
+      return "Production";
+    case "staging":
+      return "Staging";
+    case "development":
+      return "Development";
+    default:
+      return "Local";
+  }
+}
+
+function resolveAppEnvBadgeTone(appEnv: AppEnv): "danger" | "warning" | "success" | "info" | "neutral" {
+  switch (appEnv) {
+    case "production":
+      return "success";
+    case "staging":
+      return "warning";
+    case "development":
+      return "info";
+    default:
+      return "neutral";
+  }
+}
+
+/** Validates and resolves the active application environment. */
+export function resolveAppEnv(): AppEnv {
+  const appEnv = normalizeAppEnv(readRawAppEnv());
+  validatePublicEnvIsolation(appEnv);
+  return appEnv;
+}
+
+/** Browser-safe API base URL (absolute URL or relative path such as /v1). */
+export function resolvePublicApiBaseUrl(): string {
+  const appEnv = resolveAppEnv();
+  return resolvePublicApiBaseUrlForEnv(appEnv);
+}
+
+/** Server-side API base URL; prefers API_ORIGIN for relative public paths in Docker. */
+export function resolveServerApiBaseUrl(): string {
+  const appEnv = resolveAppEnv();
+  const configured = readRawApiBaseUrl();
+
+  if (configured?.startsWith("http://") || configured?.startsWith("https://")) {
+    return configured.replace(/\/$/, "");
+  }
+
+  const path = configured ?? LOCAL_DEV_API_BASE_PATH;
+  const origin = process.env.API_ORIGIN?.trim() || (isLocalAppEnv(appEnv) ? LOCAL_DEV_API_ORIGIN : undefined);
+
+  if (!origin) {
+    throw new Error("API_ORIGIN is required when NEXT_PUBLIC_API_BASE_URL is a relative path in deployable builds");
+  }
+
+  return `${origin.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export const publicAppEnv = resolveAppEnv();
+export const publicApiBaseUrl = resolvePublicApiBaseUrl();
+export const publicAppEnvLabel = resolveAppEnvLabel(publicAppEnv);
+export const publicAppEnvBadgeTone = resolveAppEnvBadgeTone(publicAppEnv);

@@ -2,8 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --surface: #161b22;
+  --surface-muted: #1e252d;
+  --text: #ffffff;
+  --text-muted: #b8c2cc;
+  --border: #2c3440;
+  --sidebar: #032221;
+  --on-sidebar: #ffffff;
+  --accent: #009933;
+  --accent-hover: #0b7e5d;
+  --accent-orange: #ff9933;
+  --danger: #ff4d4f;
+  --success: #00c853;
+  --warning: #ffb300;
+  --info: #29b6f6;
+  --focus-ring: #009933;
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
+  --bg: #f1f7f6;
+  --surface: #ffffff;
+  --surface-muted: #e7edf0;
+  --text: #172026;
+  --text-muted: #5c6670;
+  --border: #d8dee4;
+  --sidebar: #032221;
+  --on-sidebar: #ffffff;
+  --accent: #009933;
+  --accent-hover: #0b7e5d;
+  --accent-orange: #ff9933;
+  --danger: #b42318;
+  --success: #00c853;
+  --warning: #b54708;
+  --info: #0284c7;
+  --focus-ring: #009933;
+  --shadow-soft: 0 8px 24px rgba(17, 24, 32, 0.08);
 }
 
 html,
@@ -13,18 +52,73 @@ body {
 
 body {
   margin: 0;
-  background: #f3f6f8;
-  color: #172026;
+  background: var(--bg);
+  color: var(--text);
 }
 
 * {
   box-sizing: border-box;
 }
 
+@layer utilities {
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: inherit;
+    margin: inherit;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+}
+
+a,
+button,
+input,
+select,
+textarea,
+summary {
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .leaflet-grid {
   background:
-    linear-gradient(90deg, rgba(23, 32, 38, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(23, 32, 38, 0.08) 1px, transparent 1px),
-    #e7edf0;
+    linear-gradient(90deg, color-mix(in srgb, var(--text) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--text) 8%, transparent) 1px, transparent 1px),
+    var(--surface-muted);
   background-size: 30px 30px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

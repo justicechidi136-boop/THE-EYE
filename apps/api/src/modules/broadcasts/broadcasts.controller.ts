@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { BroadcastsService } from "./broadcasts.service";
 import { CreateBroadcastDto, NearbyBroadcastsQuery, RejectBroadcastDto, ReviewBroadcastDto } from "./dto/broadcast.dto";
 
@@ -15,11 +16,12 @@ export class BroadcastsController {
 
   @Get()
   @RequirePermissions("broadcast:create")
-  list(@Req() request: any) {
-    return this.broadcastsService.list(request.user);
+  list(@Req() request: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return this.broadcastsService.list(request.user, { cursor, limit });
   }
 
   @Post()
+  @RateLimit("broadcastCreate")
   @RequirePermissions("broadcast:create")
   create(@Body() dto: CreateBroadcastDto, @Req() request: any) {
     return this.broadcastsService.create(dto, request.user);

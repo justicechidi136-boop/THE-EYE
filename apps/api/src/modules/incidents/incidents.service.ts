@@ -1,10 +1,20 @@
 ﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
 import { hashPassword, randomToken } from "../../common/auth/crypto";
-import { createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
+import { createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
 import type { JwtPayload } from "../../common/auth/jwt";
+import { MetricsService } from "../../common/metrics/metrics.service";
+import {
+  buildCursorPage,
+  decodeIncidentCursor,
+  encodeIncidentCursor,
+  incidentCursorWhere,
+  resolvePageLimit,
+  type CursorPageQuery,
+} from "../../common/pagination/cursor-pagination";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { VerificationService } from "../verification/verification.service";
 import { canTransitionIncident } from "./incident-lifecycle";
 import {
   ConfirmIncidentMediaDto,
@@ -23,17 +33,20 @@ export class IncidentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly metrics: MetricsService,
+    private readonly verification: VerificationService,
   ) {}
 
-  async list(actor?: JwtPayload) {
-    return {
-      data: await this.prisma.incident.findMany({
-        where: this.incidentScopeWhere(actor),
-        include: { media: true, timeline: { orderBy: { createdAt: "desc" }, take: 10 } },
-        orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
-        take: 100,
-      }),
-    };
+  async list(actor?: JwtPayload, query: CursorPageQuery = {}) {
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeIncidentCursor(query.cursor);
+    const rows = await this.prisma.incident.findMany({
+      where: { ...this.incidentScopeWhere(actor), ...incidentCursorWhere(cursor) } as never,
+      include: { media: true, timeline: { orderBy: { createdAt: "desc" }, take: 10 } },
+      orderBy: [{ priority: "asc" }, { createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    return buildCursorPage(rows, limit, (item) => encodeIncidentCursor(String(item.priority), item.createdAt, item.id));
   }
 
   async reportEmergency(dto: ReportIncidentDto, actor?: JwtPayload) {
@@ -41,6 +54,26 @@ export class IncidentsService {
   }
 
   async report(dto: ReportIncidentDto, actor?: JwtPayload, emergencyFastPath = false) {
+    const startedAt = process.hrtime.bigint();
+    const intake = emergencyFastPath ? "emergency_fast_path" : "standard";
+    const incidentType = String(dto.type);
+    try {
+      return await this.reportInternal(dto, actor, emergencyFastPath);
+    } catch (error) {
+      this.metrics.recordIncidentSubmission(
+        incidentType,
+        intake,
+        Number(process.hrtime.bigint() - startedAt) / 1e9,
+        "error",
+      );
+      throw error;
+    }
+  }
+
+  private async reportInternal(dto: ReportIncidentDto, actor?: JwtPayload, emergencyFastPath = false) {
+    const startedAt = process.hrtime.bigint();
+    const intake = emergencyFastPath ? "emergency_fast_path" : "standard";
+    const incidentType = String(dto.type);
     validateReportIncidentDto(dto);
 
     const isAnonymous = dto.anonymous ?? !actor;
@@ -122,7 +155,9 @@ export class IncidentsService {
       void this.createEmergencyContactNotifications(actor.sub, incident.id, incidentTitle);
     }
 
-    return {
+    void this.verification.verifyIncident(incident.id).catch(() => undefined);
+
+    const result = {
       id: incident.id,
       status: incident.status,
       priority: incident.priority,
@@ -130,6 +165,13 @@ export class IncidentsService {
       fastPath: emergencyFastPath,
       targetProcessingTimeMs: emergencyFastPath ? 3000 : undefined,
     };
+    this.metrics.recordIncidentSubmission(
+      incidentType,
+      intake,
+      Number(process.hrtime.bigint() - startedAt) / 1e9,
+      "success",
+    );
+    return result;
   }
 
   async presignMedia(id: string, dto: PresignIncidentMediaDto, actor?: JwtPayload) {
@@ -141,7 +183,7 @@ export class IncidentsService {
     return {
       bucket: process.env.S3_BUCKET ?? "the-eye",
       objectKey,
-      uploadUrl: createS3PresignedPutUrl(objectKey, 300),
+      uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
       requiredHeaders: { "content-type": dto.contentType },
       expiresInSeconds: 300,
     };
@@ -149,6 +191,7 @@ export class IncidentsService {
 
   async confirmMedia(id: string, dto: ConfirmIncidentMediaDto, actor?: JwtPayload) {
     validateMediaDraft(dto);
+    assertEvidenceObjectKey(id, dto.objectKey, dto.bucket, dto.contentType);
     await this.get(id, actor);
 
     const media = await (this.prisma as any).incidentMedia.create({
@@ -323,6 +366,7 @@ export class IncidentsService {
 
     for (const media of mediaItems) {
       validateMediaDraft(media);
+      assertEvidenceObjectKey(incidentId, media.objectKey, media.bucket, media.contentType);
       await (this.prisma as any).incidentMedia.create({
         data: {
           incidentId,

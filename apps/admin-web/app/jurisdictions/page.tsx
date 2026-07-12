@@ -1,29 +1,17 @@
 import { AppShell } from "../../components/app-shell";
+import { PlaceholderNotice } from "../../components/placeholder-notice";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
+import { PLACEHOLDER_DEPENDENCIES } from "../../lib/placeholder-dependencies";
 
-const jurisdictions = [
-  { name: "Nigeria", level: "Country", admins: 2, incidentAccess: "All Nigerian states" },
-  { name: "Lagos", level: "State", admins: 4, incidentAccess: "Lagos State only" },
-  { name: "Ikeja", level: "LGA", admins: 6, incidentAccess: "Ikeja LGA only" },
-];
+const dependency = PLACEHOLDER_DEPENDENCIES.jurisdictions;
 
 export default function JurisdictionsPage() {
   return (
     <AppShell>
       <PageHeader eyebrow="RBAC boundaries" title="Jurisdiction management" action={<StatusBadge tone="success">Scoped access enforced</StatusBadge>} />
       <Panel title="Jurisdiction tree">
-        <div className="grid gap-3">
-          {jurisdictions.map((jurisdiction) => (
-            <div key={jurisdiction.name} className="grid gap-2 rounded-lg border border-line bg-slate-50 p-4 md:grid-cols-[1fr_160px_160px] md:items-center">
-              <div>
-                <p className="font-semibold">{jurisdiction.name}</p>
-                <p className="mt-1 text-sm text-muted">{jurisdiction.incidentAccess}</p>
-              </div>
-              <StatusBadge tone="info">{jurisdiction.level}</StatusBadge>
-              <p className="text-sm text-muted">{jurisdiction.admins} assigned admins</p>
-            </div>
-          ))}
-        </div>
+        <PlaceholderNotice title={dependency.title} endpoint={dependency.endpoint} note={dependency.note} />
+        <p className="mt-4 text-sm text-muted">No jurisdiction records are shown until the backend exposes a listing endpoint.</p>
       </Panel>
     </AppShell>
   );

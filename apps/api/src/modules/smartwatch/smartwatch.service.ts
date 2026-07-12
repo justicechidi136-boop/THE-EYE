@@ -1,10 +1,13 @@
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AdminRoleName, IncidentPriority, IncidentType } from "@the-eye/shared";
+import { AdminRoleName, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
 import { randomToken, hashToken } from "../../common/auth/crypto";
 import { signJwt, type JwtPayload } from "../../common/auth/jwt";
+import { requireJwtAccessSecret } from "../../common/auth/jwt-secrets";
+import { AuditService } from "../audit/audit.service";
 import { IncidentsService } from "../incidents/incidents.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { resolveAppEnvironment } from "../../common/auth/firebase-environment";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   RegisterSmartwatchDeviceDto,
@@ -16,9 +19,11 @@ import {
   SmartwatchSosDto,
   SmartwatchStandaloneLoginDto,
   UpdateSmartwatchStatusDto,
+  IssueSmartwatchPairingCodeDto,
   validateCriticalAlertDto,
   validateFirmwareReleaseDto,
   validateHeartbeatDto,
+  validateIssuePairingCodeDto,
   validateOfflineSyncDto,
   validateRegisterSmartwatchDeviceDto,
   validateStandaloneLoginDto,
@@ -27,6 +32,8 @@ import {
   validateSmartwatchStatusDto,
 } from "./dto/smartwatch.dto";
 
+const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
+
 @Injectable()
 export class SmartwatchService {
   constructor(
@@ -34,11 +41,13 @@ export class SmartwatchService {
     private readonly incidents: IncidentsService,
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
   async registerDevice(dto: RegisterSmartwatchDeviceDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can pair smartwatch devices");
     validateRegisterSmartwatchDeviceDto(dto);
+    await this.assertValidPairingCode(dto);
 
     const deviceSecret = randomToken(32);
     const device = await this.prisma.smartwatchDevice.upsert({
@@ -96,7 +105,59 @@ export class SmartwatchService {
     });
 
     await this.audit(actor, "smartwatch.device_paired", "smartwatch_devices", device.id, { deviceId: dto.deviceId, connectivityMode: dto.connectivityMode ?? "PairedPhone" });
+    await this.completePairingSession(dto.deviceId, deviceSecret);
     return { data: device, deviceSecret };
+  }
+
+  async issuePairingCode(dto: IssueSmartwatchPairingCodeDto) {
+    validateIssuePairingCodeDto(dto);
+    const firebaseEnv = dto.firebaseEnv ?? this.defaultFirebaseEnv();
+    const expiresAt = new Date(Date.now() + PAIRING_CODE_TTL_MS);
+    const session = await (this.prisma as any).smartwatchPairingSession.upsert({
+      where: { deviceId: dto.deviceId },
+      update: {
+        pairingCodeHash: hashToken(dto.pairingCode),
+        firebaseEnv,
+        expiresAt,
+        usedAt: null,
+        deviceSecretPlain: null,
+      },
+      create: {
+        deviceId: dto.deviceId,
+        pairingCodeHash: hashToken(dto.pairingCode),
+        firebaseEnv,
+        expiresAt,
+      },
+    });
+
+    await this.auditService.record({
+      actor: { sub: "system", typ: "user" } as JwtPayload,
+      actorType: "device",
+      action: "smartwatch.pairing_code_issued",
+      entityType: "smartwatch_pairing_sessions",
+      entityId: session.id,
+      metadata: { deviceId: dto.deviceId, firebaseEnv, expiresAt: expiresAt.toISOString() },
+    });
+
+    return { data: { deviceId: dto.deviceId, expiresAt: expiresAt.toISOString(), status: "pending" } };
+  }
+
+  async getPairingStatus(deviceId: string) {
+    const session = await (this.prisma as any).smartwatchPairingSession.findUnique({ where: { deviceId } });
+    if (!session) return { data: { status: "not_found" } };
+    if (session.usedAt && session.deviceSecretPlain) {
+      const secret = session.deviceSecretPlain as string;
+      await (this.prisma as any).smartwatchPairingSession.update({
+        where: { deviceId },
+        data: { deviceSecretPlain: null },
+      });
+      return { data: { status: "paired", deviceSecret: secret } };
+    }
+    if (session.usedAt) return { data: { status: "paired" } };
+    if (new Date(session.expiresAt).getTime() < Date.now()) {
+      return { data: { status: "expired" } };
+    }
+    return { data: { status: "pending", expiresAt: session.expiresAt } };
   }
 
   async standaloneLogin(dto: SmartwatchStandaloneLoginDto) {
@@ -117,10 +178,15 @@ export class SmartwatchService {
       deviceId: device.id,
       deviceSerialNumber: (device as any).serialNumber,
       authMode: "standalone_watch",
-    } as any, this.config.get<string>("JWT_ACCESS_SECRET", "dev-access-secret"), this.config.get<string>("JWT_ACCESS_TTL", "15m"));
+    } as any, requireJwtAccessSecret(this.config), this.config.get<string>("JWT_ACCESS_TTL", "15m"));
 
-    await this.prisma.auditLog.create({
-      data: { actorUserId: device.userId, actorType: "device", action: "smartwatch.standalone_login", entityType: "smartwatch_devices", entityId: device.id, metadata: { deviceId: device.deviceId } } as never,
+    await this.auditService.record({
+      actor: { sub: device.userId, typ: "user" } as JwtPayload,
+      actorType: "device",
+      action: "smartwatch.standalone_login",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      metadata: { deviceId: device.deviceId },
     });
     return { accessToken: token, tokenType: "Bearer", mode: "StandaloneCellular", expiresInSeconds: 900 };
   }
@@ -322,15 +388,13 @@ export class SmartwatchService {
       } as never,
     });
 
-    await this.prisma.auditLog.create({
-      data: {
-        actorUserId: device.userId,
-        actorType: "device",
-        action: "sos.smartwatch_triggered",
-        entityType: "sos_events",
-        entityId: sosEvent.id,
-        metadata: { incidentId: incident.id, deviceId: device.deviceId, familyAlerted },
-      } as never,
+    await this.auditService.record({
+      actor: { sub: device.userId, typ: "user" } as JwtPayload,
+      actorType: "device",
+      action: "sos.smartwatch_triggered",
+      entityType: "sos_events",
+      entityId: sosEvent.id,
+      metadata: { incidentId: incident.id, deviceId: device.deviceId, familyAlerted },
     });
 
     return { data: updated, incident, familyAlerted, targetProcessingTimeMs: 3000 };
@@ -376,13 +440,25 @@ export class SmartwatchService {
 
   async adminDevices(actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view smartwatch devices");
+    const devices = await this.prisma.smartwatchDevice.findMany({
+      include: { user: { include: { profile: true } }, sosEvents: { orderBy: { triggeredAt: "desc" }, take: 3 } },
+      orderBy: [{ lastSeenAt: "desc" }, { createdAt: "desc" }],
+      take: 100,
+    });
     return {
-      data: await this.prisma.smartwatchDevice.findMany({
-        include: { user: { include: { profile: true } }, sosEvents: { orderBy: { triggeredAt: "desc" }, take: 3 } },
-        orderBy: [{ lastSeenAt: "desc" }, { createdAt: "desc" }],
-        take: 100,
-      }),
+      data: devices.filter((device) => this.adminCanAccessUserProfile(device.user?.profile, actor)),
     };
+  }
+
+  private adminCanAccessUserProfile(
+    profile: { country?: string | null; state?: string | null; lga?: string | null } | null | undefined,
+    actor: JwtPayload,
+  ) {
+    if (!profile) return actor.role === AdminRoleName.SuperAdmin;
+    return this.adminCanAccessIncident(
+      { country: profile.country ?? "", state: profile.state ?? "", lga: profile.lga ?? "", assignedAgencyId: null },
+      actor,
+    );
   }
 
   async firmwareCheck(deviceLookup: string, dto: { deviceSecret?: string; currentVersion?: string }, actor?: JwtPayload) {
@@ -503,16 +579,45 @@ export class SmartwatchService {
   }
 
   private audit(actor: JwtPayload, action: string, entityType: string, entityId: string, metadata: Record<string, unknown>) {
-    return this.prisma.auditLog.create({
-      data: {
-        actorUserId: actor.typ === "user" ? actor.sub : undefined,
-        actorAdminId: actor.typ === "admin" ? actor.sub : undefined,
-        actorType: actor.typ,
-        action,
-        entityType,
-        entityId,
-        metadata,
-      } as never,
+    return this.auditService.record({
+      actor,
+      action,
+      entityType,
+      entityId,
+      metadata,
+    });
+  }
+
+  private defaultFirebaseEnv() {
+    return resolveAppEnvironment({
+      THE_EYE_APP_ENV: this.config.get<string>("THE_EYE_APP_ENV"),
+      FCM_PROJECT_ID: this.config.get<string>("FCM_PROJECT_ID"),
+      FIREBASE_PROJECT_ID: this.config.get<string>("FIREBASE_PROJECT_ID"),
+      NODE_ENV: process.env.NODE_ENV,
+    });
+  }
+
+  private async assertValidPairingCode(dto: RegisterSmartwatchDeviceDto) {
+    if ((dto.pairingMethod ?? SmartwatchPairingMethod.PairingCode) !== SmartwatchPairingMethod.PairingCode) return;
+    if (!dto.pairingCode) throw new BadRequestException("pairingCode is required for pairing-code flow");
+
+    const session = await (this.prisma as any).smartwatchPairingSession.findUnique({ where: { deviceId: dto.deviceId } });
+    if (!session) throw new BadRequestException("No active pairing session for this device");
+    if (session.usedAt) throw new BadRequestException("Pairing code has already been used");
+    if (new Date(session.expiresAt).getTime() < Date.now()) throw new BadRequestException("Pairing code has expired");
+
+    const env = dto.firebaseEnv ?? this.defaultFirebaseEnv();
+    if (session.firebaseEnv !== env) throw new BadRequestException("Pairing code was issued for a different Firebase environment");
+
+    if (session.pairingCodeHash !== hashToken(dto.pairingCode)) {
+      throw new BadRequestException("Invalid pairing code");
+    }
+  }
+
+  private async completePairingSession(deviceId: string, deviceSecret: string) {
+    await (this.prisma as any).smartwatchPairingSession.updateMany({
+      where: { deviceId, usedAt: null },
+      data: { usedAt: new Date(), deviceSecretPlain: deviceSecret },
     });
   }
 }
