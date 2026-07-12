@@ -37,6 +37,7 @@
     "test:docker:smoke": "node scripts/docker-compose-smoke.cjs",
     "test:deploy:env": "node scripts/validate-production-env.cjs",
     "test:firebase:guard": "node scripts/firebase-guard-production.test.cjs",
+    "test:secrets": "node scripts/validate-secrets.cjs",
     "test:notifications:worker": "pnpm --filter @the-eye/api run test",
     "firebase:use:development": "node scripts/firebase/use-environment.cjs development",
     "firebase:use:staging": "node scripts/firebase/use-environment.cjs staging",

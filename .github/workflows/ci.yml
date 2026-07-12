@@ -192,6 +192,9 @@ jobs:
           done
           echo "CI Firebase guard passed (staging project IDs only)."
 
+      - name: Secret scan (tracked files)
+        run: pnpm run test:secrets
+
       - name: Firebase auth provider manifest
         run: pnpm run test:firebase:auth-providers
 

@@ -21,7 +21,7 @@ Environment matrix (FCM, CLI): [FIREBASE_SETUP.md](./FIREBASE_SETUP.md).
 
 **Never assign THE EYE roles via Firebase custom claims.** RBAC lives in Postgres and NestJS JWTs only.
 
-**Do not commit:** `google-services.json`, `GoogleService-Info.plist`, Apple `.p8` keys, or service-account JSON.
+**Do not commit:** `google-services.json`, `GoogleService-Info.plist`, Apple `.p8` keys, service-account JSON, or real Google `apiKey` values. Tracked `firebase_options_*.dart` files intentionally use `REPLACE_WITH_*` placeholders for `apiKey`; run `flutterfire configure` locally (see [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) §4) to populate keys on your machine. `pnpm run test:secrets` blocks `AIza…` keys in git-tracked files.
 
 ---
 

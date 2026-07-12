@@ -100,6 +100,8 @@ flutterfire configure --project=the-eye-29cff   # development
 # flutterfire configure --project=the-eye-2pd-d0217   # production
 ```
 
+**Committed `firebase_options_*.dart` files use placeholder `apiKey` values** (e.g. `REPLACE_WITH_STAGING_API_KEY`). These are intentional — never commit real Google API keys. After `flutterfire configure`, your local copy gets the real key from Firebase; keep that change local or rely on gitignored `google-services.json` / `GoogleService-Info.plist`, which also carry the key at build time. CI validates project IDs, app IDs, and OAuth wiring via `pnpm run test:firebase:auth-providers` and `pnpm run test:secrets`; it does not require real apiKeys in tracked Dart files.
+
 Dependencies in `pubspec.yaml`: `firebase_core`, `firebase_messaging`.
 
 ## 5. Public web app (Vite — `apps/web`)

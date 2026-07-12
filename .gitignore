@@ -6,16 +6,27 @@ out/
 .vite/
 .turbo/
 
+# Environment files — never commit real secrets
 .env
 .env.local
 .env.production
 .env.development
 **/.env
 **/.env.local
+!.env.example
+!**/.env.example
+!**/.env.*.example
 
 # Firebase service account keys (download from console; never commit)
 **/the-eye-29cff-*.json
 **/firebase-adminsdk-*.json
+
+# Firebase SDK configs (real files per flavor; .example templates are OK)
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Apple push notification keys
+*.p8
 
 Thumbs.db
 
@@ -26,19 +37,5 @@ yarn-error.log*
 
 coverage/
 .cache/
-node_modules/
 .pnpm-store/
 .pnpm/
-dist/
-build/
-.next/
-out/
-.vite/
-.turbo/
-
-.env
-.env.local
-.env.production
-.env.development
-
-*.log
