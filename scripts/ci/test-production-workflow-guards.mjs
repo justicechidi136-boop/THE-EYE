@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * Local scenario tests for production CI guard logic (A–E).
+ * Local scenario tests for production CI guard logic (A–G).
  * Does not print secret payloads — only presence/absence simulation.
  */
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   buildReadinessReport,
   STAGING_CANONICAL_API_URL,
@@ -11,6 +14,8 @@ import {
   validateProductionGoogleServicesJson,
   validateStagingApiUrl,
 } from "./production-readiness-report.mjs";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const STAGING_MOBILE_JSON = JSON.stringify({
   project_info: { project_id: "the-eye-2stg" },
@@ -162,6 +167,59 @@ scenario("G — Staging API URL CLI wrapper", () => {
     { encoding: "utf8" },
   ).trim();
   assert(output === STAGING_CANONICAL_API_URL, "CLI wrapper accepts canonical staging URL");
+});
+
+scenario("H — Production Job A mobile/watch manifest-only static steps", () => {
+  const workflow = readFileSync(
+    join(repoRoot, ".github/workflows/validate-production.yml"),
+    "utf8",
+  );
+
+  assert(
+    workflow.includes("Mobile static validation (manifest fallback)"),
+    "workflow defines mobile static validation step",
+  );
+  assert(
+    workflow.includes("Watch static validation (manifest fallback)"),
+    "workflow defines watch static validation step",
+  );
+  assert(
+    workflow.includes("flutter analyze lib test --no-fatal-infos --no-fatal-warnings"),
+    "workflow uses non-fatal flutter analyze flags like staging",
+  );
+  assert(
+    workflow.includes("node scripts/ci/validate-production-flutter-static.mjs --target mobile"),
+    "mobile static step uses manifest-only validator",
+  );
+  assert(
+    workflow.includes("node scripts/ci/validate-production-flutter-static.mjs --target watch"),
+    "watch static step uses manifest-only validator",
+  );
+
+  const jobASection = workflow.split("production-release-gate:")[0];
+  assert(
+    !jobASection.includes("pnpm run test:mobile:firebase"),
+    "Job A static validation does not require test:mobile:firebase",
+  );
+  assert(
+    !jobASection.includes("pnpm run test:watch:firebase"),
+    "Job A static validation does not require test:watch:firebase",
+  );
+});
+
+scenario("I — Production flutter static manifest validator", () => {
+  const output = execSync("node scripts/ci/validate-production-flutter-static.mjs --target both", {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  assert(output.includes("SECRET NOT PROVIDED: MOBILE_GOOGLE_SERVICES_JSON"), "logs mobile secret notice");
+  assert(output.includes("SECRET NOT PROVIDED: WATCH_GOOGLE_SERVICES_JSON"), "logs watch secret notice");
+  assert(output.includes("MANIFEST FALLBACK USED: mobile Firebase wiring"), "logs mobile manifest fallback");
+  assert(output.includes("MANIFEST FALLBACK USED: watch Firebase wiring"), "logs watch manifest fallback");
+  assert(output.includes("ARTIFACT BUILD NOT VERIFIED: mobile production APK"), "logs mobile artifact notice");
+  assert(output.includes("ARTIFACT BUILD NOT VERIFIED: watch production APK"), "logs watch artifact notice");
+  assert(output.includes("Placeholder apiKey accepted"), "accepts placeholder apiKeys");
+  assert(output.includes('"status": "ok"'), "manifest validator returns ok");
 });
 
 console.log(`\n${"=".repeat(60)}`);

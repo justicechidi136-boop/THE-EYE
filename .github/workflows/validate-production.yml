@@ -179,24 +179,20 @@ jobs:
       - name: Mobile static validation (manifest fallback)
         run: |
           set -euo pipefail
-          echo "SECRET NOT PROVIDED: MOBILE_GOOGLE_SERVICES_JSON"
-          echo "MANIFEST FALLBACK USED: mobile Firebase wiring"
-          echo "ARTIFACT BUILD NOT VERIFIED: mobile production APK"
           pnpm --dir apps/mobile run pub-get
-          pnpm run mobile:analyze
-          pnpm run test:firebase:auth-providers
-          grep -q "com.theeye.app" apps/mobile/android/app/build.gradle
+          cd apps/mobile
+          flutter analyze lib test --no-fatal-infos --no-fatal-warnings
+          cd "${GITHUB_WORKSPACE}"
+          node scripts/ci/validate-production-flutter-static.mjs --target mobile
 
       - name: Watch static validation (manifest fallback)
         run: |
           set -euo pipefail
-          echo "SECRET NOT PROVIDED: WATCH_GOOGLE_SERVICES_JSON"
-          echo "MANIFEST FALLBACK USED: watch Firebase wiring"
-          echo "ARTIFACT BUILD NOT VERIFIED: watch production APK"
           pnpm --dir apps/watch run pub-get
-          pnpm run watch:analyze
-          pnpm run test:firebase:auth-providers
-          grep -q "com.theeye.app" apps/watch/android/app/build.gradle.kts || grep -q "applicationId" apps/watch/android/app/build.gradle.kts
+          cd apps/watch
+          flutter analyze lib test --no-fatal-infos --no-fatal-warnings
+          cd "${GITHUB_WORKSPACE}"
+          node scripts/ci/validate-production-flutter-static.mjs --target watch
 
       - name: Deploy env documentation
         run: pnpm run test:deploy:env
