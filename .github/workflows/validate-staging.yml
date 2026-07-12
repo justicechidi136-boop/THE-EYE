@@ -149,7 +149,6 @@ jobs:
           export FCM_ALLOW_SIMULATION="false"
           export FCM_SIMULATION_MODE="false"
           export THE_EYE_DISABLE_REDIS="1"
-          export NODE_ENV="test"
           export REDIS_HOST="localhost"
           export REDIS_PORT="6379"
           export JWT_ACCESS_SECRET="ci_access_secret_32_chars_minimum"
