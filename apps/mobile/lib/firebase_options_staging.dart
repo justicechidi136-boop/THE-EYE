@@ -24,7 +24,7 @@ class FirebaseOptionsStaging {
       "767357461507-rvoedt7hr8452sehgi2qs3v8q69vovuj.apps.googleusercontent.com";
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: "AIzaSyBm3_toFsNo0ZHbChLmww2y2bSLiTHvggk",
+    apiKey: "REPLACE_WITH_STAGING_API_KEY",
     appId: "1:767357461507:android:325b76c7d73640b2919a36",
     messagingSenderId: "767357461507",
     projectId: "the-eye-2stg",
@@ -32,7 +32,7 @@ class FirebaseOptionsStaging {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: "AIzaSyDLSrjpwBPWPk-XBHPJNBBDy45rjS4wFkI",
+    apiKey: "REPLACE_WITH_STAGING_IOS_API_KEY",
     appId: "1:767357461507:ios:ed01b6493b1b5562919a36",
     messagingSenderId: "767357461507",
     projectId: "the-eye-2stg",
