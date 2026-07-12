@@ -66,6 +66,7 @@
     "test:load:benchmark": "node scripts/generate-benchmark-report.cjs --all",
     "test:performance": "pnpm run test:backend && pnpm run test:load:validate && node scripts/generate-benchmark-report.cjs",
     "test:deploy:production": "pnpm run test:deploy:env && pnpm run test:firebase:guard && pnpm run test:docker:smoke",
+    "test:ci:production-guards": "node scripts/ci/test-production-workflow-guards.mjs",
     "verify:smoke": "pnpm run test:mobile:smoke && pnpm run test:admin:smoke && pnpm run test:docker:smoke && pnpm run test:deploy:env && pnpm run test:load:validate"
   },
   "engines": { "node": ">=20" }

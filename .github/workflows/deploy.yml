@@ -1,6 +1,6 @@
 # Manual deployment only — does NOT run on push.
-# Run after validate-staging.yml or validate-production.yml passes.
-# DigitalOcean/server deploy is intentionally gated behind workflow_dispatch.
+# Job C (production-deploy): requires production-release-build success + explicit vars/secrets.
+# Run validate-production.yml Job B before deploying to production.
 name: Deploy
 
 on:
@@ -23,13 +23,61 @@ on:
         required: true
         default: true
         type: boolean
+      confirm_release_build_passed:
+        description: Confirm validate-production Job B (release build) passed for this SHA
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-${{ github.event.inputs.environment }}
   cancel-in-progress: false
 
 jobs:
+  production-deploy-preflight:
+    name: Production deploy preflight (Job C gate)
+    if: github.event.inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fail closed — production deploy requirements
+        env:
+          MOBILE_GOOGLE_SERVICES_JSON: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON }}
+          WATCH_GOOGLE_SERVICES_JSON: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+          CONFIRM_RELEASE_BUILD_PASSED: ${{ github.event.inputs.confirm_release_build_passed && 'true' || 'false' }}
+        run: node scripts/ci/production-readiness-report.mjs --mode deploy-gate
+
+  staging-deploy-preflight:
+    name: Staging deploy preflight
+    if: github.event.inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Require staging NEXT_PUBLIC_API_BASE_URL
+        run: |
+          set -euo pipefail
+          URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
+          if [ -z "$URL" ]; then
+            echo "GitHub environment 'staging' must define vars.NEXT_PUBLIC_API_BASE_URL"
+            exit 1
+          fi
+          case "$URL" in
+            *localhost*|*127.0.0.1*|*api.theeye.com.ng*)
+              echo "Staging NEXT_PUBLIC_API_BASE_URL must not use localhost or production API hosts"
+              exit 1
+              ;;
+          esac
+
   build:
+    needs: [production-deploy-preflight, staging-deploy-preflight]
+    if: always() && (needs.production-deploy-preflight.result == 'success' || needs.staging-deploy-preflight.result == 'success')
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     permissions:
@@ -39,6 +87,10 @@ jobs:
       image_tag: ${{ steps.meta.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Set image tag
         id: meta
@@ -68,24 +120,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Validate admin-web build args
+      - name: Validate admin-web build args (no fallback)
         run: |
-          if [ -z "${{ vars.NEXT_PUBLIC_API_BASE_URL }}" ]; then
+          set -euo pipefail
+          URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
+          if [ -z "$URL" ]; then
             echo "GitHub environment '${{ github.event.inputs.environment }}' must define vars.NEXT_PUBLIC_API_BASE_URL"
             exit 1
           fi
           case "${{ github.event.inputs.environment }}" in
             staging)
-              if echo "${{ vars.NEXT_PUBLIC_API_BASE_URL }}" | grep -Eiq 'localhost|127\.0\.0\.1|api\.theeye\.com\.ng'; then
+              if echo "$URL" | grep -Eiq 'localhost|127\.0\.0\.1|api\.theeye\.com\.ng'; then
                 echo "Staging NEXT_PUBLIC_API_BASE_URL must not use localhost or production API hosts"
                 exit 1
               fi
               ;;
             production)
-              if echo "${{ vars.NEXT_PUBLIC_API_BASE_URL }}" | grep -Eiq 'localhost|127\.0\.0\.1|staging-api'; then
-                echo "Production NEXT_PUBLIC_API_BASE_URL must not use localhost or staging API hosts"
-                exit 1
-              fi
+              URL="$URL" node -e "
+                import { validateProductionApiUrl } from './scripts/ci/production-readiness-report.mjs';
+                const result = validateProductionApiUrl(process.env.URL);
+                if (!result.ok) { console.error(result.reason); process.exit(1); }
+              "
               ;;
           esac
 
@@ -109,7 +164,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && needs.build.result == 'success'
     steps:
       - uses: actions/checkout@v4
 
