@@ -4,7 +4,7 @@ import { MetricsService } from "../metrics.service";
 describe("metrics controller", () => {
   it("returns Prometheus exposition format", async () => {
     const previousToken = process.env.METRICS_BEARER_TOKEN;
-    delete process.env.METRICS_BEARER_TOKEN;
+    process.env.METRICS_BEARER_TOKEN = "";
     try {
       const metrics = {
         contentType: "text/plain; version=0.0.4; charset=utf-8",

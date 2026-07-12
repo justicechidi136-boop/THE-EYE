@@ -62,7 +62,6 @@ jobs:
       S3_SECRET_KEY: ci_s3_secret_key_32_chars_minimum
       CORS_ORIGINS: https://staging-admin.theeye.com.ng
       GOOGLE_OAUTH_CLIENT_ID: ci-google-oauth-client-id
-      METRICS_BEARER_TOKEN: ci_metrics_bearer_token_32_chars_min
     steps:
       - uses: actions/checkout@v4
 
