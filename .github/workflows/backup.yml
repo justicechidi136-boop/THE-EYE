@@ -1,0 +1,32 @@
+name: Backup
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Backup PostgreSQL on production host
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.DEPLOY_PATH }}
+            bash scripts/backup-the-eye.sh
+            find backups -name 'the_eye_*.dump' -mtime +14 -delete || true
+            ls -lh backups/the_eye_latest.dump
+
+      - name: Upload latest backup artifact (optional)
+        if: false
+        uses: actions/upload-artifact@v4
+        with:
+          name: the-eye-db-backup
+          path: backups/the_eye_latest.dump
+          retention-days: 7

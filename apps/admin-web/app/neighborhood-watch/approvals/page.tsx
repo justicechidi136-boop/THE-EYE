@@ -1,22 +1,35 @@
-import { AppShell } from "../../../components/app-shell";
+import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
+import { MembershipActionButton } from "../../../components/csoc/membership-action-button";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { communities } from "../../../lib/mock-data";
+import { fetchPendingMemberships } from "../../../lib/api/data";
 
-export default function MembershipApprovalsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function ApprovalsPage() {
+  const pending = await fetchPendingMemberships();
+
   return (
-    <AppShell>
-      <PageHeader eyebrow="Private community access" title="Membership approvals" action={<StatusBadge tone="warning">Moderator action</StatusBadge>} />
-      <Panel title="Pending access requests">
-        <div className="grid gap-3">
-          {communities.filter((community) => community.pending > 0).map((community) => (
-            <div key={community.id} className="grid gap-2 rounded-lg border border-line bg-slate-50 p-4 md:grid-cols-[1fr_120px_160px] md:items-center">
-              <div><p className="font-semibold">{community.name}</p><p className="text-sm text-muted">{community.hierarchy}</p></div>
-              <StatusBadge tone="warning">{community.pending} pending</StatusBadge>
-              <button className="rounded-md bg-eye px-4 py-2 text-sm font-semibold text-white">Review</button>
-            </div>
-          ))}
-        </div>
+    <>
+      <PageHeader
+        eyebrow="Membership approvals"
+        title="Resident Approvals"
+        action={<StatusBadge tone="warning">{pending.length} pending</StatusBadge>}
+      />
+      <Panel title="Pending applications">
+        <CsocDataTable
+          columns={["Applicant", "Community", "Role", "Trust", "Actions"]}
+          rows={pending.map((r) => [
+            <div key={`n-${r.membershipId}`}><p className="font-semibold">{r.name}</p><p className="text-xs text-muted">{r.email}</p></div>,
+            r.community,
+            r.role,
+            `${r.trustScore}%`,
+            <div key={`a-${r.membershipId}`} className="flex gap-2">
+              <MembershipActionButton communityId={r.communityId} membershipId={r.membershipId} action="approve" />
+            </div>,
+          ])}
+          emptyMessage="No pending resident applications."
+        />
       </Panel>
-    </AppShell>
+    </>
   );
 }

@@ -15,8 +15,13 @@ EXPOSE 3000
 CMD ["npm", "--workspace", "apps/admin-web", "run", "dev"]
 
 FROM deps AS builder
+ARG NEXT_PUBLIC_APP_ENV
+ARG NEXT_PUBLIC_API_BASE_URL
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 COPY . .
+RUN node apps/admin-web/scripts/validate-docker-build-env.mjs
 RUN npm --workspace packages/shared run build
 RUN npm --workspace apps/admin-web run build
 

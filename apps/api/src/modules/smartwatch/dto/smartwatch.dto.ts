@@ -1,4 +1,12 @@
 import { BadRequestException } from "@nestjs/common";
+import {
+  FirmwareSignatureStatus,
+  SmartwatchConnectivityMode,
+  SmartwatchEmergencyMode,
+  SmartwatchOfflineEventType,
+  SmartwatchPairingMethod,
+  reportIncidentValidation,
+} from "@the-eye/shared";
 
 export type RegisterSmartwatchDeviceDto = {
   deviceId: string;
@@ -9,10 +17,11 @@ export type RegisterSmartwatchDeviceDto = {
   provider: string;
   displayName?: string;
   model?: string;
-  connectivityMode?: "PairedPhone" | "StandaloneCellular";
-  preferredMode?: "PairedPhone" | "StandaloneCellular";
-  pairingMethod?: "QrCode" | "Bluetooth" | "PairingCode" | "Nfc";
+  connectivityMode?: SmartwatchConnectivityMode;
+  preferredMode?: SmartwatchConnectivityMode;
+  pairingMethod?: SmartwatchPairingMethod;
   pairingCode?: string;
+  firebaseEnv?: string;
   pairedPhoneDeviceId?: string;
   cellularProvider?: string;
   phoneNumber?: string;
@@ -25,12 +34,12 @@ export type RegisterSmartwatchDeviceDto = {
 };
 
 export type UpdateSmartwatchStatusDto = {
-  connectivityMode?: "PairedPhone" | "StandaloneCellular";
-  preferredMode?: "PairedPhone" | "StandaloneCellular";
+  connectivityMode?: SmartwatchConnectivityMode;
+  preferredMode?: SmartwatchConnectivityMode;
   batteryLevel?: number;
   signalStrength?: number;
   firmwareVersion?: string;
-  firmwareSignatureStatus?: "Unknown" | "Valid" | "Invalid" | "Revoked";
+  firmwareSignatureStatus?: FirmwareSignatureStatus;
   lastSeenAt?: string;
   criticalAlertsEnabled?: boolean;
   failoverEnabled?: boolean;
@@ -49,7 +58,7 @@ export type SmartwatchGpsDto = {
   heading?: number;
   altitude?: number;
   capturedAt?: string;
-  sourceMode?: "PairedPhone" | "StandaloneCellular";
+  sourceMode?: SmartwatchConnectivityMode;
   sosEventId?: string;
   batteryLevel?: number;
   signalStrength?: number;
@@ -59,7 +68,7 @@ export type SmartwatchGpsDto = {
 export type SmartwatchSosDto = SmartwatchGpsDto & {
   description?: string;
   sourceDeviceId?: string;
-  emergencyMode?: "SilentSOS" | "NormalSOS" | "MedicalSOS" | "KidnappingSOS" | "FireSOS" | "ChildSOS" | "WomenSafetySOS";
+  emergencyMode?: SmartwatchEmergencyMode;
   longPressDurationMs?: number;
 };
 
@@ -79,20 +88,20 @@ export type SmartwatchStandaloneLoginDto = {
 export type SmartwatchHeartbeatDto = {
   deviceId?: string;
   deviceSecret?: string;
-  connectivityMode?: "PairedPhone" | "StandaloneCellular";
+  connectivityMode?: SmartwatchConnectivityMode;
   pairedPhoneAvailable?: boolean;
   internetAvailable?: boolean;
   batteryLevel?: number;
   signalStrength?: number;
   firmwareVersion?: string;
-  firmwareSignatureStatus?: "Unknown" | "Valid" | "Invalid" | "Revoked";
+  firmwareSignatureStatus?: FirmwareSignatureStatus;
 };
 
 export type SmartwatchOfflineSyncDto = {
   deviceId?: string;
   deviceSecret?: string;
   events: Array<{
-    eventType: "GPS" | "SOS" | "Media" | "Heartbeat" | "IncidentAcknowledgement";
+    eventType: SmartwatchOfflineEventType;
     occurredAt: string;
     payload: Record<string, unknown>;
   }>;
@@ -108,9 +117,16 @@ export type SmartwatchFirmwareReleaseDto = {
   status?: "Draft" | "Published" | "RolledBack";
 };
 
-const modes = new Set(["PairedPhone", "StandaloneCellular"]);
-const pairingMethods = new Set(["QrCode", "Bluetooth", "PairingCode", "Nfc"]);
-const emergencyModes = new Set(["SilentSOS", "NormalSOS", "MedicalSOS", "KidnappingSOS", "FireSOS", "ChildSOS", "WomenSafetySOS"]);
+export type IssueSmartwatchPairingCodeDto = {
+  deviceId: string;
+  pairingCode: string;
+  firebaseEnv?: string;
+};
+
+const modes = new Set<string>(Object.values(SmartwatchConnectivityMode));
+const pairingMethods = new Set<string>(Object.values(SmartwatchPairingMethod));
+const emergencyModes = new Set<string>(Object.values(SmartwatchEmergencyMode));
+const firebaseEnvs = new Set(["staging", "production", "development"]);
 
 function assertText(value: unknown, label: string): asserts value is string {
   if (typeof value !== "string" || value.trim().length < 2) throw new BadRequestException(`${label} is required`);
@@ -151,7 +167,7 @@ export function validateSmartwatchGpsDto(dto: SmartwatchGpsDto) {
 export function validateSmartwatchSosDto(dto: SmartwatchSosDto) {
   validateSmartwatchGpsDto(dto);
   if (dto.emergencyMode && !emergencyModes.has(dto.emergencyMode)) throw new BadRequestException("Unsupported emergency mode");
-  if (dto.longPressDurationMs !== undefined && dto.longPressDurationMs < 3000) throw new BadRequestException("SOS button must be long-pressed for at least 3 seconds");
+  if (dto.longPressDurationMs !== undefined && dto.longPressDurationMs < reportIncidentValidation.sosLongPressMinMs) throw new BadRequestException("SOS button must be long-pressed for at least 3 seconds");
 }
 
 export function validateCriticalAlertDto(dto: SendCriticalAlertDto) {
@@ -171,7 +187,7 @@ export function validateHeartbeatDto(dto: SmartwatchHeartbeatDto) {
 
 export function validateOfflineSyncDto(dto: SmartwatchOfflineSyncDto) {
   if (!Array.isArray(dto.events) || dto.events.length === 0) throw new BadRequestException("events are required");
-  if (dto.events.length > 100) throw new BadRequestException("At most 100 offline events can be synced at once");
+  if (dto.events.length > reportIncidentValidation.offlineSyncMaxEvents) throw new BadRequestException("At most 100 offline events can be synced at once");
   for (const event of dto.events) {
     assertText(event.eventType, "eventType");
     if (!event.occurredAt || Number.isNaN(new Date(event.occurredAt).getTime())) throw new BadRequestException("occurredAt must be a valid timestamp");
@@ -184,4 +200,14 @@ export function validateFirmwareReleaseDto(dto: SmartwatchFirmwareReleaseDto) {
   assertText(dto.downloadUrl, "downloadUrl");
   assertText(dto.fileHash, "fileHash");
   assertText(dto.signature, "signature");
+}
+
+export function validateIssuePairingCodeDto(dto: IssueSmartwatchPairingCodeDto) {
+  assertText(dto.deviceId, "deviceId");
+  if (typeof dto.pairingCode !== "string" || !/^\d{6}$/.test(dto.pairingCode)) {
+    throw new BadRequestException("pairingCode must be a 6-digit code");
+  }
+  if (dto.firebaseEnv && !firebaseEnvs.has(dto.firebaseEnv)) {
+    throw new BadRequestException("Unsupported firebaseEnv");
+  }
 }

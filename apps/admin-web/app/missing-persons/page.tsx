@@ -1,10 +1,13 @@
+import { IncidentType } from "@the-eye/shared";
 import { AppShell } from "../../components/app-shell";
 import { IncidentTable } from "../../components/incident-widgets";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { incidents } from "../../lib/mock-data";
+import { fetchIncidentsByType } from "../../lib/api/data";
 
-export default function MissingPersonsPage() {
-  const missingPersons = incidents.filter((incident) => incident.type === "Missing person");
+export const dynamic = "force-dynamic";
+
+export default async function MissingPersonsPage() {
+  const missingPersons = await fetchIncidentsByType(IncidentType.MissingPerson);
   return (
     <AppShell>
       <PageHeader eyebrow="Case management" title="Missing person management" action={<StatusBadge tone="info">{missingPersons.length} open</StatusBadge>} />

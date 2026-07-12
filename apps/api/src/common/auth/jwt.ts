@@ -4,7 +4,7 @@ function base64Url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url");
 }
 
-function parseTtl(ttl: string | undefined, fallbackSeconds: number): number {
+export function parseTtl(ttl: string | undefined, fallbackSeconds: number): number {
   if (!ttl) return fallbackSeconds;
   const match = /^(\d+)([smhd])?$/.exec(ttl);
   if (!match) return fallbackSeconds;
@@ -17,6 +17,7 @@ function parseTtl(ttl: string | undefined, fallbackSeconds: number): number {
 export type JwtPayload = {
   sub: string;
   typ: "user" | "admin";
+  jti?: string;
   email?: string;
   phone?: string;
   role?: string;

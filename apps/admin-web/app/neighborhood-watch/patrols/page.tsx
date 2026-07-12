@@ -1,14 +1,32 @@
-import { AppShell } from "../../../components/app-shell";
+import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { patrolSchedules } from "../../../lib/mock-data";
+import { fetchPatrols } from "../../../lib/api/data";
 
-export default function PatrolsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function PatrolManagementPage() {
+  const patrols = await fetchPatrols();
+
   return (
-    <AppShell>
-      <PageHeader eyebrow="Community patrol management" title="Patrol schedules" action={<StatusBadge tone="info">{patrolSchedules.length} schedules</StatusBadge>} />
-      <Panel title="Patrols">
-        <div className="grid gap-3">{patrolSchedules.map((patrol) => <div key={patrol.id} className="grid gap-2 rounded-lg border border-line bg-slate-50 p-4 md:grid-cols-[1fr_120px_140px_140px] md:items-center"><div><p className="font-semibold">{patrol.title}</p><p className="text-sm text-muted">{patrol.community}</p></div><StatusBadge tone={patrol.status === "Active" ? "success" : "info"}>{patrol.status}</StatusBadge><p className="text-sm">{patrol.volunteers} volunteers</p><p className="text-sm">{patrol.checkpoints} checkpoints</p></div>)}</div>
+    <>
+      <PageHeader
+        eyebrow="Patrol operations"
+        title="Patrol Management"
+        action={<StatusBadge tone="success">{patrols.length} schedules</StatusBadge>}
+      />
+      <Panel title="Patrol schedules" aside={<span className="text-xs text-muted">Create via POST /v1/neighborhood-watch/communities/:id/patrols</span>}>
+        <CsocDataTable
+          columns={["Patrol", "Community", "Status", "Volunteers", "Checkpoints"]}
+          rows={patrols.map((p) => [
+            p.title,
+            p.community,
+            <StatusBadge key={`s-${p.id}`} tone={p.status === "Active" ? "success" : "info"}>{p.status}</StatusBadge>,
+            String(p.volunteers),
+            String(p.checkpoints),
+          ])}
+          emptyMessage="No patrol schedules in assigned communities."
+        />
       </Panel>
-    </AppShell>
+    </>
   );
 }

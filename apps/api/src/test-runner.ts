@@ -17,12 +17,20 @@ function findSpecs(dir: string): string[] {
 function makeMock(impl?: (...args: unknown[]) => unknown) {
   const fn: any = (...args: unknown[]) => {
     fn.mock.calls.push(args);
+    if (fn.mock.onceQueue.length > 0) {
+      const queued = fn.mock.onceQueue.shift();
+      return queued instanceof Promise ? queued : Promise.resolve(queued);
+    }
     if (fn.mock.impl) return fn.mock.impl(...args);
     return undefined;
   };
-  fn.mock = { calls: [] as unknown[][], impl };
+  fn.mock = { calls: [] as unknown[][], impl, onceQueue: [] as unknown[] };
   fn.mockResolvedValue = (value: unknown) => {
     fn.mock.impl = () => Promise.resolve(value);
+    return fn;
+  };
+  fn.mockResolvedValueOnce = (value: unknown) => {
+    fn.mock.onceQueue.push(value);
     return fn;
   };
   fn.mockReturnValue = (value: unknown) => {
@@ -84,6 +92,9 @@ function expectValue(actual: any, negated = false) {
     },
     toBeGreaterThanOrEqual(expected: number) {
       assert(actual >= expected, `Expected ${actual} to be >= ${expected}`);
+    },
+    toBeGreaterThan(expected: number) {
+      assert(actual > expected, `Expected ${actual} to be > ${expected}`);
     },
     toBeLessThan(expected: number) {
       assert(actual < expected, `Expected ${actual} to be < ${expected}`);

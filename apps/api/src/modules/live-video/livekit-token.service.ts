@@ -35,7 +35,7 @@ export class LiveKitTokenService {
       exp: now + ttlSeconds,
       jti: randomUUID(),
       video: grant,
-      metadata: JSON.stringify({ lowBandwidthMode: input.lowBandwidthMode ?? false }),
+      metadata: JSON.stringify({ lowBandwidthMode: input.lowBandwidthMode ?? false, issuedAt: now }),
     };
     return signJwt(payload, apiSecret);
   }

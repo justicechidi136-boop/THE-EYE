@@ -1,0 +1,4 @@
+# PostgreSQL logical backups — never commit
+*.dump
+*.sql.gz
+*.tar.gz

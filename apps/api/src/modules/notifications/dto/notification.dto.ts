@@ -38,13 +38,16 @@ export type DeliveryReceiptDto = {
 
 export type RegisterPushTokenDto = {
   token: string;
-  platform: "ios" | "android" | "web";
+  platform: "ios" | "android" | "android_watch" | "web";
   deviceId?: string;
+  provider?: string;
+  appEnvironment?: "development" | "staging" | "production";
 };
 
 const channels = new Set(["push", "sms", "email", "in_app", "watch_push"]);
 const types = new Set(["EmergencyAlert", "IncidentStatusUpdate", "BroadcastAlert", "NearbyDangerWarning", "MissingPersonAlert", "StolenVehicleAlert", "FamilySosAlert", "AdminAssignmentAlert"]);
 const priorities = new Set(["Low", "Normal", "High", "Critical"]);
+const appEnvironments = new Set(["development", "staging", "production"]);
 
 function assertText(value: unknown, label: string): asserts value is string {
   if (typeof value !== "string" || value.trim().length < 2) throw new BadRequestException(`${label} is required`);
@@ -70,5 +73,10 @@ export function validateCreateNotificationDto(dto: CreateNotificationDto) {
 
 export function validateRegisterPushTokenDto(dto: RegisterPushTokenDto) {
   assertText(dto.token, "token");
-  if (!["ios", "android", "web"].includes(dto.platform)) throw new BadRequestException("Unsupported push platform");
+  if (!["ios", "android", "android_watch", "web"].includes(dto.platform)) {
+    throw new BadRequestException("Unsupported push platform");
+  }
+  if (dto.appEnvironment && !appEnvironments.has(dto.appEnvironment)) {
+    throw new BadRequestException("Unsupported appEnvironment");
+  }
 }

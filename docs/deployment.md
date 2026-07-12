@@ -1,49 +1,182 @@
-ï»¿# Deployment Notes
+# Deployment Notes
 
-Local development uses Docker Compose. Production should deploy stateless app containers separately from persistent infrastructure.
+> **Production runbooks:** [Production Deployment Guide](./production-deployment-guide.md) · [Rollback Guide](./rollback-guide.md) · [Maintenance Guide](./maintenance-guide.md)  
+> **CI/CD & GitHub Environments:** [GitHub Workflows](./github-workflows.md)
 
-## Local Ports
+Production deployment uses `infra/docker/docker-compose.yml` with nginx TLS termination on port 443.
 
-- Admin web: `http://localhost:3000`
-- API: `http://localhost:4000`
-- API docs: `http://localhost:4000/docs`
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-- MinIO API: `http://localhost:9000`
-- MinIO console: `http://localhost:9001`
-- LiveKit: `ws://localhost:7880`
 
-## Local Startup
+## Git branch model
+
+| Branch | Role |
+|--------|------|
+| `main` | Production-ready default; push runs **Validate Production** (`validate-production.yml`). |
+| `staging` | Staging integration; push runs **Validate Staging** (`validate-staging.yml`). |
+| `feature/*` | Cursor and feature work; open PRs into `staging` (usual) or `main` (hotfix/release). Do not deploy from feature branches. |
+
+**CI:** pull requests targeting `staging` or `main` run `ci.yml` (no GitHub environment secrets).
+
+**Deploy:** `deploy.yml` is manual (`workflow_dispatch`) only. Check out `staging` and choose environment **staging**, or check out `main` and choose **production**. Server secrets live in each GitHub Environment (`staging` / `production`).
+
+## Quick start (production compose)
 
 ```bash
 cp .env.example .env
+# Edit .env — replace every change_me* placeholder with production secrets.
+
+# TLS: install certificates OR generate dev self-signed for staging
+powershell -File scripts/generate-dev-ssl.ps1 -ServerName admin.example.com
+
+docker compose -f infra/docker/docker-compose.yml --env-file .env config
+docker compose -f infra/docker/docker-compose.yml --env-file .env build
 docker compose -f infra/docker/docker-compose.yml --env-file .env up -d
+
+docker compose -f infra/docker/docker-compose.yml --profile tools run api-migrate
+docker compose -f infra/docker/docker-compose.yml --profile tools run api-seed   # optional non-prod only
 ```
 
-## Production Topology
+## Public endpoints (via nginx)
 
-- API deployment for HTTP traffic.
-- Worker deployment for BullMQ processors.
-- Admin web deployment for the command dashboard.
-- Managed PostgreSQL with PostGIS.
-- Managed Redis or Redis-compatible service.
-- S3-compatible object storage with lifecycle and retention policies.
-- LiveKit managed service or dedicated media cluster.
-- Secret manager for credentials and provider keys.
+| Path | Backend |
+|------|---------|
+| `/` | Admin web |
+| `/v1/` | API |
+| `/livekit/` | LiveKit websocket |
+| `/metrics` | Prometheus metrics (restrict at network edge) |
+| `/healthz` | Nginx liveness |
 
-## Kubernetes Readiness
+API readiness (internal / via nginx): `GET /v1/health/ready`
 
-- Health endpoints for API and admin web.
-- Separate readiness and liveness probes.
-- Horizontal scaling for API, web, and workers.
-- Pod disruption budgets for critical services.
-- Resource requests and limits.
-- Ingress with TLS.
-- Central logs, metrics, and tracing.
+## TLS / HTTPS
 
-## Backup and Recovery
+nginx renders config at container start from `infra/docker/nginx/render/the-eye.conf.template`.
 
-- Point-in-time recovery for PostgreSQL.
-- S3 object versioning for evidence buckets.
-- Redis persistence for local development only; production queues should tolerate replay.
-- Regular restore drills for database and evidence metadata.
+1. Place certificates in `infra/docker/nginx/certs/live/`:
+   - `fullchain.pem`
+   - `privkey.pem`
+2. Set in `.env`:
+   ```env
+   THE_EYE_SERVER_NAME=admin.example.com
+   THE_EYE_SSL_REDIRECT=true
+   THE_EYE_GENERATE_DEV_SSL=false
+   CORS_ORIGINS=https://admin.example.com
+   NEXT_PUBLIC_LIVEKIT_URL=wss://admin.example.com/livekit
+   ```
+3. Restart nginx: `docker compose -f infra/docker/docker-compose.yml restart nginx`
+
+### Self-signed (staging only)
+
+```powershell
+powershell -File scripts/generate-dev-ssl.ps1 -ServerName localhost
+```
+
+Or set `THE_EYE_GENERATE_DEV_SSL=true` (never in production).
+
+### Let's Encrypt
+
+```bash
+export THE_EYE_SERVER_NAME=admin.example.com
+export CERTBOT_EMAIL=ops@example.com
+bash scripts/issue-letsencrypt.sh
+```
+
+Set `THE_EYE_SSL_REDIRECT=true` after issuance. Schedule `scripts/renew-letsencrypt.sh` via cron. See `infra/docker/nginx/certs/live/README.md`.
+
+## Health checks
+
+| Service | Probe |
+|---------|-------|
+| postgres-postgis | `pg_isready` |
+| redis | `redis-cli ping` |
+| minio | `/minio/health/live` |
+| livekit | binary version (process up) |
+| api | `GET /v1/health/ready` |
+| admin-web | `GET /` (status < 500) |
+| nginx | `GET /healthz` |
+
+Services start in dependency order: data stores ? api ? admin-web ? nginx.
+
+## Required environment variables
+
+Validated by `pnpm run test:deploy:env`. Required secrets use `:?` syntax in compose so missing values fail fast.
+
+| Variable | Purpose |
+|----------|---------|
+| `POSTGRES_PASSWORD` | Database auth |
+| `DATABASE_URL` | API runtime DB |
+| `DATABASE_DIRECT_URL` | Migrations / seed |
+| `REDIS_PASSWORD` | Redis + BullMQ + rate limits |
+| `MINIO_ROOT_PASSWORD` | Object storage |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Auth tokens |
+| `LIVE_LOCATION_LINK_SECRET` | Signed location links |
+| `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Live video |
+| `CORS_ORIGINS` | Trusted admin origins (HTTPS in prod) |
+| `GOOGLE_OAUTH_CLIENT_ID` | Production auth validation |
+| `THE_EYE_SERVER_NAME` | nginx `server_name` |
+| `THE_EYE_SSL_REDIRECT` | HTTP ? HTTPS redirect |
+
+Never commit `.env` or TLS private keys.
+
+## Backup and restore
+
+### Backup PostgreSQL
+
+```bash
+bash scripts/backup-the-eye.sh
+# or: powershell -File scripts/backup-the-eye.ps1
+# writes backups/the_eye_<timestamp>.dump and backups/the_eye_latest.dump
+```
+
+Requires `postgres-postgis` running.
+
+### Restore PostgreSQL
+
+```bash
+bash scripts/restore-the-eye.sh backups/the_eye_latest.dump --confirm
+docker compose -f infra/docker/docker-compose.yml --profile tools run api-migrate
+curl -k https://localhost/v1/health/ready
+```
+
+Restore is destructive (`--clean`). Stop write traffic during restore.
+
+Object storage (MinIO/S3 evidence) requires separate bucket versioning/backup.
+
+## Validation commands
+
+```bash
+pnpm run test:docker:smoke      # compose + nginx + backup script structure
+pnpm run test:deploy:env        # .env.example vs compose variables
+docker compose -f infra/docker/docker-compose.yml --env-file .env config
+docker compose -f infra/docker/docker-compose.yml --env-file .env build
+```
+
+## Production topology
+
+- **nginx** — TLS, rate limits, reverse proxy (ports 80/443)
+- **api** — NestJS API (internal)
+- **admin-web** — Next.js command dashboard (internal)
+- **postgres-postgis** — primary datastore
+- **redis** — queues + rate limiting
+- **minio** — S3-compatible evidence storage
+- **livekit** — emergency live video
+
+Optional profiles:
+
+- `pooling` — PgBouncer in front of Postgres
+- `tools` — `api-migrate`, `api-seed`
+- `certbot` — certificate issuance helper
+- `proxy` (dev overlay) — expose api/admin directly
+
+## Kubernetes / managed cloud
+
+For managed deployments, mirror the same health endpoints, secrets, and TLS policy. Use ingress TLS instead of compose nginx when running on K8s. See [grafana-dashboard.md](./grafana-dashboard.md) for observability.
+
+**DigitalOcean App Platform (admin-web):** [digitalocean-admin-web.md](./digitalocean-admin-web.md) — `NEXT_PUBLIC_*` must be supplied as Docker **build-time** variables (`build_env`), not runtime-only App vars.
+
+## Local development overlay
+
+```bash
+docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.dev.yml up -d
+```
+
+Exposes API `:4000` and admin `:3000` directly; nginx optional via `proxy` profile.

@@ -8,7 +8,7 @@ THE EYE is a public safety platform for emergency response, crime reporting, acc
 - Admin Dashboard: Next.js command center for dispatchers, agencies, government officials, auditors, and platform admins.
 - Backend API: NestJS service boundary for auth, users, incidents, broadcasts, notifications, storage, audit, and live session orchestration.
 - PostgreSQL + PostGIS: System of record for identity, agencies, incidents, geospatial areas, evidence metadata, notifications, and audit logs.
-- Redis + BullMQ: Async processing for notification delivery, broadcast fanout, escalation timers, evidence processing, and provider retries.
+- Redis + BullMQ: Async processing for notification delivery and provider retries. Additional queue-backed workflows (broadcast fanout, escalation timers, evidence processing) are planned.
 - MinIO/S3: Object storage for citizen evidence, responder evidence, exported reports, and generated thumbnails.
 - LiveKit: Real-time video rooms for emergency streaming and responder/admin viewing.
 - Firebase Cloud Messaging: Push notification provider for citizen and responder devices.
@@ -60,5 +60,5 @@ THE EYE is a public safety platform for emergency response, crime reporting, acc
 - Incident creation must not depend on FCM, LiveKit, or object storage availability.
 - Notification and broadcast delivery run asynchronously.
 - Status transitions are validated through a lifecycle state machine.
-- Escalation timers are queue-backed and recoverable.
+- Escalation timers are planned as queue-backed workflows; today only the `notifications` BullMQ queue is implemented.
 - Every sensitive action has an audit trail.

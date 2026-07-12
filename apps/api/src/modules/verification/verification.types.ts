@@ -1,4 +1,10 @@
 ﻿import { IncidentPriority, IncidentStatus } from "@the-eye/shared";
+import type {
+  DuplicateSignal,
+  GpsValidationSignal,
+  MediaEvidenceSignal,
+  TrustedReporterSignal,
+} from "./verification-signals";
 
 export type VerificationSignalInput = {
   gpsAccuracyMeters?: number | null;
@@ -12,6 +18,10 @@ export type VerificationSignalInput = {
   trustedReporterConfirmations: number;
   adminConfirmations: number;
   historicalFalseReports: number;
+  gpsValidation?: GpsValidationSignal;
+  mediaEvidence?: MediaEvidenceSignal;
+  duplicateSignal?: DuplicateSignal;
+  trustedReporterSignal?: TrustedReporterSignal;
 };
 
 export type VerificationScoreBreakdown = {
@@ -25,6 +35,7 @@ export type VerificationScoreBreakdown = {
   nearbyUserConfirmations: number;
   trustedReporterConfirmation: number;
   adminConfirmation: number;
+  evidenceChainOfCustody: number;
   historicalFalseReportPenalty: number;
 };
 
@@ -35,6 +46,7 @@ export type VerificationDecision = {
   shouldAutoEscalate: boolean;
   targetSystemVerificationMs: number;
   targetCrowdRequestMs: number;
+  withinTarget?: boolean;
   breakdown: VerificationScoreBreakdown;
 };
 

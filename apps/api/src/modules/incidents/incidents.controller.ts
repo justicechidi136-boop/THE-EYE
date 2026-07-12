@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+﻿import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IncidentStatus } from "@the-eye/shared";
 import { IncidentScopeGuard } from "../../common/auth/incident-scope.guard";
@@ -6,6 +6,7 @@ import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../../common/auth/optional-jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { ConfirmIncidentMediaDto, PresignIncidentMediaDto, ReportIncidentDto } from "./dto/report-incident.dto";
 import { IncidentsService } from "./incidents.service";
 
@@ -27,12 +28,14 @@ export class IncidentsController {
 
   @Post("report")
   @UseGuards(OptionalJwtAuthGuard)
+  @RateLimit("incidentCreate")
   report(@Body() dto: ReportIncidentDto, @Req() request: any) {
     return this.incidentsService.report(dto, request.user);
   }
 
   @Post("emergency")
   @UseGuards(OptionalJwtAuthGuard)
+  @RateLimit("incidentCreate")
   emergency(@Body() dto: ReportIncidentDto, @Req() request: any) {
     return this.incidentsService.reportEmergency(dto, request.user);
   }
@@ -57,8 +60,8 @@ export class IncidentsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
   @RequirePermissions("incident:read")
-  list(@Req() request: any) {
-    return this.incidentsService.list(request.user);
+  list(@Req() request: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return this.incidentsService.list(request.user, { cursor, limit });
   }
 
   @Get(":id")

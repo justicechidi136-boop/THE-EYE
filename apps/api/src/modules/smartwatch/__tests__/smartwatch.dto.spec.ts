@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { SmartwatchEmergencyMode } from "@the-eye/shared";
 import { validateSmartwatchGpsDto, validateRegisterSmartwatchDeviceDto, validateSmartwatchSosDto } from "../dto/smartwatch.dto";
 
 describe("smartwatch dto validation", () => {
@@ -13,6 +14,6 @@ describe("smartwatch dto validation", () => {
 
   it("requires a 3 second SOS long press and a supported emergency mode", () => {
     expect(() => validateSmartwatchSosDto({ latitude: 6.5244, longitude: 3.3792, longPressDurationMs: 1200 })).toThrow(BadRequestException);
-    expect(() => validateSmartwatchSosDto({ latitude: 6.5244, longitude: 3.3792, emergencyMode: "MedicalSOS", longPressDurationMs: 3000 })).not.toThrow();
+    expect(() => validateSmartwatchSosDto({ latitude: 6.5244, longitude: 3.3792, emergencyMode: SmartwatchEmergencyMode.MedicalSOS, longPressDurationMs: 3000 })).not.toThrow();
   });
 });

@@ -16,3 +16,9 @@ export type CrowdRequestDto = {
   radiusMeters?: number;
   limit?: number;
 };
+
+export type AdminVerificationReviewDto = {
+  decision: "confirm" | "reject" | "needs_more_evidence";
+  note?: string;
+  confidenceOverride?: number;
+};

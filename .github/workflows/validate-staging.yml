@@ -1,0 +1,348 @@
+# Staging validation — runs on pushes to staging and manual dispatch.
+# Uses GitHub environment "staging" for environment-scoped vars/secrets.
+# Does NOT access the production environment or production secrets.
+# Does NOT deploy to DigitalOcean.
+name: Validate Staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: staging-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API lint, test, build
+    runs-on: ubuntu-latest
+    environment: staging
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: the_eye
+          POSTGRES_USER: the_eye
+          POSTGRES_PASSWORD: ci_postgres_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U the_eye -d the_eye"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      THE_EYE_APP_ENV: ${{ vars.THE_EYE_APP_ENV }}
+      FCM_PROJECT_ID: ${{ vars.FCM_PROJECT_ID }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      DATABASE_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20
+      DATABASE_DIRECT_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ci_access_secret_32_chars_minimum
+      JWT_REFRESH_SECRET: ci_refresh_secret_32_chars_minimum
+      LIVE_LOCATION_LINK_SECRET: ci_live_location_secret_32_chars
+      LIVEKIT_API_KEY: ci_livekit_api_key_32_chars_minimum
+      LIVEKIT_API_SECRET: ci_livekit_api_secret_32_chars_minimum
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: the-eye
+      S3_ACCESS_KEY: ci_s3_access_key
+      S3_SECRET_KEY: ci_s3_secret_key_32_chars_minimum
+      CORS_ORIGINS: https://staging-admin.theeye.com.ng
+      GOOGLE_OAUTH_CLIENT_ID: ci-google-oauth-client-id
+      METRICS_BEARER_TOKEN: ci_metrics_bearer_token_32_chars_min
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Staging Firebase environment guard
+        run: |
+          set -euo pipefail
+          test "${THE_EYE_APP_ENV}" = "staging"
+          test "${FCM_PROJECT_ID}" = "the-eye-2stg"
+          test "${FIREBASE_PROJECT_ID}" = "the-eye-2stg"
+          for forbidden in the-eye-2pd-d0217 the-eye-29cff; do
+            if echo "${FCM_PROJECT_ID} ${FIREBASE_PROJECT_ID}" | grep -q "${forbidden}"; then
+              echo "Staging validation must not reference ${forbidden}"
+              exit 1
+            fi
+          done
+
+      - name: Generate Prisma client
+        run: pnpm --filter @the-eye/api exec prisma generate
+
+      - name: Lint API
+        run: pnpm --filter @the-eye/api run lint
+
+      - name: Validate Prisma schema
+        run: pnpm --filter @the-eye/api exec prisma validate
+
+      - name: Validate migrations against schema
+        run: |
+          pnpm --filter @the-eye/api exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "${DATABASE_DIRECT_URL}"
+
+      - name: Apply migrations
+        run: pnpm --filter @the-eye/api exec prisma migrate deploy
+
+      - name: Backend tests
+        run: pnpm run test:backend
+
+      - name: Build API
+        run: pnpm --filter @the-eye/api run build
+
+  admin:
+    name: Admin lint & build
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      NEXT_PUBLIC_APP_ENV: staging
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+      CI_STAGING_API_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+      CI_PRODUCTION_API_URL: https://api.theeye.com.ng
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint admin-web
+        run: pnpm --filter @the-eye/admin-web run lint
+
+      - name: Build admin-web (staging)
+        run: pnpm --filter @the-eye/admin-web run build
+
+      - name: Validate staging bundle isolation
+        run: node scripts/validate-admin-next-bundle.cjs apps/admin-web/.next staging "${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
+
+  mobile:
+    name: Mobile staging analyze, test, build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Materialize mobile google-services.json files
+        env:
+          MOBILE_GOOGLE_SERVICES_JSON: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON }}
+          MOBILE_GOOGLE_SERVICES_JSON_DEVELOPMENT: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON_DEVELOPMENT }}
+          MOBILE_GOOGLE_SERVICES_JSON_PRODUCTION: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON_PRODUCTION }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MOBILE_GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "staging environment secret MOBILE_GOOGLE_SERVICES_JSON is required"
+            exit 1
+          fi
+          write_json() {
+            local flavor="$1"
+            local payload="$2"
+            mkdir -p "apps/mobile/android/app/src/${flavor}"
+            printf '%s' "$payload" > "apps/mobile/android/app/src/${flavor}/google-services.json"
+          }
+          write_json staging "$MOBILE_GOOGLE_SERVICES_JSON"
+          if [ -n "${MOBILE_GOOGLE_SERVICES_JSON_DEVELOPMENT:-}" ]; then
+            write_json development "$MOBILE_GOOGLE_SERVICES_JSON_DEVELOPMENT"
+          fi
+          if [ -n "${MOBILE_GOOGLE_SERVICES_JSON_PRODUCTION:-}" ]; then
+            write_json production "$MOBILE_GOOGLE_SERVICES_JSON_PRODUCTION"
+          fi
+          node -e "
+            const fs=require('fs');
+            const j=JSON.parse(fs.readFileSync('apps/mobile/android/app/src/staging/google-services.json','utf8'));
+            if(j.project_info.project_id!=='the-eye-2stg'){console.error('staging google-services.json project_id mismatch');process.exit(1);}
+          "
+
+      - name: Install mobile dependencies
+        run: pnpm --dir apps/mobile run pub-get
+
+      - name: Analyze
+        run: pnpm run mobile:analyze
+
+      - name: Test
+        run: pnpm run mobile:test
+
+      - name: Validate mobile Firebase wiring
+        run: |
+          set -euo pipefail
+          if [ -f apps/mobile/android/app/src/development/google-services.json ] && \
+             [ -f apps/mobile/android/app/src/production/google-services.json ]; then
+            pnpm run test:mobile:firebase
+          else
+            echo "Partial flavor secrets — running auth-provider manifest validation"
+            pnpm run test:firebase:auth-providers
+          fi
+
+      - name: Build staging APK
+        run: pnpm --dir apps/mobile exec flutter build apk --flavor staging
+
+  watch:
+    name: Watch staging analyze, test, build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Materialize watch google-services.json files
+        env:
+          WATCH_GOOGLE_SERVICES_JSON: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON }}
+          WATCH_GOOGLE_SERVICES_JSON_DEVELOPMENT: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON_DEVELOPMENT }}
+          WATCH_GOOGLE_SERVICES_JSON_PRODUCTION: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON_PRODUCTION }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WATCH_GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "staging environment secret WATCH_GOOGLE_SERVICES_JSON is required"
+            exit 1
+          fi
+          write_json() {
+            local flavor="$1"
+            local payload="$2"
+            mkdir -p "apps/watch/android/app/src/${flavor}"
+            printf '%s' "$payload" > "apps/watch/android/app/src/${flavor}/google-services.json"
+          }
+          write_json staging "$WATCH_GOOGLE_SERVICES_JSON"
+          if [ -n "${WATCH_GOOGLE_SERVICES_JSON_DEVELOPMENT:-}" ]; then
+            write_json development "$WATCH_GOOGLE_SERVICES_JSON_DEVELOPMENT"
+          fi
+          if [ -n "${WATCH_GOOGLE_SERVICES_JSON_PRODUCTION:-}" ]; then
+            write_json production "$WATCH_GOOGLE_SERVICES_JSON_PRODUCTION"
+          fi
+
+      - name: Install watch dependencies
+        run: pnpm --dir apps/watch run pub-get
+
+      - name: Analyze
+        run: pnpm run watch:analyze
+
+      - name: Test
+        run: pnpm run watch:test
+
+      - name: Validate watch Firebase wiring
+        run: |
+          set -euo pipefail
+          if [ -f apps/watch/android/app/src/development/google-services.json ] && \
+             [ -f apps/watch/android/app/src/production/google-services.json ]; then
+            pnpm run test:watch:firebase
+          else
+            echo "Partial flavor secrets — running auth-provider manifest validation"
+            pnpm run test:firebase:auth-providers
+          fi
+
+      - name: Build staging debug APK
+        run: pnpm --dir apps/watch exec flutter build apk --flavor staging --debug
+
+  firebase:
+    name: Firebase staging guards
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      THE_EYE_APP_ENV: ${{ vars.THE_EYE_APP_ENV }}
+      FCM_PROJECT_ID: ${{ vars.FCM_PROJECT_ID }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Staging Firebase guard
+        run: |
+          set -euo pipefail
+          test "${THE_EYE_APP_ENV}" = "staging"
+          test "${FCM_PROJECT_ID}" = "the-eye-2stg"
+          test "${FIREBASE_PROJECT_ID}" = "the-eye-2stg"
+
+      - name: Auth provider manifest validation
+        run: pnpm run test:firebase:auth-providers
+
+  docker:
+    name: Docker admin image (staging)
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CI_STAGING_API_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+      CI_PRODUCTION_API_URL: https://api.theeye.com.ng
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging build args
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NEXT_PUBLIC_API_BASE_URL}" ]; then
+            echo "staging environment var NEXT_PUBLIC_API_BASE_URL is required"
+            exit 1
+          fi
+          case "${NEXT_PUBLIC_API_BASE_URL}" in
+            *localhost*|*127.0.0.1*|*api.theeye.com.ng*)
+              echo "Staging NEXT_PUBLIC_API_BASE_URL must not use localhost or production API hosts"
+              exit 1
+              ;;
+          esac
+
+      - name: Build staging admin-web Docker image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_ENV=staging \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}" \
+            -f apps/admin-web/Dockerfile \
+            --target production \
+            -t the-eye-admin:staging-validate \
+            .
+
+      - name: Validate staging Docker bundle isolation
+        run: node scripts/validate-admin-docker-bundle.cjs the-eye-admin:staging-validate staging "${{ vars.NEXT_PUBLIC_API_BASE_URL }}"

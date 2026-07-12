@@ -7,6 +7,7 @@ Services:
 - `api`: NestJS backend API
 - `admin-web`: Next.js admin dashboard
 - `postgres-postgis`: PostgreSQL with PostGIS
+- `pgbouncer`: optional connection pooler (`--profile pooling`)
 - `redis`: cache and BullMQ queues
 - `minio`: S3-compatible evidence storage
 - `livekit`: live video server
@@ -87,6 +88,14 @@ docker compose -f infra/docker/docker-compose.yml --profile tools run --rm api-m
 docker compose -f infra/docker/docker-compose.yml --profile tools run --rm api-seed
 docker compose -f infra/docker/docker-compose.yml up -d --build
 ```
+
+Optional PgBouncer for multi-replica API pools:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --profile pooling up -d pgbouncer
+```
+
+Set `DATABASE_DIRECT_URL` to `postgres-postgis:5432` for migrations/seeds and `DATABASE_URL` to `pgbouncer:6432` with `pgbouncer=true` for API workers. See `docs/postgres-scaling.md`.
 
 4. Check health:
 

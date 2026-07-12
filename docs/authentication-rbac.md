@@ -17,6 +17,10 @@ THE EYE supports citizen authentication and admin authentication with scoped acc
 - Refresh calls rotate tokens and revoke the previous refresh token.
 - Logout revokes the provided refresh token.
 
+## Development admin login
+
+For local and staging environments, seed a disposable super-admin with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env.example`. Set real values only in an untracked `.env` file — never commit production passwords. Run `pnpm --filter @the-eye/api run db:seed` after migrations, or `db:create-admin` to upsert a single admin account.
+
 ## Password Reset
 
 - `POST /v1/auth/password-reset/request` creates a short-lived hashed reset token.

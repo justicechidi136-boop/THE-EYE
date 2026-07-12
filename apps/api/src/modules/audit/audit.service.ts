@@ -1,7 +1,15 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { createHash } from "crypto";
 import { AdminRoleName } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
+import {
+  buildCursorPage,
+  decodeSequenceCursor,
+  encodeSequenceCursor,
+  resolvePageLimit,
+  sequenceCursorWhere,
+  type CursorPageQuery,
+} from "../../common/pagination/cursor-pagination";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type AuditEventInput = {
@@ -22,7 +30,7 @@ export type AuditEventInput = {
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async record(input: AuditEventInput) {
     const previous = await this.prisma.auditLog.findFirst({ orderBy: { sequence: "desc" as never } });
@@ -69,18 +77,22 @@ export class AuditService {
     });
   }
 
-  async list(actor: JwtPayload, filters: { action?: string; entityType?: string; entityId?: string } = {}) {
+  async list(actor: JwtPayload, filters: { action?: string; entityType?: string; entityId?: string } = {}, query: CursorPageQuery = {}) {
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeSequenceCursor(query.cursor);
     const scope = actor.role === AdminRoleName.SuperAdmin || actor.role === AdminRoleName.OversightAuditor ? {} : { actorAdminId: actor.sub };
-    return this.prisma.auditLog.findMany({
+    const rows = await this.prisma.auditLog.findMany({
       where: {
         ...scope,
         ...(filters.action ? { action: filters.action } : {}),
         ...(filters.entityType ? { entityType: filters.entityType } : {}),
         ...(filters.entityId ? { entityId: filters.entityId } : {}),
+        ...sequenceCursorWhere(cursor),
       } as never,
-      orderBy: { sequence: "desc" as never },
-      take: 200,
+      orderBy: [{ sequence: "desc" as never }, { id: "desc" }],
+      take: limit + 1,
     });
+    return buildCursorPage(rows, limit, (item) => encodeSequenceCursor(item.sequence));
   }
 
   async verifyChain() {

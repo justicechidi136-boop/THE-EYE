@@ -1,0 +1,4 @@
+#include "Generated.xcconfig"
+PRODUCT_BUNDLE_IDENTIFIER = com.theeye.app
+DISPLAY_NAME = THE EYE
+FIREBASE_PLIST_PATH = Runner/Firebase/Production/GoogleService-Info.plist

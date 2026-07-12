@@ -1,38 +1,52 @@
 import Link from "next/link";
-import { AppShell } from "../../components/app-shell";
-import { MetricCard, PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { communities, communityPosts } from "../../lib/mock-data";
+import { CsocActivityTimeline } from "../../components/csoc/csoc-activity-timeline";
+import { CsocMap } from "../../components/csoc/csoc-map";
+import { CsocMetricGrid } from "../../components/csoc/csoc-metric-grid";
+import { PageHeader, Panel, StatusBadge } from "../../components/ui";
+import { fetchCsocMapMarkers } from "../../lib/api/data";
+import { fetchCsocDashboardMetrics } from "../../lib/csoc/metrics";
 
-export default function NeighborhoodWatchPage() {
+export const dynamic = "force-dynamic";
+
+export default async function CsocDashboardPage() {
+  const [metrics, mapMarkers] = await Promise.all([fetchCsocDashboardMetrics(), fetchCsocMapMarkers()]);
+
   return (
-    <AppShell>
-      <PageHeader eyebrow="Community safety platform" title="Neighborhood Watch" action={<StatusBadge tone="success">{communities.length} communities</StatusBadge>} />
-      <section className="mb-5 grid gap-4 md:grid-cols-4">
-        <MetricCard label="Members" value={String(communities.reduce((sum, community) => sum + community.members, 0))} />
-        <MetricCard label="Pending approvals" value={String(communities.reduce((sum, community) => sum + community.pending, 0))} />
-        <MetricCard label="Community posts" value={String(communityPosts.length)} />
-        <MetricCard label="Avg confidence" value="75%" />
-      </section>
-      <Panel title="Communities list">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-muted">
-              <tr><th className="px-4 py-3">Community</th><th className="px-4 py-3">Hierarchy</th><th className="px-4 py-3">Members</th><th className="px-4 py-3">Approvals</th><th className="px-4 py-3">Confidence</th></tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {communities.map((community) => (
-                <tr key={community.id}>
-                  <td className="px-4 py-3"><Link href={`/neighborhood-watch/${community.id}`} className="font-semibold hover:text-eye">{community.name}</Link><p className="text-xs text-muted">{community.level} - {community.visibility}</p></td>
-                  <td className="px-4 py-3 text-muted">{community.hierarchy}</td>
-                  <td className="px-4 py-3">{community.members}</td>
-                  <td className="px-4 py-3"><StatusBadge tone={community.pending ? "warning" : "success"}>{community.pending}</StatusBadge></td>
-                  <td className="px-4 py-3"><StatusBadge tone={community.confidence >= 80 ? "success" : "info"}>{community.confidence}%</StatusBadge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <>
+      <PageHeader
+        eyebrow="Community Security Operations Center"
+        title="Dashboard"
+        action={<StatusBadge tone="success">Safety score {metrics.safetyScore}%</StatusBadge>}
+      />
+      <CsocMetricGrid
+        metrics={[
+          { label: "Community Safety Score", value: `${metrics.safetyScore}%`, accent: "eye" },
+          { label: "Communities Online", value: String(metrics.communitiesOnline) },
+          { label: "Residents Online", value: String(metrics.residentsOnline) },
+          { label: "Pending Verifications", value: String(metrics.pendingVerifications), accent: "eyeOrange" },
+          { label: "Live Incidents", value: String(metrics.liveIncidents), accent: "eyeOrange" },
+          { label: "Active Broadcasts", value: String(metrics.activeBroadcasts) },
+          { label: "Missing Persons", value: String(metrics.missingPersons) },
+          { label: "Wanted Persons", value: String(metrics.wantedPersons) },
+          { label: "Stolen Vehicles", value: String(metrics.stolenVehicles) },
+          { label: "Volunteers Available", value: String(metrics.volunteersAvailable), accent: "eye" },
+          { label: "Patrols Active", value: String(metrics.patrolsActive) },
+          { label: "Avg Response Time", value: metrics.avgResponseMinutes ? `${metrics.avgResponseMinutes}m` : "—" },
+          { label: "False Report Rate", value: `${metrics.falseReportRate}%` },
+        ]}
+      />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <CsocMap markers={mapMarkers.slice(0, 40)} title="Heat map preview" heightClass="min-h-[360px]" />
+        <CsocActivityTimeline entries={metrics.recentActivity} />
+      </div>
+      <Panel title="Quick links" aside={<Link href="/neighborhood-watch/incidents" className="text-sm font-semibold text-eye hover:underline">Incident Centre →</Link>}>
+        <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <Link href="/neighborhood-watch/verification" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 hover:border-eye">Verification Queue</Link>
+          <Link href="/neighborhood-watch/broadcasts" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 hover:border-eye">Emergency Broadcasts</Link>
+          <Link href="/neighborhood-watch/live-monitoring" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 hover:border-eye">Live Monitoring</Link>
+          <Link href="/neighborhood-watch/smartwatch" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 hover:border-eye">Smartwatch Console</Link>
         </div>
       </Panel>
-    </AppShell>
+    </>
   );
 }

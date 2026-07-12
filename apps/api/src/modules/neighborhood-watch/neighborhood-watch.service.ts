@@ -1,7 +1,18 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { BroadcastType, IncidentPriority, IncidentType } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
+import {
+  buildCursorPage,
+  dateIdCursorWhere,
+  decodeDateIdCursor,
+  encodeDateIdCursor,
+  resolvePageLimit,
+  DEFAULT_PAGE_LIMIT,
+  type CursorPageQuery,
+} from "../../common/pagination/cursor-pagination";
 import { BroadcastsService } from "../broadcasts/broadcasts.service";
+import { AuditService } from "../audit/audit.service";
+import { assertEvidenceObjectKey } from "../../common/storage/s3-presign";
 import { IncidentsService } from "../incidents/incidents.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -24,6 +35,7 @@ export class NeighborhoodWatchService {
     private readonly incidents: IncidentsService,
     private readonly broadcasts: BroadcastsService,
     private readonly notifications: NotificationsService,
+    private readonly auditService: AuditService,
   ) {}
 
   async listCommunities(actor: JwtPayload) {
@@ -108,6 +120,11 @@ export class NeighborhoodWatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can create community posts");
     validatePost(dto);
     await this.assertApprovedMember(communityId, actor.sub);
+    if (dto.media?.length) {
+      for (const media of dto.media) {
+        assertEvidenceObjectKey(`community-${communityId}`, media.objectKey, media.bucket, media.contentType);
+      }
+    }
     const post = await this.prisma.communityPost.create({
       data: {
         communityId,
@@ -138,16 +155,36 @@ export class NeighborhoodWatchService {
     return { data: scored };
   }
 
-  async feed(communityId: string, actor: JwtPayload) {
+  async listPosts(actor: JwtPayload, query: CursorPageQuery = {}) {
+    const communityWhere =
+      actor.typ === "admin" && actor.role !== "Super Admin"
+        ? { country: actor.country, state: actor.state, lga: actor.lga }
+        : {};
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const rows = await this.prisma.communityPost.findMany({
+      where: {
+        ...(Object.keys(communityWhere).length ? { community: communityWhere } : {}),
+        ...dateIdCursorWhere(cursor),
+      } as never,
+      include: { community: true, media: true, comments: true, reactions: true, verifications: true, incident: true, broadcast: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+  }
+
+  async feed(communityId: string, actor: JwtPayload, query: CursorPageQuery = {}) {
     await this.assertCommunityVisible(communityId, actor);
-    return {
-      data: await this.prisma.communityPost.findMany({
-        where: { communityId },
-        include: { media: true, comments: true, reactions: true, verifications: true, incident: true, broadcast: true },
-        orderBy: { createdAt: "desc" },
-        take: 100,
-      }),
-    };
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const rows = await this.prisma.communityPost.findMany({
+      where: { communityId, ...dateIdCursorWhere(cursor) },
+      include: { media: true, comments: true, reactions: true, verifications: true, incident: true, broadcast: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
   }
 
   async verifyPost(postId: string, dto: VerifyCommunityPostDto, actor: JwtPayload) {
@@ -211,7 +248,7 @@ export class NeighborhoodWatchService {
   async map(communityId: string, actor: JwtPayload) {
     await this.assertCommunityVisible(communityId, actor);
     const [posts, policeStations, volunteers, patrols] = await Promise.all([
-      this.prisma.communityPost.findMany({ where: { communityId }, take: 100, orderBy: { createdAt: "desc" } }),
+      this.prisma.communityPost.findMany({ where: { communityId }, take: DEFAULT_PAGE_LIMIT, orderBy: { createdAt: "desc" } }),
       this.prisma.policeStation.findMany({ take: 50 }),
       this.prisma.volunteerProfile.findMany({ where: { communityId, available: true }, take: 50 }),
       this.prisma.patrolSchedule.findMany({ where: { communityId }, include: { checkpoints: true }, take: 20 }),
@@ -367,16 +404,12 @@ export class NeighborhoodWatchService {
   }
 
   private audit(actor: JwtPayload, action: string, entityType: string, entityId: string, metadata: Record<string, unknown>) {
-    return this.prisma.auditLog.create({
-      data: {
-        actorUserId: actor.typ === "user" ? actor.sub : undefined,
-        actorAdminId: actor.typ === "admin" ? actor.sub : undefined,
-        actorType: actor.typ,
-        action,
-        entityType,
-        entityId,
-        metadata,
-      } as never,
+    return this.auditService.record({
+      actor,
+      action,
+      entityType,
+      entityId,
+      metadata,
     });
   }
 }

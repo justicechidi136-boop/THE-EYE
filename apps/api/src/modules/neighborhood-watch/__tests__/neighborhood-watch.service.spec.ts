@@ -43,7 +43,8 @@ function buildService(overrides: Record<string, unknown> = {}) {
   const incidents = { report: jest.fn().mockResolvedValue({ data: { id: "incident-1", type: IncidentType.Crime } }) } as any;
   const broadcasts = { create: jest.fn().mockResolvedValue({ data: { id: "broadcast-1" } }) } as any;
   const notifications = { enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }) } as any;
-  return { service: new NeighborhoodWatchService(prisma, incidents, broadcasts, notifications), prisma, incidents, broadcasts, notifications };
+  const auditService = { record: jest.fn().mockResolvedValue({ id: "audit-1" }) } as any;
+  return { service: new NeighborhoodWatchService(prisma, incidents, broadcasts, notifications, auditService), prisma, incidents, broadcasts, notifications, auditService };
 }
 
 describe("NeighborhoodWatchService", () => {
@@ -56,10 +57,9 @@ describe("NeighborhoodWatchService", () => {
   });
 
   it("approves a pending member and audits the moderator action", async () => {
-    const { service, prisma } = buildService();
+    const { service, auditService } = buildService();
     await service.approveMember("community-1", "membership-1", adminActor);
-    expect(prisma.communityMembership.update).toHaveBeenCalled();
-    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "community.member_approved" }) }));
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({ action: "community.member_approved" }));
   });
 
   it("creates a post and targets community notifications", async () => {

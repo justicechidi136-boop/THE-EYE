@@ -1,0 +1,22 @@
+{
+  "name": "@the-eye/mobile",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "clean": "flutter clean",
+    "pub-get": "flutter pub get",
+    "analyze": "flutter analyze lib test",
+    "test": "flutter test",
+    "validate:firebase": "node ../../scripts/validate-mobile-firebase.cjs",
+    "run:staging": "flutter run --flavor staging",
+    "run:production": "flutter run --flavor production",
+    "build:apk:development": "flutter build apk --flavor development --debug",
+    "build:apk:staging": "flutter build apk --flavor staging --debug",
+    "build:apk:production": "flutter build apk --flavor production --debug",
+    "build:apk:release": "flutter build apk --flavor production --release",
+    "build:appbundle:production": "flutter build appbundle --flavor production --release",
+    "doctor": "flutter doctor",
+    "flutterfire:configure:staging": "flutterfire configure --project=the-eye-2stg --platforms=android --android-package-name=com.theeye.app.staging --out=lib/firebase_options_staging.dart --yes",
+    "flutterfire:configure:production": "flutterfire configure --project=the-eye-2pd-d0217 --platforms=android --android-package-name=com.theeye.app --out=lib/firebase_options_production.dart --yes"
+  }
+}

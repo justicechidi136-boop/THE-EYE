@@ -2,6 +2,8 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { ConfigService } from "@nestjs/config";
 import { createHmac, timingSafeEqual } from "crypto";
 import type { JwtPayload } from "../../common/auth/jwt";
+import { MetricsService } from "../../common/metrics/metrics.service";
+import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { LinkLiveVideoEvidenceDto, LiveVideoLocationUpdateDto, StartLiveVideoDto, validateEvidenceLink, validateLocationUpdate } from "./dto/live-video.dto";
 import { LiveKitTokenService } from "./livekit-token.service";
@@ -12,9 +14,12 @@ export class LiveVideoService {
     private readonly prisma: PrismaService,
     private readonly livekitTokens: LiveKitTokenService,
     private readonly config: ConfigService,
+    private readonly auditService: AuditService,
+    private readonly metrics: MetricsService,
   ) {}
 
   async startIncidentLiveVideo(incidentId: string, dto: StartLiveVideoDto, actor: JwtPayload) {
+    const startedAt = Date.now();
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can start emergency live video");
     validateLocationUpdate(dto);
     const incident = await this.prisma.incident.findUnique({ where: { id: incidentId } });
@@ -50,6 +55,7 @@ export class LiveVideoService {
     await this.timeline(incidentId, actor, "live_video.started", dto.lowBandwidthMode ? "Emergency live video started in low-bandwidth mode." : "Emergency live video started.", { sessionId: session.id, roomName });
     const location = await this.createLocationUpdate(session.id, incidentId, dto);
     await this.audit(actor, "live_video.started", session.id, { incidentId, roomName, lowBandwidthMode: dto.lowBandwidthMode ?? false });
+    this.metrics.recordLiveVideoOperation("start", (Date.now() - startedAt) / 1000, "success");
 
     return {
       data: { ...session, latestLocation: location, evidenceOverlay: this.evidenceOverlay(incident, session, location) },
@@ -77,6 +83,7 @@ export class LiveVideoService {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view incident live streams");
     const session = await this.prisma.liveVideoSession.findUnique({ where: { id: sessionId }, include: { incident: true, locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 } } });
     if (!session) throw new NotFoundException("Live video session not found");
+    if (session.status !== "Active") throw new ForbiddenException("Live video session is not active");
     await this.assertAdminCanAccessIncident(session.incidentId, actor);
 
     const identity = `admin-${actor.sub}`;
@@ -124,12 +131,14 @@ export class LiveVideoService {
   }
 
   async addLocationUpdate(sessionId: string, dto: LiveVideoLocationUpdateDto, actor: JwtPayload) {
+    const startedAt = Date.now();
     if (actor.typ !== "user") throw new ForbiddenException("Only the citizen stream owner can update live video location");
     validateLocationUpdate(dto);
     const session = await this.prisma.liveVideoSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new NotFoundException("Live video session not found");
     if (session.createdById !== actor.sub) throw new ForbiddenException("Only the stream owner can update this live video location");
     const location = await this.createLocationUpdate(session.id, session.incidentId, dto);
+    this.metrics.recordLiveVideoOperation("location_update", (Date.now() - startedAt) / 1000, "success");
     return { data: location, realtime: { event: "live_video.location.updated", sessionId, pollIntervalMs: 5000 } };
   }
 
@@ -258,16 +267,12 @@ export class LiveVideoService {
   }
 
   private audit(actor: JwtPayload, action: string, entityId: string, metadata: Record<string, unknown>) {
-    return this.prisma.auditLog.create({
-      data: {
-        actorUserId: actor.typ === "user" ? actor.sub : undefined,
-        actorAdminId: actor.typ === "admin" ? actor.sub : undefined,
-        actorType: actor.typ,
-        action,
-        entityType: "live_video_sessions",
-        entityId,
-        metadata,
-      } as never,
+    return this.auditService.record({
+      actor,
+      action,
+      entityType: "live_video_sessions",
+      entityId,
+      metadata,
     });
   }
 }

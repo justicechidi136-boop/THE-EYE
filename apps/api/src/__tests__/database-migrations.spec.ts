@@ -24,5 +24,8 @@ describe("database migrations", () => {
     expect(sql).toContain("notification_delivery_logs");
     expect(sql).toContain("smartwatch_gps_tracks");
     expect(sql).toContain("live_video_location_updates");
+    expect(sql).toContain("idx_incidents_reporter_created_at");
+    expect(sql).toContain("idx_notifications_user_unread_created_at");
+    expect(sql).toContain("idx_broadcast_deliveries_user_broadcast_id");
   });
 });

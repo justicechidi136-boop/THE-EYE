@@ -1,12 +1,22 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { BroadcastStatus, BroadcastType, IncidentPriority, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
+import { MetricsService } from "../../common/metrics/metrics.service";
+import {
+  buildCursorPage,
+  dateIdCursorWhere,
+  decodeDateIdCursor,
+  encodeDateIdCursor,
+  resolvePageLimit,
+  type CursorPageQuery,
+} from "../../common/pagination/cursor-pagination";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { approvalRequiredTypes, CreateBroadcastDto, validateCreateBroadcastDto } from "./dto/broadcast.dto";
 
 const AUTO_BROADCAST_CONFIDENCE = 85;
+const DISPATCH_BATCH_SIZE = 25;
 
 @Injectable()
 export class BroadcastsService {
@@ -14,17 +24,19 @@ export class BroadcastsService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
+    private readonly metrics: MetricsService,
   ) {}
 
-  async list(actor: JwtPayload) {
-    return {
-      data: await this.prisma.broadcast.findMany({
-        where: this.scopeWhere(actor),
-        include: { notifications: true, deliveries: true, incident: true },
-        orderBy: { createdAt: "desc" },
-        take: 100,
-      }),
-    };
+  async list(actor: JwtPayload, query: CursorPageQuery = {}) {
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const rows = await this.prisma.broadcast.findMany({
+      where: { ...this.scopeWhere(actor), ...dateIdCursorWhere(cursor) },
+      include: { notifications: true, deliveries: true, incident: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
   }
 
   async create(dto: CreateBroadcastDto, actor: JwtPayload) {
@@ -94,42 +106,68 @@ export class BroadcastsService {
   }
 
   async dispatch(id: string, actor: JwtPayload, action = "broadcast.dispatched") {
-    const broadcast = await this.getById(id);
-    if (broadcast.status !== BroadcastStatus.Published) throw new BadRequestException("Broadcast must be published before dispatch");
+    const startedAt = Date.now();
+    try {
+      const broadcast = await this.getById(id);
+      if (broadcast.status !== BroadcastStatus.Published) throw new BadRequestException("Broadcast must be published before dispatch");
 
-    const recipients = await this.findGeofencedRecipients(id);
-    for (const recipient of recipients) {
-      const notification = await this.prisma.notification.create({
-        data: {
-          userId: recipient.user_id,
-          broadcastId: id,
-          incidentId: broadcast.incidentId,
-          type: "BroadcastAlert",
-          priority: this.notificationPriority(broadcast.priority as string),
-          channel: "push",
-          title: broadcast.title,
-          body: broadcast.body,
-          status: "Pending" as never,
-          provider: "fcm",
-        } as never,
-      });
-      await this.prisma.broadcastDelivery.upsert({
-        where: { broadcastId_userId: { broadcastId: id, userId: recipient.user_id } },
-        update: { notificationId: notification.id, distanceMeters: recipient.distance_meters, status: "Queued" as never },
-        create: {
-          broadcastId: id,
-          userId: recipient.user_id,
-          notificationId: notification.id,
-          distanceMeters: recipient.distance_meters,
-          status: "Queued" as never,
-          channel: "push",
-        } as never,
-      });
-      await this.notificationsService.enqueue({ userId: recipient.user_id, notificationId: notification.id, title: broadcast.title, body: broadcast.body, broadcastId: id });
+      const recipients = await this.findGeofencedRecipients(id);
+      for (let offset = 0; offset < recipients.length; offset += DISPATCH_BATCH_SIZE) {
+        const batch = recipients.slice(offset, offset + DISPATCH_BATCH_SIZE);
+        await Promise.all(batch.map((recipient) => this.dispatchToRecipient(broadcast, id, recipient)));
+      }
+
+      await this.audit(actor, action, id, { recipientCount: recipients.length });
+      this.metrics.recordBroadcastDispatch((Date.now() - startedAt) / 1000, "success");
+      return { data: await this.getById(id), recipientCount: recipients.length };
+    } catch (error) {
+      this.metrics.recordBroadcastDispatch((Date.now() - startedAt) / 1000, "error");
+      throw error;
     }
+  }
 
-    await this.audit(actor, action, id, { recipientCount: recipients.length });
-    return { data: await this.getById(id), recipientCount: recipients.length };
+  private async dispatchToRecipient(
+    broadcast: { incidentId?: string | null; title: string; body: string; priority: string },
+    id: string,
+    recipient: { user_id: string; distance_meters: number },
+  ) {
+    const notification = await this.prisma.notification.create({
+      data: {
+        userId: recipient.user_id,
+        broadcastId: id,
+        incidentId: broadcast.incidentId,
+        type: "BroadcastAlert",
+        priority: this.notificationPriority(broadcast.priority as string),
+        channel: "push",
+        title: broadcast.title,
+        body: broadcast.body,
+        status: "Pending" as never,
+        provider: "firebase-cloud-messaging",
+      } as never,
+    });
+    await this.prisma.broadcastDelivery.upsert({
+      where: { broadcastId_userId: { broadcastId: id, userId: recipient.user_id } },
+      update: { notificationId: notification.id, distanceMeters: recipient.distance_meters, status: "Queued" as never },
+      create: {
+        broadcastId: id,
+        userId: recipient.user_id,
+        notificationId: notification.id,
+        distanceMeters: recipient.distance_meters,
+        status: "Queued" as never,
+        channel: "push",
+      } as never,
+    });
+    await this.notificationsService.enqueue({
+      userId: recipient.user_id,
+      notificationId: notification.id,
+      title: broadcast.title,
+      body: broadcast.body,
+      broadcastId: id,
+      channel: "push",
+      type: "BroadcastAlert",
+      priority: this.notificationPriority(broadcast.priority as string),
+      provider: "firebase-cloud-messaging",
+    });
   }
 
   async autoBroadcastVerifiedIncident(incidentId: string, confidenceScore: number) {

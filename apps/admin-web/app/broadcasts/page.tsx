@@ -1,10 +1,12 @@
 import { AppShell } from "../../components/app-shell";
+import { BroadcastCreateForm } from "../../components/broadcast-create-form";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { broadcasts } from "../../lib/mock-data";
+import { fetchBroadcasts } from "../../lib/api/data";
 
-const types = ["Emergency", "Crime", "Accident", "Missing person", "Stolen vehicle", "Government alert", "Community warning"];
+export const dynamic = "force-dynamic";
 
-export default function BroadcastsPage() {
+export default async function BroadcastsPage() {
+  const broadcasts = await fetchBroadcasts();
   const pending = broadcasts.filter((broadcast) => broadcast.status === "Pending approval").length;
   const published = broadcasts.filter((broadcast) => broadcast.status === "Published").length;
 
@@ -34,29 +36,13 @@ export default function BroadcastsPage() {
         </section>
 
         <Panel title="Create broadcast">
-          <div className="grid gap-3 lg:grid-cols-[220px_1fr_1fr_180px]">
-            <label className="grid gap-2 text-sm font-medium">
-              Type
-              <select className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye">
-                {types.map((type) => <option key={type}>{type}</option>)}
-              </select>
-            </label>
-            <label className="grid gap-2 text-sm font-medium">
-              Title
-              <input className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye" placeholder="Area safety alert" />
-            </label>
-            <label className="grid gap-2 text-sm font-medium">
-              Geofence
-              <input className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye" placeholder="Lat, lng, radius or WKT area" />
-            </label>
-            <button className="self-end rounded-md bg-eye px-4 py-3 text-sm font-semibold text-white">Send for approval</button>
-          </div>
+          <BroadcastCreateForm />
         </Panel>
 
         <Panel title="Broadcast queue">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-muted">
+              <thead className="bg-surfaceMuted text-xs uppercase text-muted">
                 <tr>
                   <th className="px-4 py-3">Broadcast</th>
                   <th className="px-4 py-3">Type</th>

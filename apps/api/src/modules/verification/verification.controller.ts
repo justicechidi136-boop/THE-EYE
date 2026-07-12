@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
-import { CrowdRequestDto, VerifyIncidentDto, WitnessConfirmationDto } from "./dto/verification.dto";
+import { AdminVerificationReviewDto, CrowdRequestDto, VerifyIncidentDto, WitnessConfirmationDto } from "./dto/verification.dto";
 import { VerificationService } from "./verification.service";
 
 @ApiTags("verification")
@@ -35,6 +35,12 @@ export class VerificationController {
   @RequirePermissions("incident:read")
   confirm(@Param("id") id: string, @Body() dto: WitnessConfirmationDto, @Req() request: any) {
     return this.verificationService.submitWitnessConfirmation(id, dto, request.user);
+  }
+
+  @Post("incidents/:id/admin-review")
+  @RequirePermissions("incident:update")
+  adminReview(@Param("id") id: string, @Body() dto: AdminVerificationReviewDto, @Req() request: any) {
+    return this.verificationService.adminReviewIncident(id, dto, request.user);
   }
 
   @Get("dashboard")

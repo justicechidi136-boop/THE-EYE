@@ -1,8 +1,12 @@
+import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { smartwatchDevices } from "../../lib/mock-data";
+import { fetchSmartwatchDevices } from "../../lib/api/data";
 
-export default function SmartwatchDevicesPage() {
+export const dynamic = "force-dynamic";
+
+export default async function SmartwatchDevicesPage() {
+  const smartwatchDevices = await fetchSmartwatchDevices();
   const online = smartwatchDevices.filter((device) => device.status === "Online").length;
 
   return (
@@ -31,21 +35,23 @@ export default function SmartwatchDevicesPage() {
         <Panel title="Pairing and security">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1160px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-muted">
+              <thead className="bg-surfaceMuted text-xs uppercase text-muted">
                 <tr><th className="px-4 py-3">Device</th><th className="px-4 py-3">Owner</th><th className="px-4 py-3">Mode</th><th className="px-4 py-3">Pairing</th><th className="px-4 py-3">Battery</th><th className="px-4 py-3">Signal</th><th className="px-4 py-3">Firmware</th><th className="px-4 py-3">Last GPS</th><th className="px-4 py-3">Action</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {smartwatchDevices.map((device) => (
                   <tr key={device.id}>
                     <td className="px-4 py-3">
-                      <p className="font-semibold">{device.deviceId}</p>
+                      <p className="font-semibold">
+                        <Link href={`/smartwatch/${device.id}`} className="text-eye hover:underline">{device.deviceId}</Link>
+                      </p>
                       <p className="text-xs text-muted">{device.provider} - {device.model}</p>
                     </td>
                     <td className="px-4 py-3">{device.owner}</td>
                     <td className="px-4 py-3"><StatusBadge tone="info">{device.mode}</StatusBadge></td>
                     <td className="px-4 py-3"><p>{device.pairingMethod}</p><p className="text-xs text-muted">{device.security}</p></td>
                     <td className="px-4 py-3">
-                      <div className="h-2 w-24 rounded-full bg-slate-200"><div className="h-2 rounded-full bg-eye" style={{ width: `${device.battery}%` }} /></div>
+                      <div className="h-2 w-24 rounded-full bg-surfaceMuted"><div className="h-2 rounded-full bg-eye" style={{ width: `${device.battery}%` }} /></div>
                       <p className="mt-1 text-xs text-muted">{device.battery}% - {device.lastSeen}</p>
                     </td>
                     <td className="px-4 py-3">{device.signal}%</td>

@@ -1,19 +1,40 @@
-import { AppShell } from "../../../components/app-shell";
+import Link from "next/link";
+import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
+import { PostVerifyButton } from "../../../components/csoc/post-verify-button";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { communityPosts } from "../../../lib/mock-data";
+import { fetchCommunityPosts } from "../../../lib/api/data";
 
-export default function CommunityPostsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function CommunityFeedPage() {
+  const posts = await fetchCommunityPosts();
+
   return (
-    <AppShell>
-      <PageHeader eyebrow="Community feed oversight" title="Community posts" action={<StatusBadge tone="info">{communityPosts.length} posts</StatusBadge>} />
-      <Panel title="Posts">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-muted"><tr><th className="px-4 py-3">Post</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Confidence</th><th className="px-4 py-3">Incident</th></tr></thead>
-            <tbody className="divide-y divide-line">{communityPosts.map((post) => <tr key={post.id}><td className="px-4 py-3"><p className="font-semibold">{post.title}</p><p className="text-xs text-muted">{post.community} - {post.author}</p></td><td className="px-4 py-3">{post.type}</td><td className="px-4 py-3"><StatusBadge tone={post.status === "Verified" ? "success" : post.status === "Disputed" ? "danger" : "warning"}>{post.status}</StatusBadge></td><td className="px-4 py-3">{post.confidence}%</td><td className="px-4 py-3">{post.linkedIncident}</td></tr>)}</tbody>
-          </table>
-        </div>
+    <>
+      <PageHeader
+        eyebrow="Community feed moderation"
+        title="Community Feed"
+        action={<StatusBadge tone="info">{posts.length} posts</StatusBadge>}
+      />
+      <Panel title="Feed posts">
+        <CsocDataTable
+          columns={["Post", "Community", "Type", "Status", "Confidence", "Incident", "Actions"]}
+          rows={posts.map((post) => [
+            <div key={`t-${post.id}`}><p className="font-semibold">{post.title}</p><p className="text-xs text-muted">{post.author}</p></div>,
+            post.community,
+            post.type,
+            <StatusBadge key={`s-${post.id}`} tone={post.status === "Verified" ? "success" : post.status === "False" ? "danger" : "warning"}>{post.status}</StatusBadge>,
+            `${post.confidence}%`,
+            post.linkedIncident !== "-" ? <Link key={`i-${post.id}`} href={`/incidents/${post.linkedIncident}`} className="text-eye hover:underline">{post.linkedIncident.slice(0, 8)}…</Link> : "—",
+            <div key={`a-${post.id}`} className="flex flex-wrap gap-2">
+              <PostVerifyButton postId={post.id} status="Verified" />
+              <PostVerifyButton postId={post.id} status="False" />
+              <PostVerifyButton postId={post.id} status="Disputed" />
+            </div>,
+          ])}
+          emptyMessage="No community posts in jurisdiction."
+        />
       </Panel>
-    </AppShell>
+    </>
   );
 }

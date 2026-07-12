@@ -1,10 +1,21 @@
 import { AppShell } from "../../../components/app-shell";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { smartwatchDevices } from "../../../lib/mock-data";
+import { fetchSmartwatchDevice } from "../../../lib/api/data";
+
+export const dynamic = "force-dynamic";
 
 export default async function WatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const device = smartwatchDevices.find((item) => item.id === id) ?? smartwatchDevices[0];
+  const device = await fetchSmartwatchDevice(id);
+
+  if (!device) {
+    return (
+      <AppShell>
+        <PageHeader eyebrow="Watch Detail" title="Device not found" action={<StatusBadge tone="warning">Missing</StatusBadge>} />
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <PageHeader eyebrow="Watch Detail" title={device.deviceId} action={<StatusBadge tone={device.status === "Online" ? "success" : "warning"}>{device.status}</StatusBadge>} />

@@ -1,7 +1,15 @@
+import { createMetricsMock } from "../../../common/metrics/metrics.test-utils";
 import { NotificationsService } from "../notifications.service";
 
 function buildService() {
   const queue = { add: jest.fn().mockResolvedValue({ id: "job-1" }) } as any;
+  const config = {
+    get: (key: string) => {
+      if (key === "THE_EYE_APP_ENV") return "development";
+      if (key === "FCM_PROJECT_ID") return "the-eye-29cff";
+      return undefined;
+    },
+  } as any;
   const prisma = {
     notification: {
       create: jest.fn().mockResolvedValue({ id: "notification-1" }),
@@ -16,7 +24,7 @@ function buildService() {
     },
     $queryRaw: jest.fn().mockResolvedValue([{ userId: "user-1", distanceMeters: 120 }]),
   } as any;
-  return { service: new NotificationsService(queue, prisma), queue, prisma };
+  return { service: new NotificationsService(queue, prisma, createMetricsMock(), config), queue, prisma };
 }
 
 describe("NotificationsService", () => {
@@ -34,8 +42,13 @@ describe("NotificationsService", () => {
     expect(result.recipientCount).toBe(1);
     expect(prisma.notification.create).toHaveBeenCalledTimes(2);
     expect(queue.add).toHaveBeenCalledTimes(2);
+    expect(queue.add).toHaveBeenCalledWith(
+      "dispatch",
+      expect.objectContaining({ priority: "Critical" }),
+      expect.objectContaining({ priority: 1, attempts: 8 }),
+    );
     expect(prisma.notificationDeliveryLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ status: "Queued" }),
+      data: expect.objectContaining({ status: "Queued", attempt: 0 }),
     }));
   });
 

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "137367371675",
+    "project_id": "the-eye-2pd-d0217",
+    "storage_bucket": "the-eye-2pd-d0217.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:137367371675:android:7c280f69a27799b3a2ab3e",
+        "android_client_info": {
+          "package_name": "com.theeye.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "137367371675-it4d63kmap5874h7qcsicvgla993imuj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.theeye.app",
+            "certificate_hash": "5da2e2ebfc7816b9c1fe780b102fd61f0c802ac7"
+          }
+        },
+        {
+          "client_id": "137367371675-7sikh2svb9k1c7ft8mqsmkmjpqpnav36.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCab9jm1fneeOk0ycWUQDb6mHiBvmXJoAs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "137367371675-7sikh2svb9k1c7ft8mqsmkmjpqpnav36.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
