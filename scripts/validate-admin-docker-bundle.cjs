@@ -12,8 +12,8 @@ if (!image || !expectedEnv || !expectedApiUrl) {
 
 const oppositeApiUrl =
   expectedEnv === "staging"
-    ? process.env.CI_PRODUCTION_API_URL || "https://ci-production-api.example.test"
-    : process.env.CI_STAGING_API_URL || "https://ci-staging-api.example.test";
+    ? process.env.CI_PRODUCTION_API_URL || "https://ci-production-api.theeye.internal"
+    : process.env.CI_STAGING_API_URL || "https://ci-staging-api.theeye.internal";
 
 const oppositeMarkers = [oppositeApiUrl];
 

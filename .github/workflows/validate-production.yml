@@ -1,9 +1,13 @@
 # Production validation — runs on pushes to main, releases, and manual dispatch.
 #
-# REQUIRED GitHub UI setup (Settings → Environments → production):
-#   - Enable "Required reviewers" so jobs using `environment: production` need approval.
-#   - Add production vars (public URLs / project IDs) and secrets (FCM credentials, google-services.json).
-# Does NOT deploy to DigitalOcean — use deploy.yml manually when ready.
+# Job A (production-static-validation): source/manifest checks — no production secrets required.
+# Job B (production-release-build): release artifacts — REQUIRES production secrets/vars; fail closed.
+# Job C (production-deploy): see deploy.yml — manual, requires Job B success.
+#
+# GitHub UI (Settings → Environments → production):
+#   - Required reviewers for Job B and deploy.
+#   - Vars: NEXT_PUBLIC_API_BASE_URL, THE_EYE_APP_ENV, FCM_PROJECT_ID, FIREBASE_PROJECT_ID
+#   - Secrets: FCM_*, MOBILE_GOOGLE_SERVICES_JSON, WATCH_GOOGLE_SERVICES_JSON
 name: Validate Production
 
 on:
@@ -20,9 +24,230 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  CI_STATIC_COMPILE_API_URL: https://production-ci-compile.theeye.internal
+  PRODUCTION_FIREBASE_PROJECT_ID: the-eye-2pd-d0217
+
 jobs:
-  api:
-    name: Backend production build
+  # ---------------------------------------------------------------------------
+  # Job A — static validation (no GitHub production secrets required)
+  # ---------------------------------------------------------------------------
+  production-static-validation:
+    name: Production static validation (Job A)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: the_eye
+          POSTGRES_USER: the_eye
+          POSTGRES_PASSWORD: ci_postgres_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U the_eye -d the_eye"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      THE_EYE_APP_ENV: production
+      FCM_PROJECT_ID: the-eye-2pd-d0217
+      FIREBASE_PROJECT_ID: the-eye-2pd-d0217
+      FCM_MODE: real
+      FCM_ALLOW_SIMULATION: "false"
+      FCM_SIMULATION_MODE: "false"
+      THE_EYE_DISABLE_REDIS: "0"
+      DATABASE_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20
+      DATABASE_DIRECT_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ci_access_secret_32_chars_minimum
+      JWT_REFRESH_SECRET: ci_refresh_secret_32_chars_minimum
+      LIVE_LOCATION_LINK_SECRET: ci_live_location_secret_32_chars
+      LIVEKIT_API_KEY: ci_livekit_api_key_32_chars_minimum
+      LIVEKIT_API_SECRET: ci_livekit_api_secret_32_chars_minimum
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: the-eye
+      S3_ACCESS_KEY: ci_s3_access_key
+      S3_SECRET_KEY: ci_s3_secret_key_32_chars_minimum
+      CORS_ORIGINS: https://api.theeye.com.ng
+      GOOGLE_OAUTH_CLIENT_ID: ci-google-oauth-client-id
+      METRICS_BEARER_TOKEN: ci_metrics_bearer_token_32_chars_min
+      NEXT_PUBLIC_APP_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: https://production-ci-compile.theeye.internal
+      CI_STAGING_API_URL: https://staging-api.theeye.com.ng
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Static validation manifest report
+        run: node scripts/ci/production-readiness-report.mjs --mode static-report
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production Firebase environment guard (manifest)
+        run: |
+          set -euo pipefail
+          test "${THE_EYE_APP_ENV}" = "production"
+          test "${FCM_PROJECT_ID}" = "the-eye-2pd-d0217"
+          test "${FIREBASE_PROJECT_ID}" = "the-eye-2pd-d0217"
+          for forbidden in the-eye-2stg the-eye-29cff staging-api localhost 127.0.0.1; do
+            if echo "${FCM_PROJECT_ID} ${FIREBASE_PROJECT_ID}" | grep -qi "${forbidden}"; then
+              echo "Production guard rejected forbidden identifier: ${forbidden}"
+              exit 1
+            fi
+          done
+
+      - name: Firebase guard unit tests
+        run: pnpm run test:firebase:guard
+
+      - name: Generate Prisma client
+        run: pnpm run prisma:generate:api
+
+      - name: Lint API
+        run: pnpm --filter @the-eye/api run lint
+
+      - name: Validate Prisma schema
+        run: pnpm --filter @the-eye/api exec prisma validate
+
+      - name: Validate migrations against schema
+        run: |
+          pnpm --filter @the-eye/api exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "${DATABASE_DIRECT_URL}"
+
+      - name: Apply migrations
+        run: pnpm --filter @the-eye/api exec prisma migrate deploy
+
+      - name: Backend tests
+        run: pnpm run test:backend
+
+      - name: Build API (compile validation only)
+        run: pnpm --filter @the-eye/api run build
+
+      - name: Lint admin-web (compile validation only)
+        run: pnpm --filter @the-eye/admin-web run lint
+
+      - name: Admin compile validation (non-deploying CI URL)
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ env.CI_STATIC_COMPILE_API_URL }}
+        run: |
+          set -euo pipefail
+          case "${NEXT_PUBLIC_API_BASE_URL}" in
+            https://*) ;;
+            *) echo "Static compile URL must be HTTPS"; exit 1 ;;
+          esac
+          pnpm --filter @the-eye/admin-web run build
+          node scripts/validate-admin-next-bundle.cjs apps/admin-web/.next production "${NEXT_PUBLIC_API_BASE_URL}"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Mobile static validation (manifest fallback)
+        run: |
+          set -euo pipefail
+          echo "SECRET NOT PROVIDED: MOBILE_GOOGLE_SERVICES_JSON"
+          echo "MANIFEST FALLBACK USED: mobile Firebase wiring"
+          echo "ARTIFACT BUILD NOT VERIFIED: mobile production APK"
+          pnpm --dir apps/mobile run pub-get
+          pnpm run mobile:analyze
+          pnpm run test:firebase:auth-providers
+          grep -q "com.theeye.app" apps/mobile/android/app/build.gradle
+
+      - name: Watch static validation (manifest fallback)
+        run: |
+          set -euo pipefail
+          echo "SECRET NOT PROVIDED: WATCH_GOOGLE_SERVICES_JSON"
+          echo "MANIFEST FALLBACK USED: watch Firebase wiring"
+          echo "ARTIFACT BUILD NOT VERIFIED: watch production APK"
+          pnpm --dir apps/watch run pub-get
+          pnpm run watch:analyze
+          pnpm run test:firebase:auth-providers
+          grep -q "com.theeye.app" apps/watch/android/app/build.gradle.kts || grep -q "applicationId" apps/watch/android/app/build.gradle.kts
+
+      - name: Deploy env documentation
+        run: pnpm run test:deploy:env
+
+  # ---------------------------------------------------------------------------
+  # Job B — release build gate (requires production environment secrets/vars)
+  # ---------------------------------------------------------------------------
+  production-release-gate:
+    name: Production release gate (Job B)
+    needs: production-static-validation
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      mobile_firebase_secret: ${{ steps.presence.outputs.mobile_firebase_secret }}
+      watch_firebase_secret: ${{ steps.presence.outputs.watch_firebase_secret }}
+      production_api_url: ${{ steps.presence.outputs.production_api_url }}
+      gate_passed: ${{ steps.gate.outcome == 'success' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Record secret/var presence
+        id: presence
+        env:
+          MOBILE_GOOGLE_SERVICES_JSON: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON }}
+          WATCH_GOOGLE_SERVICES_JSON: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+        run: |
+          if [ -n "${MOBILE_GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "mobile_firebase_secret=PRESENT" >> "$GITHUB_OUTPUT"
+          else
+            echo "mobile_firebase_secret=MISSING" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${WATCH_GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "watch_firebase_secret=PRESENT" >> "$GITHUB_OUTPUT"
+          else
+            echo "watch_firebase_secret=MISSING" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${NEXT_PUBLIC_API_BASE_URL:-}" ]; then
+            echo "production_api_url=PRESENT" >> "$GITHUB_OUTPUT"
+          else
+            echo "production_api_url=MISSING" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fail closed — require production release secrets
+        id: gate
+        env:
+          MOBILE_GOOGLE_SERVICES_JSON: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON }}
+          WATCH_GOOGLE_SERVICES_JSON: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+        run: node scripts/ci/production-readiness-report.mjs --mode release-gate
+
+  release-api:
+    name: Release — API build
+    needs: production-release-gate
+    if: needs.production-release-gate.outputs.gate_passed == 'true'
     runs-on: ubuntu-latest
     environment: production
     services:
@@ -85,22 +310,15 @@ jobs:
         with:
           version: 9
 
-      - name: Resolve production environment vars
+      - name: Require production environment vars (no fallback)
         run: |
+          set -euo pipefail
           APP_ENV="${{ vars.THE_EYE_APP_ENV }}"
           FCM_ID="${{ vars.FCM_PROJECT_ID }}"
           FB_ID="${{ vars.FIREBASE_PROJECT_ID }}"
-          if [ -z "$APP_ENV" ]; then
-            echo "::warning::THE_EYE_APP_ENV not set in production environment; using canonical fallback"
-            APP_ENV="production"
-          fi
-          if [ -z "$FCM_ID" ]; then
-            echo "::warning::FCM_PROJECT_ID not set in production environment; using canonical fallback"
-            FCM_ID="the-eye-2pd-d0217"
-          fi
-          if [ -z "$FB_ID" ]; then
-            echo "::warning::FIREBASE_PROJECT_ID not set in production environment; using canonical fallback"
-            FB_ID="the-eye-2pd-d0217"
+          if [ -z "$APP_ENV" ] || [ -z "$FCM_ID" ] || [ -z "$FB_ID" ]; then
+            echo "THE_EYE_APP_ENV, FCM_PROJECT_ID, and FIREBASE_PROJECT_ID must be set in production environment"
+            exit 1
           fi
           echo "THE_EYE_APP_ENV=$APP_ENV" >> "$GITHUB_ENV"
           echo "FCM_PROJECT_ID=$FCM_ID" >> "$GITHUB_ENV"
@@ -115,12 +333,6 @@ jobs:
           test "${THE_EYE_APP_ENV}" = "production"
           test "${FCM_PROJECT_ID}" = "the-eye-2pd-d0217"
           test "${FIREBASE_PROJECT_ID}" = "the-eye-2pd-d0217"
-          for forbidden in the-eye-2stg the-eye-29cff staging-api localhost 127.0.0.1; do
-            if echo "${FCM_PROJECT_ID} ${FIREBASE_PROJECT_ID}" | grep -qi "${forbidden}"; then
-              echo "Production guard rejected forbidden identifier: ${forbidden}"
-              exit 1
-            fi
-          done
 
       - name: Firebase production guard script
         run: pnpm run firebase:guard:production
@@ -128,36 +340,17 @@ jobs:
       - name: Generate Prisma client
         run: pnpm run prisma:generate:api
 
-      - name: Lint API
-        run: pnpm --filter @the-eye/api run lint
-
-      - name: Validate Prisma schema
-        run: pnpm --filter @the-eye/api exec prisma validate
-
-      - name: Validate migrations against schema
-        run: |
-          pnpm --filter @the-eye/api exec prisma migrate diff \
-            --from-migrations prisma/migrations \
-            --to-schema-datamodel prisma/schema.prisma \
-            --shadow-database-url "${DATABASE_DIRECT_URL}"
-
-      - name: Apply migrations
-        run: pnpm --filter @the-eye/api exec prisma migrate deploy
-
-      - name: Backend tests
-        run: pnpm run test:backend
-
       - name: Build API
         run: pnpm --filter @the-eye/api run build
 
-  admin:
-    name: Admin production bundle
+  release-admin:
+    name: Release — admin bundle
+    needs: production-release-gate
+    if: needs.production-release-gate.outputs.gate_passed == 'true'
     runs-on: ubuntu-latest
     environment: production
     env:
       NEXT_PUBLIC_APP_ENV: production
-      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
-      CI_PRODUCTION_API_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
       CI_STAGING_API_URL: https://staging-api.theeye.com.ng
     steps:
       - uses: actions/checkout@v4
@@ -170,33 +363,35 @@ jobs:
         with:
           version: 9
 
-      - name: Resolve NEXT_PUBLIC_API_BASE_URL
+      - name: Require NEXT_PUBLIC_API_BASE_URL (no fallback)
         run: |
+          set -euo pipefail
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
-            echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in production environment; using canonical fallback"
-            URL="https://api.theeye.com.ng"
+            echo "NEXT_PUBLIC_API_BASE_URL must be set in production environment — no fallback for release build"
+            exit 1
           fi
-          case "$URL" in
-            *localhost*|*127.0.0.1*|*staging-api*)
-              echo "Production NEXT_PUBLIC_API_BASE_URL must not use localhost or staging API hosts"
-              exit 1
-              ;;
-          esac
+          URL="$URL" node -e "
+            import { validateProductionApiUrl } from './scripts/ci/production-readiness-report.mjs';
+            const result = validateProductionApiUrl(process.env.URL);
+            if (!result.ok) { console.error(result.reason); process.exit(1); }
+          "
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "CI_PRODUCTION_API_URL=$URL" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build admin-web (production)
+      - name: Build admin-web (production release)
         run: pnpm --filter @the-eye/admin-web run build
 
       - name: Validate production bundle isolation
         run: node scripts/validate-admin-next-bundle.cjs apps/admin-web/.next production "${NEXT_PUBLIC_API_BASE_URL}"
 
-  mobile:
-    name: Mobile production package & Firebase
+  release-mobile:
+    name: Release — mobile APK
+    needs: production-release-gate
+    if: needs.production-release-gate.outputs.gate_passed == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -212,8 +407,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Materialize mobile google-services.json files
-        id: mobile_gs_json
+      - name: Materialize mobile google-services.json (production secret)
         env:
           MOBILE_GOOGLE_SERVICES_JSON: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON }}
           MOBILE_GOOGLE_SERVICES_JSON_DEVELOPMENT: ${{ secrets.MOBILE_GOOGLE_SERVICES_JSON_DEVELOPMENT }}
@@ -221,11 +415,14 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${MOBILE_GOOGLE_SERVICES_JSON:-}" ]; then
-            echo "::warning::production secret MOBILE_GOOGLE_SERVICES_JSON is not set — skipping google-services materialization, full Firebase validation, and production APK build"
-            echo "has_secret=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "MOBILE_GOOGLE_SERVICES_JSON is required for release build"
+            exit 1
           fi
-          echo "has_secret=true" >> "$GITHUB_OUTPUT"
+          node -e "
+            import { validateProductionGoogleServicesJson } from './scripts/ci/production-readiness-report.mjs';
+            const result = validateProductionGoogleServicesJson(process.env.MOBILE_GOOGLE_SERVICES_JSON);
+            if (!result.ok) { console.error(result.reason); process.exit(1); }
+          "
           write_json() {
             local flavor="$1"
             local payload="$2"
@@ -239,10 +436,6 @@ jobs:
           if [ -n "${MOBILE_GOOGLE_SERVICES_JSON_STAGING:-}" ]; then
             write_json staging "$MOBILE_GOOGLE_SERVICES_JSON_STAGING"
           fi
-          if grep -q "the-eye-2stg\|the-eye-29cff" apps/mobile/android/app/src/production/google-services.json; then
-            echo "Production mobile google-services.json must not reference staging or development projects"
-            exit 1
-          fi
 
       - name: Install mobile dependencies
         run: pnpm --dir apps/mobile run pub-get
@@ -253,34 +446,19 @@ jobs:
       - name: Validate mobile Firebase wiring (production)
         run: |
           set -euo pipefail
-          echo "Running auth-provider manifest validation (always)"
           pnpm run test:firebase:auth-providers
-          if [ "${{ steps.mobile_gs_json.outputs.has_secret }}" != "true" ]; then
-            echo "::warning::MOBILE_GOOGLE_SERVICES_JSON not set — skipped test:mobile:firebase and production APK build"
-            exit 0
-          fi
-          if [ -f apps/mobile/android/app/src/development/google-services.json ] && \
-             [ -f apps/mobile/android/app/src/staging/google-services.json ]; then
-            echo "All flavor secrets present — running full mobile Firebase validation"
-            pnpm run test:mobile:firebase
-          else
-            echo "::warning::Partial flavor secrets — skipped test:mobile:firebase (auth-provider manifest validation passed)"
-          fi
+          pnpm run test:mobile:firebase
 
       - name: Build production APK
-        if: steps.mobile_gs_json.outputs.has_secret == 'true'
         run: pnpm --dir apps/mobile exec flutter build apk --flavor production --release
 
       - name: Assert production package name
-        run: |
-          set -euo pipefail
-          grep -q "com.theeye.app" apps/mobile/android/app/build.gradle
-          if grep -q "com.theeye.app.staging\|com.theeye.app.dev" apps/mobile/lib/config/app_flavor.dart; then
-            echo "Production flavor config must not leak staging/dev package IDs into production build path"
-          fi
+        run: grep -q "com.theeye.app" apps/mobile/android/app/build.gradle
 
-  watch:
-    name: Watch production package & Firebase
+  release-watch:
+    name: Release — watch APK
+    needs: production-release-gate
+    if: needs.production-release-gate.outputs.gate_passed == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -296,8 +474,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Materialize watch google-services.json files
-        id: watch_gs_json
+      - name: Materialize watch google-services.json (production secret)
         env:
           WATCH_GOOGLE_SERVICES_JSON: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON }}
           WATCH_GOOGLE_SERVICES_JSON_DEVELOPMENT: ${{ secrets.WATCH_GOOGLE_SERVICES_JSON_DEVELOPMENT }}
@@ -305,11 +482,14 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${WATCH_GOOGLE_SERVICES_JSON:-}" ]; then
-            echo "::warning::production secret WATCH_GOOGLE_SERVICES_JSON is not set — skipping google-services materialization, full Firebase validation, and production APK build"
-            echo "has_secret=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "WATCH_GOOGLE_SERVICES_JSON is required for release build"
+            exit 1
           fi
-          echo "has_secret=true" >> "$GITHUB_OUTPUT"
+          node -e "
+            import { validateProductionGoogleServicesJson } from './scripts/ci/production-readiness-report.mjs';
+            const result = validateProductionGoogleServicesJson(process.env.WATCH_GOOGLE_SERVICES_JSON);
+            if (!result.ok) { console.error(result.reason); process.exit(1); }
+          "
           write_json() {
             local flavor="$1"
             local payload="$2"
@@ -323,10 +503,6 @@ jobs:
           if [ -n "${WATCH_GOOGLE_SERVICES_JSON_STAGING:-}" ]; then
             write_json staging "$WATCH_GOOGLE_SERVICES_JSON_STAGING"
           fi
-          if grep -q "the-eye-2stg\|the-eye-29cff" apps/watch/android/app/src/production/google-services.json; then
-            echo "Production watch google-services.json must not reference staging or development projects"
-            exit 1
-          fi
 
       - name: Install watch dependencies
         run: pnpm --dir apps/watch run pub-get
@@ -337,31 +513,18 @@ jobs:
       - name: Validate watch Firebase wiring (production)
         run: |
           set -euo pipefail
-          echo "Running auth-provider manifest validation (always)"
           pnpm run test:firebase:auth-providers
-          if [ "${{ steps.watch_gs_json.outputs.has_secret }}" != "true" ]; then
-            echo "::warning::WATCH_GOOGLE_SERVICES_JSON not set — skipped test:watch:firebase and production APK build"
-            exit 0
-          fi
-          if [ -f apps/watch/android/app/src/development/google-services.json ] && \
-             [ -f apps/watch/android/app/src/staging/google-services.json ]; then
-            echo "All flavor secrets present — running full watch Firebase validation"
-            pnpm run test:watch:firebase
-          else
-            echo "::warning::Partial flavor secrets — skipped test:watch:firebase (auth-provider manifest validation passed)"
-          fi
+          pnpm run test:watch:firebase
 
       - name: Build production APK
-        if: steps.watch_gs_json.outputs.has_secret == 'true'
         run: pnpm --dir apps/watch exec flutter build apk --flavor production --release
 
-  artifact-scan:
-    name: Artifact leakage scan
-    needs: [admin, api, mobile, watch]
+  release-artifact-scan:
+    name: Release — artifact leakage scan
+    needs: [production-release-gate, release-admin, release-api]
+    if: needs.production-release-gate.outputs.gate_passed == 'true'
     runs-on: ubuntu-latest
     environment: production
-    env:
-      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -373,22 +536,13 @@ jobs:
         with:
           version: 9
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Resolve NEXT_PUBLIC_API_BASE_URL
+      - name: Require NEXT_PUBLIC_API_BASE_URL (no fallback)
         run: |
+          set -euo pipefail
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
-            echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in production environment; using canonical fallback"
-            URL="https://api.theeye.com.ng"
+            echo "NEXT_PUBLIC_API_BASE_URL must be set for artifact scan"
+            exit 1
           fi
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
 
@@ -415,7 +569,7 @@ jobs:
             fi
           done
           if grep -rE --include='*.js' --include='*.json' --include='*.html' --include='*.txt' --include='*.map' "$LEAK_PATTERN" $TARGETS; then
-            echo "Artifact leakage scan failed — staging/dev identifiers found in production build outputs"
+            echo "Artifact leakage scan failed"
             exit 1
           fi
           echo "Artifact leakage scan passed."
@@ -423,12 +577,16 @@ jobs:
       - name: Auth provider cross-env check
         run: pnpm run test:firebase:auth-providers
 
-      - name: Deploy env documentation
-        run: pnpm run test:deploy:env
-
-  release:
-    name: Release notes & version tag
-    needs: [api, admin, mobile, watch, artifact-scan]
+  release-notes:
+    name: Release — notes & version tag
+    needs:
+      - production-release-gate
+      - release-api
+      - release-admin
+      - release-mobile
+      - release-watch
+      - release-artifact-scan
+    if: needs.production-release-gate.outputs.gate_passed == 'true'
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -444,7 +602,6 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Resolved monorepo version: ${VERSION}"
 
       - name: Generate release notes draft
         run: |
@@ -454,12 +611,8 @@ jobs:
             echo "# THE EYE v${{ steps.version.outputs.version }}"
             echo
             if [ -n "${PREV_TAG}" ]; then
-              echo "Changes since ${PREV_TAG}:"
-              echo
               git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)"
             else
-              echo "Initial release notes (no prior tag found):"
-              echo
               git log -20 --pretty=format:"- %s (%h)"
             fi
           } | tee release-notes.md
@@ -477,10 +630,39 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.version.outputs.tag }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag ${TAG} already exists — skipping tag creation"
+            echo "Tag ${TAG} already exists — skipping"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "THE EYE release ${TAG}"
           git push origin "$TAG"
+
+  production-readiness-report:
+    name: Production readiness report
+    needs:
+      - production-static-validation
+      - production-release-gate
+      - release-api
+      - release-admin
+      - release-mobile
+      - release-watch
+      - release-artifact-scan
+      - release-notes
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Emit GO/NO-GO report
+        env:
+          MOBILE_GOOGLE_SERVICES_JSON: ${{ needs.production-release-gate.outputs.mobile_firebase_secret == 'PRESENT' && 'configured' || '' }}
+          WATCH_GOOGLE_SERVICES_JSON: ${{ needs.production-release-gate.outputs.watch_firebase_secret == 'PRESENT' && 'configured' || '' }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ needs.production-release-gate.outputs.production_api_url == 'PRESENT' && 'configured' || '' }}
+          STATIC_VALIDATION_RESULT: ${{ needs.production-static-validation.result }}
+          RELEASE_BUILD_RESULT: ${{ needs.production-release-gate.outputs.gate_passed == 'true' && needs.release-notes.result || needs.production-release-gate.result }}
+        run: node scripts/ci/production-readiness-report.mjs --mode summary

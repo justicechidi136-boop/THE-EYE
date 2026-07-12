@@ -6,12 +6,23 @@
 
 const DEPLOYABLE_APP_ENVS = new Set(["staging", "production"]);
 
-const STAGING_LEAK_MARKERS = ["the-eye-2stg", "staging-api"];
-const PRODUCTION_LEAK_MARKERS = ["the-eye-2pd-d0217", "api.theeye.com.ng"];
+const STAGING_PROJECT_MARKERS = ["the-eye-2stg"];
+const PRODUCTION_PROJECT_MARKERS = ["the-eye-2pd-d0217"];
+const PRODUCTION_API_HOST = "api.theeye.com.ng";
+const STAGING_API_HOST = "staging-api.theeye.com.ng";
 
 function fail(message) {
   console.error(`[admin-web docker build] ${message}`);
   process.exit(1);
+}
+
+function apiHostname(value) {
+  try {
+    if (!value.startsWith("http://") && !value.startsWith("https://")) return null;
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 function hasMarker(value, markers) {
@@ -44,11 +55,18 @@ if (apiBaseUrl.startsWith("http://")) {
 }
 
 if (apiBaseUrl.startsWith("https://")) {
-  if (appEnv === "staging" && hasMarker(apiBaseUrl, PRODUCTION_LEAK_MARKERS)) {
+  const host = apiHostname(apiBaseUrl);
+  if (appEnv === "staging" && host === PRODUCTION_API_HOST) {
     fail("Staging image must not target production API hosts");
   }
-  if (appEnv === "production" && hasMarker(apiBaseUrl, STAGING_LEAK_MARKERS)) {
+  if (appEnv === "production" && host === STAGING_API_HOST) {
     fail("Production image must not target staging API hosts");
+  }
+  if (appEnv === "staging" && hasMarker(apiBaseUrl, PRODUCTION_PROJECT_MARKERS)) {
+    fail("Staging image must not target production Firebase configuration");
+  }
+  if (appEnv === "production" && hasMarker(apiBaseUrl, STAGING_PROJECT_MARKERS)) {
+    fail("Production image must not target staging Firebase configuration");
   }
 } else if (!apiBaseUrl.startsWith("/")) {
   fail("NEXT_PUBLIC_API_BASE_URL must be an HTTPS URL or a relative path such as /v1");

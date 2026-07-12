@@ -3,23 +3,30 @@ import { MetricsService } from "../metrics.service";
 
 describe("metrics controller", () => {
   it("returns Prometheus exposition format", async () => {
-    const metrics = {
-      contentType: "text/plain; version=0.0.4; charset=utf-8",
-      renderMetrics: jest.fn().mockResolvedValue("# HELP the_eye_http_requests_total\n"),
-    } as unknown as MetricsService;
-    const controller = new MetricsController(metrics);
-    const response = {
-      setHeader: jest.fn(),
-      send: jest.fn(),
-      status(code: number) {
-        return this;
-      },
-    };
+    const previousToken = process.env.METRICS_BEARER_TOKEN;
+    process.env.METRICS_BEARER_TOKEN = "";
+    try {
+      const metrics = {
+        contentType: "text/plain; version=0.0.4; charset=utf-8",
+        renderMetrics: jest.fn().mockResolvedValue("# HELP the_eye_http_requests_total\n"),
+      } as unknown as MetricsService;
+      const controller = new MetricsController(metrics);
+      const response = {
+        setHeader: jest.fn(),
+        send: jest.fn(),
+        status(code: number) {
+          return this;
+        },
+      };
 
-    await controller.scrape({ headers: {} }, response as never);
+      await controller.scrape({ headers: {} }, response as never);
 
-    expect(response.setHeader).toHaveBeenCalledWith("Content-Type", metrics.contentType);
-    expect(response.send).toHaveBeenCalledWith("# HELP the_eye_http_requests_total\n");
+      expect(response.setHeader).toHaveBeenCalledWith("Content-Type", metrics.contentType);
+      expect(response.send).toHaveBeenCalledWith("# HELP the_eye_http_requests_total\n");
+    } finally {
+      if (previousToken === undefined) delete process.env.METRICS_BEARER_TOKEN;
+      else process.env.METRICS_BEARER_TOKEN = previousToken;
+    }
   });
 
   it("rejects unauthenticated scrape requests when a bearer token is configured", async () => {
