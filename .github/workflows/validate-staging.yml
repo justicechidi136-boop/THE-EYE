@@ -168,7 +168,7 @@ jobs:
           unset METRICS_BEARER_TOKEN
           unset FCM_CLIENT_EMAIL
           unset FCM_PRIVATE_KEY
-          pnpm run test:backend
+          env -u METRICS_BEARER_TOKEN -u FCM_CLIENT_EMAIL -u FCM_PRIVATE_KEY pnpm run test:backend
 
       - name: Build API
         run: pnpm --filter @the-eye/api run build
