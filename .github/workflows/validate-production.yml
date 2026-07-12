@@ -25,6 +25,29 @@ jobs:
     name: Backend production build
     runs-on: ubuntu-latest
     environment: production
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: the_eye
+          POSTGRES_USER: the_eye
+          POSTGRES_PASSWORD: ci_postgres_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U the_eye -d the_eye"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     env:
       THE_EYE_APP_ENV: ${{ vars.THE_EYE_APP_ENV }}
       FCM_PROJECT_ID: ${{ vars.FCM_PROJECT_ID }}
@@ -35,6 +58,22 @@ jobs:
       FCM_ALLOW_SIMULATION: "false"
       FCM_SIMULATION_MODE: "false"
       THE_EYE_DISABLE_REDIS: "0"
+      DATABASE_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20
+      DATABASE_DIRECT_URL: postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ci_access_secret_32_chars_minimum
+      JWT_REFRESH_SECRET: ci_refresh_secret_32_chars_minimum
+      LIVE_LOCATION_LINK_SECRET: ci_live_location_secret_32_chars
+      LIVEKIT_API_KEY: ci_livekit_api_key_32_chars_minimum
+      LIVEKIT_API_SECRET: ci_livekit_api_secret_32_chars_minimum
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: the-eye
+      S3_ACCESS_KEY: ci_s3_access_key
+      S3_SECRET_KEY: ci_s3_secret_key_32_chars_minimum
+      CORS_ORIGINS: https://api.theeye.com.ng
+      GOOGLE_OAUTH_CLIENT_ID: ci-google-oauth-client-id
+      METRICS_BEARER_TOKEN: ci_metrics_bearer_token_32_chars_min
     steps:
       - uses: actions/checkout@v4
 
@@ -66,13 +105,23 @@ jobs:
         run: pnpm run firebase:guard:production
 
       - name: Generate Prisma client
-        run: pnpm --filter @the-eye/api exec prisma generate
+        run: pnpm run prisma:generate:api
 
       - name: Lint API
         run: pnpm --filter @the-eye/api run lint
 
       - name: Validate Prisma schema
         run: pnpm --filter @the-eye/api exec prisma validate
+
+      - name: Validate migrations against schema
+        run: |
+          pnpm --filter @the-eye/api exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "${DATABASE_DIRECT_URL}"
+
+      - name: Apply migrations
+        run: pnpm --filter @the-eye/api exec prisma migrate deploy
 
       - name: Backend tests
         run: pnpm run test:backend
@@ -301,6 +350,7 @@ jobs:
           NEXT_PUBLIC_APP_ENV: production
           NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
         run: |
+          pnpm run prisma:generate:api
           pnpm --filter @the-eye/api run build
           pnpm --filter @the-eye/admin-web run build
 

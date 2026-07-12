@@ -92,7 +92,7 @@ jobs:
           done
 
       - name: Generate Prisma client
-        run: pnpm --filter @the-eye/api exec prisma generate
+        run: pnpm run prisma:generate:api
 
       - name: Lint API
         run: pnpm --filter @the-eye/api run lint
