@@ -393,7 +393,8 @@ async function main() {
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const entryPath = process.argv[1];
+if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {
   main().catch((error) => {
     console.error(error);
     process.exit(1);

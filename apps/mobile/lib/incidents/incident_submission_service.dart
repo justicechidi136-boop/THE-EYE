@@ -4,8 +4,6 @@ import "dart:io";
 
 import "package:http/http.dart" as http;
 
-import "dart:io";
-
 import "../evidence/evidence_capture_service.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../contracts/the_eye_api_client.dart";

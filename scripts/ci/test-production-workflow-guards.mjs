@@ -3,6 +3,7 @@
  * Local scenario tests for production CI guard logic (A–E).
  * Does not print secret payloads — only presence/absence simulation.
  */
+import { execSync } from "node:child_process";
 import {
   buildReadinessReport,
   STAGING_CANONICAL_API_URL,
@@ -153,6 +154,14 @@ scenario("F — Staging API URL isolation", () => {
 
   const localhost = validateStagingApiUrl("https://localhost:3000");
   assert(!localhost.ok, "rejects localhost for staging");
+});
+
+scenario("G — Staging API URL CLI wrapper", () => {
+  const output = execSync(
+    `node scripts/ci/validate-staging-api-url.mjs "${STAGING_CANONICAL_API_URL}"`,
+    { encoding: "utf8" },
+  ).trim();
+  assert(output === STAGING_CANONICAL_API_URL, "CLI wrapper accepts canonical staging URL");
 });
 
 console.log(`\n${"=".repeat(60)}`);
