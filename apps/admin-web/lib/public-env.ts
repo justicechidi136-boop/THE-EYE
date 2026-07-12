@@ -13,8 +13,28 @@ const LOCAL_DEV_API_ORIGIN = "http://localhost:4000";
 const LOCAL_DEV_API_BASE_PATH = "/v1";
 
 const STAGING_LEAK_MARKERS = ["the-eye-2stg", "staging-api", "NEXT_PUBLIC_APP_ENV=staging"] as const;
-const PRODUCTION_LEAK_MARKERS = ["the-eye-2pd-d0217", "api.theeye.com.ng", "NEXT_PUBLIC_APP_ENV=production"] as const;
+const PRODUCTION_PROJECT_MARKERS = ["the-eye-2pd-d0217", "NEXT_PUBLIC_APP_ENV=production"] as const;
 const DEVELOPMENT_LEAK_MARKERS = ["the-eye-29cff", "NEXT_PUBLIC_APP_ENV=local", "NEXT_PUBLIC_APP_ENV=development"] as const;
+
+const PRODUCTION_API_HOST = "api.theeye.com.ng";
+const STAGING_API_HOST = "staging-api.theeye.com.ng";
+
+function apiHostname(apiBaseUrl: string): string | null {
+  try {
+    if (!apiBaseUrl.startsWith("http://") && !apiBaseUrl.startsWith("https://")) return null;
+    return new URL(apiBaseUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isProductionApiHost(apiBaseUrl: string): boolean {
+  return apiHostname(apiBaseUrl) === PRODUCTION_API_HOST;
+}
+
+function isStagingApiHost(apiBaseUrl: string): boolean {
+  return apiHostname(apiBaseUrl) === STAGING_API_HOST;
+}
 
 function isProductionNodeEnv(): boolean {
   return process.env.NODE_ENV === "production";
@@ -86,18 +106,24 @@ function validateDeployableApiBaseUrl(appEnv: DeployableAppEnv, apiBaseUrl: stri
   }
 
   if (apiBaseUrl.startsWith("https://")) {
+    if (appEnv === "staging" && isProductionApiHost(apiBaseUrl)) {
+      throw new Error("Staging admin-web build must not target production API hosts");
+    }
+    if (appEnv === "production" && isStagingApiHost(apiBaseUrl)) {
+      throw new Error("Production admin-web build must not target staging API hosts");
+    }
     if (appEnv === "staging") {
       assertNoMarkers(
         lower,
-        PRODUCTION_LEAK_MARKERS,
-        "Staging admin-web build must not target production API hosts",
+        PRODUCTION_PROJECT_MARKERS,
+        "Staging admin-web build must not target production Firebase configuration",
       );
     }
     if (appEnv === "production") {
       assertNoMarkers(
         lower,
-        STAGING_LEAK_MARKERS,
-        "Production admin-web build must not target staging API hosts",
+        ["the-eye-2stg"],
+        "Production admin-web build must not target staging Firebase configuration",
       );
     }
     return;
@@ -128,9 +154,13 @@ function validatePublicEnvIsolation(appEnv: AppEnv): void {
   if (appEnv === "staging") {
     assertNoMarkers(
       snapshot,
-      PRODUCTION_LEAK_MARKERS,
+      PRODUCTION_PROJECT_MARKERS,
       "Staging admin-web build leaked production NEXT_PUBLIC_* configuration",
     );
+    const configuredApi = readRawApiBaseUrl();
+    if (configuredApi && isProductionApiHost(configuredApi)) {
+      throw new Error("Staging admin-web build leaked production NEXT_PUBLIC_* configuration");
+    }
   }
 
   if (isLocalAppEnv(appEnv)) {
