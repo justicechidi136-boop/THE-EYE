@@ -20,7 +20,6 @@ jobs:
   api:
     name: API lint, test, build
     runs-on: ubuntu-latest
-    environment: staging
     services:
       postgres:
         image: postgis/postgis:16-3.4
