@@ -167,19 +167,27 @@ class ReportConfirmScreen extends StatelessWidget {
           const WatchSectionTitle('Report Sent'),
           const SizedBox(height: EyeTokens.spaceSm),
           Text(
-            description.isEmpty ? 'Your report was queued.' : description,
+            description.isEmpty
+                ? 'Your location has been attached and alert shared with users nearby.'
+                : description,
             textAlign: TextAlign.center,
             style: EyeTokens.bodySmall,
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
           ),
           const Spacer(),
-          WatchPrimaryButton(
-            label: 'Done',
+          WatchOutlineButton(
+            label: 'Home',
             onPressed: () => Navigator.popUntil(
               context,
               ModalRoute.withName(WatchRoutes.home),
             ),
+          ),
+          const SizedBox(height: EyeTokens.spaceSm),
+          WatchPrimaryButton(
+            label: 'View as Reporter',
+            onPressed: () =>
+                Navigator.pushNamed(context, WatchRoutes.stillActive),
           ),
           const SizedBox(height: EyeTokens.spaceSm),
         ],

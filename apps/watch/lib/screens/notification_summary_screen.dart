@@ -29,7 +29,7 @@ class NotificationSummaryScreen extends StatelessWidget {
           ),
           const SizedBox(height: EyeTokens.spaceXs),
           const Text(
-            'SEE DETAILS',
+            'SEE DETAILS →',
             style: TextStyle(
               color: EyeTokens.green,
               fontSize: 12,

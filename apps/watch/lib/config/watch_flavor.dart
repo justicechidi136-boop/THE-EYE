@@ -1,12 +1,19 @@
 /// Build-time flavor selection for Firebase and API pairing validation.
 ///
-/// Prefer Gradle `--flavor development|staging|production` (sets
-/// `FLUTTER_APP_FLAVOR`). Legacy override:
+/// Prefer Gradle `--flavor development|staging|production|managedStaging|managedProduction`
+/// (sets `FLUTTER_APP_FLAVOR`). Legacy override:
 /// `--dart-define=THE_EYE_FIREBASE_ENV=staging`
 enum WatchFirebaseEnv {
   development,
   staging,
   production,
+}
+
+/// Consumer builds let the user pick THE EYE as default home.
+/// Managed builds are device-owner only (no DPM in consumer).
+enum WatchLauncherMode {
+  consumer,
+  managed,
 }
 
 abstract final class WatchFlavor {
@@ -25,14 +32,29 @@ abstract final class WatchFlavor {
         return WatchFirebaseEnv.development;
       case 'production':
       case 'prod':
+      case 'managedproduction':
         return WatchFirebaseEnv.production;
       case 'staging':
       case 'stg':
+      case 'managedstaging':
         return WatchFirebaseEnv.staging;
       default:
         return WatchFirebaseEnv.staging;
     }
   }
+
+  static WatchLauncherMode get launcherMode {
+    final raw = _flutterFlavor.toLowerCase();
+    if (raw == 'managedstaging' || raw == 'managedproduction') {
+      return WatchLauncherMode.managed;
+    }
+    const dartMode = String.fromEnvironment('LAUNCHER_MODE');
+    if (dartMode == 'managed') return WatchLauncherMode.managed;
+    return WatchLauncherMode.consumer;
+  }
+
+  static bool get isManagedLauncher =>
+      launcherMode == WatchLauncherMode.managed;
 
   static String get envName {
     switch (firebaseEnv) {

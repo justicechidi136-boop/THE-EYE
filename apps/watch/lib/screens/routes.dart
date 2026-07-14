@@ -22,4 +22,6 @@ abstract final class WatchRoutes {
   static const stillActive = '/resolution/still-active';
   static const communityVote = '/resolution/vote';
   static const incidentResolved = '/resolution/resolved';
+  static const defaultHomeOnboarding = '/launcher/onboarding';
+  static const appDrawer = '/launcher/drawer';
 }

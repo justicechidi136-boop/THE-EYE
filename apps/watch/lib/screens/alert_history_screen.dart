@@ -60,7 +60,7 @@ class _AlertHistoryScreenState extends State<AlertHistoryScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'SEE DETAILS',
+                'SEE DETAILS →',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: EyeColors.green,

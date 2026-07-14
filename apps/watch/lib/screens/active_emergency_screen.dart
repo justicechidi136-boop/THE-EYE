@@ -12,6 +12,12 @@ class ActiveEmergencyScreen extends StatelessWidget {
 
   final WatchAppServices services;
 
+  bool _isQueued(SosEventState state) {
+    return state.errorMessage?.contains('Queued') == true &&
+        (state.lifecycle == SosLifecycle.failed ||
+            state.lifecycle == SosLifecycle.active);
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<SosEventState>(
@@ -20,8 +26,18 @@ class ActiveEmergencyScreen extends StatelessWidget {
       builder: (context, snapshot) {
         final state = snapshot.data!;
         final isSending = state.lifecycle == SosLifecycle.submitting;
-        final isQueued = state.lifecycle == SosLifecycle.failed &&
-            state.errorMessage?.contains('Queued') == true;
+        final isQueued = _isQueued(state);
+
+        final statusTitle = isSending
+            ? 'Sending SOS…'
+            : isQueued
+                ? 'SOS Queued'
+                : 'SOS Sent';
+
+        final statusBody = isQueued
+            ? (state.errorMessage ??
+                'Queued offline — will retry when connected')
+            : 'Your live location has been shared. Stay on the line if possible.';
 
         return WatchScaffold(
           onBack: () => Navigator.popUntil(
@@ -32,58 +48,53 @@ class ActiveEmergencyScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 8),
               Container(
-                width: 64,
-                height: 64,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: EyeColors.danger.withValues(alpha: 0.15),
                   border: Border.all(color: EyeColors.danger, width: 2),
                 ),
-                child: const Icon(Icons.sos, color: EyeColors.danger, size: 32),
+                child: Icon(
+                  isQueued ? Icons.cloud_queue : Icons.sensors,
+                  color: EyeColors.danger,
+                  size: isQueued ? 28 : 24,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
-                isSending
-                    ? 'Sending SOS…'
-                    : isQueued
-                        ? 'SOS Queued'
-                        : 'SOS Sent',
+                statusTitle,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: EyeColors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                  color: EyeColors.danger,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 6),
-              WatchStatusChip(
-                label: state.emergencyMode.label,
-                tone: WatchStatusTone.danger,
-              ),
-              if (state.errorMessage != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  state.errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: EyeColors.muted, fontSize: 10),
+              Text(
+                statusBody,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: EyeColors.muted,
+                  fontSize: 10,
+                  height: 1.4,
                 ),
-              ],
+              ),
               const Spacer(),
               WatchPrimaryButton(
-                label: 'View Tracking',
-                onPressed: () =>
-                    Navigator.pushNamed(context, WatchRoutes.tracking),
+                label: 'Done',
+                color: EyeColors.danger,
+                onPressed: () => Navigator.popUntil(
+                  context,
+                  ModalRoute.withName(WatchRoutes.home),
+                ),
               ),
               const SizedBox(height: 6),
               WatchOutlineButton(
-                label: 'End (Demo)',
-                onPressed: () {
-                  services.sos.reset();
-                  Navigator.popUntil(
-                    context,
-                    ModalRoute.withName(WatchRoutes.home),
-                  );
-                },
+                label: 'View Map',
+                onPressed: () =>
+                    Navigator.pushNamed(context, WatchRoutes.tracking),
               ),
               const SizedBox(height: 8),
             ],

@@ -96,6 +96,8 @@ class PreferencesStore {
   static const _alertsKey = 'watch.alert_history';
   static const _pairingCodeKey = 'watch.pairing_code';
   static const _isPairedKey = 'watch.is_paired';
+  static const _launcherOnboardingDismissedKey =
+      'watch.launcher_onboarding_dismissed';
 
   Future<List<OfflineEvent>> loadOfflineQueue() async {
     final store = await prefs;
@@ -155,5 +157,15 @@ class PreferencesStore {
   Future<bool> isPaired() async {
     final store = await prefs;
     return store.getBool(_isPairedKey) ?? false;
+  }
+
+  Future<bool> isLauncherOnboardingDismissed() async {
+    final store = await prefs;
+    return store.getBool(_launcherOnboardingDismissedKey) ?? false;
+  }
+
+  Future<void> setLauncherOnboardingDismissed(bool value) async {
+    final store = await prefs;
+    await store.setBool(_launcherOnboardingDismissedKey, value);
   }
 }

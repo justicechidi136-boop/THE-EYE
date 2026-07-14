@@ -50,7 +50,7 @@ class _PairingScreenState extends State<PairingScreen> {
       if (!mounted) return;
       if (state.phase == PairingPhase.paired) {
         _statusTimer?.cancel();
-        Navigator.pushReplacementNamed(context, WatchRoutes.home);
+        Navigator.pushReplacementNamed(context, WatchRoutes.locationOnboarding);
       } else if (state.phase == PairingPhase.failed) {
         _statusTimer?.cancel();
         setState(() => _error = state.errorMessage);
@@ -179,7 +179,7 @@ class _PairingScreenState extends State<PairingScreen> {
           deviceSecret: controller.text.trim(),
         );
         if (!context.mounted) return;
-        Navigator.pushReplacementNamed(context, WatchRoutes.home);
+        Navigator.pushReplacementNamed(context, WatchRoutes.locationOnboarding);
       } else {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

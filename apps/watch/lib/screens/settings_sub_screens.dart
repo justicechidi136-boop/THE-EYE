@@ -72,7 +72,7 @@ class SettingsContactsScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const WatchSectionTitle('Emergency Contacts'),
+          const WatchSectionTitle('SOS Contacts'),
           const SizedBox(height: EyeTokens.spaceSm),
           Expanded(
             child: ListView.separated(

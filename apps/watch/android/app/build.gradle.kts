@@ -30,6 +30,14 @@ android {
 
 
 
+    buildFeatures {
+
+        buildConfig = true
+
+    }
+
+
+
     defaultConfig {
 
         applicationId = "com.theeye.watch"
@@ -41,6 +49,8 @@ android {
         versionCode = flutter.versionCode
 
         versionName = flutter.versionName
+
+        buildConfigField("String", "LAUNCHER_MODE", "\"consumer\"")
 
     }
 
@@ -56,6 +66,8 @@ android {
 
             applicationIdSuffix = ".dev"
 
+            buildConfigField("String", "LAUNCHER_MODE", "\"consumer\"")
+
         }
 
         create("staging") {
@@ -64,11 +76,33 @@ android {
 
             applicationIdSuffix = ".staging"
 
+            buildConfigField("String", "LAUNCHER_MODE", "\"consumer\"")
+
         }
 
         create("production") {
 
             dimension = "environment"
+
+            buildConfigField("String", "LAUNCHER_MODE", "\"consumer\"")
+
+        }
+
+        create("managedStaging") {
+
+            dimension = "environment"
+
+            applicationIdSuffix = ".staging"
+
+            buildConfigField("String", "LAUNCHER_MODE", "\"managed\"")
+
+        }
+
+        create("managedProduction") {
+
+            dimension = "environment"
+
+            buildConfigField("String", "LAUNCHER_MODE", "\"managed\"")
 
         }
 
@@ -115,5 +149,4 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
 
 }
-
 

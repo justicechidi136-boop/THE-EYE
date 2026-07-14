@@ -4,7 +4,9 @@ import 'config/firebase_bootstrap.dart';
 import 'models/alert.dart';
 import 'screens/active_emergency_screen.dart';
 import 'screens/alert_history_screen.dart';
+import 'screens/app_drawer_screen.dart';
 import 'screens/connection_status_screen.dart';
+import 'screens/default_home_onboarding_screen.dart';
 import 'screens/device_status_screen.dart';
 import 'screens/emergency_type_screen.dart';
 import 'screens/home_screen.dart';
@@ -20,6 +22,7 @@ import 'screens/settings_sub_screens.dart';
 import 'screens/sos_confirm_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/tracking_screen.dart';
+import 'services/launcher_service.dart';
 import 'services/watch_app_services.dart';
 import 'theme/eye_colors.dart';
 import 'theme/eye_theme.dart';
@@ -27,6 +30,9 @@ import 'widgets/watch_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+  };
   runApp(const WatchBootstrapApp());
 }
 
@@ -38,99 +44,42 @@ class WatchBootstrapApp extends StatefulWidget {
 }
 
 class _WatchBootstrapAppState extends State<WatchBootstrapApp> {
-  late final Future<FirebaseBootstrapResult> _firebaseFuture =
-      initializeWatchFirebase();
+  bool _firebaseReady = false;
+  String? _firebaseError;
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<FirebaseBootstrapResult>(
-      future: _firebaseFuture,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: _WatchStartupLoading(),
-          );
-        }
-
-        final result = snapshot.data!;
-        if (!result.initialized) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: _WatchStartupError(
-              message: result.errorMessage ?? 'Startup failed',
-            ),
-          );
-        }
-
-        return const TheEyeWatchApp(firebaseReady: true);
-      },
-    );
+  void initState() {
+    super.initState();
+    _initFirebaseInBackground();
   }
-}
 
-class _WatchStartupLoading extends StatelessWidget {
-  const _WatchStartupLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return const WatchScreenShell(
-      showTopBar: false,
-      child: Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            color: EyeColors.green,
-            strokeWidth: 2,
-          ),
-        ),
-      ),
-    );
+  Future<void> _initFirebaseInBackground() async {
+    final result = await initializeWatchFirebase();
+    if (!mounted) return;
+    setState(() {
+      _firebaseReady = result.initialized;
+      _firebaseError = result.errorMessage;
+    });
   }
-}
-
-class _WatchStartupError extends StatelessWidget {
-  const _WatchStartupError({required this.message});
-
-  final String message;
 
   @override
   Widget build(BuildContext context) {
-    return WatchScreenShell(
-      showTopBar: false,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const WatchLogomark(size: 56),
-            const SizedBox(height: 12),
-            const Text(
-              'Startup error',
-              style: TextStyle(
-                color: EyeColors.danger,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: EyeColors.muted, fontSize: 10),
-            ),
-          ],
-        ),
-      ),
+    return TheEyeWatchApp(
+      firebaseReady: _firebaseReady,
+      firebaseError: _firebaseError,
     );
   }
 }
 
 class TheEyeWatchApp extends StatefulWidget {
-  const TheEyeWatchApp({super.key, this.firebaseReady = false});
+  const TheEyeWatchApp({
+    super.key,
+    this.firebaseReady = false,
+    this.firebaseError,
+  });
 
   final bool firebaseReady;
+  final String? firebaseError;
 
   @override
   State<TheEyeWatchApp> createState() => _TheEyeWatchAppState();
@@ -138,6 +87,7 @@ class TheEyeWatchApp extends StatefulWidget {
 
 class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
   final WatchAppServices _services = WatchAppServices();
+  final LauncherService _launcher = LauncherService();
 
   @override
   void dispose() {
@@ -158,12 +108,33 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
             return _page(
               SplashScreen(
                 services: _services,
+                launcher: _launcher,
                 firebaseReady: widget.firebaseReady,
+                firebaseError: widget.firebaseError,
               ),
               settings,
             );
+          case WatchRoutes.defaultHomeOnboarding:
+            return _page(
+              DefaultHomeOnboardingScreen(
+                launcher: _launcher,
+                onDismiss: () => _services.preferences
+                    .setLauncherOnboardingDismissed(true),
+                onComplete: () {
+                  Navigator.of(context).pushReplacementNamed(
+                    WatchRoutes.splash,
+                  );
+                },
+              ),
+              settings,
+            );
+          case WatchRoutes.appDrawer:
+            return _page(AppDrawerScreen(launcher: _launcher), settings);
           case WatchRoutes.home:
-            return _page(HomeScreen(services: _services), settings);
+            return _page(
+              HomeScreen(services: _services, launcher: _launcher),
+              settings,
+            );
           case WatchRoutes.locationOnboarding:
             return _page(LocationOnboardingScreen(services: _services), settings);
           case WatchRoutes.sosConfirm:
@@ -204,7 +175,10 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
           case WatchRoutes.deviceStatus:
             return _page(DeviceStatusScreen(services: _services), settings);
           case WatchRoutes.settings:
-            return _page(SettingsScreen(services: _services), settings);
+            return _page(
+              SettingsScreen(services: _services, launcher: _launcher),
+              settings,
+            );
           case WatchRoutes.settingsRadius:
             return _page(const SettingsRadiusScreen(), settings);
           case WatchRoutes.settingsContacts:
@@ -237,7 +211,9 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
             return _page(
               SplashScreen(
                 services: _services,
+                launcher: _launcher,
                 firebaseReady: widget.firebaseReady,
+                firebaseError: widget.firebaseError,
               ),
               settings,
             );
@@ -248,5 +224,43 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
 
   MaterialPageRoute<void> _page(Widget child, RouteSettings settings) {
     return MaterialPageRoute<void>(settings: settings, builder: (_) => child);
+  }
+}
+
+/// Shown only when Firebase hard-fails before any route is available.
+class WatchStartupError extends StatelessWidget {
+  const WatchStartupError({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return WatchScreenShell(
+      showTopBar: false,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const WatchLogomark(size: 56),
+            const SizedBox(height: 12),
+            const Text(
+              'Startup error',
+              style: TextStyle(
+                color: EyeColors.danger,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: EyeColors.muted, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

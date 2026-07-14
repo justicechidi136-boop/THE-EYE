@@ -44,12 +44,15 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
         final progress =
             state.holdProgressMs / widget.services.sos.holdDurationMs;
 
-        if (state.lifecycle == SosLifecycle.countdown) {
+        if (state.lifecycle == SosLifecycle.submitting ||
+            state.lifecycle == SosLifecycle.active ||
+            state.lifecycle == SosLifecycle.failed) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.pushReplacementNamed(
-                  context, WatchRoutes.emergencyType);
-            }
+            if (!mounted) return;
+            Navigator.pushReplacementNamed(
+              context,
+              WatchRoutes.activeEmergency,
+            );
           });
         }
 
@@ -75,7 +78,11 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
               ),
               const SizedBox(height: 12),
               if (showingCountdown)
-                WatchCountdownDisplay(seconds: state.countdownSeconds)
+                WatchCountdownDisplay(
+                  seconds: state.countdownSeconds,
+                  subtitle:
+                      'Sending location + alert to your emergency contacts',
+                )
               else
                 WatchCountdownDisplay(
                   seconds: (3 - (progress * 3)).ceil().clamp(1, 3),

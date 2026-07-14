@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 
+import '../config/watch_flavor.dart';
+import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
 import '../widgets/watch_ui.dart';
 import 'routes.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, required this.services});
+  const SettingsScreen({
+    super.key,
+    required this.services,
+    required this.launcher,
+  });
 
   final WatchAppServices services;
+  final LauncherService launcher;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +44,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           WatchOutlineButton(
-            label: 'Emergency Contacts',
+            label: 'SOS Contacts',
             onPressed: () =>
                 Navigator.pushNamed(context, WatchRoutes.settingsContacts),
           ),
@@ -52,6 +59,24 @@ class SettingsScreen extends StatelessWidget {
             label: 'Device Status',
             onPressed: () =>
                 Navigator.pushNamed(context, WatchRoutes.deviceStatus),
+          ),
+          const SizedBox(height: 6),
+          WatchOutlineButton(
+            label: 'App Drawer',
+            onPressed: () =>
+                Navigator.pushNamed(context, WatchRoutes.appDrawer),
+          ),
+          if (!WatchFlavor.isManagedLauncher) ...[
+            const SizedBox(height: 6),
+            WatchOutlineButton(
+              label: 'Change Default Home',
+              onPressed: launcher.openHomeSettings,
+            ),
+          ],
+          const SizedBox(height: 6),
+          WatchOutlineButton(
+            label: 'System Settings',
+            onPressed: launcher.openSystemSettings,
           ),
           const Spacer(),
           WatchPrimaryButton(

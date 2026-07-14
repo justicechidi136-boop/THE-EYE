@@ -391,7 +391,7 @@ class WatchCountdownDisplay extends StatelessWidget {
   const WatchCountdownDisplay({
     super.key,
     required this.seconds,
-    this.subtitle = 'Sending alert to emergency contacts',
+    this.subtitle = 'Sending location + alert to your emergency contacts',
   });
 
   final int seconds;

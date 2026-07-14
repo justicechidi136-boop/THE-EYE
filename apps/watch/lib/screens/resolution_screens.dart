@@ -6,7 +6,7 @@ import 'routes.dart';
 
 /// Prototype Flow G — "Still active?" resolution prompt.
 class StillActiveScreen extends StatelessWidget {
-  const StillActiveScreen({super.key, this.incidentTitle = 'Incident nearby'});
+  const StillActiveScreen({super.key, this.incidentTitle = 'Armed Robbery'});
 
   final String incidentTitle;
 
@@ -16,24 +16,24 @@ class StillActiveScreen extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: EyeTokens.spaceMd),
-          const WatchSectionTitle('Still Active?'),
+          const WatchSectionTitle('Is this still active?'),
+          const SizedBox(height: EyeTokens.spaceXs),
           Text(
-            incidentTitle,
+            'You reported $incidentTitle 30 mins ago. Is the area still dangerous?',
             textAlign: TextAlign.center,
             style: EyeTokens.bodySmall,
           ),
           const Spacer(),
-          WatchPrimaryButton(
-            label: 'Yes — Report',
-            color: EyeTokens.orange,
-            onPressed: () =>
-                Navigator.pushNamed(context, WatchRoutes.reportCategory),
+          WatchOutlineButton(
+            label: 'Still Active',
+            color: EyeTokens.danger,
+            onPressed: () => Navigator.pop(context),
           ),
           const SizedBox(height: EyeTokens.spaceSm),
-          WatchOutlineButton(
-            label: 'No — Vote',
+          WatchPrimaryButton(
+            label: "It's Cleared",
             onPressed: () =>
-                Navigator.pushNamed(context, WatchRoutes.communityVote),
+                Navigator.pushNamed(context, WatchRoutes.incidentResolved),
           ),
           const SizedBox(height: EyeTokens.spaceSm),
         ],
@@ -51,23 +51,24 @@ class CommunityVoteScreen extends StatelessWidget {
     return WatchScaffold(
       child: Column(
         children: [
-          const WatchSectionTitle('Community Vote'),
+          const WatchSectionTitle('Is this area now safe?'),
+          const SizedBox(height: EyeTokens.spaceXs),
           const Text(
-            'Is the area safe now?',
+            '⚠ Armed Robbery',
             textAlign: TextAlign.center,
-            style: EyeTokens.bodySmall,
+            style: TextStyle(color: EyeTokens.green, fontSize: 10),
           ),
           const Spacer(),
-          WatchPrimaryButton(
-            label: 'Area Cleared',
-            onPressed: () =>
-                Navigator.pushNamed(context, WatchRoutes.incidentResolved),
-          ),
-          const SizedBox(height: EyeTokens.spaceSm),
           WatchOutlineButton(
-            label: 'Still Dangerous',
+            label: 'Still Active',
             color: EyeTokens.danger,
             onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(height: EyeTokens.spaceSm),
+          WatchPrimaryButton(
+            label: 'Mark Cleared',
+            onPressed: () =>
+                Navigator.pushNamed(context, WatchRoutes.incidentResolved),
           ),
           const SizedBox(height: EyeTokens.spaceSm),
         ],

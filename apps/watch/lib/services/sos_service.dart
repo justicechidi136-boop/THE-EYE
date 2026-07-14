@@ -168,7 +168,7 @@ class SosService {
     if (_connectivity.activeMode == WatchConnectivityMode.offline) {
       await _enqueueOfflineSos(payload, idempotencyKey);
       _emit(_state.copyWith(
-        lifecycle: SosLifecycle.active,
+        lifecycle: SosLifecycle.failed,
         errorMessage: 'Queued offline — will retry when connected',
       ));
       return;

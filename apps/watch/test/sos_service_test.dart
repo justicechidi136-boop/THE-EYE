@@ -53,6 +53,8 @@ void main() {
     expect(queue, hasLength(1));
     expect(queue.first.type, OfflineEventType.sos);
     expect(queue.first.idempotencyKey, '11111111-1111-1111-1111-111111111111');
+    expect(sos.state.lifecycle, SosLifecycle.failed);
+    expect(sos.state.errorMessage, contains('Queued'));
   });
 }
 
