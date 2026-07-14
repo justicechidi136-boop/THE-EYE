@@ -6,6 +6,8 @@ import '../theme/eye_colors.dart';
 
 /// Brand asset paths (copied from mobile).
 abstract final class WatchBrandAssets {
+  /// Official THE EYE logo for Wear boot / splash (exact brand file).
+  static const bootLogo = 'assets/branding/the-eye-logo.png';
   static const logomark =
       'assets/images/brand/the-eye-logomark-transparent.png';
   static const appIcon = 'assets/images/brand/the-eye-app-icon-dark-green.png';

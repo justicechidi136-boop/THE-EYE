@@ -10,7 +10,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 
-class LauncherHomeActivity : FlutterActivity() {
+open class LauncherHomeActivity : FlutterActivity() {
 
     private val vibrationChannel = "com.theeye.watch/vibration"
     private val launcherChannel = "com.theeye.watch/launcher"

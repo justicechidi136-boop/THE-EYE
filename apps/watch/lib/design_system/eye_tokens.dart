@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 abstract final class EyeTokens {
   // Brand palette
   static const green = Color(0xFF009933);
+  static const logoGreen = Color(0xFF1A9C2D);
   static const orange = Color(0xFFFF9933);
   static const dark = Color(0xFF0B0F14);
+  static const bootBlack = Color(0xFF000000);
   static const white = Color(0xFFFFFFFF);
 
   // Semantic

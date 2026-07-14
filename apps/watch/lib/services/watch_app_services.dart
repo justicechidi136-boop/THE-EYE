@@ -75,10 +75,22 @@ class WatchAppServices {
   Future<void> initialize({bool firebaseReady = false}) async {
     await standaloneAuth.hydrateApiAuth();
     await pairing.initialize();
+    await startRuntimeServices(firebaseReady: firebaseReady);
+  }
+
+  /// Starts heartbeat / location / optional push without blocking forever on FCM.
+  Future<void> startRuntimeServices({
+    bool firebaseReady = false,
+    Duration pushTimeout = const Duration(seconds: 3),
+  }) async {
     heartbeat.start();
     location.startIdleTracking();
     if (firebaseReady && _enablePush) {
-      await push.start();
+      try {
+        await push.start().timeout(pushTimeout);
+      } catch (_) {
+        // Continue degraded — boot must not hang on FCM / network.
+      }
     }
   }
 

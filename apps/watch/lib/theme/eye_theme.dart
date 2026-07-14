@@ -15,7 +15,8 @@ ThemeData buildEyeWatchTheme() {
   return ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    scaffoldBackgroundColor: EyeColors.dark,
+    // True black avoids white flash between native splash → boot → home.
+    scaffoldBackgroundColor: const Color(0xFF000000),
     colorScheme: colorScheme,
     textTheme: const TextTheme(
       headlineLarge: TextStyle(

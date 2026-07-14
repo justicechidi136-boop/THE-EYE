@@ -49,6 +49,10 @@ void assertWatchFirebaseEnvMatchesFlavor(
 }
 
 Future<FirebaseBootstrapResult> initializeWatchFirebase() async {
+  if (Firebase.apps.isNotEmpty) {
+    return const FirebaseBootstrapResult(initialized: true);
+  }
+
   final env = WatchFlavor.firebaseEnv;
   final options = _optionsForEnv(env);
 

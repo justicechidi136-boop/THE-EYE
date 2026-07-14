@@ -14,11 +14,15 @@ class PushMessagingService {
     FirebaseMessaging? messaging,
   })  : _alerts = alerts,
         _credentials = credentials,
-        _messaging = messaging ?? FirebaseMessaging.instance;
+        _messagingOverride = messaging;
 
   final AlertService _alerts;
   final SecureCredentialStore _credentials;
-  final FirebaseMessaging _messaging;
+  final FirebaseMessaging? _messagingOverride;
+  FirebaseMessaging? _messagingLazy;
+
+  FirebaseMessaging get _messaging =>
+      _messagingOverride ?? (_messagingLazy ??= FirebaseMessaging.instance);
 
   StreamSubscription<String>? _refreshSubscription;
   bool _started = false;
