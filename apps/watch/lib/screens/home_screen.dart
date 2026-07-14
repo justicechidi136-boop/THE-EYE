@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../design_system/design_system.dart';
 import '../models/connectivity_mode.dart';
 import '../models/sos_event.dart';
 import '../services/watch_app_services.dart';
@@ -46,20 +47,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   WatchStatusTone _statusTone() {
     final mode = widget.services.connectivity.activeMode;
-    return switch (mode) {
-      WatchConnectivityMode.offline => WatchStatusTone.danger,
-      WatchConnectivityMode.standaloneCellular => WatchStatusTone.warning,
-      WatchConnectivityMode.pairedPhone => WatchStatusTone.safe,
-    };
+    if (mode == WatchConnectivityMode.offline) return WatchStatusTone.danger;
+    if (_isDangerFace()) return WatchStatusTone.warning;
+    return WatchStatusTone.safe;
   }
 
   String _statusLabel() {
     final mode = widget.services.connectivity.activeMode;
-    return switch (mode) {
-      WatchConnectivityMode.offline => 'Offline',
-      WatchConnectivityMode.standaloneCellular => 'LTE Standalone',
-      WatchConnectivityMode.pairedPhone => 'Area: Moderate Risk',
-    };
+    if (mode == WatchConnectivityMode.offline) return 'Offline';
+    if (mode == WatchConnectivityMode.standaloneCellular) return 'LTE Standalone';
+    return _alertCount > 0 ? 'Area: Elevated Risk' : 'Area: Moderate Risk';
+  }
+
+  bool _isDangerFace() {
+    final mode = widget.services.connectivity.activeMode;
+    return _alertCount > 0 &&
+        mode != WatchConnectivityMode.offline;
   }
 
   @override
@@ -77,32 +80,21 @@ class _HomeScreenState extends State<HomeScreen> {
         final holdProgress =
             sosState.holdProgressMs / widget.services.sos.holdDurationMs;
 
-        return WatchScreenShell(
+        return WatchScaffold(
           enableBack: false,
           leadingLabel: 'THE EYE',
           onLeadingTap: () =>
               Navigator.pushNamed(context, WatchRoutes.settings),
+          backgroundColor:
+              _isDangerFace() ? EyeTokens.surface : EyeTokens.dark,
           child: Column(
             children: [
-              const SizedBox(height: 4),
+              const SizedBox(height: EyeTokens.spaceXs),
               Text(
                 '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-                style: const TextStyle(
-                  color: EyeColors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -1,
-                  height: 1.2,
-                ),
+                style: EyeTokens.clockDisplay,
               ),
-              Text(
-                formatWatchDate(now),
-                style: const TextStyle(
-                  color: EyeColors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(formatWatchDate(now), style: EyeTokens.dateLabel),
               const SizedBox(height: 12),
               WatchStatusChip(label: _statusLabel(), tone: _statusTone()),
               const Spacer(),
@@ -113,14 +105,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     value: '$_alertCount',
                     label: 'Alerts',
                     onTap: () async {
-                      await Navigator.pushNamed(
-                        context,
-                        WatchRoutes.alertHistory,
-                      );
+                      if (_alertCount > 0) {
+                        await Navigator.pushNamed(
+                          context,
+                          WatchRoutes.alertSummary,
+                          arguments: _alertCount,
+                        );
+                      } else {
+                        await Navigator.pushNamed(
+                          context,
+                          WatchRoutes.alertHistory,
+                        );
+                      }
                       _loadAlerts();
                     },
                   ),
-                  WatchHomeSosButton(
+                  LargeSosButton(
+                    compact: true,
                     progress: sosState.lifecycle == SosLifecycle.holding
                         ? holdProgress.clamp(0.0, 1.0)
                         : 0,

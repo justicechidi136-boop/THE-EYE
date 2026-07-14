@@ -9,9 +9,14 @@ import 'screens/device_status_screen.dart';
 import 'screens/emergency_type_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/incoming_alert_screen.dart';
+import 'screens/location_onboarding_screen.dart';
+import 'screens/notification_summary_screen.dart';
 import 'screens/pairing_screen.dart';
+import 'screens/report_flow_screens.dart';
+import 'screens/resolution_screens.dart';
 import 'screens/routes.dart';
 import 'screens/settings_screen.dart';
+import 'screens/settings_sub_screens.dart';
 import 'screens/sos_confirm_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/tracking_screen.dart';
@@ -159,6 +164,8 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
             );
           case WatchRoutes.home:
             return _page(HomeScreen(services: _services), settings);
+          case WatchRoutes.locationOnboarding:
+            return _page(LocationOnboardingScreen(services: _services), settings);
           case WatchRoutes.sosConfirm:
             return _page(SosConfirmScreen(services: _services), settings);
           case WatchRoutes.emergencyType:
@@ -183,6 +190,13 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
             return _page(IncomingAlertScreen(services: _services), settings);
           case WatchRoutes.alertHistory:
             return _page(AlertHistoryScreen(services: _services), settings);
+          case WatchRoutes.alertSummary:
+            return _page(
+              NotificationSummaryScreen(
+                alertCount: (settings.arguments as int?) ?? 0,
+              ),
+              settings,
+            );
           case WatchRoutes.pairing:
             return _page(PairingScreen(services: _services), settings);
           case WatchRoutes.connectionStatus:
@@ -191,6 +205,34 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
             return _page(DeviceStatusScreen(services: _services), settings);
           case WatchRoutes.settings:
             return _page(SettingsScreen(services: _services), settings);
+          case WatchRoutes.settingsRadius:
+            return _page(const SettingsRadiusScreen(), settings);
+          case WatchRoutes.settingsContacts:
+            return _page(const SettingsContactsScreen(), settings);
+          case WatchRoutes.reportCategory:
+            return _page(const ReportCategoryScreen(), settings);
+          case WatchRoutes.reportDescribe:
+            return _page(
+              ReportDescribeScreen(
+                category: settings.arguments as String? ?? 'Incident',
+              ),
+              settings,
+            );
+          case WatchRoutes.reportVoice:
+            return _page(const ReportVoiceScreen(), settings);
+          case WatchRoutes.reportConfirm:
+            return _page(
+              ReportConfirmScreen(
+                description: settings.arguments as String? ?? '',
+              ),
+              settings,
+            );
+          case WatchRoutes.stillActive:
+            return _page(const StillActiveScreen(), settings);
+          case WatchRoutes.communityVote:
+            return _page(const CommunityVoteScreen(), settings);
+          case WatchRoutes.incidentResolved:
+            return _page(const IncidentResolvedScreen(), settings);
           default:
             return _page(
               SplashScreen(

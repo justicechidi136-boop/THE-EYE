@@ -38,14 +38,7 @@ class LocationService {
       return _positionProvider();
     }
     try {
-      final permission = await _geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        final requested = await _geolocator.requestPermission();
-        if (requested == LocationPermission.denied ||
-            requested == LocationPermission.deniedForever) {
-          return null;
-        }
-      }
+      if (!await _ensurePermission()) return null;
       return _geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
@@ -55,6 +48,22 @@ class LocationService {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<bool> requestPermission() => _ensurePermission();
+
+  Future<bool> _ensurePermission() async {
+    final permission = await _geolocator.checkPermission();
+    if (permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse) {
+      return true;
+    }
+    if (permission == LocationPermission.deniedForever) {
+      return false;
+    }
+    final requested = await _geolocator.requestPermission();
+    return requested == LocationPermission.always ||
+        requested == LocationPermission.whileInUse;
   }
 
   void startEmergencyTracking({String? sosEventId}) {

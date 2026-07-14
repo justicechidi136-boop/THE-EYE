@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/design_system.dart';
 import '../models/sos_event.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
@@ -19,8 +20,10 @@ class ActiveEmergencyScreen extends StatelessWidget {
       builder: (context, snapshot) {
         final state = snapshot.data!;
         final isSending = state.lifecycle == SosLifecycle.submitting;
+        final isQueued = state.lifecycle == SosLifecycle.failed &&
+            state.errorMessage?.contains('Queued') == true;
 
-        return WatchScreenShell(
+        return WatchScaffold(
           onBack: () => Navigator.popUntil(
             context,
             ModalRoute.withName(WatchRoutes.home),
@@ -40,7 +43,11 @@ class ActiveEmergencyScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                isSending ? 'Sending SOS…' : 'SOS Sent',
+                isSending
+                    ? 'Sending SOS…'
+                    : isQueued
+                        ? 'SOS Queued'
+                        : 'SOS Sent',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: EyeColors.white,

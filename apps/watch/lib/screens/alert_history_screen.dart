@@ -84,6 +84,11 @@ class _AlertHistoryScreenState extends State<AlertHistoryScreen> {
                         WatchRoutes.incomingAlert,
                         arguments: alert,
                       ),
+                      onLongPress: () => Navigator.pushNamed(
+                        context,
+                        WatchRoutes.stillActive,
+                        arguments: alert.title,
+                      ),
                     );
                   },
                 ),

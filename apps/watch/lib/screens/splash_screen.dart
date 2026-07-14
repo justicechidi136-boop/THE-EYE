@@ -30,7 +30,7 @@ class _SplashScreenState extends State<SplashScreen> {
     await widget.services.initialize(firebaseReady: widget.firebaseReady);
     if (!mounted) return;
     final destination = widget.services.pairing.state.isPaired
-        ? WatchRoutes.home
+        ? WatchRoutes.locationOnboarding
         : WatchRoutes.pairing;
     Navigator.of(context).pushReplacementNamed(destination);
   }
@@ -44,16 +44,12 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const WatchLogomark(size: 70),
-            const SizedBox(height: 16),
-            const Text(
-              'THE EYE',
-              style: TextStyle(
-                color: EyeColors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          const Text(
+            'Community Safety',
+            style: TextStyle(color: EyeColors.muted, fontSize: 11),
+          ),
+          const SizedBox(height: 20),
             const SizedBox(
               width: 24,
               height: 24,

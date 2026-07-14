@@ -1,14 +1,25 @@
 abstract final class WatchRoutes {
   static const splash = '/';
   static const home = '/home';
+  static const locationOnboarding = '/onboarding/location';
   static const sosConfirm = '/sos/confirm';
   static const emergencyType = '/sos/type';
   static const activeEmergency = '/sos/active';
   static const tracking = '/sos/tracking';
   static const incomingAlert = '/alerts/incoming';
+  static const alertSummary = '/alerts/summary';
   static const alertHistory = '/alerts/history';
   static const pairing = '/pairing';
   static const connectionStatus = '/connection';
   static const deviceStatus = '/device';
   static const settings = '/settings';
+  static const settingsRadius = '/settings/radius';
+  static const settingsContacts = '/settings/contacts';
+  static const reportCategory = '/report/category';
+  static const reportDescribe = '/report/describe';
+  static const reportVoice = '/report/voice';
+  static const reportConfirm = '/report/confirm';
+  static const stillActive = '/resolution/still-active';
+  static const communityVote = '/resolution/vote';
+  static const incidentResolved = '/resolution/resolved';
 }

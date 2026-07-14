@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/sos_event.dart';
+import '../design_system/design_system.dart';
 import '../services/watch_app_services.dart';
 import '../widgets/watch_ui.dart';
 import 'routes.dart';
@@ -31,6 +32,8 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
     Navigator.pop(context);
   }
 
+  static void _noop() {}
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<SosEventState>(
@@ -52,20 +55,19 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
 
         final showingCountdown = state.lifecycle == SosLifecycle.countdown;
 
-        return WatchScreenShell(
+        return WatchScaffold(
           onBack: _cancel,
           child: Column(
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: EyeTokens.spaceSm),
               Center(
                 child: showingCountdown
-                    ? WatchSosHoldButton(
+                    ? const LargeSosButton(
                         progress: 1,
-                        onHoldStart: () {},
-                        onHoldEnd: () {},
-                        label: 'SOS',
+                        onHoldStart: _noop,
+                        onHoldEnd: _noop,
                       )
-                    : WatchSosHoldButton(
+                    : LargeSosButton(
                         progress: progress.clamp(0.0, 1.0),
                         onHoldStart: widget.services.sos.beginHold,
                         onHoldEnd: widget.services.sos.cancelHold,
