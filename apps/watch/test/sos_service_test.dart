@@ -38,6 +38,27 @@ void main() {
     expect(sos.state.lifecycle, SosLifecycle.cancelled);
   });
 
+  test('SOS countdown cancel prevents submit', () async {
+    final client = MockClient((_) async => http.Response(
+          '{"data":{"id":"sos-1"},"incident":{"id":"inc-1"}}',
+          200,
+        ));
+    final sos = _buildSosService(
+      client,
+      holdDurationMs: 100,
+      tickIntervalMs: 50,
+    );
+
+    sos.beginHold();
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    expect(sos.state.lifecycle, SosLifecycle.countdown);
+    sos.cancelHold();
+    expect(sos.state.lifecycle, SosLifecycle.cancelled);
+    await Future<void>.delayed(const Duration(seconds: 4));
+    expect(sos.state.lifecycle, isNot(SosLifecycle.submitting));
+    expect(sos.state.lifecycle, isNot(SosLifecycle.active));
+  });
+
   test('offline SOS is queued when connectivity is offline', () async {
     final preferences = InMemoryPreferencesStore();
     final connectivity = ConnectivityService(internetAvailable: false);
@@ -63,6 +84,8 @@ SosService _buildSosService(
   PreferencesStore? preferences,
   ConnectivityService? connectivity,
   String Function()? idGenerator,
+  int holdDurationMs = 300,
+  int tickIntervalMs = 50,
 }) {
   final credentials = SecureCredentialStore(memory: {});
   credentials.saveDeviceCredentials(
@@ -90,7 +113,7 @@ SosService _buildSosService(
           idCount += 1;
           return '00000000-0000-0000-0000-${idCount.toString().padLeft(12, '0')}';
         },
-    holdDurationMs: 300,
-    tickIntervalMs: 50,
+    holdDurationMs: holdDurationMs,
+    tickIntervalMs: tickIntervalMs,
   );
 }

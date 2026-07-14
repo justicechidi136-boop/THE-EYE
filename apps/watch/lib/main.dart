@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'models/alert.dart';
 import 'screens/active_emergency_screen.dart';
@@ -27,10 +31,20 @@ import 'theme/eye_colors.dart';
 import 'theme/eye_theme.dart';
 import 'widgets/watch_ui.dart';
 
+const _crashChannel = MethodChannel('com.theeye.watch/crash');
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
+    // Best-effort native recovery counter (Wear crash loops).
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(
+        _crashChannel.invokeMethod<void>('recordFlutterCrash').catchError(
+              (_) => null,
+            ),
+      );
+    }
   };
   runApp(const TheEyeWatchApp());
 }

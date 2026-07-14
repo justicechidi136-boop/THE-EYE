@@ -46,6 +46,7 @@ class SosService {
   final _stateController = StreamController<SosEventState>.broadcast();
   SosEventState _state = const SosEventState(lifecycle: SosLifecycle.idle);
   Timer? _holdTimer;
+  Timer? _countdownTimer;
   final Set<String> _submittedIdempotencyKeys = {};
 
   Stream<SosEventState> get states => _stateController.stream;
@@ -64,6 +65,7 @@ class SosService {
     }
 
     _holdTimer?.cancel();
+    _countdownTimer?.cancel();
     _emit(const SosEventState(
       lifecycle: SosLifecycle.holding,
       holdProgressMs: 0,
@@ -92,6 +94,8 @@ class SosService {
   void cancelHold() {
     _holdTimer?.cancel();
     _holdTimer = null;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
     _emit(const SosEventState(lifecycle: SosLifecycle.cancelled));
     _vibration.cancelPattern();
     Future<void>.delayed(const Duration(milliseconds: 300), () {
@@ -102,6 +106,9 @@ class SosService {
   }
 
   void _onHoldComplete() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _countdownTimer?.cancel();
     _emit(_state.copyWith(
       lifecycle: SosLifecycle.countdown,
       holdProgressMs: holdDurationMs,
@@ -110,10 +117,15 @@ class SosService {
     _vibration.confirmSos();
 
     var seconds = 3;
-    Timer.periodic(const Duration(seconds: 1), (timer) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_state.lifecycle != SosLifecycle.countdown) {
+        timer.cancel();
+        return;
+      }
       seconds -= 1;
       if (seconds <= 0) {
         timer.cancel();
+        _countdownTimer = null;
         unawaited(submitSos());
         return;
       }
@@ -271,12 +283,16 @@ class SosService {
 
   void reset() {
     _holdTimer?.cancel();
+    _countdownTimer?.cancel();
+    _holdTimer = null;
+    _countdownTimer = null;
     _location.stopTracking();
     _emit(const SosEventState(lifecycle: SosLifecycle.idle));
   }
 
   void dispose() {
     _holdTimer?.cancel();
+    _countdownTimer?.cancel();
     _stateController.close();
   }
 }

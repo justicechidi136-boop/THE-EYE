@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../api/watch_api_client.dart';
 import '../pairing/pairing_service.dart';
 import '../services/alert_service.dart';
@@ -83,6 +85,9 @@ class WatchAppServices {
     bool firebaseReady = false,
     Duration pushTimeout = const Duration(seconds: 3),
   }) async {
+    await connectivity.startMonitoring(
+      onBecameOnline: () => sos.flushOfflineQueue(),
+    );
     heartbeat.start();
     location.startIdleTracking();
     if (firebaseReady && _enablePush) {
@@ -95,6 +100,7 @@ class WatchAppServices {
   }
 
   void dispose() {
+    unawaited(connectivity.stopMonitoring());
     heartbeat.stop();
     location.stopTracking();
     sos.dispose();

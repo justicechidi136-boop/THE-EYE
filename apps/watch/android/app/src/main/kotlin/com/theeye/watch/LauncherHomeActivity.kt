@@ -14,6 +14,7 @@ open class LauncherHomeActivity : FlutterActivity() {
 
     private val vibrationChannel = "com.theeye.watch/vibration"
     private val launcherChannel = "com.theeye.watch/launcher"
+    private val crashChannel = "com.theeye.watch/crash"
 
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
         return FlutterEngineCache.getInstance().get(FLUTTER_ENGINE_ID)
@@ -22,6 +23,8 @@ open class LauncherHomeActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         FlutterEngineCache.getInstance().put(FLUTTER_ENGINE_ID, flutterEngine)
+        CrashSentinel.reset(this)
+        ManagedLauncherStub.noteManagedBoot(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, vibrationChannel)
             .setMethodCallHandler { call, result ->
@@ -46,6 +49,21 @@ open class LauncherHomeActivity : FlutterActivity() {
             .setMethodCallHandler(
                 LauncherChannelHandler(this, packageName),
             )
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, crashChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "recordFlutterCrash" -> {
+                        CrashSentinel.recordFlutterCrash(this)
+                        result.success(null)
+                    }
+                    "resetCrashCount" -> {
+                        CrashSentinel.reset(this)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     private fun vibrator(): Vibrator? {
