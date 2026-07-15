@@ -15,11 +15,12 @@ const productionSecrets = [
   "JWT_ACCESS_SECRET",
   "JWT_REFRESH_SECRET",
   "LIVE_LOCATION_LINK_SECRET",
-  "LIVEKIT_API_KEY",
   "LIVEKIT_API_SECRET",
   "S3_SECRET_KEY",
   "REDIS_PASSWORD",
 ] as const;
+
+const MIN_LIVEKIT_API_KEY_LENGTH = 10;
 
 function validateFirebaseProjectEnv(config: Record<string, unknown>) {
   const firebaseProjectId = String(config.FIREBASE_PROJECT_ID ?? "").trim();
@@ -58,6 +59,16 @@ export function validateEnvironment(config: Record<string, unknown>) {
     if (typeof value !== "string" || value.length < 24 || value.startsWith("change_me") || value.startsWith("dev")) {
       throw new Error(`${key} must be set to a production secret of at least 24 characters`);
     }
+  }
+
+  const livekitApiKey = config.LIVEKIT_API_KEY;
+  if (
+    typeof livekitApiKey !== "string" ||
+    livekitApiKey.trim().length < MIN_LIVEKIT_API_KEY_LENGTH ||
+    livekitApiKey.startsWith("change_me") ||
+    livekitApiKey.startsWith("dev")
+  ) {
+    throw new Error(`LIVEKIT_API_KEY must be set to a valid LiveKit API key of at least ${MIN_LIVEKIT_API_KEY_LENGTH} characters`);
   }
 
   if (typeof config.CORS_ORIGINS !== "string" || !config.CORS_ORIGINS.trim()) {
