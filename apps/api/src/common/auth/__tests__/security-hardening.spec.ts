@@ -8,7 +8,7 @@ describe("security hardening", () => {
         JWT_ACCESS_SECRET: "a".repeat(32),
         JWT_REFRESH_SECRET: "b".repeat(32),
         LIVE_LOCATION_LINK_SECRET: "c".repeat(32),
-        LIVEKIT_API_KEY: "d".repeat(24),
+        LIVEKIT_API_KEY: "APIMYSBVUUX8uNf",
         LIVEKIT_API_SECRET: "e".repeat(32),
         S3_SECRET_KEY: "f".repeat(32),
         REDIS_PASSWORD: "g".repeat(32),
