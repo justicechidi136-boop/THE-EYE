@@ -22,12 +22,15 @@ flutter analyze lib test
 flutter test
 ```
 
-Override API base URL at build time:
+API URLs are resolved in `lib/config/watch_api_config.dart`:
 
-```bash
-flutter run --flavor staging \
-  --dart-define=THE_EYE_API_BASE_URL=http://YOUR_HOST:4000/v1
-```
+- staging / managedStaging: `https://staging-api.theeye.com.ng/v1` (remote staging server — not localhost)
+- production / managedProduction: `https://api.theeye.com.ng/v1`
+- development: LAN/emulator host (override with `--dart-define=THE_EYE_DEV_LAN_HOST=...`)
+
+Override any flavor with a **remote** URL: `--dart-define=THE_EYE_API_BASE_URL=https://custom.example/v1`
+
+Local `THE_EYE_API_BASE_URL` overrides (e.g. `http://localhost:4000/v1`) apply only to the **development** flavor; staging and production ignore them.
 
 Environment guards block cross-wiring:
 - Staging builds cannot initialize production Firebase or call the production API.

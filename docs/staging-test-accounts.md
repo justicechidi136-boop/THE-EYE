@@ -4,6 +4,35 @@ Idempotent staging-only test accounts for QA, integration tests, and manual cons
 
 ## Recreate command
 
+### Docker Compose (staging VPS)
+
+After migrations, with real values in server `.env` (see [Required environment](#required-environment)):
+
+```bash
+cd /opt/the-eye   # or your DEPLOY_PATH
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-seed-staging
+```
+
+**Quick bootstrap (single Super Admin only)** — if you only need admin dashboard login and have set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-create-admin
+```
+
+Use `api-seed-staging` when you want the full role matrix (Super Admin, Country/State/LGA admins, agency officer, citizens, watch-paired citizen). Use `api-create-admin` for a one-off Super Admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+Do **not** run `api-seed` on staging/production Docker images for admin login — it loads the full dev dataset and is intended for local disposable stacks.
+
+Optional login probe after the API is reachable:
+
+```bash
+STAGING_API_BASE_URL=https://staging-api.example.test \
+  docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+  sh -c "npm --workspace apps/api run verify:staging:test-accounts"
+```
+
+### Local / CI (pnpm)
+
 From the repository root, with staging env loaded (`THE_EYE_APP_ENV=staging`, staging `DATABASE_URL`, and `STAGING_TEST_*` credentials set):
 
 ```bash

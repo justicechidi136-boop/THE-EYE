@@ -228,6 +228,14 @@ Future<void> main() async {
       }
     }
 
+    assertMobileApiBaseUrlMatchesFlavor(
+      AppFlavorConfig.current,
+      theEyeApiUrl,
+    );
+    StartupDiagnostics.checkpoint(
+      "STARTUP 3: API base URL ${AppFlavorConfig.current.name} -> $theEyeApiUrl",
+    );
+
     runApp(const TheEyeBootstrap());
     StartupDiagnostics.checkpoint("STARTUP 4: runApp called");
   }, StartupDiagnostics.recordZoneError);

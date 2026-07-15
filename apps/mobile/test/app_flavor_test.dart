@@ -119,5 +119,80 @@ void main() {
         "https://api.theeye.com.ng/v1",
       );
     });
+
+    test("detects production, staging, and local dev API hosts", () {
+      expect(
+        TheEyeApiConfig.isProductionApiUrl("https://api.theeye.com.ng/v1"),
+        isTrue,
+      );
+      expect(
+        TheEyeApiConfig.isStagingApiUrl(
+          "https://staging-api.theeye.com.ng/v1",
+        ),
+        isTrue,
+      );
+      expect(
+        TheEyeApiConfig.isProductionApiUrl(
+          "https://staging-api.theeye.com.ng/v1",
+        ),
+        isFalse,
+      );
+      expect(
+        TheEyeApiConfig.isLocalDevUrl("http://10.99.68.107:4000/v1"),
+        isTrue,
+      );
+    });
+  });
+
+  group("assertMobileApiBaseUrlMatchesFlavor", () {
+    test("allows staging API for staging flavor", () {
+      expect(
+        () => assertMobileApiBaseUrlMatchesFlavor(
+          AppFlavor.staging,
+          "https://staging-api.theeye.com.ng/v1",
+        ),
+        returnsNormally,
+      );
+    });
+
+    test("rejects production API for staging flavor", () {
+      expect(
+        () => assertMobileApiBaseUrlMatchesFlavor(
+          AppFlavor.staging,
+          "https://api.theeye.com.ng/v1",
+        ),
+        throwsStateError,
+      );
+    });
+
+    test("rejects staging API for production flavor", () {
+      expect(
+        () => assertMobileApiBaseUrlMatchesFlavor(
+          AppFlavor.production,
+          "https://staging-api.theeye.com.ng/v1",
+        ),
+        throwsStateError,
+      );
+    });
+
+    test("rejects local dev API for staging flavor", () {
+      expect(
+        () => assertMobileApiBaseUrlMatchesFlavor(
+          AppFlavor.staging,
+          "http://10.99.68.107:4000/v1",
+        ),
+        throwsStateError,
+      );
+    });
+
+    test("allows local dev API for development flavor", () {
+      expect(
+        () => assertMobileApiBaseUrlMatchesFlavor(
+          AppFlavor.development,
+          "http://10.0.2.2:4000/v1",
+        ),
+        returnsNormally,
+      );
+    });
   });
 }

@@ -33,10 +33,20 @@ abstract final class TheEyeApiConfig {
     defaultValue: "https://api.theeye.com.ng/v1",
   );
 
-  static String resolveBaseUrl() {
-    if (_dartDefineUrl.isNotEmpty) return _dartDefineUrl;
+  static const String productionApiHost = "api.theeye.com.ng";
+  static const String stagingApiHost = "staging-api.theeye.com.ng";
 
-    switch (AppFlavorConfig.current) {
+  static String resolveBaseUrl() {
+    final flavor = AppFlavorConfig.current;
+
+    if (_dartDefineUrl.isNotEmpty) {
+      // Ignore dev-machine overrides when building staging/production flavors.
+      if (flavor == AppFlavor.development || !isLocalDevUrl(_dartDefineUrl)) {
+        return _dartDefineUrl;
+      }
+    }
+
+    switch (flavor) {
       case AppFlavor.development:
         return _resolveDevelopmentBaseUrl();
       case AppFlavor.staging:
@@ -61,5 +71,56 @@ abstract final class TheEyeApiConfig {
     }
 
     return TheEyeApiPaths.defaultBaseUrl;
+  }
+
+  static bool isLocalDevUrl(String baseUrl) {
+    final normalized = baseUrl.toLowerCase();
+    return normalized.contains("localhost") ||
+        normalized.contains("127.0.0.1") ||
+        normalized.contains("10.0.2.2") ||
+        normalized.contains("://test") ||
+        RegExp(r"://10\.\d+\.\d+\.\d+").hasMatch(normalized);
+  }
+
+  static bool isProductionApiUrl(String baseUrl) {
+    final normalized = baseUrl.toLowerCase();
+    return normalized.contains(productionApiHost) &&
+        !normalized.contains(stagingApiHost);
+  }
+
+  static bool isStagingApiUrl(String baseUrl) {
+    return baseUrl.toLowerCase().contains(stagingApiHost);
+  }
+}
+
+/// Ensures a build flavor cannot call the wrong API environment.
+void assertMobileApiBaseUrlMatchesFlavor(
+  AppFlavor flavor,
+  String baseUrl,
+) {
+  if (TheEyeApiConfig.isLocalDevUrl(baseUrl)) {
+    if (flavor == AppFlavor.development) return;
+    throw StateError(
+      "Environment guard: ${flavor.name} build cannot use a local dev API "
+      "(`$baseUrl`). Use `--flavor development` for local PC testing, or "
+      "`https://${TheEyeApiConfig.stagingApiHost}/v1` for staging.",
+    );
+  }
+
+  final isProdApi = TheEyeApiConfig.isProductionApiUrl(baseUrl);
+  final isStagingApi = TheEyeApiConfig.isStagingApiUrl(baseUrl);
+
+  if (flavor == AppFlavor.staging && isProdApi) {
+    throw StateError(
+      "Environment guard: staging build cannot call production API "
+      "(`$baseUrl`). Use `https://${TheEyeApiConfig.stagingApiHost}/v1`.",
+    );
+  }
+
+  if (flavor == AppFlavor.production && isStagingApi) {
+    throw StateError(
+      "Environment guard: production build cannot use staging API "
+      "(`$baseUrl`). Use `https://${TheEyeApiConfig.productionApiHost}/v1`.",
+    );
   }
 }

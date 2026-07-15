@@ -20,11 +20,13 @@ Download SDK configs from Firebase Console per flavor. These JSON/plist files ar
 
 Resolved in `lib/config/the_eye_api_config.dart`:
 
-- staging: `https://staging-api.theeye.com.ng/v1`
+- staging: `https://staging-api.theeye.com.ng/v1` (remote staging server — not localhost)
 - production: `https://api.theeye.com.ng/v1`
 - development: LAN/emulator host (override with `--dart-define=THE_EYE_DEV_LAN_HOST=...`)
 
-Override any flavor: `--dart-define=THE_EYE_API_URL=https://custom.example/v1`
+Override any flavor with a **remote** URL: `--dart-define=THE_EYE_API_URL=https://custom.example/v1`
+
+Local `THE_EYE_API_URL` overrides (e.g. `http://localhost:4000/v1`) apply only to the **development** flavor; staging and production ignore them.
 
 ## Run
 

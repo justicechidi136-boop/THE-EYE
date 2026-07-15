@@ -38,6 +38,23 @@ if (!buildGradle.includes('id "com.google.gms.google-services"')) {
   failures.push("android/app/build.gradle missing com.google.gms.google-services plugin");
 }
 
+const apiConfig = fs.readFileSync(
+  path.join(mobileRoot, "lib/config/the_eye_api_config.dart"),
+  "utf8",
+);
+if (
+  !apiConfig.includes(
+    'defaultValue: "https://staging-api.theeye.com.ng/v1"',
+  )
+) {
+  failures.push(
+    "staging API default must be https://staging-api.theeye.com.ng/v1",
+  );
+}
+if (!apiConfig.includes("assertMobileApiBaseUrlMatchesFlavor")) {
+  failures.push("the_eye_api_config.dart missing API environment guard");
+}
+
 function readDartFirebaseOptions(flavor) {
   const filePath = path.join(
     mobileRoot,

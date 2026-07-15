@@ -303,12 +303,56 @@ services:
       - path: ../../.env
         required: false
     environment:
+      NODE_ENV: development
       DATABASE_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL:?DATABASE_URL is required}}
       DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL}}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-dev-admin@theeye.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change_me_dev_admin_password}
     depends_on:
       postgres-postgis:
         condition: service_healthy
     command: ["npm", "--workspace", "apps/api", "run", "db:seed"]
+    networks:
+      - the-eye-internal
+
+  # One-time bootstrap: upsert a single Super Admin from ADMIN_EMAIL / ADMIN_PASSWORD.
+  # Safe for staging; do not run in production unless you intend to create that account.
+  api-create-admin:
+    image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+    profiles: ["tools"]
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL:?DATABASE_URL is required}}
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL}}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+    depends_on:
+      postgres-postgis:
+        condition: service_healthy
+    command: ["npm", "--workspace", "apps/api", "run", "db:create-admin"]
+    networks:
+      - the-eye-internal
+
+  # Staging-only: idempotent role-based test accounts from STAGING_TEST_* env vars.
+  # Requires THE_EYE_APP_ENV=staging and at least one STAGING_TEST_<ROLE>_EMAIL/PASSWORD pair.
+  api-seed-staging:
+    image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+    profiles: ["tools"]
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      THE_EYE_APP_ENV: ${THE_EYE_APP_ENV:-staging}
+      DATABASE_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL:?DATABASE_URL is required}}
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL}}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+    depends_on:
+      postgres-postgis:
+        condition: service_healthy
+    command: ["npm", "--workspace", "apps/api", "run", "seed:staging:test-accounts"]
     networks:
       - the-eye-internal
 
