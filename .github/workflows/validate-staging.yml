@@ -436,7 +436,7 @@ jobs:
         run: node scripts/validate-firebase-auth-providers.cjs
 
   docker:
-    name: Docker admin image (staging)
+    name: Docker images (staging)
     runs-on: ubuntu-latest
     environment: staging
     env:
@@ -460,6 +460,19 @@ jobs:
           URL="$URL" node scripts/ci/validate-staging-api-url.mjs "$URL"
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "CI_STAGING_API_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Docker compose and LiveKit smoke
+        run: |
+          node scripts/docker-compose-smoke.cjs
+          node scripts/validate-livekit-keys.cjs
+
+      - name: Build staging API Docker image
+        run: |
+          docker build \
+            -f apps/api/Dockerfile \
+            --target production \
+            -t the-eye-api:staging-validate \
+            .
 
       - name: Build staging admin-web Docker image
         run: |
