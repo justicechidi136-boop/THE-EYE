@@ -16,6 +16,7 @@ import { AdminRoleName, adminRolePermissions, userRolePermissions, UserRole } fr
 import type { VerifiedFirebaseIdentity } from "../../common/auth/firebase-id-token";
 import { peekFirebaseIdToken } from "../../common/auth/firebase-id-token";
 import { FirebaseAuthVerifier } from "../../common/auth/firebase-auth.verifier";
+import { resolveAppEnvironment } from "../../common/auth/firebase-environment";
 import { assertFirebaseProjectConfigured } from "../../common/auth/firebase-project";
 import { hashOtp, hashPassword, hashToken, randomToken, verifyPassword } from "../../common/auth/crypto";
 import { parseTtl, signJwt, verifyJwt, type JwtPayload } from "../../common/auth/jwt";
@@ -426,6 +427,21 @@ export class AuthService {
           `tokenAud=${peek?.aud ?? "unknown"}, tokenIss=${peek?.iss ?? "unknown"}, ` +
           `tokenProvider=${peek?.provider ?? "unknown"}, expectedProvider=${expectedProvider}): ${reason}`,
       );
+      const appEnv = resolveAppEnvironment({
+        THE_EYE_APP_ENV: this.config.get<string>("THE_EYE_APP_ENV"),
+        FCM_PROJECT_ID: this.config.get<string>("FCM_PROJECT_ID"),
+        FIREBASE_PROJECT_ID: this.config.get<string>("FIREBASE_PROJECT_ID"),
+        NODE_ENV: process.env.NODE_ENV,
+      });
+      if (appEnv === "staging" && peek?.aud && peek.aud !== expectedProjectId) {
+        throw new UnauthorizedException({
+          message: "Invalid Firebase identity token",
+          code: "FIREBASE_TOKEN_PROJECT_MISMATCH",
+          expectedProjectId,
+          tokenAud: peek.aud,
+          tokenIss: peek.iss ?? null,
+        });
+      }
       throw new UnauthorizedException("Invalid Firebase identity token");
     }
   }

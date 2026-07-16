@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
+import { assertFirebaseProjectConfigured } from "../../common/auth/firebase-project";
 import { buildFirebaseAdminProbe } from "../../common/auth/firebase-environment";
 import { NOTIFICATIONS_QUEUE_NAME } from "../../common/queue/queue-names";
 import { resolveFcmRuntime } from "../notifications/providers/fcm.config";
@@ -73,6 +74,14 @@ export class HealthService implements OnModuleDestroy {
           : { mode: "simulated", reason: runtime.reason },
       ),
       queueName: NOTIFICATIONS_QUEUE_NAME,
+    };
+  }
+
+  /** Project ID used by POST /auth/firebase/exchange (custom JWT verify, not Firebase Admin). */
+  getFirebaseAuthProbe() {
+    return {
+      projectId: assertFirebaseProjectConfigured(this.config),
+      verifyMethod: "google-x509-jwt",
     };
   }
 

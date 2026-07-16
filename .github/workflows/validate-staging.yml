@@ -302,7 +302,7 @@ jobs:
 
       - name: Build staging APK
         if: steps.mobile_gs_json.outputs.has_secret == 'true'
-        run: pnpm --dir apps/mobile exec flutter build apk --flavor staging
+        run: pnpm --dir apps/mobile exec flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging
 
   watch:
     name: Watch staging analyze, test, build
