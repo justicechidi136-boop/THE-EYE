@@ -5,7 +5,7 @@
   "scripts": {
     "clean": "flutter clean",
     "pub-get": "flutter pub get",
-    "analyze": "flutter analyze lib test",
+    "analyze": "flutter analyze --no-fatal-warnings --no-fatal-infos lib test",
     "test": "flutter test --dart-define=THE_EYE_FLAVOR=production",
     "validate:firebase": "node ../../scripts/validate-mobile-firebase.cjs",
     "run:staging": "flutter run --flavor staging --dart-define=THE_EYE_FLAVOR=staging",

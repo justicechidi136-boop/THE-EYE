@@ -28,6 +28,11 @@ const ALLOWED_PRIVATE_KEY_PATHS = [
   /^\.env\.example$/,
 ];
 
+// FlutterFire client config — public, app-restricted keys validated by firebase validators.
+const ALLOWED_GOOGLE_API_KEY_PATHS = [
+  /^apps\/(?:mobile|watch)\/lib\/firebase_options(?:_[a-z]+)?\.dart$/,
+];
+
 function isPlaceholder(value) {
   const trimmed = String(value).trim();
   return PLACEHOLDER_PREFIXES.some((prefix) =>
@@ -72,9 +77,14 @@ for (const file of tracked) {
 
   const apiKeyMatch = source.match(GOOGLE_API_KEY_PATTERN);
   if (apiKeyMatch && !isPlaceholder(apiKeyMatch[0])) {
-    failures.push(
-      `Google API key in tracked file: ${normalized} (${apiKeyMatch[0].slice(0, 8)}...${apiKeyMatch[0].slice(-4)})`,
+    const allowed = ALLOWED_GOOGLE_API_KEY_PATHS.some((pattern) =>
+      pattern.test(normalized),
     );
+    if (!allowed) {
+      failures.push(
+        `Google API key in tracked file: ${normalized} (${apiKeyMatch[0].slice(0, 8)}...${apiKeyMatch[0].slice(-4)})`,
+      );
+    }
   }
 
   if (PRIVATE_KEY_PATTERN.test(source)) {
