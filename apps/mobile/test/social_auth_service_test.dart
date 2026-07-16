@@ -5,6 +5,8 @@ import "package:the_eye_mobile/auth/social_auth_service.dart";
 import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "support/fake_google_sign_in.dart";
+
 class _FakeFirebaseAuth implements FirebaseAuth {
   @override
   Future<void> signOut() async {}
@@ -68,6 +70,7 @@ void main() {
       ),
       sessionStore: InMemoryAuthSessionStore(),
       firebaseAuth: _FakeFirebaseAuth(),
+      googleSignIn: FakeGoogleSignIn(),
       googleCredentialFactory: () async {
         await Future<void>.delayed(const Duration(milliseconds: 100));
         return _FakeUserCredential(_FakeUser("firebase-id-token"));
@@ -96,6 +99,7 @@ void main() {
       ),
       sessionStore: InMemoryAuthSessionStore(),
       firebaseAuth: _FakeFirebaseAuth(),
+      googleSignIn: FakeGoogleSignIn(),
       googleCredentialFactory: () async => null,
     );
 
