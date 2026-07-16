@@ -1,0 +1,18 @@
+# Port 80 — ACME challenge, health, and optional HTTP proxy (bootstrap or dev).
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${THE_EYE_SERVER_NAME};
+
+  location = /healthz {
+    access_log off;
+    add_header Content-Type text/plain;
+    return 200 "ok\n";
+  }
+
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+
+  ${THE_EYE_HTTP_BLOCK}
+}

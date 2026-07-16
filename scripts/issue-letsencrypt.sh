@@ -2,9 +2,11 @@
 set -euo pipefail
 
 # Issue or renew Let's Encrypt certificates for THE EYE nginx.
-# Requires: nginx running on port 80, DNS pointing to this host, THE_EYE_SERVER_NAME set.
+# Phase 1: nginx in HTTP bootstrap mode (THE_EYE_TLS_BOOTSTRAP=auto, THE_EYE_SSL_REDIRECT=false)
+# Phase 2: run this script, then set THE_EYE_SSL_REDIRECT=true and restart nginx.
 
 COMPOSE_FILE="${COMPOSE_FILE:-infra/docker/docker-compose.yml}"
+ENV_FILE="${ENV_FILE:-.env}"
 SERVER_NAME="${THE_EYE_SERVER_NAME:-}"
 EMAIL="${CERTBOT_EMAIL:-}"
 
@@ -12,7 +14,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 if [[ -z "$SERVER_NAME" ]]; then
-  echo "Set THE_EYE_SERVER_NAME (e.g. admin.example.com)" >&2
+  echo "Set THE_EYE_SERVER_NAME (e.g. staging-admin.theeye.com.ng)" >&2
   exit 1
 fi
 
@@ -24,8 +26,20 @@ fi
 CERT_LIVE="$REPO_ROOT/infra/docker/nginx/certs/live"
 mkdir -p "$CERT_LIVE"
 
+COMPOSE=(docker compose -f "$COMPOSE_FILE")
+if [[ -f "$ENV_FILE" ]]; then
+  COMPOSE+=(--env-file "$ENV_FILE")
+fi
+
+echo "Ensuring nginx is running in HTTP bootstrap mode for ACME ..."
+export THE_EYE_TLS_BOOTSTRAP=auto
+export THE_EYE_SSL_REDIRECT=false
+export THE_EYE_GENERATE_DEV_SSL=false
+
+"${COMPOSE[@]}" up -d nginx
+
 echo "Requesting certificate for $SERVER_NAME ..."
-docker compose -f "$COMPOSE_FILE" --profile certbot run --rm certbot certonly \
+"${COMPOSE[@]}" --profile certbot run --rm certbot certonly \
   --webroot \
   --webroot-path=/var/www/certbot \
   --email "$EMAIL" \
@@ -44,5 +58,8 @@ else
   exit 1
 fi
 
-echo "Set THE_EYE_SSL_REDIRECT=true in .env, then restart nginx:"
-echo "  docker compose -f $COMPOSE_FILE restart nginx"
+echo ""
+echo "Phase 2 — enable HTTPS:"
+echo "  1. Set THE_EYE_SSL_REDIRECT=true in ${ENV_FILE}"
+echo "  2. Restart nginx:"
+echo "     ${COMPOSE[*]} restart nginx"
