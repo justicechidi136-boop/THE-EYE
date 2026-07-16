@@ -1,6 +1,7 @@
 # Deployment Notes
 
 > **Production runbooks:** [Production Deployment Guide](./production-deployment-guide.md) · [Rollback Guide](./rollback-guide.md) · [Maintenance Guide](./maintenance-guide.md)  
+> **Staging runbooks:** [STAGING_DEPLOYMENT.md](./STAGING_DEPLOYMENT.md) · [STAGING_TROUBLESHOOTING.md](./STAGING_TROUBLESHOOTING.md)  
 > **CI/CD & GitHub Environments:** [GitHub Workflows](./github-workflows.md)
 
 Production deployment uses `infra/docker/docker-compose.yml` with nginx TLS termination on port 443.
