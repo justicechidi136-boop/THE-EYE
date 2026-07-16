@@ -1,28 +1,31 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 ENV NODE_ENV=production
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 FROM base AS deps
-COPY package.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN npm install --include=dev
+RUN pnpm install --frozen-lockfile
 
 FROM deps AS development
 ENV NODE_ENV=development
 COPY . .
 EXPOSE 4000
-CMD ["npm", "--workspace", "apps/api", "run", "start:dev"]
+CMD ["pnpm", "--filter", "@the-eye/api", "run", "start:dev"]
 
 FROM deps AS builder
 COPY . .
-RUN npm --workspace packages/shared run build
-RUN npm --workspace apps/api run prisma:generate
-RUN npm --workspace apps/api run build
+RUN pnpm --filter @the-eye/shared run build
+RUN pnpm --filter @the-eye/api run prisma:generate
+RUN pnpm --filter @the-eye/api exec nest build
 
 FROM base AS production
 RUN addgroup -S nodejs && adduser -S nestjs -G nodejs
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
