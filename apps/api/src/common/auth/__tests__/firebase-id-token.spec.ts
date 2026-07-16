@@ -199,6 +199,6 @@ describe("peekFirebaseIdToken", () => {
   });
 
   it("returns null for malformed tokens", () => {
-    expect(peekFirebaseIdToken("not-a-jwt")).toBeNull();
+    expect(peekFirebaseIdToken("not-a-jwt")).toEqual(null);
   });
 });

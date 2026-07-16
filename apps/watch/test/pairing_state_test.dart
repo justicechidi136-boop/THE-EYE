@@ -25,7 +25,8 @@ class FakePreferencesStore extends PreferencesStore {
 }
 
 class FakeWatchApiClient extends WatchApiClient {
-  FakeWatchApiClient() : super(httpClient: null, baseUrl: 'http://test/v1');
+  FakeWatchApiClient()
+      : super(httpClient: null, baseUrl: 'http://test/v1', skipEnvGuard: true);
 
   final List<Map<String, dynamic>> posts = [];
 

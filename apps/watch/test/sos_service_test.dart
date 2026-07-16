@@ -69,7 +69,11 @@ SosService _buildSosService(
     deviceId: 'watch-test-1',
     deviceSecret: 'secret',
   );
-  final api = WatchApiClient(httpClient: client, baseUrl: 'http://test/v1');
+  final api = WatchApiClient(
+    httpClient: client,
+    baseUrl: 'http://test/v1',
+    skipEnvGuard: true,
+  );
   final prefs = preferences ?? InMemoryPreferencesStore();
   final conn = connectivity ?? ConnectivityService(internetAvailable: true);
   var idCount = 0;
