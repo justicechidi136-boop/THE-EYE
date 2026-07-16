@@ -262,8 +262,7 @@ jobs:
         run: flutter analyze lib test --no-fatal-infos --no-fatal-warnings
 
       - name: Test
-        working-directory: apps/mobile
-        run: flutter test
+        run: pnpm run mobile:test
 
       - name: Validate mobile Firebase wiring
         run: |
