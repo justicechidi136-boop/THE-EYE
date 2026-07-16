@@ -24,7 +24,7 @@ class FirebaseOptionsProduction {
       "137367371675-7sikh2svb9k1c7ft8mqsmkmjpqpnav36.apps.googleusercontent.com";
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: "REPLACE_WITH_PRODUCTION_API_KEY",
+    apiKey: "AIzaSyCab9jm1fneeOk0ycWUQDb6mHiBvmXJoAs",
     appId: "1:137367371675:android:7c280f69a27799b3a2ab3e",
     messagingSenderId: "137367371675",
     projectId: "the-eye-2pd-d0217",

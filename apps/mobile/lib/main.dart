@@ -222,9 +222,13 @@ Future<void> main() async {
         );
       } catch (error, stackTrace) {
         StartupDiagnostics.recordZoneError(error, stackTrace);
-        StartupDiagnostics.checkpoint(
-          "STARTUP 2: Firebase skipped for ${AppFlavorConfig.current.name} ($error)",
-        );
+        if (AppFlavorConfig.isDevelopment) {
+          StartupDiagnostics.checkpoint(
+            "STARTUP 2: Firebase skipped for ${AppFlavorConfig.current.name} ($error)",
+          );
+        } else {
+          rethrow;
+        }
       }
     }
 

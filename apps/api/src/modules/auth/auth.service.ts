@@ -7,13 +7,16 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { AdminRoleName, adminRolePermissions, userRolePermissions, UserRole } from "@the-eye/shared";
 import type { VerifiedFirebaseIdentity } from "../../common/auth/firebase-id-token";
+import { peekFirebaseIdToken } from "../../common/auth/firebase-id-token";
 import { FirebaseAuthVerifier } from "../../common/auth/firebase-auth.verifier";
+import { assertFirebaseProjectConfigured } from "../../common/auth/firebase-project";
 import { hashOtp, hashPassword, hashToken, randomToken, verifyPassword } from "../../common/auth/crypto";
 import { parseTtl, signJwt, verifyJwt, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret, requireJwtRefreshSecret } from "../../common/auth/jwt-secrets";
@@ -41,6 +44,8 @@ type GoogleInput = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ConfigService) private readonly config: ConfigService,
@@ -410,9 +415,17 @@ export class AuthService {
   }
 
   private async verifyFirebaseIdentity(idToken: string, expectedProvider: "google.com" | "apple.com") {
+    const expectedProjectId = assertFirebaseProjectConfigured(this.config);
     try {
       return await this.firebaseVerifier.verify(idToken, expectedProvider);
-    } catch {
+    } catch (error) {
+      const peek = peekFirebaseIdToken(idToken);
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Firebase token verification failed (expectedProject=${expectedProjectId}, ` +
+          `tokenAud=${peek?.aud ?? "unknown"}, tokenIss=${peek?.iss ?? "unknown"}, ` +
+          `tokenProvider=${peek?.provider ?? "unknown"}, expectedProvider=${expectedProvider}): ${reason}`,
+      );
       throw new UnauthorizedException("Invalid Firebase identity token");
     }
   }

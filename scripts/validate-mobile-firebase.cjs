@@ -63,13 +63,14 @@ function readDartFirebaseOptions(flavor) {
   const source = fs.readFileSync(filePath, "utf8");
   const projectId = source.match(/projectId:\s*"([^"]+)"/)?.[1];
   const appId = source.match(/appId:\s*"([^"]+)"/)?.[1];
+  const apiKey = source.match(/apiKey:\s*"([^"]+)"/)?.[1];
   const messagingSenderId = source.match(
     /messagingSenderId:\s*"([^"]+)"/,
   )?.[1];
   const webClientId = source.match(
     /androidGoogleWebClientId\s*=\s*"([^"]+)"/,
   )?.[1];
-  return { projectId, appId, messagingSenderId, webClientId, source };
+  return { projectId, appId, apiKey, messagingSenderId, webClientId, source };
 }
 
 function readGoogleServicesForPackage(googleServices, packageName) {
@@ -86,7 +87,8 @@ function readGoogleServicesForPackage(googleServices, packageName) {
   const webClientId = client?.oauth_client?.find(
     (oauth) => oauth.client_type === 3,
   )?.client_id;
-  return { projectId, senderId, appId, packageNameFromClient, webClientId };
+  const apiKey = client?.api_key?.[0]?.current_key;
+  return { projectId, senderId, appId, packageNameFromClient, webClientId, apiKey };
 }
 
 for (const flavor of flavors) {
@@ -150,6 +152,14 @@ for (const flavor of flavors) {
   if (dart.webClientId && dart.webClientId !== fromJson.webClientId) {
     failures.push(
       `${flavor} firebase_options web client ID does not match google-services.json`,
+    );
+  }
+  if (dart.apiKey?.startsWith("REPLACE_WITH_")) {
+    failures.push(`${flavor} firebase_options apiKey is still a placeholder`);
+  }
+  if (dart.apiKey && fromJson.apiKey && dart.apiKey !== fromJson.apiKey) {
+    failures.push(
+      `${flavor} firebase_options apiKey does not match google-services.json`,
     );
   }
 }

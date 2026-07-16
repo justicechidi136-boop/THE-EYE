@@ -1,5 +1,5 @@
 import { createSign, generateKeyPairSync } from "crypto";
-import { resetFirebaseCertCacheForTests, verifyFirebaseIdToken } from "../firebase-id-token";
+import { peekFirebaseIdToken, resetFirebaseCertCacheForTests, verifyFirebaseIdToken } from "../firebase-id-token";
 import {
   DEVELOPMENT_FIREBASE_PROJECT_ID,
   PRODUCTION_FIREBASE_PROJECT_ID,
@@ -177,5 +177,28 @@ describe("verifyFirebaseIdToken", () => {
     } catch (error) {
       expect(String((error as Error).message)).toContain("issuer");
     }
+  });
+});
+
+describe("peekFirebaseIdToken", () => {
+  it("returns aud, iss, and provider without verifying signature", () => {
+    const payload = Buffer.from(
+      JSON.stringify({
+        aud: STAGING_FIREBASE_PROJECT_ID,
+        iss: `https://securetoken.google.com/${STAGING_FIREBASE_PROJECT_ID}`,
+        firebase: { sign_in_provider: "google.com" },
+      }),
+    ).toString("base64url");
+    const token = `header.${payload}.signature`;
+
+    expect(peekFirebaseIdToken(token)).toEqual({
+      aud: STAGING_FIREBASE_PROJECT_ID,
+      iss: `https://securetoken.google.com/${STAGING_FIREBASE_PROJECT_ID}`,
+      provider: "google.com",
+    });
+  });
+
+  it("returns null for malformed tokens", () => {
+    expect(peekFirebaseIdToken("not-a-jwt")).toBeNull();
   });
 });
