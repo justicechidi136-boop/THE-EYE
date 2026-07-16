@@ -1,7 +1,7 @@
 FROM node:20-alpine AS base
 WORKDIR /app
-ENV NODE_ENV=production
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN apk add --no-cache openssl libc6-compat && \
+    corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -22,6 +22,7 @@ RUN pnpm --filter @the-eye/api run prisma:generate
 RUN pnpm --filter @the-eye/api exec nest build
 
 FROM base AS production
+ENV NODE_ENV=production
 RUN addgroup -S nodejs && adduser -S nestjs -G nodejs
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
