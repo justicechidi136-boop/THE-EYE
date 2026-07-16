@@ -186,6 +186,7 @@ describe("peekFirebaseIdToken", () => {
       JSON.stringify({
         aud: STAGING_FIREBASE_PROJECT_ID,
         iss: `https://securetoken.google.com/${STAGING_FIREBASE_PROJECT_ID}`,
+        exp: 1700000000,
         firebase: { sign_in_provider: "google.com" },
       }),
     ).toString("base64url");
@@ -194,6 +195,7 @@ describe("peekFirebaseIdToken", () => {
     expect(peekFirebaseIdToken(token)).toEqual({
       aud: STAGING_FIREBASE_PROJECT_ID,
       iss: `https://securetoken.google.com/${STAGING_FIREBASE_PROJECT_ID}`,
+      exp: 1700000000,
       provider: "google.com",
     });
   });

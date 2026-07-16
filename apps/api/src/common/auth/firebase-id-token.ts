@@ -30,6 +30,7 @@ function decodeJwtPart(part: string): Record<string, unknown> {
 export type FirebaseIdTokenPeek = {
   aud?: string;
   iss?: string;
+  exp?: number;
   provider?: string;
 };
 
@@ -42,11 +43,13 @@ export function peekFirebaseIdToken(idToken: string): FirebaseIdTokenPeek | null
     const payload = decodeJwtPart(parts[1]) as {
       aud?: string;
       iss?: string;
+      exp?: number;
       firebase?: { sign_in_provider?: string };
     };
     return {
       aud: typeof payload.aud === "string" ? payload.aud : undefined,
       iss: typeof payload.iss === "string" ? payload.iss : undefined,
+      exp: typeof payload.exp === "number" ? payload.exp : undefined,
       provider: payload.firebase?.sign_in_provider,
     };
   } catch {

@@ -425,7 +425,8 @@ export class AuthService {
       this.logger.warn(
         `Firebase token verification failed (expectedProject=${expectedProjectId}, ` +
           `tokenAud=${peek?.aud ?? "unknown"}, tokenIss=${peek?.iss ?? "unknown"}, ` +
-          `tokenProvider=${peek?.provider ?? "unknown"}, expectedProvider=${expectedProvider}): ${reason}`,
+          `tokenExp=${peek?.exp ?? "unknown"}, tokenProvider=${peek?.provider ?? "unknown"}, ` +
+          `expectedProvider=${expectedProvider}): ${reason}`,
       );
       const appEnv = resolveAppEnvironment({
         THE_EYE_APP_ENV: this.config.get<string>("THE_EYE_APP_ENV"),
