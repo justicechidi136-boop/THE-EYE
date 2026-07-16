@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { validateComposeLivekitKeys } = require("./validate-livekit-keys.cjs");
 
 const root = path.join(__dirname, "..");
 const composePath = path.join(root, "infra", "docker", "docker-compose.yml");
@@ -15,6 +16,7 @@ const requiredServices = [
   "nginx:",
   "api-migrate:",
   "api-seed:",
+  "api-create-admin:",
   "certbot:",
   "prometheus:",
 ];
@@ -31,12 +33,18 @@ const requiredComposeMarkers = [
   "certbot_www:",
   "prisma:deploy",
   "db:seed",
+  "db:create-admin",
   "DATABASE_DIRECT_URL",
   "THE_EYE_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_GENERATE_DEV_SSL",
+  "THE_EYE_TLS_BOOTSTRAP",
   "METRICS_BEARER_TOKEN:?",
   "condition: service_healthy",
+  "FCM_PROJECT_ID",
+  "FIREBASE_PROJECT_ID",
+  "THE_EYE_APP_ENV",
+  '"pnpm", "--filter"',
 ];
 
 const missingServices = requiredServices.filter((needle) => !compose.includes(needle));
@@ -48,14 +56,31 @@ if (missingServices.length || missingMarkers.length) {
   process.exit(1);
 }
 
+const livekitErrors = validateComposeLivekitKeys(compose, fs.readFileSync(
+  path.join(root, "infra", "docker", "livekit", "livekit.yaml"),
+  "utf8",
+));
+if (livekitErrors.length) {
+  console.error("Docker Compose smoke failed. LiveKit:", livekitErrors.join("; "));
+  process.exit(1);
+}
+
 const healthcheckCount = (compose.match(/healthcheck:/g) || []).length;
 if (healthcheckCount < 7) {
   console.error(`Docker Compose smoke failed. Expected at least 7 healthchecks, found ${healthcheckCount}.`);
   process.exit(1);
 }
 
-const nginxTemplate = fs.readFileSync(
-  path.join(root, "infra", "docker", "nginx", "render", "the-eye.conf.template"),
+const httpTemplate = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "render", "http.conf.template"),
+  "utf8",
+);
+const httpsTemplate = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "render", "https.conf.template"),
+  "utf8",
+);
+const upstreams = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "upstreams.conf"),
   "utf8",
 );
 const nginxLocations = fs.readFileSync(
@@ -63,16 +88,18 @@ const nginxLocations = fs.readFileSync(
   "utf8",
 );
 const nginxChecks = [
-  ["ssl_certificate", nginxTemplate, "HTTPS ssl_certificate"],
-  ["listen 443 ssl", nginxTemplate, "HTTPS listener"],
-  ["include /etc/nginx/snippets/ssl-params.conf", nginxTemplate, "SSL params snippet"],
-  ["include /etc/nginx/snippets/the-eye-locations.conf", nginxTemplate, "shared locations snippet"],
+  ["ssl_certificate", httpsTemplate, "HTTPS ssl_certificate"],
+  ["listen 443 ssl", httpsTemplate, "HTTPS listener"],
+  ["include /etc/nginx/snippets/ssl-params.conf", httpsTemplate, "SSL params snippet"],
+  ["include /etc/nginx/snippets/the-eye-locations.conf", httpsTemplate, "shared locations snippet"],
   ["location = /metrics", nginxLocations, "metrics blocked"],
   ["location /v1/", nginxLocations, "API /v1/ route"],
   ["proxy_pass http://the_eye_api", nginxLocations, "API upstream"],
   ["location /livekit/", nginxLocations, "LiveKit route"],
   ["proxy_pass http://the_eye_livekit", nginxLocations, "LiveKit upstream"],
-  ["/.well-known/acme-challenge/", nginxTemplate, "ACME challenge path"],
+  ["/.well-known/acme-challenge/", httpTemplate, "ACME challenge path"],
+  ["upstream the_eye_api", upstreams, "API upstream block"],
+  ["upstream the_eye_livekit", upstreams, "LiveKit upstream block"],
 ];
 for (const [needle, content, label] of nginxChecks) {
   if (!content.includes(needle)) {
@@ -85,8 +112,23 @@ const entrypoint = fs.readFileSync(
   path.join(root, "infra", "docker", "nginx", "entrypoint.d", "20-render-the-eye-conf.sh"),
   "utf8",
 );
-if (!entrypoint.includes("THE_EYE_SSL_REDIRECT") || !entrypoint.includes("openssl req")) {
-  console.error("Docker Compose smoke failed. Nginx entrypoint SSL logic is incomplete.");
+const entrypointChecks = [
+  "THE_EYE_SSL_REDIRECT",
+  "THE_EYE_TLS_BOOTSTRAP",
+  "openssl req",
+  "10-http.conf",
+  "20-https.conf",
+];
+for (const needle of entrypointChecks) {
+  if (!entrypoint.includes(needle)) {
+    console.error(`Docker Compose smoke failed. Nginx entrypoint missing ${needle}.`);
+    process.exit(1);
+  }
+}
+
+const apiDockerfile = fs.readFileSync(path.join(root, "apps", "api", "Dockerfile"), "utf8");
+if (!apiDockerfile.includes("corepack") || !apiDockerfile.includes("pnpm install --frozen-lockfile")) {
+  console.error("Docker Compose smoke failed. API Dockerfile must use corepack + pnpm frozen lockfile.");
   process.exit(1);
 }
 

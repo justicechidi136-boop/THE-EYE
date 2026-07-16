@@ -24,6 +24,7 @@ const requiredInExample = [
   "THE_EYE_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_GENERATE_DEV_SSL",
+  "THE_EYE_TLS_BOOTSTRAP",
   "HTTPS_PORT",
   "API_ORIGIN",
   "ADMIN_WEB_APP_ENV",
@@ -32,6 +33,7 @@ const requiredInExample = [
   "NEXT_PUBLIC_LIVEKIT_URL",
   "ADMIN_EMAIL",
   "ADMIN_PASSWORD",
+  "CERTBOT_EMAIL",
 ];
 
 const requiredInCompose = [
@@ -49,6 +51,10 @@ const requiredInCompose = [
   "THE_EYE_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_GENERATE_DEV_SSL",
+  "THE_EYE_TLS_BOOTSTRAP",
+  "FCM_PROJECT_ID",
+  "FIREBASE_PROJECT_ID",
+  "THE_EYE_APP_ENV",
 ];
 
 const missingExample = requiredInExample.filter((key) => !example.includes(`${key}=`));
