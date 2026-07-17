@@ -440,6 +440,7 @@ jobs:
         run: |
           node scripts/docker-compose-smoke.cjs
           node scripts/validate-livekit-keys.cjs
+          node scripts/validate-nginx-config.cjs
 
       - name: Build staging API Docker image
         run: |
