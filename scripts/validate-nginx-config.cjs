@@ -289,6 +289,12 @@ function writeFixtureTree(label, fixtures) {
   return tmp;
 }
 
+const VALIDATION_UPSTREAM_HOSTS = [
+  "api:127.0.0.1",
+  "admin-web:127.0.0.1",
+  "livekit:127.0.0.1",
+];
+
 function nginxTestWithDocker(label, fixtureRoot) {
   if (!dockerAvailable()) {
     if (label === "http-bootstrap") {
@@ -303,6 +309,7 @@ function nginxTestWithDocker(label, fixtureRoot) {
     [
       "run",
       "--rm",
+      ...VALIDATION_UPSTREAM_HOSTS.flatMap((host) => ["--add-host", host]),
       "--entrypoint",
       "nginx",
       "-v",
