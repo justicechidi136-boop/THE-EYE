@@ -15,9 +15,8 @@ on:
           - production
           - staging
       image_tag:
-        description: Docker image tag (THE_EYE_IMAGE_TAG)
+        description: Docker image tag (THE_EYE_IMAGE_TAG; defaults to commit SHA when empty)
         required: false
-        default: ${{ github.sha }}
       run_migrations:
         description: Run prisma migrate deploy
         required: true
