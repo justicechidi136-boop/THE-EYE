@@ -14,11 +14,18 @@ const path = require("path");
 
 const CANONICAL_API_URL = "https://staging-api.theeye.com.ng/v1";
 
-const FORBIDDEN_MARKERS = [
+const FORBIDDEN_URL_MARKERS = [
   "https://staging-dashboard8jps.theeye.com.ng/v1",
   "https://api.theeye.com.ng",
-  "localhost",
-  "127.0.0.1",
+];
+
+// Misconfigured API endpoints — not bare "localhost"/"127.0.0.1", which appear in
+// server bundle validation code and dev-only error strings.
+const FORBIDDEN_LOCAL_API_URL_MARKERS = [
+  "http://localhost:",
+  "https://localhost:",
+  "http://127.0.0.1:",
+  "https://127.0.0.1:",
 ];
 
 const TEXT_EXTENSIONS = /\.(js|json|html|txt|map|css|xml|dart)$/i;
@@ -92,6 +99,21 @@ function contentIncludes(content, needle) {
   return content.includes(needle);
 }
 
+function isAdminClientBundle(filePath) {
+  const normalized = filePath.split(path.sep).join("/");
+  return normalized.includes("/.next/static/");
+}
+
+function forbiddenMarkersForTarget(label, filePath) {
+  const markers = [...FORBIDDEN_URL_MARKERS];
+  const checkLocalApiUrls =
+    label !== "admin-next" || isAdminClientBundle(filePath);
+  if (checkLocalApiUrls) {
+    markers.push(...FORBIDDEN_LOCAL_API_URL_MARKERS);
+  }
+  return markers;
+}
+
 function collectTargets(options) {
   const targets = [];
 
@@ -130,7 +152,7 @@ function validateArtifacts(targets) {
       canonicalFound = true;
     }
 
-    for (const marker of FORBIDDEN_MARKERS) {
+    for (const marker of forbiddenMarkersForTarget(label, file)) {
       if (contentIncludes(content, marker)) {
         forbiddenHits.push({ label, file, marker });
       }
