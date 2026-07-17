@@ -55,21 +55,30 @@ else
   echo "TLS certificates missing — serving HTTP only until certs are installed."
 fi
 
+THE_EYE_HEALTH_BLOCK='location = /healthz {
+  access_log off;
+  default_type text/plain;
+  return 200 "ok\n";
+}'
+
 if [ "$THE_EYE_SSL_REDIRECT" = "true" ] && [ "$bootstrap_mode" = "true" ]; then
   echo "WARNING: THE_EYE_SSL_REDIRECT=true but HTTPS is unavailable — serving HTTP-only until certificates exist."
+  export THE_EYE_HEALTH_BLOCK
   export THE_EYE_HTTP_BLOCK='location / {
     return 503 "TLS bootstrap in progress — retry after certificate issuance\n";
     add_header Content-Type text/plain;
   }'
 elif [ "$THE_EYE_SSL_REDIRECT" = "true" ]; then
+  export THE_EYE_HEALTH_BLOCK
   export THE_EYE_HTTP_BLOCK='location / {
     return 301 https://$host$request_uri;
   }'
 else
+  export THE_EYE_HEALTH_BLOCK=''
   export THE_EYE_HTTP_BLOCK='include /etc/nginx/snippets/the-eye-locations.conf;'
 fi
 
-envsubst '${THE_EYE_SERVER_NAME} ${THE_EYE_HTTP_BLOCK}' < "$HTTP_TEMPLATE" > "$CONF_D/10-http.conf"
+envsubst '${THE_EYE_SERVER_NAME} ${THE_EYE_HTTP_BLOCK} ${THE_EYE_HEALTH_BLOCK}' < "$HTTP_TEMPLATE" > "$CONF_D/10-http.conf"
 
 if [ "$bootstrap_mode" = "false" ]; then
   envsubst '${THE_EYE_SERVER_NAME}' < "$HTTPS_TEMPLATE" > "$CONF_D/20-https.conf"
