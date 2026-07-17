@@ -199,8 +199,10 @@ jobs:
       - name: Build admin-web (staging)
         run: pnpm --filter @the-eye/admin-web run build
 
-      - name: Validate staging bundle isolation
-        run: node scripts/validate-admin-next-bundle.cjs apps/admin-web/.next staging "${NEXT_PUBLIC_API_BASE_URL}"
+      - name: Validate staging artifacts
+        run: |
+          node scripts/validate-staging-artifacts.cjs --admin-next apps/admin-web/.next
+          node scripts/validate-admin-next-bundle.cjs apps/admin-web/.next staging "${NEXT_PUBLIC_API_BASE_URL}"
 
   mobile:
     name: Mobile staging analyze, test, build
@@ -285,6 +287,10 @@ jobs:
         if: steps.mobile_gs_json.outputs.has_secret == 'true'
         run: pnpm --dir apps/mobile exec flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging
 
+      - name: Validate mobile staging artifact
+        if: steps.mobile_gs_json.outputs.has_secret == 'true'
+        run: node scripts/validate-staging-artifacts.cjs --mobile-apk apps/mobile/build/app/outputs/flutter-apk/app-staging-release.apk
+
   watch:
     name: Watch staging analyze, test, build
     runs-on: ubuntu-latest
@@ -363,6 +369,10 @@ jobs:
       - name: Build staging debug APK
         if: steps.watch_gs_json.outputs.has_secret == 'true'
         run: pnpm --dir apps/watch exec flutter build apk --flavor staging --debug
+
+      - name: Validate watch staging artifact
+        if: steps.watch_gs_json.outputs.has_secret == 'true'
+        run: node scripts/validate-staging-artifacts.cjs --watch-apk apps/watch/build/app/outputs/flutter-apk/app-staging-debug.apk
 
   firebase:
     name: Firebase staging guards

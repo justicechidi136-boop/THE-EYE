@@ -13,6 +13,8 @@ Deploy THE EYE to the Ubuntu 24.04 staging VPS using Docker Compose.
 
 Each service is served by a dedicated nginx `server_name`. The admin dashboard hostname must **not** be used as the canonical API URL in clients.
 
+For the full **order-of-operations** rollout (DNS → HTTP bootstrap → ACME → HTTPS → migration gate → rollback), see [STAGING_SUBDOMAIN_DEPLOYMENT.md](./STAGING_SUBDOMAIN_DEPLOYMENT.md).
+
 ## Prerequisites
 
 - Ubuntu 24.04 with Docker Engine and Compose v2

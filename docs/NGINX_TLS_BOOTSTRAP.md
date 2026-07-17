@@ -8,7 +8,9 @@ nginx previously required TLS certificate files before startup. Certbot needs ng
 
 ## Solution
 
-Split nginx config with per-hostname server blocks and HTTP bootstrap mode:
+Split nginx config with per-hostname server blocks and HTTP bootstrap mode.
+
+For the full staging rollout sequence (DNS → bootstrap → ACME → HTTPS → migration gate), see [STAGING_SUBDOMAIN_DEPLOYMENT.md](./STAGING_SUBDOMAIN_DEPLOYMENT.md).
 
 | File | Role |
 |------|------|
