@@ -181,28 +181,27 @@ function buildFixtureConfigs() {
   };
 }
 
-function devTlsPrivateKeyPem() {
-  // Assembled at runtime so validate-secrets.cjs does not flag this tracked file.
-  const begin = ["-----BEGIN", "PRIVATE KEY-----"].join(" ");
-  const end = ["-----END", "PRIVATE KEY-----"].join(" ");
-  const body = [
-    "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKB",
-    "AgEAAoIBAQC7VJTUt9Us8cKB",
-  ].join("\n");
-  return `${begin}\n${body}\n${end}\n`;
-}
-
 function writeDevTlsMaterial(certsLive) {
-  const key = devTlsPrivateKeyPem();
-  const cert = `-----BEGIN CERTIFICATE-----
-MIIBkTCB+wIJAKHBfpEHI0YwMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWxv
-Y2FsaG9zdDAeFw0yNTAxMDEwMDAwMDBaFw0yNjAxMDEwMDAwMDBaMBQxEjAQBgNV
-BAMMCWxvY2FsaG9zdDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABLuUlNS31Szx
-wokCAQ==
------END CERTIFICATE-----
-`;
-  fs.writeFileSync(path.join(certsLive, "privkey.pem"), key, "utf8");
-  fs.writeFileSync(path.join(certsLive, "fullchain.pem"), cert, "utf8");
+  const keyPath = path.join(certsLive, "privkey.pem");
+  const certPath = path.join(certsLive, "fullchain.pem");
+
+  // Generate valid self-signed material at runtime (never commit PEM fixtures).
+  try {
+    execSync(
+      [
+        "openssl req -x509 -nodes -days 1 -newkey rsa:2048",
+        `-keyout "${keyPath}"`,
+        `-out "${certPath}"`,
+        '-subj "/CN=localhost"',
+      ].join(" "),
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    return;
+  } catch {
+    // Hosts without openssl skip nginx -t when docker is unavailable.
+    fs.writeFileSync(keyPath, "REPLACE_WITH_TEST_KEY\n", "utf8");
+    fs.writeFileSync(certPath, "REPLACE_WITH_TEST_CERT\n", "utf8");
+  }
 }
 
 function writeFixtureTree(label, fixtures) {
