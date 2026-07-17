@@ -10,6 +10,7 @@ const STAGING_PROJECT_MARKERS = ["the-eye-2stg"];
 const PRODUCTION_PROJECT_MARKERS = ["the-eye-2pd-d0217"];
 const PRODUCTION_API_HOST = "api.theeye.com.ng";
 const STAGING_API_HOST = "staging-api.theeye.com.ng";
+const STAGING_ADMIN_HOST = "staging-dashboard8jps.theeye.com.ng";
 
 function fail(message) {
   console.error(`[admin-web docker build] ${message}`);
@@ -56,6 +57,9 @@ if (apiBaseUrl.startsWith("http://")) {
 
 if (apiBaseUrl.startsWith("https://")) {
   const host = apiHostname(apiBaseUrl);
+  if (appEnv === "staging" && host === STAGING_ADMIN_HOST) {
+    fail("Staging image must not use admin dashboard hostname as API URL — use https://staging-api.theeye.com.ng/v1");
+  }
   if (appEnv === "staging" && host === PRODUCTION_API_HOST) {
     fail("Staging image must not target production API hosts");
   }

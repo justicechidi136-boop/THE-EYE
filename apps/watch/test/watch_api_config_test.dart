@@ -71,6 +71,16 @@ void main() {
       );
     });
 
+    test('rejects dashboard hostname as API for staging flavor', () {
+      expect(
+        () => assertWatchApiBaseUrlMatchesFlavor(
+          WatchFirebaseEnv.staging,
+          'https://staging-dashboard8jps.theeye.com.ng/v1',
+        ),
+        throwsStateError,
+      );
+    });
+
     test('rejects local dev API for staging flavor', () {
       expect(
         () => assertWatchApiBaseUrlMatchesFlavor(

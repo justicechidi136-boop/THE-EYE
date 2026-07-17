@@ -13,10 +13,11 @@
         "the-eye-2stg.firebaseapp.com",
         "the-eye-2stg.web.app",
         "staging-api.theeye.com.ng",
-        "staging-admin.theeye.com.ng"
+        "staging-dashboard8jps.theeye.com.ng",
+        "staging-livekit.theeye.com.ng"
       ],
       "apiBaseUrl": "https://staging-api.theeye.com.ng/v1",
-      "adminWebUrl": "https://staging-admin.theeye.com.ng",
+      "adminWebUrl": "https://staging-dashboard8jps.theeye.com.ng",
       "privacyPolicyUrl": "https://theeye.com.ng/privacy",
       "supportEmail": "support@theeye.com.ng",
       "apps": {

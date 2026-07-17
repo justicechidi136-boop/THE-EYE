@@ -18,6 +18,7 @@ const DEVELOPMENT_LEAK_MARKERS = ["the-eye-29cff", "NEXT_PUBLIC_APP_ENV=local", 
 
 const PRODUCTION_API_HOST = "api.theeye.com.ng";
 const STAGING_API_HOST = "staging-api.theeye.com.ng";
+const STAGING_ADMIN_HOST = "staging-dashboard8jps.theeye.com.ng";
 
 function apiHostname(apiBaseUrl: string): string | null {
   try {
@@ -34,6 +35,10 @@ function isProductionApiHost(apiBaseUrl: string): boolean {
 
 function isStagingApiHost(apiBaseUrl: string): boolean {
   return apiHostname(apiBaseUrl) === STAGING_API_HOST;
+}
+
+function isStagingAdminHost(apiBaseUrl: string): boolean {
+  return apiHostname(apiBaseUrl) === STAGING_ADMIN_HOST;
 }
 
 function isProductionNodeEnv(): boolean {
@@ -106,6 +111,11 @@ function validateDeployableApiBaseUrl(appEnv: DeployableAppEnv, apiBaseUrl: stri
   }
 
   if (apiBaseUrl.startsWith("https://")) {
+    if (appEnv === "staging" && isStagingAdminHost(apiBaseUrl)) {
+      throw new Error(
+        "Staging admin-web build must not use admin dashboard hostname as API URL — use https://staging-api.theeye.com.ng/v1",
+      );
+    }
     if (appEnv === "staging" && isProductionApiHost(apiBaseUrl)) {
       throw new Error("Staging admin-web build must not target production API hosts");
     }

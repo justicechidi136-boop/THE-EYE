@@ -35,6 +35,7 @@ abstract final class TheEyeApiConfig {
 
   static const String productionApiHost = "api.theeye.com.ng";
   static const String stagingApiHost = "staging-api.theeye.com.ng";
+  static const String stagingAdminHost = "staging-dashboard8jps.theeye.com.ng";
 
   static String resolveBaseUrl() {
     final flavor = AppFlavorConfig.current;
@@ -91,6 +92,14 @@ abstract final class TheEyeApiConfig {
   static bool isStagingApiUrl(String baseUrl) {
     return baseUrl.toLowerCase().contains(stagingApiHost);
   }
+
+  static bool isDashboardProxyApiUrl(String baseUrl) {
+    return baseUrl.toLowerCase().contains(stagingAdminHost);
+  }
+
+  static bool isHttpsUrl(String baseUrl) {
+    return baseUrl.toLowerCase().startsWith("https://");
+  }
 }
 
 /// Ensures a build flavor cannot call the wrong API environment.
@@ -104,6 +113,20 @@ void assertMobileApiBaseUrlMatchesFlavor(
       "Environment guard: ${flavor.name} build cannot use a local dev API "
       "(`$baseUrl`). Use `--flavor development` for local PC testing, or "
       "`https://${TheEyeApiConfig.stagingApiHost}/v1` for staging.",
+    );
+  }
+
+  if (TheEyeApiConfig.isDashboardProxyApiUrl(baseUrl)) {
+    throw StateError(
+      "Environment guard: ${flavor.name} build cannot use admin dashboard as API "
+      "(`$baseUrl`). Use `https://${TheEyeApiConfig.stagingApiHost}/v1`.",
+    );
+  }
+
+  if (flavor != AppFlavor.development && !TheEyeApiConfig.isHttpsUrl(baseUrl)) {
+    throw StateError(
+      "Environment guard: ${flavor.name} build must use HTTPS API URLs "
+      "(`$baseUrl`).",
     );
   }
 
