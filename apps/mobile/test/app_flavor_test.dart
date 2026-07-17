@@ -196,7 +196,17 @@ void main() {
       );
     });
 
-    test("rejects local dev API for staging flavor", () {
+    test("rejects dashboard hostname as API for staging flavor", () {
+      expect(
+        () => assertMobileApiBaseUrlMatchesFlavor(
+          AppFlavor.staging,
+          "https://staging-dashboard8jps.theeye.com.ng/v1",
+        ),
+        throwsStateError,
+      );
+    });
+
+    test("rejects non-HTTPS API for staging flavor", () {
       expect(
         () => assertMobileApiBaseUrlMatchesFlavor(
           AppFlavor.staging,
