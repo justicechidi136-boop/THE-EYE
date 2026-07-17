@@ -93,7 +93,7 @@ Create two environments under **Settings → Environments**.
 
 | Name | Example value |
 |------|-----------------|
-| `NEXT_PUBLIC_API_BASE_URL` | `https://staging-api.theeye.com.ng` *(fallback used when unset)* |
+| `NEXT_PUBLIC_API_BASE_URL` | `https://staging-api.theeye.com.ng/v1` *(fallback used when unset)* |
 | `THE_EYE_APP_ENV` | `staging` *(fallback used when unset)* |
 | `FCM_PROJECT_ID` | `the-eye-2stg` *(fallback used when unset)* |
 | `FIREBASE_PROJECT_ID` | `the-eye-2stg` *(fallback used when unset)* |

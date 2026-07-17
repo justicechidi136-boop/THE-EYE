@@ -20,7 +20,7 @@ Do **not** duplicate keys in `livekit.yaml` — port/RTC settings only belong th
 LIVEKIT_API_KEY=<staging-key>
 LIVEKIT_API_SECRET=<staging-secret-min-24-chars>
 LIVEKIT_URL=ws://livekit:7880
-NEXT_PUBLIC_LIVEKIT_URL=wss://staging-admin.theeye.com.ng/livekit
+NEXT_PUBLIC_LIVEKIT_URL=wss://staging-livekit.theeye.com.ng
 ```
 
 Use staging-only keys. Never reuse production LiveKit credentials on staging.
@@ -33,7 +33,7 @@ pnpm run test:docker:livekit
 
 ## Nginx proxy
 
-WebSocket path: `/livekit/` → `livekit:7880` (see `infra/docker/nginx/snippets/the-eye-locations.conf`).
+WebSocket endpoint: `wss://staging-livekit.theeye.com.ng` → `livekit:7880` (see `infra/docker/nginx/snippets/livekit-locations.conf`).
 
 ## Troubleshooting
 
@@ -41,4 +41,4 @@ WebSocket path: `/livekit/` → `livekit:7880` (see `infra/docker/nginx/snippets
 |---------|-----|
 | `could not parse keys` | Ensure `LIVEKIT_KEYS` format is `key: secret` with space |
 | Duplicate key config | Remove any `keys:` block from `livekit.yaml` |
-| Client cannot connect | Verify `NEXT_PUBLIC_LIVEKIT_URL` uses `wss://` and nginx `/livekit/` route |
+| Client cannot connect | Verify `NEXT_PUBLIC_LIVEKIT_URL` uses `wss://staging-livekit.theeye.com.ng` (dedicated hostname, not dashboard path) |

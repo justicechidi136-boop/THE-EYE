@@ -60,7 +60,7 @@ jobs:
       S3_BUCKET: the-eye
       S3_ACCESS_KEY: ci_s3_access_key
       S3_SECRET_KEY: ci_s3_secret_key_32_chars_minimum
-      CORS_ORIGINS: https://staging-admin.theeye.com.ng
+      CORS_ORIGINS: https://staging-dashboard8jps.theeye.com.ng
       GOOGLE_OAUTH_CLIENT_ID: ci-google-oauth-client-id
     steps:
       - uses: actions/checkout@v4
@@ -154,7 +154,7 @@ jobs:
           export S3_BUCKET="the-eye"
           export S3_ACCESS_KEY="ci_s3_access_key"
           export S3_SECRET_KEY="ci_s3_secret_key_32_chars_minimum"
-          export CORS_ORIGINS="https://staging-admin.theeye.com.ng"
+          export CORS_ORIGINS="https://staging-dashboard8jps.theeye.com.ng"
           export GOOGLE_OAUTH_CLIENT_ID="ci-google-oauth-client-id"
           unset METRICS_BEARER_TOKEN
           unset FCM_CLIENT_EMAIL
@@ -184,7 +184,7 @@ jobs:
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
             echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in staging environment; using canonical fallback"
-            URL="https://staging-api.theeye.com.ng"
+            URL="https://staging-api.theeye.com.ng/v1"
           fi
           URL="$URL" node scripts/ci/validate-staging-api-url.mjs "$URL"
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
@@ -430,7 +430,7 @@ jobs:
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
             echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in staging environment; using canonical fallback"
-            URL="https://staging-api.theeye.com.ng"
+            URL="https://staging-api.theeye.com.ng/v1"
           fi
           URL="$URL" node scripts/ci/validate-staging-api-url.mjs "$URL"
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
