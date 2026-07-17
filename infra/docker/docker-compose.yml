@@ -288,7 +288,11 @@ services:
       - the-eye-internal
 
   api-migrate:
-    image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+    image: the-eye-api-tools:${THE_EYE_IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: tools
     profiles: ["tools"]
     env_file:
       - path: ../../.env
@@ -299,12 +303,13 @@ services:
     depends_on:
       postgres-postgis:
         condition: service_healthy
-    command: ["pnpm", "--filter", "@the-eye/api", "run", "prisma:deploy"]
+    working_dir: /app
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
     networks:
       - the-eye-internal
 
   api-seed:
-    image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+    image: the-eye-api-tools:${THE_EYE_IMAGE_TAG:-local}
     profiles: ["tools"]
     env_file:
       - path: ../../.env
@@ -318,14 +323,22 @@ services:
     depends_on:
       postgres-postgis:
         condition: service_healthy
-    command: ["pnpm", "--filter", "@the-eye/api", "run", "db:seed"]
+    working_dir: /app
+    command:
+      [
+        "node",
+        "--require",
+        "./src/preload-env.cjs",
+        "node_modules/tsx/dist/cli.mjs",
+        "prisma/seed.ts",
+      ]
     networks:
       - the-eye-internal
 
   # One-time bootstrap: upsert a single Super Admin from ADMIN_EMAIL / ADMIN_PASSWORD.
   # Safe for staging; do not run in production unless you intend to create that account.
   api-create-admin:
-    image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+    image: the-eye-api-tools:${THE_EYE_IMAGE_TAG:-local}
     profiles: ["tools"]
     env_file:
       - path: ../../.env
@@ -338,14 +351,22 @@ services:
     depends_on:
       postgres-postgis:
         condition: service_healthy
-    command: ["pnpm", "--filter", "@the-eye/api", "run", "db:create-admin"]
+    working_dir: /app
+    command:
+      [
+        "node",
+        "--require",
+        "./src/preload-env.cjs",
+        "node_modules/tsx/dist/cli.mjs",
+        "prisma/create-admin.ts",
+      ]
     networks:
       - the-eye-internal
 
   # Staging-only: idempotent role-based test accounts from STAGING_TEST_* env vars.
   # Requires THE_EYE_APP_ENV=staging and at least one STAGING_TEST_<ROLE>_EMAIL/PASSWORD pair.
   api-seed-staging:
-    image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+    image: the-eye-api-tools:${THE_EYE_IMAGE_TAG:-local}
     profiles: ["tools"]
     env_file:
       - path: ../../.env
@@ -359,7 +380,15 @@ services:
     depends_on:
       postgres-postgis:
         condition: service_healthy
-    command: ["pnpm", "--filter", "@the-eye/api", "run", "seed:staging:test-accounts"]
+    working_dir: /app
+    command:
+      [
+        "node",
+        "--require",
+        "./src/preload-env.cjs",
+        "node_modules/tsx/dist/cli.mjs",
+        "prisma/seed-staging-test-accounts.ts",
+      ]
     networks:
       - the-eye-internal
 

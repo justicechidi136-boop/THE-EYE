@@ -31,9 +31,11 @@ const requiredComposeMarkers = [
   "minio_data:",
   "nginx_cache:",
   "certbot_www:",
-  "prisma:deploy",
-  "db:seed",
-  "db:create-admin",
+  "node_modules/prisma/build/index.js",
+  "prisma/seed.ts",
+  "prisma/create-admin.ts",
+  "migrate",
+  "deploy",
   "DATABASE_DIRECT_URL",
   "THE_EYE_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
@@ -44,7 +46,8 @@ const requiredComposeMarkers = [
   "FCM_PROJECT_ID",
   "FIREBASE_PROJECT_ID",
   "THE_EYE_APP_ENV",
-  '"pnpm", "--filter"',
+  "the-eye-api-tools:",
+  "target: tools",
 ];
 
 const missingServices = requiredServices.filter((needle) => !compose.includes(needle));
@@ -127,8 +130,14 @@ for (const needle of entrypointChecks) {
 }
 
 const apiDockerfile = fs.readFileSync(path.join(root, "apps", "api", "Dockerfile"), "utf8");
-if (!apiDockerfile.includes("corepack") || !apiDockerfile.includes("pnpm install --frozen-lockfile")) {
-  console.error("Docker Compose smoke failed. API Dockerfile must use corepack + pnpm frozen lockfile.");
+if (
+  !apiDockerfile.includes("corepack") ||
+  !apiDockerfile.includes("pnpm install --frozen-lockfile") ||
+  !apiDockerfile.includes("pnpm --filter @the-eye/api deploy --prod")
+) {
+  console.error(
+    "Docker Compose smoke failed. API Dockerfile must use corepack, frozen lockfile, and pnpm deploy.",
+  );
   process.exit(1);
 }
 
