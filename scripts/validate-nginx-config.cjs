@@ -183,6 +183,15 @@ function buildFixtureConfigs() {
   };
 }
 
+function dockerRunAsCurrentUserArgs() {
+  const uid = process.getuid?.();
+  const gid = process.getgid?.();
+  if (uid === undefined || gid === undefined) {
+    return [];
+  }
+  return ["--user", `${uid}:${gid}`];
+}
+
 function writeDevTlsMaterial(certsLive) {
   const keyPath = path.join(certsLive, "privkey.pem");
   const certPath = path.join(certsLive, "fullchain.pem");
@@ -191,8 +200,12 @@ function writeDevTlsMaterial(certsLive) {
     if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
       return false;
     }
-    fs.chmodSync(keyPath, 0o600);
-    fs.chmodSync(certPath, 0o644);
+    try {
+      fs.chmodSync(keyPath, 0o600);
+      fs.chmodSync(certPath, 0o644);
+    } catch {
+      // alpine/openssl may leave root-owned files on bind mounts; nginx -t reads them in-container.
+    }
     return true;
   };
 
@@ -202,6 +215,7 @@ function writeDevTlsMaterial(certsLive) {
       [
         "run",
         "--rm",
+        ...dockerRunAsCurrentUserArgs(),
         "-v",
         `${certsLive}:/certs:rw`,
         "alpine/openssl",
