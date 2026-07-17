@@ -8,6 +8,18 @@ const nginxRoot = path.join(root, "infra", "docker", "nginx");
 const entrypointRel = "infra/docker/nginx/entrypoint.d/20-render-the-eye-conf.sh";
 const entrypointPath = path.join(root, entrypointRel);
 
+const FIXTURE_HOSTS = {
+  admin: "staging-dashboard8jps.example.test",
+  api: "staging-api.example.test",
+  livekit: "staging-livekit.example.test",
+};
+
+const SERVICE_SNIPPETS = {
+  admin: "admin-locations.conf",
+  api: "api-locations.conf",
+  livekit: "livekit-locations.conf",
+};
+
 function fail(message) {
   console.error(`validate-nginx-config: ${message}`);
   process.exit(1);
@@ -74,17 +86,45 @@ function assertEntrypointExecutableInGit() {
   }
 }
 
-function renderHttp(serverName, httpBlock, healthBlock) {
+function renderHttp(serverName, serviceLabel, httpBlock) {
   const template = read("infra/docker/nginx/render/http.conf.template");
   return template
     .replace(/\$\{THE_EYE_SERVER_NAME\}/g, serverName)
-    .replace("${THE_EYE_HTTP_BLOCK}", httpBlock)
-    .replace("${THE_EYE_HEALTH_BLOCK}", healthBlock);
+    .replace(/\$\{THE_EYE_SERVICE_LABEL\}/g, serviceLabel)
+    .replace("${THE_EYE_HTTP_BLOCK}", httpBlock);
 }
 
-function renderHttps(serverName) {
+function renderHttps(serverName, serviceLabel, locationsSnippet) {
   const template = read("infra/docker/nginx/render/https.conf.template");
-  return template.replace(/\$\{THE_EYE_SERVER_NAME\}/g, serverName);
+  return template
+    .replace(/\$\{THE_EYE_SERVER_NAME\}/g, serverName)
+    .replace(/\$\{THE_EYE_SERVICE_LABEL\}/g, serviceLabel)
+    .replace(/\$\{THE_EYE_SSL_CERT\}/g, "/etc/nginx/certs/live/fullchain.pem")
+    .replace(/\$\{THE_EYE_SSL_KEY\}/g, "/etc/nginx/certs/live/privkey.pem")
+    .replace(/\$\{THE_EYE_LOCATIONS_SNIPPET\}/g, locationsSnippet);
+}
+
+function renderAllHttp(httpBlock) {
+  return Object.entries(FIXTURE_HOSTS)
+    .map(([service, hostname]) =>
+      renderHttp(
+        hostname,
+        service,
+        httpBlock.replace("LOCATIONS_SNIPPET", SERVICE_SNIPPETS[service]),
+      ).replace(
+        "include /etc/nginx/snippets/LOCATIONS_SNIPPET;",
+        `include /etc/nginx/snippets/${SERVICE_SNIPPETS[service]};`,
+      ),
+    )
+    .join("\n\n");
+}
+
+function renderAllHttps() {
+  return Object.entries(FIXTURE_HOSTS)
+    .map(([service, hostname]) =>
+      renderHttps(hostname, service, SERVICE_SNIPPETS[service]),
+    )
+    .join("\n\n");
 }
 
 function expandSnippetIncludes(configText) {
@@ -120,7 +160,11 @@ function assertNoDuplicateHealthz(label, configText) {
 
 function assertSharedSnippetMarkers() {
   const upstreams = read("infra/docker/nginx/snippets/upstreams.conf");
-  const locations = read("infra/docker/nginx/snippets/the-eye-locations.conf");
+  const healthz = read("infra/docker/nginx/snippets/healthz.conf");
+  const admin = read("infra/docker/nginx/snippets/admin-locations.conf");
+  const api = read("infra/docker/nginx/snippets/api-locations.conf");
+  const livekit = read("infra/docker/nginx/snippets/livekit-locations.conf");
+  const entrypoint = read(entrypointRel);
 
   for (const needle of ["upstream the_eye_api", "upstream the_eye_admin_web", "upstream the_eye_livekit"]) {
     if (!upstreams.includes(needle)) {
@@ -128,58 +172,71 @@ function assertSharedSnippetMarkers() {
     }
   }
 
-  for (const needle of [
-    "proxy_pass http://the_eye_api",
-    "proxy_pass http://the_eye_livekit",
-    "proxy_set_header Upgrade $http_upgrade",
-    "proxy_set_header Connection $connection_upgrade",
-    "location = /healthz",
-    "default_type text/plain",
+  if ((healthz.match(/location\s*=\s*\/healthz/g) || []).length !== 1) {
+    fail("healthz.conf must define /healthz exactly once");
+  }
+
+  for (const [file, content, needles] of [
+    ["admin-locations.conf", admin, ["proxy_pass http://the_eye_admin_web", "DEPRECATED"]],
+    ["api-locations.conf", api, ["proxy_pass http://the_eye_api", "location /v1/"]],
+    [
+      "livekit-locations.conf",
+      livekit,
+      [
+        "proxy_pass http://the_eye_livekit",
+        "proxy_set_header Upgrade $http_upgrade",
+        "proxy_set_header Connection $connection_upgrade",
+      ],
+    ],
   ]) {
-    if (!locations.includes(needle)) {
-      fail(`the-eye-locations.conf missing ${needle}`);
+    for (const needle of needles) {
+      if (!content.includes(needle)) {
+        fail(`${file} missing ${needle}`);
+      }
     }
   }
 
-  if ((locations.match(/location\s*=\s*\/healthz/g) || []).length !== 1) {
-    fail("the-eye-locations.conf must define /healthz exactly once");
+  for (const needle of [
+    "THE_EYE_ADMIN_SERVER_NAME",
+    "THE_EYE_API_SERVER_NAME",
+    "THE_EYE_LIVEKIT_SERVER_NAME",
+    'render_service_http "10-admin"',
+    'render_service_https "21-api"',
+  ]) {
+    if (!entrypoint.includes(needle)) {
+      fail(`entrypoint missing ${needle}`);
+    }
   }
 
   const httpTemplate = read("infra/docker/nginx/render/http.conf.template");
+  const httpsTemplate = read("infra/docker/nginx/render/https.conf.template");
   if (/location\s*=\s*\/healthz/.test(httpTemplate)) {
-    fail("http.conf.template must not define /healthz (use snippet or THE_EYE_HEALTH_BLOCK)");
+    fail("http.conf.template must not define /healthz (use healthz.conf snippet)");
+  }
+  if (/location\s*=\s*\/healthz/.test(httpsTemplate)) {
+    fail("https.conf.template must not define /healthz (use healthz.conf snippet)");
   }
 }
 
 function buildFixtureConfigs() {
-  const healthBlock = `location = /healthz {
-  access_log off;
-  default_type text/plain;
-  return 200 "ok\\n";
-}`;
-
-  return {
-    httpBootstrap: renderHttp(
-      "staging-admin.example.test",
-      'include /etc/nginx/snippets/the-eye-locations.conf;',
-      "",
-    ),
-    httpTlsBootstrap503: renderHttp(
-      "staging-admin.example.test",
-      `location / {
+  const bootstrapHttpBlock = "include /etc/nginx/snippets/LOCATIONS_SNIPPET;";
+  const tlsBootstrap503 = `location / {
     return 503 "TLS bootstrap in progress — retry after certificate issuance\\n";
     add_header Content-Type text/plain;
-  }`,
-      healthBlock,
-    ),
-    httpRedirect: renderHttp(
-      "staging-admin.example.test",
-      `location / {
+  }`;
+  const redirectBlock = `location / {
     return 301 https://$host$request_uri;
-  }`,
-      healthBlock,
-    ),
-    https: renderHttps("staging-admin.example.test"),
+  }`;
+
+  return {
+    httpBootstrap: renderAllHttp(bootstrapHttpBlock),
+    httpTlsBootstrap503: Object.entries(FIXTURE_HOSTS)
+      .map(([service, hostname]) => renderHttp(hostname, service, tlsBootstrap503))
+      .join("\n\n"),
+    httpRedirect: Object.entries(FIXTURE_HOSTS)
+      .map(([service, hostname]) => renderHttp(hostname, service, redirectBlock))
+      .join("\n\n"),
+    https: renderAllHttps(),
   };
 }
 
@@ -266,7 +323,6 @@ function writeDevTlsMaterial(certsLive) {
     return;
   }
 
-  // Hosts without docker/openssl skip nginx -t entirely.
   fs.writeFileSync(keyPath, "REPLACE_WITH_TEST_KEY\n", "utf8");
   fs.writeFileSync(certPath, "REPLACE_WITH_TEST_CERT\n", "utf8");
 }
@@ -284,8 +340,15 @@ function writeFixtureTree(label, fixtures) {
 
   fs.copyFileSync(path.join(nginxRoot, "nginx.conf"), path.join(etcNginx, "nginx.conf"));
   fs.copyFileSync(path.join(nginxRoot, "snippets", "upstreams.conf"), path.join(confD, "00-upstreams.conf"));
-  fs.copyFileSync(path.join(nginxRoot, "snippets", "the-eye-locations.conf"), path.join(snippets, "the-eye-locations.conf"));
-  fs.copyFileSync(path.join(nginxRoot, "snippets", "ssl-params.conf"), path.join(snippets, "ssl-params.conf"));
+  for (const snippet of [
+    "healthz.conf",
+    "admin-locations.conf",
+    "api-locations.conf",
+    "livekit-locations.conf",
+    "ssl-params.conf",
+  ]) {
+    fs.copyFileSync(path.join(nginxRoot, "snippets", snippet), path.join(snippets, snippet));
+  }
   fs.writeFileSync(
     path.join(etcNginx, "mime.types"),
     "types { text/plain txt; application/octet-stream bin; }\n",
@@ -348,23 +411,17 @@ function main() {
   const scenarios = [
     {
       label: "http-bootstrap",
-      fixtures: {
-        http: fixtures.httpBootstrap,
-      },
+      fixtures: { http: fixtures.httpBootstrap },
       rendered: fixtures.httpBootstrap,
     },
     {
       label: "http-tls-bootstrap",
-      fixtures: {
-        http: fixtures.httpTlsBootstrap503,
-      },
+      fixtures: { http: fixtures.httpTlsBootstrap503 },
       rendered: fixtures.httpTlsBootstrap503,
     },
     {
       label: "http-redirect",
-      fixtures: {
-        http: fixtures.httpRedirect,
-      },
+      fixtures: { http: fixtures.httpRedirect },
       rendered: fixtures.httpRedirect,
     },
     {

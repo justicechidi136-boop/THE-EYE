@@ -15,8 +15,10 @@ import { pathToFileURL } from "node:url";
 const PRODUCTION_PROJECT_ID = "the-eye-2pd-d0217";
 const STAGING_PROJECT_IDS = ["the-eye-2stg", "the-eye-29cff"];
 const CI_STATIC_COMPILE_API_URL = "https://production-ci-compile.theeye.internal";
-export const STAGING_CANONICAL_API_URL = "https://staging-api.theeye.com.ng";
+export const STAGING_CANONICAL_API_URL = "https://staging-api.theeye.com.ng/v1";
 const PRODUCTION_API_HOST = "api.theeye.com.ng";
+const STAGING_API_HOST = "staging-api.theeye.com.ng";
+const STAGING_ADMIN_HOST = "staging-dashboard8jps.theeye.com.ng";
 
 const FORBIDDEN_API_URL_PATTERNS = [
   /localhost/i,
@@ -90,6 +92,20 @@ export function validateStagingApiUrl(url) {
     return {
       ok: false,
       reason: `Staging API URL must not use production API host (${PRODUCTION_API_HOST})`,
+    };
+  }
+
+  if (host === STAGING_ADMIN_HOST) {
+    return {
+      ok: false,
+      reason: `Staging API URL must not use admin dashboard host (${STAGING_ADMIN_HOST}) — use ${STAGING_API_HOST}`,
+    };
+  }
+
+  if (host !== STAGING_API_HOST) {
+    return {
+      ok: false,
+      reason: `Staging API URL must use canonical staging API host (${STAGING_API_HOST})`,
     };
   }
 

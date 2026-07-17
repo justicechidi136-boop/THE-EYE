@@ -37,7 +37,9 @@ const requiredComposeMarkers = [
   "migrate",
   "deploy",
   "DATABASE_DIRECT_URL",
-  "THE_EYE_SERVER_NAME",
+  "THE_EYE_ADMIN_SERVER_NAME",
+  "THE_EYE_API_SERVER_NAME",
+  "THE_EYE_LIVEKIT_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_GENERATE_DEV_SSL",
   "THE_EYE_TLS_BOOTSTRAP",
@@ -86,20 +88,34 @@ const upstreams = fs.readFileSync(
   path.join(root, "infra", "docker", "nginx", "snippets", "upstreams.conf"),
   "utf8",
 );
-const nginxLocations = fs.readFileSync(
-  path.join(root, "infra", "docker", "nginx", "snippets", "the-eye-locations.conf"),
+const adminLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "admin-locations.conf"),
+  "utf8",
+);
+const apiLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "api-locations.conf"),
+  "utf8",
+);
+const livekitLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "livekit-locations.conf"),
+  "utf8",
+);
+const healthzSnippet = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "healthz.conf"),
   "utf8",
 );
 const nginxChecks = [
   ["ssl_certificate", httpsTemplate, "HTTPS ssl_certificate"],
   ["listen 443 ssl", httpsTemplate, "HTTPS listener"],
   ["include /etc/nginx/snippets/ssl-params.conf", httpsTemplate, "SSL params snippet"],
-  ["include /etc/nginx/snippets/the-eye-locations.conf", httpsTemplate, "shared locations snippet"],
-  ["location = /metrics", nginxLocations, "metrics blocked"],
-  ["location /v1/", nginxLocations, "API /v1/ route"],
-  ["proxy_pass http://the_eye_api", nginxLocations, "API upstream"],
-  ["location /livekit/", nginxLocations, "LiveKit route"],
-  ["proxy_pass http://the_eye_livekit", nginxLocations, "LiveKit upstream"],
+  ["include /etc/nginx/snippets/healthz.conf", httpTemplate, "healthz snippet on HTTP"],
+  ["include /etc/nginx/snippets/healthz.conf", httpsTemplate, "healthz snippet on HTTPS"],
+  ["location /v1/", apiLocations, "API /v1/ route"],
+  ["proxy_pass http://the_eye_api", apiLocations, "API upstream"],
+  ["proxy_pass http://the_eye_admin_web", adminLocations, "Admin upstream"],
+  ["proxy_pass http://the_eye_livekit", livekitLocations, "LiveKit upstream"],
+  ["proxy_set_header Upgrade $http_upgrade", livekitLocations, "LiveKit WebSocket upgrade"],
+  ["location = /healthz", healthzSnippet, "shared healthz snippet"],
   ["/.well-known/acme-challenge/", httpTemplate, "ACME challenge path"],
   ["upstream the_eye_api", upstreams, "API upstream block"],
   ["upstream the_eye_livekit", upstreams, "LiveKit upstream block"],
@@ -116,11 +132,13 @@ const entrypoint = fs.readFileSync(
   "utf8",
 );
 const entrypointChecks = [
+  "THE_EYE_ADMIN_SERVER_NAME",
+  "THE_EYE_API_SERVER_NAME",
+  "THE_EYE_LIVEKIT_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_TLS_BOOTSTRAP",
-  "openssl req",
-  "10-http.conf",
-  "20-https.conf",
+  "render_service_http \"10-admin\"",
+  "render_service_https \"21-api\"",
 ];
 for (const needle of entrypointChecks) {
   if (!entrypoint.includes(needle)) {
