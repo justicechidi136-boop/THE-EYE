@@ -449,6 +449,9 @@ jobs:
             -t the-eye-api:staging-validate \
             .
 
+      - name: Validate API runtime image
+        run: node scripts/validate-api-runtime-image.cjs the-eye-api:staging-validate
+
       - name: Build staging admin-web Docker image
         run: |
           docker build \
