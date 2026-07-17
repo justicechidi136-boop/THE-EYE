@@ -205,7 +205,7 @@ services:
     environment:
       NODE_ENV: production
       API_ORIGIN: ${API_ORIGIN:-http://api:4000}
-      NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-wss://localhost/livekit}
+      NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-wss://localhost}
     depends_on:
       api:
         condition: service_healthy
@@ -230,7 +230,10 @@ services:
       admin-web:
         condition: service_healthy
     environment:
-      THE_EYE_SERVER_NAME: ${THE_EYE_SERVER_NAME:-localhost}
+      THE_EYE_SERVER_NAME: ${THE_EYE_SERVER_NAME:-}
+      THE_EYE_ADMIN_SERVER_NAME: ${THE_EYE_ADMIN_SERVER_NAME:-${THE_EYE_SERVER_NAME:-localhost}}
+      THE_EYE_API_SERVER_NAME: ${THE_EYE_API_SERVER_NAME:-localhost}
+      THE_EYE_LIVEKIT_SERVER_NAME: ${THE_EYE_LIVEKIT_SERVER_NAME:-localhost}
       THE_EYE_SSL_REDIRECT: ${THE_EYE_SSL_REDIRECT:-false}
       THE_EYE_GENERATE_DEV_SSL: ${THE_EYE_GENERATE_DEV_SSL:-false}
       THE_EYE_TLS_BOOTSTRAP: ${THE_EYE_TLS_BOOTSTRAP:-auto}
