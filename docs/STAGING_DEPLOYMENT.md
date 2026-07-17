@@ -39,15 +39,18 @@ export THE_EYE_SSL_REDIRECT=false
 export THE_EYE_GENERATE_DEV_SSL=false
 
 docker compose -f infra/docker/docker-compose.yml --env-file .env config
-docker compose -f infra/docker/docker-compose.yml --env-file .env build
+docker compose -f infra/docker/docker-compose.yml --env-file .env build api
 docker compose -f infra/docker/docker-compose.yml --env-file .env up -d
 
-# Migrations
+# Migrations (tools image — includes prisma CLI)
+docker compose -f infra/docker/docker-compose.yml --profile tools build api-migrate
 docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate
 
 # Bootstrap Super Admin (idempotent)
 docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-create-admin
 ```
+
+The **API runtime** uses the `production` Docker target (`the-eye-api`). One-shot **tools** services (migrate, seed, create-admin) use the `tools` target (`the-eye-api-tools`) built from the same Dockerfile with full deploy deps (`prisma`, `tsx`). See [DOCKER_BUILD.md](./DOCKER_BUILD.md).
 
 ## TLS (Let's Encrypt)
 
