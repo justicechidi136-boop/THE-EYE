@@ -186,29 +186,18 @@ function buildFixtureConfigs() {
 function writeDevTlsMaterial(certsLive) {
   const keyPath = path.join(certsLive, "privkey.pem");
   const certPath = path.join(certsLive, "fullchain.pem");
-  const opensslArgs = [
-    "req",
-    "-x509",
-    "-nodes",
-    "-days",
-    "1",
-    "-newkey",
-    "rsa:2048",
-    "-keyout",
-    keyPath,
-    "-out",
-    certPath,
-    "-subj",
-    "/CN=localhost",
-  ];
 
-  let result = spawnSync("openssl", opensslArgs, { encoding: "utf8" });
-  if (result.status === 0 && fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    return;
-  }
+  const finalizeTlsMaterial = () => {
+    if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+      return false;
+    }
+    fs.chmodSync(keyPath, 0o600);
+    fs.chmodSync(certPath, 0o644);
+    return true;
+  };
 
   if (dockerAvailable()) {
-    result = spawnSync(
+    const result = spawnSync(
       "docker",
       [
         "run",
@@ -232,12 +221,35 @@ function writeDevTlsMaterial(certsLive) {
       ],
       { encoding: "utf8" },
     );
-    if (result.status === 0 && fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+    if (result.status === 0 && finalizeTlsMaterial()) {
       return;
     }
 
     const detail = [result.stderr, result.stdout, result.error?.message].filter(Boolean).join("\n");
     fail(`failed to generate TLS fixtures for nginx -t:\n${detail}`);
+  }
+
+  const result = spawnSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-nodes",
+      "-days",
+      "1",
+      "-newkey",
+      "rsa:2048",
+      "-keyout",
+      keyPath,
+      "-out",
+      certPath,
+      "-subj",
+      "/CN=localhost",
+    ],
+    { encoding: "utf8" },
+  );
+  if (result.status === 0 && finalizeTlsMaterial()) {
+    return;
   }
 
   // Hosts without docker/openssl skip nginx -t entirely.
@@ -288,7 +300,18 @@ function nginxTestWithDocker(label, fixtureRoot) {
   const mount = `${fixtureRoot}/etc/nginx`;
   const result = spawnSync(
     "docker",
-    ["run", "--rm", "-v", `${mount}:/etc/nginx:ro`, "nginx:1.27-alpine", "nginx", "-t"],
+    [
+      "run",
+      "--rm",
+      "--entrypoint",
+      "nginx",
+      "-v",
+      `${mount}:/etc/nginx:ro`,
+      "nginx:1.27-alpine",
+      "-t",
+      "-c",
+      "/etc/nginx/nginx.conf",
+    ],
     { encoding: "utf8" },
   );
   if (result.status !== 0) {
