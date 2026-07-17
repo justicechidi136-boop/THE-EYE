@@ -22,12 +22,14 @@ function run(command, options = {}) {
 }
 
 function dockerAvailable() {
-  try {
-    run("docker version --format {{.Server.Version}}");
-    return true;
-  } catch {
-    return false;
-  }
+  const result = spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], {
+    encoding: "utf8",
+  });
+  return result.status === 0;
+}
+
+function normalizeGitText(text) {
+  return text.replace(/\r\n/g, "\n");
 }
 
 function read(relPath) {
@@ -40,9 +42,9 @@ function read(relPath) {
 
 function readGitFile(relPath) {
   try {
-    return run(`git show HEAD:${relPath}`, { cwd: root });
+    return normalizeGitText(run(`git show HEAD:${relPath}`, { cwd: root }));
   } catch {
-    return read(relPath);
+    return normalizeGitText(read(relPath));
   }
 }
 
@@ -184,24 +186,63 @@ function buildFixtureConfigs() {
 function writeDevTlsMaterial(certsLive) {
   const keyPath = path.join(certsLive, "privkey.pem");
   const certPath = path.join(certsLive, "fullchain.pem");
+  const opensslArgs = [
+    "req",
+    "-x509",
+    "-nodes",
+    "-days",
+    "1",
+    "-newkey",
+    "rsa:2048",
+    "-keyout",
+    keyPath,
+    "-out",
+    certPath,
+    "-subj",
+    "/CN=localhost",
+  ];
 
-  // Generate valid self-signed material at runtime (never commit PEM fixtures).
-  try {
-    execSync(
-      [
-        "openssl req -x509 -nodes -days 1 -newkey rsa:2048",
-        `-keyout "${keyPath}"`,
-        `-out "${certPath}"`,
-        '-subj "/CN=localhost"',
-      ].join(" "),
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
+  let result = spawnSync("openssl", opensslArgs, { encoding: "utf8" });
+  if (result.status === 0 && fs.existsSync(keyPath) && fs.existsSync(certPath)) {
     return;
-  } catch {
-    // Hosts without openssl skip nginx -t when docker is unavailable.
-    fs.writeFileSync(keyPath, "REPLACE_WITH_TEST_KEY\n", "utf8");
-    fs.writeFileSync(certPath, "REPLACE_WITH_TEST_CERT\n", "utf8");
   }
+
+  if (dockerAvailable()) {
+    result = spawnSync(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "-v",
+        `${certsLive}:/certs:rw`,
+        "alpine/openssl",
+        "req",
+        "-x509",
+        "-nodes",
+        "-days",
+        "1",
+        "-newkey",
+        "rsa:2048",
+        "-keyout",
+        "/certs/privkey.pem",
+        "-out",
+        "/certs/fullchain.pem",
+        "-subj",
+        "/CN=localhost",
+      ],
+      { encoding: "utf8" },
+    );
+    if (result.status === 0 && fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+      return;
+    }
+
+    const detail = [result.stderr, result.stdout, result.error?.message].filter(Boolean).join("\n");
+    fail(`failed to generate TLS fixtures for nginx -t:\n${detail}`);
+  }
+
+  // Hosts without docker/openssl skip nginx -t entirely.
+  fs.writeFileSync(keyPath, "REPLACE_WITH_TEST_KEY\n", "utf8");
+  fs.writeFileSync(certPath, "REPLACE_WITH_TEST_CERT\n", "utf8");
 }
 
 function writeFixtureTree(label, fixtures) {

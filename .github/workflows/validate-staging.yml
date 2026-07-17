@@ -436,11 +436,14 @@ jobs:
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "CI_STAGING_API_URL=$URL" >> "$GITHUB_ENV"
 
-      - name: Docker compose and LiveKit smoke
-        run: |
-          node scripts/docker-compose-smoke.cjs
-          node scripts/validate-livekit-keys.cjs
-          node scripts/validate-nginx-config.cjs
+      - name: Docker compose smoke
+        run: node scripts/docker-compose-smoke.cjs
+
+      - name: Validate LiveKit keys
+        run: node scripts/validate-livekit-keys.cjs
+
+      - name: Validate nginx config
+        run: node scripts/validate-nginx-config.cjs
 
       - name: Build staging API Docker image
         run: |
