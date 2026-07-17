@@ -175,6 +175,7 @@ No Docker builds (fast feedback).
 - Admin staging build + bundle isolation
 - Mobile staging APK, watch staging debug APK *(skipped with warning when secrets unset)*
 - Firebase staging guards
+- Docker API image build tagged `the-eye-api:staging-validate` + `scripts/validate-api-runtime-image.cjs`
 - Docker admin image build + bundle isolation
 
 ### Production Job A (static)
@@ -198,7 +199,8 @@ No Docker builds (fast feedback).
 ### Production Job C (deploy)
 
 - Preflight gate (secrets + `confirm_release_build_passed`)
-- Docker API + admin-web images with explicit `NEXT_PUBLIC_API_BASE_URL`
+- Docker API + admin-web images tagged with explicit commit SHA (`image_tag` input or `github.sha`); GHCR `:latest` is a registry pointer only
+- SSH deploy sets `THE_EYE_IMAGE_TAG` to the same SHA on the VPS
 - SSH deploy to DigitalOcean
 
 ## Local parity commands

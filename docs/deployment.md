@@ -149,7 +149,19 @@ pnpm run test:docker:smoke      # compose + nginx + backup script structure
 pnpm run test:deploy:env        # .env.example vs compose variables
 docker compose -f infra/docker/docker-compose.yml --env-file .env config
 docker compose -f infra/docker/docker-compose.yml --env-file .env build
+node scripts/validate-api-runtime-image.cjs   # API runtime deps (explicit tag or auto-resolve)
 ```
+
+### Image tags (do not use `:latest` for deploy)
+
+Compose tags images with `THE_EYE_IMAGE_TAG` (default `local`). Deploy and rollback pin by **commit SHA**. To see what is configured or present on a host:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env images
+docker images --filter reference='*the-eye-api*'
+```
+
+See [DOCKER_BUILD.md](./DOCKER_BUILD.md#image-tagging-policy) for the full tagging matrix (local, staging, production, CI validate).
 
 ## Production topology
 

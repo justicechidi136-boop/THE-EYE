@@ -2,6 +2,54 @@
 
 THE EYE monorepo images build from the **repository root** with pnpm workspaces.
 
+## Image tagging policy
+
+Deployments and validation **must use explicit tags** — never assume `the-eye-api:latest` exists or matches what is running.
+
+| Context | Image name pattern | Set by |
+|---------|-------------------|--------|
+| **Local dev / compose default** | `the-eye-api:local`, `the-eye-api-tools:local`, `the-eye-admin-web:local` | `THE_EYE_IMAGE_TAG=local` in `.env` (default) |
+| **Local with commit** | `the-eye-api:local-<short-sha>` | `THE_EYE_IMAGE_TAG=local-abc1234` before `docker compose build` |
+| **Staging VPS / deploy** | `the-eye-api:<full-or-short-sha>` | `export THE_EYE_IMAGE_TAG=<commit-sha>` (deploy workflow default) |
+| **Production VPS / deploy** | `the-eye-api:<commit-sha>` | GitHub Deploy workflow `image_tag` input (defaults to `github.sha`) |
+| **GHCR (registry mirror)** | `ghcr.io/<owner>/<repo>/api:<commit-sha>` | Deploy workflow build job |
+| **CI validate (staging)** | `the-eye-api:staging-validate` | `validate-staging.yml` build step |
+
+Compose resolves runtime images via `THE_EYE_IMAGE_TAG` (see `infra/docker/docker-compose.yml`):
+
+```yaml
+image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+```
+
+GHCR `:latest` tags may be pushed for registry convenience but **are not used for deploy or rollback**. Always pin by commit SHA.
+
+### How operators find the correct tag
+
+On a running host:
+
+```bash
+# Tags compose is configured to use (after env interpolation)
+docker compose -f infra/docker/docker-compose.yml --env-file .env config | grep -E '^\s+image: the-eye-api'
+
+# Images currently tagged locally
+docker compose -f infra/docker/docker-compose.yml images api
+docker images --filter reference='*the-eye-api*'
+```
+
+From git / CI:
+
+```bash
+git rev-parse HEAD          # full SHA used by deploy.yml when image_tag is empty
+git rev-parse --short HEAD  # optional short tag for local builds
+```
+
+Override for one-off validation without passing a CLI arg:
+
+```bash
+export THE_EYE_API_IMAGE=the-eye-api:abc1234
+node scripts/validate-api-runtime-image.cjs
+```
+
 ## pnpm workspace layout
 
 | File | Role |
@@ -65,6 +113,8 @@ Validate runtime deps after build:
 
 ```bash
 node scripts/validate-api-runtime-image.cjs the-eye-api:local
+# Or omit the arg when THE_EYE_IMAGE_TAG=local (compose default):
+node scripts/validate-api-runtime-image.cjs
 ```
 
 ## Admin web (`apps/admin-web/Dockerfile`)
@@ -94,7 +144,8 @@ Local smoke:
 ```bash
 pnpm run test:docker:smoke
 pnpm run test:docker:livekit
-node scripts/validate-api-runtime-image.cjs the-eye-api:local   # after docker build
+node scripts/validate-api-runtime-image.cjs   # resolves tag from compose / THE_EYE_IMAGE_TAG
+node scripts/validate-api-runtime-image.cjs the-eye-api:local   # explicit after manual docker build
 ```
 
 ## Tool profile commands

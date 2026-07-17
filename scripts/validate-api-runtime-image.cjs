@@ -2,13 +2,6 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-const image = process.argv[2];
-
-if (!image) {
-  console.error("Usage: node scripts/validate-api-runtime-image.cjs <docker-image>");
-  process.exit(1);
-}
-
 const REQUIRED_MODULES = [
   "reflect-metadata",
   "@nestjs/core",
@@ -24,6 +17,8 @@ const REQUIRED_PATHS = [
 
 const root = path.join(__dirname, "..");
 const dockerfilePath = path.join(root, "apps", "api", "Dockerfile");
+const composeFile = path.join(root, "infra", "docker", "docker-compose.yml");
+const DEFAULT_API_REPO = "the-eye-api";
 
 function run(command) {
   return execSync(command, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -36,6 +31,79 @@ function dockerAvailable() {
   } catch {
     return false;
   }
+}
+
+function quoteForShell(value) {
+  if (process.platform === "win32") {
+    return `"${String(value).replace(/"/g, '\\"')}"`;
+  }
+  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function discoverApiImageFromCompose() {
+  if (!fs.existsSync(composeFile) || !dockerAvailable()) {
+    return null;
+  }
+
+  try {
+    const envFile = path.join(root, ".env");
+    let command = `docker compose -f ${quoteForShell(composeFile)}`;
+    if (fs.existsSync(envFile)) {
+      command += ` --env-file ${quoteForShell(envFile)}`;
+    }
+    command += " config --format json";
+
+    const config = JSON.parse(run(command));
+    const image = config?.services?.api?.image;
+    if (typeof image === "string" && image.length > 0 && !image.includes("${")) {
+      return image;
+    }
+  } catch {
+    // compose config unavailable — fall through to tag default
+  }
+
+  return null;
+}
+
+function resolveImageRef() {
+  const argImage = process.argv[2]?.trim();
+  if (argImage) {
+    return { image: argImage, source: "CLI argument" };
+  }
+
+  const envImage = process.env.THE_EYE_API_IMAGE?.trim();
+  if (envImage) {
+    return { image: envImage, source: "THE_EYE_API_IMAGE" };
+  }
+
+  const discovered = discoverApiImageFromCompose();
+  if (discovered) {
+    return { image: discovered, source: "docker compose config (api service)" };
+  }
+
+  const tag = process.env.THE_EYE_IMAGE_TAG?.trim() || "local";
+  return {
+    image: `${DEFAULT_API_REPO}:${tag}`,
+    source: `THE_EYE_IMAGE_TAG default (${tag})`,
+  };
+}
+
+function printUsage() {
+  console.error(`Usage: node scripts/validate-api-runtime-image.cjs [<docker-image>]
+
+Resolve order when <docker-image> is omitted:
+  1. THE_EYE_API_IMAGE environment variable
+  2. api.image from: docker compose -f infra/docker/docker-compose.yml config
+  3. the-eye-api:\${THE_EYE_IMAGE_TAG:-local} (matches compose default)
+
+Examples:
+  node scripts/validate-api-runtime-image.cjs the-eye-api:local
+  THE_EYE_API_IMAGE=the-eye-api:abc1234 node scripts/validate-api-runtime-image.cjs
+  THE_EYE_IMAGE_TAG=abc1234 node scripts/validate-api-runtime-image.cjs
+
+Discover deployed tags on a host:
+  docker compose -f infra/docker/docker-compose.yml images
+  docker images --filter reference='*the-eye-api*'`);
 }
 
 function assertInsideContainer(imageRef, assertionScript) {
@@ -94,6 +162,9 @@ function validateDockerImage(imageRef) {
   console.log("Prisma client present in runtime image.");
 }
 
+const { image, source } = resolveImageRef();
+console.log(`Validating API runtime image: ${image} (from ${source})`);
+
 try {
   validateDockerfileStatic();
 
@@ -109,5 +180,8 @@ try {
   }
 } catch (error) {
   console.error(`API runtime image validation failed for ${image}: ${error.message}`);
+  if (!process.argv[2] && !process.env.THE_EYE_API_IMAGE) {
+    printUsage();
+  }
   process.exit(1);
 }

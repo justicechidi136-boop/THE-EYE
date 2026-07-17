@@ -42,6 +42,10 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env config
 docker compose -f infra/docker/docker-compose.yml --env-file .env build api
 docker compose -f infra/docker/docker-compose.yml --env-file .env up -d
 
+# Optional: validate the API runtime image tag compose will use
+export THE_EYE_IMAGE_TAG="${THE_EYE_IMAGE_TAG:-local}"
+node scripts/validate-api-runtime-image.cjs "the-eye-api:${THE_EYE_IMAGE_TAG}"
+
 # Migrations (tools image — includes prisma CLI)
 docker compose -f infra/docker/docker-compose.yml --profile tools build api-migrate
 docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate
@@ -69,7 +73,11 @@ bash scripts/issue-letsencrypt.sh
 curl -sf http://localhost/healthz
 curl -sf http://localhost/v1/health/ready   # after TLS: https://...
 docker compose -f infra/docker/docker-compose.yml ps
+docker compose -f infra/docker/docker-compose.yml images api
+docker images --filter reference='*the-eye-api*'
 ```
+
+Confirm the running API image tag matches the deployed commit (`THE_EYE_IMAGE_TAG` or git SHA), not an unpinned `:latest` tag. See [DOCKER_BUILD.md](./DOCKER_BUILD.md#image-tagging-policy).
 
 ## Related runbooks
 
