@@ -114,6 +114,8 @@ function validateDockerfileStatic() {
     ".next/standalone",
     'CMD ["node", "apps/admin-web/server.js"]',
     "USER nextjs",
+    "ENV HOSTNAME=0.0.0.0",
+    "ENV PORT=3000",
   ];
   const forbiddenMarkers = [
     'CMD ["pnpm", "--filter", "@the-eye/admin-web", "run", "start"]',
