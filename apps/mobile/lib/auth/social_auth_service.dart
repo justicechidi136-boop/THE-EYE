@@ -11,6 +11,7 @@ import "package:google_sign_in/google_sign_in.dart";
 import "package:http/http.dart" as http;
 import "package:sign_in_with_apple/sign_in_with_apple.dart";
 
+import "../config/app_flavor.dart";
 import "../contracts/the_eye_api_client.dart";
 import "auth_safe_log.dart";
 import "auth_session_store.dart";
@@ -304,7 +305,7 @@ class SocialAuthService {
     if (code == "sign_in_failed" ||
         code == "10" ||
         (error.message ?? "").contains("10:")) {
-      return "Google sign-in is not configured for this build. Add your app SHA-1 and SHA-256 in Firebase Console (project the-eye-2pd-d0217), download an updated google-services.json, then rebuild.";
+      return "Google sign-in is not configured for this build. Add your app SHA-1 and SHA-256 in Firebase Console (project ${AppFlavorConfig.firebaseProjectId}), download an updated google-services.json, then rebuild.";
     }
     if (code == "missing-google-web-client-id" || code == "missing-id-token") {
       return error.message ??

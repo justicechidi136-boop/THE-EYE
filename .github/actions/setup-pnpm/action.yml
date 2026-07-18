@@ -1,0 +1,46 @@
+name: Setup pnpm
+description: Setup Node.js 20 and pnpm 9.15.0 via Corepack with pnpm store caching
+
+inputs:
+  node-version:
+    description: Node.js version
+    required: false
+    default: "20"
+  pnpm-version:
+    description: pnpm version (must match package.json packageManager)
+    required: false
+    default: "9.15.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Enable Corepack and activate pnpm
+      shell: bash
+      run: |
+        set -euo pipefail
+        corepack enable
+        corepack prepare "pnpm@${{ inputs.pnpm-version }}" --activate
+        ACTUAL="$(pnpm --version)"
+        if [ "$ACTUAL" != "${{ inputs.pnpm-version }}" ]; then
+          echo "pnpm version mismatch: expected ${{ inputs.pnpm-version }}, got ${ACTUAL}"
+          exit 1
+        fi
+        echo "pnpm ${ACTUAL} activated via Corepack"
+
+    - name: Resolve pnpm store path
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache pnpm store
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-

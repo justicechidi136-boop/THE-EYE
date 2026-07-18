@@ -151,13 +151,16 @@ scenario("F — Staging API URL isolation", () => {
   const staging = validateStagingApiUrl(STAGING_CANONICAL_API_URL);
   assert(staging.ok, "accepts canonical staging API URL");
 
-  const stagingWithPath = validateStagingApiUrl(`${STAGING_CANONICAL_API_URL}/v1`);
-  assert(stagingWithPath.ok, "accepts staging API URL with path");
-
-  const production = validateStagingApiUrl("https://api.theeye.com.ng");
+  const production = validateStagingApiUrl("https://api.theeye.com.ng/v1");
   assert(!production.ok, "rejects production API host for staging");
 
-  const localhost = validateStagingApiUrl("https://localhost:3000");
+  const dashboard = validateStagingApiUrl("https://staging-dashboard8jps.theeye.com.ng/v1");
+  assert(!dashboard.ok, "rejects admin dashboard host for staging API");
+
+  const wrongHost = validateStagingApiUrl("https://staging-admin.theeye.com.ng/v1");
+  assert(!wrongHost.ok, "rejects non-canonical staging API host");
+
+  const localhost = validateStagingApiUrl("https://localhost:3000/v1");
   assert(!localhost.ok, "rejects localhost for staging");
 });
 

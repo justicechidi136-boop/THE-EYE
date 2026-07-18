@@ -32,11 +32,19 @@ abstract final class WatchApiConfig {
 
   static const String productionApiHost = 'api.theeye.com.ng';
   static const String stagingApiHost = 'staging-api.theeye.com.ng';
+  static const String stagingAdminHost = 'staging-dashboard8jps.theeye.com.ng';
 
   static String resolveBaseUrl() {
-    if (_dartDefineUrl.isNotEmpty) return _dartDefineUrl;
+    final env = WatchFlavor.firebaseEnv;
 
-    switch (WatchFlavor.firebaseEnv) {
+    if (_dartDefineUrl.isNotEmpty) {
+      // Ignore dev-machine overrides when building staging/production flavors.
+      if (env == WatchFirebaseEnv.development || !isLocalDevUrl(_dartDefineUrl)) {
+        return _dartDefineUrl;
+      }
+    }
+
+    switch (env) {
       case WatchFirebaseEnv.development:
         return _resolveDevelopmentBaseUrl();
       case WatchFirebaseEnv.staging:
@@ -81,13 +89,42 @@ abstract final class WatchApiConfig {
   static bool isStagingApiUrl(String baseUrl) {
     return baseUrl.toLowerCase().contains(stagingApiHost);
   }
+
+  static bool isDashboardProxyApiUrl(String baseUrl) {
+    return baseUrl.toLowerCase().contains(stagingAdminHost);
+  }
+
+  static bool isHttpsUrl(String baseUrl) {
+    return baseUrl.toLowerCase().startsWith('https://');
+  }
 }
 
 void assertWatchApiBaseUrlMatchesFlavor(
   WatchFirebaseEnv env,
   String baseUrl,
 ) {
-  if (WatchApiConfig.isLocalDevUrl(baseUrl)) return;
+  if (WatchApiConfig.isLocalDevUrl(baseUrl)) {
+    if (env == WatchFirebaseEnv.development) return;
+    throw StateError(
+      'Environment guard: ${env.name} build cannot use a local dev API '
+      '(`$baseUrl`). Use `--flavor development` for local PC testing, or '
+      '`https://${WatchApiConfig.stagingApiHost}/v1` for staging.',
+    );
+  }
+
+  if (WatchApiConfig.isDashboardProxyApiUrl(baseUrl)) {
+    throw StateError(
+      'Environment guard: ${env.name} build cannot use admin dashboard as API '
+      '(`$baseUrl`). Use `https://${WatchApiConfig.stagingApiHost}/v1`.',
+    );
+  }
+
+  if (env != WatchFirebaseEnv.development && !WatchApiConfig.isHttpsUrl(baseUrl)) {
+    throw StateError(
+      'Environment guard: ${env.name} build must use HTTPS API URLs '
+      '(`$baseUrl`).',
+    );
+  }
 
   final isProdApi = WatchApiConfig.isProductionApiUrl(baseUrl);
   final isStagingApi = WatchApiConfig.isStagingApiUrl(baseUrl);
@@ -95,14 +132,14 @@ void assertWatchApiBaseUrlMatchesFlavor(
   if (env == WatchFirebaseEnv.staging && isProdApi) {
     throw StateError(
       'Environment guard: staging build cannot register against production API '
-      '(`$baseUrl`). Use `$WatchApiConfig.stagingApiHost` or a local dev URL.',
+      '(`$baseUrl`). Use `https://${WatchApiConfig.stagingApiHost}/v1`.',
     );
   }
 
   if (env == WatchFirebaseEnv.production && isStagingApi) {
     throw StateError(
       'Environment guard: production build cannot use staging API '
-      '(`$baseUrl`). Use `$WatchApiConfig.productionApiHost`.',
+      '(`$baseUrl`). Use `https://${WatchApiConfig.productionApiHost}/v1`.',
     );
   }
 }

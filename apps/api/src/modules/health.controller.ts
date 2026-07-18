@@ -31,6 +31,7 @@ export class HealthController {
         status: "degraded",
         checks,
         firebaseAdmin: this.health.getFirebaseAdminProbe(),
+        firebaseAuth: this.health.getFirebaseAuthProbe(),
         timestamp: new Date().toISOString(),
       });
     }
@@ -39,6 +40,7 @@ export class HealthController {
       status: "ok",
       checks,
       firebaseAdmin: this.health.getFirebaseAdminProbe(),
+      firebaseAuth: this.health.getFirebaseAuthProbe(),
       timestamp: new Date().toISOString(),
     };
   }

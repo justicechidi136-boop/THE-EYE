@@ -25,6 +25,7 @@ void main() {
     final api = WatchApiClient(
       httpClient: MockClient((_) async => http.Response('{}', 200)),
       baseUrl: 'http://test/v1',
+      skipEnvGuard: true,
     );
     final sos = SosService(
       api: api,

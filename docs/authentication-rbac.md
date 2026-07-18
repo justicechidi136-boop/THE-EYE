@@ -19,7 +19,14 @@ THE EYE supports citizen authentication and admin authentication with scoped acc
 
 ## Development admin login
 
-For local and staging environments, seed a disposable super-admin with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env.example`. Set real values only in an untracked `.env` file — never commit production passwords. Run `pnpm --filter @the-eye/api run db:seed` after migrations, or `db:create-admin` to upsert a single admin account.
+For **local development**, seed a disposable super-admin with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env.example`. Set real values only in an untracked `.env` file — never commit production passwords. Run `pnpm --filter @the-eye/api run db:seed` after migrations, or `db:create-admin` to upsert a single admin account.
+
+For **staging** (Docker VPS), migrations do not create users. After deploy:
+
+- **Single admin:** set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`, then `docker compose ... --profile tools run --rm api-create-admin`
+- **Full QA accounts:** set `STAGING_TEST_*` credentials (see `apps/api/.env.staging.example`), then `docker compose ... --profile tools run --rm api-seed-staging`
+
+Details: `docs/staging-test-accounts.md`.
 
 ## Password Reset
 

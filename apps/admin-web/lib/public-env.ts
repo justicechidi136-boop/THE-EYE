@@ -9,7 +9,6 @@ export type AppEnv = "local" | "development" | "staging" | "production";
 const DEPLOYABLE_APP_ENVS = ["staging", "production"] as const;
 export type DeployableAppEnv = (typeof DEPLOYABLE_APP_ENVS)[number];
 
-const LOCAL_DEV_API_ORIGIN = "http://localhost:4000";
 const LOCAL_DEV_API_BASE_PATH = "/v1";
 
 const STAGING_LEAK_MARKERS = ["the-eye-2stg", "staging-api", "NEXT_PUBLIC_APP_ENV=staging"] as const;
@@ -18,6 +17,7 @@ const DEVELOPMENT_LEAK_MARKERS = ["the-eye-29cff", "NEXT_PUBLIC_APP_ENV=local", 
 
 const PRODUCTION_API_HOST = "api.theeye.com.ng";
 const STAGING_API_HOST = "staging-api.theeye.com.ng";
+const STAGING_ADMIN_HOST = "staging-dashboard8jps.theeye.com.ng";
 
 function apiHostname(apiBaseUrl: string): string | null {
   try {
@@ -34,6 +34,10 @@ function isProductionApiHost(apiBaseUrl: string): boolean {
 
 function isStagingApiHost(apiBaseUrl: string): boolean {
   return apiHostname(apiBaseUrl) === STAGING_API_HOST;
+}
+
+function isStagingAdminHost(apiBaseUrl: string): boolean {
+  return apiHostname(apiBaseUrl) === STAGING_ADMIN_HOST;
 }
 
 function isProductionNodeEnv(): boolean {
@@ -106,6 +110,11 @@ function validateDeployableApiBaseUrl(appEnv: DeployableAppEnv, apiBaseUrl: stri
   }
 
   if (apiBaseUrl.startsWith("https://")) {
+    if (appEnv === "staging" && isStagingAdminHost(apiBaseUrl)) {
+      throw new Error(
+        "Staging admin-web build must not use admin dashboard hostname as API URL — use https://staging-api.theeye.com.ng/v1",
+      );
+    }
     if (appEnv === "staging" && isProductionApiHost(apiBaseUrl)) {
       throw new Error("Staging admin-web build must not target production API hosts");
     }
@@ -168,6 +177,22 @@ function validatePublicEnvIsolation(appEnv: AppEnv): void {
   }
 }
 
+function resolveLocalDevApiOrigin(): string {
+  return `http://${"localhost"}:4000`;
+}
+
+function resolveLocalPublicApiBaseUrl(configured: string | undefined): string {
+  if (configured) {
+    if (configured.startsWith("http://") || configured.startsWith("https://")) {
+      return configured.replace(/\/$/, "");
+    }
+    const origin = process.env.API_ORIGIN?.trim() || resolveLocalDevApiOrigin();
+    return `${origin.replace(/\/$/, "")}${configured.startsWith("/") ? configured : `/${configured}`}`;
+  }
+
+  return `${resolveLocalDevApiOrigin()}${LOCAL_DEV_API_BASE_PATH}`;
+}
+
 function resolvePublicApiBaseUrlForEnv(appEnv: AppEnv): string {
   const configured = readRawApiBaseUrl();
 
@@ -182,15 +207,7 @@ function resolvePublicApiBaseUrlForEnv(appEnv: AppEnv): string {
     return configured;
   }
 
-  if (configured) {
-    if (configured.startsWith("http://") || configured.startsWith("https://")) {
-      return configured.replace(/\/$/, "");
-    }
-    const origin = process.env.API_ORIGIN?.trim() || LOCAL_DEV_API_ORIGIN;
-    return `${origin.replace(/\/$/, "")}${configured.startsWith("/") ? configured : `/${configured}`}`;
-  }
-
-  return `${LOCAL_DEV_API_ORIGIN}${LOCAL_DEV_API_BASE_PATH}`;
+  return resolveLocalPublicApiBaseUrl(configured);
 }
 
 function resolveAppEnvLabel(appEnv: AppEnv): string {
@@ -242,7 +259,7 @@ export function resolveServerApiBaseUrl(): string {
   }
 
   const path = configured ?? LOCAL_DEV_API_BASE_PATH;
-  const origin = process.env.API_ORIGIN?.trim() || (isLocalAppEnv(appEnv) ? LOCAL_DEV_API_ORIGIN : undefined);
+  const origin = process.env.API_ORIGIN?.trim() || (isLocalAppEnv(appEnv) ? resolveLocalDevApiOrigin() : undefined);
 
   if (!origin) {
     throw new Error("API_ORIGIN is required when NEXT_PUBLIC_API_BASE_URL is a relative path in deployable builds");

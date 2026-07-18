@@ -30,8 +30,16 @@ abstract final class AppFlavorConfig {
       case "production":
       case "prod":
         return AppFlavor.production;
+      case "":
+        throw StateError(
+          "App flavor is not configured. Rebuild with "
+          "--flavor development|staging|production and "
+          "--dart-define=THE_EYE_FLAVOR=<same>.",
+        );
       default:
-        return AppFlavor.production;
+        throw StateError(
+          "Unknown app flavor '$raw'. Use development, staging, or production.",
+        );
     }
   }
 

@@ -1,0 +1,14 @@
+# ${THE_EYE_SERVICE_LABEL} — HTTP (port 80)
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${THE_EYE_SERVER_NAME};
+
+  include /etc/nginx/snippets/healthz.conf;
+
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+
+  ${THE_EYE_HTTP_BLOCK}
+}

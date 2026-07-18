@@ -38,6 +38,23 @@ if (!buildGradle.includes('id "com.google.gms.google-services"')) {
   failures.push("android/app/build.gradle missing com.google.gms.google-services plugin");
 }
 
+const apiConfig = fs.readFileSync(
+  path.join(mobileRoot, "lib/config/the_eye_api_config.dart"),
+  "utf8",
+);
+if (
+  !apiConfig.includes(
+    'defaultValue: "https://staging-api.theeye.com.ng/v1"',
+  )
+) {
+  failures.push(
+    "staging API default must be https://staging-api.theeye.com.ng/v1",
+  );
+}
+if (!apiConfig.includes("assertMobileApiBaseUrlMatchesFlavor")) {
+  failures.push("the_eye_api_config.dart missing API environment guard");
+}
+
 function readDartFirebaseOptions(flavor) {
   const filePath = path.join(
     mobileRoot,
@@ -46,13 +63,14 @@ function readDartFirebaseOptions(flavor) {
   const source = fs.readFileSync(filePath, "utf8");
   const projectId = source.match(/projectId:\s*"([^"]+)"/)?.[1];
   const appId = source.match(/appId:\s*"([^"]+)"/)?.[1];
+  const apiKey = source.match(/apiKey:\s*"([^"]+)"/)?.[1];
   const messagingSenderId = source.match(
     /messagingSenderId:\s*"([^"]+)"/,
   )?.[1];
   const webClientId = source.match(
     /androidGoogleWebClientId\s*=\s*"([^"]+)"/,
   )?.[1];
-  return { projectId, appId, messagingSenderId, webClientId, source };
+  return { projectId, appId, apiKey, messagingSenderId, webClientId, source };
 }
 
 function readGoogleServicesForPackage(googleServices, packageName) {
@@ -69,7 +87,8 @@ function readGoogleServicesForPackage(googleServices, packageName) {
   const webClientId = client?.oauth_client?.find(
     (oauth) => oauth.client_type === 3,
   )?.client_id;
-  return { projectId, senderId, appId, packageNameFromClient, webClientId };
+  const apiKey = client?.api_key?.[0]?.current_key;
+  return { projectId, senderId, appId, packageNameFromClient, webClientId, apiKey };
 }
 
 for (const flavor of flavors) {
@@ -133,6 +152,14 @@ for (const flavor of flavors) {
   if (dart.webClientId && dart.webClientId !== fromJson.webClientId) {
     failures.push(
       `${flavor} firebase_options web client ID does not match google-services.json`,
+    );
+  }
+  if (dart.apiKey?.startsWith("REPLACE_WITH_")) {
+    failures.push(`${flavor} firebase_options apiKey is still a placeholder`);
+  }
+  if (dart.apiKey && fromJson.apiKey && dart.apiKey !== fromJson.apiKey) {
+    failures.push(
+      `${flavor} firebase_options apiKey does not match google-services.json`,
     );
   }
 }

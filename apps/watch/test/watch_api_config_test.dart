@@ -71,10 +71,30 @@ void main() {
       );
     });
 
-    test('allows local dev URLs for any flavor', () {
+    test('rejects dashboard hostname as API for staging flavor', () {
       expect(
         () => assertWatchApiBaseUrlMatchesFlavor(
-          WatchFirebaseEnv.production,
+          WatchFirebaseEnv.staging,
+          'https://staging-dashboard8jps.theeye.com.ng/v1',
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('rejects local dev API for staging flavor', () {
+      expect(
+        () => assertWatchApiBaseUrlMatchesFlavor(
+          WatchFirebaseEnv.staging,
+          'http://10.99.68.107:4000/v1',
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('allows local dev API for development flavor', () {
+      expect(
+        () => assertWatchApiBaseUrlMatchesFlavor(
+          WatchFirebaseEnv.development,
           'http://10.0.2.2:4000/v1',
         ),
         returnsNormally,

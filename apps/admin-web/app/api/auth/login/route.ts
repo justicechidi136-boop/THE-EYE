@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       (error instanceof Error &&
         /fetch failed|ECONNREFUSED|Failed to fetch|network/i.test(error.message));
     const message = unreachable
-      ? "Cannot reach the API at http://localhost:4000. Start it with: pnpm --filter @the-eye/api run start:dev"
+      ? `Cannot reach the API at ${resolveApiBaseUrl()}. Check that the API is running.`
       : error instanceof Error
         ? error.message
         : "Login failed";

@@ -189,7 +189,9 @@ Firebase Console → **Authentication** → **Settings** → **Authorized domain
 | `the-eye-2stg.firebaseapp.com` | Firebase Auth default |
 | `the-eye-2stg.web.app` | Firebase Hosting (if used) |
 | `staging-api.theeye.com.ng` | Staging API host (OAuth / deep links if needed) |
-| `staging-admin.theeye.com.ng` | Staging admin host (**confirm DNS** — placeholder in manifest) |
+| `staging-dashboard8jps.theeye.com.ng` | Staging admin dashboard |
+| `staging-api.theeye.com.ng` | Staging API host |
+| `staging-livekit.theeye.com.ng` | Staging LiveKit host |
 
 ### Production (`the-eye-2pd-d0217`)
 

@@ -1,3 +1,5 @@
+import { resolveFcmCredentials } from "./firebase-credentials";
+
 export const DEVELOPMENT_FIREBASE_PROJECT_ID = "the-eye-29cff";
 export const STAGING_FIREBASE_PROJECT_ID = "the-eye-2stg";
 export const PRODUCTION_FIREBASE_PROJECT_ID = "the-eye-2pd-d0217";
@@ -31,6 +33,10 @@ export function resolveFirebaseProjectId(config: ConfigReader): FirebaseProjectI
 
   const fcmProjectId = config.get("FCM_PROJECT_ID")?.trim() ?? "";
   if (isKnownFirebaseProjectId(fcmProjectId)) return fcmProjectId;
+
+  const credentials = resolveFcmCredentials(config as Record<string, unknown>);
+  const credentialProjectId = credentials?.projectId?.trim() ?? "";
+  if (isKnownFirebaseProjectId(credentialProjectId)) return credentialProjectId;
 
   return DEVELOPMENT_FIREBASE_PROJECT_ID;
 }

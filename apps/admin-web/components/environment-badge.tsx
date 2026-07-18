@@ -1,4 +1,4 @@
-import { publicApiBaseUrl, publicAppEnvBadgeTone, publicAppEnvLabel } from "../lib/public-env";
+import { publicApiBaseUrl, publicAppEnvBadgeTone, publicAppEnvLabel } from "../lib/public-env.client";
 import { StatusBadge } from "./ui";
 
 export function EnvironmentBadge() {

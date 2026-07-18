@@ -222,11 +222,23 @@ Future<void> main() async {
         );
       } catch (error, stackTrace) {
         StartupDiagnostics.recordZoneError(error, stackTrace);
-        StartupDiagnostics.checkpoint(
-          "STARTUP 2: Firebase skipped for ${AppFlavorConfig.current.name} ($error)",
-        );
+        if (AppFlavorConfig.isDevelopment) {
+          StartupDiagnostics.checkpoint(
+            "STARTUP 2: Firebase skipped for ${AppFlavorConfig.current.name} ($error)",
+          );
+        } else {
+          rethrow;
+        }
       }
     }
+
+    assertMobileApiBaseUrlMatchesFlavor(
+      AppFlavorConfig.current,
+      theEyeApiUrl,
+    );
+    StartupDiagnostics.checkpoint(
+      "STARTUP 3: API base URL ${AppFlavorConfig.current.name} -> $theEyeApiUrl",
+    );
 
     runApp(const TheEyeBootstrap());
     StartupDiagnostics.checkpoint("STARTUP 4: runApp called");

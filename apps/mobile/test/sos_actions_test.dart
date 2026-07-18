@@ -23,6 +23,8 @@ import "package:the_eye_mobile/profile/car_profile_store.dart";
 import "package:the_eye_mobile/theme/theme_preferences.dart";
 import "package:the_eye_mobile/theme/theme_provider.dart";
 
+import "support/fake_google_sign_in.dart";
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late ThemeProvider themeProvider;
@@ -153,6 +155,7 @@ AppController _testController(ThemeProvider themeProvider) {
     socialAuthService: SocialAuthService(
       apiClient: apiClient,
       sessionStore: InMemoryAuthSessionStore(),
+      googleSignIn: FakeGoogleSignIn(),
     ),
     authSessionStore: InMemoryAuthSessionStore(),
     themeProvider: themeProvider,

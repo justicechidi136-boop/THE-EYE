@@ -36,6 +36,7 @@
     "test:brand:theme": "node scripts/brand-theme-smoke.cjs",
     "dev:bootstrap": "node scripts/local-dev-bootstrap.cjs",
     "test:docker:smoke": "node scripts/docker-compose-smoke.cjs",
+    "test:docker:livekit": "node scripts/validate-livekit-keys.cjs",
     "test:deploy:env": "node scripts/validate-production-env.cjs",
     "test:firebase:guard": "node scripts/firebase-guard-production.test.cjs",
     "test:secrets": "node scripts/validate-secrets.cjs",
@@ -70,5 +71,6 @@
     "test:ci:production-flutter-static": "node scripts/ci/validate-production-flutter-static.mjs --target both",
     "verify:smoke": "pnpm run test:mobile:smoke && pnpm run test:admin:smoke && pnpm run test:docker:smoke && pnpm run test:deploy:env && pnpm run test:load:validate"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=20" },
+  "packageManager": "pnpm@9.15.0"
 }

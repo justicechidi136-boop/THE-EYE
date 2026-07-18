@@ -53,7 +53,7 @@ Optional profiles:
 | `pooling` | PgBouncer |
 | `observability` | Prometheus |
 | `certbot` | Let's Encrypt helper |
-| `tools` | `api-migrate`, `api-seed` (seed = non-prod only) |
+| `tools` | `api-migrate`, `api-seed` (local dev dataset), `api-create-admin`, `api-seed-staging` |
 
 ---
 
@@ -160,6 +160,25 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tool
 ```
 
 **Do not run `api-seed` in production** unless you understand the idempotent seed data implications.
+
+### Staging: create admin login accounts
+
+Staging deploy runs migrations only — **no admin user exists until you seed**. Replace `REPLACE_ME` placeholders in `.env` before seeding.
+
+| Goal | Service | Required `.env` vars |
+|------|---------|----------------------|
+| Single Super Admin (admin dashboard login) | `api-create-admin` | `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
+| Full QA role matrix | `api-seed-staging` | `THE_EYE_APP_ENV=staging`, `STAGING_TEST_*` pairs (see `docs/staging-test-accounts.md`) |
+
+```bash
+# Option A — one Super Admin (fastest path to admin dashboard login)
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-create-admin
+
+# Option B — all staging test accounts (Super Admin + scoped admins + citizens)
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-seed-staging
+```
+
+Log in to the admin dashboard with the email/password you configured (`ADMIN_EMAIL` or `STAGING_TEST_SUPER_ADMIN_EMAIL`). See `docs/staging-test-accounts.md` for the full account matrix.
 
 ### Optional: connection pooling
 

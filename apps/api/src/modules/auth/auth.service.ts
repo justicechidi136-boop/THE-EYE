@@ -7,13 +7,17 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { AdminRoleName, adminRolePermissions, userRolePermissions, UserRole } from "@the-eye/shared";
 import type { VerifiedFirebaseIdentity } from "../../common/auth/firebase-id-token";
+import { peekFirebaseIdToken } from "../../common/auth/firebase-id-token";
 import { FirebaseAuthVerifier } from "../../common/auth/firebase-auth.verifier";
+import { resolveAppEnvironment } from "../../common/auth/firebase-environment";
+import { assertFirebaseProjectConfigured } from "../../common/auth/firebase-project";
 import { hashOtp, hashPassword, hashToken, randomToken, verifyPassword } from "../../common/auth/crypto";
 import { parseTtl, signJwt, verifyJwt, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret, requireJwtRefreshSecret } from "../../common/auth/jwt-secrets";
@@ -41,6 +45,8 @@ type GoogleInput = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ConfigService) private readonly config: ConfigService,
@@ -410,9 +416,33 @@ export class AuthService {
   }
 
   private async verifyFirebaseIdentity(idToken: string, expectedProvider: "google.com" | "apple.com") {
+    const expectedProjectId = assertFirebaseProjectConfigured(this.config);
     try {
       return await this.firebaseVerifier.verify(idToken, expectedProvider);
-    } catch {
+    } catch (error) {
+      const peek = peekFirebaseIdToken(idToken);
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Firebase token verification failed (expectedProject=${expectedProjectId}, ` +
+          `tokenAud=${peek?.aud ?? "unknown"}, tokenIss=${peek?.iss ?? "unknown"}, ` +
+          `tokenExp=${peek?.exp ?? "unknown"}, tokenProvider=${peek?.provider ?? "unknown"}, ` +
+          `expectedProvider=${expectedProvider}): ${reason}`,
+      );
+      const appEnv = resolveAppEnvironment({
+        THE_EYE_APP_ENV: this.config.get<string>("THE_EYE_APP_ENV"),
+        FCM_PROJECT_ID: this.config.get<string>("FCM_PROJECT_ID"),
+        FIREBASE_PROJECT_ID: this.config.get<string>("FIREBASE_PROJECT_ID"),
+        NODE_ENV: process.env.NODE_ENV,
+      });
+      if (appEnv === "staging" && peek?.aud && peek.aud !== expectedProjectId) {
+        throw new UnauthorizedException({
+          message: "Invalid Firebase identity token",
+          code: "FIREBASE_TOKEN_PROJECT_MISMATCH",
+          expectedProjectId,
+          tokenAud: peek.aud,
+          tokenIss: peek.iss ?? null,
+        });
+      }
       throw new UnauthorizedException("Invalid Firebase identity token");
     }
   }

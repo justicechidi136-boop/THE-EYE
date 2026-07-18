@@ -27,6 +27,36 @@ function decodeJwtPart(part: string): Record<string, unknown> {
   return JSON.parse(json) as Record<string, unknown>;
 }
 
+export type FirebaseIdTokenPeek = {
+  aud?: string;
+  iss?: string;
+  exp?: number;
+  provider?: string;
+};
+
+/** Decode Firebase ID token claims without signature verification (diagnostics only). */
+export function peekFirebaseIdToken(idToken: string): FirebaseIdTokenPeek | null {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) return null;
+
+  try {
+    const payload = decodeJwtPart(parts[1]) as {
+      aud?: string;
+      iss?: string;
+      exp?: number;
+      firebase?: { sign_in_provider?: string };
+    };
+    return {
+      aud: typeof payload.aud === "string" ? payload.aud : undefined,
+      iss: typeof payload.iss === "string" ? payload.iss : undefined,
+      exp: typeof payload.exp === "number" ? payload.exp : undefined,
+      provider: payload.firebase?.sign_in_provider,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getFirebaseCerts(fetchImpl: typeof fetch = fetch): Promise<Record<string, string>> {
   const now = Date.now();
   if (certCache && now - certCache.fetchedAt < CERT_CACHE_TTL_MS) {

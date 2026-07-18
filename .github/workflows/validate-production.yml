@@ -88,13 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Static validation manifest report
         run: node scripts/ci/production-readiness-report.mjs --mode static-report
@@ -306,13 +300,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Require production environment vars (no fallback)
         run: |
@@ -359,13 +347,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Require NEXT_PUBLIC_API_BASE_URL (no fallback)
         run: |
@@ -400,6 +382,8 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-pnpm
 
       - uses: actions/setup-java@v4
         with:
@@ -468,6 +452,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-pnpm
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -532,13 +518,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Require NEXT_PUBLIC_API_BASE_URL (no fallback)
         run: |

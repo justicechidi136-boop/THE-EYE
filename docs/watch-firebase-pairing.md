@@ -48,8 +48,11 @@ Update Dart options from the downloaded JSON:
 cd apps/watch
 flutter pub get
 
-# Staging (safe default for local/staging API + Firebase)
-flutter run --flavor staging --dart-define=THE_EYE_FIREBASE_ENV=staging --dart-define=THE_EYE_API_BASE_URL=http://10.0.2.2:4000/v1
+# Staging (remote staging API + staging Firebase)
+flutter run --flavor staging
+
+# Local PC API (development flavor only)
+flutter run --flavor development --dart-define=THE_EYE_DEV_LAN_HOST=YOUR_LAN_IP
 
 # Production flavor (only when intentionally testing production Firebase)
 flutter run --flavor production --dart-define=THE_EYE_FIREBASE_ENV=production

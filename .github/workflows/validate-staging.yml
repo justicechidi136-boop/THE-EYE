@@ -60,18 +60,12 @@ jobs:
       S3_BUCKET: the-eye
       S3_ACCESS_KEY: ci_s3_access_key
       S3_SECRET_KEY: ci_s3_secret_key_32_chars_minimum
-      CORS_ORIGINS: https://staging-admin.theeye.com.ng
+      CORS_ORIGINS: https://staging-dashboard8jps.theeye.com.ng
       GOOGLE_OAUTH_CLIENT_ID: ci-google-oauth-client-id
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Resolve staging environment vars
         run: |
@@ -160,7 +154,7 @@ jobs:
           export S3_BUCKET="the-eye"
           export S3_ACCESS_KEY="ci_s3_access_key"
           export S3_SECRET_KEY="ci_s3_secret_key_32_chars_minimum"
-          export CORS_ORIGINS="https://staging-admin.theeye.com.ng"
+          export CORS_ORIGINS="https://staging-dashboard8jps.theeye.com.ng"
           export GOOGLE_OAUTH_CLIENT_ID="ci-google-oauth-client-id"
           unset METRICS_BEARER_TOKEN
           unset FCM_CLIENT_EMAIL
@@ -182,13 +176,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Resolve NEXT_PUBLIC_API_BASE_URL
         run: |
@@ -196,7 +184,7 @@ jobs:
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
             echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in staging environment; using canonical fallback"
-            URL="https://staging-api.theeye.com.ng"
+            URL="https://staging-api.theeye.com.ng/v1"
           fi
           URL="$URL" node scripts/ci/validate-staging-api-url.mjs "$URL"
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
@@ -211,8 +199,10 @@ jobs:
       - name: Build admin-web (staging)
         run: pnpm --filter @the-eye/admin-web run build
 
-      - name: Validate staging bundle isolation
-        run: node scripts/validate-admin-next-bundle.cjs apps/admin-web/.next staging "${NEXT_PUBLIC_API_BASE_URL}"
+      - name: Validate staging artifacts
+        run: |
+          node scripts/validate-staging-artifacts.cjs --admin-next apps/admin-web/.next
+          node scripts/validate-admin-next-bundle.cjs apps/admin-web/.next staging "${NEXT_PUBLIC_API_BASE_URL}"
 
   mobile:
     name: Mobile staging analyze, test, build
@@ -221,13 +211,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - uses: actions/setup-java@v4
         with:
@@ -280,8 +264,7 @@ jobs:
         run: flutter analyze lib test --no-fatal-infos --no-fatal-warnings
 
       - name: Test
-        working-directory: apps/mobile
-        run: flutter test
+        run: pnpm run mobile:test
 
       - name: Validate mobile Firebase wiring
         run: |
@@ -302,7 +285,11 @@ jobs:
 
       - name: Build staging APK
         if: steps.mobile_gs_json.outputs.has_secret == 'true'
-        run: pnpm --dir apps/mobile exec flutter build apk --flavor staging
+        run: pnpm --dir apps/mobile exec flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging
+
+      - name: Validate mobile staging artifact
+        if: steps.mobile_gs_json.outputs.has_secret == 'true'
+        run: node scripts/validate-staging-artifacts.cjs --mobile-apk apps/mobile/build/app/outputs/flutter-apk/app-staging-release.apk
 
   watch:
     name: Watch staging analyze, test, build
@@ -311,13 +298,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - uses: actions/setup-java@v4
         with:
@@ -389,6 +370,10 @@ jobs:
         if: steps.watch_gs_json.outputs.has_secret == 'true'
         run: pnpm --dir apps/watch exec flutter build apk --flavor staging --debug
 
+      - name: Validate watch staging artifact
+        if: steps.watch_gs_json.outputs.has_secret == 'true'
+        run: node scripts/validate-staging-artifacts.cjs --watch-apk apps/watch/build/app/outputs/flutter-apk/app-staging-debug.apk
+
   firebase:
     name: Firebase staging guards
     runs-on: ubuntu-latest
@@ -436,7 +421,7 @@ jobs:
         run: node scripts/validate-firebase-auth-providers.cjs
 
   docker:
-    name: Docker admin image (staging)
+    name: Docker images (staging)
     runs-on: ubuntu-latest
     environment: staging
     env:
@@ -455,11 +440,31 @@ jobs:
           URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
           if [ -z "$URL" ]; then
             echo "::warning::NEXT_PUBLIC_API_BASE_URL not set in staging environment; using canonical fallback"
-            URL="https://staging-api.theeye.com.ng"
+            URL="https://staging-api.theeye.com.ng/v1"
           fi
           URL="$URL" node scripts/ci/validate-staging-api-url.mjs "$URL"
           echo "NEXT_PUBLIC_API_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "CI_STAGING_API_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Docker compose smoke
+        run: node scripts/docker-compose-smoke.cjs
+
+      - name: Validate LiveKit keys
+        run: node scripts/validate-livekit-keys.cjs
+
+      - name: Validate nginx config
+        run: node scripts/validate-nginx-config.cjs
+
+      - name: Build staging API Docker image
+        run: |
+          docker build \
+            -f apps/api/Dockerfile \
+            --target production \
+            -t the-eye-api:staging-validate \
+            .
+
+      - name: Validate API runtime image
+        run: node scripts/validate-api-runtime-image.cjs the-eye-api:staging-validate
 
       - name: Build staging admin-web Docker image
         run: |
@@ -473,3 +478,6 @@ jobs:
 
       - name: Validate staging Docker bundle isolation
         run: node scripts/validate-admin-docker-bundle.cjs the-eye-admin:staging-validate staging "${NEXT_PUBLIC_API_BASE_URL}"
+
+      - name: Validate admin-web runtime image
+        run: node scripts/validate-admin-runtime-image.cjs the-eye-admin:staging-validate

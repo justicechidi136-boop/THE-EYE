@@ -69,13 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -91,13 +85,21 @@ jobs:
 
       - name: Validate migrations against schema
         run: |
+          set -euo pipefail
+          export DATABASE_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20"
+          export DATABASE_DIRECT_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public"
+          export SHADOW_DATABASE_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/postgres"
           pnpm --filter @the-eye/api exec prisma migrate diff \
             --from-migrations prisma/migrations \
             --to-schema-datamodel prisma/schema.prisma \
-            --shadow-database-url "${DATABASE_DIRECT_URL}"
+            --shadow-database-url "${SHADOW_DATABASE_URL}"
 
       - name: Apply migrations
-        run: pnpm --filter @the-eye/api exec prisma migrate deploy
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public&connection_limit=5&pool_timeout=20"
+          export DATABASE_DIRECT_URL="postgresql://the_eye:ci_postgres_password@localhost:5432/the_eye?schema=public"
+          pnpm --filter @the-eye/api exec prisma migrate deploy
 
       - name: Backend tests
         run: pnpm run test:backend
@@ -108,13 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: ./.github/actions/setup-pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -130,6 +126,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-pnpm
 
       - uses: actions/setup-java@v4
         with:
@@ -156,6 +154,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-pnpm
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -181,9 +181,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Validate CI pnpm configuration
+        run: node scripts/validate-ci-pnpm.cjs
 
       - name: Staging Firebase ID guard (CI-safe)
         run: |

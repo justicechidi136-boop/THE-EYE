@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { validateComposeLivekitKeys } = require("./validate-livekit-keys.cjs");
 
 const root = path.join(__dirname, "..");
 const composePath = path.join(root, "infra", "docker", "docker-compose.yml");
@@ -15,6 +16,7 @@ const requiredServices = [
   "nginx:",
   "api-migrate:",
   "api-seed:",
+  "api-create-admin:",
   "certbot:",
   "prometheus:",
 ];
@@ -29,14 +31,25 @@ const requiredComposeMarkers = [
   "minio_data:",
   "nginx_cache:",
   "certbot_www:",
-  "prisma:deploy",
-  "db:seed",
+  "node_modules/prisma/build/index.js",
+  "prisma/seed.ts",
+  "prisma/create-admin.ts",
+  "migrate",
+  "deploy",
   "DATABASE_DIRECT_URL",
-  "THE_EYE_SERVER_NAME",
+  "THE_EYE_ADMIN_SERVER_NAME",
+  "THE_EYE_API_SERVER_NAME",
+  "THE_EYE_LIVEKIT_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_GENERATE_DEV_SSL",
+  "THE_EYE_TLS_BOOTSTRAP",
   "METRICS_BEARER_TOKEN:?",
   "condition: service_healthy",
+  "FCM_PROJECT_ID",
+  "FIREBASE_PROJECT_ID",
+  "THE_EYE_APP_ENV",
+  "the-eye-api-tools:",
+  "target: tools",
 ];
 
 const missingServices = requiredServices.filter((needle) => !compose.includes(needle));
@@ -48,31 +61,64 @@ if (missingServices.length || missingMarkers.length) {
   process.exit(1);
 }
 
+const livekitErrors = validateComposeLivekitKeys(compose, fs.readFileSync(
+  path.join(root, "infra", "docker", "livekit", "livekit.yaml"),
+  "utf8",
+));
+if (livekitErrors.length) {
+  console.error("Docker Compose smoke failed. LiveKit:", livekitErrors.join("; "));
+  process.exit(1);
+}
+
 const healthcheckCount = (compose.match(/healthcheck:/g) || []).length;
 if (healthcheckCount < 7) {
   console.error(`Docker Compose smoke failed. Expected at least 7 healthchecks, found ${healthcheckCount}.`);
   process.exit(1);
 }
 
-const nginxTemplate = fs.readFileSync(
-  path.join(root, "infra", "docker", "nginx", "render", "the-eye.conf.template"),
+const httpTemplate = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "render", "http.conf.template"),
   "utf8",
 );
-const nginxLocations = fs.readFileSync(
-  path.join(root, "infra", "docker", "nginx", "snippets", "the-eye-locations.conf"),
+const httpsTemplate = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "render", "https.conf.template"),
+  "utf8",
+);
+const upstreams = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "upstreams.conf"),
+  "utf8",
+);
+const adminLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "admin-locations.conf"),
+  "utf8",
+);
+const apiLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "api-locations.conf"),
+  "utf8",
+);
+const livekitLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "livekit-locations.conf"),
+  "utf8",
+);
+const healthzSnippet = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "healthz.conf"),
   "utf8",
 );
 const nginxChecks = [
-  ["ssl_certificate", nginxTemplate, "HTTPS ssl_certificate"],
-  ["listen 443 ssl", nginxTemplate, "HTTPS listener"],
-  ["include /etc/nginx/snippets/ssl-params.conf", nginxTemplate, "SSL params snippet"],
-  ["include /etc/nginx/snippets/the-eye-locations.conf", nginxTemplate, "shared locations snippet"],
-  ["location = /metrics", nginxLocations, "metrics blocked"],
-  ["location /v1/", nginxLocations, "API /v1/ route"],
-  ["proxy_pass http://the_eye_api", nginxLocations, "API upstream"],
-  ["location /livekit/", nginxLocations, "LiveKit route"],
-  ["proxy_pass http://the_eye_livekit", nginxLocations, "LiveKit upstream"],
-  ["/.well-known/acme-challenge/", nginxTemplate, "ACME challenge path"],
+  ["ssl_certificate", httpsTemplate, "HTTPS ssl_certificate"],
+  ["listen 443 ssl", httpsTemplate, "HTTPS listener"],
+  ["include /etc/nginx/snippets/ssl-params.conf", httpsTemplate, "SSL params snippet"],
+  ["include /etc/nginx/snippets/healthz.conf", httpTemplate, "healthz snippet on HTTP"],
+  ["include /etc/nginx/snippets/healthz.conf", httpsTemplate, "healthz snippet on HTTPS"],
+  ["location /v1/", apiLocations, "API /v1/ route"],
+  ["proxy_pass http://the_eye_api", apiLocations, "API upstream"],
+  ["proxy_pass http://the_eye_admin_web", adminLocations, "Admin upstream"],
+  ["proxy_pass http://the_eye_livekit", livekitLocations, "LiveKit upstream"],
+  ["proxy_set_header Upgrade $http_upgrade", livekitLocations, "LiveKit WebSocket upgrade"],
+  ["location = /healthz", healthzSnippet, "shared healthz snippet"],
+  ["/.well-known/acme-challenge/", httpTemplate, "ACME challenge path"],
+  ["upstream the_eye_api", upstreams, "API upstream block"],
+  ["upstream the_eye_livekit", upstreams, "LiveKit upstream block"],
 ];
 for (const [needle, content, label] of nginxChecks) {
   if (!content.includes(needle)) {
@@ -85,8 +131,31 @@ const entrypoint = fs.readFileSync(
   path.join(root, "infra", "docker", "nginx", "entrypoint.d", "20-render-the-eye-conf.sh"),
   "utf8",
 );
-if (!entrypoint.includes("THE_EYE_SSL_REDIRECT") || !entrypoint.includes("openssl req")) {
-  console.error("Docker Compose smoke failed. Nginx entrypoint SSL logic is incomplete.");
+const entrypointChecks = [
+  "THE_EYE_ADMIN_SERVER_NAME",
+  "THE_EYE_API_SERVER_NAME",
+  "THE_EYE_LIVEKIT_SERVER_NAME",
+  "THE_EYE_SSL_REDIRECT",
+  "THE_EYE_TLS_BOOTSTRAP",
+  "render_service_http \"10-admin\"",
+  "render_service_https \"21-api\"",
+];
+for (const needle of entrypointChecks) {
+  if (!entrypoint.includes(needle)) {
+    console.error(`Docker Compose smoke failed. Nginx entrypoint missing ${needle}.`);
+    process.exit(1);
+  }
+}
+
+const apiDockerfile = fs.readFileSync(path.join(root, "apps", "api", "Dockerfile"), "utf8");
+if (
+  !apiDockerfile.includes("corepack") ||
+  !apiDockerfile.includes("pnpm install --frozen-lockfile") ||
+  !apiDockerfile.includes("pnpm --filter @the-eye/api deploy --prod")
+) {
+  console.error(
+    "Docker Compose smoke failed. API Dockerfile must use corepack, frozen lockfile, and pnpm deploy.",
+  );
   process.exit(1);
 }
 
