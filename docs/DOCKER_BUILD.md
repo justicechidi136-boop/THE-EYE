@@ -148,7 +148,7 @@ Build args:
 Key requirements:
 
 - **`output: "standalone"`** in `apps/admin-web/next.config.ts` with `outputFileTracingRoot` at monorepo root (traces `@the-eye/shared`)
-- **No runtime pnpm** — production stage uses plain `node:20-alpine` (no Corepack)
+- **No runtime pnpm** — production stage uses plain `node:20-alpine` with `corepack disable` (the base image enables Corepack by default)
 - **Non-root `nextjs` user** preserved
 - **No secrets in image** — runtime env from `.env` / secret manager only
 

@@ -103,6 +103,7 @@ function validateDockerfileStatic() {
   const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
   const requiredMarkers = [
     ".next/standalone",
+    "corepack disable",
     'CMD ["node", "apps/admin-web/server.js"]',
     "USER nextjs",
   ];
