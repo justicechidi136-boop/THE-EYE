@@ -30,6 +30,8 @@ FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 # node:20-alpine enables Corepack by default; disable so runtime has no pnpm shim/fetch.
 RUN corepack disable
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs

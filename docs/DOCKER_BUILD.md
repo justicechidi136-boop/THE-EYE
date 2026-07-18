@@ -149,6 +149,7 @@ Key requirements:
 
 - **`output: "standalone"`** in `apps/admin-web/next.config.ts` with `outputFileTracingRoot` at monorepo root (traces `@the-eye/shared`)
 - **No runtime pnpm** — production stage uses plain `node:20-alpine` with `corepack disable` (the base image enables Corepack by default)
+- **`HOSTNAME=0.0.0.0` and `PORT=3000`** — Next.js standalone binds all interfaces so Docker healthchecks to `127.0.0.1:3000` succeed (without this, the server may bind only the container eth0 IP)
 - **Non-root `nextjs` user** preserved
 - **No secrets in image** — runtime env from `.env` / secret manager only
 
