@@ -36,6 +36,19 @@ RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 COPY --from=builder --chown=nextjs:nodejs /app/apps/admin-web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/admin-web/.next/static ./apps/admin-web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/admin-web/public ./apps/admin-web/public
+RUN set -eux; \
+  if [ ! -f apps/admin-web/server.js ]; then \
+    if [ -f server.js ]; then \
+      mkdir -p apps/admin-web; \
+      mv server.js apps/admin-web/server.js; \
+    else \
+      echo "ERROR: Next.js standalone server.js not found under /app or /app/apps/admin-web" >&2; \
+      find . -maxdepth 4 -name server.js -print >&2 || true; \
+      exit 1; \
+    fi; \
+  fi; \
+  test -d apps/admin-web/.next/static; \
+  test -d apps/admin-web/public
 USER nextjs
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 CMD node -e "require('http').get('http://127.0.0.1:3000',(r)=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"

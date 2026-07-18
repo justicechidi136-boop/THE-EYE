@@ -473,11 +473,11 @@ jobs:
             --build-arg NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL}" \
             -f apps/admin-web/Dockerfile \
             --target production \
-            -t the-eye-admin:staging-validate \
+            -t the-eye-admin-web:staging-validate \
             .
 
       - name: Validate staging Docker bundle isolation
-        run: node scripts/validate-admin-docker-bundle.cjs the-eye-admin:staging-validate staging "${NEXT_PUBLIC_API_BASE_URL}"
+        run: node scripts/validate-admin-docker-bundle.cjs the-eye-admin-web:staging-validate staging "${NEXT_PUBLIC_API_BASE_URL}"
 
       - name: Validate admin-web runtime image
-        run: node scripts/validate-admin-runtime-image.cjs the-eye-admin:staging-validate
+        run: node scripts/validate-admin-runtime-image.cjs the-eye-admin-web:staging-validate

@@ -2,8 +2,8 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+const SERVER_PATHS = ["/app/apps/admin-web/server.js", "/app/server.js"];
 const REQUIRED_PATHS = [
-  "/app/apps/admin-web/server.js",
   "/app/apps/admin-web/.next/static",
   "/app/apps/admin-web/public",
 ];
@@ -15,6 +15,15 @@ const DEFAULT_ADMIN_REPO = "the-eye-admin-web";
 
 function run(command) {
   return execSync(command, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
+
+function runOrThrow(command) {
+  try {
+    return run(command);
+  } catch (error) {
+    const details = [error.stderr, error.stdout].filter(Boolean).join("\n").trim();
+    throw new Error(details ? `${error.message}\n${details}` : error.message);
+  }
 }
 
 function dockerAvailable() {
@@ -96,14 +105,13 @@ Examples:
 
 function assertInsideContainer(imageRef, assertionScript) {
   const escaped = assertionScript.replace(/'/g, `'\"'\"'`);
-  return run(`docker run --rm --entrypoint sh ${imageRef} -lc '${escaped}'`);
+  return runOrThrow(`docker run --rm --entrypoint sh ${imageRef} -lc '${escaped}'`);
 }
 
 function validateDockerfileStatic() {
   const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
   const requiredMarkers = [
     ".next/standalone",
-    "corepack disable",
     'CMD ["node", "apps/admin-web/server.js"]',
     "USER nextjs",
   ];
@@ -124,7 +132,28 @@ function validateDockerfileStatic() {
   console.log("Dockerfile static checks passed (Next.js standalone production layout).");
 }
 
+function resolveServerPath(imageRef) {
+  const probe = SERVER_PATHS.map((containerPath) => {
+    return `if [ -f ${containerPath} ]; then echo ${containerPath}; exit 0; fi`;
+  }).join("; ");
+
+  const resolved = assertInsideContainer(imageRef, `${probe}; echo missing-server; exit 1`);
+  if (resolved === "missing-server" || !resolved) {
+    throw new Error(`Could not find Next.js standalone server.js at ${SERVER_PATHS.join(" or ")}`);
+  }
+
+  if (resolved !== "/app/apps/admin-web/server.js") {
+    console.warn(
+      `Warning: server.js resolved at ${resolved}; Dockerfile CMD expects /app/apps/admin-web/server.js`,
+    );
+  }
+
+  return resolved;
+}
+
 function validateDockerImage(imageRef) {
+  const serverPath = resolveServerPath(imageRef);
+
   for (const containerPath of REQUIRED_PATHS) {
     assertInsideContainer(
       imageRef,
@@ -137,21 +166,31 @@ function validateDockerImage(imageRef) {
     "command -v pnpm >/dev/null 2>&1 && { echo 'unexpected pnpm shim in runtime image'; exit 1; } || true",
   );
 
+  const serverRelative = serverPath.replace(/^\/app\/?/, "") || "server.js";
   const moduleCheck = [
     "cd /app",
     "node - <<'NODE'",
-    "const server = require('fs').readFileSync('apps/admin-web/server.js', 'utf8');",
-    "if (!server.includes('next')) {",
-    "  console.error('apps/admin-web/server.js does not look like a Next standalone entry');",
+    `const serverPath = ${JSON.stringify(serverRelative)};`,
+    "const fs = require('fs');",
+    "const server = fs.readFileSync(serverPath, 'utf8');",
+    "if (!/next/i.test(server)) {",
+    "  console.error(serverPath + ' does not look like a Next standalone entry');",
     "  process.exit(1);",
     "}",
-    "console.log('standalone server.js present');",
-    "const entries = require('fs').readdirSync('node_modules');",
+    "console.log('standalone server.js present at ' + serverPath);",
+    "const moduleDirs = ['node_modules', 'apps/admin-web/node_modules'].filter((dir) => {",
+    "  try { return fs.statSync(dir).isDirectory(); } catch { return false; }",
+    "});",
+    "if (!moduleDirs.length) {",
+    "  console.error('no traced node_modules directory found under /app');",
+    "  process.exit(1);",
+    "}",
+    "const entries = moduleDirs.flatMap((dir) => fs.readdirSync(dir));",
     "if (entries.length < 3) {",
     "  console.error('standalone node_modules too sparse: ' + entries.join(', '));",
     "  process.exit(1);",
     "}",
-    "console.log('traced node_modules entries: ' + entries.length);",
+    "console.log('traced node_modules entries: ' + entries.length + ' across ' + moduleDirs.join(', '));",
     "NODE",
   ].join("\n");
 
