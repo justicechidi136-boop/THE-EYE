@@ -478,3 +478,6 @@ jobs:
 
       - name: Validate staging Docker bundle isolation
         run: node scripts/validate-admin-docker-bundle.cjs the-eye-admin:staging-validate staging "${NEXT_PUBLIC_API_BASE_URL}"
+
+      - name: Validate admin-web runtime image
+        run: node scripts/validate-admin-runtime-image.cjs the-eye-admin:staging-validate

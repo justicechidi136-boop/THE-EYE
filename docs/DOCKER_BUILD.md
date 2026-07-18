@@ -119,17 +119,63 @@ node scripts/validate-api-runtime-image.cjs
 
 ## Admin web (`apps/admin-web/Dockerfile`)
 
-Same pnpm/Corepack pattern. Build args:
+Uses **Next.js standalone output** for a self-contained production runtime (no Corepack/pnpm fetch at container startup).
+
+Build args:
 
 - `NEXT_PUBLIC_APP_ENV` — `staging` or `production`
 - `NEXT_PUBLIC_API_BASE_URL` — public API path or URL
+
+| Stage | Purpose |
+|-------|---------|
+| `deps` | `pnpm install --frozen-lockfile` with lockfile + workspace manifests |
+| `builder` | Build `@the-eye/shared`, validate build args, `next build` (standalone trace) |
+| `production` | Copy `.next/standalone`, `.next/static`, and `public`; run traced server with Node |
+
+### Production runtime layout (`/app`)
+
+```
+/app
+├── node_modules/                 # traced prod deps from standalone output
+├── apps/admin-web/
+│   ├── server.js                 # Next.js standalone entry
+│   ├── .next/static/             # client/static assets
+│   └── public/
+```
+
+**CMD:** `node apps/admin-web/server.js`
+
+Key requirements:
+
+- **`output: "standalone"`** in `apps/admin-web/next.config.ts` with `outputFileTracingRoot` at monorepo root (traces `@the-eye/shared`)
+- **No runtime pnpm** — production stage uses plain `node:20-alpine` (no Corepack)
+- **Non-root `nextjs` user** preserved
+- **No secrets in image** — runtime env from `.env` / secret manager only
+
+Build locally:
 
 ```bash
 docker build \
   --build-arg NEXT_PUBLIC_APP_ENV=staging \
   --build-arg NEXT_PUBLIC_API_BASE_URL=/v1 \
   -f apps/admin-web/Dockerfile --target production \
-  -t the-eye-admin:local .
+  -t the-eye-admin-web:local .
+```
+
+Validate runtime layout after build:
+
+```bash
+node scripts/validate-admin-runtime-image.cjs the-eye-admin-web:local
+# Or omit the arg when THE_EYE_IMAGE_TAG=local (compose default):
+node scripts/validate-admin-runtime-image.cjs
+```
+
+Verify startup without package-manager downloads:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e API_ORIGIN=http://127.0.0.1:4000 \
+  the-eye-admin-web:local
 ```
 
 ## CI regression
@@ -146,6 +192,7 @@ pnpm run test:docker:smoke
 pnpm run test:docker:livekit
 node scripts/validate-api-runtime-image.cjs   # resolves tag from compose / THE_EYE_IMAGE_TAG
 node scripts/validate-api-runtime-image.cjs the-eye-api:local   # explicit after manual docker build
+node scripts/validate-admin-runtime-image.cjs the-eye-admin-web:local
 ```
 
 ## Tool profile commands

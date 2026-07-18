@@ -1,4 +1,5 @@
-﻿import type { NextConfig } from "next";
+﻿import path from "node:path";
+import type { NextConfig } from "next";
 import { resolveAppEnv } from "./lib/public-env";
 
 // Fail fast during production builds when NEXT_PUBLIC_* isolation rules are violated.
@@ -16,6 +17,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../.."),
   transpilePackages: ["@the-eye/shared"],
   images: {
     localPatterns: [{ pathname: "/brand/**" }, { pathname: "/favicon.png" }, { pathname: "/apple-touch-icon.png" }],
