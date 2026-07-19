@@ -59,6 +59,49 @@ export class AuthService {
     return dto.admin ? this.loginAdmin(dto) : this.loginUser(dto);
   }
 
+  async register(dto: { email: string; password: string; firstName?: string; lastName?: string }) {
+    const email = this.normalizeEmail(dto.email);
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException({
+        message: "An account with this email already exists. Sign in or reset your password.",
+        code: "EMAIL_ALREADY_REGISTERED",
+      });
+    }
+
+    const firstName = dto.firstName?.trim() || "Citizen";
+    const lastName = dto.lastName?.trim() || "User";
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        passwordHash: hashPassword(dto.password),
+        profile: {
+          create: {
+            firstName,
+            lastName,
+            country: "Nigeria",
+            state: "Lagos",
+            lga: "Ikeja",
+          },
+        },
+      },
+      include: { trustedReporter: true, profile: true },
+    });
+
+    await this.audit.record({
+      actor: { sub: user.id, typ: "user", role: UserRole.Citizen, permissions: [] },
+      action: "auth.register",
+      entityType: "users",
+      entityId: user.id,
+      metadata: { email },
+    });
+
+    const profileComplete = this.isProfileComplete(user.profile ?? null);
+    const session = await this.issueUserSession(user);
+    return { ...session, profileComplete };
+  }
+
   async googleLogin(dto: GoogleInput) {
     if (!dto.idToken) throw new BadRequestException("Google ID token is required");
     const google = await this.verifyGoogleToken(dto.idToken);

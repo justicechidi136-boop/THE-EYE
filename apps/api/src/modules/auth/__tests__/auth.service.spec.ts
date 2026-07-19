@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException } from "@nestjs/common";
 import { hashOtp } from "../../../common/auth/crypto";
 import { AuthService } from "../auth.service";
 
@@ -12,7 +12,9 @@ function createAuthService(overrides: Record<string, unknown> = {}) {
     },
     user: {
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn(),
       upsert: jest.fn().mockResolvedValue({ id: "user-1", email: null, phone: "+2348012345678", trustedReporter: null }),
+      create: jest.fn(),
     },
     refreshToken: { create: jest.fn().mockResolvedValue({}) },
     ...overrides,
@@ -33,6 +35,48 @@ function createAuthService(overrides: Record<string, unknown> = {}) {
     prisma,
   };
 }
+
+describe("AuthService registration", () => {
+  it("creates a citizen account and returns a session", async () => {
+    const createdUser = {
+      id: "user-new",
+      email: "new@theeye.local",
+      phone: null,
+      trustedReporter: null,
+      profile: { firstName: "Citizen", lastName: "User", country: "Nigeria", state: "Lagos", lga: "Ikeja" },
+    };
+    const { service, prisma } = createAuthService({
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(createdUser),
+      },
+    });
+
+    const result = await service.register({
+      email: "new@theeye.local",
+      password: "Password123!",
+    });
+
+    expect(prisma.user.create).toHaveBeenCalled();
+    expect(result.accessToken.length).toBeGreaterThan(0);
+    expect(result.refreshToken.length).toBeGreaterThan(0);
+    expect(result.profileComplete).toBe(false);
+  });
+
+  it("rejects duplicate email registration", async () => {
+    const { service, prisma } = createAuthService({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: "existing-user", email: "taken@theeye.local" }),
+        create: jest.fn(),
+      },
+    });
+
+    await expect(
+      service.register({ email: "taken@theeye.local", password: "Password123!" }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+});
 
 describe("AuthService phone OTP", () => {
   it("rate limits OTP resend requests", async () => {

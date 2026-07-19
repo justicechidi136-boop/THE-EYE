@@ -1,6 +1,6 @@
 import { validate } from "class-validator";
 import { plainToInstance } from "class-transformer";
-import { LoginDto, PhoneOtpVerifyDto } from "../dto/auth.dto";
+import { LoginDto, PhoneOtpVerifyDto, RegisterDto } from "../dto/auth.dto";
 
 async function validateDto<T extends object>(cls: new () => T, plain: object) {
   const dto = plainToInstance(cls, plain);
@@ -30,5 +30,15 @@ describe("auth DTO validation", () => {
       code: "12",
     });
     expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it("accepts valid registration payloads", async () => {
+    const errors = await validateDto(RegisterDto, {
+      email: "citizen@theeye.local",
+      password: "Password123!",
+      firstName: "Amina",
+      lastName: "Okafor",
+    });
+    expect(errors.length).toBe(0);
   });
 });
