@@ -11,7 +11,6 @@ set -euo pipefail
 
 COMPOSE_FILE="${COMPOSE_FILE:-infra/docker/docker-compose.yml}"
 ENV_FILE="${ENV_FILE:-.env}"
-EMAIL="${CERTBOT_EMAIL:-}"
 PER_HOST="${THE_EYE_TLS_PER_HOST:-false}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,6 +22,8 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
   set +a
 fi
+
+EMAIL="${CERTBOT_EMAIL:-}"
 
 ADMIN_NAME="${THE_EYE_ADMIN_SERVER_NAME:-${THE_EYE_SERVER_NAME:-}}"
 API_NAME="${THE_EYE_API_SERVER_NAME:-}"

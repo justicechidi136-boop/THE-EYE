@@ -181,6 +181,19 @@ function resolveLocalDevApiOrigin(): string {
   return `http://${"localhost"}:4000`;
 }
 
+function extractApiPath(configured: string | undefined): string {
+  if (!configured) return LOCAL_DEV_API_BASE_PATH;
+  if (configured.startsWith("http://") || configured.startsWith("https://")) {
+    try {
+      const pathname = new URL(configured).pathname.replace(/\/$/, "");
+      return pathname || LOCAL_DEV_API_BASE_PATH;
+    } catch {
+      return LOCAL_DEV_API_BASE_PATH;
+    }
+  }
+  return configured.startsWith("/") ? configured : `/${configured}`;
+}
+
 function resolveLocalPublicApiBaseUrl(configured: string | undefined): string {
   if (configured) {
     if (configured.startsWith("http://") || configured.startsWith("https://")) {
@@ -249,20 +262,24 @@ export function resolvePublicApiBaseUrl(): string {
   return resolvePublicApiBaseUrlForEnv(appEnv);
 }
 
-/** Server-side API base URL; prefers API_ORIGIN for relative public paths in Docker. */
+/** Server-side API base URL; prefers API_ORIGIN for container-to-container routing in Docker. */
 export function resolveServerApiBaseUrl(): string {
   const appEnv = resolveAppEnv();
   const configured = readRawApiBaseUrl();
+  const path = extractApiPath(configured);
+
+  const apiOrigin = process.env.API_ORIGIN?.trim();
+  if (apiOrigin) {
+    return `${apiOrigin.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  }
 
   if (configured?.startsWith("http://") || configured?.startsWith("https://")) {
     return configured.replace(/\/$/, "");
   }
 
-  const path = configured ?? LOCAL_DEV_API_BASE_PATH;
-  const origin = process.env.API_ORIGIN?.trim() || (isLocalAppEnv(appEnv) ? resolveLocalDevApiOrigin() : undefined);
-
+  const origin = isLocalAppEnv(appEnv) ? resolveLocalDevApiOrigin() : undefined;
   if (!origin) {
-    throw new Error("API_ORIGIN is required when NEXT_PUBLIC_API_BASE_URL is a relative path in deployable builds");
+    throw new Error("API_ORIGIN is required for server-side API calls in deployable Docker builds");
   }
 
   return `${origin.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;

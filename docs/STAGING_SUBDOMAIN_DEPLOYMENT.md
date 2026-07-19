@@ -84,6 +84,8 @@ THE_EYE_API_SERVER_NAME=staging-api.theeye.com.ng
 THE_EYE_LIVEKIT_SERVER_NAME=staging-livekit.theeye.com.ng
 CORS_ORIGINS=https://staging-dashboard8jps.theeye.com.ng
 NEXT_PUBLIC_API_BASE_URL=https://staging-api.theeye.com.ng/v1
+# Server-side admin-web → API calls inside Docker (not used in browser bundles)
+API_ORIGIN=http://api:4000
 NEXT_PUBLIC_LIVEKIT_URL=wss://staging-livekit.theeye.com.ng
 ```
 
@@ -134,6 +136,13 @@ During issuance, certbot writes token files; expect `404` on the directory root 
 One cert covering all three hostnames at `infra/docker/nginx/certs/live/fullchain.pem`:
 
 ```bash
+# CERTBOT_EMAIL is read from .env when set there; export only if not in .env
+bash scripts/issue-letsencrypt.sh
+```
+
+Or with explicit overrides:
+
+```bash
 export THE_EYE_ADMIN_SERVER_NAME=staging-dashboard8jps.theeye.com.ng
 export THE_EYE_API_SERVER_NAME=staging-api.theeye.com.ng
 export THE_EYE_LIVEKIT_SERVER_NAME=staging-livekit.theeye.com.ng
@@ -145,7 +154,7 @@ bash scripts/issue-letsencrypt.sh
 
 ```bash
 export THE_EYE_TLS_PER_HOST=true
-# ... same hostname vars and CERTBOT_EMAIL ...
+# CERTBOT_EMAIL from .env is sufficient; export here only to override
 bash scripts/issue-letsencrypt.sh
 ```
 
@@ -354,3 +363,33 @@ Pushes to `staging` run `.github/workflows/validate-staging.yml`, which:
 | Run `nginx -t` before every reload | Reload nginx on failed config test |
 | Validate client artifacts before cutover | Remove legacy `/v1` on admin hostname until migration gate passes |
 | Keep rollback commit SHA noted | Commit `.env`, private keys, or cert PEMs to git |
+
+---
+
+## Troubleshooting — admin login / container DNS
+
+If admin login fails with `getaddrinfo EAI_AGAIN` or `nslookup staging-api.theeye.com.ng` returns `SERVFAIL` **inside** the `admin-web` container, the server-side code is likely calling the public API hostname instead of the internal Docker service.
+
+**Verify:**
+
+```bash
+docker compose -f infra/docker/docker-compose.yml exec admin-web printenv API_ORIGIN
+docker compose -f infra/docker/docker-compose.yml exec admin-web node -e "console.log(process.env.API_ORIGIN)"
+# Expect: http://api:4000
+
+docker compose -f infra/docker/docker-compose.yml exec admin-web wget -qO- http://api:4000/v1/health/ready
+# Expect: 200 OK
+```
+
+**Required `.env` split:**
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `NEXT_PUBLIC_API_BASE_URL` | Browser/client bundles (build-time) | `https://staging-api.theeye.com.ng/v1` |
+| `API_ORIGIN` | Server-side routes inside Docker (runtime) | `http://api:4000` |
+
+After changing `API_ORIGIN`, recreate the admin-web container:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate admin-web
+```
