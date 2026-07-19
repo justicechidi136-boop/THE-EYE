@@ -89,6 +89,17 @@ describe("validateEnvironment firebase isolation", () => {
     );
   });
 
+  it("rejects staging without FIREBASE_PROJECT_ID", () => {
+    expectValidationFailure(
+      {
+        NODE_ENV: "development",
+        THE_EYE_APP_ENV: "staging",
+        FCM_PROJECT_ID: STAGING_FIREBASE_PROJECT_ID,
+      },
+      "FIREBASE_PROJECT_ID is required in staging",
+    );
+  });
+
   it("accepts staging configuration", () => {
     const config = {
       NODE_ENV: "development",

@@ -90,10 +90,16 @@ export function assertStagingFirebaseGuard(config: Record<string, unknown>) {
   if (firebaseProjectId === PRODUCTION_FIREBASE_PROJECT_ID) {
     throw new Error("FIREBASE_PROJECT_ID must not use the production Firebase project in staging");
   }
-  if (fcmProjectId && fcmProjectId !== STAGING_FIREBASE_PROJECT_ID) {
+  if (!fcmProjectId) {
+    throw new Error(`FCM_PROJECT_ID is required in staging (must be ${STAGING_FIREBASE_PROJECT_ID})`);
+  }
+  if (!firebaseProjectId) {
+    throw new Error(`FIREBASE_PROJECT_ID is required in staging (must be ${STAGING_FIREBASE_PROJECT_ID})`);
+  }
+  if (fcmProjectId !== STAGING_FIREBASE_PROJECT_ID) {
     throw new Error(`FCM_PROJECT_ID must be ${STAGING_FIREBASE_PROJECT_ID} in staging`);
   }
-  if (firebaseProjectId && firebaseProjectId !== STAGING_FIREBASE_PROJECT_ID) {
+  if (firebaseProjectId !== STAGING_FIREBASE_PROJECT_ID) {
     throw new Error(`FIREBASE_PROJECT_ID must be ${STAGING_FIREBASE_PROJECT_ID} in staging`);
   }
 }

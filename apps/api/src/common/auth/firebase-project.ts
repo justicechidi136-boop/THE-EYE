@@ -1,3 +1,4 @@
+import { resolveAppEnvironment } from "./firebase-environment";
 import { resolveFcmCredentials } from "./firebase-credentials";
 
 export const DEVELOPMENT_FIREBASE_PROJECT_ID = "the-eye-29cff";
@@ -37,6 +38,15 @@ export function resolveFirebaseProjectId(config: ConfigReader): FirebaseProjectI
   const credentials = resolveFcmCredentials(config as Record<string, unknown>);
   const credentialProjectId = credentials?.projectId?.trim() ?? "";
   if (isKnownFirebaseProjectId(credentialProjectId)) return credentialProjectId;
+
+  const appEnvironment = resolveAppEnvironment({
+    THE_EYE_APP_ENV: config.get("THE_EYE_APP_ENV"),
+    FCM_PROJECT_ID: fcmProjectId,
+    FIREBASE_PROJECT_ID: explicit,
+    NODE_ENV: process.env.NODE_ENV,
+  });
+  if (appEnvironment === "staging") return STAGING_FIREBASE_PROJECT_ID;
+  if (appEnvironment === "production") return PRODUCTION_FIREBASE_PROJECT_ID;
 
   return DEVELOPMENT_FIREBASE_PROJECT_ID;
 }
