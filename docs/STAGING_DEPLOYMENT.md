@@ -105,6 +105,34 @@ docker images --filter reference='*the-eye-api*'
 
 Confirm the running API image tag matches the deployed commit (`THE_EYE_IMAGE_TAG` or git SHA), not an unpinned `:latest` tag. See [DOCKER_BUILD.md](./DOCKER_BUILD.md#image-tagging-policy).
 
+### Network egress (Firebase / Google OAuth)
+
+The API container must reach the public internet over HTTPS to verify Firebase ID tokens. The Firebase Admin SDK fetches Google signing certificates from `https://www.googleapis.com/robot/v1/metadata/x509/...` at runtime.
+
+Compose uses two Docker networks:
+
+| Network | `internal` | Attached by | Purpose |
+|---------|------------|-------------|---------|
+| `the-eye-internal` | `true` | postgres, redis, minio, livekit, admin-web, api | Service-to-service traffic; **no outbound internet** |
+| `the-eye-public` | `false` | nginx, certbot, **api** | Outbound HTTPS for Firebase cert fetch, ACME, TLS bootstrap |
+
+The API joins **both** networks: internal for database/redis/S3/LiveKit, public for Google/Firebase egress. Data stores stay on the internal network only.
+
+After deploy or network changes, recreate the API container and verify egress from inside it:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate api
+
+# DNS + HTTPS reachability (Alpine API image includes wget)
+docker compose -f infra/docker/docker-compose.yml exec api wget -qO- https://www.googleapis.com 2>&1 | head
+
+# Optional: confirm API is on both networks
+docker inspect the-eye-api --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+# Expected: the-eye-internal the-eye-public
+```
+
+If `wget` returns `SERVFAIL` or times out, Firebase token verification will fail with cert-fetch timeouts even when `FIREBASE_PROJECT_ID` is correct.
+
 ## Related runbooks
 
 - [DOCKER_BUILD.md](./DOCKER_BUILD.md) — image build details

@@ -205,6 +205,24 @@ docker compose -f infra/docker/docker-compose.yml --profile tools build api api-
 docker compose -f infra/docker/docker-compose.yml --profile tools run --rm api-migrate
 ```
 
+## Docker network egress (Firebase)
+
+`infra/docker/docker-compose.yml` defines two bridge networks:
+
+- **`the-eye-internal`** (`internal: true`) — postgres, redis, minio, livekit, admin-web. No direct outbound internet (security isolation for data stores).
+- **`the-eye-public`** — nginx, certbot, and the **API** service. Allows outbound HTTPS.
+
+The NestJS API must reach `www.googleapis.com` at runtime so the Firebase Admin SDK can fetch Google signing certificates for ID token verification. If the API is attached only to `the-eye-internal`, DNS resolves with `SERVFAIL` and auth endpoints time out despite correct `FIREBASE_PROJECT_ID`.
+
+The API is dual-homed: internal network for `postgres`/`redis`/`minio`/`livekit`, public network for Google/Firebase egress. After changing networks, recreate the API container on the VPS:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate api
+docker compose -f infra/docker/docker-compose.yml exec api wget -qO- https://www.googleapis.com 2>&1 | head
+```
+
+See [STAGING_DEPLOYMENT.md](./STAGING_DEPLOYMENT.md#network-egress-firebase--google-oauth) for staging verification steps.
+
 ## .dockerignore
 
 Excludes `node_modules`, tests, mobile app sources, and `.env` files from build context.
