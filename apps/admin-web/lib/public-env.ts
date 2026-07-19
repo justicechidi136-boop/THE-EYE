@@ -56,6 +56,26 @@ function readRawApiBaseUrl(): string | undefined {
   return configured || undefined;
 }
 
+/** Bracket access so Next.js does not inline missing build-time values into the server bundle. */
+function readRuntimeEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
+/** Docker Compose DNS uses lowercase service names (e.g. `api`, not `API`). */
+function normalizeApiOrigin(raw: string): string {
+  const trimmed = raw.trim();
+  try {
+    const url = new URL(trimmed);
+    url.protocol = url.protocol.toLowerCase();
+    url.hostname = url.hostname.toLowerCase();
+    const port = url.port ? `:${url.port}` : "";
+    return `${url.protocol}//${url.hostname}${port}`.replace(/\/$/, "");
+  } catch {
+    return trimmed.replace(/\/$/, "");
+  }
+}
+
 function assertNoMarkers(snapshot: string, markers: readonly string[], message: string): void {
   if (markers.some((marker) => snapshot.includes(marker))) {
     throw new Error(message);
@@ -199,7 +219,7 @@ function resolveLocalPublicApiBaseUrl(configured: string | undefined): string {
     if (configured.startsWith("http://") || configured.startsWith("https://")) {
       return configured.replace(/\/$/, "");
     }
-    const origin = process.env.API_ORIGIN?.trim() || resolveLocalDevApiOrigin();
+    const origin = readRuntimeEnv("API_ORIGIN") ?? resolveLocalDevApiOrigin();
     return `${origin.replace(/\/$/, "")}${configured.startsWith("/") ? configured : `/${configured}`}`;
   }
 
@@ -268,9 +288,9 @@ export function resolveServerApiBaseUrl(): string {
   const configured = readRawApiBaseUrl();
   const path = extractApiPath(configured);
 
-  const apiOrigin = process.env.API_ORIGIN?.trim();
+  const apiOrigin = readRuntimeEnv("API_ORIGIN");
   if (apiOrigin) {
-    return `${apiOrigin.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+    return `${normalizeApiOrigin(apiOrigin)}${path.startsWith("/") ? path : `/${path}`}`;
   }
 
   if (configured?.startsWith("http://") || configured?.startsWith("https://")) {
@@ -283,6 +303,33 @@ export function resolveServerApiBaseUrl(): string {
   }
 
   return `${origin.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** Safe runtime diagnostics for server-side API routing (no secrets). */
+export function resolveServerApiDiagnostics(): {
+  baseUrl: string;
+  apiOriginConfigured: boolean;
+  apiOriginHost: string | null;
+  publicApiPath: string;
+} {
+  const configured = readRawApiBaseUrl();
+  const path = extractApiPath(configured);
+  const apiOrigin = readRuntimeEnv("API_ORIGIN");
+  let apiOriginHost: string | null = null;
+  if (apiOrigin) {
+    try {
+      apiOriginHost = new URL(normalizeApiOrigin(apiOrigin)).hostname;
+    } catch {
+      apiOriginHost = null;
+    }
+  }
+
+  return {
+    baseUrl: resolveServerApiBaseUrl(),
+    apiOriginConfigured: Boolean(apiOrigin),
+    apiOriginHost,
+    publicApiPath: path,
+  };
 }
 
 export const publicAppEnv = resolveAppEnv();

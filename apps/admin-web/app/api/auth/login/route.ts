@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { apiRequest, resolveApiBaseUrl } from "../../../../lib/api/client";
+import { apiRequest } from "../../../../lib/api/client";
+import { resolveServerApiDiagnostics } from "../../../../lib/public-env";
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "../../../../lib/session";
 
 export async function POST(request: Request) {
@@ -36,12 +37,21 @@ export async function POST(request: Request) {
     });
     return response;
   } catch (error) {
+    const diagnostics = resolveServerApiDiagnostics();
     const unreachable =
       error instanceof TypeError ||
       (error instanceof Error &&
-        /fetch failed|ECONNREFUSED|Failed to fetch|network/i.test(error.message));
+        /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|Failed to fetch|network/i.test(error.message));
+    if (unreachable) {
+      console.error("[auth/login] API unreachable", {
+        baseUrl: diagnostics.baseUrl,
+        apiOriginConfigured: diagnostics.apiOriginConfigured,
+        apiOriginHost: diagnostics.apiOriginHost,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     const message = unreachable
-      ? `Cannot reach the API at ${resolveApiBaseUrl()}. Check that the API is running.`
+      ? `Cannot reach the API at ${diagnostics.baseUrl}. Check that the API is running.`
       : error instanceof Error
         ? error.message
         : "Login failed";
@@ -50,5 +60,5 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  return NextResponse.json({ baseUrl: resolveApiBaseUrl() });
+  return NextResponse.json(resolveServerApiDiagnostics());
 }
