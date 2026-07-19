@@ -122,6 +122,24 @@ class TheEyeApiClient {
     return _sessionFromResponse(response);
   }
 
+  Future<AuthExchangeResult> register({
+    required String email,
+    required String password,
+    String? firstName,
+    String? lastName,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final payload = <String, Object?>{
+      "email": email,
+      "password": password,
+      if (firstName != null && firstName.isNotEmpty) "firstName": firstName,
+      if (lastName != null && lastName.isNotEmpty) "lastName": lastName,
+    };
+    final response =
+        await postJson(TheEyeApiPaths.authRegister, payload, timeout: timeout);
+    return _exchangeFromResponse(response);
+  }
+
   Future<void> requestPasswordReset(
       {required String email,
       Duration timeout = const Duration(seconds: 30)}) async {

@@ -20,6 +20,7 @@ enum AuthRequestStatus {
   otpLocked,
   otpAlreadyUsed,
   otpMissing,
+  emailAlreadyRegistered,
 }
 
 class AuthRequestResult {
@@ -28,12 +29,14 @@ class AuthRequestResult {
     this.session,
     this.userMessage,
     this.fieldErrors = const {},
+    this.profileComplete = true,
   });
 
   final AuthRequestStatus status;
   final AuthSession? session;
   final String? userMessage;
   final Map<String, String> fieldErrors;
+  final bool profileComplete;
 
   bool get isSuccess => status == AuthRequestStatus.success;
 }
@@ -74,6 +77,57 @@ class AuthService {
       logAuthEvent("Auth login succeeded for ${parsed.kind.name} identifier");
       return AuthRequestResult(
           status: AuthRequestStatus.success, session: session);
+    } on AuthApiException catch (error) {
+      return _mapAuthException(error);
+    } on SocketException {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.networkError,
+        userMessage:
+            "Unable to reach THE EYE right now. Your details are still here — try again.",
+      );
+    } on http.ClientException {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.networkError,
+        userMessage:
+            "Connection failed. Your details are still here — try again.",
+      );
+    }
+  }
+
+  Future<AuthRequestResult> register({
+    required String email,
+    required String password,
+    required String confirmPassword,
+    String? firstName,
+    String? lastName,
+  }) async {
+    final validation = validateRegisterForm(
+      email: email,
+      password: password,
+      confirmPassword: confirmPassword,
+    );
+    if (!validation.isEmpty) {
+      return AuthRequestResult(
+        status: AuthRequestStatus.validationError,
+        userMessage: "Check the highlighted fields before continuing.",
+        fieldErrors: validation.values,
+      );
+    }
+
+    try {
+      final exchange = await _apiClient.register(
+        email: email.trim().toLowerCase(),
+        password: password,
+        firstName: firstName?.trim(),
+        lastName: lastName?.trim(),
+      );
+      await _sessionStore.save(exchange.session);
+      logAuthEvent("Auth registration succeeded for email");
+      return AuthRequestResult(
+        status: AuthRequestStatus.success,
+        session: exchange.session,
+        profileComplete: exchange.profileComplete,
+      );
     } on AuthApiException catch (error) {
       return _mapAuthException(error);
     } on SocketException {
@@ -203,6 +257,12 @@ class AuthService {
       return const AuthRequestResult(
         status: AuthRequestStatus.invalidCredentials,
         userMessage: "Email, phone, or password is incorrect.",
+      );
+    }
+    if (error.statusCode == 409) {
+      return AuthRequestResult(
+        status: AuthRequestStatus.emailAlreadyRegistered,
+        userMessage: error.userMessage,
       );
     }
     if (error.statusCode == 429) {
