@@ -39,6 +39,7 @@ WebSocket endpoint: `wss://staging-livekit.theeye.com.ng` → `livekit:7880` (se
 
 | Symptom | Fix |
 |---------|-----|
+| Docker `unhealthy` but LiveKit works | Healthcheck probes `http://127.0.0.1:7880` (returns `OK`); recreate the container after compose changes |
 | `could not parse keys` | Ensure `LIVEKIT_KEYS` format is `key: secret` with space |
 | Duplicate key config | Remove any `keys:` block from `livekit.yaml` |
 | Client cannot connect | Verify `NEXT_PUBLIC_LIVEKIT_URL` uses `wss://staging-livekit.theeye.com.ng` (dedicated hostname, not dashboard path) |
