@@ -388,8 +388,26 @@ docker compose -f infra/docker/docker-compose.yml exec admin-web wget -qO- http:
 | `NEXT_PUBLIC_API_BASE_URL` | Browser/client bundles (build-time) | `https://staging-api.theeye.com.ng/v1` |
 | `API_ORIGIN` | Server-side routes inside Docker (runtime) | `http://api:4000` |
 
-After changing `API_ORIGIN`, recreate the admin-web container:
+After changing `API_ORIGIN`, recreate the admin-web container (runtime env only — no rebuild needed):
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate admin-web
 ```
+
+After pulling **admin-web code changes** (e.g. `resolveServerApiBaseUrl` fixes), **rebuild the image** — `--force-recreate` alone reuses the old image:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env build --no-cache admin-web
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d admin-web
+```
+
+Use lowercase for the Docker service hostname: `API_ORIGIN=http://api:4000` (not `HTTP://API:4000`). Compose registers the service as `api`; uppercase hostnames may fail DNS lookup inside the container.
+
+**Diagnostic endpoint** (from browser or curl on the admin host):
+
+```bash
+curl -s https://staging-dashboard8jps.theeye.com.ng/api/auth/login
+# Expect: {"baseUrl":"http://api:4000/v1","apiOriginConfigured":true,"apiOriginHost":"api","publicApiPath":"/v1"}
+```
+
+If `baseUrl` shows `https://staging-api.theeye.com.ng/v1` instead, either `API_ORIGIN` is unset in the running container or the image predates the server-side routing fix — rebuild after pull.
