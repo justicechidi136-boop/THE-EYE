@@ -401,6 +401,18 @@ class SocialAuthService {
       );
     }
     if (error.statusCode == 401) {
+      if (error.errorCode == "FIREBASE_TOKEN_PROJECT_MISMATCH") {
+        final tokenProject = error.tokenAud ?? "unknown";
+        final apiProject = error.expectedProjectId ?? "the-eye-2stg";
+        return SocialAuthResult(
+          status: SocialAuthStatus.invalidToken,
+          userMessage:
+              "Firebase project mismatch: this app issued a token for `$tokenProject` "
+              "but the API expects `$apiProject`. Rebuild with "
+              "`flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging`, "
+              "or ask ops to verify FIREBASE_PROJECT_ID on the staging API.",
+        );
+      }
       return SocialAuthResult(
         status: SocialAuthStatus.invalidToken,
         userMessage: error.userMessage,

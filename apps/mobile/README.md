@@ -32,17 +32,17 @@ Local `THE_EYE_API_URL` overrides (e.g. `http://localhost:4000/v1`) apply only t
 
 ```bash
 flutter pub get
-flutter run --flavor staging
-flutter run --flavor production
+flutter run --flavor staging --dart-define=THE_EYE_FLAVOR=staging
+flutter run --flavor production --dart-define=THE_EYE_FLAVOR=production
 ```
 
 ## Build
 
 ```bash
-flutter build apk --flavor staging
-flutter build apk --flavor staging --debug
-flutter build apk --flavor production --release
-flutter build appbundle --flavor production --release
+flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging
+flutter build apk --flavor staging --debug --dart-define=THE_EYE_FLAVOR=staging
+flutter build apk --flavor production --release --dart-define=THE_EYE_FLAVOR=production
+flutter build appbundle --flavor production --release --dart-define=THE_EYE_FLAVOR=production
 ```
 
 ## Validate Firebase wiring

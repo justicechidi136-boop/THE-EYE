@@ -40,8 +40,19 @@ describe("firebase-environment guards", () => {
         assertStagingFirebaseGuard({
           THE_EYE_APP_ENV: "staging",
           FCM_PROJECT_ID: PRODUCTION_FIREBASE_PROJECT_ID,
+          FIREBASE_PROJECT_ID: PRODUCTION_FIREBASE_PROJECT_ID,
         }),
       "production Firebase project in staging",
+    );
+  });
+
+  it("requires explicit staging Firebase project IDs", () => {
+    expectGuardFailure(
+      () =>
+        assertStagingFirebaseGuard({
+          THE_EYE_APP_ENV: "staging",
+        }),
+      "FCM_PROJECT_ID is required in staging",
     );
   });
 

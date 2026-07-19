@@ -26,12 +26,23 @@ export class HealthController {
     const checks = { database, redis };
     const healthy = Object.values(checks).every((value) => value === "ok" || value === "skipped");
 
+    const firebaseAdmin = this.health.getFirebaseAdminProbe();
+    const firebaseAuth = this.health.getFirebaseAuthProbe();
+    const firebase = {
+      appEnvironment: firebaseAdmin.appEnvironment,
+      authProjectId: firebaseAuth.projectId,
+      adminProjectId: firebaseAdmin.projectId,
+      adminConfigured: firebaseAdmin.configured,
+      adminSimulation: firebaseAdmin.simulation,
+    };
+
     if (!healthy) {
       throw new ServiceUnavailableException({
         status: "degraded",
         checks,
-        firebaseAdmin: this.health.getFirebaseAdminProbe(),
-        firebaseAuth: this.health.getFirebaseAuthProbe(),
+        firebase,
+        firebaseAdmin,
+        firebaseAuth,
         timestamp: new Date().toISOString(),
       });
     }
@@ -39,8 +50,9 @@ export class HealthController {
     return {
       status: "ok",
       checks,
-      firebaseAdmin: this.health.getFirebaseAdminProbe(),
-      firebaseAuth: this.health.getFirebaseAuthProbe(),
+      firebase,
+      firebaseAdmin,
+      firebaseAuth,
       timestamp: new Date().toISOString(),
     };
   }

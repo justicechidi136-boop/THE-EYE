@@ -1,6 +1,7 @@
 import { resolveFirebaseProjectId } from "../firebase-project";
 import {
   DEVELOPMENT_FIREBASE_PROJECT_ID,
+  PRODUCTION_FIREBASE_PROJECT_ID,
   STAGING_FIREBASE_PROJECT_ID,
 } from "../firebase-project";
 
@@ -44,5 +45,21 @@ describe("resolveFirebaseProjectId", () => {
         get: () => undefined,
       }),
     ).toBe(DEVELOPMENT_FIREBASE_PROJECT_ID);
+  });
+
+  it("defaults to staging when THE_EYE_APP_ENV is staging and project env vars are unset", () => {
+    expect(
+      resolveFirebaseProjectId({
+        get: (key: string) => (key === "THE_EYE_APP_ENV" ? "staging" : undefined),
+      }),
+    ).toBe(STAGING_FIREBASE_PROJECT_ID);
+  });
+
+  it("defaults to production when THE_EYE_APP_ENV is production and project env vars are unset", () => {
+    expect(
+      resolveFirebaseProjectId({
+        get: (key: string) => (key === "THE_EYE_APP_ENV" ? "production" : undefined),
+      }),
+    ).toBe(PRODUCTION_FIREBASE_PROJECT_ID);
   });
 });

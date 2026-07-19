@@ -251,15 +251,25 @@ class AuthService {
 }
 
 class AuthApiException implements Exception {
-  AuthApiException(this.statusCode, this.userMessage, {this.errorCode});
+  AuthApiException(
+    this.statusCode,
+    this.userMessage, {
+    this.errorCode,
+    this.tokenAud,
+    this.expectedProjectId,
+  });
 
   final int statusCode;
   final String userMessage;
   final String? errorCode;
+  final String? tokenAud;
+  final String? expectedProjectId;
 
   static AuthApiException fromResponse(http.Response response) {
     String message = "Unable to complete sign in right now.";
     String? code;
+    String? tokenAud;
+    String? expectedProjectId;
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map) {
@@ -269,6 +279,10 @@ class AuthApiException implements Exception {
         } else if (raw is Map) {
           if (raw["message"] is String) message = raw["message"] as String;
           if (raw["code"] is String) code = raw["code"] as String;
+          if (raw["tokenAud"] is String) tokenAud = raw["tokenAud"] as String;
+          if (raw["expectedProjectId"] is String) {
+            expectedProjectId = raw["expectedProjectId"] as String;
+          }
         }
         if (decoded["code"] is String) code = decoded["code"] as String;
       }
@@ -280,6 +294,12 @@ class AuthApiException implements Exception {
           ? message
           : "Too many attempts. Wait a minute and try again.";
     }
-    return AuthApiException(response.statusCode, message, errorCode: code);
+    return AuthApiException(
+      response.statusCode,
+      message,
+      errorCode: code,
+      tokenAud: tokenAud,
+      expectedProjectId: expectedProjectId,
+    );
   }
 }
