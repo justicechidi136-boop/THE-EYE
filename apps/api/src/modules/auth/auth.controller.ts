@@ -12,6 +12,7 @@ import {
   PhoneOtpRequestDto,
   PhoneOtpVerifyDto,
   RefreshDto,
+  RegisterDto,
 } from "./dto/auth.dto";
 import { AuthService } from "./auth.service";
 
@@ -24,6 +25,11 @@ export class AuthController {
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post("register")
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 
   @Post("google")

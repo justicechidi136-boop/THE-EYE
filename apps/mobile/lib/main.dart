@@ -624,6 +624,7 @@ class _TheEyeAppState extends State<TheEyeApp> {
             routes: {
               "/": (_) => const SplashScreen(),
               "/login": (_) => const LoginRegisterScreen(),
+              "/register": (_) => const EmailRegistrationScreen(),
               "/otp-verification": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments
                     as OtpVerificationArgs?;
@@ -1688,11 +1689,338 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                         child: GestureDetector(
                           onTap: socialBusy || submitting
                               ? null
-                              : () => _handleSocialSignIn(
-                                    SocialAuthProvider.google,
-                                  ),
+                              : () => Navigator.of(context)
+                                  .pushNamed("/register"),
                           child: const Text(
                             "Create an account",
+                            style: TextStyle(color: BrandColors.accentHover),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class EmailRegistrationScreen extends StatefulWidget {
+  const EmailRegistrationScreen({super.key});
+
+  @override
+  State<EmailRegistrationScreen> createState() =>
+      _EmailRegistrationScreenState();
+}
+
+class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
+  final _emailController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  String? emailError;
+  String? firstNameError;
+  String? lastNameError;
+  String? passwordError;
+  String? confirmPasswordError;
+  String? formError;
+  bool submitting = false;
+  bool obscurePassword = true;
+  bool obscureConfirmPassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitRegistration() async {
+    setState(() {
+      submitting = true;
+      emailError = null;
+      firstNameError = null;
+      lastNameError = null;
+      passwordError = null;
+      confirmPasswordError = null;
+      formError = null;
+    });
+
+    final controller = AppScope.of(context);
+    final result = await controller.authService.register(
+      email: _emailController.text,
+      password: _passwordController.text,
+      confirmPassword: _confirmPasswordController.text,
+      firstName: _firstNameController.text,
+      lastName: _lastNameController.text,
+    );
+    if (!mounted) return;
+
+    if (result.fieldErrors.isNotEmpty) {
+      setState(() {
+        submitting = false;
+        emailError = result.fieldErrors["email"];
+        firstNameError = result.fieldErrors["firstName"];
+        lastNameError = result.fieldErrors["lastName"];
+        passwordError = result.fieldErrors["password"];
+        confirmPasswordError = result.fieldErrors["confirmPassword"];
+        formError = result.userMessage;
+      });
+      return;
+    }
+
+    if (result.isSuccess && result.session != null) {
+      await controller.setSession(result.session!);
+      if (!mounted) return;
+      if (!result.profileComplete) {
+        Navigator.of(context).pushReplacementNamed("/profile");
+        return;
+      }
+      Navigator.of(context).pushReplacementNamed("/home");
+      return;
+    }
+
+    setState(() {
+      submitting = false;
+      formError = result.userMessage;
+    });
+  }
+
+  InputDecoration _fieldDecoration({
+    required String hintText,
+    String? errorText,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      errorText: errorText,
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: BrandColors.authStroke, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: BrandColors.accentHover, width: 1),
+      ),
+      suffixIcon: suffixIcon,
+    );
+  }
+
+  Widget _labeledField({
+    required String label,
+    required Widget field,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: BrandColors.command,
+          ),
+        ),
+        const SizedBox(height: 8),
+        field,
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSubmit = !submitting &&
+        _emailController.text.trim().isNotEmpty &&
+        _passwordController.text.isNotEmpty &&
+        _confirmPasswordController.text.isNotEmpty;
+
+    return Scaffold(
+      backgroundColor: BrandColors.lightBackground,
+      appBar: AppBar(
+        backgroundColor: BrandColors.lightBackground,
+        elevation: 0,
+        foregroundColor: BrandColors.command,
+        title: const Text("Create account"),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Join THE EYE",
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: BrandColors.command,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                "Create your citizen account with email",
+                style: TextStyle(fontSize: 16, color: BrandColors.ash),
+              ),
+              const SizedBox(height: 24),
+              _labeledField(
+                label: "Email",
+                field: TextField(
+                  controller: _emailController,
+                  decoration: _fieldDecoration(
+                    hintText: "Enter your email",
+                    errorText: emailError,
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => setState(() => emailError = null),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _labeledField(
+                label: "First name (optional)",
+                field: TextField(
+                  controller: _firstNameController,
+                  decoration: _fieldDecoration(
+                    hintText: "First name",
+                    errorText: firstNameError,
+                  ),
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => setState(() => firstNameError = null),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _labeledField(
+                label: "Last name (optional)",
+                field: TextField(
+                  controller: _lastNameController,
+                  decoration: _fieldDecoration(
+                    hintText: "Last name",
+                    errorText: lastNameError,
+                  ),
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => setState(() => lastNameError = null),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _labeledField(
+                label: "Password",
+                field: TextField(
+                  controller: _passwordController,
+                  obscureText: obscurePassword,
+                  decoration: _fieldDecoration(
+                    hintText: "At least 8 characters",
+                    errorText: passwordError,
+                    suffixIcon: IconButton(
+                      onPressed: () =>
+                          setState(() => obscurePassword = !obscurePassword),
+                      icon: Icon(
+                        obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: BrandColors.ash,
+                      ),
+                    ),
+                  ),
+                  autofillHints: const [AutofillHints.newPassword],
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => setState(() => passwordError = null),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _labeledField(
+                label: "Confirm password",
+                field: TextField(
+                  controller: _confirmPasswordController,
+                  obscureText: obscureConfirmPassword,
+                  decoration: _fieldDecoration(
+                    hintText: "Re-enter password",
+                    errorText: confirmPasswordError,
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(
+                          () => obscureConfirmPassword = !obscureConfirmPassword),
+                      icon: Icon(
+                        obscureConfirmPassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: BrandColors.ash,
+                      ),
+                    ),
+                  ),
+                  autofillHints: const [AutofillHints.newPassword],
+                  onChanged: (_) => setState(() => confirmPasswordError = null),
+                  onSubmitted: (_) {
+                    if (canSubmit) _submitRegistration();
+                  },
+                ),
+              ),
+              if (formError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  formError!,
+                  style: const TextStyle(
+                    color: BrandColors.danger,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: canSubmit
+                      ? BrandColors.accentHover
+                      : BrandColors.authInactive,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(51),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: canSubmit ? _submitRegistration : null,
+                child: submitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text("Create account"),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Text.rich(
+                  TextSpan(
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: BrandColors.command,
+                    ),
+                    children: [
+                      const TextSpan(text: "Already have an account? "),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.baseline,
+                        baseline: TextBaseline.alphabetic,
+                        child: GestureDetector(
+                          onTap: submitting
+                              ? null
+                              : () => Navigator.of(context)
+                                  .pushReplacementNamed("/login"),
+                          child: const Text(
+                            "Log in",
                             style: TextStyle(color: BrandColors.accentHover),
                           ),
                         ),

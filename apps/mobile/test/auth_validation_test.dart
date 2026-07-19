@@ -26,6 +26,22 @@ void main() {
       expect(result["password"], contains("8 characters"));
     });
 
+    test("validates registration form including confirm password", () {
+      final mismatch = validateRegisterForm(
+        email: "citizen@theeye.local",
+        password: "Password123!",
+        confirmPassword: "Different123!",
+      );
+      expect(mismatch["confirmPassword"], contains("do not match"));
+
+      final invalidEmail = validateRegisterForm(
+        email: "bad-email",
+        password: "Password123!",
+        confirmPassword: "Password123!",
+      );
+      expect(invalidEmail["email"], isNotNull);
+    });
+
     test("validates OTP length and accepted characters", () {
       expect(validateOtpCode("12ab56"), isNotNull);
       expect(validateOtpCode("123456"), isNull);
@@ -170,6 +186,58 @@ void main() {
 
       expect(result.isSuccess, isTrue);
       expect((await store.load())?.accessToken, "access-token");
+    });
+
+    test("successful registration stores session and profile flag", () async {
+      final store = InMemoryAuthSessionStore();
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.authRegister)) {
+            return http.Response(
+              jsonEncode({
+                "accessToken": "access-token",
+                "refreshToken": "refresh-token",
+                "profileComplete": false,
+                "user": {"sub": "user-new"}
+              }),
+              200,
+            );
+          }
+          return http.Response("{}", 404);
+        }),
+      );
+      final service = AuthService(apiClient: client, sessionStore: store);
+      final result = await service.register(
+        email: "new@theeye.local",
+        password: "Password123!",
+        confirmPassword: "Password123!",
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.profileComplete, isFalse);
+      expect((await store.load())?.accessToken, "access-token");
+    });
+
+    test("maps duplicate email registration", () async {
+      final client = TheEyeApiClient(
+        httpClient: MockClient((_) async => http.Response(
+              jsonEncode({
+                "message":
+                    "An account with this email already exists. Sign in or reset your password.",
+                "code": "EMAIL_ALREADY_REGISTERED",
+              }),
+              409,
+            )),
+      );
+      final service = AuthService(
+          apiClient: client, sessionStore: InMemoryAuthSessionStore());
+      final result = await service.register(
+        email: "taken@theeye.local",
+        password: "Password123!",
+        confirmPassword: "Password123!",
+      );
+
+      expect(result.status, AuthRequestStatus.emailAlreadyRegistered);
     });
   });
 }

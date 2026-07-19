@@ -90,6 +90,31 @@ AuthFieldErrors validateLoginForm(
   return AuthFieldErrors(errors);
 }
 
+AuthFieldErrors validateRegisterForm({
+  required String email,
+  required String password,
+  required String confirmPassword,
+}) {
+  final errors = <String, String>{};
+
+  if (email.trim().isEmpty) {
+    errors["email"] = "Enter your email address.";
+  } else if (!isValidEmail(email.trim())) {
+    errors["email"] = "Enter a valid email address.";
+  }
+
+  final passwordError = validatePassword(password);
+  if (passwordError != null) errors["password"] = passwordError;
+
+  if (confirmPassword.isEmpty) {
+    errors["confirmPassword"] = "Confirm your password.";
+  } else if (confirmPassword != password) {
+    errors["confirmPassword"] = "Passwords do not match.";
+  }
+
+  return AuthFieldErrors(errors);
+}
+
 String? validatePassword(String password) {
   if (password.isEmpty) return "Enter your password.";
   if (password.length < AuthValidationRules.passwordMinLength) {
