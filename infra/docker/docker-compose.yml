@@ -186,8 +186,12 @@ services:
       timeout: 5s
       start_period: 45s
       retries: 5
+    # Dual-network: the-eye-internal for postgres/redis/minio/livekit; the-eye-public
+    # for outbound HTTPS (Firebase Admin SDK cert fetch from www.googleapis.com, FCM, etc.).
+    # internal: true on the-eye-internal blocks all egress — API must also join the-eye-public.
     networks:
       - the-eye-internal
+      - the-eye-public
 
   admin-web:
     build:
@@ -397,6 +401,9 @@ services:
       - the-eye-internal
 
 networks:
+  # Security isolation: data stores and app backends have no direct outbound internet.
+  # Services that need egress (api for Firebase/Google OAuth cert verification, nginx for
+  # TLS bootstrap, certbot for ACME) also attach to the-eye-public.
   the-eye-internal:
     driver: bridge
     internal: true
