@@ -1,10 +1,12 @@
 ﻿import { BullModule } from "@nestjs/bullmq";
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { join } from "path";
 import { MetricsModule } from "../common/metrics/metrics.module";
 import { RateLimitModule } from "../common/rate-limit/rate-limit.module";
 import { RequestContextMiddleware } from "../common/middleware/request-context.middleware";
+import { JsonSafeInterceptor } from "../common/serialization/json-safe.interceptor";
 import { validateEnvironment } from "../config/validate-env";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
@@ -65,7 +67,10 @@ const redisDisabled = process.env.THE_EYE_DISABLE_REDIS === "1";
     SmartwatchModule,
   ],
   controllers: [HealthController],
-  providers: [RequestContextMiddleware],
+  providers: [
+    RequestContextMiddleware,
+    { provide: APP_INTERCEPTOR, useClass: JsonSafeInterceptor },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
