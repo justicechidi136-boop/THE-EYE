@@ -32,14 +32,14 @@ describe("UsersService.getMe", () => {
       permissions: [],
     } as never);
 
-    expect(result).toMatchObject({
+    expect(result).toEqual(expect.objectContaining({
       id: "user-1",
       displayName: "Ada Okeke",
       email: "citizen@example.com",
       kycStatus: "Verified",
       trustScore: 91,
-      emergencyContact: { phone: "+2348099990000" },
-    });
+      emergencyContact: expect.objectContaining({ phone: "+2348099990000" }),
+    }));
   });
 
   it("returns admin identity without requiring a citizen profile", async () => {
@@ -53,11 +53,11 @@ describe("UsersService.getMe", () => {
       country: "Nigeria",
     } as never);
 
-    expect(result).toMatchObject({
+    expect(result).toEqual(expect.objectContaining({
       id: "admin-1",
       typ: "admin",
       email: "admin@theeye.local",
       role: "Super Admin",
-    });
+    }));
   });
 });
