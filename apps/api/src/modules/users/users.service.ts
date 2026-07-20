@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
-import { AdminRoleName } from "@the-eye/shared";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { AdminRoleName, UserRole } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
   buildCursorPage,
@@ -26,6 +26,71 @@ type DirectoryRow = {
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getMe(actor: JwtPayload) {
+    if (actor.typ === "admin") {
+      return {
+        id: actor.sub,
+        typ: actor.typ,
+        email: actor.email ?? null,
+        role: actor.role,
+        permissions: actor.permissions ?? [],
+        country: actor.country ?? null,
+        state: actor.state ?? null,
+        lga: actor.lga ?? null,
+      };
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: actor.sub },
+      include: {
+        profile: true,
+        trustedReporter: true,
+        kycRecords: { orderBy: { createdAt: "desc" }, take: 1 },
+        emergencyContacts: { orderBy: { priority: "asc" }, take: 1 },
+      },
+    });
+    if (!user) throw new NotFoundException("User not found");
+
+    const trusted =
+      user.trustedReporter && !user.trustedReporter.revokedAt ? user.trustedReporter : null;
+    const latestKyc = user.kycRecords[0] ?? null;
+    const primaryContact = user.emergencyContacts[0] ?? null;
+    const displayName =
+      [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(" ").trim() ||
+      user.email ||
+      user.phone ||
+      "Citizen";
+
+    return {
+      id: user.id,
+      typ: "user" as const,
+      email: user.email,
+      phone: user.phone,
+      role: trusted ? UserRole.TrustedReporter : UserRole.Citizen,
+      status: user.status,
+      displayName,
+      kycStatus: latestKyc?.status ?? "Unverified",
+      trustScore: trusted ? Number(trusted.trustScore) : null,
+      emergencyContact: primaryContact
+        ? {
+            name: primaryContact.name,
+            phone: primaryContact.phone,
+            relationship: primaryContact.relationship,
+          }
+        : null,
+      profile: user.profile
+        ? {
+            firstName: user.profile.firstName,
+            lastName: user.profile.lastName,
+            country: user.profile.country,
+            state: user.profile.state,
+            lga: user.profile.lga,
+            avatarUrl: user.profile.avatarUrl,
+          }
+        : null,
+    };
+  }
 
   async listDirectory(actor: JwtPayload, query: CursorPageQuery = {}) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list users");

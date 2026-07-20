@@ -5,6 +5,11 @@ import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./modules/app.module";
 
+// Prisma BigInt fields (e.g. audit_logs.sequence) must be JSON-serializable.
+(BigInt.prototype as { toJSON?: () => string }).toJSON = function toJSON() {
+  return this.toString();
+};
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   const isProduction = process.env.NODE_ENV === "production";

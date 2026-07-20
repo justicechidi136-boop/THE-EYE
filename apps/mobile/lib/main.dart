@@ -903,6 +903,17 @@ class AppController extends ChangeNotifier {
     await _pushNotifications?.syncTokenWithBackend();
   }
 
+  Future<void> clearSession() async {
+    await _authSessionStore.clear();
+    _cachedSession = null;
+    _sessionAccessToken = null;
+    notifyListeners();
+  }
+
+  bool get isAuthenticated =>
+      _cachedSession != null &&
+      (_cachedSession!.accessToken.isNotEmpty);
+
   void bindPushNotifications(PushNotificationService service) {
     _pushNotifications = service;
   }
@@ -4812,30 +4823,168 @@ class CommunityAlertsScreen extends StatelessWidget {
   }
 }
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final TheEyeApiClient _apiClient = TheEyeApiClient(baseUrl: theEyeApiUrl);
+  CitizenProfile? _profile;
+  String? _error;
+  bool _loading = true;
+  bool _loadStarted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_loadStarted) {
+      _loadStarted = true;
+      unawaited(_loadProfile());
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    final controller = AppScope.of(context);
+    if (!controller.isAuthenticated || controller.accessToken == null) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _profile = null;
+        _error = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final profile = await _apiClient.fetchCitizenProfile(
+        accessToken: controller.accessToken!,
+      );
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _loading = false;
+      });
+    } on AuthApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.userMessage;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Unable to load your profile right now.";
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _signOut() async {
+    await AppScope.of(context).clearSession();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil("/login", (_) => false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = AppScope.of(context);
+    final authenticated = controller.isAuthenticated;
+
     return SafetyScaffold(
       title: "Profile",
       selectedIndex: 4,
+      useFigmaShell: true,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: const [
-          SectionCard(
-            title: "Citizen profile",
-            child: Column(
-              children: [
-                CircleAvatar(radius: 42, child: Icon(Icons.person, size: 44)),
-                SizedBox(height: 16),
-                ProfileRow("Name", "Amina Okafor"),
-                ProfileRow("KYC status", "Verified"),
-                ProfileRow("Trust score", "82"),
-                ProfileRow("Emergency contact", "+234 800 000 0000"),
-              ],
+        children: [
+          if (!authenticated)
+            SectionCard(
+              title: "Sign in required",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    "Create an account or sign in to view your citizen profile, KYC status, and emergency contacts.",
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed("/login"),
+                    child: const Text("Sign in"),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed("/register"),
+                    child: const Text("Create an account"),
+                  ),
+                ],
+              ),
+            )
+          else if (_loading)
+            const SectionCard(
+              title: "Citizen profile",
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            )
+          else if (_error != null)
+            SectionCard(
+              title: "Citizen profile",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(_error!,
+                      style: const TextStyle(color: BrandColors.danger)),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: _loadProfile,
+                    child: const Text("Retry"),
+                  ),
+                ],
+              ),
+            )
+          else
+            SectionCard(
+              title: "Citizen profile",
+              child: Column(
+                children: [
+                  const CircleAvatar(
+                      radius: 42, child: Icon(Icons.person, size: 44)),
+                  const SizedBox(height: 16),
+                  ProfileRow("Name", _profile?.displayName ?? "Citizen"),
+                  if (_profile?.email != null && _profile!.email!.isNotEmpty)
+                    ProfileRow("Email", _profile!.email!),
+                  if (_profile?.phone != null && _profile!.phone!.isNotEmpty)
+                    ProfileRow("Phone", _profile!.phone!),
+                  ProfileRow("KYC status", _profile?.kycStatus ?? "Unverified"),
+                  ProfileRow(
+                    "Trust score",
+                    _profile?.trustScore != null
+                        ? _profile!.trustScore!.toStringAsFixed(0)
+                        : "Not rated",
+                  ),
+                  ProfileRow(
+                    "Emergency contact",
+                    _profile?.emergencyContactPhone ?? "Not set",
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton(
+                    onPressed: _signOut,
+                    child: const Text("Sign out"),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -5115,6 +5264,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
+    final authenticated = controller.isAuthenticated;
     return SafetyScaffold(
       title: "Settings",
       selectedIndex: 4,
@@ -5122,6 +5272,55 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
+          SectionCard(
+            title: "Account",
+            child: Column(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.person_outline,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: const Text("Profile"),
+                  subtitle: Text(
+                    authenticated
+                        ? "View your citizen profile and KYC status"
+                        : "Sign in to view your profile",
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).pushNamed("/profile"),
+                ),
+                if (authenticated)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.logout,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text("Sign out"),
+                    onTap: () async {
+                      await controller.clearSession();
+                      if (!context.mounted) return;
+                      Navigator.of(context)
+                          .pushNamedAndRemoveUntil("/login", (_) => false);
+                    },
+                  )
+                else
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.login,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text("Sign in"),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).pushNamed("/login"),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           SectionCard(
             title: "Your car",
             child: ListTile(

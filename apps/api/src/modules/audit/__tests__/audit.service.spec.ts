@@ -36,4 +36,26 @@ describe("AuditService", () => {
     expect(result.verified).toBe(false);
     expect(result.broken[0].reason).toBe("previous_hash_mismatch");
   });
+
+  it("serializes BigInt sequence values for JSON-safe list responses", async () => {
+    const { service, prisma } = buildService();
+    prisma.auditLog.findMany.mockResolvedValue([
+      {
+        id: "a1",
+        sequence: 42n,
+        action: "admin.login",
+        entityType: "admins",
+        eventHash: "abc",
+      },
+    ]);
+
+    const page = await service.list(
+      { sub: "admin-1", typ: "admin", role: "SuperAdmin", permissions: ["audit:read"] } as never,
+      {},
+      { limit: 10 },
+    );
+
+    expect(page.data[0]?.sequence).toBe("42");
+    expect(() => JSON.stringify(page)).not.toThrow();
+  });
 });

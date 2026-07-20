@@ -92,7 +92,16 @@ export class AuditService {
       orderBy: [{ sequence: "desc" as never }, { id: "desc" }],
       take: limit + 1,
     });
-    return buildCursorPage(rows, limit, (item) => encodeSequenceCursor(item.sequence));
+    const serialized = rows.map((row) => this.serializeAuditLog(row));
+    return buildCursorPage(serialized, limit, (item) => encodeSequenceCursor(item.sequence));
+  }
+
+  /** Prisma returns `sequence` as BigInt, which JSON.stringify cannot serialize. */
+  private serializeAuditLog<T extends { sequence?: bigint | number | string }>(row: T) {
+    return {
+      ...row,
+      sequence: row.sequence === undefined || row.sequence === null ? row.sequence : String(row.sequence),
+    };
   }
 
   async verifyChain() {

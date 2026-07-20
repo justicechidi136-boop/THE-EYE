@@ -15,6 +15,50 @@ export "../auth/auth_service.dart" show AuthApiException;
 export "../incidents/incident_submission_service.dart"
     show IncidentReportResponse, IncidentApiException;
 
+class CitizenProfile {
+  const CitizenProfile({
+    required this.id,
+    required this.displayName,
+    required this.kycStatus,
+    this.email,
+    this.phone,
+    this.trustScore,
+    this.emergencyContactPhone,
+    this.emergencyContactName,
+  });
+
+  final String id;
+  final String displayName;
+  final String kycStatus;
+  final String? email;
+  final String? phone;
+  final double? trustScore;
+  final String? emergencyContactPhone;
+  final String? emergencyContactName;
+
+  factory CitizenProfile.fromJson(Map<String, dynamic> json) {
+    final contact = json["emergencyContact"];
+    final contactMap = contact is Map
+        ? Map<String, dynamic>.from(contact)
+        : const <String, dynamic>{};
+    final trustRaw = json["trustScore"];
+    return CitizenProfile(
+      id: (json["id"] as String?) ?? "",
+      displayName: (json["displayName"] as String?)?.trim().isNotEmpty == true
+          ? json["displayName"] as String
+          : (json["email"] as String?) ??
+              (json["phone"] as String?) ??
+              "Citizen",
+      kycStatus: (json["kycStatus"] as String?) ?? "Unverified",
+      email: json["email"] as String?,
+      phone: json["phone"] as String?,
+      trustScore: trustRaw is num ? trustRaw.toDouble() : null,
+      emergencyContactPhone: contactMap["phone"] as String?,
+      emergencyContactName: contactMap["name"] as String?,
+    );
+  }
+}
+
 class PresignedEvidenceTarget {
   const PresignedEvidenceTarget({
     required this.bucket,
@@ -199,6 +243,29 @@ class TheEyeApiClient {
       timeout: timeout,
     );
     return _exchangeFromResponse(response);
+  }
+
+  Future<CitizenProfile> fetchCitizenProfile({
+    required String accessToken,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await _http
+        .get(
+          _uri(TheEyeApiPaths.usersMe),
+          headers: {
+            "accept": "application/json",
+            "authorization": "Bearer $accessToken",
+          },
+        )
+        .timeout(timeout);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      final map = decoded is Map<String, dynamic>
+          ? decoded
+          : Map<String, dynamic>.from(decoded as Map);
+      return CitizenProfile.fromJson(map);
+    }
+    throw AuthApiException.fromResponse(response);
   }
 
   AuthExchangeResult _exchangeFromResponse(http.Response response) {
