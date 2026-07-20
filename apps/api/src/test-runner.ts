@@ -2,6 +2,9 @@ import { readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
 import { pathToFileURL } from "url";
 import { isDeepStrictEqual } from "util";
+import { installJsonSafePrototypes } from "./common/serialization/json-safe";
+
+installJsonSafePrototypes();
 
 type TestCase = { name: string; fn: () => unknown | Promise<unknown> };
 const tests: TestCase[] = [];

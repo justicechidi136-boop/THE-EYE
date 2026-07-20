@@ -29,6 +29,7 @@ abstract final class TheEyeApiPaths {
   static const authRequestPhoneOtp = "/auth/phone/request-otp";
   static const authVerifyPhoneOtp = "/auth/phone/verify-otp";
   static const authPasswordResetRequest = "/auth/password-reset/request";
+  static const usersMe = "/users/me";
   static const notificationsPushTokens = "/notifications/push-tokens";
   static const notificationsPushTokensDeactivate =
       "/notifications/push-tokens/deactivate";

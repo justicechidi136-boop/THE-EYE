@@ -21,7 +21,6 @@ abstract final class EyeNavRoutes {
         route.startsWith("/neighborhood-watch") ||
         route == "/tracking" ||
         route == "/family" ||
-        route == "/profile" ||
         route == "/smartwatch" ||
         route.startsWith("/report/") ||
         route == "/live-video" ||
@@ -30,7 +29,9 @@ abstract final class EyeNavRoutes {
       return 1;
     }
     if (route == broadcast || route == "/notifications") return 3;
-    if (route == settings) return 4;
+    if (route == settings || route == "/profile" || route == "/your-car") {
+      return 4;
+    }
     return 0;
   }
 }

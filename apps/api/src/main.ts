@@ -3,7 +3,10 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { installJsonSafePrototypes } from "./common/serialization/json-safe";
 import { AppModule } from "./modules/app.module";
+
+installJsonSafePrototypes();
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });

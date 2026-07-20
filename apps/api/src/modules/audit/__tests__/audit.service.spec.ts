@@ -1,4 +1,7 @@
+import { installJsonSafePrototypes, toJsonSafe } from "../../../common/serialization/json-safe";
 import { AuditService } from "../audit.service";
+
+installJsonSafePrototypes();
 
 function buildService() {
   const created: any[] = [];
@@ -35,5 +38,28 @@ describe("AuditService", () => {
     const result = await service.verifyChain();
     expect(result.verified).toBe(false);
     expect(result.broken[0].reason).toBe("previous_hash_mismatch");
+  });
+
+  it("returns audit rows that become JSON-safe via centralized serialization", async () => {
+    const { service, prisma } = buildService();
+    prisma.auditLog.findMany.mockResolvedValue([
+      {
+        id: "a1",
+        sequence: 42n,
+        action: "admin.login",
+        entityType: "admins",
+        eventHash: "abc",
+      },
+    ]);
+
+    const page = await service.list(
+      { sub: "admin-1", typ: "admin", role: "SuperAdmin", permissions: ["audit:read"] } as never,
+      {},
+      { limit: 10 },
+    );
+
+    expect(page.data[0]?.sequence).toBe(42n);
+    expect(() => JSON.stringify(page)).not.toThrow();
+    expect(toJsonSafe(page).data[0]?.sequence).toBe("42");
   });
 });

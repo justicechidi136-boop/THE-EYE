@@ -92,7 +92,7 @@ export class AuditService {
       orderBy: [{ sequence: "desc" as never }, { id: "desc" }],
       take: limit + 1,
     });
-    return buildCursorPage(rows, limit, (item) => encodeSequenceCursor(item.sequence));
+    return buildCursorPage(rows, limit, (item) => encodeSequenceCursor(item.sequence as bigint | number | string));
   }
 
   async verifyChain() {

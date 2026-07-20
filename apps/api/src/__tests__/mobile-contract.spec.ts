@@ -50,6 +50,8 @@ describe("mobile contract sharing", () => {
     expect(paths.includes("/live-video/incidents/")).toBe(true);
     expect(paths.includes("/smartwatch/devices/register")).toBe(true);
     expect(paths.includes("/incidents/report")).toBe(true);
+    expect(paths.includes("/auth/register")).toBe(true);
+    expect(paths.includes("/users/me")).toBe(true);
   });
 
   it("aligns mobile API base URL with backend /v1 prefix", () => {

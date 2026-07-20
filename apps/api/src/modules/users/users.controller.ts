@@ -13,8 +13,8 @@ export class UsersController {
   constructor(private readonly users: UsersService) {}
 
   @Get("me")
-  me(@Req() request: { user: unknown }) {
-    return request.user;
+  me(@Req() request: { user: Parameters<UsersService["getMe"]>[0] }) {
+    return this.users.getMe(request.user);
   }
 
   @Get("directory")
