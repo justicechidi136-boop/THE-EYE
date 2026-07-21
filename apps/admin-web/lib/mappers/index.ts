@@ -87,9 +87,11 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
     evidence: media.map((item) => {
       const mediaItem = item as Record<string, unknown>;
       return {
+        id: String(mediaItem.id ?? ""),
         type: String(mediaItem.mediaType ?? "Media"),
         name: String(mediaItem.objectKey ?? "evidence"),
         hash: String(mediaItem.fileHash ?? "pending"),
+        contentType: mediaItem.contentType ? String(mediaItem.contentType) : undefined,
       };
     }),
   };
