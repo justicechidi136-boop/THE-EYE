@@ -23,6 +23,7 @@ import { parseTtl, signJwt, verifyJwt, type JwtPayload } from "../../common/auth
 import { requireJwtAccessSecret, requireJwtRefreshSecret } from "../../common/auth/jwt-secrets";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuthDeliveryService } from "./auth-delivery.service";
 import type { FirebaseExchangeDto, FirebaseLinkDto } from "./dto/auth.dto";
 import { isValidPhoneNumber, normalizePhoneNumber } from "./phone-normalize";
 
@@ -52,6 +53,7 @@ export class AuthService {
     @Inject(ConfigService) private readonly config: ConfigService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(FirebaseAuthVerifier) private readonly firebaseVerifier: FirebaseAuthVerifier,
+    @Inject(AuthDeliveryService) private readonly authDelivery: AuthDeliveryService,
   ) {}
 
   async login(dto: LoginInput) {
@@ -69,8 +71,11 @@ export class AuthService {
       });
     }
 
-    const firstName = dto.firstName?.trim() || "Citizen";
-    const lastName = dto.lastName?.trim() || "User";
+    const firstName = dto.firstName?.trim();
+    const lastName = dto.lastName?.trim();
+    if (!firstName || !lastName) {
+      throw new BadRequestException("First name and last name are required.");
+    }
 
     const user = await this.prisma.user.create({
       data: {
@@ -80,9 +85,7 @@ export class AuthService {
           create: {
             firstName,
             lastName,
-            country: "Nigeria",
-            state: "Lagos",
-            lga: "Ikeja",
+            ...this.incompleteProfileLocation(),
           },
         },
       },
@@ -117,15 +120,13 @@ export class AuthService {
         googleId: google.sub,
         profile: {
           create: {
-            firstName: dto.firstName ?? google.given_name ?? "Google",
-            lastName: dto.lastName ?? google.family_name ?? "User",
-            country: "Nigeria",
-            state: "Lagos",
-            lga: "Ikeja",
+            firstName: dto.firstName ?? google.given_name ?? this.nameFromEmail(google.email).firstName,
+            lastName: dto.lastName ?? google.family_name ?? this.nameFromEmail(google.email).lastName,
+            ...this.incompleteProfileLocation(),
           },
         },
       },
-      include: { trustedReporter: true },
+      include: { trustedReporter: true, profile: true },
     });
 
     return this.issueUserSession(user);
@@ -276,8 +277,10 @@ export class AuthService {
       },
     });
 
-    // TODO: Dispatch the raw token through the configured email provider.
-    return this.allowDevAuthCodes() ? { ok: true, devResetToken: token } : { ok: true };
+    await this.authDelivery.sendPasswordResetEmail(email, token);
+    return this.authDelivery.allowDevAuthCodes()
+      ? { ok: true, devResetToken: token }
+      : { ok: true };
   }
 
   async confirmPasswordReset(token: string, newPassword: string) {
@@ -318,8 +321,10 @@ export class AuthService {
       },
     });
 
-    // TODO: Dispatch the raw code through the configured SMS provider.
-    return this.allowDevAuthCodes() ? { ok: true, devOtp: code } : { ok: true };
+    await this.authDelivery.sendPhoneOtp(normalizedPhone, code, purpose);
+    return this.authDelivery.allowDevAuthCodes()
+      ? { ok: true, devOtp: code }
+      : { ok: true };
   }
 
   async verifyPhoneOtp(phone: string, code: string, purpose: string) {
@@ -604,10 +609,8 @@ export class AuthService {
             create: {
               firstName: names.firstName,
               lastName: names.lastName,
-              country: "Nigeria",
-              state: "Lagos",
-              lga: "Ikeja",
               avatarUrl: identity.picture ?? null,
+              ...this.incompleteProfileLocation(),
             },
           },
         },
@@ -643,6 +646,10 @@ export class AuthService {
     }
   }
 
+  private incompleteProfileLocation() {
+    return { country: "", state: "", lga: "" };
+  }
+
   private isProfileComplete(profile: { firstName: string; lastName: string; country: string; state: string; lga: string } | null) {
     if (!profile) return false;
     const placeholderNames = new Set(["Google", "Apple", "Citizen"]);
@@ -656,17 +663,31 @@ export class AuthService {
 
   private splitDisplayName(name: string | undefined, provider: "google.com" | "apple.com") {
     if (!name?.trim()) {
-      return { firstName: provider === "apple.com" ? "Apple" : "Google", lastName: "User" };
+      const fallback = provider === "apple.com" ? "apple" : "google";
+      return this.nameFromEmail(`${fallback}@provider.local`);
     }
     const parts = name.trim().split(/\s+/);
     return {
       firstName: parts[0] ?? "Citizen",
-      lastName: parts.length > 1 ? parts.slice(1).join(" ") : "User",
+      lastName: parts.length > 1 ? parts.slice(1).join(" ") : parts[0] ?? "Citizen",
     };
   }
 
-  private allowDevAuthCodes() {
-    return process.env.NODE_ENV === "development" && this.config.get<string>("ALLOW_DEV_AUTH_CODES") === "true";
+  private nameFromEmail(email: string) {
+    const localPart = email.split("@")[0]?.trim() ?? "citizen";
+    const segments = localPart.split(/[._-]+/).filter(Boolean);
+    if (segments.length >= 2) {
+      return {
+        firstName: this.titleCase(segments[0]!),
+        lastName: this.titleCase(segments.slice(1).join(" ")),
+      };
+    }
+    return { firstName: this.titleCase(localPart), lastName: "Account" };
+  }
+
+  private titleCase(value: string) {
+    if (!value) return value;
+    return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
   }
 }
 

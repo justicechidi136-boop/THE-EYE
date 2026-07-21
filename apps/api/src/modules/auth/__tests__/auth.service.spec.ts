@@ -3,6 +3,12 @@ import { hashOtp } from "../../../common/auth/crypto";
 import { AuthService } from "../auth.service";
 
 function createAuthService(overrides: Record<string, unknown> = {}) {
+  const authDelivery = {
+    sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+    sendPhoneOtp: jest.fn().mockResolvedValue(undefined),
+    allowDevAuthCodes: jest.fn().mockReturnValue(true),
+  };
+
   const prisma = {
     phoneOtp: {
       count: jest.fn().mockResolvedValue(0),
@@ -17,6 +23,7 @@ function createAuthService(overrides: Record<string, unknown> = {}) {
       create: jest.fn(),
     },
     refreshToken: { create: jest.fn().mockResolvedValue({}) },
+    passwordResetToken: { create: jest.fn().mockResolvedValue({ id: "reset-1" }) },
     ...overrides,
   };
 
@@ -31,8 +38,15 @@ function createAuthService(overrides: Record<string, unknown> = {}) {
   };
 
   return {
-    service: new AuthService(prisma as never, config as never, { record: jest.fn() } as never, { verify: jest.fn() } as never),
+    service: new AuthService(
+      prisma as never,
+      config as never,
+      { record: jest.fn() } as never,
+      { verify: jest.fn() } as never,
+      authDelivery as never,
+    ),
     prisma,
+    authDelivery,
   };
 }
 
@@ -43,7 +57,7 @@ describe("AuthService registration", () => {
       email: "new@theeye.local",
       phone: null,
       trustedReporter: null,
-      profile: { firstName: "Citizen", lastName: "User", country: "Nigeria", state: "Lagos", lga: "Ikeja" },
+      profile: { firstName: "Ada", lastName: "Okeke", country: "", state: "", lga: "" },
     };
     const { service, prisma } = createAuthService({
       user: {
@@ -55,12 +69,23 @@ describe("AuthService registration", () => {
     const result = await service.register({
       email: "new@theeye.local",
       password: "Password123!",
+      firstName: "Ada",
+      lastName: "Okeke",
     });
 
     expect(prisma.user.create).toHaveBeenCalled();
     expect(result.accessToken.length).toBeGreaterThan(0);
     expect(result.refreshToken.length).toBeGreaterThan(0);
     expect(result.profileComplete).toBe(false);
+  });
+
+  it("rejects registration without names", async () => {
+    const { service, prisma } = createAuthService();
+
+    await expect(
+      service.register({ email: "new@theeye.local", password: "Password123!" } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
   it("rejects duplicate email registration", async () => {
@@ -72,9 +97,46 @@ describe("AuthService registration", () => {
     });
 
     await expect(
-      service.register({ email: "taken@theeye.local", password: "Password123!" }),
+      service.register({
+        email: "taken@theeye.local",
+        password: "Password123!",
+        firstName: "Ada",
+        lastName: "Okeke",
+      }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("AuthService delivery", () => {
+  it("dispatches password reset through delivery service", async () => {
+    const { service, authDelivery } = createAuthService({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: "user-1", email: "citizen@theeye.local" }),
+      },
+    });
+
+    await service.requestPasswordReset("citizen@theeye.local");
+
+    expect(authDelivery.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+    const [email, token] = authDelivery.sendPasswordResetEmail.mock.calls[0] as [
+      string,
+      string,
+    ];
+    expect(email).toBe("citizen@theeye.local");
+    expect(token.length).toBeGreaterThan(10);
+  });
+
+  it("dispatches phone OTP through delivery service", async () => {
+    const { service, authDelivery } = createAuthService();
+
+    await service.requestPhoneOtp("+2348012345678", "login");
+
+    expect(authDelivery.sendPhoneOtp).toHaveBeenCalledTimes(1);
+    const args = authDelivery.sendPhoneOtp.mock.calls[0] as unknown[];
+    expect(args[0]).toBe("+2348012345678");
+    expect(args[2]).toBe("login");
+    expect(typeof args[1]).toBe("string");
   });
 });
 

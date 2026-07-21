@@ -635,7 +635,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
                   const ReportScreen(type: ReportType.emergency),
               "/live-video": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments;
-                final autoStart = args is LiveVideoRouteArgs && args.autoStartStream;
+                final autoStart =
+                    args is LiveVideoRouteArgs && args.autoStartStream;
                 return LiveEmergencyVideoScreen(autoStartStream: autoStart);
               },
               "/report/crime": (_) =>
@@ -692,7 +693,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
 
 String? _montserratFontFamily() => EyeTypography.fontFamily();
 
-TextTheme _montserratTextTheme(TextTheme base) => EyeTypography.montserratTextTheme(base);
+TextTheme _montserratTextTheme(TextTheme base) =>
+    EyeTypography.montserratTextTheme(base);
 
 ThemeData buildTheme(bool highContrast) {
   final baseTextTheme = ThemeData.light().textTheme;
@@ -844,6 +846,7 @@ class AppController extends ChangeNotifier {
   AuthSession? _cachedSession;
   String? _sessionAccessToken;
   PendingRetryCoordinator? _retryCoordinator;
+  Future<SessionRestoreResult>? _restoreInFlight;
   bool syncingPending = false;
   String? lastSubmissionMessage;
   final List<IncidentDraft> pendingDrafts = [];
@@ -904,15 +907,46 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> clearSession() async {
-    await _authSessionStore.clear();
+    await _authService.logout();
     _cachedSession = null;
     _sessionAccessToken = null;
     notifyListeners();
   }
 
+  Future<SessionRestoreResult> restoreSession() async {
+    if (_restoreInFlight != null) {
+      return _restoreInFlight!;
+    }
+
+    final pending = _restoreSessionImpl();
+    _restoreInFlight = pending;
+    try {
+      return await pending;
+    } finally {
+      if (identical(_restoreInFlight, pending)) {
+        _restoreInFlight = null;
+      }
+    }
+  }
+
+  Future<SessionRestoreResult> _restoreSessionImpl() async {
+    final result = await _authService.restorePersistedSession();
+    if (result.session != null) {
+      _cachedSession = result.session;
+      _sessionAccessToken = result.session!.accessToken;
+      notifyListeners();
+      await _pushNotifications?.syncTokenWithBackend();
+    } else if (result.status == SessionRestoreStatus.failed ||
+        result.status == SessionRestoreStatus.unauthenticated) {
+      _cachedSession = null;
+      _sessionAccessToken = null;
+      notifyListeners();
+    }
+    return result;
+  }
+
   bool get isAuthenticated =>
-      _cachedSession != null &&
-      (_cachedSession!.accessToken.isNotEmpty);
+      _cachedSession != null && (_cachedSession!.accessToken.isNotEmpty);
 
   void bindPushNotifications(PushNotificationService service) {
     _pushNotifications = service;
@@ -1164,12 +1198,24 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(milliseconds: 900), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed("/login");
-        StartupDiagnostics.checkpoint("STARTUP 5: login screen visible");
-      }
-    });
+    unawaited(_routeAfterSplash());
+  }
+
+  Future<void> _routeAfterSplash() async {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+
+    final controller = AppScope.of(context);
+    final restore = await controller.restoreSession();
+    if (!mounted) return;
+
+    final route = switch (restore.status) {
+      SessionRestoreStatus.restored => "/home",
+      SessionRestoreStatus.profileIncomplete => "/profile",
+      _ => "/login",
+    };
+    Navigator.of(context).pushReplacementNamed(route);
+    StartupDiagnostics.checkpoint("STARTUP 5: $route visible");
   }
 
   @override
@@ -1669,8 +1715,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                 icon: Icons.g_mobiledata_rounded,
                 loading: activeSocialProvider == SocialAuthProvider.google,
                 enabled: !submitting && !socialBusy,
-                onPressed: () =>
-                    _handleSocialSignIn(SocialAuthProvider.google),
+                onPressed: () => _handleSocialSignIn(SocialAuthProvider.google),
               ),
               if (SocialAuthService.isAppleSignInSupported) ...[
                 const SizedBox(height: 12),
@@ -1685,6 +1730,16 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                 ),
               ],
               const SizedBox(height: 16),
+              TextButton(
+                onPressed: submitting || socialBusy
+                    ? null
+                    : () => Navigator.of(context).pushReplacementNamed("/home"),
+                child: const Text(
+                  "Continue without signing in",
+                  style: TextStyle(color: BrandColors.accentHover),
+                ),
+              ),
+              const SizedBox(height: 8),
               Center(
                 child: Text.rich(
                   TextSpan(
@@ -1700,8 +1755,8 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                         child: GestureDetector(
                           onTap: socialBusy || submitting
                               ? null
-                              : () => Navigator.of(context)
-                                  .pushNamed("/register"),
+                              : () =>
+                                  Navigator.of(context).pushNamed("/register"),
                           child: const Text(
                             "Create an account",
                             style: TextStyle(color: BrandColors.accentHover),
@@ -1855,6 +1910,8 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
   Widget build(BuildContext context) {
     final canSubmit = !submitting &&
         _emailController.text.trim().isNotEmpty &&
+        _firstNameController.text.trim().isNotEmpty &&
+        _lastNameController.text.trim().isNotEmpty &&
         _passwordController.text.isNotEmpty &&
         _confirmPasswordController.text.isNotEmpty;
 
@@ -1902,7 +1959,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
               ),
               const SizedBox(height: 12),
               _labeledField(
-                label: "First name (optional)",
+                label: "First name",
                 field: TextField(
                   controller: _firstNameController,
                   decoration: _fieldDecoration(
@@ -1915,7 +1972,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
               ),
               const SizedBox(height: 12),
               _labeledField(
-                label: "Last name (optional)",
+                label: "Last name",
                 field: TextField(
                   controller: _lastNameController,
                   decoration: _fieldDecoration(
@@ -1961,8 +2018,8 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                     hintText: "Re-enter password",
                     errorText: confirmPasswordError,
                     suffixIcon: IconButton(
-                      onPressed: () => setState(
-                          () => obscureConfirmPassword = !obscureConfirmPassword),
+                      onPressed: () => setState(() =>
+                          obscureConfirmPassword = !obscureConfirmPassword),
                       icon: Icon(
                         obscureConfirmPassword
                             ? Icons.visibility_off_outlined
@@ -2262,7 +2319,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               Text(
                 "Please enter the 6-digit verification code sent to $maskedDestination",
                 textAlign: TextAlign.center,
-                style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1),
+                style:
+                    EyeTypography.fieldHint.copyWith(color: EyeTokens.black1),
               ),
               const SizedBox(height: 48),
               EyeOtpInput(
@@ -2296,7 +2354,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 children: [
                   Text(
                     "Didn't receive code? ",
-                    style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1),
+                    style: EyeTypography.fieldHint
+                        .copyWith(color: EyeTokens.black1),
                   ),
                   GestureDetector(
                     onTap: (resendSecondsRemaining > 0 ||
@@ -2326,7 +2385,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 children: [
                   Text(
                     "Experiencing issues? ",
-                    style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1),
+                    style: EyeTypography.fieldHint
+                        .copyWith(color: EyeTokens.black1),
                   ),
                   GestureDetector(
                     onTap: () => showAppSnackBar(
@@ -2387,7 +2447,8 @@ class HomeScreen extends StatelessWidget {
     ),
     EyeHeroSlide(
       title: "Report Crime",
-      subtitle: "Report crimes quickly and securely with our easy-to-use platform.",
+      subtitle:
+          "Report crimes quickly and securely with our easy-to-use platform.",
       gradient: [Color(0xFF1E3A5F), Color(0xFF312E81)],
       icon: Icons.local_police,
     ),
@@ -2408,7 +2469,8 @@ class HomeScreen extends StatelessWidget {
       selectedIndex: 0,
       useFigmaShell: true,
       body: ListView(
-        padding: const EdgeInsets.only(bottom: EyeTokens.contentBottomClearance),
+        padding:
+            const EdgeInsets.only(bottom: EyeTokens.contentBottomClearance),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -2416,8 +2478,7 @@ class HomeScreen extends StatelessWidget {
               children: [
                 IconButton(
                   tooltip: "Incident history",
-                  onPressed: () =>
-                      Navigator.of(context).pushNamed("/tracking"),
+                  onPressed: () => Navigator.of(context).pushNamed("/tracking"),
                   icon: const Icon(Icons.history, color: EyeTokens.greenMain),
                 ),
                 const Spacer(),
@@ -2488,8 +2549,7 @@ class HomeScreen extends StatelessWidget {
             child: SectionCard(
               title: "All services",
               child: GridView.count(
-                crossAxisCount:
-                    MediaQuery.sizeOf(context).width > 640 ? 3 : 2,
+                crossAxisCount: MediaQuery.sizeOf(context).width > 640 ? 3 : 2,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 12,
@@ -2515,8 +2575,8 @@ class HomeScreen extends StatelessWidget {
                       "Kidnapping report",
                       Icons.report,
                       Colors.red.shade900,
-                      () =>
-                          Navigator.of(context).pushNamed("/report/kidnapping")),
+                      () => Navigator.of(context)
+                          .pushNamed("/report/kidnapping")),
                   ActionTile(
                       "Abuse report",
                       Icons.health_and_safety,
@@ -2532,14 +2592,12 @@ class HomeScreen extends StatelessWidget {
                       "Missing person",
                       Icons.person_search,
                       Colors.teal.shade700,
-                      () =>
-                          Navigator.of(context).pushNamed("/missing-person")),
+                      () => Navigator.of(context).pushNamed("/missing-person")),
                   ActionTile(
                       "Stolen vehicle",
                       Icons.directions_car,
                       Colors.blueGrey.shade700,
-                      () =>
-                          Navigator.of(context).pushNamed("/stolen-vehicle")),
+                      () => Navigator.of(context).pushNamed("/stolen-vehicle")),
                   ActionTile("SOS device", Icons.watch, Colors.red.shade800,
                       () => Navigator.of(context).pushNamed("/smartwatch")),
                   ActionTile(
@@ -2553,7 +2611,10 @@ class HomeScreen extends StatelessWidget {
                       Icons.campaign,
                       Colors.purple.shade700,
                       () => Navigator.of(context).pushNamed("/broadcasts")),
-                  ActionTile("Incident status", Icons.radar, Colors.cyan.shade800,
+                  ActionTile(
+                      "Incident status",
+                      Icons.radar,
+                      Colors.cyan.shade800,
                       () => Navigator.of(context).pushNamed("/tracking")),
                 ],
               ),
@@ -2622,7 +2683,8 @@ class _ReportScreenState extends State<ReportScreen> {
                 children: [
                   if (controller.showConnectivityBanner)
                     OfflineStatusBanner(state: controller.connectivityState),
-                  if (controller.showConnectivityBanner) const SizedBox(height: 12),
+                  if (controller.showConnectivityBanner)
+                    const SizedBox(height: 12),
                   if (isEmergency) ...[
                     SizedBox(
                       width: double.infinity,
@@ -2635,8 +2697,9 @@ class _ReportScreenState extends State<ReportScreen> {
                                 BorderRadius.circular(EyeTokens.radiusSm),
                           ),
                         ),
-                        onPressed:
-                            submitting ? null : () => _submit(context, urgent: true),
+                        onPressed: submitting
+                            ? null
+                            : () => _submit(context, urgent: true),
                         icon: submitting
                             ? const SizedBox(
                                 width: 20,
@@ -2674,7 +2737,8 @@ class _ReportScreenState extends State<ReportScreen> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: manualLocation,
-                    onChanged: (value) => setState(() => manualLocation = value),
+                    onChanged: (value) =>
+                        setState(() => manualLocation = value),
                     title: const Text("Manual location adjustment"),
                     subtitle: const Text("GPS is captured automatically"),
                   ),
@@ -2697,7 +2761,8 @@ class _ReportScreenState extends State<ReportScreen> {
                   TextField(
                     controller: descriptionController,
                     maxLines: isEmergency ? 5 : 4,
-                    style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1),
+                    style: EyeTypography.fieldHint
+                        .copyWith(color: EyeTokens.black1),
                     decoration: InputDecoration(
                       hintText: isEmergency
                           ? "Enter information about the injuries"
@@ -3264,9 +3329,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       }
 
       final outcome = await captureLocationOutcome(
-          accuracy: lowBandwidth
-              ? LocationAccuracy.medium
-              : LocationAccuracy.high);
+          accuracy:
+              lowBandwidth ? LocationAccuracy.medium : LocationAccuracy.high);
       if (!mounted) return;
       if (outcome.position == null) {
         final message = locationFailureMessage(outcome.result);
@@ -3345,8 +3409,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           Timer.periodic(const Duration(seconds: 5), (_) => _sendGpsUpdate());
     } on TimeoutException {
       if (!mounted) return;
-      showAppSnackBar(
-          context,
+      showAppSnackBar(context,
           "Live video start timed out. Check your connection and try again.",
           isError: true);
     } on IncidentApiException catch (error) {
@@ -3374,8 +3437,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           final accessToken = AppScope.of(context).session?.accessToken ??
               (theEyeAccessToken.isNotEmpty ? theEyeAccessToken : null);
           await apiClient
-              .stopLiveVideo(
-                  sessionId: liveSessionId, accessToken: accessToken)
+              .stopLiveVideo(sessionId: liveSessionId, accessToken: accessToken)
               .timeout(const Duration(seconds: 15));
         } catch (_) {
           // Local stop still proceeds; server reconciliation happens on next start.
@@ -3525,7 +3587,9 @@ class _StolenVehicleBroadcastScreenState
             ? null
             : colorController.text.trim(),
         year: year,
-        vin: vinController.text.trim().isEmpty ? null : vinController.text.trim(),
+        vin: vinController.text.trim().isEmpty
+            ? null
+            : vinController.text.trim(),
       ),
       localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
     );
@@ -4916,8 +4980,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
-                    onPressed: () =>
-                        Navigator.of(context).pushNamed("/login"),
+                    onPressed: () => Navigator.of(context).pushNamed("/login"),
                     child: const Text("Sign in"),
                   ),
                   const SizedBox(height: 8),
@@ -5046,9 +5109,8 @@ class _YourCarScreenState extends State<YourCarScreen> {
     if (!await carDir.exists()) {
       await carDir.create(recursive: true);
     }
-    final extension = p.extension(picked.path).isEmpty
-        ? ".jpg"
-        : p.extension(picked.path);
+    final extension =
+        p.extension(picked.path).isEmpty ? ".jpg" : p.extension(picked.path);
     final destination = p.join(carDir.path, "car_photo$extension");
     await File(picked.path).copy(destination);
     return destination;
@@ -5076,8 +5138,7 @@ class _YourCarScreenState extends State<YourCarScreen> {
     if (makeController.text.trim().isEmpty ||
         modelController.text.trim().isEmpty ||
         plateController.text.trim().isEmpty) {
-      showAppSnackBar(
-          context, "Make, model, and plate number are required.",
+      showAppSnackBar(context, "Make, model, and plate number are required.",
           isError: true);
       return;
     }
@@ -5223,8 +5284,8 @@ class _YourCarScreenState extends State<YourCarScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: vinController,
-                  decoration: const InputDecoration(
-                      labelText: "VIN (optional)"),
+                  decoration:
+                      const InputDecoration(labelText: "VIN (optional)"),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -5330,9 +5391,7 @@ class SettingsScreen extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primary,
               ),
               title: Text(
-                controller.carProfile == null
-                    ? "Add your car"
-                    : "Your car",
+                controller.carProfile == null ? "Add your car" : "Your car",
               ),
               subtitle: Text(
                 controller.carProfile == null
@@ -5474,8 +5533,9 @@ class SafetyScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final routeName = ModalRoute.of(context)?.settings.name;
-    final navIndex =
-        useFigmaShell ? selectedIndex : EyeNavRoutes.selectedIndexForRoute(routeName);
+    final navIndex = useFigmaShell
+        ? selectedIndex
+        : EyeNavRoutes.selectedIndexForRoute(routeName);
 
     return Scaffold(
       backgroundColor: useFigmaShell
@@ -5498,8 +5558,7 @@ class SafetyScaffold extends StatelessWidget {
                 IconButton(
                   tooltip: "Settings",
                   icon: const Icon(Icons.settings),
-                  onPressed: () =>
-                      Navigator.of(context).pushNamed("/settings"),
+                  onPressed: () => Navigator.of(context).pushNamed("/settings"),
                 ),
               ],
             ),
@@ -5580,8 +5639,8 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     try {
       final outcome = await captureLocationOutcome().timeout(
         kSosSubmissionTimeout,
-        onTimeout: () => const LocationCaptureOutcome(
-            result: LocationCaptureResult.timeout),
+        onTimeout: () =>
+            const LocationCaptureOutcome(result: LocationCaptureResult.timeout),
       );
       if (!parentContext.mounted) return;
 
@@ -5600,15 +5659,13 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
         title: "SOS emergency",
       );
 
-      final result = await controller
-          .submitIncident(draft)
-          .timeout(kSosSubmissionTimeout);
+      final result =
+          await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
       if (!parentContext.mounted) return;
 
       if (result.status == IncidentSubmissionStatus.duplicateInFlight) {
         showAppSnackBar(
-            parentContext,
-            result.userMessage ?? "SOS is already sending.",
+            parentContext, result.userMessage ?? "SOS is already sending.",
             isError: true);
         return;
       }
@@ -5625,15 +5682,13 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
           isError: true);
     } on TimeoutException {
       if (parentContext.mounted) {
-        showAppSnackBar(
-            parentContext,
+        showAppSnackBar(parentContext,
             "SOS timed out. Check your connection and try again.",
             isError: true);
       }
     } catch (_) {
       if (parentContext.mounted) {
-        showAppSnackBar(
-            parentContext,
+        showAppSnackBar(parentContext,
             "Unable to send SOS. Check your connection and try again.",
             isError: true);
       }
@@ -5699,7 +5754,8 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
           ),
           const SizedBox(height: 10),
           OutlinedButton(
-              onPressed: sendingAlert ? null : () => Navigator.of(context).pop(),
+              onPressed:
+                  sendingAlert ? null : () => Navigator.of(context).pop(),
               child: const Text("Cancel")),
         ],
       ),
