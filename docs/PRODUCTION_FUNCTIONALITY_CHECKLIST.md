@@ -2,9 +2,10 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-21 (Sprint 2 code complete — pending staging QA)  
+**Last updated:** 2026-07-22 (Sprint 3 incident reporting — code in progress)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
-**Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)
+**Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
+**Sprint 3 status:** **CODE IN PROGRESS — NOT STAGING QA**
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -14,12 +15,12 @@
 
 | Metric | Count |
 |--------|------:|
-| **Total features tracked** | **231** |
+| **Total features tracked** | **249** |
 | **PASS** | **77** |
-| **FAIL** | **19** |
-| **PARTIAL** | **58** |
+| **FAIL** | **28** |
+| **PARTIAL** | **62** |
 | **BLOCKED** | **19** |
-| **NOT IMPLEMENTED** | **50** |
+| **NOT IMPLEMENTED** | **54** |
 | **NOT APPLICABLE** | **1** |
 | **NOT TESTED** | **7** |
 | **P0 blockers (open)** | **34** |
@@ -70,6 +71,7 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-22 | Sprint 3 Phase 1–2 | Full incident lifecycle re-audit on `staging` @ `45c2197`. Sprint 3 gap table + canonical contract (`docs/INCIDENT_CONTRACT.md`) added. Implementation started on `feature/sprint-3-incident-reporting`: idempotency, location endpoint, notification enqueue, mobile history/detail, admin verify/assign/evidence viewer. No PASS without staging device QA. |
 | 2026-07-21 | Sprint 2 implementation | Citizen profile lifecycle coded on `feature/sprint-2-citizen-profile`: PATCH/me, emergency contacts CRUD, avatar presign/confirm, KYC submit+admin review, deletion deactivate, mobile completion/edit/contacts/KYC, admin KYC queue + citizen detail. Automated API + mobile tests green. No PASS without staging redeploy + device QA. Full erasure/preferences sync remain BLOCKED. |
 | 2026-07-21 | Sprint 2 Phase 1 | Full citizen-profile re-audit on `staging` @ `74565ff`. Sprint 2 gap table added; 13 new checklist rows (MOB-PROF-009–011, API-PROF-001–010). MOB-PROF-001 downgraded to PARTIAL pending completion flow + avatar. No implementation changes in this entry. |
 | 2026-07-21 | Sprint 1 (Auth) | Session restore, token refresh-on-restore, logout API, auth delivery webhooks, required registration names, guest flow, demo profile defaults removed. Backend auth tests + mobile auth tests green. Staging device QA pending. |
@@ -157,6 +159,12 @@
 | MOB-INCD-014 | Incidents | Edit draft | Citizen | Mobile | — | N | N | Local only | N/A | Y | N | Y | Y | N | N | N | N | **PARTIAL** | P2 | N | Queue replay only | — | N | — |
 | MOB-INCD-015 | Incidents | Delete draft | Citizen | Mobile | — | N | N | Local | N/A | Y | N | Y | Y | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No explicit delete UI | — | N | — |
 | MOB-INCD-016 | Incidents | Missing person report | Citizen | Mobile | `/missing-person` | Y | Y | `POST /v1/incidents/report` | Y | Y | Y | Y | Y | N | N | N | N | **PASS** | P0 | N | — | — | N | Dedicated payload |
+| MOB-INCD-017 | Incidents | Incident history API | Citizen | Mobile | `/tracking` | Y | Y | `GET /v1/incidents` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Wired in Sprint 3; staging device QA pending | `incident_history_service.dart` | Y | Replaces session-local list |
+| MOB-INCD-018 | Incidents | Incident detail screen | Citizen | Mobile | `/incident-detail` | Y | Y | `GET /v1/incidents/:id` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Detail screen added Sprint 3 | `incident_detail_screen.dart` | Y | Pull-to-refresh |
+| MOB-INCD-019 | Incidents | Status refresh | Citizen | Mobile | `/tracking` | Y | Y | `GET /v1/incidents` | Y | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P0 | N | Pull-to-refresh + API reload; push update still PARTIAL | `main.dart` | N | — |
+| MOB-INCD-020 | Incidents | Compose draft save | Citizen | Mobile | Report flow | Y | PARTIAL | Local store | N/A | Y | N | Y | Y | Y | N | N | N | **PARTIAL** | P1 | N | Separate compose store; resume UI partial | `compose_draft_store.dart` | N | Distinct from offline queue |
+| MOB-INCD-021 | Incidents | Emergency contact IDs on submit | Citizen | Mobile | Report/SOS | Y | PARTIAL | In payload | Y | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P1 | N | Backend honors IDs; mobile picker still partial | `incidents.service.ts` | N | — |
+| MOB-INCD-022 | Incidents | Live location updates | Citizen | Mobile | Active emergency | N | N | `POST /v1/incidents/:id/location` | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | N | API added Sprint 3; mobile stream pending | — | Y | — |
 
 ### Notifications
 
@@ -217,6 +225,8 @@
 | WCH-SOS-002 | SOS | Silent SOS | Citizen | Watch | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | No distinct flow | — | Y | — |
 | WCH-SOS-003 | SOS | GPS tracking | Citizen | Watch | `/sos/active` | Y | Y | `/smartwatch/devices/:id/gps` | Y | Y | Y | Y | Y | N | N | N | N | **PASS** | P0 | N | 5s emergency interval | — | N | — |
 | WCH-SOS-004 | SOS | Offline queue | Citizen | Watch | Connection | Y | Y | `/offline-sync` | Y | Y | Y | Y | Y | Y | N | N | N | **PASS** | P0 | N | — | — | N | — |
+| WCH-INC-001 | SOS | Duplicate SOS prevention | Citizen | Watch | SOS | Y | Y | `/smartwatch/sos` | PARTIAL | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P0 | N | Report idempotency shared; watch clientSubmissionId pending | `smartwatch.service.ts` | N | — |
+| WCH-INC-002 | SOS | Server status on watch | Citizen | Watch | Tracking | Y | PARTIAL | incident status API | Y | Y | Y | N | N | N | N | N | N | **PARTIAL** | P1 | N | Local acknowledgement only | — | N | — |
 | WCH-PUSH-001 | Push | FCM token | Citizen | Watch | Background | Y | N/A | `/notifications/push-tokens` | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | Firebase config required | — | Y | — |
 | WCH-PUSH-002 | Push | Incoming alert | Citizen | Watch | `/alerts/incoming` | Y | Y | FCM | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | Depends on FCM | — | Y | — |
 | WCH-PUSH-003 | Push | Alert acknowledgement | Citizen | Watch | Alert screens | Y | PARTIAL | — | N | N | N | Y | Y | N | N | N | N | **PARTIAL** | P2 | N | Local UI only | — | N | — |
@@ -274,6 +284,11 @@
 | ADM-INC-009 | Incidents | Live video | Admin | Admin | `/live-video` | Y | Y | admin-token | Y | Y | Y | Y | Y | Y | N | N | N | **BLOCKED** | P0 | Y | LiveKit env | — | Y | Player wired |
 | ADM-INC-010 | Incidents | Location map | Admin | Admin | Detail / emergency | Y | Y | — | N | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | CSS dot placeholder map | — | N | Not real map |
 | ADM-INC-011 | Incidents | Audit trail | Admin | Admin | Detail | Y | Y | audit filtered | Y | Y | Y | Y | Y | N | N | Y | N | **PASS** | P1 | N | — | — | N | — |
+| ADM-INC-012 | Incidents | Verify/reject wired | Admin | Admin | `/verification` | Y | Y | admin-review BFF | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | Y | Buttons wired Sprint 3 | `incident-review-button.tsx` | Y | Staging QA pending |
+| ADM-INC-013 | Incidents | Assign/status wired | Admin | Admin | Detail | Y | Y | PATCH status/assign BFF | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | N | Admin actions panel Sprint 3 | `incident-admin-actions.tsx` | Y | — |
+| ADM-INC-014 | Incidents | Evidence signed view | Admin | Admin | Detail | Y | Y | media view BFF | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | Y | Signed URL when S3 configured (INF-006) | `evidence-view-button.tsx` | Y | BLOCKED without S3 |
+| ADM-INC-015 | Incidents | Real GPS map markers | Admin | Admin | List/detail map | Y | PARTIAL | GPS from API | Y | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P1 | N | Uses real lat/lng positions; not full map library | `incident-widgets.tsx` | N | — |
+| ADM-INC-016 | Incidents | Queue filters | Admin | Admin | `/incidents` | N | N | query params | Y | Y | Y | Y | Y | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | — | — | N | — |
 
 ### Users
 
@@ -409,6 +424,17 @@
 | API-PROF-009 | Profile | Account deletion request | Citizen | Backend | `POST /users/me/deletion-request` | N/A | N/A | deletion | Y | PARTIAL | Y | Y | Y | Y | N | N | N | **PARTIAL** | P2 | Y | Deactivate + revoke; full erasure BLOCKED | — | Y | Retention policy pending |
 | API-PROF-010 | Profile | Profile write audit | System | Backend | profile writes | N/A | N/A | AuditService | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | N | Actor audit on profile/contacts/avatar/KYC/deletion | `users.service.ts` | Y | — |
 
+### Incidents API (Sprint 3)
+
+| ID | Module | Feature | User Role | Platform | Screen/Page | UI Present | Navigation Works | API Endpoint | Backend Implemented | Database Implemented | Authorization Implemented | Uses Real Data | Mock/Demo Removed | Automated Test | Manual Device Test | Staging Verified | Production Config Ready | Status | Severity | Blocker | Root Cause | Files Changed | Deployment Required | Notes |
+|----|--------|---------|-----------|----------|-------------|:----------:|:----------------:|--------------|:-------------------:|:--------------------:|:-------------------------:|:--------------:|:-----------------:|:--------------:|:------------------:|:----------------:|:-----------------------:|--------|----------|:-------:|------------|---------------|:-------------------:|-------|
+| API-INC-001 | Incidents | Report idempotency | System | Backend | `POST /incidents/report` | N/A | N/A | `x-client-submission-id` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Unique `clientSubmissionId`; duplicate response | `incidents.service.ts` | Y | Migration required |
+| API-INC-002 | Incidents | Live location endpoint | System | Backend | `POST /incidents/:id/location` | N/A | N/A | location route | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | `IncidentLocationUpdate` model + sequence dedupe | `incidents.service.ts` | Y | — |
+| API-INC-003 | Incidents | Emergency contact enqueue | System | Backend | report notify | N/A | N/A | NotificationsService | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | Y | SMS via BullMQ enqueue; Redis/FCM may BLOCK | `incidents.service.ts` | Y | — |
+| API-INC-004 | Incidents | Assign lifecycle FSM | System | Backend | PATCH assign | N/A | N/A | assign | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | N | Validates transition to Assigned | `incidents.service.ts` | N | — |
+| API-INC-005 | Incidents | Evidence signed GET | System | Backend | media view | N/A | N/A | view/download | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | Y | Short-lived signed URL in response | `s3-presign.ts` | Y | INF-006 |
+| API-INC-006 | Incidents | Status history actor notes | System | Backend | PATCH status | N/A | N/A | statusHistory | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P1 | N | App writes note + resolved/closed timestamps | `incidents.service.ts` | Y | — |
+
 ---
 
 ## SPRINT 2 — Citizen Profile
@@ -448,6 +474,47 @@
 | Trust score | MOB-PROF-006 | PARTIAL | Required | Read-only |
 | Settings | MOB-PROF-007, MOB-PROF-011, API-PROF-008 | PARTIAL / NOT IMPL | Optional | Sync API deferred |
 | Deletion | MOB-PROF-008, API-PROF-009 | PARTIAL | Required | Erasure BLOCKED |
+
+---
+
+## SPRINT 3 — Incident Reporting
+
+**Baseline:** `staging` @ `45c2197`  
+**Implementation branch:** `feature/sprint-3-incident-reporting`  
+**Contract:** `docs/INCIDENT_CONTRACT.md`  
+**Sprint 3 verdict:** **CODE IN PROGRESS — NOT STAGING QA**
+
+### Sprint 3 gap table (Phase 1 audit @ 2026-07-22)
+
+| ID | Feature | Platform | Current status | UI | Navigation | Endpoint | Backend | Database | Storage | Notification | Admin | Watch | Tests | Severity | Required change |
+|----|---------|----------|----------------|:--:|:----------:|:--------:|:-------:|:--------:|:-------:|:------------:|:-----:|:-----:|:-----:|:--------:|-----------------|
+| S3-001 | Create incident | Mobile + API | PASS/NOT TESTED | Report flows exist | 7 routes | POST report | Y | Y | Presign path | Partial enqueue | Read-only | SOS Y | Mobile service tests | P0 | Staging device QA |
+| S3-002 | Idempotency | API + Mobile | NOT TESTED | N/A | Header sent | Dedupe key | Y | Y | N/A | N/A | N/A | Partial | New specs | P0 | Verify duplicate retry |
+| S3-003 | Draft save | Mobile | PARTIAL | Compose store | Tracking drafts | Local | N/A | N/A | Local refs | N/A | N/A | N/A | compose_draft_store_test | P1 | Resume report screens |
+| S3-004 | Offline queue | Mobile | PASS | Banner/tracking | Y | POST report | Y | Y | Retry | N/A | N/A | SOS queue | pending store tests | P0 | Staging QA |
+| S3-005 | Photo/video/audio evidence | Mobile + API | PASS/BLOCKED | Capture UI | Y | presign/confirm | Y | Y | INF-006 | N/A | Signed view NOT TESTED | N/A | evidence tests | P0 | S3 staging + device QA |
+| S3-006 | GPS + timestamps | Mobile + API | PASS | Capture | Y | In payload | Y | Y | N/A | N/A | Map partial | GPS Y | DTO tests | P0 | Device QA |
+| S3-007 | Live location | API + Mobile | PARTIAL | N/A mobile | N/A | POST location | Y | Y | N/A | N/A | N/A | GPS trail | DTO tests | P1 | Mobile stream + active emergency rules |
+| S3-008 | Incident history | Mobile | NOT TESTED | Tracking | Y | GET list | Y | Y | N/A | N/A | Y | N/A | history service test | P0 | Staging QA after deploy |
+| S3-009 | Incident details | Mobile | NOT TESTED | Detail screen | Y | GET detail | Y | Y | N/A | N/A | Y | N/A | history service test | P0 | Staging QA |
+| S3-010 | Status tracking | All | PARTIAL | Tiles | Refresh partial | PATCH status | Y | Y | N/A | BLOCKED | Wired NOT TESTED | Local only | lifecycle partial | P0 | Notifications + citizen copy |
+| S3-011 | Verification workflow | Admin + API | NOT TESTED | Buttons wired | Y | admin-review | Y | Y | N/A | BLOCKED | Y | N/A | Manual | P0 | Staging QA |
+| S3-012 | Admin operations | Admin | NOT TESTED | Detail actions | Y | assign/status BFF | Y | Y | Signed view | N/A | Y | N/A | Manual | P0 | Staging QA |
+| S3-013 | Notifications | API | BLOCKED | N/A | N/A | BullMQ | Partial | Y | N/A | Redis/FCM | N/A | N/A | processor tests | P0 | INF-005/FCM on VPS |
+| S3-014 | LiveKit | All | BLOCKED | UI wired | Y | tokens | Y | Y | N/A | N/A | Player | N/A | live-video tests | P0 | INF-003 |
+| S3-015 | Watch SOS linkage | Watch + API | PARTIAL | SOS hold | Y | smartwatch/sos | Y | Y | N/A | Enqueue | Admin list | Y | sos_service_test | P0 | Dedupe + status sync |
+
+### Sprint 3 evidence tracker
+
+| Track | IDs | Target status | Staging device QA | Notes |
+|-------|-----|---------------|-------------------|-------|
+| Report + idempotency | MOB-INCD-012, API-INC-001 | NOT TESTED | Required | Migration + redeploy |
+| History + detail | MOB-EMRG-010, MOB-INCD-013/017/018 | NOT TESTED | Required | API wired Sprint 3 |
+| Evidence pipeline | MOB-INCD-004–006, API-INC-005, ADM-INC-014 | NOT TESTED / BLOCKED | Required | Needs INF-006 |
+| Admin verify/assign | ADM-INC-003/007/012/013 | NOT TESTED | Required | BFF wired |
+| Notifications | API-CORE-011/012, S3-013 | BLOCKED | Required | Redis + FCM on VPS |
+| Live video | MOB-INCD-007, ADM-INC-009, S3-014 | BLOCKED | Required | LiveKit staging |
+| Watch SOS | WCH-SOS-001, WCH-INC-001/002 | PARTIAL | Required | Idempotency + status |
 
 ---
 
