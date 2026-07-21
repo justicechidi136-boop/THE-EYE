@@ -26,6 +26,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuthDeliveryService } from "./auth-delivery.service";
 import type { FirebaseExchangeDto, FirebaseLinkDto } from "./dto/auth.dto";
 import { isValidPhoneNumber, normalizePhoneNumber } from "./phone-normalize";
+import { incompleteProfileLocation, isCitizenProfileComplete } from "../users/profile-complete";
 
 const ADMIN_ROLE_NAMES = new Set<string>(Object.values(AdminRoleName));
 
@@ -85,7 +86,7 @@ export class AuthService {
           create: {
             firstName,
             lastName,
-            ...this.incompleteProfileLocation(),
+            ...incompleteProfileLocation(),
           },
         },
       },
@@ -100,7 +101,7 @@ export class AuthService {
       metadata: { email },
     });
 
-    const profileComplete = this.isProfileComplete(user.profile ?? null);
+    const profileComplete = isCitizenProfileComplete(user.profile ?? null);
     const session = await this.issueUserSession(user);
     return { ...session, profileComplete };
   }
@@ -122,14 +123,16 @@ export class AuthService {
           create: {
             firstName: dto.firstName ?? google.given_name ?? this.nameFromEmail(google.email).firstName,
             lastName: dto.lastName ?? google.family_name ?? this.nameFromEmail(google.email).lastName,
-            ...this.incompleteProfileLocation(),
+            ...incompleteProfileLocation(),
           },
         },
       },
       include: { trustedReporter: true, profile: true },
     });
 
-    return this.issueUserSession(user);
+    const profileComplete = isCitizenProfileComplete(user.profile ?? null);
+    const session = await this.issueUserSession(user);
+    return { ...session, profileComplete };
   }
 
   async exchangeFirebaseToken(dto: FirebaseExchangeDto) {
@@ -154,7 +157,7 @@ export class AuthService {
       },
     });
 
-    const profileComplete = this.isProfileComplete(user.profile ?? null);
+    const profileComplete = isCitizenProfileComplete(user.profile ?? null);
     const session = await this.issueUserSession(user);
     return { ...session, profileComplete };
   }
@@ -610,7 +613,7 @@ export class AuthService {
               firstName: names.firstName,
               lastName: names.lastName,
               avatarUrl: identity.picture ?? null,
-              ...this.incompleteProfileLocation(),
+              ...incompleteProfileLocation(),
             },
           },
         },
@@ -644,17 +647,6 @@ export class AuthService {
         code: "ACCOUNT_DEACTIVATED",
       });
     }
-  }
-
-  private incompleteProfileLocation() {
-    return { country: "", state: "", lga: "" };
-  }
-
-  private isProfileComplete(profile: { firstName: string; lastName: string; country: string; state: string; lga: string } | null) {
-    if (!profile) return false;
-    const placeholderNames = new Set(["Google", "Apple", "Citizen"]);
-    if (placeholderNames.has(profile.firstName) || profile.lastName === "User") return false;
-    return Boolean(profile.firstName && profile.lastName && profile.country && profile.state && profile.lga);
   }
 
   private normalizeEmail(email: string) {
