@@ -47,8 +47,16 @@ import "push/push_background_handler.dart";
 import "push/push_deep_link_router.dart";
 import "push/push_notification_service.dart";
 import "startup/startup_diagnostics.dart";
+import "app/app_scope.dart";
+import "app/session_accessor.dart";
 import "profile/car_profile.dart";
 import "profile/car_profile_store.dart";
+import "profile/emergency_contacts_screen.dart";
+import "profile/kyc_screen.dart";
+import "profile/profile_edit_screen.dart";
+import "profile/profile_screen.dart";
+
+export "app/app_scope.dart" show AppScope;
 import "theme/the_eye_theme.dart";
 import "theme/theme_preferences.dart";
 import "theme/theme_provider.dart";
@@ -60,6 +68,12 @@ const theEyeAccessToken =
 
 final GlobalKey<NavigatorState> theEyeNavigatorKey =
     GlobalKey<NavigatorState>();
+
+AppController appOf(BuildContext context) {
+  final session = AppScope.of(context);
+  assert(session is AppController, "AppController required in AppScope");
+  return session as AppController;
+}
 
 Uri mapsUri(double latitude, double longitude) {
   return Uri.parse(
@@ -672,6 +686,10 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/neighborhood-watch/alerts": (_) =>
                   const CommunityAlertsScreen(),
               "/profile": (_) => const ProfileScreen(),
+              "/profile/edit": (_) => const ProfileEditScreen(),
+              "/profile/emergency-contacts": (_) =>
+                  const EmergencyContactsScreen(),
+              "/profile/kyc": (_) => const KycScreen(),
               "/settings": (_) => const SettingsScreen(),
               "/your-car": (_) => const YourCarScreen(),
               "/account-status": (context) {
@@ -814,7 +832,7 @@ ThemeData buildDarkTheme(bool highContrast) {
   );
 }
 
-class AppController extends ChangeNotifier {
+class AppController extends SessionAccessor {
   AppController({
     required IncidentSubmissionService submissionService,
     required ConnectivityService connectivity,
@@ -847,6 +865,7 @@ class AppController extends ChangeNotifier {
   String? _sessionAccessToken;
   PendingRetryCoordinator? _retryCoordinator;
   Future<SessionRestoreResult>? _restoreInFlight;
+  CitizenProfile? _cachedCitizenProfile;
   bool syncingPending = false;
   String? lastSubmissionMessage;
   final List<IncidentDraft> pendingDrafts = [];
@@ -880,6 +899,7 @@ class AppController extends ChangeNotifier {
   bool get online => _connectivity.isOnline;
   bool get showConnectivityBanner => _connectivity.showConnectivityBanner;
 
+  @override
   String? get accessToken {
     if (_sessionAccessToken != null && _sessionAccessToken!.isNotEmpty)
       return _sessionAccessToken;
@@ -902,14 +922,57 @@ class AppController extends ChangeNotifier {
     await _authSessionStore.save(session);
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
+    clearCitizenProfileCache();
     notifyListeners();
     await _pushNotifications?.syncTokenWithBackend();
   }
 
+  @override
+  CitizenProfile? get cachedCitizenProfile => _cachedCitizenProfile;
+
+  @override
+  void clearCitizenProfileCache() {
+    _cachedCitizenProfile = null;
+  }
+
+  @override
+  Future<CitizenProfile?> loadCitizenProfile({bool forceRefresh = false}) async {
+    if (!isAuthenticated || accessToken == null) {
+      clearCitizenProfileCache();
+      return null;
+    }
+    if (!forceRefresh && _cachedCitizenProfile != null) {
+      return _cachedCitizenProfile;
+    }
+    final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final profile = await client.fetchCitizenProfile(accessToken: accessToken!);
+    _cachedCitizenProfile = profile;
+    notifyListeners();
+    return profile;
+  }
+
+  @override
+  Future<CitizenProfile> updateCitizenProfile(Map<String, Object?> payload) async {
+    final token = accessToken;
+    if (token == null) {
+      throw StateError("Authenticated session required to update profile");
+    }
+    final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final updated = await client.updateCitizenProfile(
+      accessToken: token,
+      payload: payload,
+    );
+    _cachedCitizenProfile = updated;
+    notifyListeners();
+    return updated;
+  }
+
+  @override
   Future<void> clearSession() async {
     await _authService.logout();
     _cachedSession = null;
     _sessionAccessToken = null;
+    clearCitizenProfileCache();
     notifyListeners();
   }
 
@@ -940,11 +1003,13 @@ class AppController extends ChangeNotifier {
         result.status == SessionRestoreStatus.unauthenticated) {
       _cachedSession = null;
       _sessionAccessToken = null;
+      clearCitizenProfileCache();
       notifyListeners();
     }
     return result;
   }
 
+  @override
   bool get isAuthenticated =>
       _cachedSession != null && (_cachedSession!.accessToken.isNotEmpty);
 
@@ -972,6 +1037,7 @@ class AppController extends ChangeNotifier {
   }
 
   bool highContrastMode = false;
+  @override
   bool lowDataMode = false;
   CarProfile? carProfile;
 
@@ -1175,18 +1241,6 @@ class BroadcastAlert {
   final DateTime receivedAt;
 }
 
-class AppScope extends InheritedNotifier<AppController> {
-  const AppScope(
-      {required AppController controller, required super.child, super.key})
-      : super(notifier: controller);
-
-  static AppController of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
-    assert(scope != null, "AppScope not found");
-    return scope!.notifier!;
-  }
-}
-
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -1205,7 +1259,7 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
 
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final restore = await controller.restoreSession();
     if (!mounted) return;
 
@@ -1402,7 +1456,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
       formError = null;
     });
 
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final result = await controller.authService.login(
       identifier: _identifierController.text,
       password: _passwordController.text,
@@ -1422,6 +1476,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     if (result.isSuccess && result.session != null) {
       await controller.setSession(result.session!);
       if (!mounted) return;
+      if (!result.profileComplete) {
+        Navigator.of(context).pushReplacementNamed("/profile");
+        return;
+      }
       Navigator.of(context).pushReplacementNamed("/home");
       return;
     }
@@ -1441,7 +1499,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
       formError = null;
     });
 
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     SocialAuthResult result;
     try {
       result = provider == SocialAuthProvider.google
@@ -1502,7 +1560,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
 
   Future<void> _handleForgotPassword() async {
     final parsed = parseLoginIdentifier(_identifierController.text);
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
 
     if (parsed.kind == LoginIdentifierKind.phone &&
         isValidPhoneNumber(_identifierController.text)) {
@@ -1821,7 +1879,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
       formError = null;
     });
 
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final result = await controller.authService.register(
       email: _emailController.text,
       password: _passwordController.text,
@@ -2222,7 +2280,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       formError = null;
     });
 
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final result = await controller.authService.verifyPhoneOtp(
       phone: phone,
       code: _otpController.text,
@@ -2240,6 +2298,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     if (result.isSuccess && result.session != null) {
       await controller.setSession(result.session!);
       if (!mounted) return;
+      if (!result.profileComplete) {
+        Navigator.of(context).pushReplacementNamed("/profile");
+        return;
+      }
       Navigator.of(context).pushReplacementNamed("/home");
       return;
     }
@@ -2260,7 +2322,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     });
 
     final result =
-        await AppScope.of(context).authService.requestPhoneOtp(phone);
+        await appOf(context).authService.requestPhoneOtp(phone);
     if (!mounted) return;
 
     setState(() => resending = false);
@@ -2463,7 +2525,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     return SafetyScaffold(
       title: "Home",
       selectedIndex: 0,
@@ -2669,7 +2731,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final isEmergency = widget.type == ReportType.emergency;
     return Scaffold(
       backgroundColor: EyeTokens.whiteBg,
@@ -2861,7 +2923,7 @@ class _ReportScreenState extends State<ReportScreen> {
       submissionError = null;
     });
 
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final outcome = await captureLocationOutcome(
         accuracy: controller.lowDataMode
             ? LocationAccuracy.medium
@@ -2990,7 +3052,7 @@ class _MissingPersonBroadcastScreenState
     }
 
     setState(() => submitting = true);
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final outcome = await captureLocationOutcome();
     if (!mounted) return;
     if (outcome.result != LocationCaptureResult.granted ||
@@ -3055,7 +3117,7 @@ class _MissingPersonBroadcastScreenState
                 const SizedBox(height: 12),
                 ManagedEvidenceSection(
                     key: _evidenceSectionKey,
-                    lowDataMode: AppScope.of(context).lowDataMode),
+                    lowDataMode: appOf(context).lowDataMode),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: submitting ? null : _submit,
@@ -3343,7 +3405,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       }
 
       final position = outcome.position!;
-      final appController = AppScope.of(context);
+      final appController = appOf(context);
       final draft = buildIncidentDraft(
         type: IncidentType.emergency,
         description: "Live emergency video started with GPS.",
@@ -3434,7 +3496,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       locationTimer?.cancel();
       if (liveSessionId.isNotEmpty) {
         try {
-          final accessToken = AppScope.of(context).session?.accessToken ??
+          final accessToken = appOf(context).session?.accessToken ??
               (theEyeAccessToken.isNotEmpty ? theEyeAccessToken : null);
           await apiClient
               .stopLiveVideo(sessionId: liveSessionId, accessToken: accessToken)
@@ -3463,7 +3525,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       lastCapturedAt = position.timestamp;
     });
     try {
-      final accessToken = AppScope.of(context).session?.accessToken ??
+      final accessToken = appOf(context).session?.accessToken ??
           (theEyeAccessToken.isNotEmpty ? theEyeAccessToken : null);
       await apiClient.postLiveVideoLocation(
         sessionId: liveSessionId,
@@ -3471,7 +3533,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         accessToken: accessToken,
       );
     } catch (_) {
-      AppScope.of(context).notifications.insert(
+      appOf(context).notifications.insert(
           0,
           BroadcastAlert("Incident status update", "GPS update queued",
               "Will retry when connection improves", "Info", "Queued", false));
@@ -3514,7 +3576,7 @@ class _StolenVehicleBroadcastScreenState
     super.didChangeDependencies();
     if (prefilledFromSavedCar) return;
     prefilledFromSavedCar = true;
-    _applySavedCarProfile(AppScope.of(context).carProfile, notify: false);
+    _applySavedCarProfile(appOf(context).carProfile, notify: false);
   }
 
   void _applySavedCarProfile(CarProfile? profile, {bool notify = true}) {
@@ -3555,7 +3617,7 @@ class _StolenVehicleBroadcastScreenState
     }
 
     setState(() => submitting = true);
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final outcome = await captureLocationOutcome();
     if (!mounted) return;
     if (outcome.result != LocationCaptureResult.granted ||
@@ -3612,7 +3674,7 @@ class _StolenVehicleBroadcastScreenState
 
   @override
   Widget build(BuildContext context) {
-    final savedCar = AppScope.of(context).carProfile;
+    final savedCar = appOf(context).carProfile;
     final hasSavedCar = savedCar?.hasRequiredFields ?? false;
     return SafetyScaffold(
       title: "Stolen vehicle",
@@ -3688,7 +3750,7 @@ class _StolenVehicleBroadcastScreenState
                 const SizedBox(height: 12),
                 ManagedEvidenceSection(
                     key: _evidenceSectionKey,
-                    lowDataMode: AppScope.of(context).lowDataMode),
+                    lowDataMode: appOf(context).lowDataMode),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: submitting ? null : _submit,
@@ -3835,7 +3897,7 @@ class BroadcastForm extends StatelessWidget {
                   )),
               ManagedEvidenceSection(
                   key: GlobalKey<ManagedEvidenceSectionState>(),
-                  lowDataMode: AppScope.of(context).lowDataMode),
+                  lowDataMode: appOf(context).lowDataMode),
               const SizedBox(height: 16),
               FilledButton(
                   onPressed: onSubmit, child: const Text("Submit broadcast")),
@@ -3982,7 +4044,7 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     return Scaffold(
       backgroundColor: EyeTokens.whiteBg,
       body: SafeArea(
@@ -4014,7 +4076,7 @@ class IncidentTrackingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     return SafetyScaffold(
       title: "Incident status",
       selectedIndex: 2,
@@ -4721,7 +4783,7 @@ class CreateCommunityPostScreen extends StatelessWidget {
           const TextField(
               maxLines: 4, decoration: InputDecoration(labelText: "Details")),
           const SizedBox(height: 12),
-          ManagedEvidenceSection(lowDataMode: AppScope.of(context).lowDataMode),
+          ManagedEvidenceSection(lowDataMode: appOf(context).lowDataMode),
           const SizedBox(height: 12),
           FilledButton(
               onPressed: () =>
@@ -4887,169 +4949,16 @@ class CommunityAlertsScreen extends StatelessWidget {
   }
 }
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen> {
-  final TheEyeApiClient _apiClient = TheEyeApiClient(baseUrl: theEyeApiUrl);
-  CitizenProfile? _profile;
-  String? _error;
-  bool _loading = true;
-  bool _loadStarted = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_loadStarted) {
-      _loadStarted = true;
-      unawaited(_loadProfile());
-    }
-  }
-
-  Future<void> _loadProfile() async {
-    final controller = AppScope.of(context);
-    if (!controller.isAuthenticated || controller.accessToken == null) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _profile = null;
-        _error = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final profile = await _apiClient.fetchCitizenProfile(
-        accessToken: controller.accessToken!,
-      );
-      if (!mounted) return;
-      setState(() {
-        _profile = profile;
-        _loading = false;
-      });
-    } on AuthApiException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error.userMessage;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = "Unable to load your profile right now.";
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _signOut() async {
-    await AppScope.of(context).clearSession();
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil("/login", (_) => false);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final controller = AppScope.of(context);
-    final authenticated = controller.isAuthenticated;
-
-    return SafetyScaffold(
+    return const SafetyScaffold(
       title: "Profile",
       selectedIndex: 4,
       useFigmaShell: true,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          if (!authenticated)
-            SectionCard(
-              title: "Sign in required",
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    "Create an account or sign in to view your citizen profile, KYC status, and emergency contacts.",
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: () => Navigator.of(context).pushNamed("/login"),
-                    child: const Text("Sign in"),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: () =>
-                        Navigator.of(context).pushNamed("/register"),
-                    child: const Text("Create an account"),
-                  ),
-                ],
-              ),
-            )
-          else if (_loading)
-            const SectionCard(
-              title: "Citizen profile",
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            )
-          else if (_error != null)
-            SectionCard(
-              title: "Citizen profile",
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(_error!,
-                      style: const TextStyle(color: BrandColors.danger)),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _loadProfile,
-                    child: const Text("Retry"),
-                  ),
-                ],
-              ),
-            )
-          else
-            SectionCard(
-              title: "Citizen profile",
-              child: Column(
-                children: [
-                  const CircleAvatar(
-                      radius: 42, child: Icon(Icons.person, size: 44)),
-                  const SizedBox(height: 16),
-                  ProfileRow("Name", _profile?.displayName ?? "Citizen"),
-                  if (_profile?.email != null && _profile!.email!.isNotEmpty)
-                    ProfileRow("Email", _profile!.email!),
-                  if (_profile?.phone != null && _profile!.phone!.isNotEmpty)
-                    ProfileRow("Phone", _profile!.phone!),
-                  ProfileRow("KYC status", _profile?.kycStatus ?? "Unverified"),
-                  ProfileRow(
-                    "Trust score",
-                    _profile?.trustScore != null
-                        ? _profile!.trustScore!.toStringAsFixed(0)
-                        : "Not rated",
-                  ),
-                  ProfileRow(
-                    "Emergency contact",
-                    _profile?.emergencyContactPhone ?? "Not set",
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed: _signOut,
-                    child: const Text("Sign out"),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
+      body: ProfileScreenBody(),
     );
   }
 }
@@ -5078,7 +4987,7 @@ class _YourCarScreenState extends State<YourCarScreen> {
     super.didChangeDependencies();
     if (initialized) return;
     initialized = true;
-    final profile = AppScope.of(context).carProfile;
+    final profile = appOf(context).carProfile;
     if (profile != null) {
       makeController.text = profile.make;
       modelController.text = profile.model;
@@ -5170,7 +5079,7 @@ class _YourCarScreenState extends State<YourCarScreen> {
       imagePath: imagePath,
     );
 
-    await AppScope.of(context).saveCarProfile(profile);
+    await appOf(context).saveCarProfile(profile);
     if (!mounted) return;
     setState(() => saving = false);
     showAppSnackBar(context, "Your car details were saved.");
@@ -5195,7 +5104,7 @@ class _YourCarScreenState extends State<YourCarScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await AppScope.of(context).clearCarProfile();
+    await appOf(context).clearCarProfile();
     if (!mounted) return;
     showAppSnackBar(context, "Saved car removed.");
     Navigator.of(context).pop();
@@ -5203,7 +5112,7 @@ class _YourCarScreenState extends State<YourCarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasSavedCar = AppScope.of(context).carProfile != null;
+    final hasSavedCar = appOf(context).carProfile != null;
     return SafetyScaffold(
       title: hasSavedCar ? "Your car" : "Add your car",
       useFigmaShell: true,
@@ -5319,12 +5228,54 @@ class _YourCarScreenState extends State<YourCarScreen> {
   }
 }
 
+Future<void> _confirmAccountDeletion(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text("Delete account?"),
+      content: const Text(
+        "This deactivates your account and signs you out. Incident evidence and audit records may be retained where legally required. Continue?",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Cancel"),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text("Deactivate account"),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  final controller = appOf(context);
+  final token = controller.accessToken;
+  if (token == null) return;
+
+  try {
+    final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    await client.requestAccountDeletion(accessToken: token);
+    await controller.clearSession();
+    if (!context.mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil("/login", (_) => false);
+    showAppSnackBar(context, "Account deactivated.");
+  } on AuthApiException catch (error) {
+    if (!context.mounted) return;
+    showAppSnackBar(context, error.userMessage, isError: true);
+  } catch (_) {
+    if (!context.mounted) return;
+    showAppSnackBar(context, "Unable to process deletion request.", isError: true);
+  }
+}
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = AppScope.of(context);
+    final controller = appOf(context);
     final authenticated = controller.isAuthenticated;
     return SafetyScaffold(
       title: "Settings",
@@ -5352,7 +5303,7 @@ class SettingsScreen extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).pushNamed("/profile"),
                 ),
-                if (authenticated)
+                if (authenticated) ...[
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(
@@ -5366,8 +5317,20 @@ class SettingsScreen extends StatelessWidget {
                       Navigator.of(context)
                           .pushNamedAndRemoveUntil("/login", (_) => false);
                     },
-                  )
-                else
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.delete_outline,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    title: const Text("Request account deletion"),
+                    subtitle: const Text(
+                      "Deactivates your account. Full erasure follows legal retention rules.",
+                    ),
+                    onTap: () => _confirmAccountDeletion(context),
+                  ),
+                ] else
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(
@@ -5629,7 +5592,7 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     setState(() => sendingAlert = true);
 
     final parentContext = widget.parentContext;
-    final controller = AppScope.of(parentContext);
+    final controller = appOf(parentContext);
 
     // Close the sheet before location permission / GPS so Android can show
     // system dialogs above the app (modal sheets block them otherwise).

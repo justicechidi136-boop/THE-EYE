@@ -32,6 +32,13 @@ abstract final class TheEyeApiPaths {
   static const authVerifyPhoneOtp = "/auth/phone/verify-otp";
   static const authPasswordResetRequest = "/auth/password-reset/request";
   static const usersMe = "/users/me";
+  static const usersMeEmergencyContacts = "/users/me/emergency-contacts";
+  static String usersMeEmergencyContact(String id) =>
+      "/users/me/emergency-contacts/$id";
+  static const usersMeAvatarPresign = "/users/me/avatar/presign";
+  static const usersMeAvatarConfirm = "/users/me/avatar/confirm";
+  static const usersMeKyc = "/users/me/kyc";
+  static const usersMeDeletionRequest = "/users/me/deletion-request";
   static const notificationsPushTokens = "/notifications/push-tokens";
   static const notificationsPushTokensDeactivate =
       "/notifications/push-tokens/deactivate";
