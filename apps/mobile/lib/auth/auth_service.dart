@@ -95,9 +95,13 @@ class AuthService {
         password: password,
       );
       await _sessionStore.save(session);
+      final profileComplete = await _resolveProfileComplete(session);
       logAuthEvent("Auth login succeeded for ${parsed.kind.name} identifier");
       return AuthRequestResult(
-          status: AuthRequestStatus.success, session: session);
+        status: AuthRequestStatus.success,
+        session: session,
+        profileComplete: profileComplete,
+      );
     } on AuthApiException catch (error) {
       return _mapAuthException(error);
     } on SocketException {
@@ -261,9 +265,13 @@ class AuthService {
       final session = await _apiClient.verifyPhoneOtp(
           phone: normalized, code: code.trim(), purpose: purpose);
       await _sessionStore.save(session);
+      final profileComplete = await _resolveProfileComplete(session);
       logAuthEvent("Phone verification succeeded");
       return AuthRequestResult(
-          status: AuthRequestStatus.success, session: session);
+        status: AuthRequestStatus.success,
+        session: session,
+        profileComplete: profileComplete,
+      );
     } on AuthApiException catch (error) {
       return _mapOtpException(error);
     } on SocketException {
@@ -343,6 +351,16 @@ class AuthService {
       final profile = await _apiClient.fetchCitizenProfile(
           accessToken: refreshed.accessToken);
       return (session: refreshed, citizenProfile: profile);
+    }
+  }
+
+  Future<bool> _resolveProfileComplete(AuthSession session) async {
+    try {
+      final profile = await _fetchProfileWithRefresh(session);
+      await _sessionStore.save(profile.session);
+      return profile.citizenProfile.profileComplete;
+    } catch (_) {
+      return false;
     }
   }
 
