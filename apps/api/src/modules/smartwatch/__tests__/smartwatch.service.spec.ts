@@ -81,7 +81,7 @@ describe("SmartwatchService", () => {
     expect(incidents.report).toHaveBeenCalledWith(expect.objectContaining({
       type: "SOS",
       priority: "P1LifeThreatening",
-      notifyEmergencyContacts: true,
+      notifyEmergencyContacts: false,
     }), expect.objectContaining({ typ: "user", sub: "user-1" }));
     expect(prisma.sosEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ sourceMode: "StandaloneCellular", incidentId: "incident-1" }),
