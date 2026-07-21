@@ -423,6 +423,8 @@ model Incident {
   manualLocationAdjusted Boolean              @default(false) @map("manual_location_adjusted")
   isAnonymous         Boolean                 @default(false) @map("is_anonymous")
   notifyEmergencyContacts Boolean             @default(false) @map("notify_emergency_contacts")
+  clientSubmissionId  String?                 @unique @map("client_submission_id")
+  occurredAt          DateTime?               @map("occurred_at") @db.Timestamptz(6)
   submittedAt         DateTime                @default(now()) @map("submitted_at") @db.Timestamptz(6)
   metadata            Json                    @default("{}")
   createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -437,6 +439,7 @@ model Incident {
   verifications       IncidentVerification[]
   timeline            IncidentTimeline[]
   statusHistory       IncidentStatusHistory[]
+  locationUpdates     IncidentLocationUpdate[]
   notifications       Notification[]
   liveVideoSessions   LiveVideoSession[]
   liveVideoLocationUpdates LiveVideoLocationUpdate[]
@@ -540,6 +543,23 @@ model IncidentStatusHistory {
 
   @@index([incidentId, createdAt])
   @@map("incident_status_history")
+}
+
+model IncidentLocationUpdate {
+  id             String   @id @default(uuid()) @db.Uuid
+  incidentId     String   @map("incident_id") @db.Uuid
+  latitude       Decimal  @db.Decimal(9, 6)
+  longitude      Decimal  @db.Decimal(9, 6)
+  accuracy       Decimal? @db.Decimal(8, 2)
+  gpsLocation    Unsupported("geography(Point,4326)") @map("gps_location")
+  capturedAt     DateTime @map("captured_at") @db.Timestamptz(6)
+  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  sourceDeviceId String?  @map("source_device_id")
+  sequenceNumber Int      @default(0) @map("sequence_number")
+  incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId, capturedAt])
+  @@map("incident_location_updates")
 }
 
 model Broadcast {

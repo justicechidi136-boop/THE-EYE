@@ -341,7 +341,7 @@ export class SmartwatchService {
       longitude: dto.longitude,
       priority: IncidentPriority.P1LifeThreatening,
       anonymous: false,
-      notifyEmergencyContacts: true,
+      notifyEmergencyContacts: false,
     }, {
       sub: device.userId,
       typ: "user",

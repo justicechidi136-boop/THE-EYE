@@ -31,6 +31,8 @@ export type ReportIncidentDto = {
   anonymous?: boolean;
   notifyEmergencyContacts?: boolean;
   emergencyContactIds?: string[];
+  occurredAt?: string;
+  clientSubmissionId?: string;
   media?: IncidentMediaDraft[];
   missingPerson?: {
     fullName: string;
@@ -61,6 +63,15 @@ export type PresignIncidentMediaDto = {
 
 export type ConfirmIncidentMediaDto = IncidentMediaDraft;
 
+export type UpdateIncidentLocationDto = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+  capturedAt?: string;
+  sourceDeviceId?: string;
+  sequenceNumber?: number;
+};
+
 function assertCoordinate(value: unknown, label: string, min: number, max: number): asserts value is number {
   if (typeof value !== "number" || Number.isNaN(value) || value < min || value > max) {
     throw new BadRequestException(`${label} must be between ${min} and ${max}`);
@@ -80,6 +91,7 @@ export function validateReportIncidentDto(dto: ReportIncidentDto) {
 
   if (dto.priority && !allowedPriorities.has(dto.priority)) throw new BadRequestException("Unsupported incident priority");
   if (dto.media && dto.media.length > 10) throw new BadRequestException("At most 10 media files can be attached at submission");
+  if (dto.emergencyContactIds && dto.emergencyContactIds.length > 5) throw new BadRequestException("At most 5 emergency contacts can be notified");
   if (dto.type === IncidentType.MissingPerson && !dto.missingPerson?.fullName) throw new BadRequestException("Missing person fullName is required");
   if (dto.type === IncidentType.StolenVehicle && !dto.stolenVehicle?.plateNumber) throw new BadRequestException("Stolen vehicle plateNumber is required");
 }
@@ -90,5 +102,13 @@ export function validateMediaDraft(dto: IncidentMediaDraft) {
   if (dto.latitude !== undefined || dto.longitude !== undefined) {
     assertCoordinate(dto.latitude, "latitude", -90, 90);
     assertCoordinate(dto.longitude, "longitude", -180, 180);
+  }
+}
+
+export function validateIncidentLocationDto(dto: UpdateIncidentLocationDto) {
+  assertCoordinate(dto.latitude, "latitude", -90, 90);
+  assertCoordinate(dto.longitude, "longitude", -180, 180);
+  if (dto.accuracyMeters !== undefined && (typeof dto.accuracyMeters !== "number" || dto.accuracyMeters < 0)) {
+    throw new BadRequestException("accuracyMeters must be a non-negative number");
   }
 }

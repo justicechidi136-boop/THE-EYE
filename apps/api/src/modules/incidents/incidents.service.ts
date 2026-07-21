@@ -1,7 +1,7 @@
 ﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
 import { hashPassword, randomToken } from "../../common/auth/crypto";
-import { createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
+import { createS3PresignedPutUrl, createS3PresignedGetUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import {
@@ -15,11 +15,14 @@ import {
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { VerificationService } from "../verification/verification.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { canTransitionIncident } from "./incident-lifecycle";
 import {
   ConfirmIncidentMediaDto,
   PresignIncidentMediaDto,
   ReportIncidentDto,
+  UpdateIncidentLocationDto,
+  validateIncidentLocationDto,
   validateMediaDraft,
   validateReportIncidentDto,
 } from "./dto/report-incident.dto";
@@ -35,6 +38,7 @@ export class IncidentsService {
     private readonly audit: AuditService,
     private readonly metrics: MetricsService,
     private readonly verification: VerificationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(actor?: JwtPayload, query: CursorPageQuery = {}) {
@@ -42,7 +46,12 @@ export class IncidentsService {
     const cursor = decodeIncidentCursor(query.cursor);
     const rows = await this.prisma.incident.findMany({
       where: { ...this.incidentScopeWhere(actor), ...incidentCursorWhere(cursor) } as never,
-      include: { media: true, timeline: { orderBy: { createdAt: "desc" }, take: 10 } },
+      include: {
+        media: true,
+        timeline: { orderBy: { createdAt: "desc" }, take: 10 },
+        statusHistory: { orderBy: { createdAt: "desc" }, take: 5 },
+        locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 },
+      },
       orderBy: [{ priority: "asc" }, { createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
@@ -76,6 +85,14 @@ export class IncidentsService {
     const incidentType = String(dto.type);
     validateReportIncidentDto(dto);
 
+    const clientSubmissionId = dto.clientSubmissionId?.trim();
+    if (clientSubmissionId) {
+      const existing = await this.prisma.incident.findUnique({ where: { clientSubmissionId } });
+      if (existing) {
+        return this.buildReportResponse(existing, emergencyFastPath, true);
+      }
+    }
+
     const isAnonymous = dto.anonymous ?? !actor;
     if (!isAnonymous && actor?.typ !== "user" && actor?.typ !== "admin") {
       throw new BadRequestException("Identified reporting requires authentication");
@@ -107,6 +124,8 @@ export class IncidentsService {
         manualLocationAdjusted: dto.manualLatitude !== undefined && dto.manualLongitude !== undefined,
         isAnonymous,
         notifyEmergencyContacts: dto.notifyEmergencyContacts ?? false,
+        clientSubmissionId: clientSubmissionId || undefined,
+        occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : undefined,
         submittedAt: now,
         metadata: {
           intake: emergencyFastPath ? "emergency_fast_path" : "standard",
@@ -152,19 +171,12 @@ export class IncidentsService {
     }
 
     if (dto.notifyEmergencyContacts && !isAnonymous && actor?.typ === "user") {
-      void this.createEmergencyContactNotifications(actor.sub, incident.id, incidentTitle);
+      void this.createEmergencyContactNotifications(actor.sub, incident.id, incidentTitle, dto.emergencyContactIds);
     }
 
     void this.verification.verifyIncident(incident.id).catch(() => undefined);
 
-    const result = {
-      id: incident.id,
-      status: incident.status,
-      priority: incident.priority,
-      submittedAt: incident.submittedAt,
-      fastPath: emergencyFastPath,
-      targetProcessingTimeMs: emergencyFastPath ? 3000 : undefined,
-    };
+    const result = this.buildReportResponse(incident, emergencyFastPath, false);
     this.metrics.recordIncidentSubmission(
       incidentType,
       intake,
@@ -228,7 +240,7 @@ export class IncidentsService {
   async get(id: string, actor?: JwtPayload) {
     const incident = await this.prisma.incident.findFirst({
       where: { id, ...this.incidentScopeWhere(actor) },
-      include: { media: true, timeline: { orderBy: { createdAt: "asc" } }, statusHistory: { orderBy: { createdAt: "asc" } } },
+      include: { media: true, timeline: { orderBy: { createdAt: "asc" } }, statusHistory: { orderBy: { createdAt: "asc" } }, locationUpdates: { orderBy: { capturedAt: "asc" } } },
     });
     if (!incident) throw new NotFoundException("Incident not found or outside your scope");
     await this.audit.record({
@@ -255,6 +267,8 @@ export class IncidentsService {
       where: { id },
       data: {
         status: status as never,
+        resolvedAt: status === IncidentStatus.Resolved ? new Date() : undefined,
+        closedAt: status === IncidentStatus.Closed ? new Date() : undefined,
         timeline: {
           create: {
             actorId: actor?.typ === "user" ? actor.sub : undefined,
@@ -262,6 +276,14 @@ export class IncidentsService {
             eventType: "incident.status_changed",
             message: note ?? `Status changed from ${currentStatus} to ${status}`,
             metadata: { fromStatus: currentStatus, toStatus: status },
+          },
+        },
+        statusHistory: {
+          create: {
+            fromStatus: currentStatus as never,
+            toStatus: status as never,
+            changedById: actor?.typ === "user" ? actor.sub : undefined,
+            note: note ?? `Status changed from ${currentStatus} to ${status}`,
           },
         },
       } as never,
@@ -285,12 +307,18 @@ export class IncidentsService {
   async assign(id: string, dto: { agencyId?: string; adminId?: string; reason?: string }, actor?: JwtPayload) {
     if (actor?.role === AdminRoleName.OversightAuditor) throw new ForbiddenException("Oversight Auditor cannot modify incidents");
     const incident = await this.get(id, actor);
+    const currentStatus = incident.status as IncidentStatus;
+    const nextStatus = IncidentStatus.Assigned;
+    if (currentStatus !== nextStatus && !canTransitionIncident(currentStatus, nextStatus)) {
+      throw new BadRequestException(`Incident cannot move from ${currentStatus} to ${nextStatus}`);
+    }
+
     const updated = await this.prisma.incident.update({
       where: { id },
       data: {
         assignedAgencyId: dto.agencyId,
         assignedAdminId: dto.adminId,
-        status: IncidentStatus.Assigned as never,
+        ...(currentStatus !== nextStatus ? { status: nextStatus as never } : {}),
         timeline: {
           create: {
             actorId: actor?.typ === "user" ? actor.sub : undefined,
@@ -300,6 +328,17 @@ export class IncidentsService {
             metadata: { agencyId: dto.agencyId, adminId: dto.adminId },
           },
         },
+        ...(currentStatus !== nextStatus
+          ? {
+              statusHistory: {
+                create: {
+                  fromStatus: currentStatus as never,
+                  toStatus: nextStatus as never,
+                  note: dto.reason ?? "Incident assigned.",
+                },
+              },
+            }
+          : {}),
       } as never,
     });
     await this.audit.record({
@@ -309,9 +348,55 @@ export class IncidentsService {
       entityId: id,
       reason: dto.reason,
       beforeState: { assignedAgencyId: incident.assignedAgencyId, assignedAdminId: incident.assignedAdminId, status: incident.status },
-      afterState: { assignedAgencyId: dto.agencyId, assignedAdminId: dto.adminId, status: IncidentStatus.Assigned },
+      afterState: { assignedAgencyId: dto.agencyId, assignedAdminId: dto.adminId, status: currentStatus !== nextStatus ? nextStatus : currentStatus },
     });
     return updated;
+  }
+
+  async recordLocation(id: string, dto: UpdateIncidentLocationDto, actor?: JwtPayload) {
+    validateIncidentLocationDto(dto);
+    const incident = await this.get(id, actor);
+    if (actor?.typ === "user" && incident.reporterId !== actor.sub) {
+      throw new ForbiddenException("Only the reporting citizen can update this incident location stream");
+    }
+
+    const capturedAt = dto.capturedAt ? new Date(dto.capturedAt) : new Date();
+    if (dto.sequenceNumber !== undefined) {
+      const duplicate = await (this.prisma as any).incidentLocationUpdate.findFirst({
+        where: { incidentId: id, sequenceNumber: dto.sequenceNumber },
+      });
+      if (duplicate) return duplicate;
+    }
+
+    const update = await (this.prisma as any).incidentLocationUpdate.create({
+      data: {
+        incidentId: id,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        accuracy: dto.accuracyMeters,
+        capturedAt,
+        sourceDeviceId: dto.sourceDeviceId,
+        sequenceNumber: dto.sequenceNumber ?? 0,
+      } as never,
+    });
+
+    await this.prisma.incident.update({
+      where: { id },
+      data: {
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+      } as never,
+    });
+
+    await this.audit.record({
+      actor,
+      action: "incident.location_updated",
+      entityType: "incidents",
+      entityId: id,
+      metadata: { latitude: dto.latitude, longitude: dto.longitude, sequenceNumber: dto.sequenceNumber ?? 0 },
+    });
+
+    return update;
   }
 
   async accessMedia(incidentId: string, mediaId: string, action: "view" | "download", actor?: JwtPayload) {
@@ -335,7 +420,32 @@ export class IncidentsService {
       reason: action === "download" ? "Evidence downloaded for investigation" : "Evidence viewed",
       metadata: { incidentId, fileHash: media.fileHash, objectKey: media.objectKey },
     });
-    return { data: media, access: action };
+
+    let signedUrl: string | undefined;
+    try {
+      signedUrl = createS3PresignedGetUrl(media.objectKey, 300);
+    } catch {
+      signedUrl = undefined;
+    }
+
+    return {
+      data: media,
+      access: action,
+      signedUrl,
+      expiresInSeconds: signedUrl ? 300 : undefined,
+    };
+  }
+
+  private buildReportResponse(incident: { id: string; status: unknown; priority: unknown; submittedAt: Date }, emergencyFastPath: boolean, duplicate: boolean) {
+    return {
+      id: incident.id,
+      status: incident.status,
+      priority: incident.priority,
+      submittedAt: incident.submittedAt,
+      fastPath: emergencyFastPath,
+      duplicate,
+      targetProcessingTimeMs: emergencyFastPath ? 3000 : undefined,
+    };
   }
 
   private async findJurisdiction(latitude: number, longitude: number, actor?: JwtPayload) {
@@ -443,23 +553,24 @@ export class IncidentsService {
     });
   }
 
-  private async createEmergencyContactNotifications(userId: string, incidentId: string, title: string) {
-    const contacts = await this.prisma.emergencyContact.findMany({ where: { userId }, orderBy: { priority: "asc" }, take: 5 });
+  private async createEmergencyContactNotifications(userId: string, incidentId: string, title: string, contactIds?: string[]) {
+    const where = contactIds?.length
+      ? { userId, id: { in: contactIds } }
+      : { userId };
+    const contacts = await this.prisma.emergencyContact.findMany({ where, orderBy: { priority: "asc" }, take: 5 });
     if (!contacts.length) return;
 
-    await this.prisma.notification.createMany({
-      data: contacts.map((contact) => ({
-        userId,
-        incidentId,
-        type: "FamilySosAlert",
-        priority: "Critical",
-        channel: "sms",
-        title: "Emergency report submitted",
-        body: `${contact.name} should be notified: ${title}`,
-        status: "Pending" as never,
-        provider: "emergency-contact-adapter",
-      })),
-    });
+    await Promise.all(
+      contacts.map((contact) =>
+        this.notifications.enqueue({
+          channel: "sms",
+          phone: contact.phone,
+          title: "THE EYE emergency report",
+          body: `${contact.name}, an emergency report was submitted: ${title}. Open THE EYE for updates.`,
+          incidentId,
+        }),
+      ),
+    );
   }
 
   private async systemUserId() {
