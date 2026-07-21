@@ -11,15 +11,15 @@ export class RegisterDto {
   @MinLength(8)
   password!: string;
 
-  @ApiPropertyOptional({ example: "Amina" })
-  @IsOptional()
+  @ApiProperty({ example: "Ada" })
   @IsString()
-  firstName?: string;
+  @MinLength(1)
+  firstName!: string;
 
-  @ApiPropertyOptional({ example: "Okafor" })
-  @IsOptional()
+  @ApiProperty({ example: "Okeke" })
   @IsString()
-  lastName?: string;
+  @MinLength(1)
+  lastName!: string;
 }
 
 export class LoginDto {
