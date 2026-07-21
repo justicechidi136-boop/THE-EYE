@@ -2,9 +2,9 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-21 (Sprint 2 Phase 1 audit)  
+**Last updated:** 2026-07-21 (Sprint 2 code complete — pending staging QA)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
-**Sprint 2 status:** **NOT STARTED (implementation)** — Phase 1 re-audit documented below
+**Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -17,13 +17,13 @@
 | **Total features tracked** | **231** |
 | **PASS** | **77** |
 | **FAIL** | **19** |
-| **PARTIAL** | **50** |
-| **BLOCKED** | **18** |
-| **NOT IMPLEMENTED** | **62** |
+| **PARTIAL** | **58** |
+| **BLOCKED** | **19** |
+| **NOT IMPLEMENTED** | **50** |
 | **NOT APPLICABLE** | **1** |
-| **NOT TESTED** | **2** |
-| **P0 blockers (open)** | **37** |
-| **P1 blockers (open)** | **28** |
+| **NOT TESTED** | **7** |
+| **P0 blockers (open)** | **34** |
+| **P1 blockers (open)** | **26** |
 
 *Counts derived from checklist rows (231 feature IDs). Recalculate after each update.*
 
@@ -36,6 +36,8 @@
 | Admin Dashboard | 75 | 22 | **29.3%** |
 | Backend / API | 34 | 13 | **38.2%** |
 | Infrastructure | 18 | 8 | **44.4%** |
+
+*Sprint 2 moved many profile rows from NOT IMPLEMENTED → NOT TESTED/PARTIAL. PASS count unchanged until staging device QA.*
 
 *Completion = PASS ÷ applicable rows. UI presence alone does not count.*
 
@@ -68,6 +70,7 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-21 | Sprint 2 implementation | Citizen profile lifecycle coded on `feature/sprint-2-citizen-profile`: PATCH/me, emergency contacts CRUD, avatar presign/confirm, KYC submit+admin review, deletion deactivate, mobile completion/edit/contacts/KYC, admin KYC queue + citizen detail. Automated API + mobile tests green. No PASS without staging redeploy + device QA. Full erasure/preferences sync remain BLOCKED. |
 | 2026-07-21 | Sprint 2 Phase 1 | Full citizen-profile re-audit on `staging` @ `74565ff`. Sprint 2 gap table added; 13 new checklist rows (MOB-PROF-009–011, API-PROF-001–010). MOB-PROF-001 downgraded to PARTIAL pending completion flow + avatar. No implementation changes in this entry. |
 | 2026-07-21 | Sprint 1 (Auth) | Session restore, token refresh-on-restore, logout API, auth delivery webhooks, required registration names, guest flow, demo profile defaults removed. Backend auth tests + mobile auth tests green. Staging device QA pending. |
 | 2026-07-21 | Release audit | Initial checklist created from full-repo audit (`staging` @ `49613b1`). Mobile staging APK build/install verified 2026-07-20 (Firebase `the-eye-2stg`, API `https://staging-api.theeye.com.ng/v1`, login screen + startup logs). |
@@ -107,17 +110,17 @@
 
 | ID | Module | Feature | User Role | Platform | Screen/Page | UI Present | Navigation Works | API Endpoint | Backend Implemented | Database Implemented | Authorization Implemented | Uses Real Data | Mock/Demo Removed | Automated Test | Manual Device Test | Staging Verified | Production Config Ready | Status | Severity | Blocker | Root Cause | Files Changed | Deployment Required | Notes |
 |----|--------|---------|-----------|----------|-------------|:----------:|:----------------:|--------------|:-------------------:|:--------------------:|:-------------------------:|:--------------:|:-----------------:|:--------------:|:------------------:|:----------------:|:-----------------------:|--------|----------|:-------:|------------|---------------|:-------------------:|-------|
-| MOB-PROF-001 | Profile | View profile | Citizen | Mobile | `/profile` | Y | Y | `GET /v1/users/me` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P1 | Y | Read-only; static avatar icon; jurisdiction not shown; `profileComplete` computed client-side only | — | Y | Sprint 2 re-audit @ `74565ff`; prior device view not re-verified post-Sprint 1 merge |
-| MOB-PROF-002 | Profile | Edit profile | Citizen | Mobile | `/profile` | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | No `PATCH /v1/users/me`; no edit UI | — | Y | Read-only profile |
-| MOB-PROF-003 | Profile | Avatar upload | Citizen | Mobile | — | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | `avatarUrl` in schema/GET only; no presign or mobile picker | — | Y | Default CircleAvatar icon only |
-| MOB-PROF-004 | Profile | Emergency contacts | Citizen | Mobile | `/profile` | Y | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | Primary contact read-only from `/users/me`; no CRUD API or list UI | — | Y | SOS reads DB contacts server-side; citizen cannot manage |
-| MOB-PROF-005 | Profile | KYC | Citizen | Mobile | `/profile` | Y | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | Status label only; no submit/resubmit UI or API | — | Y | KycRecord model exists; no citizen/admin workflow APIs |
-| MOB-PROF-006 | Profile | Trust score | Citizen | Mobile | `/profile` | Y | Y | `GET /v1/users/me` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P2 | N | Numeric display only; no explanation; null shown as "Not rated" | — | N | Server-controlled; no demo fallback in UI |
+| MOB-PROF-001 | Profile | View profile | Citizen | Mobile | `/profile` | Y | Y | `GET /v1/users/me` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | Y | Code: real profile + geo + contacts count + avatar; device QA pending | `profile_screen.dart` | Y | Do not PASS without staging device |
+| MOB-PROF-002 | Profile | Edit profile | Citizen | Mobile | `/profile/edit` | Y | Y | `PATCH /v1/users/me` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | Y | Edit UI wired; staging device QA pending | `profile_edit_screen.dart` | Y | — |
+| MOB-PROF-003 | Profile | Avatar upload | Citizen | Mobile | `/profile` | Y | Y | presign + confirm | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P1 | Y | Pipeline coded; S3 staging env required (INF-006) | `avatar_upload_service.dart` | Y | — |
+| MOB-PROF-004 | Profile | Emergency contacts | Citizen | Mobile | `/profile/emergency-contacts` | Y | Y | CRUD `/users/me/emergency-contacts` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | Y | List/add/edit/delete UI; device QA pending | `emergency_contacts_screen.dart` | Y | Do not claim SOS notify delivery without verify |
+| MOB-PROF-005 | Profile | KYC | Citizen | Mobile | `/profile/kyc` | Y | Y | `POST /users/me/kyc` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | Y | Status + submit foundation; doc upload optional; legal docs may BLOCK | `kyc_screen.dart` | Y | — |
+| MOB-PROF-006 | Profile | Trust score | Citizen | Mobile | `/profile` | Y | Y | `GET /v1/users/me` | Y | Y | Y | Y | Y | Y | N | N | N | **PARTIAL** | P2 | N | Numeric display; null = Not rated; no client edit; calc rules BLOCKED | — | N | No hardcoded 82 |
 | MOB-PROF-007 | Profile | Preferences (theme, contrast, low-data) | Citizen | Mobile | `/settings` | Y | Y | — (local) | N/A | N/A | N/A | Y | Y | Y | N | N | N | **PARTIAL** | P2 | N | Local-only theme/contrast/low-data; no server-synced notification/privacy prefs | — | N | `theme_and_car_profile_test.dart` |
-| MOB-PROF-008 | Profile | Account deletion | Citizen | Mobile | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | Y | No UI or API; retention policy not finalized | — | Y | Must not fake success |
-| MOB-PROF-009 | Profile | Profile completion routing | Citizen | Mobile | splash/register/social | Y | PARTIAL | auth + `GET /v1/users/me` | PARTIAL | Y | Y | Y | Y | Y | N | N | N | **PARTIAL** | P0 | Y | Register/social/splash route incomplete users to `/profile`; password/OTP login always `/home` (`main.dart:1425`) | — | Y | No completion form on `/profile` |
-| MOB-PROF-010 | Profile | Profile completion form | Citizen | Mobile | `/profile` | N | N | `PATCH /v1/users/me` | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P0 | Y | Required jurisdiction/name fields not editable | — | Y | Blocks new social/email users |
-| MOB-PROF-011 | Profile | Server-synced citizen preferences | Citizen | Mobile | `/settings` | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No typed preferences API | — | Y | Notification/privacy prefs out of scope until API exists |
+| MOB-PROF-008 | Profile | Account deletion | Citizen | Mobile | `/settings` | Y | Y | `POST /users/me/deletion-request` | Y | PARTIAL | Y | Y | Y | Y | N | N | N | **PARTIAL** | P2 | Y | Deactivate + revoke sessions; full erasure BLOCKED pending legal retention | `main.dart` settings | Y | Explicit retention message |
+| MOB-PROF-009 | Profile | Profile completion routing | Citizen | Mobile | splash/login/register/social/otp | Y | Y | auth + `GET /v1/users/me` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Password/OTP/register/social/splash honor `profileComplete` | `main.dart`, `auth_service.dart` | Y | Device QA pending |
+| MOB-PROF-010 | Profile | Profile completion form | Citizen | Mobile | `/profile` | Y | Y | `PATCH /v1/users/me` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Required name + jurisdiction; no silent NG default | `profile_screen.dart` | Y | — |
+| MOB-PROF-011 | Profile | Server-synced citizen preferences | Citizen | Mobile | `/settings` | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No typed preferences API | — | Y | Notification/privacy prefs out of scope |
 
 ### Emergency
 
@@ -277,11 +280,11 @@
 | ID | Module | Feature | User Role | Platform | Screen/Page | UI Present | Navigation Works | API Endpoint | Backend Implemented | Database Implemented | Authorization Implemented | Uses Real Data | Mock/Demo Removed | Automated Test | Manual Device Test | Staging Verified | Production Config Ready | Status | Severity | Blocker | Root Cause | Files Changed | Deployment Required | Notes |
 |----|--------|---------|-----------|----------|-------------|:----------:|:----------------:|--------------|:-------------------:|:--------------------:|:-------------------------:|:--------------:|:-----------------:|:--------------:|:------------------:|:----------------:|:-----------------------:|--------|----------|:-------:|------------|---------------|:-------------------:|-------|
 | ADM-USR-001 | Users | User list | Admin | Admin | `/users` | Y | Y | `GET /v1/users/directory` | Y | Y | Y | Y | Y | N | N | Y | N | **PASS** | P1 | N | Read-only | — | N | — |
-| ADM-USR-002 | Users | User details | Admin | Admin | — | N | N | — | N | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | List only; no detail page | — | Y | — |
+| ADM-USR-002 | Users | User details | Admin | Admin | `/users/[id]` | Y | Y | `GET /v1/users/:id` | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P1 | Y | Detail page coded; staging QA pending | `app/users/[id]/page.tsx` | Y | Jurisdiction scoped |
 | ADM-USR-003 | Users | Suspend | Admin | Admin | — | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P0 | Y | No admin user action API | — | Y | — |
 | ADM-USR-004 | Users | Reactivate | Admin | Admin | — | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P0 | Y | — | — | Y | — |
 | ADM-USR-005 | Users | Delete | Admin | Admin | — | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | — | — | Y | — |
-| ADM-USR-006 | Users | KYC review | Admin | Admin | — | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | KycRecord read-only | — | Y | — |
+| ADM-USR-006 | Users | KYC review | Admin | Admin | `/users/kyc` | Y | Y | pending + review | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P1 | Y | Queue + approve/reject UI; staging QA pending | `app/users/kyc`, `kyc-review-button` | Y | — |
 | ADM-USR-007 | Users | Trust score | Admin | Admin | `/users` | Y | Y | In directory | Y | Y | Y | Y | Y | N | N | Y | N | **PASS** | P2 | N | Display only | — | N | — |
 | ADM-USR-008 | Users | Export | Admin | Admin | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | — | — | Y | — |
 
@@ -395,56 +398,56 @@
 
 | ID | Module | Feature | User Role | Platform | Screen/Page | UI Present | Navigation Works | API Endpoint | Backend Implemented | Database Implemented | Authorization Implemented | Uses Real Data | Mock/Demo Removed | Automated Test | Manual Device Test | Staging Verified | Production Config Ready | Status | Severity | Blocker | Root Cause | Files Changed | Deployment Required | Notes |
 |----|--------|---------|-----------|----------|-------------|:----------:|:----------------:|--------------|:-------------------:|:--------------------:|:-------------------------:|:--------------:|:-----------------:|:--------------:|:------------------:|:----------------:|:-----------------------:|--------|----------|:-------:|------------|---------------|:-------------------:|-------|
-| API-PROF-001 | Profile | GET citizen profile | Citizen | Backend | `GET /v1/users/me` | N/A | N/A | `GET /v1/users/me` | PARTIAL | Y | Y | Y | Y | Y | N | N | N | **PARTIAL** | P0 | Y | Missing `profileComplete`, `dateOfBirth`, `preferredLanguage`; returns only first emergency contact | `users.service.ts` | Y | Admin branch returns JWT claims only |
-| API-PROF-002 | Profile | PATCH citizen profile | Citizen | Backend | — | N/A | N/A | — | N | Y | N | N | Y | N | N | N | N | **NOT IMPLEMENTED** | P0 | Y | No update endpoint or DTO | — | Y | Required for completion + edit |
-| API-PROF-003 | Profile | Avatar presign + confirm | Citizen | Backend | — | N/A | N/A | — | N | Y | N | N | Y | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | S3 presign exists for incidents only | `s3-presign.ts` | Y | Blocked until S3 env on staging |
-| API-PROF-004 | Profile | Emergency contacts CRUD | Citizen | Backend | — | N/A | N/A | — | N | Y | N | N | Y | N | N | N | N | **NOT IMPLEMENTED** | P0 | Y | `EmergencyContact` model unused by API | — | Y | Incidents read contacts for SOS notify |
-| API-PROF-005 | Profile | KYC citizen submit | Citizen | Backend | — | N/A | N/A | — | N | Y | N | N | Y | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | No submit endpoint; documentary reqs BLOCKED | — | Y | Foundation only until legal sign-off |
-| API-PROF-006 | Profile | KYC admin review | Admin | Backend | — | N/A | N/A | — | N | Y | N | N | Y | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | No admin KYC list/approve/reject API | — | Y | ADM-USR-006 blocked |
-| API-PROF-007 | Profile | profileComplete rules | System | Backend | auth + users | N/A | N/A | auth responses | PARTIAL | Y | Y | Y | Y | Y | N | N | N | **PARTIAL** | P0 | Y | Logic in `auth.service.ts` only; not on `/users/me`; `googleLogin` omits flag | `auth.service.ts` | Y | Empty geo on register (good); no silent NG default |
+| API-PROF-001 | Profile | GET citizen profile | Citizen | Backend | `GET /v1/users/me` | N/A | N/A | `GET /v1/users/me` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Returns `profileComplete`, geo, contacts[], KYC reason; no secrets | `users.service.ts` | Y | Staging runtime pending |
+| API-PROF-002 | Profile | PATCH citizen profile | Citizen | Backend | `PATCH /v1/users/me` | N/A | N/A | `PATCH /v1/users/me` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Allowlisted fields; forbidNonWhitelisted; audit | `dto/users.dto.ts` | Y | — |
+| API-PROF-003 | Profile | Avatar presign + confirm | Citizen | Backend | avatar routes | N/A | N/A | presign/confirm | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | Y | Image MIME allowlist; ownership; INF-006 S3 staging | `s3-presign.ts` | Y | — |
+| API-PROF-004 | Profile | Emergency contacts CRUD | Citizen | Backend | `/users/me/emergency-contacts` | N/A | N/A | CRUD | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Max contacts; phone validate; audit; owner-only | `users.service.ts` | Y | — |
+| API-PROF-005 | Profile | KYC citizen submit | Citizen | Backend | `POST /users/me/kyc` | N/A | N/A | submit | Y | Y | Y | Y | Y | Y | N | N | N | **PARTIAL** | P1 | Y | Status workflow foundation; documentary requirements may BLOCK | — | Y | No mobile client approval |
+| API-PROF-006 | Profile | KYC admin review | Admin | Backend | pending + review | N/A | N/A | list/review | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | Y | Jurisdiction scoped; audit decisions | `users.controller.ts` | Y | — |
+| API-PROF-007 | Profile | profileComplete rules | System | Backend | auth + users | N/A | N/A | shared helper | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Shared `profile-complete.ts`; on GET/PATCH/auth | `profile-complete.ts` | Y | No silent NG default |
 | API-PROF-008 | Profile | Server-synced preferences | Citizen | Backend | — | N/A | N/A | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No preferences model/API | — | Y | Avoid JSON blob |
-| API-PROF-009 | Profile | Account deletion request | Citizen | Backend | — | N/A | N/A | — | N | PARTIAL | N | N | Y | N | N | N | N | **NOT IMPLEMENTED** | P2 | Y | User status enum exists; no deletion flow | — | Y | Policy/retention BLOCKED |
-| API-PROF-010 | Profile | Profile write audit | System | Backend | — | N/A | N/A | — | PARTIAL | Y | N | N | Y | N | N | N | N | **PARTIAL** | P1 | N | DB audit triggers on profile tables; no write APIs / actor `set_config` | prisma migrations | Y | Read path only today |
+| API-PROF-009 | Profile | Account deletion request | Citizen | Backend | `POST /users/me/deletion-request` | N/A | N/A | deletion | Y | PARTIAL | Y | Y | Y | Y | N | N | N | **PARTIAL** | P2 | Y | Deactivate + revoke; full erasure BLOCKED | — | Y | Retention policy pending |
+| API-PROF-010 | Profile | Profile write audit | System | Backend | profile writes | N/A | N/A | AuditService | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | N | Actor audit on profile/contacts/avatar/KYC/deletion | `users.service.ts` | Y | — |
 
 ---
 
-## SPRINT 2 — Citizen Profile (Phase 1 re-audit)
+## SPRINT 2 — Citizen Profile
 
-**Baseline:** `staging` @ merge commit `74565ff` (Sprint 1 auth merged)  
-**Branch for implementation:** `feature/sprint-2-citizen-profile` (not yet created at audit time)  
-**Sprint 2 verdict:** **NOT STARTED** — audit complete; implementation pending
+**Baseline:** `staging` @ `74565ff`  
+**Implementation branch:** `feature/sprint-2-citizen-profile`  
+**Sprint 2 verdict:** **CODE COMPLETE — PENDING STAGING QA**
 
-### Sprint 2 gap table
+### Sprint 2 gap table (post-implementation)
 
 | ID | Feature | Platform | Current status | UI status | Endpoint status | Database status | Authorization status | Mock/demo status | Tests | Severity | Required change |
 |----|---------|----------|----------------|-----------|-----------------|-----------------|----------------------|------------------|-------|----------|-----------------|
-| S2-001 | View real profile | Mobile + API | PARTIAL | Read-only `/profile`; static avatar; no jurisdiction | `GET /users/me` works; incomplete contract | Profile + relations exist | JWT owner on GET | Real API data; client-side `profileComplete` | Mobile: `citizen_profile_test.dart`; API: 2 unit tests | P1 | Extend GET contract; show avatar/geo; server `profileComplete` |
-| S2-002 | Edit profile | Mobile + API | NOT IMPLEMENTED | No edit UI | No PATCH | Profile writable in DB | N/A | No demo writes | None | P0 | `PATCH /users/me` + edit screen + validation + audit |
-| S2-003 | Profile completion flow | Mobile + API | PARTIAL | Routing exists; no form | `profileComplete` on auth only | Empty geo on register | Auth required | No hardcoded Lagos | Partial auth tests | P0 | Completion form; fix password login routing; server flag on GET |
-| S2-004 | Avatar upload | Mobile + API + Storage | NOT IMPLEMENTED | Icon placeholder | No avatar presign | `avatarUrl` column | N/A | No base64 in JSON | None | P1 | Presign pipeline; mobile picker/compress; confirm + cleanup |
-| S2-005 | Emergency contacts CRUD | Mobile + API | NOT IMPLEMENTED | Single phone read-only | No CRUD routes | `EmergencyContact` model | N/A | Real read if seeded | None | P0 | Full CRUD API + list/add/edit/delete UI + SOS reads active list |
-| S2-006 | KYC workflow | Mobile + API + Admin | NOT IMPLEMENTED | Status label only | No submit/review APIs | `KycRecord` model | N/A | No fake approvals | None | P1 | Citizen submit foundation; admin approve/reject; docs BLOCKED if legal pending |
-| S2-007 | Trust score display | Mobile + API | PARTIAL | Number or "Not rated" | Read via GET | `TrustedReporter` | Server-controlled | No hardcoded 82 | Display test only | P2 | Read-only display + explanation copy; audit on admin changes |
-| S2-008 | Citizen settings | Mobile | PARTIAL | Local theme/contrast/low-data | No sync API | N/A | N/A | Local prefs real | `theme_and_car_profile_test.dart` | P2 | Typed prefs API for sync-required settings only |
-| S2-009 | Account deletion | Mobile + API | NOT IMPLEMENTED | No entry | No API | User status fields | N/A | No fake success | None | P2 | Policy BLOCKED; disabled UI entry if not approved |
-| S2-010 | Admin user detail | Admin | NOT IMPLEMENTED | Directory cards only | `GET /users/directory` | Includes profile/KYC in query | RBAC scope on list | Real directory data | Zero admin tests | P1 | Detail view; completeness; scoped emergency contacts |
-| S2-011 | Admin KYC review | Admin + API | NOT IMPLEMENTED | Badge "KYC aware" only | No review endpoints | KycRecord | N/A | No placeholder decisions | None | P1 | Pending list; evidence access; approve/reject + audit |
-| S2-012 | Session + navigation | Mobile | PARTIAL | Guest blocked on profile | Session restore uses GET | N/A | Guest vs auth | Cached session only | `auth_session_restore_test.dart` | P0 | Password login → profile when incomplete; logout clears cache |
-| S2-013 | Profile security | All | PARTIAL | N/A | Mass-assignment N/A until PATCH | Audit triggers exist | JWT on GET | No PII in logs verified | Partial | P0 | Field allowlist; ownership; rate limits; security regression tests |
+| S2-001 | View real profile | Mobile + API | NOT TESTED | Full profile view | GET complete | Existing models | Owner JWT | Real API only | Unit + service | P1 | Staging device QA |
+| S2-002 | Edit profile | Mobile + API | NOT TESTED | Edit screen | PATCH allowlist | Existing | Owner + validation | No demo | Service + mobile API | P0 | Staging device QA |
+| S2-003 | Profile completion | Mobile + API | NOT TESTED | Completion form + routing | Server `profileComplete` | Existing | Auth | No silent geo | Service + auth | P0 | Staging device QA |
+| S2-004 | Avatar upload | Mobile + API + Storage | NOT TESTED | Picker + upload | Presign/confirm | `avatarUrl` | Owner | No base64 | Service | P1 | S3 staging (INF-006) + device QA |
+| S2-005 | Emergency contacts | Mobile + API | NOT TESTED | CRUD UI | Full CRUD | Model used | Owner | Real | Service + mobile | P0 | Staging device QA |
+| S2-006 | KYC workflow | Mobile + API + Admin | PARTIAL/NOT TESTED | Citizen + admin UI | Submit + review | KycRecord | RBAC + jurisdiction | No fake approve | Service | P1 | Legal docs may BLOCK; staging QA |
+| S2-007 | Trust score | Mobile + API | PARTIAL | Display only | Read-only | TrustedReporter | Server-controlled | No hardcoded 82 | Display | P2 | Automated calc BLOCKED |
+| S2-008 | Citizen settings | Mobile | PARTIAL | Local prefs | No sync API | N/A | N/A | Local real | Theme tests | P2 | Typed sync API deferred |
+| S2-009 | Account deletion | Mobile + API | PARTIAL | Settings entry | Deactivate | Status + revoke | Owner confirm | Honest retention copy | Service + mobile | P2 | Full erasure BLOCKED |
+| S2-010 | Admin user detail | Admin | NOT TESTED | `/users/[id]` | GET detail | Includes contacts/KYC | user:manage + scope | Real | Manual | P1 | Staging QA |
+| S2-011 | Admin KYC review | Admin + API | NOT TESTED | `/users/kyc` | Pending + review | KycRecord | user:manage + scope | Real | Manual | P1 | Staging QA |
+| S2-012 | Session + navigation | Mobile | NOT TESTED | Login/OTP/splash routes | Session + profile | N/A | Guest gated | Cache cleared on logout | Auth restore tests | P0 | Staging device QA |
+| S2-013 | Profile security | All | NOT TESTED | N/A | forbidNonWhitelisted | Audit events | Ownership + RBAC | No secrets in GET | Service specs | P0 | Staging + security regression |
 
-### Sprint 2 evidence tracker (update during implementation)
+### Sprint 2 evidence tracker
 
 | Track | ID | Target status | Staging device QA | Notes |
 |-------|-----|---------------|-------------------|-------|
-| Profile read | MOB-PROF-001, API-PROF-001 | NOT TESTED | Required | Do not PASS without device |
-| Profile edit | MOB-PROF-002, API-PROF-002 | NOT IMPLEMENTED | Required | — |
-| Profile completion | MOB-PROF-009, MOB-PROF-010, API-PROF-007 | PARTIAL | Required | Password login gap |
-| Avatar | MOB-PROF-003, API-PROF-003 | NOT IMPLEMENTED | Required | S3 staging dependency |
-| Emergency contacts | MOB-PROF-004, API-PROF-004 | NOT IMPLEMENTED | Required | — |
-| KYC | MOB-PROF-005, API-PROF-005/006, ADM-USR-006 | NOT IMPLEMENTED | Required | Legal docs may BLOCK |
-| Trust score | MOB-PROF-006 | PARTIAL | Required | Display only |
-| Settings | MOB-PROF-007, MOB-PROF-011, API-PROF-008 | PARTIAL | Required | — |
-| Deletion | MOB-PROF-008, API-PROF-009 | NOT IMPLEMENTED | BLOCKED | Policy pending |
+| Profile read | MOB-PROF-001, API-PROF-001 | NOT TESTED | Required | Code complete |
+| Profile edit | MOB-PROF-002, API-PROF-002 | NOT TESTED | Required | Code complete |
+| Profile completion | MOB-PROF-009, MOB-PROF-010, API-PROF-007 | NOT TESTED | Required | Login/OTP routing fixed |
+| Avatar | MOB-PROF-003, API-PROF-003 | NOT TESTED | Required | Needs S3 env |
+| Emergency contacts | MOB-PROF-004, API-PROF-004 | NOT TESTED | Required | Code complete |
+| KYC | MOB-PROF-005, API-PROF-005/006, ADM-USR-006 | PARTIAL / NOT TESTED | Required | Docs may BLOCK |
+| Trust score | MOB-PROF-006 | PARTIAL | Required | Read-only |
+| Settings | MOB-PROF-007, MOB-PROF-011, API-PROF-008 | PARTIAL / NOT IMPL | Optional | Sync API deferred |
+| Deletion | MOB-PROF-008, API-PROF-009 | PARTIAL | Required | Erasure BLOCKED |
 
 ---
 
@@ -480,11 +483,11 @@
 | MOB-AUTH-003/004 | Phone OTP | PARTIAL | Configure `AUTH_PHONE_OTP_WEBHOOK_URL` on staging |
 | MOB-AUTH-007 | Password reset | PARTIAL | Configure `AUTH_PASSWORD_RESET_WEBHOOK_URL` on staging |
 | MOB-AUTH-010 | Session restoration | PARTIAL | Staging cold-start device QA pending |
-| MOB-PROF-009/010 | Profile completion | PARTIAL/NOT IMPL | No form; password login skips |
-| MOB-PROF-004, API-PROF-004 | Emergency contacts | NOT IMPL | No CRUD |
-| API-PROF-002 | PATCH /users/me | NOT IMPL | Blocks edit + completion |
-| API-PROF-005/006, ADM-USR-006 | KYC workflow | NOT IMPL | No APIs or admin UI |
-| API-PROF-003 | Avatar upload | NOT IMPL | S3 + presign needed |
+| MOB-PROF-009/010 | Profile completion | NOT TESTED | Staging device QA pending |
+| MOB-PROF-004, API-PROF-004 | Emergency contacts | NOT TESTED | Staging device QA pending |
+| API-PROF-002 | PATCH /users/me | NOT TESTED | Staging runtime pending |
+| API-PROF-005/006, ADM-USR-006 | KYC workflow | PARTIAL/NOT TESTED | Legal docs may BLOCK; staging QA |
+| API-PROF-003 | Avatar upload | NOT TESTED | S3 staging (INF-006) required |
 | MOB-EMRG-009/010 | Incident status/history | FAIL/NOT IMPL | No mobile fetch |
 | MOB-NOTF-001–004 | Push pipeline | BLOCKED | FCM + iOS gap |
 | MOB-NW-* / MOB-SAFE-007 | Mock citizen feeds | FAIL | Static UI data |
