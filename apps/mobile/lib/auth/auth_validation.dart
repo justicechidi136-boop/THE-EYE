@@ -94,6 +94,8 @@ AuthFieldErrors validateRegisterForm({
   required String email,
   required String password,
   required String confirmPassword,
+  required String firstName,
+  required String lastName,
 }) {
   final errors = <String, String>{};
 
@@ -101,6 +103,14 @@ AuthFieldErrors validateRegisterForm({
     errors["email"] = "Enter your email address.";
   } else if (!isValidEmail(email.trim())) {
     errors["email"] = "Enter a valid email address.";
+  }
+
+  if (firstName.trim().isEmpty) {
+    errors["firstName"] = "Enter your first name.";
+  }
+
+  if (lastName.trim().isEmpty) {
+    errors["lastName"] = "Enter your last name.";
   }
 
   final passwordError = validatePassword(password);

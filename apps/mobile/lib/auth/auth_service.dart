@@ -23,6 +23,27 @@ enum AuthRequestStatus {
   emailAlreadyRegistered,
 }
 
+enum SessionRestoreStatus {
+  unauthenticated,
+  restored,
+  profileIncomplete,
+  failed,
+}
+
+class SessionRestoreResult {
+  const SessionRestoreResult({
+    required this.status,
+    this.session,
+  });
+
+  final SessionRestoreStatus status;
+  final AuthSession? session;
+
+  bool get isAuthenticated =>
+      status == SessionRestoreStatus.restored ||
+      status == SessionRestoreStatus.profileIncomplete;
+}
+
 class AuthRequestResult {
   const AuthRequestResult({
     required this.status,
@@ -98,13 +119,15 @@ class AuthService {
     required String email,
     required String password,
     required String confirmPassword,
-    String? firstName,
-    String? lastName,
+    required String firstName,
+    required String lastName,
   }) async {
     final validation = validateRegisterForm(
       email: email,
       password: password,
       confirmPassword: confirmPassword,
+      firstName: firstName,
+      lastName: lastName,
     );
     if (!validation.isEmpty) {
       return AuthRequestResult(
@@ -118,8 +141,8 @@ class AuthService {
       final exchange = await _apiClient.register(
         email: email.trim().toLowerCase(),
         password: password,
-        firstName: firstName?.trim(),
-        lastName: lastName?.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
       );
       await _sessionStore.save(exchange.session);
       logAuthEvent("Auth registration succeeded for email");
@@ -249,6 +272,77 @@ class AuthService {
         userMessage:
             "Unable to verify right now. Your code is still here — try again.",
       );
+    }
+  }
+
+  Future<SessionRestoreResult> restorePersistedSession() async {
+    final session = await _sessionStore.load();
+    if (session == null || session.accessToken.isEmpty) {
+      return const SessionRestoreResult(
+          status: SessionRestoreStatus.unauthenticated);
+    }
+
+    try {
+      final profile = await _fetchProfileWithRefresh(session);
+      await _sessionStore.save(profile.session);
+      if (!profile.citizenProfile.profileComplete) {
+        return SessionRestoreResult(
+          status: SessionRestoreStatus.profileIncomplete,
+          session: profile.session,
+        );
+      }
+      return SessionRestoreResult(
+        status: SessionRestoreStatus.restored,
+        session: profile.session,
+      );
+    } on SocketException {
+      if (session.accessToken.isNotEmpty) {
+        return SessionRestoreResult(
+          status: SessionRestoreStatus.restored,
+          session: session,
+        );
+      }
+      return const SessionRestoreResult(status: SessionRestoreStatus.failed);
+    } on http.ClientException {
+      if (session.accessToken.isNotEmpty) {
+        return SessionRestoreResult(
+          status: SessionRestoreStatus.restored,
+          session: session,
+        );
+      }
+      return const SessionRestoreResult(status: SessionRestoreStatus.failed);
+    } catch (_) {
+      await _sessionStore.clear();
+      return const SessionRestoreResult(status: SessionRestoreStatus.failed);
+    }
+  }
+
+  Future<void> logout() async {
+    final session = await _sessionStore.load();
+    if (session != null && session.refreshToken.isNotEmpty) {
+      try {
+        await _apiClient.logout(refreshToken: session.refreshToken);
+      } catch (_) {
+        // Clear local session even when the API is unreachable.
+      }
+    }
+    await _sessionStore.clear();
+    logAuthEvent("Auth logout completed");
+  }
+
+  Future<({AuthSession session, CitizenProfile citizenProfile})>
+      _fetchProfileWithRefresh(AuthSession session) async {
+    try {
+      final profile = await _apiClient.fetchCitizenProfile(
+          accessToken: session.accessToken);
+      return (session: session, citizenProfile: profile);
+    } on AuthApiException catch (error) {
+      if (error.statusCode != 401 || session.refreshToken.isEmpty) rethrow;
+      final refreshed =
+          await _apiClient.refreshSession(refreshToken: session.refreshToken);
+      final profile = await _apiClient.fetchCitizenProfile(
+          accessToken: refreshed.accessToken);
+      return (session: refreshed, citizenProfile: profile);
     }
   }
 

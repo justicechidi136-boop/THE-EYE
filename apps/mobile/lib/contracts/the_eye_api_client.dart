@@ -20,6 +20,7 @@ class CitizenProfile {
     required this.id,
     required this.displayName,
     required this.kycStatus,
+    required this.profileComplete,
     this.email,
     this.phone,
     this.trustScore,
@@ -30,6 +31,7 @@ class CitizenProfile {
   final String id;
   final String displayName;
   final String kycStatus;
+  final bool profileComplete;
   final String? email;
   final String? phone;
   final double? trustScore;
@@ -42,6 +44,10 @@ class CitizenProfile {
         ? Map<String, dynamic>.from(contact)
         : const <String, dynamic>{};
     final trustRaw = json["trustScore"];
+    final profile = json["profile"];
+    final profileMap = profile is Map
+        ? Map<String, dynamic>.from(profile)
+        : const <String, dynamic>{};
     return CitizenProfile(
       id: (json["id"] as String?) ?? "",
       displayName: (json["displayName"] as String?)?.trim().isNotEmpty == true
@@ -50,12 +56,30 @@ class CitizenProfile {
               (json["phone"] as String?) ??
               "Citizen",
       kycStatus: (json["kycStatus"] as String?) ?? "Unverified",
+      profileComplete: _isProfileComplete(profileMap),
       email: json["email"] as String?,
       phone: json["phone"] as String?,
       trustScore: trustRaw is num ? trustRaw.toDouble() : null,
       emergencyContactPhone: contactMap["phone"] as String?,
       emergencyContactName: contactMap["name"] as String?,
     );
+  }
+
+  static bool _isProfileComplete(Map<String, dynamic> profile) {
+    if (profile.isEmpty) return false;
+    final firstName = (profile["firstName"] as String?)?.trim() ?? "";
+    final lastName = (profile["lastName"] as String?)?.trim() ?? "";
+    final country = (profile["country"] as String?)?.trim() ?? "";
+    final state = (profile["state"] as String?)?.trim() ?? "";
+    final lga = (profile["lga"] as String?)?.trim() ?? "";
+    const placeholderNames = {"Google", "Apple", "Citizen"};
+    if (placeholderNames.contains(firstName) || lastName == "User")
+      return false;
+    return firstName.isNotEmpty &&
+        lastName.isNotEmpty &&
+        country.isNotEmpty &&
+        state.isNotEmpty &&
+        lga.isNotEmpty;
   }
 }
 
@@ -169,19 +193,45 @@ class TheEyeApiClient {
   Future<AuthExchangeResult> register({
     required String email,
     required String password,
-    String? firstName,
-    String? lastName,
+    required String firstName,
+    required String lastName,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final payload = <String, Object?>{
       "email": email,
       "password": password,
-      if (firstName != null && firstName.isNotEmpty) "firstName": firstName,
-      if (lastName != null && lastName.isNotEmpty) "lastName": lastName,
+      "firstName": firstName,
+      "lastName": lastName,
     };
     final response =
         await postJson(TheEyeApiPaths.authRegister, payload, timeout: timeout);
     return _exchangeFromResponse(response);
+  }
+
+  Future<AuthSession> refreshSession({
+    required String refreshToken,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.authRefresh,
+      {"refreshToken": refreshToken},
+      timeout: timeout,
+    );
+    return _sessionFromResponse(response);
+  }
+
+  Future<void> logout({
+    required String refreshToken,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.authLogout,
+      {"refreshToken": refreshToken},
+      timeout: timeout,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AuthApiException.fromResponse(response);
+    }
   }
 
   Future<void> requestPasswordReset(
@@ -249,15 +299,13 @@ class TheEyeApiClient {
     required String accessToken,
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    final response = await _http
-        .get(
-          _uri(TheEyeApiPaths.usersMe),
-          headers: {
-            "accept": "application/json",
-            "authorization": "Bearer $accessToken",
-          },
-        )
-        .timeout(timeout);
+    final response = await _http.get(
+      _uri(TheEyeApiPaths.usersMe),
+      headers: {
+        "accept": "application/json",
+        "authorization": "Bearer $accessToken",
+      },
+    ).timeout(timeout);
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final decoded = jsonDecode(response.body);
       final map = decoded is Map<String, dynamic>

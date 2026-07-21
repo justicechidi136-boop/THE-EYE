@@ -31,6 +31,8 @@ void main() {
         email: "citizen@theeye.local",
         password: "Password123!",
         confirmPassword: "Different123!",
+        firstName: "Ada",
+        lastName: "Okeke",
       );
       expect(mismatch["confirmPassword"], contains("do not match"));
 
@@ -38,8 +40,20 @@ void main() {
         email: "bad-email",
         password: "Password123!",
         confirmPassword: "Password123!",
+        firstName: "Ada",
+        lastName: "Okeke",
       );
       expect(invalidEmail["email"], isNotNull);
+
+      final missingNames = validateRegisterForm(
+        email: "citizen@theeye.local",
+        password: "Password123!",
+        confirmPassword: "Password123!",
+        firstName: "",
+        lastName: "",
+      );
+      expect(missingNames["firstName"], isNotNull);
+      expect(missingNames["lastName"], isNotNull);
     });
 
     test("validates OTP length and accepted characters", () {
@@ -211,6 +225,8 @@ void main() {
         email: "new@theeye.local",
         password: "Password123!",
         confirmPassword: "Password123!",
+        firstName: "Ada",
+        lastName: "Okeke",
       );
 
       expect(result.isSuccess, isTrue);
@@ -235,6 +251,8 @@ void main() {
         email: "taken@theeye.local",
         password: "Password123!",
         confirmPassword: "Password123!",
+        firstName: "Ada",
+        lastName: "Okeke",
       );
 
       expect(result.status, AuthRequestStatus.emailAlreadyRegistered);

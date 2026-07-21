@@ -36,9 +36,17 @@ describe("auth DTO validation", () => {
     const errors = await validateDto(RegisterDto, {
       email: "citizen@theeye.local",
       password: "Password123!",
-      firstName: "Amina",
-      lastName: "Okafor",
+      firstName: "Ada",
+      lastName: "Okeke",
     });
     expect(errors.length).toBe(0);
+  });
+
+  it("rejects registration payloads missing names", async () => {
+    const errors = await validateDto(RegisterDto, {
+      email: "citizen@theeye.local",
+      password: "Password123!",
+    });
+    expect(errors.length).toBeGreaterThan(0);
   });
 });

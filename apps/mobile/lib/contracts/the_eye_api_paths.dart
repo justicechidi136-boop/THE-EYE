@@ -24,6 +24,8 @@ abstract final class TheEyeApiPaths {
   static const health = "/health";
   static const authLogin = "/auth/login";
   static const authRegister = "/auth/register";
+  static const authRefresh = "/auth/refresh";
+  static const authLogout = "/auth/logout";
   static const authFirebaseExchange = "/auth/firebase/exchange";
   static const authProvidersLink = "/auth/providers/link";
   static const authRequestPhoneOtp = "/auth/phone/request-otp";

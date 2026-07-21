@@ -43,12 +43,19 @@ function createFirebaseAuthService(overrides: Record<string, unknown> = {}) {
     }),
   };
 
+  const authDelivery = {
+    sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+    sendPhoneOtp: jest.fn().mockResolvedValue(undefined),
+    allowDevAuthCodes: jest.fn().mockReturnValue(true),
+  };
+
   return {
     service: new AuthService(
       prisma as never,
       config as never,
       { record: jest.fn() } as never,
       firebaseVerifier as never,
+      authDelivery as never,
     ),
     prisma,
     firebaseVerifier,
@@ -66,9 +73,9 @@ describe("AuthService Firebase exchange", () => {
       profile: {
         firstName: "Citizen",
         lastName: "User",
-        country: "Nigeria",
-        state: "Lagos",
-        lga: "Ikeja",
+        country: "",
+        state: "",
+        lga: "",
       },
       trustedReporter: null,
     });
