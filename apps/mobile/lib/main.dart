@@ -28,8 +28,11 @@ import "connectivity/connectivity_service.dart";
 import "connectivity/connectivity_state.dart";
 import "connectivity/network_interface_reader.dart";
 import "connectivity/pending_retry_coordinator.dart";
+import "incidents/compose_draft_store.dart";
+import "incidents/incident_detail_screen.dart";
 import "incidents/incident_draft.dart";
 import "incidents/incident_draft_factory.dart";
+import "incidents/incident_history_service.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
 import "incidents/pending_submission_store.dart";
@@ -670,6 +673,16 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/police-stations": (_) => const NearbyPoliceStationsScreen(),
               "/notifications": (_) => const NotificationsScreen(),
               "/tracking": (_) => const IncidentTrackingScreen(),
+              "/incident-detail": (context) {
+                final incidentId =
+                    ModalRoute.of(context)?.settings.arguments as String? ??
+                        "";
+                final token = appOf(context).accessToken ?? "";
+                return IncidentDetailScreen(
+                  incidentId: incidentId,
+                  accessToken: token,
+                );
+              },
               "/family": (_) => const FamilySafetyCircleScreen(),
               "/smartwatch": (_) => const SmartwatchDeviceScreen(),
               "/neighborhood-watch": (_) => const NeighborhoodWatchHomeScreen(),
@@ -854,6 +867,8 @@ class AppController extends SessionAccessor {
   }
 
   final IncidentSubmissionService _submissionService;
+  final IncidentHistoryService _historyService = IncidentHistoryService();
+  final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
   final ConnectivityService _connectivity;
   final AuthService _authService;
   final SocialAuthService _socialAuthService;
@@ -869,7 +884,10 @@ class AppController extends SessionAccessor {
   bool syncingPending = false;
   String? lastSubmissionMessage;
   final List<IncidentDraft> pendingDrafts = [];
+  final List<IncidentDraft> composeDrafts = [];
   final List<IncidentTrackingItem> incidents = [];
+  bool loadingIncidents = false;
+  String? incidentLoadError;
   final List<BroadcastAlert> notifications = [
     BroadcastAlert("Emergency alert", "Verified P1 emergency auto-alert",
         "5 km from your current area", "P1", "Delivered", false),
@@ -925,6 +943,62 @@ class AppController extends SessionAccessor {
     clearCitizenProfileCache();
     notifyListeners();
     await _pushNotifications?.syncTokenWithBackend();
+    unawaited(loadIncidentsFromApi());
+  }
+
+  Future<void> loadIncidentsFromApi() async {
+    if (!isAuthenticated || accessToken == null) {
+      incidents.clear();
+      incidentLoadError = null;
+      notifyListeners();
+      return;
+    }
+    loadingIncidents = true;
+    incidentLoadError = null;
+    notifyListeners();
+    try {
+      final rows =
+          await _historyService.listIncidents(accessToken: accessToken!);
+      incidents
+        ..clear()
+        ..addAll(
+          rows.map(
+            (row) => IncidentTrackingItem(
+              row.id,
+              row.type,
+              row.status,
+              row.agency,
+              row.confidence,
+              submittedAt: row.submittedAt,
+              verificationStatus: row.verificationStatus,
+            ),
+          ),
+        );
+    } on IncidentApiException catch (error) {
+      incidentLoadError = error.userMessage;
+    } catch (_) {
+      incidentLoadError = "Unable to load incident history.";
+    } finally {
+      loadingIncidents = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshComposeDrafts() async {
+    composeDrafts
+      ..clear()
+      ..addAll(await _composeDraftStore.loadDrafts());
+    notifyListeners();
+  }
+
+  Future<void> saveComposeDraft(IncidentDraft draft) async {
+    await _composeDraftStore.upsertDraft(draft);
+    await refreshComposeDrafts();
+  }
+
+  Future<void> deleteComposeDraft(String clientSubmissionId) async {
+    await _composeDraftStore.deleteDraft(clientSubmissionId);
+    await refreshComposeDrafts();
   }
 
   @override
@@ -999,6 +1073,8 @@ class AppController extends SessionAccessor {
       _sessionAccessToken = result.session!.accessToken;
       notifyListeners();
       await _pushNotifications?.syncTokenWithBackend();
+      unawaited(loadIncidentsFromApi());
+      unawaited(refreshComposeDrafts());
     } else if (result.status == SessionRestoreStatus.failed ||
         result.status == SessionRestoreStatus.unauthenticated) {
       _cachedSession = null;
@@ -1092,18 +1168,7 @@ class AppController extends SessionAccessor {
     );
 
     if (result.isSuccess) {
-      incidents.insert(
-        0,
-        IncidentTrackingItem(
-          result.incidentId!,
-          draft.type,
-          result.serverStatus ?? IncidentStatus.submitted,
-          "Awaiting assignment",
-          0,
-          submittedAt: result.submittedAt,
-          verificationStatus: "Pending",
-        ),
-      );
+      unawaited(loadIncidentsFromApi());
       notifications.insert(
         0,
         BroadcastAlert(
@@ -1153,17 +1218,7 @@ class AppController extends SessionAccessor {
       List<IncidentSubmissionResult> results) async {
     for (final result in results) {
       if (result.isSuccess && result.incidentId != null) {
-        incidents.insert(
-          0,
-          IncidentTrackingItem(
-            result.incidentId!,
-            result.reportType ?? IncidentType.emergency,
-            result.serverStatus ?? IncidentStatus.submitted,
-            "Awaiting assignment",
-            0,
-            submittedAt: result.submittedAt,
-          ),
-        );
+        unawaited(loadIncidentsFromApi());
       }
     }
 
@@ -4071,8 +4126,23 @@ class NotificationsScreen extends StatelessWidget {
   }
 }
 
-class IncidentTrackingScreen extends StatelessWidget {
+class IncidentTrackingScreen extends StatefulWidget {
   const IncidentTrackingScreen({super.key});
+
+  @override
+  State<IncidentTrackingScreen> createState() => _IncidentTrackingScreenState();
+}
+
+class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = appOf(context);
+      unawaited(controller.loadIncidentsFromApi());
+      unawaited(controller.refreshComposeDrafts());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4080,38 +4150,90 @@ class IncidentTrackingScreen extends StatelessWidget {
     return SafetyScaffold(
       title: "Incident status",
       selectedIndex: 2,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          if (controller.pendingDrafts.isNotEmpty)
-            SectionCard(
-              title: "Pending submissions",
-              child: Column(
-                children: [
-                  ...controller.pendingDrafts.map(
-                    (draft) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.cloud_off),
-                      title: Text(draft.type),
-                      subtitle: Text(draft.description),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await controller.loadIncidentsFromApi();
+          await controller.refreshPendingDrafts();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          children: [
+            if (controller.loadingIncidents)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            if (controller.incidentLoadError != null)
+              ListTile(
+                leading: const Icon(Icons.cloud_off),
+                title: const Text("History unavailable"),
+                subtitle: Text(controller.incidentLoadError!),
+              ),
+            if (controller.composeDrafts.isNotEmpty)
+              SectionCard(
+                title: "Saved drafts",
+                child: Column(
+                  children: controller.composeDrafts
+                      .map(
+                        (draft) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.edit_note),
+                          title: Text(draft.type),
+                          subtitle: Text(draft.description),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => controller
+                                .deleteComposeDraft(draft.clientSubmissionId),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            if (controller.pendingDrafts.isNotEmpty)
+              SectionCard(
+                title: "Pending submissions",
+                child: Column(
+                  children: [
+                    ...controller.pendingDrafts.map(
+                      (draft) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.cloud_off),
+                        title: Text(draft.type),
+                        subtitle: Text(draft.description),
+                      ),
                     ),
-                  ),
-                  if (controller.online)
-                    FilledButton(
-                      onPressed: controller.syncingPending
-                          ? null
-                          : () => controller.syncPendingSubmissions(),
-                      child: Text(controller.syncingPending
-                          ? "Retrying..."
-                          : "Retry pending submissions"),
-                    ),
-                ],
+                    if (controller.online)
+                      FilledButton(
+                        onPressed: controller.syncingPending
+                            ? null
+                            : () => controller.syncPendingSubmissions(),
+                        child: Text(controller.syncingPending
+                            ? "Retrying..."
+                            : "Retry pending submissions"),
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            if (controller.incidents.isEmpty && !controller.loadingIncidents)
+              const ListTile(
+                leading: Icon(Icons.history),
+                title: Text("No submitted incidents yet"),
+                subtitle: Text(
+                    "Reports you submit will appear here after server confirmation."),
+              ),
+            ...controller.incidents.map(
+              (incident) => IncidentStatusTile(
+                incident: incident,
+                onTap: () => Navigator.of(context).pushNamed(
+                  "/incident-detail",
+                  arguments: incident.id,
+                ),
               ),
             ),
-          const SizedBox(height: 12),
-          ...controller.incidents
-              .map((incident) => IncidentStatusTile(incident: incident)),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -5955,12 +6077,14 @@ class ListTileCard extends StatelessWidget {
       required this.title,
       required this.subtitle,
       this.trailing,
+      this.onTap,
       super.key});
 
   final Widget leading;
   final String title;
   final String subtitle;
   final Widget? trailing;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -5972,6 +6096,7 @@ class ListTileCard extends StatelessWidget {
         border: Border.all(color: BrandColors.lightBorder),
       ),
       child: ListTile(
+        onTap: onTap,
         minVerticalPadding: 14,
         leading: leading,
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -5983,9 +6108,10 @@ class ListTileCard extends StatelessWidget {
 }
 
 class IncidentStatusTile extends StatelessWidget {
-  const IncidentStatusTile({required this.incident, super.key});
+  const IncidentStatusTile({required this.incident, this.onTap, super.key});
 
   final IncidentTrackingItem incident;
+  final VoidCallback? onTap;
 
   Color _verificationColor(String status) {
     switch (status) {
@@ -6003,6 +6129,7 @@ class IncidentStatusTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTileCard(
+      onTap: onTap,
       leading: const Icon(Icons.radar),
       title: "${incident.id} - ${incident.type}",
       subtitle:
