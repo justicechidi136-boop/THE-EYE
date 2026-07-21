@@ -126,6 +126,35 @@ export async function fetchUsersDirectory(): Promise<UserDirectoryEntry[]> {
   }, []);
 }
 
+export type PendingKycRow = {
+  id: string;
+  userId: string;
+  documentType: string;
+  status: string;
+  createdAt: string;
+  citizen: {
+    displayName: string;
+    email: string | null;
+    phone: string | null;
+    country: string | null;
+    state: string | null;
+    lga: string | null;
+  };
+};
+
+export async function fetchPendingKyc(): Promise<PendingKycRow[]> {
+  return withToken(async (token) => {
+    const rows = await fetchAllPages<PendingKycRow>("/users/kyc/pending", token);
+    return rows;
+  }, []);
+}
+
+export async function fetchCitizenDetail(userId: string): Promise<Record<string, unknown> | null> {
+  return withToken(async (token) => {
+    return apiRequest<Record<string, unknown>>(`/users/${userId}`, { token });
+  }, null);
+}
+
 export async function fetchAuditLogs(filters?: {
   action?: string;
   entityType?: string;
