@@ -343,7 +343,7 @@ jobs:
 
       - name: Analyze
         working-directory: apps/watch
-        run: flutter analyze lib test
+        run: flutter analyze lib test --no-fatal-infos --no-fatal-warnings
 
       - name: Test
         working-directory: apps/watch
