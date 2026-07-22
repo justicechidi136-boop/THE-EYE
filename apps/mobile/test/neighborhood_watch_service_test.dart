@@ -12,7 +12,8 @@ void main() {
     final apiClient = TheEyeApiClient(
       baseUrl: "https://api.test/v1",
       httpClient: MockClient((request) async {
-        expect(request.url.path, endsWith(TheEyeApiPaths.neighborhoodWatchCommunities));
+        expect(request.url.path,
+            endsWith(TheEyeApiPaths.neighborhoodWatchCommunities));
         return http.Response(
           jsonEncode({
             "data": [
@@ -98,7 +99,8 @@ void main() {
       }),
     );
     final service = NeighborhoodWatchService(apiClient: apiClient);
-    final stats = await service.getStatistics(accessToken: "token", communityId: "c1");
+    final stats =
+        await service.getStatistics(accessToken: "token", communityId: "c1");
     expect(stats.memberCount, 10);
     expect(stats.commentCount, 6);
   });

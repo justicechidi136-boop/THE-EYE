@@ -170,7 +170,6 @@ export class NeighborhoodWatchService {
       data: this.toCitizenCommunitySummary(community, membership?.status, activeAlertsCount, {
         description: community.description,
         channels: community.channels,
-        roles: undefined,
       }),
     };
   }
@@ -246,7 +245,7 @@ export class NeighborhoodWatchService {
       data: page.data.map((membership) => {
         const roleName = membership.role?.name ?? "Resident";
         const volunteer = membership.user.volunteerProfile;
-        const badges = [roleName];
+        const badges: string[] = [roleName];
         if (volunteer?.communityId === communityId && volunteer.verified) badges.push("Volunteer");
         if (isModeratorRole(roleName)) badges.push("Moderator");
         if (roleName === "VolunteerCoordinator" || roleName === "SecurityCoordinator") badges.push("PatrolLead");
@@ -915,10 +914,11 @@ export class NeighborhoodWatchService {
 
   private async assertApprovedMember(communityId: string, userId: string) {
     const membership = await this.prisma.communityMembership.findUnique({ where: { communityId_userId: { communityId, userId } }, include: { role: true } });
-    if (!membership || membership.status !== "Approved") throw new ForbiddenException("Approved community membership is required");
+    if (!membership) throw new ForbiddenException("Approved community membership is required");
     if (membership.status === "Suspended" || membership.status === "Banned") {
       throw new ForbiddenException("Suspended or banned members cannot perform this action");
     }
+    if (membership.status !== "Approved") throw new ForbiddenException("Approved community membership is required");
   }
 
   private async assertAdminCommunityScope(communityId: string, actor: JwtPayload) {

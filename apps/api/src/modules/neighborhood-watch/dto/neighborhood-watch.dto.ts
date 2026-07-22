@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import type { CursorPageQuery } from "../../../common/pagination/cursor-pagination";
 
 export type CreateCommunityDto = {
   parentId?: string;

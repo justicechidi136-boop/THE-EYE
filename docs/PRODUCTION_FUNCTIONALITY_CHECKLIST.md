@@ -2,12 +2,12 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-22 (Sprint 5 Phase 1 — neighborhood watch audit)  
+**Last updated:** 2026-07-22 (Sprint 5 re-evaluation — functionally complete pending staging QA)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
 **Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**  
 **Sprint 4 status:** **CODE COMPLETE — PENDING STAGING RUNTIME QA** (DI fix `fe7bb3d`; VPS redeploy pending)  
-**Sprint 5 status:** **CODE COMPLETE — PENDING STAGING QA** (implementation on `feature/sprint-5-neighborhood-watch`; no PASS without device/runtime evidence)
+**Sprint 5 status:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (`feature/sprint-5-neighborhood-watch` @ `ec3362a`+; no PASS without device/runtime evidence; INF-006 media E2E remains blocked)
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -73,6 +73,7 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-22 | Sprint 5 re-evaluation | Completed P0/P1 gaps on `feature/sprint-5-neighborhood-watch`: permission matrix, moderation/statistics APIs, privilege tests (249 API tests), mobile leave/members/comments/reports/media UI, admin moderation BFF. Status promoted to **FUNCTIONALLY COMPLETE — PENDING STAGING QA** only. No Sprint 5 runtime PASS. INF-006 media E2E and Sprint 4 notification delivery remain blocked. Sprint 1–4 unchanged. |
 | 2026-07-22 | Sprint 5 implementation | Neighborhood Watch lifecycle coded on `feature/sprint-5-neighborhood-watch`: discovery pagination, community requests, membership reject, comments/reactions/reports APIs, alerts/patrols/members endpoints, Prisma migration, mobile live wiring, admin reject BFF + map GPS fix. API 241/241 + mobile NW test green. No PASS without staging device QA. Sprint 1–4 unchanged. |
 | 2026-07-22 | Sprint 5 Phase 1 | Full Neighborhood Watch re-audit on `staging` @ `fe7bb3d`. Sprint 5 gap table + `docs/NEIGHBORHOOD_WATCH_CONTRACT.md` added on `feature/sprint-5-neighborhood-watch`. Backend core exists; mobile 100% static UI; admin CSOC partial with mock map coords and dead actions. No implementation changes. No PASS promotions. Sprint 1–4 statuses unchanged except Sprint 4 header note for DI fix. |
 | 2026-07-22 | Sprint 4 staging QA attempt | Deploy workflow `29887082714` failed preflight: GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL`. Live staging API @ `ca227fc` era (pre-Sprint-4): `/v1/health/ready` returns database/redis only; `/v1/broadcasts/admin/scheduler-health` returns 404; no worker/scheduler heartbeats observable. Feature branch `c66561e` local CI green (API 238/238, mobile 106/106, watch 49/49). End-to-end device QA not executed (no VPS deploy, no physical phone/watch in this session). No PASS promotions. |
@@ -592,7 +593,7 @@
 **Baseline:** `staging` @ `fe7bb3d`  
 **Implementation branch:** `feature/sprint-5-neighborhood-watch`  
 **Contract:** `docs/NEIGHBORHOOD_WATCH_CONTRACT.md`  
-**Sprint 5 verdict:** **CODE COMPLETE — PENDING STAGING QA** (backend + mobile + admin wiring; Sprint 4 notification delivery and INF-006 media E2E remain blocked on staging)
+**Sprint 5 verdict:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (leave, members, comments, reports, moderation, statistics, permission matrix, and media upload UI wired; Sprint 4 notification delivery and INF-006 media E2E remain blocked on staging)
 
 > Rules: No PASS without staging evidence. Mobile must not use static/mock community data. Sprint 4 notification delivery remains **DEVICE/INFRA QA PENDING** — NW notification rows inherit that blocker until runtime verified.
 

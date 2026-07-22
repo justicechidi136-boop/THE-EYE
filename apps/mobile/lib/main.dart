@@ -745,7 +745,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
                         communityId: controller.selectedCommunity?.id ?? "",
                         targetType: "Community",
                         targetId: controller.selectedCommunity?.id ?? "",
-                        targetLabel: controller.selectedCommunity?.name ?? "Community",
+                        targetLabel:
+                            controller.selectedCommunity?.name ?? "Community",
                       ),
                 );
               },
@@ -1353,13 +1354,15 @@ class AppController extends SessionAccessor {
         ..addAll(page.items);
       selectedCommunity = communities.firstWhere(
         (community) => community.isMember,
-        orElse: () => communities.isNotEmpty ? communities.first : CommunitySummary(
-          id: "",
-          name: "",
-          visibility: "Public",
-          memberCount: 0,
-          activeAlertsCount: 0,
-        ),
+        orElse: () => communities.isNotEmpty
+            ? communities.first
+            : CommunitySummary(
+                id: "",
+                name: "",
+                visibility: "Public",
+                memberCount: 0,
+                activeAlertsCount: 0,
+              ),
       );
       if (selectedCommunity?.id.isEmpty ?? true) selectedCommunity = null;
     } on IncidentApiException catch (error) {
@@ -1663,7 +1666,8 @@ class AppController extends SessionAccessor {
     final index = broadcasts.indexWhere((item) => item.id == broadcastId);
     if (index >= 0 && !broadcasts[index].read) {
       broadcasts[index] = broadcasts[index].copyWith(read: true);
-      broadcastUnreadCount = broadcastUnreadCount > 0 ? broadcastUnreadCount - 1 : 0;
+      broadcastUnreadCount =
+          broadcastUnreadCount > 0 ? broadcastUnreadCount - 1 : 0;
       notifyListeners();
     }
     try {
@@ -4659,7 +4663,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
       );
     }
 
-    if (controller.broadcastLoadError != null && controller.broadcasts.isEmpty) {
+    if (controller.broadcastLoadError != null &&
+        controller.broadcasts.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
@@ -4692,7 +4697,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
         children: const [
           SectionCard(
             title: "Alerts for your location",
-            child: Text("No active safety broadcasts match your location right now."),
+            child: Text(
+                "No active safety broadcasts match your location right now."),
           ),
         ],
       );
@@ -4700,7 +4706,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 240) {
+        if (notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 240) {
           unawaited(controller.loadMoreBroadcasts());
         }
         return false;
@@ -4750,7 +4757,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => BroadcastDetailScreen(broadcastId: item.id),
+                      builder: (_) =>
+                          BroadcastDetailScreen(broadcastId: item.id),
                     ),
                   );
                 },
@@ -4867,7 +4875,8 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                           const SizedBox(height: 12),
                           Text(
                             "${_item?.priority ?? ""} · ${_item?.type ?? ""}",
-                            style: const TextStyle(color: BrandColors.lightTextMuted),
+                            style: const TextStyle(
+                                color: BrandColors.lightTextMuted),
                           ),
                           if (_item?.expiresAt != null) ...[
                             const SizedBox(height: 8),
@@ -4875,7 +4884,8 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                               _item!.expired
                                   ? "Expired"
                                   : "Expires ${formatNotificationAge(_item!.expiresAt!)}",
-                              style: const TextStyle(color: BrandColors.lightTextMuted),
+                              style: const TextStyle(
+                                  color: BrandColors.lightTextMuted),
                             ),
                           ],
                         ],
@@ -5908,7 +5918,8 @@ class _NeighborhoodWatchHomeScreenState
                     Text("Patrols: ${stats.patrolCount}"),
                     Text("Active alerts: ${stats.activeAlerts}"),
                     Text("Incidents: ${stats.incidentCount}"),
-                    Text("Posts: ${stats.postCount} • Comments: ${stats.commentCount}"),
+                    Text(
+                        "Posts: ${stats.postCount} • Comments: ${stats.commentCount}"),
                     Text("30-day member growth: ${stats.memberGrowth30Days}"),
                   ],
                 ),
@@ -6065,11 +6076,13 @@ class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
                                   ),
                                   actions: [
                                     TextButton(
-                                      onPressed: () => Navigator.pop(context, false),
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
                                       child: const Text("Cancel"),
                                     ),
                                     FilledButton(
-                                      onPressed: () => Navigator.pop(context, true),
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
                                       child: const Text("Leave"),
                                     ),
                                   ],
@@ -6082,8 +6095,10 @@ class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
                               if (error != null) {
                                 showAppSnackBar(context, error, isError: true);
                               } else {
-                                showAppSnackBar(context, "You left the community");
-                                await controller.loadCommunitiesFromApi(refresh: true);
+                                showAppSnackBar(
+                                    context, "You left the community");
+                                await controller.loadCommunitiesFromApi(
+                                    refresh: true);
                                 setState(() {});
                               }
                             },
@@ -6182,9 +6197,8 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
                       "${community.visibility} • ${community.memberCount} members",
                   trailing: FilledButton(
                     onPressed: () => _join(community.id),
-                    child: Text(community.visibility == "Private"
-                        ? "Request"
-                        : "Join"),
+                    child: Text(
+                        community.visibility == "Private" ? "Request" : "Join"),
                   ),
                 )),
         ],
@@ -6318,7 +6332,8 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
 
   Future<void> _submit() async {
     setState(() => _submitting = true);
-    final attachments = _evidenceSectionKey.currentState?.attachments ?? const [];
+    final attachments =
+        _evidenceSectionKey.currentState?.attachments ?? const [];
     final error = await appOf(context).createCommunityPost(
       type: _typeMap[_selectedType] ?? "SuspiciousActivity",
       title: _titleController.text.trim(),
@@ -6538,7 +6553,8 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
       showAppSnackBar(context, error.userMessage, isError: true);
     } catch (_) {
       if (!mounted) return;
-      showAppSnackBar(context, "Unable to register as volunteer", isError: true);
+      showAppSnackBar(context, "Unable to register as volunteer",
+          isError: true);
     } finally {
       if (mounted) setState(() => _registering = false);
     }
@@ -6565,7 +6581,8 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
           FilledButton.icon(
             onPressed: _registering ? null : _register,
             icon: const Icon(Icons.volunteer_activism),
-            label: Text(_registering ? "Registering..." : "Register as volunteer"),
+            label:
+                Text(_registering ? "Registering..." : "Register as volunteer"),
           ),
           const SizedBox(height: 16),
           ...types.map((type) => ListTileCard(
@@ -6605,8 +6622,7 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
 
   Future<void> _logCheckpoint() async {
     final controller = appOf(context);
-    if (controller.communityPatrols.isEmpty ||
-        controller.accessToken == null) {
+    if (controller.communityPatrols.isEmpty || controller.accessToken == null) {
       showAppSnackBar(context, "No active patrol schedule available",
           isError: true);
       return;
@@ -6615,7 +6631,8 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
     try {
       final location = await captureLocationOutcome();
       if (location.position == null) {
-        showAppSnackBar(context, "Location permission is required", isError: true);
+        showAppSnackBar(context, "Location permission is required",
+            isError: true);
         return;
       }
       await NeighborhoodWatchService().logCheckpoint(
@@ -6666,8 +6683,7 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
               ...controller.communityPatrols.map((patrol) => ListTileCard(
                     leading: const Icon(Icons.route),
                     title: patrol.title,
-                    subtitle:
-                        "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
+                    subtitle: "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
                   )),
             FilledButton.icon(
               onPressed: _logCheckpoint,
