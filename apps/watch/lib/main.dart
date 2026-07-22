@@ -51,7 +51,7 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
   @override
   void initState() {
     super.initState();
-    _services.push.onActiveEmergencyRefresh = ({incidentId, category}) async {
+    _services.push.onActiveEmergencyRefresh = ({required String? incidentId, required String category}) async {
       await _services.sos.syncEmergencyTracking();
       final nav = _navKey.currentState;
       if (nav == null) return;
