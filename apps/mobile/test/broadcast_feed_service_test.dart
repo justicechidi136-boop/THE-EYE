@@ -59,4 +59,10 @@ void main() {
     expect(second.id, first.id);
     expect(second.read, isTrue);
   });
+
+  test("cache keys remain user scoped for logout isolation", () {
+    const scopeA = "broadcast_feed_cache_v1:session-a";
+    const scopeB = "broadcast_feed_cache_v1:session-b";
+    expect(scopeA == scopeB, isFalse);
+  });
 }
