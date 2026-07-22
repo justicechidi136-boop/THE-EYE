@@ -67,4 +67,33 @@ abstract final class TheEyeApiPaths {
       "/incidents/$incidentId/media/presign";
   static String incidentsMediaConfirm(String incidentId) =>
       "/incidents/$incidentId/media/confirm";
+
+  static const neighborhoodWatchCommunities = "/neighborhood-watch/communities";
+  static const neighborhoodWatchCommunityRequests =
+      "/neighborhood-watch/community-requests";
+  static const neighborhoodWatchVolunteers = "/neighborhood-watch/volunteers";
+  static String neighborhoodWatchCommunity(String communityId) =>
+      "/neighborhood-watch/communities/$communityId";
+  static String neighborhoodWatchCommunityJoin(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/join";
+  static String neighborhoodWatchCommunityLeave(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/leave";
+  static String neighborhoodWatchCommunityFeed(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/feed";
+  static String neighborhoodWatchCommunityAlerts(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/alerts";
+  static String neighborhoodWatchCommunityPosts(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/posts";
+  static String neighborhoodWatchCommunityMembers(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/members";
+  static String neighborhoodWatchCommunityPatrols(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/patrols";
+  static String neighborhoodWatchCommunityMap(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/map";
+  static String neighborhoodWatchPatrolCheckpoint(String scheduleId) =>
+      "/neighborhood-watch/patrols/$scheduleId/checkpoints";
+  static String neighborhoodWatchChannelMessages(String channelId) =>
+      "/neighborhood-watch/channels/$channelId/messages";
+  static String neighborhoodWatchPostComments(String postId) =>
+      "/neighborhood-watch/posts/$postId/comments";
 }
