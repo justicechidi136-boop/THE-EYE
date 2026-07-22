@@ -49,24 +49,38 @@ export async function fetchCsocMapLayers(): Promise<CsocMapLayers> {
         return { id: post.id, type: "post", label: post.title, lat: coords.lat, lng: coords.lng, status: post.status, detail: post.community };
       })
       .filter((m): m is MapMarker => m !== null),
-    volunteers: volunteers.map((v, i) => ({
-      id: `vol-${i}`,
-      type: "volunteer",
-      label: v.name,
-      lat: 6.45 + i * 0.01,
-      lng: 3.4 + i * 0.01,
-      status: v.status,
-      detail: v.type,
-    })),
-    patrols: patrols.map((p) => ({
-      id: p.id,
-      type: "patrol",
-      label: p.title,
-      lat: 6.44,
-      lng: 3.41,
-      status: p.status,
-      detail: p.community,
-    })),
+    volunteers: volunteers
+      .map((v, i): MapMarker | null => {
+        if (v.latitude != null && v.longitude != null) {
+          return {
+            id: v.id ?? `vol-${i}`,
+            type: "volunteer",
+            label: v.name,
+            lat: v.latitude,
+            lng: v.longitude,
+            status: v.status,
+            detail: v.type,
+          };
+        }
+        return null;
+      })
+      .filter((m): m is MapMarker => m !== null),
+    patrols: patrols
+      .map((p): MapMarker | null => {
+        if (p.latitude != null && p.longitude != null) {
+          return {
+            id: p.id,
+            type: "patrol",
+            label: p.title,
+            lat: p.latitude,
+            lng: p.longitude,
+            status: p.status,
+            detail: p.community,
+          };
+        }
+        return null;
+      })
+      .filter((m): m is MapMarker => m !== null),
     incidents: incidents
       .filter((i) => i.gps.lat && i.gps.lng)
       .map((i) => ({

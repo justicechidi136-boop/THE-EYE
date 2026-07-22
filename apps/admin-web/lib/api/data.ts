@@ -195,14 +195,15 @@ export async function fetchCommunityPosts(communityId?: string): Promise<Communi
 
 export async function fetchCommunityDetail(communityId: string) {
   return withToken(async (token) => {
-    const [community, posts, map] = await Promise.all([
-      apiRequest<Record<string, unknown>>(`/neighborhood-watch/communities/${communityId}`, { token }),
+    const [communityResponse, posts, map] = await Promise.all([
+      apiRequest<{ data: Record<string, unknown> }>(`/neighborhood-watch/communities/${communityId}`, { token }),
       fetchAllPages<Record<string, unknown>>(`/neighborhood-watch/communities/${communityId}/feed`, token),
       apiRequest<{ data: Record<string, unknown> }>(`/neighborhood-watch/communities/${communityId}/map`, { token }),
     ]);
+    const communityRecord = communityResponse.data ?? communityResponse;
     const mapData = map.data;
     return {
-      community: toCommunityView(community),
+      community: toCommunityView(communityRecord),
       posts: posts.map(toCommunityPostView),
       volunteers: (Array.isArray(mapData.volunteers) ? mapData.volunteers : []).map(toVolunteerView),
       patrols: (Array.isArray(mapData.patrols) ? mapData.patrols : []).map(toPatrolScheduleView),

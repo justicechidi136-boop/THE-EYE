@@ -9,10 +9,19 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!token) return NextResponse.json({ message: "Authentication required" }, { status: 401 });
 
   const { membershipId } = await context.params;
-  const body = (await request.json()) as { communityId?: string; action?: string };
+  const body = (await request.json()) as { communityId?: string; action?: string; note?: string };
   if (!body.communityId) return NextResponse.json({ message: "communityId is required" }, { status: 400 });
   if (body.action === "reject") {
-    return NextResponse.json({ message: "Reject membership requires a backend endpoint" }, { status: 501 });
+    try {
+      const result = await apiRequest<{ data: Record<string, unknown> }>(
+        `/neighborhood-watch/communities/${body.communityId}/memberships/${membershipId}/reject`,
+        { method: "PATCH", token, body: JSON.stringify({ note: body.note ?? undefined }) },
+      );
+      return NextResponse.json({ ok: true, data: result.data });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Rejection failed";
+      return NextResponse.json({ message }, { status: 400 });
+    }
   }
 
   try {

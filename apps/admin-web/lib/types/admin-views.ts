@@ -163,11 +163,14 @@ export type ResidentView = {
 };
 
 export type VolunteerView = {
+  id?: string;
   name: string;
   type: string;
   community: string;
   status: string;
   distance: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type PatrolScheduleView = {
@@ -177,6 +180,8 @@ export type PatrolScheduleView = {
   status: string;
   volunteers: number;
   checkpoints: number;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type SmartwatchDeviceView = {
