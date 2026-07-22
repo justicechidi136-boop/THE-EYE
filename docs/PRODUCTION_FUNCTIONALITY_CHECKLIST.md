@@ -541,16 +541,16 @@
 | S4-007 | Mobile FCM token lifecycle | Mobile | CODE COMPLETE — DEVICE QA PENDING | Background | push-tokens | Y | N/A | FCM | Y | N | Y | P0 | Y | Stable deviceId; appEnvironment; refresh; logout deactivate-all; foreground/open/background ack |
 | S4-008 | Watch FCM token lifecycle | Watch | CODE COMPLETE — DEVICE QA PENDING | Background | push-tokens | Y | N/A | FCM | Y | N | Y | P0 | Y | appEnvironment register; unpair deactivate-all; server device-received ack |
 | S4-009 | Mobile notification inbox | Mobile | CODE COMPLETE — DEVICE QA PENDING | `/notifications` | GET/PATCH notifications | Y | N/A | N/A | N | N | Y | P1 | Y | Device QA on staging APK; verify pagination, read/unread, offline cache, FCM refresh |
-| S4-010 | Mobile broadcast feed | Mobile | FAIL | `/broadcasts` | GET broadcasts/nearby | Y | N/A | N/A | N | N | N | P1 | Y | Replace hardcoded feed; geo query; detail screen |
+| S4-010 | Mobile broadcast feed | Mobile | CODE COMPLETE — DEVICE QA PENDING | `/broadcasts` | GET broadcasts/nearby | Y | N/A | N/A | N | N | N | P1 | Y | Live API feed + cache + detail; guest login required; staging device QA pending |
 | S4-011 | Notification preferences | Mobile + API | NOT IMPLEMENTED | `/settings` | preferences API | N | N/A | N/A | N | N | N | P1 | Y | Server-backed typed prefs; mobile settings UI; audit on change |
 | S4-012 | Mobile deep links | Mobile | PASS | Router | payload routes | N/A | N/A | N/A | Y | N | Y | P1 | N | Extend tests for broadcast/incident routes; sync inbox on open |
 | S4-013 | Watch alert categories | Watch | CODE COMPLETE — DEVICE QA PENDING | Alert screens | push router | Y | N/A | FCM | Y | N | Y | P1 | N | Server ack on incoming push; notificationId propagation; device QA on staging watch APK |
 | S4-014 | Broadcast create | Admin | PARTIAL | `/broadcasts` | POST broadcasts | Y | Y | push only | N | Y | N | P0 | N | Draft save supported; jurisdiction/WKT targeting UI still thin |
 | S4-015 | Broadcast approve/dispatch | Admin | CODE COMPLETE — STAGING QA PENDING | Queue table | PATCH approve, POST dispatch | Y | Y | push | N | Y | N | P0 | Y | BFF action routes + queue table controls wired |
-| S4-016 | Broadcast schedule/cancel | Admin + API | PARTIAL — AUTO-DISPATCH NOT IMPLEMENTED | Queue actions | schedule/cancel/progress | Y | N | N/A | N | Y | N | P2 | N | `scheduledAt` storage + manual schedule/cancel/retry/progress; no due-time worker yet |
+| S4-016 | Broadcast schedule/cancel | Admin + API | CODE COMPLETE — STAGING WORKER QA PENDING | Queue actions | schedule/cancel/progress + worker scheduler | Y | N | N/A | N | Y | N | P2 | N | UTC scheduledAt + BullMQ auto-dispatch worker; staging worker QA pending |
 | S4-017 | Broadcast multi-channel | Admin + API | FAIL | compose | dispatch | Y | Y | push only | N | Y | N | P0 | Y | SMS/email channel selection + batched dispatch |
 | S4-018 | Delivery monitoring | Admin | CODE COMPLETE — STAGING QA PENDING | `/notifications` | admin/delivery-operations | Y | Y | Y | N | N | N | P1 | Y | Live queue/worker/FCM metrics on notifications + broadcasts pages |
-| S4-019 | Citizen broadcast nearby | API + Mobile | PARTIAL | feed | GET nearby | Y | Y | push | N | N | N | P1 | Y | Wire mobile; pagination; expiry; read state |
+| S4-019 | Citizen broadcast nearby | API + Mobile | CODE COMPLETE — DEVICE QA PENDING | feed | GET nearby/detail/read | Y | Y | push | N | N | N | P1 | Y | Jurisdiction + geofence scoped feed; pagination/read/unread; mobile wired |
 | S4-020 | Invalid token cleanup | API | CODE COMPLETE — STAGING QA PENDING | N/A | push-tokens deactivate | Y | Y | FCM | N | N | Y | P1 | N | FCM invalid-token deactivate; client logout/unpair deactivate-all paths |
 | S4-021 | Retry / dead-letter | API | PARTIAL | N/A | processor | Y | Y | all | N | N | Y | P1 | N | Bounded backoff; poison job handling; admin visibility |
 | S4-022 | Rate limiting / abuse | API | PARTIAL | N/A | send + tokens | Y | Y | all | N | N | N | P1 | Y | Rate limit notification send + token register; broadcast approval guards |
@@ -565,7 +565,7 @@
 | Queue + worker | S4-001, S4-002, S4-024, API-CORE-011 | BLOCKED/PARTIAL | Required | Redis + worker on VPS |
 | FCM pipeline | S4-004, S4-007, S4-008, MOB-NOTF-001–004, WCH-PUSH-001 | CODE COMPLETE — STAGING FCM QA PENDING | Required | Staging Firebase creds + device push QA |
 | SMS / email | S4-005, S4-006, API-CORE-013/014 | FAIL-CLOSED — PROVIDER INTEGRATION PENDING | Required | Real provider credentials + adapters |
-| Mobile inbox + feed | S4-009, S4-010, MOB-NOTF-006/007, MOB-SAFE-007 | PARTIAL | Required | Inbox live; broadcast feed still mock |
+| Mobile inbox + feed | S4-009, S4-010, MOB-NOTF-006/007, MOB-SAFE-007 | PARTIAL | Required | Inbox live; broadcast feed code complete — device QA pending |
 | Preferences | S4-011, MOB-NOTF-008 | NOT IMPLEMENTED | Required | Server + mobile UI |
 | Admin broadcast lifecycle | S4-014–S4-018, ADM-BRD-001–009 | CODE COMPLETE — STAGING QA PENDING | Required | Approve/dispatch/schedule/monitor wired |
 | Watch alerts | S4-013, WCH-PUSH-001 | CODE COMPLETE — DEVICE QA PENDING | Required | Staging watch push + ack QA |
