@@ -70,6 +70,12 @@ export class DispatchController {
     return this.dispatchService.runTriageForIncident(id, request.user, dto);
   }
 
+  @Post("incidents/:id/request-info")
+  @RequirePermissions("incident:update")
+  requestMoreInformation(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
+    return this.dispatchService.requestMoreInformation(id, body, request.user);
+  }
+
   @Get("assignments/:id")
   @RequirePermissions("incident:read")
   getAssignment(@Param("id") id: string, @Req() request: any) {

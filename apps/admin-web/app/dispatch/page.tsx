@@ -38,8 +38,8 @@ export default async function DispatchCommandCenterPage() {
                 <div>
                   {incident.type} · {incident.status} · {incident.priority}
                 </div>
-                <Link className="text-primary underline" href={`/incidents/${incident.id}`}>
-                  Open incident
+                <Link className="text-primary underline" href={`/dispatch/incidents/${incident.id}`}>
+                  Open incident detail
                 </Link>
               </li>
             ))}

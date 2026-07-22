@@ -46,6 +46,7 @@ import {
   AssignmentNoteDto,
 } from "./dto/dispatch.dto";
 import { TriageService, type TriageResult } from "./triage.service";
+import { buildSlaTimerState } from "./sla-policy";
 
 const DISPATCH_QUEUE_STATUSES = [
   IncidentStatus.Submitted,
@@ -136,6 +137,15 @@ export class DispatchService {
       orderBy: { createdAt: "desc" },
     });
 
+    const primaryAssignment = assignments[0];
+    const slaTimers = buildSlaTimerState({
+      submittedAt: incident.submittedAt,
+      triagedAt: metadata.triagedAt ? new Date(String(metadata.triagedAt)) : null,
+      assignedAt: primaryAssignment?.createdAt ?? null,
+      acceptedAt: primaryAssignment?.acceptedAt ?? null,
+      arrivedAt: primaryAssignment?.arrivedAt ?? null,
+    });
+
     return {
       data: {
         incident: this.sanitizeIncidentForActor(incident, actor),
@@ -143,8 +153,53 @@ export class DispatchService {
         routingRecommendations: routing.data,
         distanceSource: routing.distanceSource,
         assignments,
+        slaTimers,
+        silentIndicator: this.canViewSilentIndicator(actor) && this.incidentIsSilent(incident),
       },
     };
+  }
+
+  async requestMoreInformation(id: string, dto: { reason: string }, actor: JwtPayload) {
+    this.assertDispatcher(actor);
+    if (!dto.reason?.trim() || dto.reason.trim().length < 5) {
+      throw new BadRequestException("reason must be at least 5 characters");
+    }
+    const incident = await this.prisma.incident.findFirst({
+      where: { id, ...this.dispatchScopeWhere(actor) } as never,
+    });
+    if (!incident) throw new NotFoundException("Incident not found or outside dispatch scope");
+
+    await this.recordDispatchEvent(id, actor, "incident.info_requested", dto.reason.trim(), {
+      manualEscalation: true,
+    });
+
+    if (incident.reporterId && !incident.isAnonymous) {
+      const copy = this.citizenNotificationCopy(
+        incident,
+        {
+          title: "More information needed",
+          body: "Responders need additional details about your report.",
+        },
+        { title: "Status update", body: "Please review your report status." },
+      );
+      await this.notifications.create({
+        userId: incident.reporterId,
+        incidentId: id,
+        type: "IncidentStatusUpdate",
+        priority: "High",
+        channels: ["push", "in_app"],
+        title: copy.title,
+        body: copy.body,
+        metadata: {
+          route: "/active-emergency",
+          deepLink: "/active-emergency",
+          incidentId: id,
+          silent: this.incidentIsSilent(incident),
+        },
+      });
+    }
+
+    return { ok: true };
   }
 
   async runTriageForIncident(incidentId: string, actor?: JwtPayload, override?: TriageOverrideDto) {
@@ -701,6 +756,18 @@ export class DispatchService {
     });
   }
 
+  private incidentIsSilent(incident: any): boolean {
+    return Boolean((incident.metadata as Record<string, unknown> | undefined)?.silent);
+  }
+
+  private citizenNotificationCopy(
+    incident: any,
+    normal: { title: string; body: string },
+    discreet: { title: string; body: string },
+  ) {
+    return this.incidentIsSilent(incident) ? discreet : normal;
+  }
+
   private async notifyAssignmentCreated(assignment: any, incident: any) {
     if (assignment.responder?.adminUserId) {
       await this.notifications.create({
@@ -727,15 +794,25 @@ export class DispatchService {
     }
 
     if (incident.reporterId && !incident.isAnonymous) {
+      const copy = this.citizenNotificationCopy(
+        incident,
+        { title: "Responder assigned", body: "A responder has been assigned to your emergency." },
+        { title: "Status update", body: "Your report status has changed." },
+      );
       await this.notifications.create({
         userId: incident.reporterId,
         incidentId: incident.id,
         type: "IncidentStatusUpdate",
         priority: "High",
         channels: ["push", "in_app"],
-        title: "Responder assigned",
-        body: "A responder has been assigned to your emergency.",
-        metadata: { assignmentId: assignment.id },
+        title: copy.title,
+        body: copy.body,
+        metadata: {
+          assignmentId: assignment.id,
+          route: "/active-emergency",
+          deepLink: "/active-emergency",
+          silent: this.incidentIsSilent(incident),
+        },
       });
     }
   }
@@ -744,7 +821,7 @@ export class DispatchService {
     const incident = assignment.incident;
     if (!incident?.reporterId || incident.isAnonymous) return;
 
-    const messages: Partial<Record<IncidentAssignmentStatus, { title: string; body: string }>> = {
+    const normalMessages: Partial<Record<IncidentAssignmentStatus, { title: string; body: string }>> = {
       [IncidentAssignmentStatus.Accepted]: {
         title: "Responder accepted",
         body: "Your assigned responder accepted the emergency.",
@@ -762,8 +839,17 @@ export class DispatchService {
         body: "Your emergency response has been marked resolved.",
       },
     };
-    const message = messages[status];
-    if (!message) return;
+    const discreetMessages: Partial<Record<IncidentAssignmentStatus, { title: string; body: string }>> = {
+      [IncidentAssignmentStatus.Accepted]: { title: "Status update", body: "Your report status has changed." },
+      [IncidentAssignmentStatus.EnRoute]: { title: "Status update", body: "Your report status has changed." },
+      [IncidentAssignmentStatus.Arrived]: { title: "Status update", body: "Your report status has changed." },
+      [IncidentAssignmentStatus.Completed]: { title: "Status update", body: "Your report is closed." },
+    };
+    const message = this.citizenNotificationCopy(
+      incident,
+      normalMessages[status] ?? { title: "Status update", body: "Your report status has changed." },
+      discreetMessages[status] ?? { title: "Status update", body: "Your report status has changed." },
+    );
 
     await this.notifications.create({
       userId: incident.reporterId,
@@ -773,7 +859,13 @@ export class DispatchService {
       channels: ["push", "in_app"],
       title: message.title,
       body: message.body,
-      metadata: { assignmentId: assignment.id, assignmentStatus: status },
+      metadata: {
+        assignmentId: assignment.id,
+        assignmentStatus: status,
+        route: "/active-emergency",
+        deepLink: "/active-emergency",
+        silent: this.incidentIsSilent(incident),
+      },
     });
   }
 
@@ -909,14 +1001,25 @@ export class DispatchService {
     return { id: "__deny__" };
   }
 
+  private canViewSilentIndicator(actor: JwtPayload) {
+    return actor.typ === "admin" && Boolean(actor.permissions?.includes("incident:read"));
+  }
+
   private sanitizeIncidentForActor(incident: any, actor: JwtPayload) {
+    let sanitized = incident;
     if (incident.isAnonymous && actor.role !== AdminRoleName.SuperAdmin) {
-      return {
-        ...incident,
+      sanitized = {
+        ...sanitized,
         reporterId: null,
         reporter: undefined,
       };
     }
-    return incident;
+    if (this.incidentIsSilent(incident) && !this.canViewSilentIndicator(actor)) {
+      const metadata = { ...((sanitized.metadata ?? {}) as Record<string, unknown>) };
+      delete metadata.silent;
+      delete metadata.emergencyCategory;
+      sanitized = { ...sanitized, metadata };
+    }
+    return sanitized;
   }
 }
