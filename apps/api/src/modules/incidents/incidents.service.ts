@@ -16,6 +16,9 @@ import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { VerificationService } from "../verification/verification.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { DispatchService } from "../dispatch/dispatch.service";
+import { EmergencyClassificationService } from "../dispatch/emergency-classification.service";
+import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { canTransitionIncident } from "./incident-lifecycle";
 import {
   ConfirmIncidentMediaDto,
@@ -39,6 +42,8 @@ export class IncidentsService {
     private readonly metrics: MetricsService,
     private readonly verification: VerificationService,
     private readonly notifications: NotificationsService,
+    private readonly dispatchService: DispatchService,
+    private readonly emergencyClassification: EmergencyClassificationService,
   ) {}
 
   async list(
@@ -68,6 +73,40 @@ export class IncidentsService {
 
   async reportEmergency(dto: ReportIncidentDto, actor?: JwtPayload) {
     return this.report({ ...dto, type: IncidentType.Emergency, priority: IncidentPriority.P1LifeThreatening, notifyEmergencyContacts: dto.notifyEmergencyContacts ?? true }, actor, true);
+  }
+
+  async reportSos(dto: SosReportDto, actor?: JwtPayload) {
+    const classified = this.emergencyClassification.classifySosReport(dto);
+    const reportDto = this.emergencyClassification.toReportIncidentDto(dto);
+    const response = await this.report(reportDto, actor, true);
+    const incidentId = response.id as string;
+
+    const existing = await this.prisma.incident.findUnique({ where: { id: incidentId }, select: { metadata: true } });
+    await this.prisma.incident.update({
+      where: { id: incidentId },
+      data: {
+        metadata: {
+          ...((existing?.metadata as Record<string, unknown>) ?? {}),
+          ...this.emergencyClassification.buildIncidentMetadata(dto, classified),
+        },
+      } as never,
+    });
+
+    await this.audit.record({
+      actor,
+      actorType: dto.anonymous ? "anonymous" : actor?.typ ?? "system",
+      action: "incident.sos_classified",
+      entityType: "incidents",
+      entityId: incidentId,
+      afterState: {
+        emergencyCategory: classified.category,
+        incidentType: classified.incidentType,
+        silent: classified.silent,
+      },
+      metadata: { suggestedAgencyTypes: classified.suggestedAgencyTypes },
+    });
+
+    return { ...response, emergencyCategory: classified.category, silent: classified.silent };
   }
 
   async report(dto: ReportIncidentDto, actor?: JwtPayload, emergencyFastPath = false) {
@@ -183,6 +222,7 @@ export class IncidentsService {
     }
 
     void this.verification.verifyIncident(incident.id).catch(() => undefined);
+    void this.dispatchService.runTriageForIncident(incident.id, actor).catch(() => undefined);
 
     const result = this.buildReportResponse(incident, emergencyFastPath, false);
     this.metrics.recordIncidentSubmission(

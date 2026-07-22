@@ -8,6 +8,7 @@ import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { ConfirmIncidentMediaDto, PresignIncidentMediaDto, ReportIncidentDto, UpdateIncidentLocationDto } from "./dto/report-incident.dto";
+import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { IncidentsService } from "./incidents.service";
 
 class UpdateIncidentStatusDto {
@@ -40,6 +41,14 @@ export class IncidentsController {
   emergency(@Body() dto: ReportIncidentDto, @Req() request: any, @Headers("x-client-submission-id") clientSubmissionId?: string) {
     const payload = clientSubmissionId && !dto.clientSubmissionId ? { ...dto, clientSubmissionId } : dto;
     return this.incidentsService.reportEmergency(payload, request.user);
+  }
+
+  @Post("sos")
+  @UseGuards(OptionalJwtAuthGuard)
+  @RateLimit("incidentCreate")
+  sos(@Body() dto: SosReportDto, @Req() request: any, @Headers("x-client-submission-id") clientSubmissionId?: string) {
+    const payload = clientSubmissionId && !dto.clientSubmissionId ? { ...dto, clientSubmissionId } : dto;
+    return this.incidentsService.reportSos(payload, request.user);
   }
 
   @Post(":id/media/presign")

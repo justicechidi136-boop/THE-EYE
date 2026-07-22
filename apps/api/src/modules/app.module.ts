@@ -13,6 +13,7 @@ import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { BroadcastsModule } from "./broadcasts/broadcasts.module";
 import { EscalationModule } from "./escalation/escalation.module";
+import { DispatchModule } from "./dispatch/dispatch.module";
 import { HealthController } from "./health.controller";
 import { HealthModule } from "./health/health.module";
 import { IncidentsModule } from "./incidents/incidents.module";
@@ -69,6 +70,7 @@ const redisDisabled = !shouldRegisterBullMq();
     AuditModule,
     VerificationModule,
     EscalationModule,
+    DispatchModule,
     NeighborhoodWatchModule,
     PoliceStationsModule,
     LiveVideoModule,

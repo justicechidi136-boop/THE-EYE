@@ -157,3 +157,16 @@ export enum IncidentAssignmentStatus {
   Completed = "Completed",
   Cancelled = "Cancelled",
 }
+
+export enum EmergencyCategory {
+  SecurityCrime = "SecurityCrime",
+  Medical = "Medical",
+  Fire = "Fire",
+  RoadTraffic = "RoadTraffic",
+  DomesticViolence = "DomesticViolence",
+  Kidnapping = "Kidnapping",
+  MissingPerson = "MissingPerson",
+  NaturalDisaster = "NaturalDisaster",
+  SilentSos = "SilentSos",
+  Other = "Other",
+}
