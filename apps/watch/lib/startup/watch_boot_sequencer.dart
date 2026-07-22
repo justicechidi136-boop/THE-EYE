@@ -164,7 +164,7 @@ class WatchBootSequencer {
       WatchBootStage.pairingRestored.progress,
     );
     await _guarded(
-      () => services.startRuntimeServices(
+      () => services.initialize(
         firebaseReady: firebaseReady,
         pushTimeout: pushTimeout,
       ),

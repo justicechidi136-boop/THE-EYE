@@ -74,7 +74,10 @@ class WatchAppServices {
   late final PushMessagingService push;
   DeviceTelemetryService? _telemetry;
 
-  Future<void> initialize({bool firebaseReady = false}) async {
+  Future<void> initialize({
+    bool firebaseReady = false,
+    Duration pushTimeout = const Duration(seconds: 3),
+  }) async {
     await standaloneAuth.hydrateApiAuth();
     await pairing.initialize();
     _telemetry = DeviceTelemetryService(
@@ -82,7 +85,10 @@ class WatchAppServices {
       onBackOnline: watchOfflineReplay(sos),
     );
     await _telemetry!.start();
-    await startRuntimeServices(firebaseReady: firebaseReady);
+    await startRuntimeServices(
+      firebaseReady: firebaseReady,
+      pushTimeout: pushTimeout,
+    );
   }
 
   /// Starts heartbeat / location / optional push without blocking forever on FCM.
