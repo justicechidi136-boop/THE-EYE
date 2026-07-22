@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models/alert.dart';
+import 'models/emergency_mode.dart';
 import 'screens/active_emergency_screen.dart';
 import 'screens/alert_history_screen.dart';
 import 'screens/app_drawer_screen.dart';
@@ -46,6 +47,21 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
   final WatchAppServices _services = WatchAppServices();
   final LauncherService _launcher = LauncherService();
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _services.push.onActiveEmergencyRefresh = ({incidentId, category}) async {
+      await _services.sos.syncEmergencyTracking();
+      final nav = _navKey.currentState;
+      if (nav == null) return;
+      if (ModalRoute.of(nav.context)?.settings.name ==
+          WatchRoutes.activeEmergency) {
+        return;
+      }
+      nav.pushNamed(WatchRoutes.activeEmergency);
+    };
+  }
 
   @override
   void dispose() {
@@ -98,7 +114,13 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
               settings,
             );
           case WatchRoutes.sosConfirm:
-            return _darkPage(SosConfirmScreen(services: _services), settings);
+            final mode = settings.arguments is WatchEmergencyMode
+                ? settings.arguments! as WatchEmergencyMode
+                : WatchEmergencyMode.normalSos;
+            return _darkPage(
+              SosConfirmScreen(services: _services, mode: mode),
+              settings,
+            );
           case WatchRoutes.emergencyType:
             return _darkPage(
               EmergencyTypeScreen(services: _services),

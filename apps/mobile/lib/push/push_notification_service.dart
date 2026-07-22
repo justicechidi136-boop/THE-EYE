@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 import "dart:io";
 
 import "package:firebase_core/firebase_core.dart";
@@ -14,6 +15,7 @@ import "../config/app_flavor.dart";
 import "push_delivery_ack.dart";
 import "push_device_id.dart";
 import "push_deep_link_router.dart";
+import "push_navigation.dart";
 import "push_notification_channels.dart";
 import "push_safe_log.dart";
 
@@ -44,10 +46,13 @@ class PushNotificationService {
   FirebaseMessaging? _messaging;
   final FlutterLocalNotificationsPlugin _localNotifications;
   final PushDeliveryAckService _deliveryAck;
-  final StreamController<String> _routeController =
-      StreamController<String>.broadcast();
+  final StreamController<PushNavigationRequest> _navigationController =
+      StreamController<PushNavigationRequest>.broadcast();
 
-  Stream<String> get routeStream => _routeController.stream;
+  Stream<PushNavigationRequest> get navigationStream =>
+      _navigationController.stream;
+  Stream<String> get routeStream =>
+      navigationStream.map((request) => request.route);
   void Function(RemoteMessage message)? onForegroundMessage;
   bool _initialized = false;
   String? _lastRegisteredTokenSuffix;
@@ -149,10 +154,25 @@ class PushNotificationService {
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
-        final route = response.payload;
-        if (route != null && route.isNotEmpty) {
-          _routeController.add(route);
+        final payload = response.payload;
+        if (payload == null || payload.isEmpty) return;
+        try {
+          final decoded = jsonDecode(payload);
+          if (decoded is Map<String, dynamic>) {
+            final request = PushNavigationRequest(
+              route: decoded["route"]?.toString() ?? "",
+              incidentId: decoded["incidentId"]?.toString(),
+              silent: decoded["silent"] == true,
+            );
+            if (request.route.isNotEmpty) {
+              _navigationController.add(request);
+            }
+            return;
+          }
+        } catch (_) {
+          // Legacy payloads stored only the route string.
         }
+        _navigationController.add(PushNavigationRequest(route: payload));
       },
     );
   }
@@ -233,7 +253,9 @@ class PushNotificationService {
     onForegroundMessage?.call(message);
     final notification = message.notification;
     final data = message.data;
-    final route = PushDeepLinkRouter.resolveRoute(data) ?? "/notifications";
+    final navigation = PushNavigationRequest.fromMessageData(data);
+    final route = navigation?.route ?? "/notifications";
+    final silent = navigation?.silent ?? false;
     final notificationId = data["notificationId"]?.toString() ?? "";
     if (notificationId.isNotEmpty) {
       unawaited(_deliveryAck.acknowledge(
@@ -241,33 +263,41 @@ class PushNotificationService {
         source: "foreground",
       ));
     }
-    final channelId = PushNotificationChannels.resolveChannelId(
-      type: data["type"]?.toString(),
-      priority: data["priority"]?.toString(),
-      route: route,
-    );
+    final channelId = silent
+        ? PushNotificationChannels.general.id
+        : PushNotificationChannels.resolveChannelId(
+            type: data["type"]?.toString(),
+            priority: data["priority"]?.toString(),
+            route: route,
+          );
 
     await _localNotifications.show(
       message.hashCode,
-      notification?.title ?? data["title"]?.toString() ?? "THE EYE",
+      notification?.title ??
+          data["title"]?.toString() ??
+          (silent ? "THE EYE" : "THE EYE"),
       notification?.body ??
           data["body"]?.toString() ??
-          "New safety notification",
+          (silent ? "Status update" : "New safety notification"),
       NotificationDetails(
         android: AndroidNotificationDetails(
           channelId,
           _channelName(channelId),
           channelDescription: "THE EYE safety notifications",
           icon: "ic_notification",
-          importance: channelId == PushNotificationChannels.emergency.id
-              ? Importance.max
-              : Importance.high,
-          priority: channelId == PushNotificationChannels.emergency.id
-              ? Priority.max
-              : Priority.high,
+          importance: silent
+              ? Importance.low
+              : channelId == PushNotificationChannels.emergency.id
+                  ? Importance.max
+                  : Importance.high,
+          priority: silent
+              ? Priority.low
+              : channelId == PushNotificationChannels.emergency.id
+                  ? Priority.max
+                  : Priority.high,
         ),
       ),
-      payload: route,
+      payload: navigation == null ? route : _encodeNavigationPayload(navigation),
     );
   }
 
@@ -280,10 +310,18 @@ class PushNotificationService {
         source: "opened",
       ));
     }
-    final route = PushDeepLinkRouter.resolveRoute(data);
-    if (route != null) {
-      _routeController.add(route);
+    final navigation = PushNavigationRequest.fromMessageData(data);
+    if (navigation != null) {
+      _navigationController.add(navigation);
     }
+  }
+
+  String _encodeNavigationPayload(PushNavigationRequest request) {
+    return jsonEncode({
+      "route": request.route,
+      if (request.incidentId != null) "incidentId": request.incidentId,
+      "silent": request.silent,
+    });
   }
 
   String _channelName(String channelId) {
@@ -294,6 +332,6 @@ class PushNotificationService {
   }
 
   Future<void> dispose() async {
-    await _routeController.close();
+    await _navigationController.close();
   }
 }
