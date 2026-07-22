@@ -45,6 +45,16 @@ export type DuplicateReportView = {
   confidence: number;
 };
 
+export type WitnessConfirmationView = {
+  id: string;
+  verifierName: string;
+  method: string;
+  result: string;
+  confidence: number | null;
+  notes: string | null;
+  createdAt: string;
+};
+
 export type EvidenceAccessEntry = {
   actor: string;
   file: string;

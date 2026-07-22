@@ -27,7 +27,7 @@ export const PLACEHOLDER_DEPENDENCIES = {
   witnessConfirmations: {
     title: "Witness confirmation listing",
     endpoint: "GET /v1/verification/incidents/:id/confirmations",
-    note: "Crowd confirmation requests can be sent via POST /v1/verification/incidents/:id/crowd-request, but witness status listing is not yet exposed.",
+    note: "Crowd confirmation requests use POST /v1/verification/incidents/:id/crowd-request with BullMQ enqueue (delivery BLOCKED without Redis/FCM).",
   },
   dashboardUserTrends: {
     title: "User registration analytics",

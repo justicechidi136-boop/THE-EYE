@@ -7,6 +7,7 @@ import {
   toCommunityPostView,
   toCommunityView,
   toDuplicateReportView,
+  toWitnessConfirmationView,
   toFirmwareReleaseView,
   toIncidentView,
   toLiveVideoSessionView,
@@ -26,6 +27,7 @@ import type {
   CommunityView,
   DuplicateReportView,
   EvidenceAccessEntry,
+  WitnessConfirmationView,
   FirmwareReleaseView,
   Incident,
   LiveVideoSessionView,
@@ -80,9 +82,13 @@ async function withToken<T>(fn: (token: string) => Promise<T>, fallback: T): Pro
   }
 }
 
-export async function fetchIncidents(): Promise<Incident[]> {
+export async function fetchIncidents(filters: { status?: string; priority?: string; type?: string } = {}): Promise<Incident[]> {
   return withToken(async (token) => {
-    const rows = await fetchAllPages<Record<string, unknown>>("/incidents", token);
+    const rows = await fetchAllPages<Record<string, unknown>>("/incidents", token, {
+      status: filters.status,
+      priority: filters.priority,
+      type: filters.type,
+    });
     return rows.map(toIncidentView);
   }, []);
 }
@@ -367,6 +373,26 @@ export async function fetchIncidentDuplicates(incidentId: string): Promise<Dupli
     const rows = await apiRequest<Record<string, unknown>[]>(`/verification/incidents/${incidentId}/duplicates`, { token });
     return rows.map(toDuplicateReportView);
   }, []);
+}
+
+export async function fetchWitnessConfirmations(incidentId: string): Promise<WitnessConfirmationView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>(`/verification/incidents/${incidentId}/confirmations`, { token });
+    return (response.data ?? []).map(toWitnessConfirmationView);
+  }, []);
+}
+
+export async function requestCrowdConfirmation(
+  incidentId: string,
+  input: { limit?: number; radiusMeters?: number } = {},
+): Promise<Record<string, unknown>> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/verification/incidents/${incidentId}/crowd-request`, {
+    token,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function fetchEvidenceAccessLogs(incidentId: string): Promise<EvidenceAccessEntry[]> {
