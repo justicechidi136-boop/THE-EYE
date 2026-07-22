@@ -1,6 +1,6 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, UnauthorizedException } from "@nestjs/common";
 import { hashToken } from "../../../common/auth/crypto";
-import { SmartwatchConnectivityMode, SmartwatchPairingMethod } from "@the-eye/shared";
+import { SmartwatchConnectivityMode, SmartwatchOfflineEventType, SmartwatchPairingMethod } from "@the-eye/shared";
 import { SmartwatchService } from "../smartwatch.service";
 
 function buildService(overrides: { config?: Record<string, string>; pairingSession?: any } = {}) {
@@ -62,6 +62,9 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
   } as any;
   const notifications = {
     enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }),
+    registerPushTokenForUser: jest.fn().mockResolvedValue({ data: { token: "fcm-token" } }),
+    deactivatePushTokensForDevice: jest.fn().mockResolvedValue({ updated: 1 }),
+    recordDeviceReceivedForUser: jest.fn().mockResolvedValue({ acknowledged: true }),
   } as any;
   const config = {
     get: jest.fn((key: string, fallback?: string) => overrides.config?.[key] ?? fallback ?? ""),
@@ -241,7 +244,7 @@ describe("SmartwatchService", () => {
       deviceSecret: "watch-secret",
       events: [
         {
-          eventType: "GPS",
+          eventType: SmartwatchOfflineEventType.GPS,
           occurredAt: new Date().toISOString(),
           payload: {
             deviceId: "EYE-WATCH-001",
@@ -262,5 +265,57 @@ describe("SmartwatchService", () => {
     expect(prisma.smartwatchOfflineEvent.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "Processed" }),
     }));
+  });
+
+  it("registers push tokens with device credentials", async () => {
+    const { service, notifications } = buildService({
+      config: { THE_EYE_APP_ENV: "staging" },
+    });
+
+    const result = await service.registerDevicePushToken("EYE-WATCH-001", {
+      deviceSecret: "watch-secret",
+      token: "fcm-token-1",
+      platform: "android_watch",
+      appEnvironment: "staging",
+    });
+
+    expect(result.registered).toBe(true);
+    expect(notifications.registerPushTokenForUser).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        token: "fcm-token-1",
+        deviceId: "EYE-WATCH-001",
+        platform: "android_watch",
+      }),
+    );
+  });
+
+  it("rejects push token registration for invalid device secret", async () => {
+    const { service } = buildService();
+
+    await expect(
+      service.registerDevicePushToken("EYE-WATCH-001", {
+        deviceSecret: "wrong-secret",
+        token: "fcm-token-1",
+        appEnvironment: "staging",
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("acknowledges notifications for paired device users", async () => {
+    const { service, notifications } = buildService();
+
+    const result = await service.acknowledgeNotificationForDevice(
+      "EYE-WATCH-001",
+      "notification-1",
+      { deviceSecret: "watch-secret", source: "watch_ack" },
+    );
+
+    expect(result.acknowledged).toBe(true);
+    expect(notifications.recordDeviceReceivedForUser).toHaveBeenCalledWith(
+      "user-1",
+      "notification-1",
+      "watch_ack",
+    );
   });
 });

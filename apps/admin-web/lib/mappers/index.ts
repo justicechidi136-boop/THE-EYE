@@ -270,10 +270,11 @@ export function toResidentView(
 export function toSmartwatchDeviceView(record: Record<string, unknown>): SmartwatchDeviceView {
   const profile = (record.user as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile;
   const owner = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Unknown owner";
-  const battery = toNumber(record.batteryPercent, 0);
+  const battery = toNumber(record.batteryLevel ?? record.batteryPercent, 0);
   const signal = toNumber(record.signalStrength, 0);
   const online = Boolean(record.isOnline);
   const needsAttention = battery < 20 || signal < 25;
+  const lastAccuracy = record.lastGpsAccuracy ?? record.lastAccuracyMeters;
 
   return {
     id: String(record.id),
@@ -287,14 +288,21 @@ export function toSmartwatchDeviceView(record: Record<string, unknown>): Smartwa
     status: needsAttention ? "Needs attention" : online ? "Online" : "Offline",
     battery,
     signal,
-    firmware: String(record.firmwareVersion ?? "unknown"),
-    security: record.certificateValid === false ? "Certificate invalid" : "Certificate valid",
+    firmware: String(record.firmwareVersion ?? record.appVersion ?? "unknown"),
+    security:
+      record.firmwareSignatureStatus === "Invalid"
+        ? "Certificate invalid"
+        : record.remoteWipedAt
+          ? "Remote wipe queued"
+          : record.isActive === false
+            ? "Inactive"
+            : "Active",
     alerts: record.criticalAlertsEnabled === false ? "Disabled" : "Enabled",
     lastSeen: formatTime(record.lastSeenAt as string),
     lastGps: {
       lat: toNumber(record.lastLatitude),
       lng: toNumber(record.lastLongitude),
-      accuracy: record.lastAccuracyMeters ? `${toNumber(record.lastAccuracyMeters)}m` : "-",
+      accuracy: lastAccuracy ? `${toNumber(lastAccuracy)}m` : "-",
     },
   };
 }
