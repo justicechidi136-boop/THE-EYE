@@ -193,6 +193,53 @@ services:
       - the-eye-internal
       - the-eye-public
 
+  notification-worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: production
+    image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}
+    container_name: the-eye-notification-worker
+    restart: unless-stopped
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      NODE_ENV: production
+      THE_EYE_APP_ENV: ${THE_EYE_APP_ENV:-staging}
+      THE_EYE_RUN_NOTIFICATION_WORKER: "1"
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL:-}
+      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL}}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+    depends_on:
+      postgres-postgis:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["node", "--require", "./src/preload-env.cjs", "dist/worker.js"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const Redis=require('ioredis');const p=process.env.BULLMQ_PREFIX||('the-eye-'+(process.env.THE_EYE_APP_ENV||'staging'));const r=new Redis({host:process.env.REDIS_HOST,port:Number(process.env.REDIS_PORT||6379),password:process.env.REDIS_PASSWORD,maxRetriesPerRequest:1,lazyConnect:true,connectTimeout:2000});r.connect().then(()=>r.get(p+':notification-worker:heartbeat')).then(v=>process.exit(v?0:1)).catch(()=>process.exit(1)).finally(()=>r.quit());\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 5
+    stop_grace_period: 30s
+    networks:
+      - the-eye-internal
+      - the-eye-public
+
   admin-web:
     build:
       context: ../..
