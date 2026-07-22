@@ -22,6 +22,8 @@ const navGroups = [
     label: "Reports",
     items: [
       ["Emergencies", "/emergency"],
+      ["Command Center", "/dispatch"],
+      ["Agency Dispatch", "/dispatch/agency"],
       ["Verification", "/verification"],
       ["Live Video", "/live-video"],
       ["SOS Monitor", "/sos-monitor"],
