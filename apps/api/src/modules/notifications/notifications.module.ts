@@ -23,7 +23,8 @@ import { NotificationsService } from "./notifications.service";
     NotificationsService,
     JwtAuthGuard,
     PermissionsGuard,
-    ...(shouldRegisterBullMq() ? [NotificationQueueDiagnosticsService, QueueMetricsService] : []),
+    NotificationQueueDiagnosticsService,
+    ...(shouldRegisterBullMq() ? [QueueMetricsService] : []),
   ],
   exports: [NotificationsService, NotificationQueueDiagnosticsService],
 })

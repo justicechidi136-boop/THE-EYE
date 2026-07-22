@@ -931,6 +931,10 @@ class AppController extends SessionAccessor {
     _sessionAccessToken = session?.accessToken;
     notifyListeners();
     if (_sessionAccessToken != null && _sessionAccessToken!.isNotEmpty) {
+      await persistBackgroundPushContext(
+        accessToken: _sessionAccessToken!,
+        apiBaseUrl: theEyeApiUrl,
+      );
       await _pushNotifications?.syncTokenWithBackend();
       unawaited(loadNotificationsFromApi());
     }
@@ -942,6 +946,10 @@ class AppController extends SessionAccessor {
     _sessionAccessToken = session.accessToken;
     clearCitizenProfileCache();
     notifyListeners();
+    await persistBackgroundPushContext(
+      accessToken: session.accessToken,
+      apiBaseUrl: theEyeApiUrl,
+    );
     await _pushNotifications?.syncTokenWithBackend();
     unawaited(loadIncidentsFromApi());
     unawaited(loadNotificationsFromApi());
@@ -1034,7 +1042,8 @@ class AppController extends SessionAccessor {
         accessToken: accessToken!,
         notificationId: notificationId,
       );
-      final index = notifications.indexWhere((item) => item.id == notificationId);
+      final index =
+          notifications.indexWhere((item) => item.id == notificationId);
       if (index >= 0) {
         notifications[index] =
             notifications[index].copyWith(read: true, deliveryStatus: "Read");
@@ -1254,6 +1263,10 @@ class AppController extends SessionAccessor {
       _cachedSession = result.session;
       _sessionAccessToken = result.session!.accessToken;
       notifyListeners();
+      await persistBackgroundPushContext(
+        accessToken: result.session!.accessToken,
+        apiBaseUrl: theEyeApiUrl,
+      );
       await _pushNotifications?.syncTokenWithBackend();
       unawaited(loadIncidentsFromApi());
       unawaited(loadNotificationsFromApi(refresh: true));
@@ -1278,7 +1291,8 @@ class AppController extends SessionAccessor {
       unawaited(
         upsertNotificationFromPush(
           notificationId: message.data["notificationId"]?.toString(),
-          title: message.notification?.title ?? message.data["title"]?.toString(),
+          title:
+              message.notification?.title ?? message.data["title"]?.toString(),
           body: message.notification?.body ?? message.data["body"]?.toString(),
           type: message.data["type"]?.toString(),
           priority: message.data["priority"]?.toString(),
@@ -4466,7 +4480,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () => controller.loadNotificationsFromApi(refresh: true),
+                onRefresh: () =>
+                    controller.loadNotificationsFromApi(refresh: true),
                 child: _buildBody(controller),
               ),
             ),
@@ -4513,7 +4528,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ListTile(
             leading: Icon(Icons.notifications_none),
             title: Text("No notifications yet"),
-            subtitle: Text("Safety alerts and incident updates will appear here."),
+            subtitle:
+                Text("Safety alerts and incident updates will appear here."),
           ),
         ],
       );

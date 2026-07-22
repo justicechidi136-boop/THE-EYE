@@ -46,6 +46,10 @@ abstract final class TheEyeApiPaths {
   static const notificationsPushTokens = "/notifications/push-tokens";
   static const notificationsPushTokensDeactivate =
       "/notifications/push-tokens/deactivate";
+  static const notificationsPushTokensDeactivateAll =
+      "/notifications/push-tokens/deactivate-all";
+  static String notificationDeviceReceived(String notificationId) =>
+      "/notifications/$notificationId/device-received";
   static const notifications = "/notifications";
   static const notificationsUnreadCount = "/notifications/unread-count";
   static const notificationsReadAll = "/notifications/read-all";

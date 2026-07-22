@@ -5,6 +5,7 @@ class WatchAlert {
     required this.body,
     required this.receivedAt,
     this.incidentId,
+    this.notificationId,
     this.acknowledged = false,
     this.priority = 'High',
   });
@@ -14,6 +15,7 @@ class WatchAlert {
   final String body;
   final DateTime receivedAt;
   final String? incidentId;
+  final String? notificationId;
   final bool acknowledged;
   final String priority;
 
@@ -24,6 +26,7 @@ class WatchAlert {
       body: body,
       receivedAt: receivedAt,
       incidentId: incidentId,
+      notificationId: notificationId,
       acknowledged: acknowledged ?? this.acknowledged,
       priority: priority,
     );
@@ -35,6 +38,7 @@ class WatchAlert {
         'body': body,
         'receivedAt': receivedAt.toUtc().toIso8601String(),
         'incidentId': incidentId,
+        'notificationId': notificationId,
         'acknowledged': acknowledged,
         'priority': priority,
       };
@@ -46,6 +50,7 @@ class WatchAlert {
       body: json['body'] as String,
       receivedAt: DateTime.parse(json['receivedAt'] as String),
       incidentId: json['incidentId'] as String?,
+      notificationId: json['notificationId'] as String?,
       acknowledged: json['acknowledged'] as bool? ?? false,
       priority: json['priority'] as String? ?? 'High',
     );

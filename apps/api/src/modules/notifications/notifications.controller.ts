@@ -46,6 +46,12 @@ export class NotificationsController {
     return this.notificationsService.markAllRead(request.user);
   }
 
+  @Get("admin/delivery-operations")
+  @RequirePermissions("auth:admin")
+  deliveryOperations(@Req() request: any) {
+    return this.notificationsService.getAdminDeliveryOperations(request.user);
+  }
+
   @Get(":id")
   @RequirePermissions("incident:read")
   getOne(@Param("id") id: string, @Req() request: any) {
@@ -68,6 +74,22 @@ export class NotificationsController {
   @RequirePermissions("incident:read")
   deactivatePushToken(@Body() dto: { token: string }, @Req() request: any) {
     return this.notificationsService.deactivatePushToken(dto.token, request.user);
+  }
+
+  @Patch("push-tokens/deactivate-all")
+  @RequirePermissions("incident:read")
+  deactivateAllPushTokens(@Body() dto: { deviceId?: string }, @Req() request: any) {
+    return this.notificationsService.deactivateAllPushTokens(request.user, dto.deviceId);
+  }
+
+  @Patch(":id/device-received")
+  @RequirePermissions("incident:read")
+  deviceReceived(
+    @Param("id") id: string,
+    @Body() dto: { source?: "foreground" | "background" | "opened" | "watch_ack" },
+    @Req() request: any,
+  ) {
+    return this.notificationsService.recordDeviceReceived(id, request.user, dto.source ?? "opened");
   }
 
   @Patch(":id/read")

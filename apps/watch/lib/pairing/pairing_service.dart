@@ -111,6 +111,19 @@ class PairingService {
 
   Future<void> unpair() async {
     _stopPairingPoll();
+    try {
+      final accessToken = await _credentials.readAccessToken();
+      final deviceId = await _credentials.readDeviceId();
+      if (accessToken != null && deviceId != null) {
+        _api.accessToken = accessToken;
+        await _api.patch(
+          WatchApiPaths.pushTokensDeactivateAll,
+          body: {'deviceId': deviceId},
+        );
+      }
+    } catch (_) {
+      // Best-effort server revoke before local wipe.
+    }
     await _credentials.wipe();
     await _preferences.setPaired(false);
     await _preferences.savePairingCode(null);

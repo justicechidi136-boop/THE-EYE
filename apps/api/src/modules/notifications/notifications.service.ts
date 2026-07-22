@@ -25,6 +25,8 @@ import {
 } from "../../common/pagination/cursor-pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { MetricsService } from "../../common/metrics/metrics.service";
+import { FcmProvider } from "./providers/fcm.provider";
+import { NotificationQueueDiagnosticsService } from "./notification-queue-diagnostics.service";
 import { CreateNotificationDto, DeliveryReceiptDto, NotificationChannel, RegisterPushTokenDto, validateCreateNotificationDto, validateRegisterPushTokenDto } from "./dto/notification.dto";
 import { bullJobAttempts, bullJobPriority, isEmergencyPriority } from "./notification.types";
 import type { NotificationDispatchJobPayload, NotificationDispatchPayload } from "./notification.types";
@@ -50,6 +52,8 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
     private readonly config: ConfigService,
+    @Optional() private readonly queueDiagnostics?: NotificationQueueDiagnosticsService,
+    @Optional() private readonly fcm?: FcmProvider,
   ) {}
 
   async create(dto: CreateNotificationDto, actor?: JwtPayload) {
@@ -108,7 +112,11 @@ export class NotificationsService {
   async registerPushToken(dto: RegisterPushTokenDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new NotFoundException("Push tokens can only be registered for citizen users");
     validateRegisterPushTokenDto(dto);
-    const appEnvironment = dto.appEnvironment ?? this.resolveWorkerAppEnvironment();
+    const expectedEnvironment = this.resolveWorkerAppEnvironment();
+    if (dto.appEnvironment && dto.appEnvironment !== expectedEnvironment) {
+      throw new ForbiddenException(`Push tokens must be registered for ${expectedEnvironment}`);
+    }
+    const appEnvironment = dto.appEnvironment ?? expectedEnvironment;
     const token = await (this.prisma as any).userPushToken.upsert({
       where: { token: dto.token },
       update: {
@@ -138,6 +146,121 @@ export class NotificationsService {
       data: { isActive: false },
     });
     return { updated: updated.count };
+  }
+
+  async deactivateAllPushTokens(actor: JwtPayload, deviceId?: string) {
+    if (actor.typ !== "user") throw new NotFoundException("Push tokens can only be deactivated for citizen users");
+    const updated = await (this.prisma as any).userPushToken.updateMany({
+      where: {
+        userId: actor.sub,
+        isActive: true,
+        ...(deviceId ? { deviceId } : {}),
+      },
+      data: { isActive: false },
+    });
+    return { updated: updated.count };
+  }
+
+  async deactivatePushTokensForDevice(userId: string, deviceId: string) {
+    const updated = await (this.prisma as any).userPushToken.updateMany({
+      where: { userId, deviceId, isActive: true },
+      data: { isActive: false },
+    });
+    return { updated: updated.count };
+  }
+
+  async recordDeviceReceived(
+    notificationId: string,
+    actor: JwtPayload,
+    source: "foreground" | "background" | "opened" | "watch_ack" = "opened",
+  ) {
+    const scope = this.resolveActorScope(actor);
+    const notification = await this.prisma.notification.findFirst({
+      where: scope.oversightAdmin
+        ? { id: notificationId }
+        : scope.userId
+          ? { id: notificationId, userId: scope.userId }
+          : { id: notificationId, adminUserId: scope.adminUserId },
+    });
+    if (!notification) throw new NotFoundException("Notification not found");
+
+    const metadata = (notification.metadata as Record<string, unknown> | null) ?? {};
+    if (
+      (notification.status === "Delivered" || notification.status === "Read") &&
+      typeof metadata.deviceReceivedAt === "string"
+    ) {
+      return { acknowledged: true, notificationId, source, duplicate: true };
+    }
+
+    await (this.prisma as any).notificationDeliveryLog.create({
+      data: {
+        notificationId,
+        channel: notification.channel ?? "push",
+        provider: notification.provider ?? "firebase-cloud-messaging",
+        status: "DeviceReceived",
+        attempt: 0,
+        responsePayload: { source, receivedAt: new Date().toISOString() },
+        deliveredAt: new Date(),
+      } as never,
+    });
+
+    await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: {
+        status: "Delivered" as never,
+        metadata: {
+          ...metadata,
+          deviceReceivedAt: new Date().toISOString(),
+          deviceReceivedSource: source,
+        },
+      } as never,
+    });
+
+    await this.syncBroadcastDelivery(notificationId, "Delivered");
+    return { acknowledged: true, notificationId, source };
+  }
+
+  async getAdminDeliveryOperations(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view delivery operations");
+
+    const [queue, worker, groupedStatuses, recentFailures] = await Promise.all([
+      this.queueDiagnostics?.getQueueDiagnostics() ?? Promise.resolve(null),
+      this.queueDiagnostics?.getWorkerDiagnostics() ?? Promise.resolve(null),
+      this.prisma.notification.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      (this.prisma as any).notificationDeliveryLog.findMany({
+        where: { status: { in: ["Failed", "InvalidToken", "Retrying"] } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          notificationId: true,
+          channel: true,
+          provider: true,
+          status: true,
+          attempt: true,
+          error: true,
+          createdAt: true,
+          notification: { select: { id: true, title: true, channel: true } },
+        },
+      }),
+    ]);
+
+    const summary = groupedStatuses.reduce<Record<string, number>>((acc, row) => {
+      acc[String(row.status)] = row._count._all;
+      return acc;
+    }, {});
+
+    return {
+      queue,
+      worker,
+      fcm: this.fcm?.getRuntimeSnapshot() ?? null,
+      summary,
+      recentFailures,
+      generatedAt: new Date().toISOString(),
+    };
   }
 
   async enqueue(payload: NotificationDispatchPayload) {
