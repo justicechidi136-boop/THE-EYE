@@ -29,6 +29,14 @@ abstract final class WatchApiPaths {
   static const pushTokens = '/notifications/push-tokens';
   static const pushTokensDeactivateAll =
       '/notifications/push-tokens/deactivate-all';
+  static String devicePushTokens(String deviceId) =>
+      '/smartwatch/devices/$deviceId/push-tokens';
+  static String devicePushTokensDeactivate(String deviceId) =>
+      '/smartwatch/devices/$deviceId/push-tokens/deactivate';
+  static String telemetry(String deviceId) =>
+      '/smartwatch/devices/$deviceId/telemetry';
+  static String notificationAck(String deviceId, String notificationId) =>
+      '/smartwatch/devices/$deviceId/notifications/$notificationId/ack';
   static String notificationDeviceReceived(String notificationId) =>
       '/notifications/$notificationId/device-received';
   static const issuePairingCode = '/smartwatch/devices/pairing-codes';

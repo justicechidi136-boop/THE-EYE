@@ -24,8 +24,25 @@ class AlertService {
 
   Future<void> registerPushToken(String token) async {
     await _credentials.savePushToken(token);
-    final accessToken = await _credentials.readAccessToken();
     final deviceId = await _credentials.readDeviceId();
+    final deviceSecret = await _credentials.readDeviceSecret();
+    if (deviceId != null &&
+        deviceSecret != null &&
+        deviceSecret.isNotEmpty) {
+      await _api.post(
+        WatchApiPaths.devicePushTokens(deviceId),
+        body: {
+          'deviceSecret': deviceSecret,
+          'token': token,
+          'platform': 'android_watch',
+          'provider': 'fcm',
+          'appEnvironment': WatchFlavor.envName,
+        },
+      );
+      return;
+    }
+
+    final accessToken = await _credentials.readAccessToken();
     if (accessToken == null) return;
 
     _api.accessToken = accessToken;
@@ -42,8 +59,19 @@ class AlertService {
   }
 
   Future<void> deactivatePushTokens() async {
-    final accessToken = await _credentials.readAccessToken();
     final deviceId = await _credentials.readDeviceId();
+    final deviceSecret = await _credentials.readDeviceSecret();
+    if (deviceId != null &&
+        deviceSecret != null &&
+        deviceSecret.isNotEmpty) {
+      await _api.patch(
+        WatchApiPaths.devicePushTokensDeactivate(deviceId),
+        body: {'deviceSecret': deviceSecret},
+      );
+      return;
+    }
+
+    final accessToken = await _credentials.readAccessToken();
     if (accessToken == null || deviceId == null) return;
     _api.accessToken = accessToken;
     await _api.patch(
@@ -102,6 +130,21 @@ class AlertService {
   }
 
   Future<void> acknowledgeDelivery(String notificationId) async {
+    final deviceId = await _credentials.readDeviceId();
+    final deviceSecret = await _credentials.readDeviceSecret();
+    if (deviceId != null &&
+        deviceSecret != null &&
+        deviceSecret.isNotEmpty) {
+      await _api.patch(
+        WatchApiPaths.notificationAck(deviceId, notificationId),
+        body: {
+          'deviceSecret': deviceSecret,
+          'source': 'watch_ack',
+        },
+      );
+      return;
+    }
+
     final accessToken = await _credentials.readAccessToken();
     if (accessToken == null) return;
     _api.accessToken = accessToken;
