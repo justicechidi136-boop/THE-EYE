@@ -53,6 +53,7 @@ import "config/the_eye_api_config.dart";
 import "design_system/eye_design_system.dart";
 import "push/push_background_handler.dart";
 import "push/push_deep_link_router.dart";
+import "push/push_navigation.dart";
 import "push/push_notification_service.dart";
 import "broadcasts/broadcast_feed_cache.dart";
 import "broadcasts/broadcast_feed_service.dart";
@@ -610,24 +611,57 @@ class TheEyeApp extends StatefulWidget {
 
 class _TheEyeAppState extends State<TheEyeApp> {
   AppController get controller => widget.controller;
-  StreamSubscription<String>? _pushRouteSubscription;
+  StreamSubscription<PushNavigationRequest>? _pushNavigationSubscription;
 
   @override
   void initState() {
     super.initState();
-    _pushRouteSubscription =
-        widget.pushNotifications.routeStream.listen((route) {
-      final navigator = theEyeNavigatorKey.currentState;
-      if (navigator == null ||
-          !PushDeepLinkRouter.allowedRoutes.contains(route)) return;
-      navigator.pushNamedAndRemoveUntil(route,
-          (existing) => existing.isFirst || existing.settings.name == "/home");
+    _pushNavigationSubscription =
+        widget.pushNotifications.navigationStream.listen((request) {
+      unawaited(_handlePushNavigation(request));
     });
+  }
+
+  Future<void> _handlePushNavigation(PushNavigationRequest request) async {
+    if (!PushDeepLinkRouter.allowedRoutes.contains(request.route)) return;
+    await controller.handlePushNavigation(request);
+    if (!mounted) return;
+    final navigator = theEyeNavigatorKey.currentState;
+    if (navigator == null) return;
+
+    if (request.route == "/active-emergency") {
+      final currentRoute = ModalRoute.of(theEyeNavigatorKey.currentContext!)
+          ?.settings
+          .name;
+      if (currentRoute == "/active-emergency") return;
+      final incidentId = request.incidentId ??
+          (await controller.activeEmergencyService
+              .restoreActiveEmergency(controller.accessToken ?? ""))
+              ?.incidentId;
+      if (incidentId == null || incidentId.isEmpty) {
+        navigator.pushNamed("/tracking");
+        return;
+      }
+      navigator.pushNamedAndRemoveUntil(
+        request.route,
+        (existing) => existing.isFirst || existing.settings.name == "/home",
+        arguments: {
+          "incidentId": incidentId,
+          "silent": request.silent,
+        },
+      );
+      return;
+    }
+
+    navigator.pushNamedAndRemoveUntil(
+      request.route,
+      (existing) => existing.isFirst || existing.settings.name == "/home",
+    );
   }
 
   @override
   void dispose() {
-    _pushRouteSubscription?.cancel();
+    _pushNavigationSubscription?.cancel();
     super.dispose();
   }
 
@@ -1292,6 +1326,34 @@ class AppController extends SessionAccessor {
     return activeEmergencyService.activateIncident(incidentId, silent: silent);
   }
 
+  String? _lastPushNavigationKey;
+
+  Future<void> handlePushNavigation(PushNavigationRequest request) async {
+    final key =
+        "${request.route}:${request.incidentId ?? ""}:${request.silent}";
+    if (_lastPushNavigationKey == key) return;
+    _lastPushNavigationKey = key;
+
+    if (request.route != "/active-emergency") return;
+    final token = accessToken;
+    if (token == null || token.isEmpty) return;
+
+    final incidentId = request.incidentId;
+    if (incidentId != null && incidentId.isNotEmpty) {
+      await activateActiveEmergency(incidentId, silent: request.silent);
+      try {
+        await activeEmergencyService.refreshIncident(
+          incidentId,
+          token,
+          silent: request.silent,
+        );
+      } catch (_) {
+        // Fall back to stored snapshot when refresh fails.
+      }
+      unawaited(startIncidentLocationTracking(incidentId));
+    }
+  }
+
   Future<ActiveEmergencySnapshot?> restoreActiveEmergency() async {
     if (accessToken == null) return null;
     return activeEmergencyService.restoreActiveEmergency(accessToken!);
@@ -1903,6 +1965,9 @@ class AppController extends SessionAccessor {
     for (final result in results) {
       if (result.isSuccess && result.incidentId != null) {
         unawaited(loadIncidentsFromApi());
+        if (result.silent) {
+          unawaited(activateActiveEmergency(result.incidentId!, silent: true));
+        }
       }
     }
 
@@ -7453,6 +7518,95 @@ class _SosBottomSheet extends StatefulWidget {
 
 class _SosBottomSheetState extends State<_SosBottomSheet> {
   bool sendingAlert = false;
+  bool sendingSilentAlert = false;
+  int silentCountdownSeconds = 0;
+  Timer? _silentCountdownTimer;
+
+  @override
+  void dispose() {
+    _silentCountdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startSilentCountdown() {
+    if (sendingAlert || sendingSilentAlert || silentCountdownSeconds > 0) return;
+    setState(() => silentCountdownSeconds = 3);
+    _silentCountdownTimer?.cancel();
+    _silentCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (silentCountdownSeconds <= 1) {
+        timer.cancel();
+        setState(() => silentCountdownSeconds = 0);
+        unawaited(_sendSilentSosAlert());
+        return;
+      }
+      setState(() => silentCountdownSeconds -= 1);
+    });
+  }
+
+  Future<void> _sendSilentSosAlert() async {
+    if (sendingSilentAlert || sendingAlert) return;
+    setState(() => sendingSilentAlert = true);
+
+    final parentContext = widget.parentContext;
+    final controller = appOf(parentContext);
+    Navigator.of(context).pop();
+
+    try {
+      final outcome = await captureLocationOutcome().timeout(
+        kSosSubmissionTimeout,
+        onTimeout: () =>
+            const LocationCaptureOutcome(result: LocationCaptureResult.timeout),
+      );
+      if (!parentContext.mounted) return;
+
+      if (outcome.result != LocationCaptureResult.granted ||
+          outcome.position == null) {
+        return;
+      }
+
+      final draft = IncidentDraft(
+        clientSubmissionId: createClientSubmissionId(),
+        type: IncidentType.sos,
+        description: "Discreet assistance request from mobile app.",
+        latitude: outcome.position!.latitude,
+        longitude: outcome.position!.longitude,
+        locationAccuracyMeters: outcome.position!.accuracy,
+        capturedAt: outcome.position!.timestamp.toUtc(),
+        title: "Silent SOS",
+        anonymous: true,
+        notifyEmergencyContacts: false,
+        silent: true,
+        emergencyCategory: "SilentSos",
+      );
+
+      final result =
+          await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
+      if (!parentContext.mounted) return;
+
+      if (result.isSuccess || result.isQueued) {
+        final incidentId = result.incidentId;
+        if (incidentId != null && incidentId.isNotEmpty) {
+          await controller.activateActiveEmergency(incidentId, silent: true);
+          if (result.isSuccess) {
+            await controller.startIncidentLocationTracking(incidentId);
+          }
+          if (!parentContext.mounted) return;
+          Navigator.of(parentContext).pushNamed(
+            "/active-emergency",
+            arguments: {"incidentId": incidentId, "silent": true},
+          );
+        }
+      }
+    } catch (_) {
+      // Silent SOS stays discreet — no alarm-style error UI.
+    } finally {
+      if (mounted) setState(() => sendingSilentAlert = false);
+    }
+  }
 
   Future<void> _sendSosAlert() async {
     if (sendingAlert) return;
@@ -7583,6 +7737,26 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
                         strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.flash_on),
             label: Text(sendingAlert ? "Sending SOS..." : "Send SOS now"),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(EyeTokens.sosButtonHeight),
+            ),
+            onPressed: (sendingAlert || sendingSilentAlert)
+                ? null
+                : (silentCountdownSeconds > 0 ? null : _startSilentCountdown),
+            icon: Icon(silentCountdownSeconds > 0
+                ? Icons.hourglass_bottom
+                : Icons.visibility_off_outlined),
+            label: Text(silentCountdownSeconds > 0
+                ? "Sending in $silentCountdownSeconds..."
+                : (sendingSilentAlert ? "Sending..." : "Send silent alert")),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            "Silent alert shares your location without sound or obvious notifications.",
+            style: TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 10),
           FilledButton.icon(

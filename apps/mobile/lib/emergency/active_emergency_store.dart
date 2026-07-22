@@ -59,6 +59,8 @@ class ActiveEmergencySnapshot {
 
   factory ActiveEmergencySnapshot.fromJson(Map<String, dynamic> json,
       {bool silent = false}) {
+    final metadata = json["metadata"] as Map<String, dynamic>? ?? {};
+    final silentFromServer = metadata["silent"] == true;
     final timeline = (json["timeline"] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map((entry) => Map<String, dynamic>.from(entry))
@@ -72,7 +74,7 @@ class ActiveEmergencySnapshot {
               ?.toString() ??
           "",
       timeline: timeline,
-      silent: silent,
+      silent: silent || silentFromServer,
     );
   }
 }

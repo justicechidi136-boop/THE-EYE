@@ -34,12 +34,15 @@ export class IncidentTimelineService {
 
     const metadata = (incident.metadata ?? {}) as Record<string, unknown>;
     const triage = metadata.triage as Record<string, unknown> | undefined;
+    const silent = metadata.silent === true;
+    const labelFor = (defaultLabel: string, discreetLabel: string) =>
+      audience === "citizen" && silent ? discreetLabel : defaultLabel;
     const entries: Array<Record<string, unknown>> = [];
 
     entries.push({
       at: incident.submittedAt,
       type: "report.submitted",
-      label: "Emergency report submitted",
+      label: labelFor("Emergency report submitted", "Status update received"),
       audience: ["citizen", "responder", "dispatcher"],
     });
 
@@ -47,7 +50,7 @@ export class IncidentTimelineService {
       entries.push({
         at: metadata.triagedAt ?? incident.updatedAt,
         type: "triage.completed",
-        label: audience === "dispatcher" ? `Triage: ${String(triage.priority ?? "")}` : "Incident triaged",
+        label: audience === "dispatcher" ? `Triage: ${String(triage.priority ?? "")}` : labelFor("Incident triaged", "Status updated"),
         details: audience === "dispatcher" ? triage : undefined,
         audience: ["citizen", "responder", "dispatcher"],
       });
@@ -66,7 +69,7 @@ export class IncidentTimelineService {
       entries.push({
         at: assignment.createdAt,
         type: "assignment.created",
-        label: "Responder assigned",
+        label: labelFor("Responder assigned", "Agency assigned"),
         details:
           audience === "dispatcher"
             ? { agency: assignment.agency?.name, responder: assignment.responder?.displayName, status: assignment.status }
@@ -76,13 +79,13 @@ export class IncidentTimelineService {
         audience: ["citizen", "responder", "dispatcher"],
       });
       if (assignment.acceptedAt) {
-        entries.push({ at: assignment.acceptedAt, type: "assignment.accepted", label: "Responder accepted", audience: ["citizen", "responder", "dispatcher"] });
+        entries.push({ at: assignment.acceptedAt, type: "assignment.accepted", label: labelFor("Responder accepted", "Response accepted"), audience: ["citizen", "responder", "dispatcher"] });
       }
       if (assignment.enRouteAt) {
-        entries.push({ at: assignment.enRouteAt, type: "assignment.en_route", label: "Responder en route", audience: ["citizen", "responder", "dispatcher"] });
+        entries.push({ at: assignment.enRouteAt, type: "assignment.en_route", label: labelFor("Responder en route", "Response en route"), audience: ["citizen", "responder", "dispatcher"] });
       }
       if (assignment.arrivedAt) {
-        entries.push({ at: assignment.arrivedAt, type: "assignment.arrived", label: "Responder arrived", audience: ["citizen", "responder", "dispatcher"] });
+        entries.push({ at: assignment.arrivedAt, type: "assignment.arrived", label: labelFor("Responder arrived", "Response arrived"), audience: ["citizen", "responder", "dispatcher"] });
       }
       if (assignment.completedAt) {
         entries.push({ at: assignment.completedAt, type: "assignment.completed", label: "Response completed", audience: ["citizen", "responder", "dispatcher"] });
@@ -120,7 +123,7 @@ export class IncidentTimelineService {
     }
 
     if (incident.resolvedAt) {
-      entries.push({ at: incident.resolvedAt, type: "incident.resolved", label: "Incident resolved", audience: ["citizen", "responder", "dispatcher"] });
+      entries.push({ at: incident.resolvedAt, type: "incident.resolved", label: labelFor("Incident resolved", "Status closed"), audience: ["citizen", "responder", "dispatcher"] });
     }
     if (incident.closedAt) {
       entries.push({ at: incident.closedAt, type: "incident.closed", label: "Incident closed", audience: ["dispatcher"] });
@@ -130,6 +133,10 @@ export class IncidentTimelineService {
       .filter((entry) => (entry.audience as string[]).includes(audience))
       .map(({ audience: _aud, ...rest }) => rest)
       .sort((a, b) => new Date(String(a.at)).getTime() - new Date(String(b.at)).getTime());
+
+    if (silent && audience === "dispatcher") {
+      filtered.unshift({ at: incident.submittedAt, type: "report.silent", label: "Silent SOS indicator", silent: true });
+    }
 
     if (incident.isAnonymous && audience !== "dispatcher" && actor?.role !== AdminRoleName.SuperAdmin) {
       return {

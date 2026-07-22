@@ -57,19 +57,25 @@ class SosService {
     _stateController.add(next);
   }
 
-  void beginHold() {
+  void beginHold({WatchEmergencyMode emergencyMode = WatchEmergencyMode.normalSos}) {
     if (_state.lifecycle != SosLifecycle.idle &&
         _state.lifecycle != SosLifecycle.failed &&
         _state.lifecycle != SosLifecycle.cancelled) {
       return;
     }
 
+    final discreet = emergencyMode == WatchEmergencyMode.silentSos;
+    _vibration.setEnabled(!discreet);
+
     _holdTimer?.cancel();
-    _emit(const SosEventState(
+    _emit(SosEventState(
       lifecycle: SosLifecycle.holding,
       holdProgressMs: 0,
+      emergencyMode: emergencyMode,
     ));
-    _vibration.pulse();
+    if (!discreet) {
+      _vibration.pulse();
+    }
 
     var elapsed = 0;
     _holdTimer =
@@ -84,7 +90,7 @@ class SosService {
         lifecycle: SosLifecycle.holding,
         holdProgressMs: elapsed,
       ));
-      if (elapsed % 500 == 0) {
+      if (!discreet && elapsed % 500 == 0) {
         _vibration.pulse();
       }
     });
@@ -103,19 +109,22 @@ class SosService {
   }
 
   void _onHoldComplete() {
+    final discreet = _state.emergencyMode == WatchEmergencyMode.silentSos;
     _emit(_state.copyWith(
       lifecycle: SosLifecycle.countdown,
       holdProgressMs: holdDurationMs,
       countdownSeconds: 3,
     ));
-    _vibration.confirmSos();
+    if (!discreet) {
+      _vibration.confirmSos();
+    }
 
     var seconds = 3;
     Timer.periodic(const Duration(seconds: 1), (timer) {
       seconds -= 1;
       if (seconds <= 0) {
         timer.cancel();
-        unawaited(submitSos());
+        unawaited(submitSos(emergencyMode: _state.emergencyMode));
         return;
       }
       _emit(_state.copyWith(countdownSeconds: seconds));
@@ -193,7 +202,9 @@ class SosService {
         longitude: position?.longitude,
         offlineQueued: false,
       ));
-      _vibration.confirmSos();
+      if (emergencyMode != WatchEmergencyMode.silentSos) {
+        _vibration.confirmSos();
+      }
     } catch (error) {
       await _enqueueOfflineSos(payload, idempotencyKey);
       _emit(_state.copyWith(

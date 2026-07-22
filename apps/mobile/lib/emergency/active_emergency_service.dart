@@ -55,6 +55,8 @@ class ActiveEmergencyService {
 
     final snapshot = ActiveEmergencySnapshot.fromJson(detail, silent: silent);
 
+    await _store.saveActiveIncident(incidentId, silent: snapshot.silent || silent);
+
     DateTime? lastLocationAt;
     try {
       final liveResponse = await _apiClient.getJson(
@@ -78,7 +80,7 @@ class ActiveEmergencyService {
       agencyName: snapshot.agencyName,
       timeline: timeline,
       lastLocationAt: lastLocationAt,
-      silent: snapshot.silent,
+      silent: snapshot.silent || silent,
     );
   }
 

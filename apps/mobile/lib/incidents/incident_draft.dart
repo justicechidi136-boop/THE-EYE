@@ -106,6 +106,8 @@ class IncidentDraft {
     this.localMedia = const [],
     this.missingPerson,
     this.stolenVehicle,
+    this.silent = false,
+    this.emergencyCategory,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now().toUtc();
 
@@ -128,6 +130,8 @@ class IncidentDraft {
   final List<LocalEvidenceAttachment> localMedia;
   final MissingPersonDetails? missingPerson;
   final StolenVehicleDetails? stolenVehicle;
+  final bool silent;
+  final String? emergencyCategory;
   final DateTime createdAt;
 
   Map<String, dynamic> toJson() => {
@@ -150,6 +154,9 @@ class IncidentDraft {
         "localMedia": localMedia.map((item) => item.toJson()).toList(),
         "missingPerson": missingPerson?.toJson(),
         "stolenVehicle": stolenVehicle?.toJson(),
+        "silent": silent,
+        if (emergencyCategory != null && emergencyCategory!.isNotEmpty)
+          "emergencyCategory": emergencyCategory,
         "createdAt": createdAt.toUtc().toIso8601String(),
       };
 
@@ -191,6 +198,8 @@ class IncidentDraft {
           ? null
           : StolenVehicleDetails.fromJson(
               Map<String, dynamic>.from(json["stolenVehicle"] as Map)),
+      silent: json["silent"] as bool? ?? false,
+      emergencyCategory: json["emergencyCategory"] as String?,
       createdAt: DateTime.parse(json["createdAt"] as String),
     );
   }

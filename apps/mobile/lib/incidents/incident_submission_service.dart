@@ -20,12 +20,14 @@ class IncidentReportResponse {
     required this.status,
     required this.submittedAt,
     this.priority,
+    this.silent = false,
   });
 
   final String id;
   final String status;
   final DateTime submittedAt;
   final String? priority;
+  final bool silent;
 
   factory IncidentReportResponse.fromJson(Map<String, dynamic> json) {
     return IncidentReportResponse(
@@ -34,6 +36,8 @@ class IncidentReportResponse {
       submittedAt: DateTime.parse((json["submittedAt"] as String?) ??
           DateTime.now().toUtc().toIso8601String()),
       priority: json["priority"] as String?,
+      silent: json["silent"] == true ||
+          (json["metadata"] as Map<String, dynamic>?)?["silent"] == true,
     );
   }
 }
@@ -88,14 +92,23 @@ class IncidentSubmissionService {
 
     _inFlightSubmissionIds.add(draft.clientSubmissionId);
     try {
-      final response = await _apiClient
-          .reportIncident(
-            payload: _payloadForDraft(draft),
-            accessToken: accessToken,
-            clientSubmissionId: draft.clientSubmissionId,
-            timeout: requestTimeout,
-          )
-          .timeout(requestTimeout);
+      final response = draft.emergencyCategory != null
+          ? await _apiClient
+              .reportSos(
+                payload: _payloadForSosDraft(draft),
+                accessToken: accessToken,
+                clientSubmissionId: draft.clientSubmissionId,
+                timeout: requestTimeout,
+              )
+              .timeout(requestTimeout)
+          : await _apiClient
+              .reportIncident(
+                payload: _payloadForDraft(draft),
+                accessToken: accessToken,
+                clientSubmissionId: draft.clientSubmissionId,
+                timeout: requestTimeout,
+              )
+              .timeout(requestTimeout);
 
       await _removeQueuedDraft(draft.clientSubmissionId);
       final message = await _finalizeEvidenceUpload(
@@ -112,6 +125,7 @@ class IncidentSubmissionService {
         submittedAt: response.submittedAt,
         userMessage: message,
         reportType: draft.type,
+        silent: response.silent || draft.silent,
       );
     } on TimeoutException {
       await _queueDraft(draft);
@@ -187,6 +201,20 @@ class IncidentSubmissionService {
   }
 
   Future<List<IncidentDraft>> pendingDrafts() => _pendingStore.loadPending();
+
+  Map<String, Object?> _payloadForSosDraft(IncidentDraft draft) {
+    return TheEyePayloads.reportSos(
+      emergencyCategory: draft.emergencyCategory ?? "SilentSos",
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+      description: draft.description.trim(),
+      silent: draft.silent,
+      anonymous: draft.anonymous,
+      notifyEmergencyContacts: draft.notifyEmergencyContacts,
+      capturedAt: draft.capturedAt.toUtc().toIso8601String(),
+      clientSubmissionId: draft.clientSubmissionId,
+    );
+  }
 
   Map<String, Object?> _payloadForDraft(IncidentDraft draft) {
     final accuracyAddress = draft.locationAccuracyMeters == null

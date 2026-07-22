@@ -51,6 +51,7 @@ const ALLOWED_DEEP_LINKS = new Set([
   "/neighborhood-watch/alerts",
   "/live-video",
   "/report/emergency",
+  "/active-emergency",
 ]);
 
 export function mapCanonicalDeliveryStatus(notification: NotificationLike): CanonicalDeliveryStatus {
@@ -101,6 +102,7 @@ export function buildNotificationDeepLink(notification: NotificationLike): strin
   if (type.includes("stolenvehicle")) return "/stolen-vehicle";
   if (type.includes("broadcast")) return "/broadcasts";
   if (type.includes("neighborhood") || notification.metadata?.communityId) return "/neighborhood-watch";
+  if (notification.incidentId && type.includes("incidentstatus")) return "/active-emergency";
   if (notification.incidentId) return "/tracking";
   return "/notifications";
 }

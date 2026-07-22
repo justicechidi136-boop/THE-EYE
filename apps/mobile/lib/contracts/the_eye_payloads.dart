@@ -158,6 +158,31 @@ abstract final class TheEyePayloads {
     };
   }
 
+  static Map<String, Object?> reportSos({
+    required String emergencyCategory,
+    required double latitude,
+    required double longitude,
+    String? description,
+    bool silent = false,
+    bool anonymous = true,
+    bool notifyEmergencyContacts = false,
+    String? capturedAt,
+    String? clientSubmissionId,
+  }) {
+    return {
+      "emergencyCategory": emergencyCategory,
+      "latitude": latitude,
+      "longitude": longitude,
+      if (description != null && description.isNotEmpty) "description": description,
+      "silent": silent,
+      "anonymous": anonymous,
+      "notifyEmergencyContacts": notifyEmergencyContacts,
+      if (capturedAt != null && capturedAt.isNotEmpty) "capturedAt": capturedAt,
+      if (clientSubmissionId != null && clientSubmissionId.isNotEmpty)
+        "clientSubmissionId": clientSubmissionId,
+    };
+  }
+
   static Map<String, Object?> reportIncident({
     required String type,
     required String description,
