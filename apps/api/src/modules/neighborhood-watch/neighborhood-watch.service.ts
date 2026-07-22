@@ -19,12 +19,21 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateCommunityDto,
   CreateCommunityPostDto,
+  CreateCommunityRequestDto,
   CreatePatrolScheduleDto,
+  CreateCommunityCommentDto,
+  CreateCommunityContentReportDto,
+  CreateCommunityReactionDto,
+  AssignCommunityRoleDto,
+  ListCommunitiesQuery,
   PatrolCheckpointDto,
   RegisterVolunteerDto,
+  ReviewCommunityRequestDto,
   SendCommunityMessageDto,
+  UpdateCommunityCommentDto,
   VerifyCommunityPostDto,
   validateCommunity,
+  validateCommunityRequest,
   validatePost,
 } from "./dto/neighborhood-watch.dto";
 
@@ -38,16 +47,67 @@ export class NeighborhoodWatchService {
     private readonly auditService: AuditService,
   ) {}
 
-  async listCommunities(actor: JwtPayload) {
-    const where = actor.typ === "admin" && actor.role !== "Super Admin"
-      ? { country: actor.country, state: actor.state, lga: actor.lga }
-      : {};
-    return { data: await this.prisma.community.findMany({ where: where as never, include: { memberships: true, posts: true }, orderBy: { createdAt: "desc" }, take: 100 }) };
+  async listCommunities(actor: JwtPayload, query: ListCommunitiesQuery = {}) {
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const where: Record<string, unknown> = { status: "Active" as never };
+    if (actor.typ === "admin" && actor.role !== "Super Admin") {
+      where.country = actor.country;
+      where.state = actor.state;
+      where.lga = actor.lga;
+    }
+    if (query.country) where.country = query.country;
+    if (query.state) where.state = query.state;
+    if (query.lga) where.lga = query.lga;
+    if (query.search?.trim()) {
+      where.OR = [
+        { name: { contains: query.search.trim(), mode: "insensitive" } },
+        { estate: { contains: query.search.trim(), mode: "insensitive" } },
+        { ward: { contains: query.search.trim(), mode: "insensitive" } },
+      ];
+    }
+    const rows = await this.prisma.community.findMany({
+      where: { ...where, ...dateIdCursorWhere(cursor) } as never,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      include: actor.typ === "admin"
+        ? { memberships: true, posts: { orderBy: { createdAt: "desc" }, take: 20 } }
+        : {
+            _count: { select: { memberships: { where: { status: "Approved" as never } } } },
+            posts: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+          },
+    });
+    if (actor.typ === "admin") {
+      return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    }
+    const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    const membershipMap = actor.typ === "user"
+      ? new Map(
+          (await this.prisma.communityMembership.findMany({
+            where: { userId: actor.sub, communityId: { in: page.data.map((row) => row.id) } },
+            select: { communityId: true, status: true },
+          })).map((membership) => [membership.communityId, membership.status]),
+        )
+      : new Map<string, string>();
+    const alertTypes = ["SuspiciousActivity", "LostChild", "MissingPerson", "CrimeAlert", "AccidentAlert", "FireAlert", "FloodWarning"];
+    const summaries = await Promise.all(page.data.map(async (community) => {
+      const activeAlertsCount = await this.prisma.communityPost.count({
+        where: {
+          communityId: community.id,
+          type: { in: alertTypes as never },
+          verificationStatus: "Verified" as never,
+        },
+      });
+      return this.toCitizenCommunitySummary(community, membershipMap.get(community.id), activeAlertsCount);
+    }));
+    return { ...page, data: summaries };
   }
 
   async createCommunity(dto: CreateCommunityDto, actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can create communities");
     validateCommunity(dto);
+    await this.assertNoDuplicateCommunity(dto);
+    await this.assertAdminJurisdiction(actor, dto.country, dto.state, dto.lga);
     const community = await this.prisma.community.create({
       data: {
         parentId: dto.parentId,
@@ -68,32 +128,105 @@ export class NeighborhoodWatchService {
     await this.writeCommunityLocation(community.id, dto);
     await this.createDefaultRolesAndChannels(community.id);
     await this.audit(actor, "community.created", "communities", community.id, { level: dto.level, visibility: dto.visibility ?? "Public" });
-    return { data: await this.getCommunity(community.id, actor) };
+    const detail = await this.getCommunity(community.id, actor);
+    return detail;
   }
 
   async getCommunity(id: string, actor: JwtPayload) {
     await this.assertCommunityVisible(id, actor);
     const community = await this.prisma.community.findUnique({
       where: { id },
-      include: { children: true, roles: true, memberships: true, channels: true, patrolSchedules: true, volunteerProfiles: true },
+      include: {
+        children: { select: { id: true, name: true, level: true, visibility: true } },
+        roles: { select: { id: true, name: true } },
+        channels: { select: { id: true, type: true, name: true } },
+        patrolSchedules: actor.typ === "admin"
+          ? { include: { checkpoints: true }, take: 20, orderBy: { startsAt: "desc" } }
+          : false,
+        volunteerProfiles: actor.typ === "admin" ? { take: 50 } : false,
+        _count: { select: { memberships: { where: { status: "Approved" as never } } } },
+        posts: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      },
     });
     if (!community) throw new NotFoundException("Community not found");
-    return community;
+    if (community.status !== "Active") throw new ForbiddenException("Community is not active");
+    const membership = actor.typ === "user"
+      ? await this.prisma.communityMembership.findUnique({ where: { communityId_userId: { communityId: id, userId: actor.sub } } })
+      : null;
+    const activeAlertsCount = await this.prisma.communityPost.count({
+      where: {
+        communityId: id,
+        type: { in: ["SuspiciousActivity", "LostChild", "MissingPerson", "CrimeAlert", "AccidentAlert", "FireAlert", "FloodWarning"] as never },
+        verificationStatus: "Verified" as never,
+      },
+    });
+    if (actor.typ === "admin") return { data: community };
+    return {
+      data: this.toCitizenCommunitySummary(community, membership?.status, activeAlertsCount, {
+        description: community.description,
+        channels: community.channels,
+        roles: undefined,
+      }),
+    };
   }
 
   async joinCommunity(communityId: string, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can join communities");
     const community = await this.prisma.community.findUnique({ where: { id: communityId } });
     if (!community) throw new NotFoundException("Community not found");
+    if (community.status !== "Active") throw new ForbiddenException("Community is not accepting members");
+    await this.assertUserEligible(actor.sub);
     const residentRole = await this.prisma.communityRole.findFirst({ where: { communityId, name: "Resident" as never } });
+    const existing = await this.prisma.communityMembership.findUnique({ where: { communityId_userId: { communityId, userId: actor.sub } } });
+    if (existing?.status === "Approved") return { data: existing };
     const status = community.visibility === "Private" ? "Pending" : "Approved";
     const membership = await this.prisma.communityMembership.upsert({
       where: { communityId_userId: { communityId, userId: actor.sub } },
-      update: { status: status as never, leftAt: null },
+      update: { status: status as never, leftAt: null, requestedAt: new Date() },
       create: { communityId, userId: actor.sub, roleId: residentRole?.id, status: status as never } as never,
     });
     await this.audit(actor, status === "Pending" ? "community.join_requested" : "community.joined", "communities", communityId, { membershipId: membership.id });
+    if (status === "Pending") await this.notifyModerators(communityId, "Join request", "A resident requested to join your community", { communityId, membershipId: membership.id });
     return { data: membership };
+  }
+
+  async rejectMember(communityId: string, membershipId: string, actor: JwtPayload, note?: string) {
+    await this.assertModerator(communityId, actor);
+    const membership = await this.prisma.communityMembership.findUnique({ where: { id: membershipId } });
+    if (!membership || membership.communityId !== communityId) throw new NotFoundException("Membership not found");
+    const updated = await this.prisma.communityMembership.update({
+      where: { id: membershipId },
+      data: { status: "Rejected" as never } as never,
+    });
+    await this.audit(actor, "community.member_rejected", "community_memberships", membership.id, { communityId, note });
+    await this.notifyUser(membership.userId, "Join request declined", note ?? "Your community join request was declined", { communityId });
+    return { data: updated };
+  }
+
+  async listMembers(communityId: string, actor: JwtPayload, query: CursorPageQuery = {}) {
+    await this.assertCommunityVisible(communityId, actor);
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const rows = await this.prisma.communityMembership.findMany({
+      where: { communityId, status: "Approved" as never, ...dateIdCursorWhere(cursor) } as never,
+      include: {
+        role: { select: { name: true } },
+        user: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+      },
+      orderBy: [{ approvedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.approvedAt ?? item.requestedAt, item.id));
+    return {
+      ...page,
+      data: page.data.map((membership) => ({
+        id: membership.id,
+        userId: membership.userId,
+        displayName: [membership.user.profile?.firstName, membership.user.profile?.lastName].filter(Boolean).join(" ") || "Member",
+        role: membership.role?.name ?? "Resident",
+        approvedAt: membership.approvedAt,
+      })),
+    };
   }
 
   async approveMember(communityId: string, membershipId: string, actor: JwtPayload) {
@@ -103,17 +236,26 @@ export class NeighborhoodWatchService {
       data: { status: "Approved" as never, approvedById: actor.sub, approvedAt: new Date() } as never,
     });
     await this.audit(actor, "community.member_approved", "community_memberships", membership.id, { communityId });
+    await this.notifyUser(membership.userId, "Join request approved", "You can now participate in your community", { communityId });
     return { data: membership };
   }
 
   async leaveCommunity(communityId: string, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can leave communities");
-    const membership = await this.prisma.communityMembership.update({
+    const membership = await this.prisma.communityMembership.findUnique({
+      where: { communityId_userId: { communityId, userId: actor.sub } },
+      include: { role: true },
+    });
+    if (!membership || membership.status !== "Approved") throw new NotFoundException("Membership not found");
+    if (["CommunityModerator", "EstateAdmin"].includes(String(membership.role?.name))) {
+      throw new BadRequestException("Transfer community ownership before leaving moderator role");
+    }
+    const updated = await this.prisma.communityMembership.update({
       where: { communityId_userId: { communityId, userId: actor.sub } },
       data: { status: "Left" as never, leftAt: new Date() } as never,
     });
-    await this.audit(actor, "community.left", "communities", communityId, { membershipId: membership.id });
-    return { data: membership };
+    await this.audit(actor, "community.left", "communities", communityId, { membershipId: updated.id });
+    return { data: updated };
   }
 
   async createPost(communityId: string, dto: CreateCommunityPostDto, actor: JwtPayload) {
@@ -208,13 +350,16 @@ export class NeighborhoodWatchService {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId }, include: { community: true } });
     if (!post) throw new NotFoundException("Community post not found");
     await this.assertModerator(post.communityId, actor);
+    if (!Number.isFinite(Number(post.latitude)) || !Number.isFinite(Number(post.longitude))) {
+      throw new BadRequestException("Post location is required before converting to incident");
+    }
     const incidentType = this.incidentTypeFromPost(post.type as string);
     const incident = await this.incidents.report({
       type: incidentType,
       title: post.title,
       description: post.body,
-      latitude: Number(post.latitude ?? 6.6012),
-      longitude: Number(post.longitude ?? 3.3514),
+      latitude: Number(post.latitude),
+      longitude: Number(post.longitude),
       priority: incidentType === IncidentType.Emergency ? IncidentPriority.P1LifeThreatening : IncidentPriority.P3SuspiciousActivity,
       anonymous: false,
     }, actor);
@@ -310,6 +455,256 @@ export class NeighborhoodWatchService {
     return { data: message, realtime: { event: "community.message.created", room: `community-channel:${channelId}` } };
   }
 
+  async createCommunityRequest(dto: CreateCommunityRequestDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can request communities");
+    validateCommunityRequest(dto);
+    const profile = await this.prisma.profile.findUnique({ where: { userId: actor.sub } });
+    if (!profile?.country) throw new BadRequestException("Complete your profile jurisdiction before requesting a community");
+    if (dto.country !== profile.country || (profile.state && dto.state && dto.state !== profile.state) || (profile.lga && dto.lga && dto.lga !== profile.lga)) {
+      throw new ForbiddenException("Community request must match your verified jurisdiction");
+    }
+    await this.assertNoDuplicateCommunity(dto);
+    const request = await this.prisma.communityRequest.create({
+      data: {
+        requesterId: actor.sub,
+        name: dto.name.trim(),
+        description: dto.description,
+        country: dto.country,
+        state: dto.state,
+        lga: dto.lga,
+        ward: dto.ward,
+        estate: dto.estate,
+        street: dto.street,
+        visibility: (dto.visibility ?? "Private") as never,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+      } as never,
+    });
+    await this.audit(actor, "community.request_created", "community_requests", request.id, { name: dto.name });
+    return { data: request };
+  }
+
+  async listCommunityRequests(actor: JwtPayload) {
+    const where = actor.typ === "admin" && actor.role !== "Super Admin"
+      ? { country: actor.country, state: actor.state, lga: actor.lga, status: "Pending" as never }
+      : actor.typ === "admin"
+        ? { status: "Pending" as never }
+        : { requesterId: actor.sub };
+    return { data: await this.prisma.communityRequest.findMany({ where: where as never, orderBy: { createdAt: "desc" }, take: 100 }) };
+  }
+
+  async reviewCommunityRequest(requestId: string, dto: ReviewCommunityRequestDto, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can review community requests");
+    const request = await this.prisma.communityRequest.findUnique({ where: { id: requestId } });
+    if (!request || request.status !== "Pending") throw new NotFoundException("Community request not found");
+    await this.assertAdminJurisdiction(actor, request.country, request.state ?? undefined, request.lga ?? undefined);
+    if (dto.action === "reject") {
+      const rejected = await this.prisma.communityRequest.update({
+        where: { id: requestId },
+        data: { status: "Rejected" as never, reviewedById: actor.sub, reviewedAt: new Date(), rejectionNote: dto.rejectionNote } as never,
+      });
+      await this.audit(actor, "community.request_rejected", "community_requests", requestId, { note: dto.rejectionNote });
+      await this.notifyUser(request.requesterId, "Community request declined", dto.rejectionNote ?? "Your community request was declined", {});
+      return { data: rejected };
+    }
+    const community = await this.createCommunity({
+      name: request.name,
+      level: "Community",
+      visibility: request.visibility as "Public" | "Private",
+      country: request.country,
+      state: request.state ?? undefined,
+      lga: request.lga ?? undefined,
+      ward: request.ward ?? undefined,
+      estate: request.estate ?? undefined,
+      street: request.street ?? undefined,
+      description: request.description ?? undefined,
+      latitude: request.latitude ? Number(request.latitude) : undefined,
+      longitude: request.longitude ? Number(request.longitude) : undefined,
+    }, actor);
+    const approved = await this.prisma.communityRequest.update({
+      where: { id: requestId },
+      data: {
+        status: "Approved" as never,
+        reviewedById: actor.sub,
+        reviewedAt: new Date(),
+        communityId: (community.data as { id: string }).id,
+      } as never,
+    });
+    await this.audit(actor, "community.request_approved", "community_requests", requestId, { communityId: approved.communityId });
+    await this.notifyUser(request.requesterId, "Community request approved", "Your requested community is now available", { communityId: approved.communityId });
+    return { data: approved, community: community.data };
+  }
+
+  async listPostComments(postId: string, actor: JwtPayload, query: CursorPageQuery = {}) {
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException("Community post not found");
+    await this.assertCommunityVisible(post.communityId, actor);
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const rows = await this.prisma.communityPostComment.findMany({
+      where: { postId, ...dateIdCursorWhere(cursor) },
+      include: { author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: limit + 1,
+    });
+    const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    return {
+      ...page,
+      data: page.data.map((comment) => ({
+        id: comment.id,
+        body: comment.body,
+        createdAt: comment.createdAt,
+        author: {
+          id: comment.author.id,
+          displayName: [comment.author.profile?.firstName, comment.author.profile?.lastName].filter(Boolean).join(" ") || "Member",
+        },
+      })),
+    };
+  }
+
+  async createPostComment(postId: string, dto: CreateCommunityCommentDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can comment");
+    if (!dto.body?.trim()) throw new BadRequestException("Comment body is required");
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException("Community post not found");
+    await this.assertApprovedMember(post.communityId, actor.sub);
+    const comment = await this.prisma.communityPostComment.create({
+      data: { postId, authorId: actor.sub, body: dto.body.trim() },
+    });
+    await this.audit(actor, "community.comment_created", "community_post_comments", comment.id, { postId });
+    if (post.authorId !== actor.sub) {
+      await this.notifyUser(post.authorId, "New comment on your post", dto.body.trim().slice(0, 120), { postId, communityId: post.communityId });
+    }
+    return { data: comment };
+  }
+
+  async updatePostComment(commentId: string, dto: UpdateCommunityCommentDto, actor: JwtPayload) {
+    const comment = await this.prisma.communityPostComment.findUnique({ where: { id: commentId }, include: { post: true } });
+    if (!comment) throw new NotFoundException("Comment not found");
+    if (comment.authorId !== actor.sub) throw new ForbiddenException("Only the author can edit this comment");
+    const updated = await this.prisma.communityPostComment.update({ where: { id: commentId }, data: { body: dto.body.trim() } });
+    await this.audit(actor, "community.comment_updated", "community_post_comments", commentId, { postId: comment.postId });
+    return { data: updated };
+  }
+
+  async deletePostComment(commentId: string, actor: JwtPayload) {
+    const comment = await this.prisma.communityPostComment.findUnique({ where: { id: commentId }, include: { post: true } });
+    if (!comment) throw new NotFoundException("Comment not found");
+    if (comment.authorId !== actor.sub) await this.assertModerator(comment.post.communityId, actor);
+    await this.prisma.communityPostComment.delete({ where: { id: commentId } });
+    await this.audit(actor, "community.comment_deleted", "community_post_comments", commentId, { postId: comment.postId });
+    return { data: { id: commentId, deleted: true } };
+  }
+
+  async createPostReaction(postId: string, dto: CreateCommunityReactionDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can react");
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException("Community post not found");
+    await this.assertApprovedMember(post.communityId, actor.sub);
+    const reaction = await this.prisma.communityPostReaction.upsert({
+      where: { postId_userId_type: { postId, userId: actor.sub, type: dto.type as never } },
+      update: {},
+      create: { postId, userId: actor.sub, type: dto.type as never },
+    });
+    await this.audit(actor, "community.reaction_created", "community_post_reactions", reaction.id, { postId, type: dto.type });
+    return { data: reaction };
+  }
+
+  async deletePostReaction(postId: string, type: CreateCommunityReactionDto["type"], actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can remove reactions");
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException("Community post not found");
+    await this.assertApprovedMember(post.communityId, actor.sub);
+    await this.prisma.communityPostReaction.deleteMany({ where: { postId, userId: actor.sub, type: type as never } });
+    await this.audit(actor, "community.reaction_deleted", "community_post_reactions", postId, { type });
+    return { data: { postId, type, deleted: true } };
+  }
+
+  async createContentReport(communityId: string, dto: CreateCommunityContentReportDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can submit reports");
+    await this.assertApprovedMember(communityId, actor.sub);
+    const report = await this.prisma.communityContentReport.create({
+      data: {
+        communityId,
+        reporterId: actor.sub,
+        targetType: dto.targetType as never,
+        targetId: dto.targetId,
+        reasonCode: dto.reasonCode,
+        note: dto.note,
+      } as never,
+    });
+    await this.audit(actor, "community.content_reported", "community_content_reports", report.id, { targetType: dto.targetType, targetId: dto.targetId });
+    await this.notifyModerators(communityId, "New moderation report", `Report submitted for ${dto.targetType}`, { reportId: report.id });
+    return { data: report };
+  }
+
+  async listContentReports(actor: JwtPayload, communityId?: string) {
+    const where: Record<string, unknown> = { status: "Pending" as never };
+    if (communityId) where.communityId = communityId;
+    if (actor.typ === "admin" && actor.role !== "Super Admin") {
+      where.community = { country: actor.country, state: actor.state, lga: actor.lga };
+    }
+    return { data: await this.prisma.communityContentReport.findMany({ where: where as never, orderBy: { createdAt: "desc" }, take: 100 }) };
+  }
+
+  async assignMemberRole(communityId: string, membershipId: string, dto: AssignCommunityRoleDto, actor: JwtPayload) {
+    await this.assertModerator(communityId, actor);
+    const role = await this.prisma.communityRole.findFirst({ where: { communityId, name: dto.roleName as never } });
+    if (!role) throw new NotFoundException("Community role not found");
+    const membership = await this.prisma.communityMembership.update({
+      where: { id: membershipId },
+      data: { roleId: role.id },
+    });
+    await this.audit(actor, "community.role_assigned", "community_memberships", membership.id, { communityId, roleName: dto.roleName });
+    return { data: membership };
+  }
+
+  async listPatrols(communityId: string, actor: JwtPayload) {
+    await this.assertCommunityVisible(communityId, actor);
+    return {
+      data: await this.prisma.patrolSchedule.findMany({
+        where: { communityId },
+        include: { checkpoints: true, assignments: { include: { user: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } } } },
+        orderBy: { startsAt: "desc" },
+        take: 50,
+      }),
+    };
+  }
+
+  async listAlerts(communityId: string, actor: JwtPayload, query: CursorPageQuery = {}) {
+    await this.assertCommunityVisible(communityId, actor);
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const alertTypes = ["SuspiciousActivity", "LostChild", "MissingPerson", "CrimeAlert", "AccidentAlert", "FireAlert", "FloodWarning"];
+    const rows = await this.prisma.communityPost.findMany({
+      where: {
+        communityId,
+        type: { in: alertTypes as never },
+        verificationStatus: { in: ["Verified", "PendingVerification"] as never },
+        ...dateIdCursorWhere(cursor),
+      } as never,
+      include: { media: true, author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+  }
+
+  async getPost(postId: string, actor: JwtPayload) {
+    const post = await this.prisma.communityPost.findUnique({
+      where: { id: postId },
+      include: {
+        media: true,
+        comments: { orderBy: { createdAt: "asc" }, take: 20 },
+        reactions: true,
+        author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+      },
+    });
+    if (!post) throw new NotFoundException("Community post not found");
+    await this.assertCommunityVisible(post.communityId, actor);
+    return { data: post };
+  }
+
   private async scorePost(postId: string, reporterId: string, moderatorConfirmed: boolean) {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId }, include: { media: true, reactions: true, incident: true } });
     if (!post) throw new NotFoundException("Community post not found");
@@ -327,6 +722,7 @@ export class NeighborhoodWatchService {
   private async assertCommunityVisible(communityId: string, actor: JwtPayload) {
     const community = await this.prisma.community.findUnique({ where: { id: communityId } });
     if (!community) throw new NotFoundException("Community not found");
+    if (community.status !== "Active") throw new ForbiddenException("Community is not active");
     if (community.visibility === "Public" || actor.typ === "admin") return;
     await this.assertApprovedMember(communityId, actor.sub);
   }
@@ -374,6 +770,101 @@ export class NeighborhoodWatchService {
 
   private channelName(type: string) {
     return type.replace(/([A-Z])/g, " $1").trim();
+  }
+
+  private toCitizenCommunitySummary(
+    community: {
+      id: string;
+      name: string;
+      country: string;
+      state: string | null;
+      lga: string | null;
+      ward: string | null;
+      estate: string | null;
+      street: string | null;
+      visibility: string;
+      status?: string;
+      description?: string | null;
+      channels?: Array<{ id: string; type: string; name: string }>;
+      posts?: Array<{ createdAt: Date }>;
+      _count?: { memberships: number };
+    },
+    membershipStatus?: string,
+    activeAlertsCount = 0,
+    extra?: { description?: string | null; channels?: Array<{ id: string; type: string; name: string }> },
+  ) {
+    return {
+      id: community.id,
+      name: community.name,
+      description: extra?.description ?? community.description ?? null,
+      country: community.country,
+      state: community.state,
+      lga: community.lga,
+      ward: community.ward,
+      estate: community.estate,
+      street: community.street,
+      visibility: community.visibility,
+      status: community.status ?? "Active",
+      memberCount: community._count?.memberships ?? 0,
+      activeAlertsCount,
+      latestActivityAt: community.posts?.[0]?.createdAt ?? null,
+      membershipStatus: membershipStatus ?? null,
+      channels: extra?.channels ?? community.channels,
+    };
+  }
+
+  private async assertNoDuplicateCommunity(dto: Pick<CreateCommunityDto, "name" | "country" | "state" | "lga" | "ward" | "estate" | "street">) {
+    const duplicate = await this.prisma.community.findFirst({
+      where: {
+        status: "Active" as never,
+        name: { equals: dto.name.trim(), mode: "insensitive" },
+        country: dto.country,
+        state: dto.state ?? null,
+        lga: dto.lga ?? null,
+        ward: dto.ward ?? null,
+        estate: dto.estate ?? null,
+        street: dto.street ?? null,
+      } as never,
+    });
+    if (duplicate) throw new BadRequestException("A community with this name already exists in the selected area");
+  }
+
+  private async assertAdminJurisdiction(actor: JwtPayload, country: string, state?: string, lga?: string) {
+    if (actor.typ !== "admin" || actor.role === "Super Admin") return;
+    if (actor.country && actor.country !== country) throw new ForbiddenException("Community is outside your jurisdiction");
+    if (actor.state && state && actor.state !== state) throw new ForbiddenException("Community is outside your jurisdiction");
+    if (actor.lga && lga && actor.lga !== lga) throw new ForbiddenException("Community is outside your jurisdiction");
+  }
+
+  private async assertUserEligible(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { status: true } });
+    if (!user || user.status !== "Active") throw new ForbiddenException("Account is not eligible to join communities");
+    const suspended = await this.prisma.communityMembership.findFirst({ where: { userId, status: "Suspended" as never } });
+    if (suspended) throw new ForbiddenException("Community membership is suspended");
+  }
+
+  private async notifyModerators(communityId: string, title: string, body: string, metadata: Record<string, unknown>) {
+    const moderators = await this.prisma.communityMembership.findMany({
+      where: {
+        communityId,
+        status: "Approved" as never,
+        role: { name: { in: ["CommunityModerator", "EstateAdmin", "SecurityCoordinator"] as never } },
+      },
+      take: 25,
+    });
+    for (const moderator of moderators) {
+      const notification = await this.prisma.notification.create({
+        data: { userId: moderator.userId, communityId, channel: "push", title, body, status: "Pending" as never, provider: "fcm" } as never,
+      });
+      await this.notifications.enqueue({ userId: moderator.userId, notificationId: notification.id, communityId, title, body, ...metadata });
+    }
+  }
+
+  private async notifyUser(userId: string, title: string, body: string, metadata: Record<string, unknown>) {
+    const notification = await this.prisma.notification.create({
+      data: { userId, channel: "push", title, body, status: "Pending" as never, provider: "fcm" } as never,
+    });
+    await this.notifications.enqueue({ userId, notificationId: notification.id, title, body, ...metadata });
   }
 
   private incidentTypeFromPost(type: string): IncidentType {

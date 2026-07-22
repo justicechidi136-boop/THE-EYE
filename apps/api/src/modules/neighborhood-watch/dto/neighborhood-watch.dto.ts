@@ -67,6 +67,86 @@ export type SendCommunityMessageDto = {
   body: string;
 };
 
+export type ListCommunitiesQuery = {
+  search?: string;
+  country?: string;
+  state?: string;
+  lga?: string;
+  cursor?: string;
+  limit?: string;
+  latitude?: string;
+  longitude?: string;
+};
+
+export type CreateCommunityRequestDto = {
+  name: string;
+  description?: string;
+  country: string;
+  state?: string;
+  lga?: string;
+  ward?: string;
+  estate?: string;
+  street?: string;
+  visibility?: "Public" | "Private";
+  latitude?: number;
+  longitude?: number;
+};
+
+export type ReviewCommunityRequestDto = {
+  action: "approve" | "reject";
+  rejectionNote?: string;
+};
+
+export type CreateCommunityCommentDto = {
+  body: string;
+};
+
+export type UpdateCommunityCommentDto = {
+  body: string;
+};
+
+export type CreateCommunityReactionDto = {
+  type: "Confirm" | "Dispute" | "Support" | "Concern";
+};
+
+export type CreateCommunityContentReportDto = {
+  targetType: "Post" | "Comment" | "Member";
+  targetId: string;
+  reasonCode: string;
+  note?: string;
+};
+
+export type AssignCommunityRoleDto = {
+  roleName:
+    | "CommunityModerator"
+    | "EstateAdmin"
+    | "SecurityCoordinator"
+    | "PoliceLiaison"
+    | "VolunteerCoordinator"
+    | "VerifiedVolunteer"
+    | "Resident";
+};
+
+export type RejectMembershipDto = {
+  note?: string;
+};
+
+export function validateCommunityRequest(dto: CreateCommunityRequestDto) {
+  validateCommunity({
+    name: dto.name,
+    level: "Community",
+    country: dto.country,
+    state: dto.state,
+    lga: dto.lga,
+    ward: dto.ward,
+    estate: dto.estate,
+    street: dto.street,
+    description: dto.description,
+    latitude: dto.latitude,
+    longitude: dto.longitude,
+  });
+}
+
 export function validateCommunity(dto: CreateCommunityDto) {
   if (!dto.name || dto.name.trim().length < 2) throw new BadRequestException("Community name is required");
   if (!dto.country) throw new BadRequestException("Country is required");

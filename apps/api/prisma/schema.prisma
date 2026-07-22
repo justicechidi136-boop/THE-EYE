@@ -109,6 +109,30 @@ enum CommunityVisibility {
   Private
 }
 
+enum CommunityStatus {
+  Active
+  Archived
+  Suspended
+}
+
+enum CommunityRequestStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum CommunityReportTargetType {
+  Post
+  Comment
+  Member
+}
+
+enum CommunityReportStatus {
+  Pending
+  Reviewed
+  Dismissed
+}
+
 enum CommunityMembershipStatus {
   Pending
   Approved
@@ -248,6 +272,8 @@ model User {
   communityReactions    CommunityPostReaction[]
   communityVerifications CommunityVerification[]
   communityMessages     CommunityMessage[]
+  communityRequests     CommunityRequest[]
+  communityContentReports CommunityContentReport[]
   volunteerProfile      VolunteerProfile?
   patrolAssignments     PatrolAssignment[]
   patrolCheckpoints     PatrolCheckpoint[]
@@ -835,6 +861,7 @@ model Community {
   name           String
   level          CommunityLevel
   visibility     CommunityVisibility @default(Public)
+  status         CommunityStatus     @default(Active)
   country        String
   state          String?
   lga            String?
@@ -857,10 +884,13 @@ model Community {
   volunteerProfiles VolunteerProfile[]
   patrolSchedules PatrolSchedule[]
   notifications  Notification[]
+  requests       CommunityRequest[]
+  contentReports CommunityContentReport[]
 
   @@index([parentId])
   @@index([country, state, lga, ward])
   @@index([level, visibility])
+  @@index([status])
   @@map("communities")
 }
 
@@ -1018,6 +1048,56 @@ model CommunityMessage {
 
   @@index([channelId, createdAt])
   @@map("community_messages")
+}
+
+model CommunityRequest {
+  id             String                  @id @default(uuid()) @db.Uuid
+  requesterId    String                  @map("requester_id") @db.Uuid
+  name           String
+  description    String?
+  country        String
+  state          String?
+  lga            String?
+  ward           String?
+  estate         String?
+  street         String?
+  visibility     CommunityVisibility     @default(Private)
+  latitude       Decimal?                @db.Decimal(9, 6)
+  longitude      Decimal?                @db.Decimal(9, 6)
+  status         CommunityRequestStatus  @default(Pending)
+  reviewedById   String?                 @map("reviewed_by_id") @db.Uuid
+  reviewedAt     DateTime?               @map("reviewed_at") @db.Timestamptz(6)
+  rejectionNote  String?                 @map("rejection_note")
+  communityId    String?                 @map("community_id") @db.Uuid
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  requester      User                    @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  community      Community?              @relation(fields: [communityId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([requesterId])
+  @@index([country, state, lga])
+  @@map("community_requests")
+}
+
+model CommunityContentReport {
+  id           String                   @id @default(uuid()) @db.Uuid
+  communityId  String                   @map("community_id") @db.Uuid
+  reporterId   String                   @map("reporter_id") @db.Uuid
+  targetType   CommunityReportTargetType @map("target_type")
+  targetId     String                   @map("target_id") @db.Uuid
+  reasonCode   String                   @map("reason_code")
+  note         String?
+  status       CommunityReportStatus    @default(Pending)
+  reviewedById String?                  @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?                @map("reviewed_at") @db.Timestamptz(6)
+  createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  community    Community                @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  reporter     User                     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([communityId, status, createdAt])
+  @@index([targetType, targetId])
+  @@map("community_content_reports")
 }
 
 model VolunteerProfile {

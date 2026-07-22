@@ -9,9 +9,11 @@ function buildService(overrides: Record<string, unknown> = {}) {
   const prisma = {
     community: {
       findMany: jest.fn().mockResolvedValue([]),
-      findUnique: jest.fn().mockResolvedValue({ id: "community-1", visibility: "Public", jurisdictionId: "jurisdiction-1" }),
+      findUnique: jest.fn().mockResolvedValue({ id: "community-1", visibility: "Public", status: "Active", jurisdictionId: "jurisdiction-1" }),
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({ id: "community-1" }),
     },
+    user: { findUnique: jest.fn().mockResolvedValue({ id: "user-1", status: "Active" }) },
     communityRole: {
       findFirst: jest.fn().mockResolvedValue({ id: "role-resident", name: "Resident" }),
       createMany: jest.fn().mockResolvedValue({ count: 7 }),
@@ -25,7 +27,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
     },
     communityPost: {
       create: jest.fn().mockResolvedValue({ id: "post-1", communityId: "community-1", authorId: "user-1", type: "SuspiciousActivity", title: "Suspicious movement", body: "Movement near gate", media: [], reactions: [] }),
-      findUnique: jest.fn().mockResolvedValue({ id: "post-1", communityId: "community-1", authorId: "user-1", type: "SuspiciousActivity", title: "Suspicious movement", body: "Movement near gate", verificationStatus: "Verified", community: { id: "community-1", jurisdictionId: "jurisdiction-1" }, media: [], reactions: [], incidentId: null }),
+      findUnique: jest.fn().mockResolvedValue({ id: "post-1", communityId: "community-1", authorId: "user-1", type: "SuspiciousActivity", title: "Suspicious movement", body: "Movement near gate", latitude: 6.6012, longitude: 3.3514, verificationStatus: "Verified", community: { id: "community-1", jurisdictionId: "jurisdiction-1" }, media: [], reactions: [], incidentId: null }),
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({ id: "post-1", confidenceScore: 80, verificationStatus: "Verified", title: "Suspicious movement", type: "SuspiciousActivity" }),
     },
@@ -36,7 +38,9 @@ function buildService(overrides: Record<string, unknown> = {}) {
     patrolSchedule: { create: jest.fn().mockResolvedValue({ id: "patrol-1" }), findMany: jest.fn().mockResolvedValue([]) },
     patrolCheckpoint: { create: jest.fn().mockResolvedValue({ id: "checkpoint-1" }) },
     policeStation: { findMany: jest.fn().mockResolvedValue([]) },
-    auditLog: { create: jest.fn().mockResolvedValue({ id: "audit-1" }) },
+    communityRequest: { create: jest.fn().mockResolvedValue({ id: "request-1", status: "Pending" }) },
+    communityPostComment: { create: jest.fn().mockResolvedValue({ id: "comment-1", body: "Thanks" }) },
+    profile: { findUnique: jest.fn().mockResolvedValue({ userId: "user-1", country: "NG", state: "LA", lga: "Ikeja" }) },
     $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   } as any;
@@ -49,7 +53,15 @@ function buildService(overrides: Record<string, unknown> = {}) {
 
 describe("NeighborhoodWatchService", () => {
   it("joins a public community immediately", async () => {
-    const { service, prisma } = buildService();
+    const { service, prisma } = buildService({
+      communityMembership: {
+        upsert: jest.fn().mockResolvedValue({ id: "membership-1", communityId: "community-1", userId: "user-1", status: "Approved" }),
+        update: jest.fn().mockResolvedValue({ id: "membership-1", status: "Approved" }),
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+    });
     await service.joinCommunity("community-1", userActor);
     expect(prisma.communityMembership.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ status: "Approved" }),
@@ -96,5 +108,40 @@ describe("NeighborhoodWatchService", () => {
     });
     await expect(service.approveMember("community-1", "membership-1", userActor)).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.communityMembership.findUnique).toHaveBeenCalled();
+  });
+
+  it("rejects a pending member", async () => {
+    const { service, prisma, auditService } = buildService({
+      communityMembership: {
+        findUnique: jest.fn().mockResolvedValue({ id: "membership-1", communityId: "community-1", userId: "user-2", status: "Pending", role: { name: "CommunityModerator" } }),
+        update: jest.fn().mockResolvedValue({ id: "membership-1", status: "Rejected" }),
+      },
+    });
+    await service.rejectMember("community-1", "membership-1", adminActor, "Not eligible");
+    expect(prisma.communityMembership.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "Rejected" }) }));
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({ action: "community.member_rejected" }));
+  });
+
+  it("creates a community request for citizens", async () => {
+    const { service, prisma } = buildService({
+      profile: { findUnique: jest.fn().mockResolvedValue({ userId: "user-1", country: "NG", state: "LA", lga: "Ikeja" }) },
+      community: { findFirst: jest.fn().mockResolvedValue(null) },
+      communityRequest: { create: jest.fn().mockResolvedValue({ id: "request-1", status: "Pending" }) },
+    });
+    await service.createCommunityRequest({
+      name: "New Estate",
+      country: "NG",
+      state: "LA",
+      lga: "Ikeja",
+    }, userActor);
+    expect(prisma.communityRequest.create).toHaveBeenCalled();
+  });
+
+  it("creates a post comment for approved members", async () => {
+    const { service, prisma } = buildService({
+      communityPostComment: { create: jest.fn().mockResolvedValue({ id: "comment-1", body: "Thanks" }) },
+    });
+    await service.createPostComment("post-1", { body: "Thanks for the update" }, userActor);
+    expect(prisma.communityPostComment.create).toHaveBeenCalled();
   });
 });
