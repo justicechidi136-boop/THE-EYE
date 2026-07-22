@@ -72,6 +72,7 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-22 | Sprint 4 staging QA attempt | Deploy workflow `29887082714` failed preflight: GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL`. Live staging API @ `ca227fc` era (pre-Sprint-4): `/v1/health/ready` returns database/redis only; `/v1/broadcasts/admin/scheduler-health` returns 404; no worker/scheduler heartbeats observable. Feature branch `c66561e` local CI green (API 238/238, mobile 106/106, watch 49/49). End-to-end device QA not executed (no VPS deploy, no physical phone/watch in this session). No PASS promotions. |
 | 2026-07-22 | Sprint 4 Phase 1 | Full notifications & broadcasts re-audit on `staging` @ `ca227fc` (RC1). Sprint 4 gap table added on `feature/sprint-4-notifications-broadcasts`. No implementation changes in this entry. No PASS promotions. Sprint 1–3 statuses unchanged. |
 | 2026-07-22 | Sprint 3 Phase 1–2 | Full incident lifecycle re-audit on `staging` @ `45c2197`. Sprint 3 gap table + canonical contract (`docs/INCIDENT_CONTRACT.md`) added. Implementation started on `feature/sprint-3-incident-reporting`: idempotency, location endpoint, notification enqueue, mobile history/detail, admin verify/assign/evidence viewer. No PASS without staging device QA. |
 | 2026-07-21 | Sprint 2 implementation | Citizen profile lifecycle coded on `feature/sprint-2-citizen-profile`: PATCH/me, emergency contacts CRUD, avatar presign/confirm, KYC submit+admin review, deletion deactivate, mobile completion/edit/contacts/KYC, admin KYC queue + citizen detail. Automated API + mobile tests green. No PASS without staging redeploy + device QA. Full erasure/preferences sync remain BLOCKED. |
@@ -562,7 +563,7 @@
 
 | Track | IDs | Target status | Staging runtime QA | Notes |
 |-------|-----|---------------|-------------------|-------|
-| Queue + worker | S4-001, S4-002, S4-024, API-CORE-011 | BLOCKED/PARTIAL | Required | Redis + worker on VPS |
+| Queue + worker | S4-001, S4-002, S4-024, API-CORE-011 | BLOCKED/PARTIAL | Required | 2026-07-22: staging still on pre-Sprint-4 deploy; GH deploy blocked on missing `NEXT_PUBLIC_API_BASE_URL`; worker/scheduler heartbeats not observable |
 | FCM pipeline | S4-004, S4-007, S4-008, MOB-NOTF-001–004, WCH-PUSH-001 | CODE COMPLETE — STAGING FCM QA PENDING | Required | Staging Firebase creds + device push QA |
 | SMS / email | S4-005, S4-006, API-CORE-013/014 | FAIL-CLOSED — PROVIDER INTEGRATION PENDING | Required | Real provider credentials + adapters |
 | Mobile inbox + feed | S4-009, S4-010, MOB-NOTF-006/007, MOB-SAFE-007 | PARTIAL | Required | Inbox live; broadcast feed code complete — device QA pending |
