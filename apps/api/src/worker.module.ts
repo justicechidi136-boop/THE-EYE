@@ -6,6 +6,7 @@ import { MetricsModule } from "./common/metrics/metrics.module";
 import { resolveBullMqRootOptions, shouldRegisterBullMq } from "./common/queue/queue-config";
 import { validateEnvironment } from "./config/validate-env";
 import { NotificationsWorkerModule } from "./modules/notifications/notifications-worker.module";
+import { BroadcastsWorkerModule } from "./modules/broadcasts/broadcasts-worker.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 
 @Module({
@@ -39,6 +40,7 @@ import { PrismaModule } from "./modules/prisma/prisma.module";
         ]
       : []),
     NotificationsWorkerModule,
+    BroadcastsWorkerModule,
   ],
 })
 export class WorkerModule {}

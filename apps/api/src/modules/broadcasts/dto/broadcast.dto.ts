@@ -41,6 +41,11 @@ export type NearbyBroadcastsQuery = {
   latitude?: string;
   longitude?: string;
   radiusMeters?: string;
+  cursor?: string;
+  limit?: string;
+  category?: string;
+  severity?: string;
+  unreadOnly?: string;
 };
 
 export const approvalRequiredTypes = new Set<BroadcastType>([

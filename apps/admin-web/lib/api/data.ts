@@ -326,6 +326,23 @@ export type NotificationDeliveryDiagnostics = {
   generatedAt: string;
 };
 
+export type BroadcastSchedulerHealth = {
+  active: boolean;
+  lastRunAt: string | null;
+  dueCount: number;
+  claimedCount: number;
+  dispatchFailures: number;
+  staleScheduledCount: number;
+  nextScheduledAt: string | null;
+  queue: Record<string, unknown>;
+};
+
+export async function fetchBroadcastSchedulerHealth(): Promise<BroadcastSchedulerHealth | null> {
+  return withToken(async (token) => {
+    return apiRequest<BroadcastSchedulerHealth>("/broadcasts/admin/scheduler-health", { token });
+  }, null);
+}
+
 export async function fetchNotificationDeliveryDiagnostics(): Promise<NotificationDeliveryDiagnostics | null> {
   return withToken(async (token) => {
     return apiRequest<NotificationDeliveryDiagnostics>("/notifications/admin/delivery-operations", { token });

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
@@ -30,12 +30,26 @@ export class BroadcastsController {
   @Get("nearby")
   @RequirePermissions("incident:read")
   nearby(@Query() query: NearbyBroadcastsQuery, @Req() request: any) {
-    return this.broadcastsService.nearbyForUser(
-      request.user.sub,
-      Number(query.latitude),
-      Number(query.longitude),
-      query.radiusMeters ? Number(query.radiusMeters) : undefined,
-    );
+    return this.broadcastsService.nearbyForUser(request.user.sub, Number(query.latitude), Number(query.longitude), {
+      radiusMeters: query.radiusMeters ? Number(query.radiusMeters) : undefined,
+      cursor: query.cursor,
+      limit: query.limit ? Number(query.limit) : undefined,
+      category: query.category,
+      severity: query.severity,
+      unreadOnly: query.unreadOnly === "true",
+    });
+  }
+
+  @Get("unread-count")
+  @RequirePermissions("incident:read")
+  unreadCount(@Req() request: any) {
+    return this.broadcastsService.unreadCount(request.user.sub);
+  }
+
+  @Get("admin/scheduler-health")
+  @RequirePermissions("broadcast:publish")
+  schedulerHealth(@Req() request: any) {
+    return this.broadcastsService.getSchedulerHealth(request.user);
   }
 
   @Post("auto/verified-incident/:incidentId")
@@ -45,9 +59,21 @@ export class BroadcastsController {
   }
 
   @Get(":id")
-  @RequirePermissions("broadcast:create")
-  getOne(@Param("id") id: string, @Req() request: any) {
-    return this.broadcastsService.get(id, request.user);
+  async getOne(@Param("id") id: string, @Req() request: any) {
+    const permissions = new Set(request.user?.permissions ?? []);
+    if (permissions.has("broadcast:create")) {
+      return this.broadcastsService.get(id, request.user);
+    }
+    if (permissions.has("incident:read")) {
+      return this.broadcastsService.getForCitizen(id, request.user);
+    }
+    throw new ForbiddenException("Missing required permission");
+  }
+
+  @Patch(":id/read")
+  @RequirePermissions("incident:read")
+  markRead(@Param("id") id: string, @Req() request: any) {
+    return this.broadcastsService.markRead(id, request.user);
   }
 
   @Get(":id/preview")

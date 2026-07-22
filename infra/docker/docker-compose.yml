@@ -229,7 +229,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "node -e \"const Redis=require('ioredis');const p=process.env.BULLMQ_PREFIX||('the-eye-'+(process.env.THE_EYE_APP_ENV||'staging'));const r=new Redis({host:process.env.REDIS_HOST,port:Number(process.env.REDIS_PORT||6379),password:process.env.REDIS_PASSWORD,maxRetriesPerRequest:1,lazyConnect:true,connectTimeout:2000});r.connect().then(()=>r.get(p+':notification-worker:heartbeat')).then(v=>process.exit(v?0:1)).catch(()=>process.exit(1)).finally(()=>r.quit());\"",
+          "node -e \"const Redis=require('ioredis');const p=process.env.BULLMQ_PREFIX||('the-eye-'+(process.env.THE_EYE_APP_ENV||'staging'));const r=new Redis({host:process.env.REDIS_HOST,port:Number(process.env.REDIS_PORT||6379),password:process.env.REDIS_PASSWORD,maxRetriesPerRequest:1,lazyConnect:true,connectTimeout:2000});r.connect().then(async()=>{const worker=await r.get(p+':notification-worker:heartbeat');const scheduler=await r.get(p+':broadcast-scheduler:heartbeat');process.exit(worker&&scheduler?0:1);}).catch(()=>process.exit(1)).finally(()=>r.quit());\"",
         ]
       interval: 30s
       timeout: 5s

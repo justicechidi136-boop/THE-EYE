@@ -66,7 +66,11 @@ enum MediaType {
 enum BroadcastStatus {
   Draft
   PendingApproval
+  Scheduled
+  DispatchQueued
+  Dispatching
   Published
+  Failed
   Expired
   Cancelled
   Rejected
@@ -227,6 +231,7 @@ model User {
   notifications         Notification[]
   pushTokens            UserPushToken[]
   broadcastDeliveries   BroadcastDelivery[]
+  broadcastReads        BroadcastRead[]
   groupMessages         GroupMessage[]
   smartwatchDevices     SmartwatchDevice[]
   sosEvents             SosEvent[]
@@ -581,6 +586,10 @@ model Broadcast {
   rejectedReason String?         @map("rejected_reason")
   publishedAt    DateTime?       @map("published_at") @db.Timestamptz(6)
   scheduledAt    DateTime?       @map("scheduled_at") @db.Timestamptz(6)
+  dispatchQueuedAt DateTime?     @map("dispatch_queued_at") @db.Timestamptz(6)
+  dispatchStartedAt DateTime?    @map("dispatch_started_at") @db.Timestamptz(6)
+  dispatchCompletedAt DateTime?  @map("dispatch_completed_at") @db.Timestamptz(6)
+  dispatchFailureReason String?  @map("dispatch_failure_reason")
   expiresAt      DateTime?       @map("expires_at") @db.Timestamptz(6)
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   jurisdiction   Jurisdiction?   @relation(fields: [jurisdictionId], references: [id])
@@ -589,6 +598,7 @@ model Broadcast {
   approver       AdminUser?      @relation("BroadcastApprover", fields: [approverAdminId], references: [id])
   notifications  Notification[]
   deliveries     BroadcastDelivery[]
+  reads          BroadcastRead[]
   communityPosts CommunityPost[]
 
   @@index([status, publishedAt])
@@ -596,7 +606,22 @@ model Broadcast {
   @@index([jurisdictionId])
   @@index([incidentId])
   @@index([scheduledAt])
+  @@index([status, scheduledAt])
   @@map("broadcasts")
+}
+
+model BroadcastRead {
+  id          String    @id @default(uuid()) @db.Uuid
+  broadcastId String    @map("broadcast_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  readAt      DateTime  @default(now()) @map("read_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, userId])
+  @@index([userId, readAt])
+  @@map("broadcast_reads")
 }
 
 model BroadcastDelivery {

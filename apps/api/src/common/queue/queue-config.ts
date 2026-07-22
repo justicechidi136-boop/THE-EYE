@@ -65,6 +65,10 @@ export function resolveWorkerHeartbeatKey(config: Record<string, unknown> = proc
   return `${resolveQueuePrefix(config)}:notification-worker:heartbeat`;
 }
 
+export function resolveBroadcastSchedulerHeartbeatKey(config: Record<string, unknown> = process.env as Record<string, unknown>): string {
+  return `${resolveQueuePrefix(config)}:broadcast-scheduler:heartbeat`;
+}
+
 export function resolveNotificationQueueOptions(
   queueName: string,
   config: Record<string, unknown> = process.env as Record<string, unknown>,

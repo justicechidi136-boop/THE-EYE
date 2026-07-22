@@ -96,6 +96,10 @@ export type BroadcastView = {
   requiresApproval: boolean;
   recipients: number;
   delivery: string;
+  scheduledAt: string | null;
+  schedulingState: string;
+  dispatchFailureReason: string | null;
+  autoDispatchStatus: string;
 };
 
 export type UserDirectoryEntry = {

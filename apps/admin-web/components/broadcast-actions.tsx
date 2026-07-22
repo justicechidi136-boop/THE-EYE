@@ -8,9 +8,19 @@ type BroadcastActionsProps = {
   broadcastId: string;
   status: string;
   requiresApproval: boolean;
+  scheduledAt?: string | null;
+  dispatchFailureReason?: string | null;
+  autoDispatchStatus?: string;
 };
 
-export function BroadcastActions({ broadcastId, status, requiresApproval }: BroadcastActionsProps) {
+export function BroadcastActions({
+  broadcastId,
+  status,
+  requiresApproval,
+  scheduledAt,
+  dispatchFailureReason,
+  autoDispatchStatus,
+}: BroadcastActionsProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,8 +47,22 @@ export function BroadcastActions({ broadcastId, status, requiresApproval }: Broa
     }
   }
 
+  const dueCountdown =
+    scheduledAt && !Number.isNaN(Date.parse(scheduledAt))
+      ? new Date(scheduledAt).getTime() <= Date.now()
+        ? "Due now"
+        : `Scheduled ${new Date(scheduledAt).toLocaleString()}`
+      : null;
+
   return (
     <div className="grid gap-2">
+      {scheduledAt ? (
+        <p className="text-xs text-muted">
+          {dueCountdown}
+          {autoDispatchStatus ? ` · ${autoDispatchStatus}` : null}
+        </p>
+      ) : null}
+      {dispatchFailureReason ? <InlineAlert tone="error">{dispatchFailureReason}</InlineAlert> : null}
       <div className="flex flex-wrap gap-2">
         {(status === "Pending approval" || status === "Draft") && requiresApproval ? (
           <>
@@ -59,7 +83,12 @@ export function BroadcastActions({ broadcastId, status, requiresApproval }: Broa
             </Button>
           </>
         ) : null}
-        {status === "Draft" || status === "Pending approval" ? (
+        {status === "Scheduled" || status === "DispatchQueued" || status === "Failed" ? (
+          <Button disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
+            Cancel schedule
+          </Button>
+        ) : null}
+        {status === "Draft" || status === "Pending approval" || status === "Scheduled" || status === "Failed" ? (
           <Button
             disabled={busy !== null}
             onClick={() =>

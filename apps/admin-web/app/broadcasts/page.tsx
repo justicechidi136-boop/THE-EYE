@@ -2,19 +2,22 @@ import { AppShell } from "../../components/app-shell";
 import { BroadcastActions } from "../../components/broadcast-actions";
 import { BroadcastCreateForm } from "../../components/broadcast-create-form";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { fetchBroadcasts, fetchNotificationDeliveryDiagnostics } from "../../lib/api/data";
+import { fetchBroadcasts, fetchBroadcastSchedulerHealth, fetchNotificationDeliveryDiagnostics } from "../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function BroadcastsPage() {
-  const [broadcasts, diagnostics] = await Promise.all([
+  const [broadcasts, diagnostics, scheduler] = await Promise.all([
     fetchBroadcasts(),
     fetchNotificationDeliveryDiagnostics(),
+    fetchBroadcastSchedulerHealth(),
   ]);
   const pending = broadcasts.filter((broadcast) => broadcast.status === "Pending approval").length;
   const published = broadcasts.filter((broadcast) => broadcast.status === "Published").length;
+  const scheduled = broadcasts.filter((broadcast) => broadcast.status === "Scheduled").length;
   const queueWaiting = Number(diagnostics?.queue?.waiting ?? 0);
   const workerActive = diagnostics?.worker?.active === true;
+  const schedulerActive = scheduler?.active === true;
 
   return (
     <AppShell>
@@ -36,12 +39,19 @@ export default async function BroadcastsPage() {
           <Panel title="Dispatch health">
             <div className="grid gap-3">
               <StatusBadge tone="success">{published} published</StatusBadge>
+              <StatusBadge tone={schedulerActive ? "success" : "warning"}>
+                Scheduler {schedulerActive ? "active" : "stale"}
+              </StatusBadge>
+              <StatusBadge tone="info">{scheduled} scheduled</StatusBadge>
               <StatusBadge tone={workerActive ? "success" : "warning"}>
                 Worker {workerActive ? "active" : "stale"}
               </StatusBadge>
               <StatusBadge tone={queueWaiting > 0 ? "warning" : "info"}>
                 Queue waiting: {queueWaiting}
               </StatusBadge>
+              {scheduler?.dueCount ? (
+                <StatusBadge tone="warning">Due now: {scheduler.dueCount}</StatusBadge>
+              ) : null}
             </div>
           </Panel>
         </section>
@@ -60,6 +70,7 @@ export default async function BroadcastsPage() {
                   <th className="px-4 py-3">Priority</th>
                   <th className="px-4 py-3">Target geofence</th>
                   <th className="px-4 py-3">Approval</th>
+                  <th className="px-4 py-3">Schedule</th>
                   <th className="px-4 py-3">Recipients</th>
                   <th className="px-4 py-3">Delivery</th>
                   <th className="px-4 py-3">Actions</th>
@@ -80,6 +91,15 @@ export default async function BroadcastsPage() {
                         {broadcast.requiresApproval ? broadcast.status : "Auto-broadcast"}
                       </StatusBadge>
                     </td>
+                    <td className="px-4 py-3 text-muted">
+                      <p>{broadcast.schedulingState}</p>
+                      <p className="mt-1 text-xs">
+                        {broadcast.scheduledAt
+                          ? new Date(broadcast.scheduledAt).toLocaleString()
+                          : "Not scheduled"}
+                      </p>
+                      <p className="mt-1 text-xs">{broadcast.autoDispatchStatus}</p>
+                    </td>
                     <td className="px-4 py-3">{broadcast.recipients}</td>
                     <td className="px-4 py-3"><StatusBadge tone={broadcast.delivery === "Sent" ? "success" : "info"}>{broadcast.delivery}</StatusBadge></td>
                     <td className="px-4 py-3">
@@ -87,6 +107,9 @@ export default async function BroadcastsPage() {
                         broadcastId={broadcast.id}
                         status={broadcast.status}
                         requiresApproval={broadcast.requiresApproval}
+                        scheduledAt={broadcast.scheduledAt}
+                        dispatchFailureReason={broadcast.dispatchFailureReason}
+                        autoDispatchStatus={broadcast.autoDispatchStatus}
                       />
                     </td>
                   </tr>
