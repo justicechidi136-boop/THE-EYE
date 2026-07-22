@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../design_system/design_system.dart';
@@ -7,10 +9,32 @@ import '../theme/eye_colors.dart';
 import '../widgets/watch_ui.dart';
 import 'routes.dart';
 
-class ActiveEmergencyScreen extends StatelessWidget {
+class ActiveEmergencyScreen extends StatefulWidget {
   const ActiveEmergencyScreen({super.key, required this.services});
 
   final WatchAppServices services;
+
+  @override
+  State<ActiveEmergencyScreen> createState() => _ActiveEmergencyScreenState();
+}
+
+class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(widget.services.sos.syncEmergencyTracking());
+    });
+    unawaited(widget.services.sos.syncEmergencyTracking());
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
 
   bool _isQueued(SosEventState state) {
     return state.errorMessage?.contains('Queued') == true &&
@@ -21,8 +45,8 @@ class ActiveEmergencyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<SosEventState>(
-      stream: services.sos.states,
-      initialData: services.sos.state,
+      stream: widget.services.sos.states,
+      initialData: widget.services.sos.state,
       builder: (context, snapshot) {
         final state = snapshot.data!;
         final isSending = state.lifecycle == SosLifecycle.submitting;
@@ -37,7 +61,9 @@ class ActiveEmergencyScreen extends StatelessWidget {
         final statusBody = isQueued
             ? (state.errorMessage ??
                 'Queued offline — will retry when connected')
-            : 'Your live location has been shared. Stay on the line if possible.';
+            : state.incidentId == null
+                ? 'Syncing incident status with command center…'
+                : 'Your live location has been shared. Stay on the line if possible.';
 
         return WatchScaffold(
           onBack: () => Navigator.popUntil(
@@ -81,6 +107,14 @@ class ActiveEmergencyScreen extends StatelessWidget {
                   height: 1.4,
                 ),
               ),
+              if (state.incidentId != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Incident ${state.incidentId}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: EyeColors.muted, fontSize: 9),
+                ),
+              ],
               const Spacer(),
               WatchPrimaryButton(
                 label: 'Done',

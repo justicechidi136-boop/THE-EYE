@@ -51,6 +51,11 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
     incidentTimeline: { create: jest.fn().mockResolvedValue({ id: "timeline-1" }) },
     auditLog: { create: jest.fn().mockResolvedValue({ id: "audit-1" }) },
     notification: { create: jest.fn() },
+    smartwatchOfflineEvent: {
+      create: jest.fn().mockImplementation(async (args: any) => ({ id: "offline-1", ...args.data })),
+      findMany: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({ id: "offline-1", status: "Processed" }),
+    },
   } as any;
   const incidents = {
     report: jest.fn().mockResolvedValue({ id: "incident-1", priority: "P1LifeThreatening", status: "Submitted" }),
@@ -212,6 +217,50 @@ describe("SmartwatchService", () => {
     expect(first.data.deviceSecret).toBe("secret-once");
     expect(prisma.smartwatchPairingSession.update).toHaveBeenCalledWith(expect.objectContaining({
       data: { deviceSecretPlain: null },
+    }));
+  });
+
+  it("replays uploaded offline SOS events after sync", async () => {
+    const { service, prisma, incidents } = buildService();
+    prisma.smartwatchOfflineEvent.findMany.mockResolvedValue([
+      {
+        id: "offline-1",
+        eventType: "SOS",
+        payload: {
+          deviceId: "EYE-WATCH-001",
+          deviceSecret: "watch-secret",
+          latitude: 6.5244,
+          longitude: 3.3792,
+          metadata: { idempotencyKey: "offline-sos-1" },
+        },
+      },
+    ]);
+
+    await service.syncOfflineEvents("EYE-WATCH-001", {
+      deviceId: "EYE-WATCH-001",
+      deviceSecret: "watch-secret",
+      events: [
+        {
+          eventType: "GPS",
+          occurredAt: new Date().toISOString(),
+          payload: {
+            deviceId: "EYE-WATCH-001",
+            deviceSecret: "watch-secret",
+            latitude: 6.5244,
+            longitude: 3.3792,
+          },
+        },
+      ],
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(incidents.report).toHaveBeenCalledWith(
+      expect.objectContaining({ clientSubmissionId: "offline-sos-1" }),
+      expect.objectContaining({ typ: "user" }),
+    );
+    expect(prisma.smartwatchOfflineEvent.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "Processed" }),
     }));
   });
 });

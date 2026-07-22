@@ -39,7 +39,8 @@ abstract final class WatchApiConfig {
 
     if (_dartDefineUrl.isNotEmpty) {
       // Ignore dev-machine overrides when building staging/production flavors.
-      if (env == WatchFirebaseEnv.development || !isLocalDevUrl(_dartDefineUrl)) {
+      if (env == WatchFirebaseEnv.development ||
+          !isLocalDevUrl(_dartDefineUrl)) {
         return _dartDefineUrl;
       }
     }
@@ -119,7 +120,8 @@ void assertWatchApiBaseUrlMatchesFlavor(
     );
   }
 
-  if (env != WatchFirebaseEnv.development && !WatchApiConfig.isHttpsUrl(baseUrl)) {
+  if (env != WatchFirebaseEnv.development &&
+      !WatchApiConfig.isHttpsUrl(baseUrl)) {
     throw StateError(
       'Environment guard: ${env.name} build must use HTTPS API URLs '
       '(`$baseUrl`).',

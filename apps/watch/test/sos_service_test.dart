@@ -56,6 +56,45 @@ void main() {
     expect(sos.state.lifecycle, SosLifecycle.failed);
     expect(sos.state.errorMessage, contains('Queued'));
   });
+
+  test('syncEmergencyTracking updates incident and coordinates from API',
+      () async {
+    var calledTracking = false;
+    final connectivity = ConnectivityService(
+      internetAvailable: true,
+      pairedPhoneAvailable: true,
+    );
+    final sos = _buildSosService(
+      MockClient((request) async {
+        if (request.method == 'POST') {
+          return http.Response(
+            '{"data":{"id":"sos-99"},"incident":{"id":"incident-live"}}',
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' && request.url.path.contains('tracking')) {
+          calledTracking = true;
+          return http.Response(
+            '{"data":{"event":{"incident":{"id":"incident-99"}},"latest":{"latitude":6.1,"longitude":3.2}}}',
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+      connectivity: connectivity,
+    );
+
+    await sos.submitSos();
+    expect(sos.state.sosEventId, 'sos-99');
+    await sos.syncEmergencyTracking();
+
+    expect(calledTracking, isTrue);
+    expect(sos.state.incidentId, 'incident-99');
+    expect(sos.state.latitude, 6.1);
+    expect(sos.state.longitude, 3.2);
+  });
 }
 
 SosService _buildSosService(

@@ -75,7 +75,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _statusLabel() {
     final mode = widget.services.connectivity.activeMode;
     if (mode == WatchConnectivityMode.offline) return 'Offline';
-    if (mode == WatchConnectivityMode.standaloneCellular) return 'LTE Standalone';
+    if (mode == WatchConnectivityMode.standaloneCellular)
+      return 'LTE Standalone';
     if (_isDangerFace()) return 'DANGER NEARBY';
     return 'Area: Moderate Risk';
   }
@@ -114,8 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (_) => AppDrawerScreen(launcher: widget.launcher),
             ),
           ),
-          backgroundColor:
-              _isDangerFace() ? EyeTokens.surface : EyeTokens.dark,
+          backgroundColor: _isDangerFace() ? EyeTokens.surface : EyeTokens.dark,
           child: Column(
             children: [
               GestureDetector(
@@ -194,7 +194,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     'Bat $battery%',
-                    style: const TextStyle(color: EyeColors.muted, fontSize: 10),
+                    style:
+                        const TextStyle(color: EyeColors.muted, fontSize: 10),
                   ),
                   GestureDetector(
                     onTap: () => Navigator.pushNamed(
@@ -245,7 +246,8 @@ class _ModeBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 7, fontWeight: FontWeight.w700),
+        style:
+            TextStyle(color: color, fontSize: 7, fontWeight: FontWeight.w700),
       ),
     );
   }

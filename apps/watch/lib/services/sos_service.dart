@@ -217,6 +217,25 @@ class SosService {
     await _preferences.saveOfflineQueue(queue);
   }
 
+  Future<void> syncEmergencyTracking() async {
+    final sosEventId = _state.sosEventId;
+    if (sosEventId == null) return;
+    try {
+      final response =
+          await _api.get(WatchApiPaths.emergencyTracking(sosEventId));
+      final data = response['data'] as Map<String, dynamic>? ?? response;
+      final event = data['event'] as Map<String, dynamic>?;
+      final latest = data['latest'] as Map<String, dynamic>?;
+      final incident = event?['incident'] as Map<String, dynamic>?;
+      _emit(_state.copyWith(
+        incidentId: incident?['id'] as String? ?? _state.incidentId,
+        latitude: (latest?['latitude'] as num?)?.toDouble() ?? _state.latitude,
+        longitude:
+            (latest?['longitude'] as num?)?.toDouble() ?? _state.longitude,
+      ));
+    } catch (_) {}
+  }
+
   Future<int> flushOfflineQueue() async {
     final deviceId = await _credentials.readDeviceId();
     final deviceSecret = await _credentials.readDeviceSecret();
