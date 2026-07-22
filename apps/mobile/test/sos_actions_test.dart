@@ -71,6 +71,11 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        routes: {
+          "/active-emergency": (_) =>
+              const Scaffold(body: Text("Active emergency")),
+          "/tracking": (_) => const Scaffold(body: Text("Tracking")),
+        },
         home: AppScope(
           controller: _testController(themeProvider),
           child: const SafetyScaffold(
@@ -94,6 +99,11 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        routes: {
+          "/active-emergency": (_) =>
+              const Scaffold(body: Text("Active emergency")),
+          "/tracking": (_) => const Scaffold(body: Text("Tracking")),
+        },
         home: AppScope(
           controller: _testController(themeProvider),
           child: const SafetyScaffold(
@@ -126,6 +136,19 @@ AppController _testController(ThemeProvider themeProvider) {
             "id": "incident-sos-test",
             "status": "Submitted",
             "submittedAt": "2026-07-10T01:31:00.000Z",
+          }),
+          200,
+          headers: {"content-type": "application/json"},
+        );
+      }
+      if (request.url.path.contains("/incidents/incident-sos-test")) {
+        return http.Response(
+          jsonEncode({
+            "id": "incident-sos-test",
+            "status": "Submitted",
+            "title": "SOS emergency",
+            "type": "SOS",
+            "timeline": [],
           }),
           200,
           headers: {"content-type": "application/json"},

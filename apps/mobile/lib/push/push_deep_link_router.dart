@@ -10,6 +10,7 @@ abstract final class PushDeepLinkRouter {
     "/neighborhood-watch/alerts",
     "/live-video",
     "/report/emergency",
+    "/active-emergency",
   };
 
   /// Returns a safe in-app route from FCM data payload fields.
@@ -31,7 +32,7 @@ abstract final class PushDeepLinkRouter {
     if (type.contains("stolenvehicle")) return "/stolen-vehicle";
     if (type.contains("neighborhood") || type.contains("community"))
       return "/neighborhood-watch";
-    if (type.contains("incident")) return "/tracking";
+    if (type.contains("incident")) return "/active-emergency";
     if (type.contains("broadcast")) return "/broadcasts";
     if (type.contains("livevideo")) return "/live-video";
     return "/notifications";

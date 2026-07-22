@@ -21,10 +21,17 @@ abstract final class TheEyeApiPaths {
       "/smartwatch/devices/$deviceId/offline-sync";
 
   static const incidentsReport = "/incidents/report";
+  static const incidentsSos = "/incidents/sos";
   static const incidents = "/incidents";
   static String incidentDetail(String incidentId) => "/incidents/$incidentId";
   static String incidentLocation(String incidentId) =>
       "/incidents/$incidentId/location";
+  static String incidentLiveLocation(String incidentId) =>
+      "/incidents/$incidentId/live-location";
+  static String incidentTimeline(String incidentId) =>
+      "/incidents/$incidentId/timeline";
+  static String incidentCancel(String incidentId) =>
+      "/incidents/$incidentId/cancel";
   static const health = "/health";
   static const authLogin = "/auth/login";
   static const authRegister = "/auth/register";

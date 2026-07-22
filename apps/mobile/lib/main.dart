@@ -37,6 +37,9 @@ import "incidents/incident_history_service.dart";
 import "incidents/incident_location_tracker.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
+import "emergency/active_emergency_screen.dart";
+import "emergency/active_emergency_service.dart";
+import "emergency/active_emergency_store.dart";
 import "incidents/pending_submission_store.dart";
 import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
@@ -685,6 +688,26 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/police-stations": (_) => const NearbyPoliceStationsScreen(),
               "/notifications": (_) => const NotificationsScreen(),
               "/tracking": (_) => const IncidentTrackingScreen(),
+              "/active-emergency": (context) {
+                final args = ModalRoute.of(context)?.settings.arguments;
+                final incidentId = args is Map
+                    ? args["incidentId"] as String?
+                    : args as String?;
+                final silent = args is Map ? args["silent"] == true : false;
+                final controller = appOf(context);
+                final token = controller.accessToken ?? "";
+                if (incidentId != null && incidentId.isNotEmpty) {
+                  unawaited(controller.startIncidentLocationTracking(incidentId));
+                }
+                return ActiveEmergencyScreen(
+                  incidentId: incidentId ?? "",
+                  accessToken: token,
+                  service: controller.activeEmergencyService,
+                  silent: silent,
+                  onStopLocationTracking: () async =>
+                      controller.stopIncidentLocationTracking(),
+                );
+              },
               "/incident-detail": (context) {
                 final incidentId =
                     ModalRoute.of(context)?.settings.arguments as String? ?? "";
@@ -928,6 +951,7 @@ class AppController extends SessionAccessor {
   final BroadcastFeedCache _broadcastFeedCache = BroadcastFeedCache();
   final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
   IncidentLocationTracker? _locationTracker;
+  ActiveEmergencyService? _activeEmergencyService;
   final ConnectivityService _connectivity;
   final AuthService _authService;
   final SocialAuthService _socialAuthService;
@@ -1257,6 +1281,20 @@ class AppController extends SessionAccessor {
 
   void stopIncidentLocationTracking() {
     _locationTracker?.stop();
+  }
+
+  ActiveEmergencyService get activeEmergencyService =>
+      _activeEmergencyService ??= ActiveEmergencyService(
+        apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+      );
+
+  Future<void> activateActiveEmergency(String incidentId, {bool silent = false}) {
+    return activeEmergencyService.activateIncident(incidentId, silent: silent);
+  }
+
+  Future<ActiveEmergencySnapshot?> restoreActiveEmergency() async {
+    if (accessToken == null) return null;
+    return activeEmergencyService.restoreActiveEmergency(accessToken!);
   }
 
   @override
@@ -1944,6 +1982,20 @@ class _SplashScreenState extends State<SplashScreen> {
       SessionRestoreStatus.profileIncomplete => "/profile",
       _ => "/login",
     };
+
+    if (restore.status == SessionRestoreStatus.restored) {
+      final active = await controller.restoreActiveEmergency();
+      if (active != null && mounted) {
+        await controller.startIncidentLocationTracking(active.incidentId);
+        Navigator.of(context).pushReplacementNamed(
+          "/active-emergency",
+          arguments: {"incidentId": active.incidentId, "silent": active.silent},
+        );
+        StartupDiagnostics.checkpoint("STARTUP 5: /active-emergency visible");
+        return;
+      }
+    }
+
     Navigator.of(context).pushReplacementNamed(route);
     StartupDiagnostics.checkpoint("STARTUP 5: $route visible");
   }
@@ -7449,6 +7501,23 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
       }
 
       if (result.isSuccess || result.isQueued || result.canRetry) {
+        final incidentId = result.incidentId;
+        if (incidentId != null && incidentId.isNotEmpty) {
+          await controller.activateActiveEmergency(incidentId);
+          if (result.isSuccess) {
+            await controller.startIncidentLocationTracking(incidentId);
+          }
+          if (!parentContext.mounted) return;
+          showAppSnackBar(
+            parentContext,
+            result.userMessage ?? "SOS sent with your GPS location.",
+          );
+          Navigator.of(parentContext).pushNamed(
+            "/active-emergency",
+            arguments: {"incidentId": incidentId, "silent": false},
+          );
+          return;
+        }
         showAppSnackBar(parentContext,
             result.userMessage ?? "SOS sent with your GPS location.");
         Navigator.of(parentContext).pushNamed("/tracking");
