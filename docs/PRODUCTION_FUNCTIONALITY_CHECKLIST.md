@@ -2,10 +2,10 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-22 (Sprint 3 incident reporting — code in progress)  
+**Last updated:** 2026-07-22 (Sprint 3 incident reporting — code complete pending staging QA)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
-**Sprint 3 status:** **CODE IN PROGRESS — NOT STAGING QA**
+**Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -155,16 +155,16 @@
 | MOB-INCD-010 | Incidents | Draft saving | Citizen | Mobile | Offline | Y | Y | Local store | Y | Y | Y | Y | Y | Y | N | N | N | **PASS** | P0 | N | — | — | N | `pending_submission_store.dart` |
 | MOB-INCD-011 | Incidents | Offline retry | Citizen | Mobile | Banner / tracking | Y | Y | `POST /v1/incidents/report` | Y | Y | Y | Y | Y | Y | N | N | N | **PASS** | P0 | N | — | — | N | — |
 | MOB-INCD-012 | Incidents | Submit | Citizen | Mobile | Report screens | Y | Y | `POST /v1/incidents/report` | Y | Y | Y | Y | Y | Y | N | N | N | **PASS** | P0 | N | — | — | N | — |
-| MOB-INCD-013 | Incidents | View report | Citizen | Mobile | `/tracking` | Y | Y | — | N | Y | N | N | N | N | N | N | N | **FAIL** | P0 | Y | No server fetch wired | — | Y | — |
-| MOB-INCD-014 | Incidents | Edit draft | Citizen | Mobile | — | N | N | Local only | N/A | Y | N | Y | Y | N | N | N | N | **PARTIAL** | P2 | N | Queue replay only | — | N | — |
-| MOB-INCD-015 | Incidents | Delete draft | Citizen | Mobile | — | N | N | Local | N/A | Y | N | Y | Y | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No explicit delete UI | — | N | — |
+| MOB-INCD-013 | Incidents | View report | Citizen | Mobile | `/tracking` | Y | Y | `GET /v1/incidents` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | API history wired Sprint 3; staging device QA pending | `incident_history_service.dart` | Y | Replaces session-local list |
+| MOB-INCD-014 | Incidents | Edit draft | Citizen | Mobile | Report resume | Y | Y | Local only | N/A | Y | N | Y | Y | Y | N | N | N | **NOT TESTED** | P2 | N | Compose draft resume on report screens | `main.dart` | N | Distinct from offline queue |
+| MOB-INCD-015 | Incidents | Delete draft | Citizen | Mobile | `/tracking` | Y | Y | Local | N/A | Y | N | Y | Y | Y | N | N | N | **NOT TESTED** | P2 | N | Delete icon on saved drafts | `compose_draft_store.dart` | N | — |
 | MOB-INCD-016 | Incidents | Missing person report | Citizen | Mobile | `/missing-person` | Y | Y | `POST /v1/incidents/report` | Y | Y | Y | Y | Y | N | N | N | N | **PASS** | P0 | N | — | — | N | Dedicated payload |
 | MOB-INCD-017 | Incidents | Incident history API | Citizen | Mobile | `/tracking` | Y | Y | `GET /v1/incidents` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Wired in Sprint 3; staging device QA pending | `incident_history_service.dart` | Y | Replaces session-local list |
 | MOB-INCD-018 | Incidents | Incident detail screen | Citizen | Mobile | `/incident-detail` | Y | Y | `GET /v1/incidents/:id` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | Y | Detail screen added Sprint 3 | `incident_detail_screen.dart` | Y | Pull-to-refresh |
-| MOB-INCD-019 | Incidents | Status refresh | Citizen | Mobile | `/tracking` | Y | Y | `GET /v1/incidents` | Y | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P0 | N | Pull-to-refresh + API reload; push update still PARTIAL | `main.dart` | N | — |
-| MOB-INCD-020 | Incidents | Compose draft save | Citizen | Mobile | Report flow | Y | PARTIAL | Local store | N/A | Y | N | Y | Y | Y | N | N | N | **PARTIAL** | P1 | N | Separate compose store; resume UI partial | `compose_draft_store.dart` | N | Distinct from offline queue |
-| MOB-INCD-021 | Incidents | Emergency contact IDs on submit | Citizen | Mobile | Report/SOS | Y | PARTIAL | In payload | Y | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P1 | N | Backend honors IDs; mobile picker still partial | `incidents.service.ts` | N | — |
-| MOB-INCD-022 | Incidents | Live location updates | Citizen | Mobile | Active emergency | N | N | `POST /v1/incidents/:id/location` | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | N | API added Sprint 3; mobile stream pending | — | Y | — |
+| MOB-INCD-019 | Incidents | Status refresh | Citizen | Mobile | `/tracking` | Y | Y | `GET /v1/incidents` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | N | Pull-to-refresh + API reload; push update still BLOCKED (FCM) | `main.dart` | N | — |
+| MOB-INCD-020 | Incidents | Compose draft save | Citizen | Mobile | Report flow | Y | Y | Local store | N/A | Y | N | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | N | Auto-save + resume from tracking | `compose_draft_store.dart` | N | Distinct from offline queue |
+| MOB-INCD-021 | Incidents | Emergency contact IDs on submit | Citizen | Mobile | Report/SOS | Y | Y | In payload | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | N | Multi-select picker wired | `main.dart` | N | — |
+| MOB-INCD-022 | Incidents | Live location updates | Citizen | Mobile | Active emergency | Y | Y | `POST /v1/incidents/:id/location` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | N | 10s tracker after emergency submit | `incident_location_tracker.dart` | Y | Staging device QA |
 
 ### Notifications
 
@@ -225,8 +225,8 @@
 | WCH-SOS-002 | SOS | Silent SOS | Citizen | Watch | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | No distinct flow | — | Y | — |
 | WCH-SOS-003 | SOS | GPS tracking | Citizen | Watch | `/sos/active` | Y | Y | `/smartwatch/devices/:id/gps` | Y | Y | Y | Y | Y | N | N | N | N | **PASS** | P0 | N | 5s emergency interval | — | N | — |
 | WCH-SOS-004 | SOS | Offline queue | Citizen | Watch | Connection | Y | Y | `/offline-sync` | Y | Y | Y | Y | Y | Y | N | N | N | **PASS** | P0 | N | — | — | N | — |
-| WCH-INC-001 | SOS | Duplicate SOS prevention | Citizen | Watch | SOS | Y | Y | `/smartwatch/sos` | PARTIAL | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P0 | N | Report idempotency shared; watch clientSubmissionId pending | `smartwatch.service.ts` | N | — |
-| WCH-INC-002 | SOS | Server status on watch | Citizen | Watch | Tracking | Y | PARTIAL | incident status API | Y | Y | Y | N | N | N | N | N | N | **PARTIAL** | P1 | N | Local acknowledgement only | — | N | — |
+| WCH-INC-001 | SOS | Duplicate SOS prevention | Citizen | Watch | SOS | Y | Y | `/smartwatch/sos` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P0 | N | `clientSubmissionId` from watch idempotency key | `smartwatch.service.ts` | N | Staging device QA |
+| WCH-INC-002 | SOS | Server status on watch | Citizen | Watch | Tracking | Y | Y | `/smartwatch/sos/:id/tracking` | Y | Y | Y | Y | Y | Y | N | N | N | **NOT TESTED** | P1 | N | Polls server tracking every 5s | `active_emergency_screen.dart` | N | Staging device QA |
 | WCH-PUSH-001 | Push | FCM token | Citizen | Watch | Background | Y | N/A | `/notifications/push-tokens` | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | Firebase config required | — | Y | — |
 | WCH-PUSH-002 | Push | Incoming alert | Citizen | Watch | `/alerts/incoming` | Y | Y | FCM | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | Depends on FCM | — | Y | — |
 | WCH-PUSH-003 | Push | Alert acknowledgement | Citizen | Watch | Alert screens | Y | PARTIAL | — | N | N | N | Y | Y | N | N | N | N | **PARTIAL** | P2 | N | Local UI only | — | N | — |
@@ -288,7 +288,7 @@
 | ADM-INC-013 | Incidents | Assign/status wired | Admin | Admin | Detail | Y | Y | PATCH status/assign BFF | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | N | Admin actions panel Sprint 3 | `incident-admin-actions.tsx` | Y | — |
 | ADM-INC-014 | Incidents | Evidence signed view | Admin | Admin | Detail | Y | Y | media view BFF | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P0 | Y | Signed URL when S3 configured (INF-006) | `evidence-view-button.tsx` | Y | BLOCKED without S3 |
 | ADM-INC-015 | Incidents | Real GPS map markers | Admin | Admin | List/detail map | Y | PARTIAL | GPS from API | Y | Y | Y | Y | Y | N | N | N | N | **PARTIAL** | P1 | N | Uses real lat/lng positions; not full map library | `incident-widgets.tsx` | N | — |
-| ADM-INC-016 | Incidents | Queue filters | Admin | Admin | `/incidents` | N | N | query params | Y | Y | Y | Y | Y | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | — | — | N | — |
+| ADM-INC-016 | Incidents | Queue filters | Admin | Admin | `/incidents` | Y | Y | query params | Y | Y | Y | Y | Y | N | N | N | N | **NOT TESTED** | P2 | N | status/priority/type filters | `incident-filter.tsx` | N | Staging QA |
 
 ### Users
 
@@ -482,27 +482,27 @@
 **Baseline:** `staging` @ `45c2197`  
 **Implementation branch:** `feature/sprint-3-incident-reporting`  
 **Contract:** `docs/INCIDENT_CONTRACT.md`  
-**Sprint 3 verdict:** **CODE IN PROGRESS — NOT STAGING QA**
+**Sprint 3 verdict:** **CODE COMPLETE — PENDING STAGING QA**
 
 ### Sprint 3 gap table (Phase 1 audit @ 2026-07-22)
 
 | ID | Feature | Platform | Current status | UI | Navigation | Endpoint | Backend | Database | Storage | Notification | Admin | Watch | Tests | Severity | Required change |
 |----|---------|----------|----------------|:--:|:----------:|:--------:|:-------:|:--------:|:-------:|:------------:|:-----:|:-----:|:-----:|:--------:|-----------------|
-| S3-001 | Create incident | Mobile + API | PASS/NOT TESTED | Report flows exist | 7 routes | POST report | Y | Y | Presign path | Partial enqueue | Read-only | SOS Y | Mobile service tests | P0 | Staging device QA |
-| S3-002 | Idempotency | API + Mobile | NOT TESTED | N/A | Header sent | Dedupe key | Y | Y | N/A | N/A | N/A | Partial | New specs | P0 | Verify duplicate retry |
-| S3-003 | Draft save | Mobile | PARTIAL | Compose store | Tracking drafts | Local | N/A | N/A | Local refs | N/A | N/A | N/A | compose_draft_store_test | P1 | Resume report screens |
+| S3-001 | Create incident | Mobile + API | NOT TESTED | Report flows exist | 7 routes | POST report | Y | Y | Presign path | Partial enqueue | Read-only | SOS Y | Mobile service tests | P0 | Staging device QA |
+| S3-002 | Idempotency | API + Mobile | NOT TESTED | N/A | Header sent | Dedupe key | Y | Y | N/A | N/A | N/A | Y | New specs | P0 | Staging QA |
+| S3-003 | Draft save | Mobile | NOT TESTED | Compose store + resume | Tracking drafts | Local | N/A | N/A | Local refs | N/A | N/A | N/A | compose_draft_store_test | P1 | Staging QA |
 | S3-004 | Offline queue | Mobile | PASS | Banner/tracking | Y | POST report | Y | Y | Retry | N/A | N/A | SOS queue | pending store tests | P0 | Staging QA |
 | S3-005 | Photo/video/audio evidence | Mobile + API | PASS/BLOCKED | Capture UI | Y | presign/confirm | Y | Y | INF-006 | N/A | Signed view NOT TESTED | N/A | evidence tests | P0 | S3 staging + device QA |
 | S3-006 | GPS + timestamps | Mobile + API | PASS | Capture | Y | In payload | Y | Y | N/A | N/A | Map partial | GPS Y | DTO tests | P0 | Device QA |
-| S3-007 | Live location | API + Mobile | PARTIAL | N/A mobile | N/A | POST location | Y | Y | N/A | N/A | N/A | GPS trail | DTO tests | P1 | Mobile stream + active emergency rules |
+| S3-007 | Live location | API + Mobile | NOT TESTED | Tracker wired | Y | POST location | Y | Y | N/A | N/A | N/A | GPS trail | payload + tracker tests | P1 | Staging device QA |
 | S3-008 | Incident history | Mobile | NOT TESTED | Tracking | Y | GET list | Y | Y | N/A | N/A | Y | N/A | history service test | P0 | Staging QA after deploy |
 | S3-009 | Incident details | Mobile | NOT TESTED | Detail screen | Y | GET detail | Y | Y | N/A | N/A | Y | N/A | history service test | P0 | Staging QA |
-| S3-010 | Status tracking | All | PARTIAL | Tiles | Refresh partial | PATCH status | Y | Y | N/A | BLOCKED | Wired NOT TESTED | Local only | lifecycle partial | P0 | Notifications + citizen copy |
-| S3-011 | Verification workflow | Admin + API | NOT TESTED | Buttons wired | Y | admin-review | Y | Y | N/A | BLOCKED | Y | N/A | Manual | P0 | Staging QA |
-| S3-012 | Admin operations | Admin | NOT TESTED | Detail actions | Y | assign/status BFF | Y | Y | Signed view | N/A | Y | N/A | Manual | P0 | Staging QA |
-| S3-013 | Notifications | API | BLOCKED | N/A | N/A | BullMQ | Partial | Y | N/A | Redis/FCM | N/A | N/A | processor tests | P0 | INF-005/FCM on VPS |
+| S3-010 | Status tracking | All | NOT TESTED | Tiles | Refresh wired | PATCH status | Y | Y | N/A | BLOCKED | Wired NOT TESTED | Server poll | lifecycle partial | P0 | FCM staging + device QA |
+| S3-011 | Verification workflow | Admin + API | NOT TESTED | Witness panel wired | Y | confirmations/crowd | Y | Y | N/A | BLOCKED enqueue | Y | N/A | verification specs | P0 | Staging QA |
+| S3-012 | Admin operations | Admin | NOT TESTED | Detail actions + filters | Y | assign/status BFF | Y | Y | Signed view | N/A | Y | N/A | Manual | P0 | Staging QA |
+| S3-013 | Notifications | API | BLOCKED | N/A | N/A | BullMQ | Code complete | Y | N/A | Redis/FCM | N/A | N/A | processor tests | P0 | INF-005/FCM on VPS |
 | S3-014 | LiveKit | All | BLOCKED | UI wired | Y | tokens | Y | Y | N/A | N/A | Player | N/A | live-video tests | P0 | INF-003 |
-| S3-015 | Watch SOS linkage | Watch + API | PARTIAL | SOS hold | Y | smartwatch/sos | Y | Y | N/A | Enqueue | Admin list | Y | sos_service_test | P0 | Dedupe + status sync |
+| S3-015 | Watch SOS linkage | Watch + API | NOT TESTED | SOS hold + poll | Y | smartwatch/sos + tracking | Y | Y | N/A | Enqueue | Admin list | Y | sos_service_test | P0 | Staging device QA |
 
 ### Sprint 3 evidence tracker
 
@@ -514,7 +514,7 @@
 | Admin verify/assign | ADM-INC-003/007/012/013 | NOT TESTED | Required | BFF wired |
 | Notifications | API-CORE-011/012, S3-013 | BLOCKED | Required | Redis + FCM on VPS |
 | Live video | MOB-INCD-007, ADM-INC-009, S3-014 | BLOCKED | Required | LiveKit staging |
-| Watch SOS | WCH-SOS-001, WCH-INC-001/002 | PARTIAL | Required | Idempotency + status |
+| Watch SOS | WCH-SOS-001, WCH-INC-001/002 | NOT TESTED | Required | Idempotency + server poll wired |
 
 ---
 
