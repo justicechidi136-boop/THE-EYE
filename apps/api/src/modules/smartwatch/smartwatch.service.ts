@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AdminRoleName, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
+import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
 import { randomToken, hashToken } from "../../common/auth/crypto";
 import { signJwt, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret } from "../../common/auth/jwt-secrets";
@@ -338,22 +338,41 @@ export class SmartwatchService {
     const metadata = dto.metadata as Record<string, unknown> | undefined;
     const clientSubmissionId =
       typeof metadata?.idempotencyKey === "string" ? metadata.idempotencyKey : undefined;
+    const isSilent = dto.emergencyMode === "SilentSOS";
 
-    const incident = await this.incidents.report({
-      type: IncidentType.SOS,
-      title: "Smartwatch SOS alert",
-      description: dto.description ?? `SOS triggered from ${sourceMode} smartwatch device ${device.deviceId}.`,
-      latitude: dto.latitude,
-      longitude: dto.longitude,
-      priority: IncidentPriority.P1LifeThreatening,
-      anonymous: false,
-      notifyEmergencyContacts: false,
-      clientSubmissionId,
-    }, {
+    const actorPayload = {
       sub: device.userId,
-      typ: "user",
+      typ: "user" as const,
       permissions: ["incident:create", "incident:read"],
-    });
+    };
+
+    const incident = isSilent
+      ? await this.incidents.reportSos(
+          {
+            emergencyCategory: EmergencyCategory.SilentSos,
+            silent: true,
+            latitude: dto.latitude,
+            longitude: dto.longitude,
+            description: dto.description ?? `Silent SOS from smartwatch device ${device.deviceId}.`,
+            notifyEmergencyContacts: false,
+            clientSubmissionId,
+            deviceId: device.deviceId,
+            batteryLevel: dto.batteryLevel,
+            capturedAt: dto.capturedAt,
+          },
+          actorPayload,
+        )
+      : await this.incidents.report({
+          type: IncidentType.SOS,
+          title: "Smartwatch SOS alert",
+          description: dto.description ?? `SOS triggered from ${sourceMode} smartwatch device ${device.deviceId}.`,
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          priority: IncidentPriority.P1LifeThreatening,
+          anonymous: false,
+          notifyEmergencyContacts: false,
+          clientSubmissionId,
+        }, actorPayload);
 
     const sosEvent = await (this.prisma as any).sosEvent.create({
       data: {
@@ -377,8 +396,8 @@ export class SmartwatchService {
       } as never,
     });
 
-    await this.recordGps(device.deviceId, { ...dto, sosEventId: sosEvent.id, deviceSecret: dto.deviceSecret, sourceMode }, { sub: device.userId, typ: "user", permissions: ["incident:create"] });
-    const familyAlerted = await this.notifyFamilySafetyCircle(device.userId, incident.id, sosEvent.id);
+    await this.recordGps(device.deviceId, { ...dto, sosEventId: sosEvent.id, deviceSecret: dto.deviceSecret, sourceMode }, actorPayload);
+    const familyAlerted = isSilent ? false : await this.notifyFamilySafetyCircle(device.userId, incident.id, sosEvent.id);
     const updated = await this.prisma.sosEvent.update({
       where: { id: sosEvent.id },
       data: { familyNotifiedAt: familyAlerted ? new Date() : undefined } as never,

@@ -2,6 +2,7 @@ import '../api/watch_api_client.dart';
 import '../pairing/pairing_service.dart';
 import '../services/alert_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/device_telemetry_service.dart';
 import '../services/heartbeat_service.dart';
 import '../services/location_service.dart';
 import '../services/push_messaging_service.dart';
@@ -71,10 +72,16 @@ class WatchAppServices {
   late final HeartbeatService heartbeat;
   late final AlertService alerts;
   late final PushMessagingService push;
+  DeviceTelemetryService? _telemetry;
 
   Future<void> initialize({bool firebaseReady = false}) async {
     await standaloneAuth.hydrateApiAuth();
     await pairing.initialize();
+    _telemetry = DeviceTelemetryService(
+      connectivity: connectivity,
+      onBackOnline: watchOfflineReplay(sos),
+    );
+    await _telemetry!.start();
     await startRuntimeServices(firebaseReady: firebaseReady);
   }
 
@@ -95,6 +102,7 @@ class WatchAppServices {
   }
 
   void dispose() {
+    _telemetry?.dispose();
     heartbeat.stop();
     location.stopTracking();
     sos.dispose();

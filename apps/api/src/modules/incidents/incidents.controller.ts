@@ -8,6 +8,7 @@ import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { ConfirmIncidentMediaDto, PresignIncidentMediaDto, ReportIncidentDto, UpdateIncidentLocationDto } from "./dto/report-incident.dto";
+import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { IncidentsService } from "./incidents.service";
 
 class UpdateIncidentStatusDto {
@@ -40,6 +41,14 @@ export class IncidentsController {
   emergency(@Body() dto: ReportIncidentDto, @Req() request: any, @Headers("x-client-submission-id") clientSubmissionId?: string) {
     const payload = clientSubmissionId && !dto.clientSubmissionId ? { ...dto, clientSubmissionId } : dto;
     return this.incidentsService.reportEmergency(payload, request.user);
+  }
+
+  @Post("sos")
+  @UseGuards(OptionalJwtAuthGuard)
+  @RateLimit("incidentCreate")
+  sos(@Body() dto: SosReportDto, @Req() request: any, @Headers("x-client-submission-id") clientSubmissionId?: string) {
+    const payload = clientSubmissionId && !dto.clientSubmissionId ? { ...dto, clientSubmissionId } : dto;
+    return this.incidentsService.reportSos(payload, request.user);
   }
 
   @Post(":id/media/presign")
@@ -103,6 +112,38 @@ export class IncidentsController {
   @RequirePermissions("incident:create")
   recordLocation(@Param("id") id: string, @Body() dto: UpdateIncidentLocationDto, @Req() request: any) {
     return this.incidentsService.recordLocation(id, dto, request.user);
+  }
+
+  @Get(":id/live-location")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:read")
+  liveLocation(@Param("id") id: string, @Req() request: any) {
+    return this.incidentsService.getLiveLocation(id, request.user);
+  }
+
+  @Get(":id/location-history")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:read")
+  locationHistory(@Param("id") id: string, @Req() request: any, @Query("limit") limit?: string, @Query("cursor") cursor?: string) {
+    return this.incidentsService.getLocationHistory(id, request.user, limit, cursor);
+  }
+
+  @Get(":id/timeline")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:read")
+  timeline(@Param("id") id: string, @Req() request: any) {
+    return this.incidentsService.getTimeline(id, request.user);
+  }
+
+  @Post(":id/cancel")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:create")
+  cancel(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
+    return this.incidentsService.cancelEmergency(id, body.reason, request.user);
   }
 
   @Get(":id/media/:mediaId/view")

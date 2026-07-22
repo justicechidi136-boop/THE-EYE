@@ -19,6 +19,7 @@ class IncidentSubmissionResult {
     this.fieldErrors = const {},
     this.reportType,
     this.clientSubmissionId,
+    this.silent = false,
   });
 
   final IncidentSubmissionStatus status;
@@ -29,6 +30,7 @@ class IncidentSubmissionResult {
   final Map<String, String> fieldErrors;
   final String? reportType;
   final String? clientSubmissionId;
+  final bool silent;
 
   bool get isSuccess => status == IncidentSubmissionStatus.success;
   bool get isQueued => status == IncidentSubmissionStatus.queuedOffline;

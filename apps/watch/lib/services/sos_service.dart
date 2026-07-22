@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
+import '../models/active_emergency_status.dart';
 import '../models/connectivity_mode.dart';
 import '../models/emergency_mode.dart';
 import '../models/offline_event.dart';
@@ -56,19 +57,25 @@ class SosService {
     _stateController.add(next);
   }
 
-  void beginHold() {
+  void beginHold({WatchEmergencyMode emergencyMode = WatchEmergencyMode.normalSos}) {
     if (_state.lifecycle != SosLifecycle.idle &&
         _state.lifecycle != SosLifecycle.failed &&
         _state.lifecycle != SosLifecycle.cancelled) {
       return;
     }
 
+    final discreet = emergencyMode == WatchEmergencyMode.silentSos;
+    _vibration.setEnabled(!discreet);
+
     _holdTimer?.cancel();
-    _emit(const SosEventState(
+    _emit(SosEventState(
       lifecycle: SosLifecycle.holding,
       holdProgressMs: 0,
+      emergencyMode: emergencyMode,
     ));
-    _vibration.pulse();
+    if (!discreet) {
+      _vibration.pulse();
+    }
 
     var elapsed = 0;
     _holdTimer =
@@ -83,7 +90,7 @@ class SosService {
         lifecycle: SosLifecycle.holding,
         holdProgressMs: elapsed,
       ));
-      if (elapsed % 500 == 0) {
+      if (!discreet && elapsed % 500 == 0) {
         _vibration.pulse();
       }
     });
@@ -102,19 +109,22 @@ class SosService {
   }
 
   void _onHoldComplete() {
+    final discreet = _state.emergencyMode == WatchEmergencyMode.silentSos;
     _emit(_state.copyWith(
       lifecycle: SosLifecycle.countdown,
       holdProgressMs: holdDurationMs,
       countdownSeconds: 3,
     ));
-    _vibration.confirmSos();
+    if (!discreet) {
+      _vibration.confirmSos();
+    }
 
     var seconds = 3;
     Timer.periodic(const Duration(seconds: 1), (timer) {
       seconds -= 1;
       if (seconds <= 0) {
         timer.cancel();
-        unawaited(submitSos());
+        unawaited(submitSos(emergencyMode: _state.emergencyMode));
         return;
       }
       _emit(_state.copyWith(countdownSeconds: seconds));
@@ -170,6 +180,7 @@ class SosService {
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.failed,
         errorMessage: 'Queued offline — will retry when connected',
+        offlineQueued: true,
       ));
       return;
     }
@@ -189,13 +200,17 @@ class SosService {
         incidentId: incidentId,
         latitude: position?.latitude,
         longitude: position?.longitude,
+        offlineQueued: false,
       ));
-      _vibration.confirmSos();
+      if (emergencyMode != WatchEmergencyMode.silentSos) {
+        _vibration.confirmSos();
+      }
     } catch (error) {
       await _enqueueOfflineSos(payload, idempotencyKey);
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.failed,
         errorMessage: error.toString(),
+        offlineQueued: true,
       ));
     }
   }
@@ -227,11 +242,17 @@ class SosService {
       final event = data['event'] as Map<String, dynamic>?;
       final latest = data['latest'] as Map<String, dynamic>?;
       final incident = event?['incident'] as Map<String, dynamic>?;
+      final incidentStatus = incident?['status'] as String?;
+      if (watchIncidentTerminal(incidentStatus)) {
+        _location.stopTracking();
+      }
       _emit(_state.copyWith(
         incidentId: incident?['id'] as String? ?? _state.incidentId,
+        incidentStatus: incidentStatus ?? _state.incidentStatus,
         latitude: (latest?['latitude'] as num?)?.toDouble() ?? _state.latitude,
         longitude:
             (latest?['longitude'] as num?)?.toDouble() ?? _state.longitude,
+        offlineQueued: false,
       ));
     } catch (_) {}
   }
@@ -285,6 +306,9 @@ class SosService {
     }
 
     await _preferences.saveOfflineQueue([]);
+    if (uploadedCount > 0 && _state.offlineQueued) {
+      _emit(_state.copyWith(offlineQueued: false));
+    }
     return uploadedCount;
   }
 

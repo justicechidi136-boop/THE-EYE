@@ -707,14 +707,35 @@ class TheEyeApiClient {
     String? clientSubmissionId,
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    final response = await postJson(
-      TheEyeApiPaths.incidentsReport,
-      payload,
-      accessToken: accessToken,
-      clientSubmissionId: clientSubmissionId,
-      timeout: timeout,
+    return _parseIncidentReportResponse(
+      await postJson(
+        TheEyeApiPaths.incidentsReport,
+        payload,
+        accessToken: accessToken,
+        clientSubmissionId: clientSubmissionId,
+        timeout: timeout,
+      ),
     );
+  }
 
+  Future<IncidentReportResponse> reportSos({
+    required Map<String, Object?> payload,
+    String? accessToken,
+    String? clientSubmissionId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    return _parseIncidentReportResponse(
+      await postJson(
+        TheEyeApiPaths.incidentsSos,
+        payload,
+        accessToken: accessToken,
+        clientSubmissionId: clientSubmissionId,
+        timeout: timeout,
+      ),
+    );
+  }
+
+  IncidentReportResponse _parseIncidentReportResponse(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final decoded = jsonDecode(response.body);
       if (decoded is Map<String, dynamic>) {

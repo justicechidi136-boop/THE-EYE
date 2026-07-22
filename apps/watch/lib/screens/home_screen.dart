@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../config/watch_flavor.dart';
 import '../design_system/design_system.dart';
+import '../models/emergency_mode.dart';
 import '../models/connectivity_mode.dart';
 import '../models/sos_event.dart';
 import '../services/launcher_service.dart';
@@ -188,6 +189,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         Navigator.pushNamed(context, WatchRoutes.deviceStatus),
                   ),
                 ],
+              ),
+              const SizedBox(height: EyeTokens.spaceXs),
+              WatchOutlineButton(
+                label: 'Silent alert',
+                onPressed: () {
+                  widget.services.sos
+                      .beginHold(emergencyMode: WatchEmergencyMode.silentSos);
+                  Navigator.pushNamed(
+                    context,
+                    WatchRoutes.sosConfirm,
+                    arguments: WatchEmergencyMode.silentSos,
+                  );
+                },
               ),
               const SizedBox(height: EyeTokens.spaceSm),
               Row(

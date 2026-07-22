@@ -127,3 +127,48 @@ export enum IncidentMediaType {
   Document = "Document",
   LiveVideoRecording = "LiveVideoRecording",
 }
+
+export enum ResponderAvailability {
+  Offline = "Offline",
+  Available = "Available",
+  Busy = "Busy",
+  EnRoute = "EnRoute",
+  OnScene = "OnScene",
+  OutOfService = "OutOfService",
+}
+
+export enum ResponseUnitStatus {
+  Offline = "Offline",
+  Available = "Available",
+  Busy = "Busy",
+  EnRoute = "EnRoute",
+  OnScene = "OnScene",
+  OutOfService = "OutOfService",
+}
+
+export enum IncidentAssignmentStatus {
+  Proposed = "Proposed",
+  Assigned = "Assigned",
+  Accepted = "Accepted",
+  Declined = "Declined",
+  Expired = "Expired",
+  Reassigned = "Reassigned",
+  EnRoute = "EnRoute",
+  Arrived = "Arrived",
+  InProgress = "InProgress",
+  Completed = "Completed",
+  Cancelled = "Cancelled",
+}
+
+export enum EmergencyCategory {
+  SecurityCrime = "SecurityCrime",
+  Medical = "Medical",
+  Fire = "Fire",
+  RoadTraffic = "RoadTraffic",
+  DomesticViolence = "DomesticViolence",
+  Kidnapping = "Kidnapping",
+  MissingPerson = "MissingPerson",
+  NaturalDisaster = "NaturalDisaster",
+  SilentSos = "SilentSos",
+  Other = "Other",
+}

@@ -7,11 +7,12 @@ import { AuditModule } from "../audit/audit.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { VerificationModule } from "../verification/verification.module";
+import { DispatchModule } from "../dispatch/dispatch.module";
 import { IncidentsController } from "./incidents.controller";
 import { IncidentsService } from "./incidents.service";
 
 @Module({
-  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule],
+  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, DispatchModule],
   controllers: [IncidentsController],
   providers: [IncidentsService, JwtAuthGuard, OptionalJwtAuthGuard, PermissionsGuard, IncidentScopeGuard],
   exports: [IncidentsService],

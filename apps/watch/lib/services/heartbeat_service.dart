@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:battery_plus/battery_plus.dart';
+
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
 import '../models/device_status.dart';
@@ -26,6 +28,7 @@ class HeartbeatService {
 
   Timer? _timer;
   DeviceStatusSnapshot? _latest;
+  final Battery _battery = Battery();
 
   DeviceStatusSnapshot? get latest => _latest;
 
@@ -42,13 +45,21 @@ class HeartbeatService {
   }
 
   Future<DeviceStatusSnapshot?> sendHeartbeat({
-    int batteryLevel = 100,
+    int? batteryLevel,
     int signalStrength = 80,
     String firmwareVersion = '0.1.0',
   }) async {
     final deviceId = await _credentials.readDeviceId();
     final deviceSecret = await _credentials.readDeviceSecret();
     if (deviceId == null || deviceSecret == null) return null;
+
+    var resolvedBattery = batteryLevel ?? 100;
+    try {
+      final level = await _battery.batteryLevel;
+      if (level >= 0 && level <= 100) resolvedBattery = level;
+    } catch (_) {
+      // Keep caller/default fallback when platform battery API is unavailable.
+    }
 
     await _api.post(
       WatchApiPaths.heartbeat(deviceId),
@@ -58,7 +69,7 @@ class HeartbeatService {
         'connectivityMode': _connectivity.activeMode.apiValue,
         'pairedPhoneAvailable': _connectivity.pairedPhoneAvailable,
         'internetAvailable': _connectivity.internetAvailable,
-        'batteryLevel': batteryLevel,
+        'batteryLevel': resolvedBattery,
         'signalStrength': signalStrength,
         'firmwareVersion': firmwareVersion,
       },
@@ -66,7 +77,7 @@ class HeartbeatService {
 
     _latest = DeviceStatusSnapshot(
       deviceId: deviceId,
-      batteryLevel: batteryLevel,
+      batteryLevel: resolvedBattery,
       signalStrength: signalStrength,
       connectivityMode: _connectivity.activeMode,
       isOnline: true,

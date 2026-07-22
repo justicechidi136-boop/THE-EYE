@@ -7,6 +7,11 @@ import 'alert_service.dart';
 import 'push_background_handler.dart';
 import 'push_message_router.dart';
 
+typedef WatchActiveEmergencyRefreshHandler = Future<void> Function({
+  required String? incidentId,
+  required String category,
+});
+
 class PushMessagingService {
   PushMessagingService({
     required AlertService alerts,
@@ -15,6 +20,8 @@ class PushMessagingService {
   })  : _alerts = alerts,
         _credentials = credentials,
         _messagingOverride = messaging;
+
+  WatchActiveEmergencyRefreshHandler? onActiveEmergencyRefresh;
 
   final AlertService _alerts;
   final SecureCredentialStore _credentials;
@@ -26,6 +33,7 @@ class PushMessagingService {
 
   StreamSubscription<String>? _refreshSubscription;
   bool _started = false;
+  String? _lastIncidentPushKey;
 
   Future<void> start() async {
     if (_started) return;
@@ -95,5 +103,16 @@ class PushMessagingService {
       notificationId: notificationId,
       priority: priority,
     );
+
+    if (category == WatchPushCategories.incidentStatus ||
+        category == WatchPushCategories.emergencyAlert) {
+      final key = '$category:${incidentId ?? notificationId ?? title}';
+      if (_lastIncidentPushKey == key) return;
+      _lastIncidentPushKey = key;
+      await onActiveEmergencyRefresh?.call(
+        incidentId: incidentId,
+        category: category,
+      );
+    }
   }
 }

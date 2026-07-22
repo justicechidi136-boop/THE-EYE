@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../models/sos_event.dart';
+import '../models/emergency_mode.dart';
 import '../design_system/design_system.dart';
 import '../services/watch_app_services.dart';
 import '../widgets/watch_ui.dart';
 import 'routes.dart';
 
 class SosConfirmScreen extends StatefulWidget {
-  const SosConfirmScreen({super.key, required this.services});
+  const SosConfirmScreen({
+    super.key,
+    required this.services,
+    this.mode = WatchEmergencyMode.normalSos,
+  });
 
   final WatchAppServices services;
+  final WatchEmergencyMode mode;
 
   @override
   State<SosConfirmScreen> createState() => _SosConfirmScreenState();
@@ -17,13 +23,15 @@ class SosConfirmScreen extends StatefulWidget {
 
 class _SosConfirmScreenState extends State<SosConfirmScreen> {
   late final Stream<SosEventState> _stream;
+  late final WatchEmergencyMode _mode;
 
   @override
   void initState() {
     super.initState();
+    _mode = widget.mode;
     _stream = widget.services.sos.states;
     if (widget.services.sos.state.lifecycle == SosLifecycle.idle) {
-      widget.services.sos.beginHold();
+      widget.services.sos.beginHold(emergencyMode: _mode);
     }
   }
 
@@ -57,6 +65,7 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
         }
 
         final showingCountdown = state.lifecycle == SosLifecycle.countdown;
+        final discreet = _mode == WatchEmergencyMode.silentSos;
 
         return WatchScaffold(
           onBack: _cancel,
@@ -72,7 +81,8 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
                       )
                     : LargeSosButton(
                         progress: progress.clamp(0.0, 1.0),
-                        onHoldStart: widget.services.sos.beginHold,
+                        onHoldStart: () => widget.services.sos
+                            .beginHold(emergencyMode: _mode),
                         onHoldEnd: widget.services.sos.cancelHold,
                       ),
               ),
@@ -80,15 +90,16 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
               if (showingCountdown)
                 WatchCountdownDisplay(
                   seconds: state.countdownSeconds,
-                  subtitle:
-                      'Sending location + alert to your emergency contacts',
+                  subtitle: discreet
+                      ? 'Sending discreet update'
+                      : 'Sending location + alert to your emergency contacts',
                 )
               else
                 WatchCountdownDisplay(
                   seconds: (3 - (progress * 3)).ceil().clamp(1, 3),
                   subtitle: state.lifecycle == SosLifecycle.holding
-                      ? 'Keep holding for SOS'
-                      : 'Hold 3 seconds to activate',
+                      ? (discreet ? 'Keep holding' : 'Keep holding for SOS')
+                      : (discreet ? 'Hold 3 seconds' : 'Hold 3 seconds to activate'),
                 ),
               const Spacer(),
               WatchOutlineButton(label: 'Cancel', onPressed: _cancel),

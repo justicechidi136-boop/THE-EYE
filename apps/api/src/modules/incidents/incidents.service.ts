@@ -16,6 +16,12 @@ import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { VerificationService } from "../verification/verification.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { LocationTrackingService } from "../dispatch/location-tracking.service";
+import { IncidentTimelineService } from "../dispatch/incident-timeline.service";
+import { EtaService } from "../dispatch/eta.service";
+import { DispatchService } from "../dispatch/dispatch.service";
+import { EmergencyClassificationService } from "../dispatch/emergency-classification.service";
+import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { canTransitionIncident } from "./incident-lifecycle";
 import {
   ConfirmIncidentMediaDto,
@@ -39,6 +45,11 @@ export class IncidentsService {
     private readonly metrics: MetricsService,
     private readonly verification: VerificationService,
     private readonly notifications: NotificationsService,
+    private readonly dispatchService: DispatchService,
+    private readonly emergencyClassification: EmergencyClassificationService,
+    private readonly locationTracking: LocationTrackingService,
+    private readonly incidentTimeline: IncidentTimelineService,
+    private readonly etaService: EtaService,
   ) {}
 
   async list(
@@ -68,6 +79,40 @@ export class IncidentsService {
 
   async reportEmergency(dto: ReportIncidentDto, actor?: JwtPayload) {
     return this.report({ ...dto, type: IncidentType.Emergency, priority: IncidentPriority.P1LifeThreatening, notifyEmergencyContacts: dto.notifyEmergencyContacts ?? true }, actor, true);
+  }
+
+  async reportSos(dto: SosReportDto, actor?: JwtPayload) {
+    const classified = this.emergencyClassification.classifySosReport(dto);
+    const reportDto = this.emergencyClassification.toReportIncidentDto(dto);
+    const response = await this.report(reportDto, actor, true);
+    const incidentId = response.id as string;
+
+    const existing = await this.prisma.incident.findUnique({ where: { id: incidentId }, select: { metadata: true } });
+    await this.prisma.incident.update({
+      where: { id: incidentId },
+      data: {
+        metadata: {
+          ...((existing?.metadata as Record<string, unknown>) ?? {}),
+          ...this.emergencyClassification.buildIncidentMetadata(dto, classified),
+        },
+      } as never,
+    });
+
+    await this.audit.record({
+      actor,
+      actorType: dto.anonymous ? "anonymous" : actor?.typ ?? "system",
+      action: "incident.sos_classified",
+      entityType: "incidents",
+      entityId: incidentId,
+      afterState: {
+        emergencyCategory: classified.category,
+        incidentType: classified.incidentType,
+        silent: classified.silent,
+      },
+      metadata: { suggestedAgencyTypes: classified.suggestedAgencyTypes },
+    });
+
+    return { ...response, emergencyCategory: classified.category, silent: classified.silent };
   }
 
   async report(dto: ReportIncidentDto, actor?: JwtPayload, emergencyFastPath = false) {
@@ -183,6 +228,7 @@ export class IncidentsService {
     }
 
     void this.verification.verifyIncident(incident.id).catch(() => undefined);
+    void this.dispatchService.runTriageForIncident(incident.id, actor).catch(() => undefined);
 
     const result = this.buildReportResponse(incident, emergencyFastPath, false);
     this.metrics.recordIncidentSubmission(
@@ -362,49 +408,34 @@ export class IncidentsService {
   }
 
   async recordLocation(id: string, dto: UpdateIncidentLocationDto, actor?: JwtPayload) {
-    validateIncidentLocationDto(dto);
+    return this.locationTracking.recordCitizenLocation(id, dto, actor);
+  }
+
+  async getLiveLocation(id: string, actor?: JwtPayload) {
+    return this.locationTracking.getCitizenLiveLocation(id, actor);
+  }
+
+  async getLocationHistory(id: string, actor: JwtPayload | undefined, limit?: string, cursor?: string) {
+    return this.locationTracking.getCitizenLocationHistory(id, actor, limit ? Number(limit) : 50, cursor);
+  }
+
+  async getTimeline(id: string, actor?: JwtPayload) {
+    await this.get(id, actor);
+    const audience = actor?.typ === "user" ? "citizen" : actor?.typ === "admin" ? "dispatcher" : "citizen";
+    return this.incidentTimeline.buildTimeline(id, audience, actor);
+  }
+
+  async cancelEmergency(id: string, reason: string, actor?: JwtPayload) {
+    if (!reason?.trim()) throw new BadRequestException("Cancellation reason is required");
     const incident = await this.get(id, actor);
     if (actor?.typ === "user" && incident.reporterId !== actor.sub) {
-      throw new ForbiddenException("Only the reporting citizen can update this incident location stream");
+      throw new ForbiddenException("Only the reporting citizen can cancel this emergency");
     }
-
-    const capturedAt = dto.capturedAt ? new Date(dto.capturedAt) : new Date();
-    if (dto.sequenceNumber !== undefined) {
-      const duplicate = await (this.prisma as any).incidentLocationUpdate.findFirst({
-        where: { incidentId: id, sequenceNumber: dto.sequenceNumber },
-      });
-      if (duplicate) return duplicate;
+    const allowed = [IncidentStatus.Submitted, IncidentStatus.Received, IncidentStatus.Verifying, IncidentStatus.Verified, IncidentStatus.Assigned];
+    if (!allowed.includes(incident.status as IncidentStatus)) {
+      throw new BadRequestException(`Incident in status ${incident.status} cannot be cancelled`);
     }
-
-    const update = await (this.prisma as any).incidentLocationUpdate.create({
-      data: {
-        incidentId: id,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-        accuracy: dto.accuracyMeters,
-        capturedAt,
-        sourceDeviceId: dto.sourceDeviceId,
-        sequenceNumber: dto.sequenceNumber ?? 0,
-      } as never,
-    });
-
-    await this.prisma.incident.update({
-      where: { id },
-      data: {
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-      } as never,
-    });
-
-    await this.audit.record({
-      actor,
-      action: "incident.location_updated",
-      entityType: "incidents",
-      entityId: id,
-      metadata: { latitude: dto.latitude, longitude: dto.longitude, sequenceNumber: dto.sequenceNumber ?? 0 },
-    });
-
-    return update;
+    return this.updateStatus(id, IncidentStatus.Closed, reason, actor);
   }
 
   async accessMedia(incidentId: string, mediaId: string, action: "view" | "download", actor?: JwtPayload) {

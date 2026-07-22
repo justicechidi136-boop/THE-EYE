@@ -95,6 +95,13 @@ export class FcmProvider implements OnModuleInit {
 
     const accessToken = await this.getAccessToken(runtime.clientEmail, runtime.privateKey);
     const emergency = isEmergencyPriority(payload.priority);
+    const storedMetadata = payload.notificationId
+      ? (((await this.prisma.notification.findUnique({
+          where: { id: payload.notificationId },
+          select: { metadata: true },
+        }))?.metadata ?? {}) as Record<string, unknown>)
+      : {};
+    const silent = storedMetadata.silent === true;
     const tokenResults: FcmTokenResult[] = [];
     const deepLink = buildNotificationDeepLink({
       id: payload.notificationId ?? "",
@@ -107,7 +114,7 @@ export class FcmProvider implements OnModuleInit {
       createdAt: new Date(),
       incidentId: payload.incidentId,
       broadcastId: payload.broadcastId,
-      metadata: {},
+      metadata: storedMetadata,
     });
 
     for (const entry of tokens) {
@@ -139,11 +146,12 @@ export class FcmProvider implements OnModuleInit {
                 broadcastId: payload.broadcastId ?? "",
                 route: deepLink,
                 deepLink,
+                silent: silent ? "true" : "false",
               },
-              android: { priority: emergency ? "high" : "normal" },
+              android: { priority: emergency && !silent ? "high" : "normal" },
               apns: {
-                headers: { "apns-priority": emergency ? "10" : "5" },
-                payload: { aps: { sound: emergency ? "emergency.caf" : "default" } },
+                headers: { "apns-priority": emergency && !silent ? "10" : "5" },
+                payload: { aps: { sound: emergency && !silent ? "emergency.caf" : undefined } },
               },
             },
           }),
