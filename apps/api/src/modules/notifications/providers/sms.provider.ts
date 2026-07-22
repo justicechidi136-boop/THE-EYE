@@ -20,16 +20,12 @@ export class SmsProvider {
     }
 
     if (disabled) {
-      return {
-        status: "Sent",
-        provider: "sms-placeholder",
-        providerMessageId: `sms-placeholder-${phone}`,
-        responsePayload: {
-          placeholder: true,
-          phone,
-          message: "SMS provider disabled. Configure SMS_PROVIDER_DISABLED=false and a real SMS integration.",
-        },
-      };
+      throw new NotificationDispatchError(
+        "SMS provider is disabled. Configure SMS_PROVIDER_DISABLED=false and a real SMS integration.",
+        "sms-placeholder",
+        false,
+        { placeholder: true, phone },
+      );
     }
 
     throw new NotificationDispatchError(

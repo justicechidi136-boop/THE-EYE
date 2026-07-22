@@ -1,5 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  mapBroadcastDeliveryStatusFromProvider,
+  mapProviderResultToDeliveryLogStatus,
+  mapProviderResultToNotificationStatus,
+} from "./notification-delivery-status";
 import type { NotificationDispatchPayload, NotificationDispatchResult } from "./notification.types";
 
 @Injectable()
@@ -8,33 +13,39 @@ export class NotificationDeliveryService {
 
   async recordSuccess(payload: NotificationDispatchPayload, result: NotificationDispatchResult, attempt: number) {
     if (payload.notificationId) {
+      const logStatus = mapProviderResultToDeliveryLogStatus(result);
+      const notificationStatus = mapProviderResultToNotificationStatus(result);
+
       await (this.prisma as any).notificationDeliveryLog.create({
         data: {
           notificationId: payload.notificationId,
           channel: payload.channel ?? "push",
           provider: result.provider,
-          status: result.status,
+          status: logStatus,
           attempt,
           providerMessageId: result.providerMessageId,
           requestPayload: payload,
           responsePayload: result.responsePayload,
-          sentAt: new Date(),
-          deliveredAt: result.status === "Delivered" ? new Date() : undefined,
+          sentAt: logStatus === "Failed" ? undefined : new Date(),
+          deliveredAt: logStatus === "Delivered" ? new Date() : undefined,
         } as never,
       });
 
       await this.prisma.notification.update({
         where: { id: payload.notificationId },
         data: {
-          status: result.status as never,
+          status: notificationStatus as never,
           provider: result.provider,
           providerMessageId: result.providerMessageId,
-          error: null,
-          sentAt: new Date(),
+          error: logStatus === "Failed" ? "Provider dispatch was simulated or unavailable" : null,
+          sentAt: notificationStatus === "Failed" ? undefined : new Date(),
         } as never,
       });
 
-      await this.syncBroadcastDelivery(payload.notificationId, result.status === "Delivered" ? "Delivered" : "Sent");
+      await this.syncBroadcastDelivery(
+        payload.notificationId,
+        mapBroadcastDeliveryStatusFromProvider(result),
+      );
     }
   }
 
@@ -48,12 +59,15 @@ export class NotificationDeliveryService {
   ) {
     if (!payload.notificationId) return;
 
+    const invalidToken = `${errorMessage} ${JSON.stringify(responsePayload ?? {})}`.toLowerCase().includes("invalid token")
+      || `${errorMessage}`.toLowerCase().includes("unregistered");
+
     await (this.prisma as any).notificationDeliveryLog.create({
       data: {
         notificationId: payload.notificationId,
         channel: payload.channel ?? "push",
         provider: payload.provider ?? this.providerForChannel(payload.channel ?? "push"),
-        status: isFinalAttempt ? "Failed" : "Retrying",
+        status: isFinalAttempt ? (invalidToken ? "InvalidToken" : "Failed") : "Retrying",
         attempt,
         error: errorMessage,
         requestPayload: payload,

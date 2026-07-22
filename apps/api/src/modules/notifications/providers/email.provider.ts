@@ -20,16 +20,12 @@ export class EmailProvider {
     }
 
     if (disabled) {
-      return {
-        status: "Sent",
-        provider: "email-placeholder",
-        providerMessageId: `email-placeholder-${email}`,
-        responsePayload: {
-          placeholder: true,
-          email,
-          message: "Email provider disabled. Configure EMAIL_PROVIDER_DISABLED=false and a real email integration.",
-        },
-      };
+      throw new NotificationDispatchError(
+        "Email provider is disabled. Configure EMAIL_PROVIDER_DISABLED=false and a real email integration.",
+        "email-placeholder",
+        false,
+        { placeholder: true, email },
+      );
     }
 
     throw new NotificationDispatchError(

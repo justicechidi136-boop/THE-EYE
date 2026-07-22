@@ -18,8 +18,9 @@ export class NotificationDispatcherService {
 
     switch (channel) {
       case "push":
-      case "watch_push":
         return this.fcm.send({ ...payload, channel: "push" });
+      case "watch_push":
+        return this.fcm.send({ ...payload, channel: "watch_push" });
       case "sms":
         return this.sms.send(payload);
       case "email":

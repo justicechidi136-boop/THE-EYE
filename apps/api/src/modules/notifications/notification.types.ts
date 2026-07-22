@@ -37,7 +37,7 @@ export type NotificationDispatchResult = {
   status: "Sent" | "Delivered";
   provider: string;
   providerMessageId?: string;
-  responsePayload?: Record<string, unknown>;
+  responsePayload?: Record<string, unknown> & { simulated?: boolean; fcmMode?: string };
   recipientCount?: number;
 };
 

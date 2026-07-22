@@ -3,6 +3,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { resolveAppEnvironment, type AppEnvironment } from "../../../common/auth/firebase-environment";
 import { PrismaService } from "../../prisma/prisma.service";
+import { buildNotificationDeepLink } from "../notification-inbox.mapper";
 import { NotificationDispatchError } from "../notification-dispatch.error";
 import type { NotificationDispatchPayload, NotificationDispatchResult } from "../notification.types";
 import { isEmergencyPriority } from "../notification.types";
@@ -75,7 +76,12 @@ export class FcmProvider implements OnModuleInit {
   async send(payload: NotificationDispatchPayload): Promise<NotificationDispatchResult> {
     const runtime = assertFcmRuntimeAllowed(this.config);
     if (runtime.mode === "simulated") {
-      return this.simulatedDispatch(payload, runtime.reason);
+      throw new NotificationDispatchError(
+        `FCM dispatch unavailable: ${runtime.reason}`,
+        "firebase-cloud-messaging",
+        false,
+        { simulated: true, fcmMode: "simulated", reason: runtime.reason },
+      );
     }
 
     if (!payload.userId && !payload.targetToken) {
@@ -90,6 +96,19 @@ export class FcmProvider implements OnModuleInit {
     const accessToken = await this.getAccessToken(runtime.clientEmail, runtime.privateKey);
     const emergency = isEmergencyPriority(payload.priority);
     const tokenResults: FcmTokenResult[] = [];
+    const deepLink = buildNotificationDeepLink({
+      id: payload.notificationId ?? "",
+      type: payload.type ?? "IncidentStatusUpdate",
+      priority: payload.priority ?? "Normal",
+      channel: payload.channel ?? "push",
+      title: payload.title,
+      body: payload.body,
+      status: "Pending",
+      createdAt: new Date(),
+      incidentId: payload.incidentId,
+      broadcastId: payload.broadcastId,
+      metadata: {},
+    });
 
     for (const entry of tokens) {
       const tokenSuffix = maskToken(entry.token);
@@ -118,6 +137,8 @@ export class FcmProvider implements OnModuleInit {
                 priority: payload.priority ?? "Normal",
                 incidentId: payload.incidentId ?? "",
                 broadcastId: payload.broadcastId ?? "",
+                route: deepLink,
+                deepLink,
               },
               android: { priority: emergency ? "high" : "normal" },
               apns: {
@@ -214,21 +235,6 @@ export class FcmProvider implements OnModuleInit {
       data: { isActive: false },
     });
     return updated.count > 0;
-  }
-
-  private simulatedDispatch(payload: NotificationDispatchPayload, reason: string): NotificationDispatchResult {
-    return {
-      status: "Sent",
-      provider: "firebase-cloud-messaging",
-      providerMessageId: `fcm-simulated-${payload.notificationId ?? payload.userId ?? "anonymous"}`,
-      responsePayload: {
-        simulated: true,
-        fcmMode: "simulated",
-        reason,
-        emergency: isEmergencyPriority(payload.priority),
-        tokenResults: [],
-      },
-    };
   }
 
   private async getAccessToken(clientEmail: string, privateKey: string) {
