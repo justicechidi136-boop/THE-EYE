@@ -118,8 +118,7 @@ class CommunityPostItem {
       type: (json["type"] as String?) ?? "CommunityAnnouncement",
       verificationStatus:
           (json["verificationStatus"] as String?) ?? "PendingVerification",
-      confidenceScore:
-          double.tryParse("${json["confidenceScore"]}") ?? 0,
+      confidenceScore: double.tryParse("${json["confidenceScore"]}") ?? 0,
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
       authorName: authorName,
     );
@@ -131,20 +130,152 @@ class CommunityMemberItem {
     required this.id,
     required this.displayName,
     required this.role,
+    this.userId,
+    this.badges = const [],
+    this.isVolunteer = false,
   });
 
   final String id;
   final String displayName;
   final String role;
+  final String? userId;
+  final List<String> badges;
+  final bool isVolunteer;
 
   factory CommunityMemberItem.fromJson(Map<String, dynamic> json) {
+    final badgesRaw = json["badges"];
     return CommunityMemberItem(
       id: (json["id"] as String?) ?? "",
+      userId: json["userId"] as String?,
       displayName: (json["displayName"] as String?) ?? "Member",
       role: (json["role"] as String?) ?? "Resident",
+      badges:
+          badgesRaw is List ? badgesRaw.whereType<String>().toList() : const [],
+      isVolunteer: json["isVolunteer"] == true,
     );
   }
 }
+
+class CommunityCommentItem {
+  const CommunityCommentItem({
+    required this.id,
+    required this.body,
+    required this.authorId,
+    required this.authorName,
+    this.createdAt,
+    this.pending = false,
+    this.failed = false,
+  });
+
+  final String id;
+  final String body;
+  final String authorId;
+  final String authorName;
+  final DateTime? createdAt;
+  final bool pending;
+  final bool failed;
+
+  CommunityCommentItem copyWith({
+    String? id,
+    String? body,
+    String? authorId,
+    String? authorName,
+    bool? pending,
+    bool? failed,
+  }) {
+    return CommunityCommentItem(
+      id: id ?? this.id,
+      body: body ?? this.body,
+      authorId: authorId ?? this.authorId,
+      authorName: authorName ?? this.authorName,
+      createdAt: createdAt,
+      pending: pending ?? this.pending,
+      failed: failed ?? this.failed,
+    );
+  }
+
+  factory CommunityCommentItem.fromJson(Map<String, dynamic> json) {
+    final author = json["author"] as Map<String, dynamic>?;
+    return CommunityCommentItem(
+      id: (json["id"] as String?) ?? "",
+      body: (json["body"] as String?) ?? "",
+      authorId: (author?["id"] as String?) ?? "",
+      authorName: (author?["displayName"] as String?) ?? "Member",
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+    );
+  }
+}
+
+class CommunityStatistics {
+  const CommunityStatistics({
+    required this.memberCount,
+    required this.activeVolunteers,
+    required this.patrolCount,
+    required this.activeAlerts,
+    required this.incidentCount,
+    required this.postCount,
+    required this.commentCount,
+    required this.memberGrowth30Days,
+  });
+
+  final int memberCount;
+  final int activeVolunteers;
+  final int patrolCount;
+  final int activeAlerts;
+  final int incidentCount;
+  final int postCount;
+  final int commentCount;
+  final int memberGrowth30Days;
+
+  factory CommunityStatistics.fromJson(Map<String, dynamic> json) {
+    int readCount(String key) => (json[key] as num?)?.toInt() ?? 0;
+    return CommunityStatistics(
+      memberCount: readCount("memberCount"),
+      activeVolunteers: readCount("activeVolunteers"),
+      patrolCount: readCount("patrolCount"),
+      activeAlerts: readCount("activeAlerts"),
+      incidentCount: readCount("incidentCount"),
+      postCount: readCount("postCount"),
+      commentCount: readCount("commentCount"),
+      memberGrowth30Days: readCount("memberGrowth30Days"),
+    );
+  }
+}
+
+class CommunityPostMediaItem {
+  const CommunityPostMediaItem({
+    required this.mediaType,
+    required this.bucket,
+    required this.objectKey,
+    required this.contentType,
+    required this.fileHash,
+  });
+
+  final String mediaType;
+  final String bucket;
+  final String objectKey;
+  final String contentType;
+  final String fileHash;
+
+  Map<String, dynamic> toJson() => {
+        "mediaType": mediaType,
+        "bucket": bucket,
+        "objectKey": objectKey,
+        "contentType": contentType,
+        "fileHash": fileHash,
+      };
+}
+
+const communityReportReasons = [
+  "Harassment",
+  "Spam",
+  "FalseInformation",
+  "HateSpeech",
+  "ViolenceThreat",
+  "Impersonation",
+  "PrivacyViolation",
+  "Other",
+];
 
 class PatrolScheduleItem {
   const PatrolScheduleItem({
@@ -287,6 +418,7 @@ class NeighborhoodWatchService {
     required String body,
     double? latitude,
     double? longitude,
+    List<CommunityPostMediaItem> media = const [],
   }) async {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.neighborhoodWatchCommunityPosts(communityId),
@@ -296,6 +428,8 @@ class NeighborhoodWatchService {
         "body": body,
         if (latitude != null) "latitude": latitude,
         if (longitude != null) "longitude": longitude,
+        if (media.isNotEmpty)
+          "media": media.map((item) => item.toJson()).toList(),
       },
       accessToken: accessToken,
     );
@@ -308,12 +442,136 @@ class NeighborhoodWatchService {
   Future<CommunityPage<CommunityMemberItem>> listMembers({
     required String accessToken,
     required String communityId,
+    String? search,
+    String? cursor,
+    int limit = 25,
   }) async {
     final response = await _apiClient.getJson(
       TheEyeApiPaths.neighborhoodWatchCommunityMembers(communityId),
       accessToken: accessToken,
+      query: {
+        "limit": "$limit",
+        if (search != null && search.isNotEmpty) "search": search,
+        if (cursor != null) "cursor": cursor,
+      },
     );
     return _decodePage(response, CommunityMemberItem.fromJson);
+  }
+
+  Future<CommunityStatistics> getStatistics({
+    required String accessToken,
+    required String communityId,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.neighborhoodWatchCommunityStatistics(communityId),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
+    return CommunityStatistics.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<CommunityPage<CommunityCommentItem>> listComments({
+    required String accessToken,
+    required String postId,
+    String? cursor,
+    int limit = 25,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.neighborhoodWatchPostComments(postId),
+      accessToken: accessToken,
+      query: {
+        "limit": "$limit",
+        if (cursor != null) "cursor": cursor,
+      },
+    );
+    return _decodePage(response, CommunityCommentItem.fromJson);
+  }
+
+  Future<CommunityCommentItem> createComment({
+    required String accessToken,
+    required String postId,
+    required String body,
+  }) async {
+    final response = await _apiClient.postJson(
+      TheEyeApiPaths.neighborhoodWatchPostComments(postId),
+      {"body": body},
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
+    final map = Map<String, dynamic>.from(data as Map);
+    return CommunityCommentItem(
+      id: (map["id"] as String?) ?? "",
+      body: (map["body"] as String?) ?? body,
+      authorId: (map["authorId"] as String?) ?? "",
+      authorName: "You",
+      createdAt: DateTime.tryParse((map["createdAt"] as String?) ?? "") ??
+          DateTime.now(),
+    );
+  }
+
+  Future<CommunityCommentItem> updateComment({
+    required String accessToken,
+    required String postId,
+    required String commentId,
+    required String body,
+  }) async {
+    final response = await _apiClient.patchJson(
+      TheEyeApiPaths.neighborhoodWatchPostComment(postId, commentId),
+      {"body": body},
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
+    final map = Map<String, dynamic>.from(data as Map);
+    return CommunityCommentItem(
+      id: commentId,
+      body: (map["body"] as String?) ?? body,
+      authorId: "",
+      authorName: "You",
+      createdAt: DateTime.tryParse((map["updatedAt"] as String?) ?? ""),
+    );
+  }
+
+  Future<void> deleteComment({
+    required String accessToken,
+    required String postId,
+    required String commentId,
+  }) async {
+    final response = await _apiClient.deleteJson(
+      TheEyeApiPaths.neighborhoodWatchPostComment(postId, commentId),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+  }
+
+  Future<void> submitReport({
+    required String accessToken,
+    required String communityId,
+    required String targetType,
+    required String targetId,
+    required String reasonCode,
+    String? note,
+    String? evidenceObjectKey,
+    String? evidenceBucket,
+  }) async {
+    final response = await _apiClient.postJson(
+      TheEyeApiPaths.neighborhoodWatchCommunityReports(communityId),
+      {
+        "targetType": targetType,
+        "targetId": targetId,
+        "reasonCode": reasonCode,
+        if (note != null && note.isNotEmpty) "note": note,
+        if (evidenceObjectKey != null) "evidenceObjectKey": evidenceObjectKey,
+        if (evidenceBucket != null) "evidenceBucket": evidenceBucket,
+      },
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
   }
 
   Future<void> registerVolunteer({

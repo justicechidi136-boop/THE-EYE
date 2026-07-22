@@ -96,4 +96,15 @@ abstract final class TheEyeApiPaths {
       "/neighborhood-watch/channels/$channelId/messages";
   static String neighborhoodWatchPostComments(String postId) =>
       "/neighborhood-watch/posts/$postId/comments";
+  static String neighborhoodWatchPostComment(String postId, String commentId) =>
+      "/neighborhood-watch/posts/$postId/comments/$commentId";
+  static String neighborhoodWatchCommunityStatistics(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/statistics";
+  static String neighborhoodWatchCommunityReports(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/reports";
+  static String neighborhoodWatchCommunityPostMediaPresign(
+          String communityId) =>
+      "/neighborhood-watch/communities/$communityId/posts/media/presign";
+  static String neighborhoodWatchPost(String postId) =>
+      "/neighborhood-watch/posts/$postId";
 }

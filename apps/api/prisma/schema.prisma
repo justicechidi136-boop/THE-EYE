@@ -125,6 +125,7 @@ enum CommunityReportTargetType {
   Post
   Comment
   Member
+  Community
 }
 
 enum CommunityReportStatus {
@@ -139,6 +140,7 @@ enum CommunityMembershipStatus {
   Rejected
   Left
   Suspended
+  Banned
 }
 
 enum CommunityRoleName {
@@ -918,6 +920,9 @@ model CommunityMembership {
   approvedById String?                   @map("approved_by_id") @db.Uuid
   approvedAt   DateTime?                 @map("approved_at") @db.Timestamptz(6)
   leftAt       DateTime?                 @map("left_at") @db.Timestamptz(6)
+  moderatorNote String?                  @map("moderator_note")
+  moderatedById String?                   @map("moderated_by_id") @db.Uuid
+  moderatedAt  DateTime?                 @map("moderated_at") @db.Timestamptz(6)
   community    Community                 @relation(fields: [communityId], references: [id], onDelete: Cascade)
   user         User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role         CommunityRole?            @relation(fields: [roleId], references: [id])

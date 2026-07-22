@@ -13,7 +13,9 @@ import {
   CreateCommunityReactionDto,
   CreateCommunityRequestDto,
   CreatePatrolScheduleDto,
+  ModerateMemberDto,
   PatrolCheckpointDto,
+  PresignCommunityMediaDto,
   RegisterVolunteerDto,
   ReviewCommunityRequestDto,
   SendCommunityMessageDto,
@@ -67,8 +69,20 @@ export class NeighborhoodWatchController {
 
   @Get("communities/:communityId/members")
   @RequirePermissions("community:read")
-  listMembers(@Param("communityId") communityId: string, @Req() request: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
-    return this.neighborhoodWatch.listMembers(communityId, request.user, { cursor, limit });
+  listMembers(
+    @Param("communityId") communityId: string,
+    @Req() request: any,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+    @Query("search") search?: string,
+  ) {
+    return this.neighborhoodWatch.listMembers(communityId, request.user, { cursor, limit, search });
+  }
+
+  @Get("communities/:communityId/statistics")
+  @RequirePermissions("community:read")
+  statistics(@Param("communityId") communityId: string, @Req() request: any) {
+    return this.neighborhoodWatch.getCommunityStatistics(communityId, request.user);
   }
 
   @Post("communities/:communityId/join")
@@ -93,6 +107,17 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:moderate")
   assignRole(@Param("communityId") communityId: string, @Param("membershipId") membershipId: string, @Body() dto: AssignCommunityRoleDto, @Req() request: any) {
     return this.neighborhoodWatch.assignMemberRole(communityId, membershipId, dto, request.user);
+  }
+
+  @Patch("communities/:communityId/memberships/:membershipId/moderate")
+  @RequirePermissions("community:moderate")
+  moderateMember(
+    @Param("communityId") communityId: string,
+    @Param("membershipId") membershipId: string,
+    @Body() dto: ModerateMemberDto,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.moderateMember(communityId, membershipId, dto, request.user);
   }
 
   @Patch("communities/:communityId/leave")
@@ -133,6 +158,12 @@ export class NeighborhoodWatchController {
     @Query("limit") limit?: string,
   ) {
     return this.neighborhoodWatch.listAlerts(communityId, request.user, { cursor, limit });
+  }
+
+  @Post("communities/:communityId/posts/media/presign")
+  @RequirePermissions("community:post")
+  presignMedia(@Param("communityId") communityId: string, @Body() dto: PresignCommunityMediaDto, @Req() request: any) {
+    return this.neighborhoodWatch.presignPostMedia(communityId, dto, request.user);
   }
 
   @Post("communities/:communityId/posts")
@@ -191,6 +222,18 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:moderate")
   listReports(@Req() request: any, @Query("communityId") communityId?: string) {
     return this.neighborhoodWatch.listContentReports(request.user, communityId);
+  }
+
+  @Delete("posts/:postId")
+  @RequirePermissions("community:moderate")
+  removePost(@Param("postId") postId: string, @Body() dto: { note?: string }, @Req() request: any) {
+    return this.neighborhoodWatch.removePost(postId, request.user, dto.note);
+  }
+
+  @Patch("reports/:reportId/review")
+  @RequirePermissions("community:moderate")
+  reviewReport(@Param("reportId") reportId: string, @Body() dto: { action: "reviewed" | "dismissed"; note?: string }, @Req() request: any) {
+    return this.neighborhoodWatch.reviewContentReport(reportId, dto, request.user);
   }
 
   @Patch("posts/:postId/verify")

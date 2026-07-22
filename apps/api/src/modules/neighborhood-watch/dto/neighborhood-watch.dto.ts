@@ -110,11 +110,40 @@ export type CreateCommunityReactionDto = {
 };
 
 export type CreateCommunityContentReportDto = {
-  targetType: "Post" | "Comment" | "Member";
+  targetType: "Post" | "Comment" | "Member" | "Community";
   targetId: string;
   reasonCode: string;
   note?: string;
+  evidenceObjectKey?: string;
+  evidenceBucket?: string;
 };
+
+export type ModerateMemberDto = {
+  action: "suspend" | "restore" | "ban" | "unban";
+  note?: string;
+};
+
+export type PresignCommunityMediaDto = {
+  fileName: string;
+  contentType: string;
+  mediaType: "Image" | "Video" | "Audio" | "Document";
+  sizeBytes?: number;
+};
+
+export type ListMembersQuery = CursorPageQuery & {
+  search?: string;
+};
+
+export const COMMUNITY_REPORT_REASONS = [
+  "Harassment",
+  "Spam",
+  "FalseInformation",
+  "HateSpeech",
+  "ViolenceThreat",
+  "Impersonation",
+  "PrivacyViolation",
+  "Other",
+] as const;
 
 export type AssignCommunityRoleDto = {
   roleName:

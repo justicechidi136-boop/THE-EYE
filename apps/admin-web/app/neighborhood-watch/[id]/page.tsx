@@ -14,7 +14,8 @@ export default async function CommunityDetailPage({ params }: { params: Promise<
     );
   }
 
-  const { community, posts, volunteers, patrols } = detail;
+  const { community, posts, volunteers, patrols, statistics } = detail;
+  const stats = statistics as Record<string, unknown>;
 
   return (
     <>
@@ -23,7 +24,14 @@ export default async function CommunityDetailPage({ params }: { params: Promise<
         <Panel title="Community statistics">
           <div className="grid gap-3 text-sm">
             <p><strong>Level:</strong> {community.level}</p>
-            <p><strong>Members:</strong> {community.members}</p>
+            <p><strong>Members:</strong> {String(stats.memberCount ?? community.members)}</p>
+            <p><strong>Active volunteers:</strong> {String(stats.activeVolunteers ?? volunteers.length)}</p>
+            <p><strong>Patrols:</strong> {String(stats.patrolCount ?? patrols.length)}</p>
+            <p><strong>Active alerts:</strong> {String(stats.activeAlerts ?? community.pending)}</p>
+            <p><strong>Incidents:</strong> {String(stats.incidentCount ?? 0)}</p>
+            <p><strong>Posts:</strong> {String(stats.postCount ?? posts.length)}</p>
+            <p><strong>Comments:</strong> {String(stats.commentCount ?? 0)}</p>
+            <p><strong>30-day growth:</strong> {String(stats.memberGrowth30Days ?? 0)}</p>
             <p><strong>Pending approvals:</strong> {community.pending}</p>
             <p><strong>Safety index:</strong> {community.confidence}%</p>
             <Link href="/neighborhood-watch/map" className="text-eye hover:underline">View on map →</Link>

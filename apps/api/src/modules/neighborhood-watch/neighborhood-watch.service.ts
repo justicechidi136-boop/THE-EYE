@@ -12,7 +12,8 @@ import {
 } from "../../common/pagination/cursor-pagination";
 import { BroadcastsService } from "../broadcasts/broadcasts.service";
 import { AuditService } from "../audit/audit.service";
-import { assertEvidenceObjectKey } from "../../common/storage/s3-presign";
+import { assertEvidenceObjectKey, createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
+import { communityRoleCan, isCommunityAdminRole, isModeratorRole, platformAdminCan } from "./community-permissions";
 import { IncidentsService } from "../incidents/incidents.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -26,7 +27,10 @@ import {
   CreateCommunityReactionDto,
   AssignCommunityRoleDto,
   ListCommunitiesQuery,
+  ListMembersQuery,
+  ModerateMemberDto,
   PatrolCheckpointDto,
+  PresignCommunityMediaDto,
   RegisterVolunteerDto,
   ReviewCommunityRequestDto,
   SendCommunityMessageDto,
@@ -35,6 +39,7 @@ import {
   validateCommunity,
   validateCommunityRequest,
   validatePost,
+  COMMUNITY_REPORT_REASONS,
 } from "./dto/neighborhood-watch.dto";
 
 @Injectable()
@@ -203,15 +208,34 @@ export class NeighborhoodWatchService {
     return { data: updated };
   }
 
-  async listMembers(communityId: string, actor: JwtPayload, query: CursorPageQuery = {}) {
+  async listMembers(communityId: string, actor: JwtPayload, query: ListMembersQuery = {}) {
     await this.assertCommunityVisible(communityId, actor);
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
+    const search = query.search?.trim();
     const rows = await this.prisma.communityMembership.findMany({
-      where: { communityId, status: "Approved" as never, ...dateIdCursorWhere(cursor) } as never,
+      where: {
+        communityId,
+        status: "Approved" as never,
+        ...(search
+          ? {
+              OR: [
+                { user: { profile: { firstName: { contains: search, mode: "insensitive" } } } },
+                { user: { profile: { lastName: { contains: search, mode: "insensitive" } } } },
+              ],
+            }
+          : {}),
+        ...dateIdCursorWhere(cursor),
+      } as never,
       include: {
         role: { select: { name: true } },
-        user: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        user: {
+          select: {
+            id: true,
+            profile: { select: { firstName: true, lastName: true } },
+            volunteerProfile: { select: { id: true, verified: true, communityId: true, types: true } },
+          },
+        },
       },
       orderBy: [{ approvedAt: "desc" }, { id: "desc" }],
       take: limit + 1,
@@ -219,14 +243,158 @@ export class NeighborhoodWatchService {
     const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.approvedAt ?? item.requestedAt, item.id));
     return {
       ...page,
-      data: page.data.map((membership) => ({
-        id: membership.id,
-        userId: membership.userId,
-        displayName: [membership.user.profile?.firstName, membership.user.profile?.lastName].filter(Boolean).join(" ") || "Member",
-        role: membership.role?.name ?? "Resident",
-        approvedAt: membership.approvedAt,
-      })),
+      data: page.data.map((membership) => {
+        const roleName = membership.role?.name ?? "Resident";
+        const volunteer = membership.user.volunteerProfile;
+        const badges = [roleName];
+        if (volunteer?.communityId === communityId && volunteer.verified) badges.push("Volunteer");
+        if (isModeratorRole(roleName)) badges.push("Moderator");
+        if (roleName === "VolunteerCoordinator" || roleName === "SecurityCoordinator") badges.push("PatrolLead");
+        return {
+          id: membership.id,
+          userId: membership.userId,
+          displayName: [membership.user.profile?.firstName, membership.user.profile?.lastName].filter(Boolean).join(" ") || "Member",
+          role: roleName,
+          badges,
+          isVolunteer: volunteer?.communityId === communityId,
+          approvedAt: membership.approvedAt,
+        };
+      }),
     };
+  }
+
+  async getCommunityStatistics(communityId: string, actor: JwtPayload) {
+    await this.assertCommunityVisible(communityId, actor);
+    if (actor.typ === "user") {
+      const membership = await this.prisma.communityMembership.findUnique({
+        where: { communityId_userId: { communityId, userId: actor.sub } },
+        include: { role: true },
+      });
+      if (!membership || membership.status !== "Approved" || !communityRoleCan(membership.role?.name as string, "community_statistics")) {
+        if (!isModeratorRole(membership?.role?.name as string)) {
+          throw new ForbiddenException("Community statistics are restricted to moderators");
+        }
+      }
+    } else if (!platformAdminCan(actor, "community_statistics")) {
+      await this.assertAdminCommunityScope(communityId, actor);
+    }
+    const alertTypes = ["SuspiciousActivity", "LostChild", "MissingPerson", "CrimeAlert", "AccidentAlert", "FireAlert", "FloodWarning"];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [
+      memberCount,
+      activeVolunteers,
+      patrolCount,
+      activeAlerts,
+      incidentCount,
+      postCount,
+      commentCount,
+      recentMembers,
+    ] = await Promise.all([
+      this.prisma.communityMembership.count({ where: { communityId, status: "Approved" as never } }),
+      this.prisma.volunteerProfile.count({ where: { communityId, available: true, verified: true } }),
+      this.prisma.patrolSchedule.count({ where: { communityId } }),
+      this.prisma.communityPost.count({
+        where: { communityId, type: { in: alertTypes as never }, verificationStatus: "Verified" as never },
+      }),
+      this.prisma.communityPost.count({ where: { communityId, incidentId: { not: null } } }),
+      this.prisma.communityPost.count({ where: { communityId } }),
+      this.prisma.communityPostComment.count({ where: { post: { communityId } } }),
+      this.prisma.communityMembership.count({ where: { communityId, status: "Approved" as never, approvedAt: { gte: thirtyDaysAgo } } }),
+    ]);
+    return {
+      data: {
+        communityId,
+        memberCount,
+        activeVolunteers,
+        patrolCount,
+        activeAlerts,
+        incidentCount,
+        postCount,
+        commentCount,
+        memberGrowth30Days: recentMembers,
+      },
+    };
+  }
+
+  async moderateMember(communityId: string, membershipId: string, dto: ModerateMemberDto, actor: JwtPayload) {
+    await this.assertModerator(communityId, actor);
+    const membership = await this.prisma.communityMembership.findUnique({ where: { id: membershipId }, include: { role: true } });
+    if (!membership || membership.communityId !== communityId) throw new NotFoundException("Membership not found");
+    if (isCommunityAdminRole(membership.role?.name as string) && actor.typ === "user") {
+      const actorMembership = await this.prisma.communityMembership.findUnique({
+        where: { communityId_userId: { communityId, userId: actor.sub } },
+        include: { role: true },
+      });
+      if (!isCommunityAdminRole(actorMembership?.role?.name as string)) {
+        throw new ForbiddenException("Only community admins can moderate other admins");
+      }
+    }
+    const statusMap = {
+      suspend: "Suspended",
+      restore: "Approved",
+      ban: "Banned",
+      unban: "Approved",
+    } as const;
+    const updated = await this.prisma.communityMembership.update({
+      where: { id: membershipId },
+      data: {
+        status: statusMap[dto.action] as never,
+        moderatorNote: dto.note,
+        moderatedById: actor.sub,
+        moderatedAt: new Date(),
+      } as never,
+    });
+    await this.audit(actor, `community.member_${dto.action}`, "community_memberships", membershipId, { communityId, note: dto.note });
+    await this.notifyUser(
+      membership.userId,
+      dto.action === "restore" || dto.action === "unban" ? "Membership restored" : "Membership restricted",
+      dto.note ?? `Your community membership was ${dto.action}ed`,
+      { communityId },
+    );
+    return { data: updated };
+  }
+
+  async removePost(postId: string, actor: JwtPayload, note?: string) {
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException("Community post not found");
+    await this.assertModerator(post.communityId, actor);
+    await this.prisma.communityPost.delete({ where: { id: postId } });
+    await this.audit(actor, "community.post_removed", "community_posts", postId, { communityId: post.communityId, note });
+    return { data: { id: postId, removed: true } };
+  }
+
+  async presignPostMedia(communityId: string, dto: PresignCommunityMediaDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can upload community media");
+    await this.assertApprovedMember(communityId, actor.sub);
+    if (!dto.fileName || !dto.contentType || !dto.mediaType) throw new BadRequestException("fileName, contentType, and mediaType are required");
+    validateEvidenceUpload(dto.contentType, dto.sizeBytes);
+    const prefix = `community-${communityId}`;
+    const objectKey = evidenceObjectKey(prefix, dto.fileName);
+    return {
+      data: {
+        bucket: process.env.S3_BUCKET ?? "the-eye",
+        objectKey,
+        uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
+        requiredHeaders: { "content-type": dto.contentType },
+        expiresInSeconds: 300,
+      },
+    };
+  }
+
+  async reviewContentReport(reportId: string, dto: { action: "reviewed" | "dismissed"; note?: string }, actor: JwtPayload) {
+    const report = await this.prisma.communityContentReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException("Report not found");
+    await this.assertModerator(report.communityId, actor);
+    const updated = await this.prisma.communityContentReport.update({
+      where: { id: reportId },
+      data: {
+        status: dto.action === "reviewed" ? "Reviewed" as never : "Dismissed" as never,
+        reviewedById: actor.sub,
+        reviewedAt: new Date(),
+      } as never,
+    });
+    await this.audit(actor, "community.report_reviewed", "community_content_reports", reportId, { action: dto.action, note: dto.note });
+    return { data: updated };
   }
 
   async approveMember(communityId: string, membershipId: string, actor: JwtPayload) {
@@ -242,14 +410,26 @@ export class NeighborhoodWatchService {
 
   async leaveCommunity(communityId: string, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can leave communities");
+    const community = await this.prisma.community.findUnique({ where: { id: communityId } });
+    if (!community) throw new NotFoundException("Community not found");
+    if (community.createdById === actor.sub) {
+      throw new BadRequestException("Transfer community ownership or archive the community before leaving as owner");
+    }
     const membership = await this.prisma.communityMembership.findUnique({
       where: { communityId_userId: { communityId, userId: actor.sub } },
       include: { role: true },
     });
     if (!membership || membership.status !== "Approved") throw new NotFoundException("Membership not found");
-    if (["CommunityModerator", "EstateAdmin"].includes(String(membership.role?.name))) {
-      throw new BadRequestException("Transfer community ownership before leaving moderator role");
+    if (isCommunityAdminRole(membership.role?.name as string) || isModeratorRole(membership.role?.name as string)) {
+      throw new BadRequestException("Transfer community moderator responsibilities before leaving");
     }
+    const activePatrol = await this.prisma.patrolAssignment.findFirst({
+      where: {
+        userId: actor.sub,
+        schedule: { communityId, status: { in: ["Scheduled", "Active"] as never } },
+      },
+    });
+    if (activePatrol) throw new BadRequestException("Complete or leave your active patrol assignment before leaving the community");
     const updated = await this.prisma.communityMembership.update({
       where: { communityId_userId: { communityId, userId: actor.sub } },
       data: { status: "Left" as never, leftAt: new Date() } as never,
@@ -623,6 +803,12 @@ export class NeighborhoodWatchService {
   async createContentReport(communityId: string, dto: CreateCommunityContentReportDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can submit reports");
     await this.assertApprovedMember(communityId, actor.sub);
+    if (!COMMUNITY_REPORT_REASONS.includes(dto.reasonCode as never) && dto.reasonCode !== "Other") {
+      throw new BadRequestException("Invalid report reason code");
+    }
+    if (dto.evidenceObjectKey) {
+      assertEvidenceObjectKey(`community-${communityId}`, dto.evidenceObjectKey, dto.evidenceBucket ?? process.env.S3_BUCKET ?? "the-eye");
+    }
     const report = await this.prisma.communityContentReport.create({
       data: {
         communityId,
@@ -728,15 +914,27 @@ export class NeighborhoodWatchService {
   }
 
   private async assertApprovedMember(communityId: string, userId: string) {
-    const membership = await this.prisma.communityMembership.findUnique({ where: { communityId_userId: { communityId, userId } } });
+    const membership = await this.prisma.communityMembership.findUnique({ where: { communityId_userId: { communityId, userId } }, include: { role: true } });
     if (!membership || membership.status !== "Approved") throw new ForbiddenException("Approved community membership is required");
+    if (membership.status === "Suspended" || membership.status === "Banned") {
+      throw new ForbiddenException("Suspended or banned members cannot perform this action");
+    }
+  }
+
+  private async assertAdminCommunityScope(communityId: string, actor: JwtPayload) {
+    const community = await this.prisma.community.findUnique({ where: { id: communityId } });
+    if (!community) throw new NotFoundException("Community not found");
+    await this.assertAdminJurisdiction(actor, community.country, community.state ?? undefined, community.lga ?? undefined);
   }
 
   private async assertModerator(communityId: string, actor: JwtPayload) {
-    if (actor.typ === "admin") return;
+    if (actor.typ === "admin") {
+      await this.assertAdminCommunityScope(communityId, actor);
+      if (!platformAdminCan(actor, "moderate_member")) throw new ForbiddenException("Admin role cannot moderate this community");
+      return;
+    }
     const membership = await this.prisma.communityMembership.findUnique({ where: { communityId_userId: { communityId, userId: actor.sub } }, include: { role: true } });
-    const allowed = ["CommunityModerator", "EstateAdmin", "SecurityCoordinator", "PoliceLiaison", "VolunteerCoordinator"];
-    if (!membership || membership.status !== "Approved" || !membership.role || !allowed.includes(membership.role.name as string)) {
+    if (!membership || membership.status !== "Approved" || !membership.role || !isModeratorRole(membership.role.name as string)) {
       throw new ForbiddenException("Community moderator permissions are required");
     }
   }
