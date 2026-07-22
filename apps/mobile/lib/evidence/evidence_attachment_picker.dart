@@ -188,7 +188,8 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                         SizedBox(height: 8),
                         Text(
                           "Click here to upload",
-                          style: TextStyle(fontSize: 12, color: Color(0xFF032221)),
+                          style:
+                              TextStyle(fontSize: 12, color: Color(0xFF032221)),
                         ),
                       ],
                     ),

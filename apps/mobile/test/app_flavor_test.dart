@@ -99,7 +99,8 @@ void main() {
         projectId: "the-eye-2stg",
       );
       expect(
-        () => assertFirebaseEnvMatchesFlavor(AppFlavor.production, wrongProject),
+        () =>
+            assertFirebaseEnvMatchesFlavor(AppFlavor.production, wrongProject),
         throwsStateError,
       );
     });

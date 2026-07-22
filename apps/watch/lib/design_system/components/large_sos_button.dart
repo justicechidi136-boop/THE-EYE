@@ -42,9 +42,8 @@ class LargeSosButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: compact ? EyeTokens.danger : Colors.transparent,
             shape: BoxShape.circle,
-            border: compact
-                ? null
-                : Border.all(color: EyeTokens.danger, width: 2),
+            border:
+                compact ? null : Border.all(color: EyeTokens.danger, width: 2),
             boxShadow: compact
                 ? null
                 : [

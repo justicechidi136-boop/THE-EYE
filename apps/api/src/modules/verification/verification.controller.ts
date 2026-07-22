@@ -31,6 +31,12 @@ export class VerificationController {
     return this.verificationService.requestCrowdConfirmation(id, dto, request.user);
   }
 
+  @Get("incidents/:id/confirmations")
+  @RequirePermissions("incident:read")
+  confirmations(@Param("id") id: string) {
+    return this.verificationService.listWitnessConfirmations(id);
+  }
+
   @Post("incidents/:id/confirm")
   @RequirePermissions("incident:read")
   confirm(@Param("id") id: string, @Body() dto: WitnessConfirmationDto, @Req() request: any) {

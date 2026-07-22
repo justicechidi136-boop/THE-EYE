@@ -11,15 +11,12 @@ enum AppFlavor {
 }
 
 abstract final class AppFlavorConfig {
-  static const _dartDefineFlavor =
-      String.fromEnvironment("THE_EYE_FLAVOR");
-  static const _flutterFlavor =
-      String.fromEnvironment("FLUTTER_APP_FLAVOR");
+  static const _dartDefineFlavor = String.fromEnvironment("THE_EYE_FLAVOR");
+  static const _flutterFlavor = String.fromEnvironment("FLUTTER_APP_FLAVOR");
 
   static AppFlavor get current {
-    final raw = _dartDefineFlavor.isNotEmpty
-        ? _dartDefineFlavor
-        : _flutterFlavor;
+    final raw =
+        _dartDefineFlavor.isNotEmpty ? _dartDefineFlavor : _flutterFlavor;
     switch (raw.toLowerCase()) {
       case "development":
       case "dev":

@@ -26,9 +26,8 @@ class AvatarUploadService {
       ".webp" => "image/webp",
       _ => "image/jpeg",
     };
-    final fileName = p.basename(sourcePath).isEmpty
-        ? "avatar.jpg"
-        : p.basename(sourcePath);
+    final fileName =
+        p.basename(sourcePath).isEmpty ? "avatar.jpg" : p.basename(sourcePath);
 
     final uploadPath = await _compressor.prepareUploadCopy(
       sourcePath: sourcePath,

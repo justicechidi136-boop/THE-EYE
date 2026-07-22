@@ -16,6 +16,7 @@ import type {
   UserDirectoryEntry,
   VolunteerView,
   ResidentView,
+  WitnessConfirmationView,
 } from "../types/admin-views";
 
 function priorityLabel(priority: string): Incident["priority"] {
@@ -87,9 +88,11 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
     evidence: media.map((item) => {
       const mediaItem = item as Record<string, unknown>;
       return {
+        id: String(mediaItem.id ?? ""),
         type: String(mediaItem.mediaType ?? "Media"),
         name: String(mediaItem.objectKey ?? "evidence"),
         hash: String(mediaItem.fileHash ?? "pending"),
+        contentType: mediaItem.contentType ? String(mediaItem.contentType) : undefined,
       };
     }),
   };
@@ -388,6 +391,18 @@ export function toDuplicateReportView(record: Record<string, unknown>): Duplicat
     title: String(record.title ?? "Duplicate report"),
     distance: distanceMeters ? `${Math.round(distanceMeters)}m` : "-",
     confidence: 70,
+  };
+}
+
+export function toWitnessConfirmationView(record: Record<string, unknown>): WitnessConfirmationView {
+  return {
+    id: String(record.id),
+    verifierName: String(record.verifierName ?? "Witness"),
+    method: String(record.method ?? "nearby_user_confirmation"),
+    result: String(record.result ?? "pending"),
+    confidence: record.confidence == null ? null : toNumber(record.confidence, 0),
+    notes: record.notes ? String(record.notes) : null,
+    createdAt: formatTime(record.createdAt as string | Date | null | undefined),
   };
 }
 

@@ -332,6 +332,9 @@ export class SmartwatchService {
     if (!lookup) throw new UnauthorizedException("deviceId is required for smartwatch SOS");
     const device = await this.findAuthorizedDevice(lookup, dto.deviceSecret, actor);
     const sourceMode = dto.sourceMode ?? (device as any).connectivityMode ?? "PairedPhone";
+    const metadata = dto.metadata as Record<string, unknown> | undefined;
+    const clientSubmissionId =
+      typeof metadata?.idempotencyKey === "string" ? metadata.idempotencyKey : undefined;
 
     const incident = await this.incidents.report({
       type: IncidentType.SOS,
@@ -341,7 +344,8 @@ export class SmartwatchService {
       longitude: dto.longitude,
       priority: IncidentPriority.P1LifeThreatening,
       anonymous: false,
-      notifyEmergencyContacts: true,
+      notifyEmergencyContacts: false,
+      clientSubmissionId,
     }, {
       sub: device.userId,
       typ: "user",
@@ -425,7 +429,40 @@ export class SmartwatchService {
       }),
     ));
     await this.prisma.smartwatchDevice.update({ where: { id: device.id }, data: { isOnline: true, lastSeenAt: new Date() } as never });
+    void this.processPendingOfflineEvents(device).catch(() => undefined);
     return { data: created, uploaded: created.length };
+  }
+
+  private async processPendingOfflineEvents(device: { id: string; userId: string; deviceId: string }) {
+    const actor = { sub: device.userId, typ: "user", permissions: ["incident:create", "incident:read"] } as JwtPayload;
+    const pending = await (this.prisma as any).smartwatchOfflineEvent.findMany({
+      where: { deviceId: device.id, status: "Uploaded", processedAt: null },
+      orderBy: { occurredAt: "asc" },
+      take: 100,
+    });
+
+    for (const event of pending) {
+      try {
+        const payload = (event.payload ?? {}) as SmartwatchGpsDto;
+        const eventType = String(event.eventType).toLowerCase();
+        if (eventType === "sos") {
+          await this.triggerSos(payload as SmartwatchSosDto, actor);
+        } else if (eventType === "gps") {
+          await this.recordGps(device.deviceId, payload, actor);
+        } else if (eventType === "heartbeat") {
+          await this.heartbeat(device.deviceId, payload as SmartwatchHeartbeatDto, actor);
+        }
+        await (this.prisma as any).smartwatchOfflineEvent.update({
+          where: { id: event.id },
+          data: { status: "Processed", processedAt: new Date() },
+        });
+      } catch {
+        await (this.prisma as any).smartwatchOfflineEvent.update({
+          where: { id: event.id },
+          data: { status: "Failed", processedAt: new Date() },
+        });
+      }
+    }
   }
 
   async adminSosEvents(actor: JwtPayload) {

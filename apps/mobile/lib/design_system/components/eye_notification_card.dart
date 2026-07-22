@@ -43,7 +43,8 @@ class EyeNotificationCard extends StatelessWidget {
             Text(category!, style: EyeTypography.fieldHint),
             const SizedBox(height: 4),
           ],
-          Text(title, style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1)),
+          Text(title,
+              style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1)),
           if (thumbnails.isNotEmpty) ...[
             const SizedBox(height: 8),
             Row(
@@ -56,7 +57,9 @@ class EyeNotificationCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 4),
-          Text(timestamp, style: EyeTypography.fieldHint.copyWith(fontSize: 12, color: EyeTokens.black1)),
+          Text(timestamp,
+              style: EyeTypography.fieldHint
+                  .copyWith(fontSize: 12, color: EyeTokens.black1)),
         ],
       ),
     );

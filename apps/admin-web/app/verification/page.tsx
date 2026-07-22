@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
 import { Button } from "../../components/form-primitives";
+import { IncidentReviewButton } from "../../components/incident-review-button";
 import { DuplicateReportPanel, VerificationStatusBadge, WitnessConfirmationPanel } from "../../components/verification-ui";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
 import { fetchVerificationQueue } from "../../lib/api/data";
@@ -49,8 +50,8 @@ export default async function VerificationPage() {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link href={`/incidents/${incident.id}`}><Button variant="secondary">Review incident</Button></Link>
-                  <Button>Approve verification</Button>
-                  <Button variant="danger">Mark false information</Button>
+                  <IncidentReviewButton incidentId={incident.id} decision="confirm" label="Approve verification" />
+                  <IncidentReviewButton incidentId={incident.id} decision="reject" label="Mark false information" variant="danger" />
                 </div>
               </div>
             )) : <p className="text-sm text-muted">No incidents are waiting in the verification queue.</p>}

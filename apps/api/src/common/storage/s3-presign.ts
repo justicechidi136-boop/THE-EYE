@@ -119,3 +119,38 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900,
   const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
   return `${url.origin}${canonicalUri}?${query.toString()}&X-Amz-Signature=${signature}`;
 }
+
+export function createS3PresignedGetUrl(objectKey: string, expiresSeconds = 300) {
+  const endpoint = process.env.S3_ENDPOINT;
+  const bucket = process.env.S3_BUCKET;
+  const accessKey = process.env.S3_ACCESS_KEY;
+  const secretKey = process.env.S3_SECRET_KEY;
+  const region = process.env.S3_REGION ?? "us-east-1";
+  if (!endpoint || !bucket || !accessKey || !secretKey) {
+    throw new InternalServerErrorException("Evidence storage is not configured");
+  }
+
+  const now = new Date();
+  const date = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = date.slice(0, 8);
+  const scope = `${dateStamp}/${region}/s3/aws4_request`;
+  const credential = `${accessKey}/${scope}`;
+  const url = new URL(endpoint);
+  const canonicalUri = `/${encodePath(`${bucket}/${objectKey}`)}`;
+  const signedHeaders = "host";
+  const query = new URLSearchParams({
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": credential,
+    "X-Amz-Date": date,
+    "X-Amz-Expires": String(expiresSeconds),
+    "X-Amz-SignedHeaders": signedHeaders,
+  });
+  query.sort();
+
+  const canonicalHeaders = `host:${url.host}\n`;
+  const canonicalRequest = ["GET", canonicalUri, query.toString(), canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"].join("\n");
+  const stringToSign = ["AWS4-HMAC-SHA256", date, scope, createHash("sha256").update(canonicalRequest).digest("hex")].join("\n");
+  const signingKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, dateStamp), region), "s3"), "aws4_request");
+  const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
+  return `${url.origin}${canonicalUri}?${query.toString()}&X-Amz-Signature=${signature}`;
+}

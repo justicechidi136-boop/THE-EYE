@@ -86,7 +86,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
     });
 
     try {
-      final profile = await session.loadCitizenProfile(forceRefresh: forceRefresh);
+      final profile =
+          await session.loadCitizenProfile(forceRefresh: forceRefresh);
       if (!mounted) return;
       setState(() {
         _profile = profile;
@@ -120,8 +121,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
     setState(() {
       _submittingCompletion = true;
       _completionError = null;
-      _firstNameError =
-          firstName.isEmpty ? "Enter your first name." : null;
+      _firstNameError = firstName.isEmpty ? "Enter your first name." : null;
       _lastNameError = lastName.isEmpty ? "Enter your last name." : null;
       _countryError = country.isEmpty ? "Enter your country." : null;
       _stateError = state.isEmpty ? "Enter your state." : null;
@@ -254,8 +254,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
             field: TextField(
               controller: _firstNameController,
               textInputAction: TextInputAction.next,
-              decoration:
-                  profileFieldDecoration(hintText: "Ada", errorText: _firstNameError),
+              decoration: profileFieldDecoration(
+                  hintText: "Ada", errorText: _firstNameError),
             ),
           ),
           profileLabeledField(
@@ -263,8 +263,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
             field: TextField(
               controller: _lastNameController,
               textInputAction: TextInputAction.next,
-              decoration:
-                  profileFieldDecoration(hintText: "Okeke", errorText: _lastNameError),
+              decoration: profileFieldDecoration(
+                  hintText: "Okeke", errorText: _lastNameError),
             ),
           ),
           profileLabeledField(
@@ -283,8 +283,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
             field: TextField(
               controller: _stateController,
               textInputAction: TextInputAction.next,
-              decoration:
-                  profileFieldDecoration(hintText: "Lagos", errorText: _stateError),
+              decoration: profileFieldDecoration(
+                  hintText: "Lagos", errorText: _stateError),
             ),
           ),
           profileLabeledField(
@@ -292,8 +292,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
             field: TextField(
               controller: _lgaController,
               textInputAction: TextInputAction.done,
-              decoration:
-                  profileFieldDecoration(hintText: "Ikeja", errorText: _lgaError),
+              decoration: profileFieldDecoration(
+                  hintText: "Ikeja", errorText: _lgaError),
             ),
           ),
           if (_completionError != null)
@@ -326,8 +326,9 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
       children: [
         CircleAvatar(
           radius: 42,
-          backgroundImage:
-              avatarUrl != null && avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+          backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+              ? NetworkImage(avatarUrl)
+              : null,
           child: avatarUrl == null || avatarUrl.isEmpty
               ? const Icon(Icons.person, size: 44)
               : null,
@@ -427,7 +428,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () async {
-              await Navigator.of(context).pushNamed("/profile/emergency-contacts");
+              await Navigator.of(context)
+                  .pushNamed("/profile/emergency-contacts");
               if (mounted) unawaited(_loadProfile(forceRefresh: true));
             },
             child: const Text("Emergency contacts"),
@@ -484,7 +486,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(_error!, style: const TextStyle(color: BrandColors.danger)),
+                Text(_error!,
+                    style: const TextStyle(color: BrandColors.danger)),
                 const SizedBox(height: 12),
                 OutlinedButton(
                   onPressed: () => _loadProfile(forceRefresh: true),
@@ -508,7 +511,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
         if (_error != null && profile != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(_error!, style: const TextStyle(color: BrandColors.danger)),
+            child: Text(_error!,
+                style: const TextStyle(color: BrandColors.danger)),
           ),
       ],
     );

@@ -67,8 +67,7 @@ Future<void> _pumpBootChrome(
       ),
       routes: {
         '/pairing': (_) => const Scaffold(body: Text('PAIRING')),
-        '/onboarding/location': (_) =>
-            const Scaffold(body: Text('LOCATION')),
+        '/onboarding/location': (_) => const Scaffold(body: Text('LOCATION')),
       },
     ),
   );
@@ -132,7 +131,8 @@ void main() {
     );
   });
 
-  testWidgets('boot screen shows brand chrome on square canvas', (tester) async {
+  testWidgets('boot screen shows brand chrome on square canvas',
+      (tester) async {
     final services = _testServices();
     addTearDown(services.dispose);
     await _pumpBootChrome(

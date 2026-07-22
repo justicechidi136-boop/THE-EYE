@@ -21,7 +21,7 @@ export type Incident = {
   responseStatus: string;
   location: string;
   timeline: Array<{ time: string; event: string; actor: string }>;
-  evidence: Array<{ type: string; name: string; hash: string }>;
+  evidence: Array<{ id: string; type: string; name: string; hash: string; contentType?: string }>;
 };
 
 export type PoliceStationView = {
@@ -43,6 +43,16 @@ export type DuplicateReportView = {
   title: string;
   distance: string;
   confidence: number;
+};
+
+export type WitnessConfirmationView = {
+  id: string;
+  verifierName: string;
+  method: string;
+  result: string;
+  confidence: number | null;
+  notes: string | null;
+  createdAt: string;
 };
 
 export type EvidenceAccessEntry = {

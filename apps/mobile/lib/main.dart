@@ -28,8 +28,12 @@ import "connectivity/connectivity_service.dart";
 import "connectivity/connectivity_state.dart";
 import "connectivity/network_interface_reader.dart";
 import "connectivity/pending_retry_coordinator.dart";
+import "incidents/compose_draft_store.dart";
+import "incidents/incident_detail_screen.dart";
 import "incidents/incident_draft.dart";
 import "incidents/incident_draft_factory.dart";
+import "incidents/incident_history_service.dart";
+import "incidents/incident_location_tracker.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
 import "incidents/pending_submission_store.dart";
@@ -645,31 +649,41 @@ class _TheEyeAppState extends State<TheEyeApp> {
                 return OtpVerificationScreen(args: args);
               },
               "/home": (_) => const HomeScreen(),
-              "/report/emergency": (_) =>
-                  const ReportScreen(type: ReportType.emergency),
+              "/report/emergency": (context) =>
+                  _reportRoute(context, ReportType.emergency),
               "/live-video": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments;
                 final autoStart =
                     args is LiveVideoRouteArgs && args.autoStartStream;
                 return LiveEmergencyVideoScreen(autoStartStream: autoStart);
               },
-              "/report/crime": (_) =>
-                  const ReportScreen(type: ReportType.crime),
-              "/report/accident": (_) =>
-                  const ReportScreen(type: ReportType.accident),
-              "/report/fire": (_) => const ReportScreen(type: ReportType.fire),
-              "/report/kidnapping": (_) =>
-                  const ReportScreen(type: ReportType.kidnapping),
-              "/report/abuse": (_) =>
-                  const ReportScreen(type: ReportType.abuse),
-              "/report/suspicious-activity": (_) =>
-                  const ReportScreen(type: ReportType.suspiciousActivity),
+              "/report/crime": (context) =>
+                  _reportRoute(context, ReportType.crime),
+              "/report/accident": (context) =>
+                  _reportRoute(context, ReportType.accident),
+              "/report/fire": (context) =>
+                  _reportRoute(context, ReportType.fire),
+              "/report/kidnapping": (context) =>
+                  _reportRoute(context, ReportType.kidnapping),
+              "/report/abuse": (context) =>
+                  _reportRoute(context, ReportType.abuse),
+              "/report/suspicious-activity": (context) =>
+                  _reportRoute(context, ReportType.suspiciousActivity),
               "/missing-person": (_) => const MissingPersonBroadcastScreen(),
               "/stolen-vehicle": (_) => const StolenVehicleBroadcastScreen(),
               "/broadcasts": (_) => const BroadcastCenterScreen(),
               "/police-stations": (_) => const NearbyPoliceStationsScreen(),
               "/notifications": (_) => const NotificationsScreen(),
               "/tracking": (_) => const IncidentTrackingScreen(),
+              "/incident-detail": (context) {
+                final incidentId =
+                    ModalRoute.of(context)?.settings.arguments as String? ?? "";
+                final token = appOf(context).accessToken ?? "";
+                return IncidentDetailScreen(
+                  incidentId: incidentId,
+                  accessToken: token,
+                );
+              },
               "/family": (_) => const FamilySafetyCircleScreen(),
               "/smartwatch": (_) => const SmartwatchDeviceScreen(),
               "/neighborhood-watch": (_) => const NeighborhoodWatchHomeScreen(),
@@ -854,6 +868,9 @@ class AppController extends SessionAccessor {
   }
 
   final IncidentSubmissionService _submissionService;
+  final IncidentHistoryService _historyService = IncidentHistoryService();
+  final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
+  IncidentLocationTracker? _locationTracker;
   final ConnectivityService _connectivity;
   final AuthService _authService;
   final SocialAuthService _socialAuthService;
@@ -869,7 +886,10 @@ class AppController extends SessionAccessor {
   bool syncingPending = false;
   String? lastSubmissionMessage;
   final List<IncidentDraft> pendingDrafts = [];
+  final List<IncidentDraft> composeDrafts = [];
   final List<IncidentTrackingItem> incidents = [];
+  bool loadingIncidents = false;
+  String? incidentLoadError;
   final List<BroadcastAlert> notifications = [
     BroadcastAlert("Emergency alert", "Verified P1 emergency auto-alert",
         "5 km from your current area", "P1", "Delivered", false),
@@ -925,6 +945,87 @@ class AppController extends SessionAccessor {
     clearCitizenProfileCache();
     notifyListeners();
     await _pushNotifications?.syncTokenWithBackend();
+    unawaited(loadIncidentsFromApi());
+  }
+
+  Future<void> loadIncidentsFromApi() async {
+    if (!isAuthenticated || accessToken == null) {
+      incidents.clear();
+      incidentLoadError = null;
+      notifyListeners();
+      return;
+    }
+    loadingIncidents = true;
+    incidentLoadError = null;
+    notifyListeners();
+    try {
+      final rows =
+          await _historyService.listIncidents(accessToken: accessToken!);
+      incidents
+        ..clear()
+        ..addAll(
+          rows.map(
+            (row) => IncidentTrackingItem(
+              row.id,
+              row.type,
+              row.status,
+              row.agency,
+              row.confidence,
+              submittedAt: row.submittedAt,
+              verificationStatus: row.verificationStatus,
+            ),
+          ),
+        );
+    } on IncidentApiException catch (error) {
+      incidentLoadError = error.userMessage;
+    } catch (_) {
+      incidentLoadError = "Unable to load incident history.";
+    } finally {
+      loadingIncidents = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshComposeDrafts() async {
+    composeDrafts
+      ..clear()
+      ..addAll(await _composeDraftStore.loadDrafts());
+    notifyListeners();
+  }
+
+  Future<void> saveComposeDraft(IncidentDraft draft) async {
+    await _composeDraftStore.upsertDraft(draft);
+    await refreshComposeDrafts();
+  }
+
+  Future<void> deleteComposeDraft(String clientSubmissionId) async {
+    await _composeDraftStore.deleteDraft(clientSubmissionId);
+    await refreshComposeDrafts();
+  }
+
+  bool _shouldTrackIncidentLocation(String type) {
+    return type == IncidentType.emergency ||
+        type == IncidentType.fire ||
+        type == IncidentType.kidnapping ||
+        type == IncidentType.sos;
+  }
+
+  void _ensureLocationTracker() {
+    _locationTracker ??= IncidentLocationTracker(
+        apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl));
+  }
+
+  Future<void> startIncidentLocationTracking(String incidentId) async {
+    if (accessToken == null) return;
+    _ensureLocationTracker();
+    _locationTracker!.start(
+      incidentId: incidentId,
+      accessToken: accessToken!,
+    );
+  }
+
+  void stopIncidentLocationTracking() {
+    _locationTracker?.stop();
   }
 
   @override
@@ -936,7 +1037,8 @@ class AppController extends SessionAccessor {
   }
 
   @override
-  Future<CitizenProfile?> loadCitizenProfile({bool forceRefresh = false}) async {
+  Future<CitizenProfile?> loadCitizenProfile(
+      {bool forceRefresh = false}) async {
     if (!isAuthenticated || accessToken == null) {
       clearCitizenProfileCache();
       return null;
@@ -952,7 +1054,8 @@ class AppController extends SessionAccessor {
   }
 
   @override
-  Future<CitizenProfile> updateCitizenProfile(Map<String, Object?> payload) async {
+  Future<CitizenProfile> updateCitizenProfile(
+      Map<String, Object?> payload) async {
     final token = accessToken;
     if (token == null) {
       throw StateError("Authenticated session required to update profile");
@@ -999,6 +1102,8 @@ class AppController extends SessionAccessor {
       _sessionAccessToken = result.session!.accessToken;
       notifyListeners();
       await _pushNotifications?.syncTokenWithBackend();
+      unawaited(loadIncidentsFromApi());
+      unawaited(refreshComposeDrafts());
     } else if (result.status == SessionRestoreStatus.failed ||
         result.status == SessionRestoreStatus.unauthenticated) {
       _cachedSession = null;
@@ -1072,6 +1177,7 @@ class AppController extends SessionAccessor {
 
   @override
   void dispose() {
+    _locationTracker?.stop();
     _connectivity.removeListener(_onConnectivityChanged);
     _themeProvider.removeListener(_onThemeChanged);
     super.dispose();
@@ -1092,18 +1198,12 @@ class AppController extends SessionAccessor {
     );
 
     if (result.isSuccess) {
-      incidents.insert(
-        0,
-        IncidentTrackingItem(
-          result.incidentId!,
-          draft.type,
-          result.serverStatus ?? IncidentStatus.submitted,
-          "Awaiting assignment",
-          0,
-          submittedAt: result.submittedAt,
-          verificationStatus: "Pending",
-        ),
-      );
+      if (result.incidentId != null &&
+          _shouldTrackIncidentLocation(draft.type)) {
+        unawaited(startIncidentLocationTracking(result.incidentId!));
+      }
+      unawaited(deleteComposeDraft(draft.clientSubmissionId));
+      unawaited(loadIncidentsFromApi());
       notifications.insert(
         0,
         BroadcastAlert(
@@ -1153,17 +1253,7 @@ class AppController extends SessionAccessor {
       List<IncidentSubmissionResult> results) async {
     for (final result in results) {
       if (result.isSuccess && result.incidentId != null) {
-        incidents.insert(
-          0,
-          IncidentTrackingItem(
-            result.incidentId!,
-            result.reportType ?? IncidentType.emergency,
-            result.serverStatus ?? IncidentStatus.submitted,
-            "Awaiting assignment",
-            0,
-            submittedAt: result.submittedAt,
-          ),
-        );
+        unawaited(loadIncidentsFromApi());
       }
     }
 
@@ -2321,8 +2411,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       formError = null;
     });
 
-    final result =
-        await appOf(context).authService.requestPhoneOtp(phone);
+    final result = await appOf(context).authService.requestPhoneOtp(phone);
     if (!mounted) return;
 
     setState(() => resending = false);
@@ -2702,12 +2791,21 @@ class HomeScreen extends StatelessWidget {
 }
 
 class ReportScreen extends StatefulWidget {
-  const ReportScreen({required this.type, super.key});
+  const ReportScreen({required this.type, this.initialDraft, super.key});
 
   final ReportType type;
+  final IncidentDraft? initialDraft;
 
   @override
   State<ReportScreen> createState() => _ReportScreenState();
+}
+
+Widget _reportRoute(BuildContext context, ReportType type) {
+  final draft = ModalRoute.of(context)?.settings.arguments;
+  return ReportScreen(
+    type: type,
+    initialDraft: draft is IncidentDraft ? draft : null,
+  );
 }
 
 class _ReportScreenState extends State<ReportScreen> {
@@ -2715,18 +2813,135 @@ class _ReportScreenState extends State<ReportScreen> {
   bool notifyEmergencyContact = true;
   bool manualLocation = false;
   bool submitting = false;
+  bool loadingEmergencyContacts = false;
   String? descriptionError;
   String? locationError;
   String? submissionError;
+  String composeDraftId = createClientSubmissionId();
+  double? draftLatitude;
+  double? draftLongitude;
+  double? draftAccuracy;
+  List<EmergencyContact> emergencyContacts = const [];
+  final Set<String> selectedEmergencyContactIds = {};
+  Timer? composeSaveTimer;
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final descriptionController = TextEditingController();
   final manualAddressController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    final draft = widget.initialDraft;
+    if (draft != null) {
+      composeDraftId = draft.clientSubmissionId;
+      descriptionController.text = draft.description;
+      anonymous = draft.anonymous;
+      notifyEmergencyContact = draft.notifyEmergencyContacts;
+      selectedEmergencyContactIds.addAll(draft.emergencyContactIds);
+      manualLocation =
+          draft.manualAddress != null && draft.manualAddress!.isNotEmpty;
+      manualAddressController.text = draft.manualAddress ?? "";
+      draftLatitude = draft.latitude;
+      draftLongitude = draft.longitude;
+      draftAccuracy = draft.locationAccuracyMeters;
+    }
+    descriptionController.addListener(_scheduleComposeDraftSave);
+    manualAddressController.addListener(_scheduleComposeDraftSave);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadEmergencyContacts());
+    });
+  }
+
+  @override
   void dispose() {
+    composeSaveTimer?.cancel();
     descriptionController.dispose();
     manualAddressController.dispose();
     super.dispose();
+  }
+
+  void _scheduleComposeDraftSave() {
+    composeSaveTimer?.cancel();
+    composeSaveTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) unawaited(_persistComposeDraft());
+    });
+  }
+
+  Future<void> _loadEmergencyContacts() async {
+    final controller = appOf(context);
+    if (!controller.isAuthenticated || controller.accessToken == null) return;
+    setState(() => loadingEmergencyContacts = true);
+    try {
+      final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
+      final contacts = await client.listEmergencyContacts(
+        accessToken: controller.accessToken!,
+      );
+      if (!mounted) return;
+      setState(() {
+        emergencyContacts = contacts;
+        if (selectedEmergencyContactIds.isEmpty && contacts.isNotEmpty) {
+          selectedEmergencyContactIds.addAll(
+            contacts.take(3).map((contact) => contact.id),
+          );
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => emergencyContacts = const []);
+    } finally {
+      if (mounted) setState(() => loadingEmergencyContacts = false);
+    }
+  }
+
+  Future<void> _persistComposeDraft() async {
+    final trimmed = descriptionController.text.trim();
+    if (trimmed.isEmpty &&
+        !anonymous &&
+        !notifyEmergencyContact &&
+        !manualLocation) {
+      return;
+    }
+
+    final controller = appOf(context);
+    Position? position;
+    if (draftLatitude != null && draftLongitude != null) {
+      position = Position(
+        latitude: draftLatitude!,
+        longitude: draftLongitude!,
+        timestamp: DateTime.now().toUtc(),
+        accuracy: draftAccuracy ?? 0,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+    } else {
+      final outcome = await captureLocationOutcome(
+        accuracy: LocationAccuracy.low,
+      );
+      position = outcome.position;
+      if (position != null) {
+        draftLatitude = position.latitude;
+        draftLongitude = position.longitude;
+        draftAccuracy = position.accuracy;
+      }
+    }
+    if (position == null || !mounted) return;
+
+    final draft = buildIncidentDraft(
+      type: widget.type.incidentType,
+      description: trimmed.isEmpty ? "${widget.type.label} draft" : trimmed,
+      position: position,
+      anonymous: anonymous,
+      notifyEmergencyContacts: notifyEmergencyContact,
+      emergencyContactIds: selectedEmergencyContactIds.toList(),
+      manualAddress:
+          manualLocation ? manualAddressController.text.trim() : null,
+      title: trimmed.isEmpty ? widget.type.label : trimmed,
+      clientSubmissionId: composeDraftId,
+    );
+    await controller.saveComposeDraft(draft);
   }
 
   @override
@@ -2878,10 +3093,52 @@ class _ReportScreenState extends State<ReportScreen> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: notifyEmergencyContact,
-                    onChanged: (value) =>
-                        setState(() => notifyEmergencyContact = value),
+                    onChanged: (value) {
+                      setState(() => notifyEmergencyContact = value);
+                      if (value) unawaited(_loadEmergencyContacts());
+                      _scheduleComposeDraftSave();
+                    },
                     title: const Text("Notify emergency contact"),
                   ),
+                  if (notifyEmergencyContact) ...[
+                    if (loadingEmergencyContacts)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: LinearProgressIndicator(),
+                      )
+                    else if (emergencyContacts.isEmpty)
+                      const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text("No saved emergency contacts"),
+                        subtitle: Text("Add contacts from your profile"),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: emergencyContacts
+                            .map(
+                              (contact) => FilterChip(
+                                label: Text(contact.name),
+                                selected: selectedEmergencyContactIds
+                                    .contains(contact.id),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      selectedEmergencyContactIds
+                                          .add(contact.id);
+                                    } else {
+                                      selectedEmergencyContactIds
+                                          .remove(contact.id);
+                                    }
+                                  });
+                                  _scheduleComposeDraftSave();
+                                },
+                              ),
+                            )
+                            .toList(),
+                      ),
+                  ],
                   if (submissionError != null) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -2949,10 +3206,12 @@ class _ReportScreenState extends State<ReportScreen> {
       position: outcome.position!,
       anonymous: anonymous,
       notifyEmergencyContacts: notifyEmergencyContact,
+      emergencyContactIds: selectedEmergencyContactIds.toList(),
       manualAddress:
           manualLocation ? manualAddressController.text.trim() : null,
       title: trimmed.isEmpty ? widget.type.label : trimmed,
       localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
+      clientSubmissionId: composeDraftId,
     );
 
     for (final attachment in draft.localMedia) {
@@ -4071,8 +4330,23 @@ class NotificationsScreen extends StatelessWidget {
   }
 }
 
-class IncidentTrackingScreen extends StatelessWidget {
+class IncidentTrackingScreen extends StatefulWidget {
   const IncidentTrackingScreen({super.key});
+
+  @override
+  State<IncidentTrackingScreen> createState() => _IncidentTrackingScreenState();
+}
+
+class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = appOf(context);
+      unawaited(controller.loadIncidentsFromApi());
+      unawaited(controller.refreshComposeDrafts());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4080,38 +4354,99 @@ class IncidentTrackingScreen extends StatelessWidget {
     return SafetyScaffold(
       title: "Incident status",
       selectedIndex: 2,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          if (controller.pendingDrafts.isNotEmpty)
-            SectionCard(
-              title: "Pending submissions",
-              child: Column(
-                children: [
-                  ...controller.pendingDrafts.map(
-                    (draft) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.cloud_off),
-                      title: Text(draft.type),
-                      subtitle: Text(draft.description),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await controller.loadIncidentsFromApi();
+          await controller.refreshPendingDrafts();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          children: [
+            if (controller.loadingIncidents)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            if (controller.incidentLoadError != null)
+              ListTile(
+                leading: const Icon(Icons.cloud_off),
+                title: const Text("History unavailable"),
+                subtitle: Text(controller.incidentLoadError!),
+              ),
+            if (controller.composeDrafts.isNotEmpty)
+              SectionCard(
+                title: "Saved drafts",
+                child: Column(
+                  children: controller.composeDrafts
+                      .map(
+                        (draft) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.edit_note),
+                          title: Text(draft.type),
+                          subtitle: Text(draft.description),
+                          onTap: () {
+                            final reportType =
+                                reportTypeForIncidentType(draft.type);
+                            if (reportType == null) return;
+                            Navigator.of(context).pushNamed(
+                              reportType.routePath,
+                              arguments: draft,
+                            );
+                          },
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => controller
+                                .deleteComposeDraft(draft.clientSubmissionId),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            if (controller.pendingDrafts.isNotEmpty)
+              SectionCard(
+                title: "Pending submissions",
+                child: Column(
+                  children: [
+                    ...controller.pendingDrafts.map(
+                      (draft) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.cloud_off),
+                        title: Text(draft.type),
+                        subtitle: Text(draft.description),
+                      ),
                     ),
-                  ),
-                  if (controller.online)
-                    FilledButton(
-                      onPressed: controller.syncingPending
-                          ? null
-                          : () => controller.syncPendingSubmissions(),
-                      child: Text(controller.syncingPending
-                          ? "Retrying..."
-                          : "Retry pending submissions"),
-                    ),
-                ],
+                    if (controller.online)
+                      FilledButton(
+                        onPressed: controller.syncingPending
+                            ? null
+                            : () => controller.syncPendingSubmissions(),
+                        child: Text(controller.syncingPending
+                            ? "Retrying..."
+                            : "Retry pending submissions"),
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            if (controller.incidents.isEmpty && !controller.loadingIncidents)
+              const ListTile(
+                leading: Icon(Icons.history),
+                title: Text("No submitted incidents yet"),
+                subtitle: Text(
+                    "Reports you submit will appear here after server confirmation."),
+              ),
+            ...controller.incidents.map(
+              (incident) => IncidentStatusTile(
+                incident: incident,
+                onTap: () => Navigator.of(context).pushNamed(
+                  "/incident-detail",
+                  arguments: incident.id,
+                ),
               ),
             ),
-          const SizedBox(height: 12),
-          ...controller.incidents
-              .map((incident) => IncidentStatusTile(incident: incident)),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -5266,7 +5601,8 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
     showAppSnackBar(context, error.userMessage, isError: true);
   } catch (_) {
     if (!context.mounted) return;
-    showAppSnackBar(context, "Unable to process deletion request.", isError: true);
+    showAppSnackBar(context, "Unable to process deletion request.",
+        isError: true);
   }
 }
 
@@ -5955,12 +6291,14 @@ class ListTileCard extends StatelessWidget {
       required this.title,
       required this.subtitle,
       this.trailing,
+      this.onTap,
       super.key});
 
   final Widget leading;
   final String title;
   final String subtitle;
   final Widget? trailing;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -5972,6 +6310,7 @@ class ListTileCard extends StatelessWidget {
         border: Border.all(color: BrandColors.lightBorder),
       ),
       child: ListTile(
+        onTap: onTap,
         minVerticalPadding: 14,
         leading: leading,
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -5983,9 +6322,10 @@ class ListTileCard extends StatelessWidget {
 }
 
 class IncidentStatusTile extends StatelessWidget {
-  const IncidentStatusTile({required this.incident, super.key});
+  const IncidentStatusTile({required this.incident, this.onTap, super.key});
 
   final IncidentTrackingItem incident;
+  final VoidCallback? onTap;
 
   Color _verificationColor(String status) {
     switch (status) {
@@ -6003,6 +6343,7 @@ class IncidentStatusTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTileCard(
+      onTap: onTap,
       leading: const Icon(Icons.radar),
       title: "${incident.id} - ${incident.type}",
       subtitle:

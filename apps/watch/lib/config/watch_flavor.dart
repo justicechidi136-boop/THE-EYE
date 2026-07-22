@@ -17,8 +17,7 @@ enum WatchLauncherMode {
 }
 
 abstract final class WatchFlavor {
-  static const _flutterFlavor =
-      String.fromEnvironment('FLUTTER_APP_FLAVOR');
+  static const _flutterFlavor = String.fromEnvironment('FLUTTER_APP_FLAVOR');
   static const _legacyEnvName = String.fromEnvironment(
     'THE_EYE_FIREBASE_ENV',
     defaultValue: '',
@@ -89,9 +88,7 @@ abstract final class WatchFlavor {
     }
   }
 
-  static bool get isDevelopment =>
-      firebaseEnv == WatchFirebaseEnv.development;
+  static bool get isDevelopment => firebaseEnv == WatchFirebaseEnv.development;
   static bool get isStaging => firebaseEnv == WatchFirebaseEnv.staging;
-  static bool get isProduction =>
-      firebaseEnv == WatchFirebaseEnv.production;
+  static bool get isProduction => firebaseEnv == WatchFirebaseEnv.production;
 }

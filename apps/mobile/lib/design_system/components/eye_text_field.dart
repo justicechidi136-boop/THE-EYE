@@ -59,7 +59,8 @@ class EyeTextField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-              borderSide: const BorderSide(color: EyeTokens.greenMain, width: 2),
+              borderSide:
+                  const BorderSide(color: EyeTokens.greenMain, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(EyeTokens.radiusSm),

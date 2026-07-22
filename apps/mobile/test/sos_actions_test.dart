@@ -90,7 +90,8 @@ void main() {
     expect(find.text("Sending SOS..."), findsNothing);
   });
 
-  testWidgets("Send SOS now dismisses action sheet immediately", (tester) async {
+  testWidgets("Send SOS now dismisses action sheet immediately",
+      (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: AppScope(
@@ -144,8 +145,8 @@ AppController _testController(ThemeProvider themeProvider) {
     ),
     connectivity: ConnectivityService(
       apiClient: apiClient,
-      networkReader: FakeNetworkInterfaceReader(
-          initial: [ConnectivityResult.wifi]),
+      networkReader:
+          FakeNetworkInterfaceReader(initial: [ConnectivityResult.wifi]),
       debounceDelay: Duration.zero,
     ),
     authService: AuthService(
@@ -176,7 +177,8 @@ class _ImmediateLocationPlatform extends GeolocatorPlatform {
   Future<bool> isLocationServiceEnabled() async => true;
 
   @override
-  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async {
+  Future<Position> getCurrentPosition(
+      {LocationSettings? locationSettings}) async {
     return Position(
       latitude: 6.5244,
       longitude: 3.3792,

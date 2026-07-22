@@ -4,7 +4,15 @@ import { verificationStatusFromScore } from "../lib/verification";
 import { EmptyState, TableScrollHint } from "./form-primitives";
 import { EvidenceAccessLog, VerificationStatusBadge } from "./verification-ui";
 import { LocationTrailMap } from "./location-trail-map";
+import { IncidentAdminActions } from "./incident-admin-actions";
+import { EvidenceViewButton } from "./evidence-view-button";
 import { Panel, StatusBadge } from "./ui";
+
+function gpsToMarker(lat: number, lng: number, label: string) {
+  const left = `${Math.min(90, Math.max(10, ((lng - 3.2) / 0.4) * 100))}%`;
+  const top = `${Math.min(90, Math.max(10, ((6.7 - lat) / 0.2) * 100))}%`;
+  return { left, top, label };
+}
 
 function priorityTone(priority: Incident["priority"]) {
   if (priority === "P1") return "danger";
@@ -29,8 +37,17 @@ export function IncidentMap({ incidents }: { incidents: Incident[] }) {
         aria-label={`Operational map showing ${incidents.length} incident positions in Ikeja`}
       >
         <div className="absolute left-[58%] top-[38%] h-4 w-4 rounded-full bg-red-600 ring-4 ring-red-600/20" />
-        <div className="absolute left-[48%] top-[52%] h-4 w-4 rounded-full bg-amber-500 ring-4 ring-amber-500/20" />
-        <div className="absolute left-[65%] top-[61%] h-4 w-4 rounded-full bg-sky-600 ring-4 ring-sky-600/20" />
+        {incidents.map((incident) => {
+          const marker = gpsToMarker(incident.gps.lat, incident.gps.lng, incident.id);
+          return (
+            <div
+              key={incident.id}
+              className="absolute h-4 w-4 rounded-full bg-red-600 ring-4 ring-red-600/20"
+              style={{ left: marker.left, top: marker.top }}
+              title={`${incident.id} ${incident.gps.lat}, ${incident.gps.lng}`}
+            />
+          );
+        })}
         <div className="absolute bottom-4 left-4 rounded-lg border border-line bg-surface/95 p-3 shadow-soft">
           <p className="text-sm font-semibold">Ikeja operational view</p>
           <p className="mt-1 text-xs text-muted">GPS, manual adjustment, assigned agency, and confidence overlays.</p>
@@ -118,12 +135,18 @@ export function IncidentDetail({
       <Panel title="Evidence">
         <div className="grid gap-3">
           {incident.evidence.length ? incident.evidence.map((item) => (
-            <div key={item.hash} className="rounded-lg border border-line bg-surfaceMuted p-3">
+            <div key={item.id || item.hash} className="rounded-lg border border-line bg-surfaceMuted p-3">
               <p className="font-semibold">{item.type}: {item.name}</p>
               <p className="mt-1 break-all text-xs text-muted">{item.hash}</p>
+              {item.id ? (
+                <EvidenceViewButton incidentId={incident.id} mediaId={item.id} label="View evidence" />
+              ) : null}
             </div>
           )) : <p className="text-sm text-muted">No evidence uploaded yet.</p>}
         </div>
+      </Panel>
+      <Panel title="Admin operations">
+        <IncidentAdminActions incidentId={incident.id} currentStatus={incident.status} />
       </Panel>
       <Panel title="Status history">
         <ol className="grid gap-3">
@@ -142,7 +165,11 @@ export function IncidentDetail({
         <EvidenceAccessLog entries={evidenceAccessLogs} />
       </Panel>
       <div className="xl:col-span-2">
-        <LocationTrailMap title="Live map marker and movement trail" openLocationHref={mapsHref} />
+        <LocationTrailMap
+          title="Live map marker and movement trail"
+          openLocationHref={mapsHref}
+          points={[gpsToMarker(incident.gps.lat, incident.gps.lng, incident.id)]}
+        />
       </div>
     </div>
   );

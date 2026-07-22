@@ -305,6 +305,7 @@ class TheEyeApiClient {
   Future<http.Response> getJson(
     String path, {
     String? accessToken,
+    Map<String, String>? query,
     Duration timeout = const Duration(seconds: 30),
   }) {
     final headers = <String, String>{"accept": "application/json"};
@@ -312,7 +313,12 @@ class TheEyeApiClient {
       headers["authorization"] = "Bearer $accessToken";
     }
 
-    return _http.get(_uri(path), headers: headers).timeout(timeout);
+    var uri = _uri(path);
+    if (query != null && query.isNotEmpty) {
+      uri = uri.replace(queryParameters: {...uri.queryParameters, ...query});
+    }
+
+    return _http.get(uri, headers: headers).timeout(timeout);
   }
 
   Future<bool> checkApiReachable(
@@ -850,6 +856,21 @@ class TheEyeApiClient {
       payload,
       accessToken: accessToken,
     );
+  }
+
+  Future<void> postIncidentLocation({
+    required String incidentId,
+    required Map<String, Object?> payload,
+    String? accessToken,
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.incidentLocation(incidentId),
+      payload,
+      accessToken: accessToken,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw IncidentApiException.fromResponse(response);
+    }
   }
 
   Future<void> registerSmartwatch(Map<String, Object?> payload,
