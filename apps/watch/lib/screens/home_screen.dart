@@ -75,8 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _statusLabel() {
     final mode = widget.services.connectivity.activeMode;
     if (mode == WatchConnectivityMode.offline) return 'Offline';
-    if (mode == WatchConnectivityMode.standaloneCellular)
+    if (mode == WatchConnectivityMode.standaloneCellular) {
       return 'LTE Standalone';
+    }
     if (_isDangerFace()) return 'DANGER NEARBY';
     return 'Area: Moderate Risk';
   }
