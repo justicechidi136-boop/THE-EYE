@@ -2,12 +2,13 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-22 (Sprint 5 re-evaluation — functionally complete pending staging QA)  
+**Last updated:** 2026-07-22 (Sprint 6 Phase 1 audit + contracts — implementation not started)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
 **Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**  
 **Sprint 4 status:** **CODE COMPLETE — PENDING STAGING RUNTIME QA** (DI fix `fe7bb3d`; VPS redeploy pending)  
-**Sprint 5 status:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (`feature/sprint-5-neighborhood-watch` @ `ec3362a`+; no PASS without device/runtime evidence; INF-006 media E2E remains blocked)
+**Sprint 5 status:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (`feature/sprint-5-neighborhood-watch` @ `ec3362a`+; no PASS without device/runtime evidence; INF-006 media E2E remains blocked)  
+**Sprint 6 status:** **PHASE 1 AUDIT COMPLETE — IMPLEMENTATION NOT STARTED** (branch `feature/sprint-6-emergency-response-command-center`; contracts in `docs/EMERGENCY_RESPONSE_CONTRACT.md`, `docs/AGENCY_DISPATCH_ARCHITECTURE.md`)
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -73,6 +74,7 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-22 | Sprint 6 Phase 1–2 | Full emergency-response re-audit on `staging` @ `7d71615`. Sprint 6 gap table (S6-001–S6-035) + canonical contracts (`docs/EMERGENCY_RESPONSE_CONTRACT.md`, `docs/AGENCY_DISPATCH_ARCHITECTURE.md`) on `feature/sprint-6-emergency-response-command-center`. No implementation changes. No PASS promotions. Sprint 1–5 statuses unchanged. |
 | 2026-07-22 | Sprint 5 re-evaluation | Completed P0/P1 gaps on `feature/sprint-5-neighborhood-watch`: permission matrix, moderation/statistics APIs, privilege tests (249 API tests), mobile leave/members/comments/reports/media UI, admin moderation BFF. Status promoted to **FUNCTIONALLY COMPLETE — PENDING STAGING QA** only. No Sprint 5 runtime PASS. INF-006 media E2E and Sprint 4 notification delivery remain blocked. Sprint 1–4 unchanged. |
 | 2026-07-22 | Sprint 5 implementation | Neighborhood Watch lifecycle coded on `feature/sprint-5-neighborhood-watch`: discovery pagination, community requests, membership reject, comments/reactions/reports APIs, alerts/patrols/members endpoints, Prisma migration, mobile live wiring, admin reject BFF + map GPS fix. API 241/241 + mobile NW test green. No PASS without staging device QA. Sprint 1–4 unchanged. |
 | 2026-07-22 | Sprint 5 Phase 1 | Full Neighborhood Watch re-audit on `staging` @ `fe7bb3d`. Sprint 5 gap table + `docs/NEIGHBORHOOD_WATCH_CONTRACT.md` added on `feature/sprint-5-neighborhood-watch`. Backend core exists; mobile 100% static UI; admin CSOC partial with mock map coords and dead actions. No implementation changes. No PASS promotions. Sprint 1–4 statuses unchanged except Sprint 4 header note for DI fix. |
@@ -665,6 +667,94 @@
 | Admin CSOC | ADM-NW-001–007 |
 | API neighborhood-watch module | Covered by S5-001–S5-040 |
 | Infrastructure dependencies | INF-005 (queue), INF-006 (media) |
+
+---
+
+## SPRINT 6 — Emergency Response, Agency Dispatch, and Command Center
+
+**Baseline:** `staging` @ `7d71615` (post Sprint 5 merge, Validate Staging green)  
+**Implementation branch:** `feature/sprint-6-emergency-response-command-center`  
+**Contracts:** `docs/EMERGENCY_RESPONSE_CONTRACT.md`, `docs/AGENCY_DISPATCH_ARCHITECTURE.md`  
+**Sprint 6 verdict:** **PHASE 1 AUDIT COMPLETE — IMPLEMENTATION NOT STARTED**
+
+> Rules: No mock responders, fake maps, placeholder agency data, or simulated success. Reuse existing Redis/FCM/S3/LiveKit integrations or mark **BLOCKED**. Do not promote Sprint 1–5 rows to PASS without new live evidence. Do not start Sprint 7.
+
+### Sprint 6 gap table (Phase 1 audit @ 2026-07-22)
+
+| ID | Capability | Platform | Current status | UI | Endpoint | Service | Database | Geospatial | Queue/notification | LiveKit | Admin/agency dashboard | Tests | Severity | Blocker | Required change |
+|----|------------|----------|----------------|:--:|:--------:|:-------:|:--------:|:----------:|:------------------:|:-------:|:----------------------:|:-----:|:--------:|:-------:|-----------------|
+| S6-001 | Mobile standard SOS | Mobile + API | PARTIAL | SOS bottom sheet → `POST /incidents/report` type SOS | Y | `IncidentsService.report` | Y | GPS in payload | Partial enqueue | N/A | SOS monitor list | `sos_actions_test.dart` | P0 | N | Active-emergency screen; post-submit status; staging device QA |
+| S6-002 | Mobile silent SOS | Mobile + API | NOT IMPLEMENTED | No silent flow | N | N | N | N | N | N/A | N | N | P1 | Y | Silent flag + discreet UX per contract; server `silent` metadata |
+| S6-003 | Mobile SOS cancellation | Mobile + API | PARTIAL | Pre-submit dismiss only | N | N | N | N | N | N/A | N | N | P1 | N | Post-submit cancel API + countdown policy + audit |
+| S6-004 | Mobile emergency category | Mobile + API | PARTIAL | Type selection in SOS sheet | Y | Maps to `IncidentType` | Y | N | N | N/A | N | Y | P0 | N | Align categories with contract table; no new conflicting enums |
+| S6-005 | Mobile offline SOS queue | Mobile + API | PASS | `pending_retry_coordinator` | Y | Y | Y | N | N | N/A | N | Y | P0 | N | Staging device QA only |
+| S6-006 | Mobile active-emergency experience | Mobile | NOT IMPLEMENTED | No dedicated screen post-SOS | Partial GET detail | Partial | Y | Partial location | BLOCKED push | BLOCKED | N | N | P0 | Y | Wire status/responder/ETA/timeline; survive restart; no fake "help on way" |
+| S6-007 | Mobile live citizen location | Mobile + API | PARTIAL | Tracker exists; not SOS-bound | `POST /incidents/:id/location` | Y | `IncidentLocationUpdate` | Y | N | N/A | N | Partial | P0 | N | Start/stop on active emergency; movement-aware frequency |
+| S6-008 | Mobile responder status / ETA | Mobile | NOT IMPLEMENTED | N | N | N | N | N | N | N/A | N | N | P0 | Y | Assignment + ETA endpoints; no static responder names |
+| S6-009 | Watch SOS hold/cancel/submit | Watch + API | PARTIAL | 3s hold + cancel | `POST /smartwatch/sos` | `SmartwatchService` | `SosEvent` | GPS to API | Partial | N/A | Admin list | `sos_service_test.dart` | P0 | N | Staging device QA |
+| S6-010 | Watch silent SOS | Watch + API | NOT IMPLEMENTED | Enum exists; not in main flow | N | N | N | N | N | N/A | N | N | P1 | Y | Wire silent mode per contract |
+| S6-011 | Watch offline SOS replay | Watch + API | PARTIAL | Manual flush only | Y | Y | Y | GPS not queued offline | N | N/A | N | Partial | P0 | N | Auto-flush on reconnect; ordered replay |
+| S6-012 | Watch active-emergency screen | Watch | PARTIAL | `active_emergency_screen.dart` | Poll status | Partial | Y | Hardcoded battery/signal | BLOCKED FCM | N/A | N | Partial | P0 | Y | Real telemetry; responder milestones; discreet silent UX |
+| S6-013 | Watch GPS stream / tracking map | Watch + API | PARTIAL | GPS posts; map placeholder | `POST .../gps`, tracking GET | Y | `SmartwatchGpsTrack` | Y | N | N/A | Not wired | Partial | P1 | N | Wire admin tracking endpoint; remove placeholder map |
+| S6-014 | Triage and priority engine | API | PARTIAL | N/A | Via verification | `VerificationService` scoring | Y | Jurisdiction lookup | N | N/A | Manual review | verification specs | P0 | Y | Deterministic triage module; auditable recommendations; category tests |
+| S6-015 | Agency routing | API | NOT IMPLEMENTED | N/A | N | N | `Agency` exists | `police-stations/nearest` only | N | N/A | N | N | P0 | Y | Rank agencies by category+jurisdiction+proximity+availability; no global hardcode |
+| S6-016 | Dispatch queue API | API + Admin | NOT IMPLEMENTED | N/A | No `/dispatch/*` | N | No assignment model | N | N | N/A | Incident list only | N | P0 | Y | New dispatch module: list/filter/assign/escalate/request-info |
+| S6-017 | Responder availability | API | NOT IMPLEMENTED | N/A | N | N | No `Responder` model | N | N | N/A | N | N | P0 | Y | Responder model + availability FSM + agency scope |
+| S6-018 | Incident assignment lifecycle | API + Admin | PARTIAL | Admin assign UI | `PATCH /incidents/:id/assign` | Sets `assignedAgencyId`/`assignedAdminId` only | No `IncidentAssignment` | N | Not enqueued | N/A | PARTIAL | Partial | P0 | Y | Full assignment FSM; accept/decline/reassign; idempotent claim lock |
+| S6-019 | Responder accept/decline/en route/arrive | API | NOT IMPLEMENTED | N/A | N | N | N | N | N | N/A | N | N | P0 | Y | Responder actions + validated transitions + audit |
+| S6-020 | Reassignment chain | API | NOT IMPLEMENTED | N/A | N | N | N | N | N | N/A | N | N | P1 | Y | `previousAssignmentId` chain; auto-reassign on decline/expiry |
+| S6-021 | Live citizen location (server) | API | PARTIAL | N/A | `POST /incidents/:id/location` | Y | `IncidentLocationUpdate` | PostGIS jurisdiction | N | N/A | CSS map only | Partial | P0 | N | Stale indicator; privacy DTOs; admin real map |
+| S6-022 | Live responder location | API + Admin | NOT IMPLEMENTED | N/A | N | N | No responder location table | N | N | N/A | N | N | P0 | Y | Assignment-scoped location stream + command-center layer |
+| S6-023 | ETA and distance | API + Mobile + Admin | NOT IMPLEMENTED | N/A | N | N | N | Haversine possible | N | N/A | N | N | P1 | Y | Provider-neutral routing interface; label straight-line; road ETA BLOCKED |
+| S6-024 | Command center dashboard | Admin | PARTIAL | `/` metrics real | Partial incidents API | Partial | Y | Mock map markers | N | BLOCKED | PARTIAL | N | P0 | Y | Real map library; dispatch queue; SLA timers; worker health |
+| S6-025 | Agency-scoped dashboards | Admin | NOT IMPLEMENTED | Single admin app | Agency filter partial | Partial RBAC | `Agency` + admin scope | N | N | N/A | N | N | P1 | N | Role/agency-scoped views; shared components |
+| S6-026 | Incident communications (chat) | All | NOT IMPLEMENTED | Inert chat buttons | N | N | N | N | N | N/A | N | N | P1 | Y | Typed incident conversation API or mark BLOCKED — no simulation |
+| S6-027 | LiveKit incident A/V | All | BLOCKED | Mobile + admin player wired | Token endpoints | `LiveVideoService` | `LiveVideoSession` | Session GPS | N | INF-003 | Viewer exists | live-video tests | P0 | Y | Staging credentials; incident/assignment binding; role-scoped tokens |
+| S6-028 | Escalation and SLA engine | API + Worker | PARTIAL | Manual escalate button | `POST /escalation/run` | `EscalationService` | `EscalationRule` | N | Not scheduled | N/A | N | Partial | P0 | Y | Cron/worker; idempotent jobs; thresholds; no notification spam |
+| S6-029 | Unified incident timeline | API + All clients | PARTIAL | Admin audit partial | GET detail includes history | Status history | `IncidentStatusHistory` | Location events partial | N | Partial | Timeline partial | Partial | P1 | N | `DispatchEvent` + safe citizen vs privileged DTOs |
+| S6-030 | Operational analytics | Admin | PARTIAL | Dashboard metrics | Existing aggregates | Partial | Y | N | N | N/A | Real counts only | N | P2 | N | Factual metrics: triage/assign/arrival/resolution times; no fake charts |
+| S6-031 | Security and jurisdiction enforcement | API | PARTIAL | N/A | Existing guards | Partial | Y | Jurisdiction assert | N | Token auth | RBAC partial | Partial | P0 | N | Dispatch/responder regression tests; location privacy; cancel abuse |
+| S6-032 | Assignment/status notifications | API | NOT IMPLEMENTED | N/A | N | NotificationsService exists | Y | N | BLOCKED INF-005/FCM | N/A | N | Partial | P0 | Y | Enqueue on assign/accept/en route/arrive/resolve via Sprint 4 pipeline |
+| S6-033 | Fall/health/hardware SOS triggers | Watch | NOT IMPLEMENTED | N | N | N | N | N | N | N/A | N | N | P3 | Y | **BLOCKED** — no compatible hardware/policy; do not simulate |
+| S6-034 | SMS emergency contacts on SOS | API | BLOCKED | N/A | Enqueue path exists | Partial | Y | N | SMS provider fail-closed | N/A | N | N | P1 | Y | Real SMS webhook/provider on staging |
+| S6-035 | Dispatch automated test suite | API + Mobile + Admin | NOT IMPLEMENTED | N/A | N | N | N | N | N | N/A | N | N | P0 | Y | Cover SOS→triage→route→assign→location→SLA per Phase 21 |
+
+### Sprint 6 evidence tracker (target — no PASS until staging device QA)
+
+| Track | IDs | Target status | Staging runtime QA | Notes |
+|-------|-----|---------------|-------------------|-------|
+| Mobile SOS + active emergency | S6-001–S6-008, MOB-EMRG-001–010 | NOT IMPLEMENTED / PARTIAL | Required | Silent SOS + active screen are P0 gaps |
+| Watch SOS + active emergency | S6-009–S6-013, WCH-SOS-* | PARTIAL | Required | Offline replay + telemetry gaps |
+| Dispatch core | S6-014–S6-020, S6-016–S6-018 | NOT IMPLEMENTED | Required | No `/dispatch/*` module yet |
+| Live location + ETA | S6-021–S6-023 | NOT IMPLEMENTED / PARTIAL | Required | Responder location + real maps |
+| Command center | S6-024–S6-025, ADM-INC-010/015 | PARTIAL / FAIL | Required | Replace CSS mock maps |
+| Communications + LiveKit | S6-026–S6-027 | BLOCKED / NOT IMPL | Required | INF-003 LiveKit; chat API missing |
+| SLA + timeline + analytics | S6-028–S6-030 | PARTIAL | Required | Worker cron + DispatchEvent |
+| Security + notifications | S6-031–S6-034 | PARTIAL / BLOCKED | Required | Inherits INF-005/FCM/SMS blockers |
+| Test coverage | S6-035 | NOT IMPLEMENTED | Required | Phase 21 acceptance suites |
+
+### Sprint 6 checklist row map (existing IDs — statuses unchanged)
+
+| Sprint 6 track | Existing checklist IDs |
+|----------------|------------------------|
+| Mobile SOS / emergency | MOB-EMRG-001–010 |
+| Mobile incident tracking | MOB-INCD-013, MOB-INCD-017, MOB-INCD-018 |
+| Watch SOS | WCH-SOS-001–004, WCH-INC-001/002 |
+| Admin incidents / command | ADM-INC-001–016, ADM-CSOC-001–004 |
+| API incidents / escalation | API-INC-001–006, API-ESC-* |
+| Infrastructure dependencies | INF-003 (LiveKit), INF-005 (Redis), INF-006 (S3) |
+
+### Sprint 6 dependency map
+
+| Dependency | Existing integration | Sprint 6 need | Status |
+|------------|---------------------|---------------|--------|
+| PostgreSQL + PostGIS | Jurisdiction, nearest police | Agency routing, distance | **PARTIAL** |
+| Redis + BullMQ | Notification worker | Assignment/SLA notifications | **BLOCKED** on staging VPS |
+| FCM | `fcm.provider.ts` | Citizen/responder push updates | **BLOCKED** device QA |
+| S3/Spaces | Presign | Evidence in command center | **BLOCKED** INF-006 |
+| LiveKit | `livekit-token.service.ts` | Incident live video | **BLOCKED** INF-003 |
+| SMS provider | Fail-closed stub | Emergency contact SMS | **BLOCKED** |
+| Real map library | Not present | Command center maps | **NOT IMPLEMENTED** |
 
 ---
 
