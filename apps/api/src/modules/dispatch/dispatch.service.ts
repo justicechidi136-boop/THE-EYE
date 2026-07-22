@@ -41,6 +41,9 @@ import {
   validateTriageOverrideDto,
   validateUpdateDispatchAssignmentDto,
   validateUpdateResponderAvailabilityDto,
+  resolveAssignmentStatus,
+  validateAssignmentNoteDto,
+  AssignmentNoteDto,
 } from "./dto/dispatch.dto";
 import { TriageService, type TriageResult } from "./triage.service";
 
@@ -412,33 +415,51 @@ export class DispatchService {
 
   async updateAssignment(id: string, dto: UpdateDispatchAssignmentDto, actor: JwtPayload) {
     validateUpdateDispatchAssignmentDto(dto);
+    const targetStatus = resolveAssignmentStatus(dto);
+
+    if (dto.clientActionId) {
+      const prior = await (this.prisma as any).dispatchEvent.findFirst({
+        where: {
+          eventType: `assignment.${targetStatus.toLowerCase()}`,
+          metadata: { path: ["clientActionId"], equals: dto.clientActionId },
+        },
+      });
+      if (prior) {
+        const assignment = await (this.prisma as any).incidentAssignment.findUnique({
+          where: { id },
+          include: { incident: true, responder: true, agency: true },
+        });
+        return { data: assignment, duplicate: true };
+      }
+    }
+
     const assignment = await (this.prisma as any).incidentAssignment.findUnique({
       where: { id },
-      include: { incident: true, responder: true },
+      include: { incident: true, responder: true, agency: true },
     });
     if (!assignment) throw new NotFoundException("Assignment not found");
 
     this.assertAssignmentActor(assignment, actor);
     const currentStatus = assignment.status as IncidentAssignmentStatus;
-    if (!canTransitionAssignment(currentStatus, dto.status)) {
-      throw new BadRequestException(`Assignment cannot move from ${currentStatus} to ${dto.status}`);
+    if (!canTransitionAssignment(currentStatus, targetStatus)) {
+      throw new BadRequestException(`Assignment cannot move from ${currentStatus} to ${targetStatus}`);
     }
 
-    if (assignment.expiresAt && dto.status === IncidentAssignmentStatus.Accepted && new Date() > assignment.expiresAt) {
+    if (assignment.expiresAt && targetStatus === IncidentAssignmentStatus.Accepted && new Date() > assignment.expiresAt) {
       throw new BadRequestException("Assignment acceptance window expired");
     }
 
+    const now = new Date();
     const updateResult = await (this.prisma as any).incidentAssignment.updateMany({
       where: { id, version: dto.version },
       data: {
-        status: dto.status,
+        status: targetStatus,
         version: { increment: 1 },
-        acceptedAt: dto.status === IncidentAssignmentStatus.Accepted ? new Date() : assignment.acceptedAt,
-        declinedAt: dto.status === IncidentAssignmentStatus.Declined ? new Date() : assignment.declinedAt,
-        enRouteAt:
-          dto.status === IncidentAssignmentStatus.Accepted && !assignment.enRouteAt ? new Date() : assignment.enRouteAt,
-        arrivedAt: dto.status === IncidentAssignmentStatus.Arrived ? new Date() : assignment.arrivedAt,
-        completedAt: dto.status === IncidentAssignmentStatus.Completed ? new Date() : assignment.completedAt,
+        acceptedAt: targetStatus === IncidentAssignmentStatus.Accepted ? now : assignment.acceptedAt,
+        declinedAt: targetStatus === IncidentAssignmentStatus.Declined ? now : assignment.declinedAt,
+        enRouteAt: targetStatus === IncidentAssignmentStatus.EnRoute ? now : assignment.enRouteAt,
+        arrivedAt: targetStatus === IncidentAssignmentStatus.Arrived ? now : assignment.arrivedAt,
+        completedAt: targetStatus === IncidentAssignmentStatus.Completed ? now : assignment.completedAt,
         declineReason: dto.declineReason,
         metadata: {
           ...(assignment.metadata ?? {}),
@@ -450,28 +471,130 @@ export class DispatchService {
 
     const updated = await (this.prisma as any).incidentAssignment.findUnique({
       where: { id },
-      include: { incident: true, responder: true },
+      include: { incident: true, responder: true, agency: true },
     });
 
-    await this.syncIncidentFromAssignment(updated, dto.status, actor, dto.note);
-    await this.syncResponderAvailability(updated, dto.status);
-    await this.recordDispatchEvent(updated.incidentId, actor, `assignment.${dto.status.toLowerCase()}`, dto.note, {
+    await this.syncIncidentFromAssignment(updated, targetStatus, actor, dto.note);
+    await this.syncResponderAvailability(updated, targetStatus);
+    await this.recordDispatchEvent(updated.incidentId, actor, `assignment.${targetStatus.toLowerCase()}`, dto.note, {
       assignmentId: id,
       declineReason: dto.declineReason,
+      clientActionId: dto.clientActionId,
     });
     await this.audit.record({
       actor,
-      action: `assignment.${dto.status.toLowerCase()}`,
+      action: `assignment.${targetStatus.toLowerCase()}`,
       entityType: "incident_assignments",
       entityId: id,
       reason: dto.declineReason ?? dto.note,
       beforeState: { status: currentStatus, version: dto.version },
-      afterState: { status: dto.status, version: dto.version + 1 },
+      afterState: { status: targetStatus, version: dto.version + 1 },
     });
 
-    await this.notifyAssignmentStatus(updated, dto.status);
+    await this.notifyAssignmentStatus(updated, targetStatus);
 
     return { data: updated };
+  }
+
+  async getAssignment(id: string, actor: JwtPayload) {
+    const assignment = await (this.prisma as any).incidentAssignment.findUnique({
+      where: { id },
+      include: { incident: true, responder: true, agency: true, responseUnit: true },
+    });
+    if (!assignment) throw new NotFoundException("Assignment not found");
+    this.assertAssignmentReadAccess(assignment, actor);
+    return { data: assignment };
+  }
+
+  async getResponderMe(actor: JwtPayload) {
+    const responder = await this.resolveResponderForActor(actor);
+    return { data: responder };
+  }
+
+  async getMyAssignments(actor: JwtPayload, query: { status?: string; limit?: string } = {}) {
+    const responder = await this.resolveResponderForActor(actor);
+    const rows = await (this.prisma as any).incidentAssignment.findMany({
+      where: {
+        responderId: responder.id,
+        ...(query.status ? { status: query.status } : {}),
+      },
+      include: { incident: true, agency: true },
+      orderBy: { createdAt: "desc" },
+      take: resolvePageLimit(query.limit),
+    });
+    return { data: rows };
+  }
+
+  async updateMyAvailability(actor: JwtPayload, dto: UpdateResponderAvailabilityDto) {
+    const responder = await this.resolveResponderForActor(actor);
+    return this.updateResponderStatus(responder.id, dto, actor);
+  }
+
+  async addAssignmentNote(id: string, dto: AssignmentNoteDto, actor: JwtPayload) {
+    validateAssignmentNoteDto(dto);
+    const assignment = await (this.prisma as any).incidentAssignment.findUnique({
+      where: { id },
+      include: { incident: true, responder: true },
+    });
+    if (!assignment) throw new NotFoundException("Assignment not found");
+    this.assertAssignmentActor(assignment, actor, true);
+
+    await this.recordDispatchEvent(assignment.incidentId, actor, "assignment.internal_note", dto.note, {
+      assignmentId: id,
+      internal: true,
+      clientActionId: dto.clientActionId,
+    });
+    await this.audit.record({
+      actor,
+      action: "assignment.note_added",
+      entityType: "incident_assignments",
+      entityId: id,
+      reason: dto.note,
+      metadata: { internal: true },
+    });
+    return { data: { recorded: true } };
+  }
+
+  async requestAssignmentBackup(id: string, reason: string, actor: JwtPayload) {
+    const assignment = await (this.prisma as any).incidentAssignment.findUnique({
+      where: { id },
+      include: { incident: true, responder: true },
+    });
+    if (!assignment) throw new NotFoundException("Assignment not found");
+    this.assertAssignmentActor(assignment, actor);
+
+    return this.escalateIncident(
+      assignment.incidentId,
+      { reason, requestBackup: true },
+      actor,
+    );
+  }
+
+  private async resolveResponderForActor(actor: JwtPayload) {
+    const responder = await (this.prisma as any).responder.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          actor.typ === "admin" ? { adminUserId: actor.sub } : undefined,
+          actor.typ === "user" ? { userId: actor.sub } : undefined,
+        ].filter(Boolean),
+      },
+      include: { agency: true },
+    });
+    if (!responder) throw new NotFoundException("Responder profile not found for current session");
+    return responder;
+  }
+
+  private assertAssignmentReadAccess(assignment: any, actor: JwtPayload) {
+    if (actor.typ === "admin" && actor.permissions?.includes("incident:read")) {
+      if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== assignment.agencyId) {
+        throw new ForbiddenException("Assignment outside agency scope");
+      }
+      return;
+    }
+    if (actor.typ === "user" && assignment.responder?.userId === actor.sub) return;
+    if (actor.typ === "admin" && assignment.responder?.adminUserId === actor.sub) return;
+    throw new ForbiddenException("Not authorized to view this assignment");
   }
 
   async listResponders(actor: JwtPayload, query: { agencyId?: string; availability?: string; limit?: string } = {}) {
@@ -522,8 +645,12 @@ export class DispatchService {
     note?: string,
   ) {
     let nextStatus: IncidentStatus | undefined;
-    if (status === IncidentAssignmentStatus.Accepted) nextStatus = IncidentStatus.Responding;
-    if (status === IncidentAssignmentStatus.Arrived) nextStatus = IncidentStatus.Responding;
+    if (status === IncidentAssignmentStatus.Accepted || status === IncidentAssignmentStatus.EnRoute) {
+      nextStatus = IncidentStatus.Responding;
+    }
+    if (status === IncidentAssignmentStatus.Arrived || status === IncidentAssignmentStatus.InProgress) {
+      nextStatus = IncidentStatus.Responding;
+    }
     if (status === IncidentAssignmentStatus.Completed) nextStatus = IncidentStatus.Resolved;
 
     if (!nextStatus) return;
@@ -558,8 +685,10 @@ export class DispatchService {
   private async syncResponderAvailability(assignment: any, status: IncidentAssignmentStatus) {
     if (!assignment.responderId) return;
     const availabilityMap: Partial<Record<IncidentAssignmentStatus, ResponderAvailability>> = {
-      [IncidentAssignmentStatus.Accepted]: ResponderAvailability.EnRoute,
+      [IncidentAssignmentStatus.Accepted]: ResponderAvailability.Busy,
+      [IncidentAssignmentStatus.EnRoute]: ResponderAvailability.EnRoute,
       [IncidentAssignmentStatus.Arrived]: ResponderAvailability.OnScene,
+      [IncidentAssignmentStatus.InProgress]: ResponderAvailability.OnScene,
       [IncidentAssignmentStatus.Completed]: ResponderAvailability.Available,
       [IncidentAssignmentStatus.Declined]: ResponderAvailability.Available,
       [IncidentAssignmentStatus.Cancelled]: ResponderAvailability.Available,
@@ -619,6 +748,10 @@ export class DispatchService {
       [IncidentAssignmentStatus.Accepted]: {
         title: "Responder accepted",
         body: "Your assigned responder accepted the emergency.",
+      },
+      [IncidentAssignmentStatus.EnRoute]: {
+        title: "Responder en route",
+        body: "Your assigned responder is en route.",
       },
       [IncidentAssignmentStatus.Arrived]: {
         title: "Responder arrived",
@@ -718,9 +851,15 @@ export class DispatchService {
     }
   }
 
-  private assertAssignmentActor(assignment: any, actor: JwtPayload) {
+  private assertAssignmentActor(assignment: any, actor: JwtPayload, supervisorOk = false) {
     if (actor.typ === "admin") {
       if (assignment.responder?.adminUserId === actor.sub) return;
+      if (supervisorOk && actor.permissions?.includes("incident:assign")) {
+        if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== assignment.agencyId) {
+          throw new ForbiddenException("Assignment is outside agency scope");
+        }
+        return;
+      }
       this.assertDispatcher(actor);
       if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== assignment.agencyId) {
         throw new ForbiddenException("Assignment is outside agency scope");

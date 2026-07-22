@@ -9,6 +9,9 @@ import { AgencyRoutingService } from "./agency-routing.service";
 import { DispatchController } from "./dispatch.controller";
 import { DispatchService } from "./dispatch.service";
 import { EmergencyClassificationService } from "./emergency-classification.service";
+import { EtaService } from "./eta.service";
+import { IncidentTimelineService } from "./incident-timeline.service";
+import { LocationTrackingService } from "./location-tracking.service";
 import { TriageService } from "./triage.service";
 
 @Module({
@@ -19,10 +22,21 @@ import { TriageService } from "./triage.service";
     TriageService,
     AgencyRoutingService,
     EmergencyClassificationService,
+    LocationTrackingService,
+    IncidentTimelineService,
+    EtaService,
     JwtAuthGuard,
     PermissionsGuard,
     IncidentScopeGuard,
   ],
-  exports: [DispatchService, TriageService, EmergencyClassificationService, AgencyRoutingService],
+  exports: [
+    DispatchService,
+    TriageService,
+    EmergencyClassificationService,
+    AgencyRoutingService,
+    LocationTrackingService,
+    IncidentTimelineService,
+    EtaService,
+  ],
 })
 export class DispatchModule {}

@@ -153,7 +153,9 @@ export enum IncidentAssignmentStatus {
   Declined = "Declined",
   Expired = "Expired",
   Reassigned = "Reassigned",
+  EnRoute = "EnRoute",
   Arrived = "Arrived",
+  InProgress = "InProgress",
   Completed = "Completed",
   Cancelled = "Cancelled",
 }

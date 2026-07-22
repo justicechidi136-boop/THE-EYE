@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { EmergencyCategory, IncidentAssignmentStatus, IncidentPriority, ResponderAvailability } from "@the-eye/shared";
+import { ASSIGNMENT_ACTION_TO_STATUS } from "../assignment-lifecycle";
 
 const emergencyCategories = new Set<string>(Object.values(EmergencyCategory));
 const assignmentStatuses = new Set<string>(Object.values(IncidentAssignmentStatus));
@@ -95,9 +96,34 @@ export type EscalateDispatchIncidentDto = {
 };
 
 export type UpdateDispatchAssignmentDto = {
-  status: IncidentAssignmentStatus;
+  status?: IncidentAssignmentStatus;
+  action?: "accept" | "decline" | "en_route" | "arrive" | "in_progress" | "complete" | "cancel";
   version: number;
   declineReason?: string;
+  note?: string;
+  clientActionId?: string;
+};
+
+export type AssignmentNoteDto = {
+  note: string;
+  clientActionId?: string;
+};
+
+export type AssignmentLocationDto = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+  capturedAt?: string;
+  sequenceNumber?: number;
+  speedMps?: number;
+  headingDegrees?: number;
+  batteryLevel?: number;
+  networkType?: string;
+  sourceDeviceId?: string;
+};
+
+export type ResponderMeAvailabilityDto = {
+  availability: ResponderAvailability;
   note?: string;
 };
 
@@ -119,10 +145,36 @@ export function validateEscalateDispatchIncidentDto(dto: EscalateDispatchInciden
 }
 
 export function validateUpdateDispatchAssignmentDto(dto: UpdateDispatchAssignmentDto) {
-  if (!assignmentStatuses.has(dto.status)) throw new BadRequestException("Unsupported assignment status");
   if (typeof dto.version !== "number" || dto.version < 1) throw new BadRequestException("version is required");
-  if (dto.status === IncidentAssignmentStatus.Declined) {
+  if (!dto.action && !dto.status) throw new BadRequestException("action or status is required");
+  const resolvedStatus = dto.status ?? (dto.action ? ASSIGNMENT_ACTION_TO_STATUS[dto.action] : undefined);
+  if (!resolvedStatus || !assignmentStatuses.has(resolvedStatus)) {
+    throw new BadRequestException("Unsupported assignment action/status");
+  }
+  if (resolvedStatus === IncidentAssignmentStatus.Declined) {
     assertText(dto.declineReason, "declineReason", 3);
+  }
+}
+
+export function resolveAssignmentStatus(dto: UpdateDispatchAssignmentDto): IncidentAssignmentStatus {
+  if (dto.status) return dto.status;
+  if (dto.action) {
+    const status = ASSIGNMENT_ACTION_TO_STATUS[dto.action];
+    if (!status) throw new BadRequestException("Unsupported assignment action");
+    return status;
+  }
+  throw new BadRequestException("action or status is required");
+}
+
+export function validateAssignmentNoteDto(dto: AssignmentNoteDto) {
+  assertText(dto.note, "note", 3);
+}
+
+export function validateAssignmentLocationDto(dto: AssignmentLocationDto) {
+  assertCoordinate(dto.latitude, "latitude", -90, 90);
+  assertCoordinate(dto.longitude, "longitude", -180, 180);
+  if (dto.accuracyMeters !== undefined && dto.accuracyMeters < 0) {
+    throw new BadRequestException("accuracyMeters must be non-negative");
   }
 }
 

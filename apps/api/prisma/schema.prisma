@@ -258,7 +258,9 @@ enum IncidentAssignmentStatus {
   Declined
   Expired
   Reassigned
+  EnRoute
   Arrived
+  InProgress
   Completed
   Cancelled
 }
@@ -509,6 +511,8 @@ model Incident {
   updatedAt           DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   resolvedAt          DateTime?               @map("resolved_at") @db.Timestamptz(6)
   closedAt            DateTime?               @map("closed_at") @db.Timestamptz(6)
+  liveLocationUpdatedAt DateTime?             @map("live_location_updated_at") @db.Timestamptz(6)
+  liveLocationStale   Boolean                 @default(false) @map("live_location_stale")
   reporter            User?                   @relation("IncidentReporter", fields: [reporterId], references: [id])
   jurisdiction        Jurisdiction            @relation(fields: [jurisdictionId], references: [id])
   assignedAgency      Agency?                 @relation(fields: [assignedAgencyId], references: [id])
@@ -636,6 +640,7 @@ model IncidentLocationUpdate {
   receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
   sourceDeviceId String?  @map("source_device_id")
   sequenceNumber Int      @default(0) @map("sequence_number")
+  metadata       Json     @default("{}")
   incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
 
   @@index([incidentId, capturedAt])

@@ -10,15 +10,25 @@ export const allowedAssignmentTransitions: Record<IncidentAssignmentStatus, Inci
     IncidentAssignmentStatus.Reassigned,
   ],
   [IncidentAssignmentStatus.Accepted]: [
-    IncidentAssignmentStatus.Arrived,
-    IncidentAssignmentStatus.Completed,
+    IncidentAssignmentStatus.EnRoute,
+    IncidentAssignmentStatus.Declined,
     IncidentAssignmentStatus.Cancelled,
     IncidentAssignmentStatus.Reassigned,
   ],
+  [IncidentAssignmentStatus.EnRoute]: [
+    IncidentAssignmentStatus.Arrived,
+    IncidentAssignmentStatus.Cancelled,
+    IncidentAssignmentStatus.Reassigned,
+  ],
+  [IncidentAssignmentStatus.Arrived]: [
+    IncidentAssignmentStatus.InProgress,
+    IncidentAssignmentStatus.Completed,
+    IncidentAssignmentStatus.Cancelled,
+  ],
+  [IncidentAssignmentStatus.InProgress]: [IncidentAssignmentStatus.Completed, IncidentAssignmentStatus.Cancelled],
   [IncidentAssignmentStatus.Declined]: [],
   [IncidentAssignmentStatus.Expired]: [],
   [IncidentAssignmentStatus.Reassigned]: [],
-  [IncidentAssignmentStatus.Arrived]: [IncidentAssignmentStatus.Completed, IncidentAssignmentStatus.Cancelled],
   [IncidentAssignmentStatus.Completed]: [],
   [IncidentAssignmentStatus.Cancelled]: [],
 };
@@ -31,7 +41,21 @@ export const ACTIVE_ASSIGNMENT_STATUSES: IncidentAssignmentStatus[] = [
   IncidentAssignmentStatus.Proposed,
   IncidentAssignmentStatus.Assigned,
   IncidentAssignmentStatus.Accepted,
+  IncidentAssignmentStatus.EnRoute,
   IncidentAssignmentStatus.Arrived,
+  IncidentAssignmentStatus.InProgress,
 ];
 
 export const ASSIGNMENT_ACCEPT_TIMEOUT_SECONDS = 300;
+
+export const ASSIGNMENT_ACTION_TO_STATUS: Record<string, IncidentAssignmentStatus> = {
+  accept: IncidentAssignmentStatus.Accepted,
+  decline: IncidentAssignmentStatus.Declined,
+  en_route: IncidentAssignmentStatus.EnRoute,
+  arrive: IncidentAssignmentStatus.Arrived,
+  in_progress: IncidentAssignmentStatus.InProgress,
+  complete: IncidentAssignmentStatus.Completed,
+  cancel: IncidentAssignmentStatus.Cancelled,
+};
+
+export const LOCATION_STALE_SECONDS = 120;
