@@ -8,6 +8,8 @@
     "start": "node --require ./src/preload-env.cjs dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node --require ./src/preload-env.cjs dist/main.js",
+    "start:worker": "node --require ./src/preload-env.cjs dist/worker.js",
+    "start:worker:dev": "nest start --entryFile worker --watch",
     "lint": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
