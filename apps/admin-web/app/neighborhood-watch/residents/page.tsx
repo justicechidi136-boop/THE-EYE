@@ -1,4 +1,5 @@
 import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
+import { MembershipModerationButton } from "../../../components/csoc/membership-moderation-button";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
 import { fetchCommunityResidents } from "../../../lib/api/data";
 
@@ -18,7 +19,7 @@ export default async function ResidentsPage() {
       />
       <Panel title="Resident directory">
         <CsocDataTable
-          columns={["Name", "Community", "Role", "Status", "Trust", "Volunteer", "Smartwatch", "Contact"]}
+          columns={["Name", "Community", "Role", "Status", "Trust", "Volunteer", "Smartwatch", "Contact", "Moderation"]}
           rows={residents.map((r) => [
             r.name,
             r.community,
@@ -28,6 +29,12 @@ export default async function ResidentsPage() {
             r.volunteerStatus,
             r.smartwatchStatus,
             <span key={`c-${r.membershipId}`} className="text-xs text-muted">{r.email}<br />{r.phone}</span>,
+            <MembershipModerationButton
+              key={`m-${r.membershipId}`}
+              communityId={r.communityId}
+              membershipId={r.membershipId}
+              status={r.status}
+            />,
           ])}
           emptyMessage="No residents found in assigned communities."
         />

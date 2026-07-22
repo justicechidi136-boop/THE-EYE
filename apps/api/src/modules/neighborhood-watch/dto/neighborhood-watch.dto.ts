@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import type { CursorPageQuery } from "../../../common/pagination/cursor-pagination";
 
 export type CreateCommunityDto = {
   parentId?: string;
@@ -66,6 +67,115 @@ export type PatrolCheckpointDto = {
 export type SendCommunityMessageDto = {
   body: string;
 };
+
+export type ListCommunitiesQuery = {
+  search?: string;
+  country?: string;
+  state?: string;
+  lga?: string;
+  cursor?: string;
+  limit?: string;
+  latitude?: string;
+  longitude?: string;
+};
+
+export type CreateCommunityRequestDto = {
+  name: string;
+  description?: string;
+  country: string;
+  state?: string;
+  lga?: string;
+  ward?: string;
+  estate?: string;
+  street?: string;
+  visibility?: "Public" | "Private";
+  latitude?: number;
+  longitude?: number;
+};
+
+export type ReviewCommunityRequestDto = {
+  action: "approve" | "reject";
+  rejectionNote?: string;
+};
+
+export type CreateCommunityCommentDto = {
+  body: string;
+};
+
+export type UpdateCommunityCommentDto = {
+  body: string;
+};
+
+export type CreateCommunityReactionDto = {
+  type: "Confirm" | "Dispute" | "Support" | "Concern";
+};
+
+export type CreateCommunityContentReportDto = {
+  targetType: "Post" | "Comment" | "Member" | "Community";
+  targetId: string;
+  reasonCode: string;
+  note?: string;
+  evidenceObjectKey?: string;
+  evidenceBucket?: string;
+};
+
+export type ModerateMemberDto = {
+  action: "suspend" | "restore" | "ban" | "unban";
+  note?: string;
+};
+
+export type PresignCommunityMediaDto = {
+  fileName: string;
+  contentType: string;
+  mediaType: "Image" | "Video" | "Audio" | "Document";
+  sizeBytes?: number;
+};
+
+export type ListMembersQuery = CursorPageQuery & {
+  search?: string;
+};
+
+export const COMMUNITY_REPORT_REASONS = [
+  "Harassment",
+  "Spam",
+  "FalseInformation",
+  "HateSpeech",
+  "ViolenceThreat",
+  "Impersonation",
+  "PrivacyViolation",
+  "Other",
+] as const;
+
+export type AssignCommunityRoleDto = {
+  roleName:
+    | "CommunityModerator"
+    | "EstateAdmin"
+    | "SecurityCoordinator"
+    | "PoliceLiaison"
+    | "VolunteerCoordinator"
+    | "VerifiedVolunteer"
+    | "Resident";
+};
+
+export type RejectMembershipDto = {
+  note?: string;
+};
+
+export function validateCommunityRequest(dto: CreateCommunityRequestDto) {
+  validateCommunity({
+    name: dto.name,
+    level: "Community",
+    country: dto.country,
+    state: dto.state,
+    lga: dto.lga,
+    ward: dto.ward,
+    estate: dto.estate,
+    street: dto.street,
+    description: dto.description,
+    latitude: dto.latitude,
+    longitude: dto.longitude,
+  });
+}
 
 export function validateCommunity(dto: CreateCommunityDto) {
   if (!dto.name || dto.name.trim().length < 2) throw new BadRequestException("Community name is required");

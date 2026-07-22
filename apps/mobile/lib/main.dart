@@ -22,6 +22,7 @@ import "contracts/the_eye_api_paths.dart";
 import "contracts/the_eye_enums.dart";
 import "contracts/the_eye_payloads.dart";
 import "evidence/evidence_attachment_picker.dart";
+import "evidence/local_evidence_attachment.dart";
 import "evidence/evidence_capture_service.dart";
 import "evidence/evidence_upload_service.dart";
 import "connectivity/connectivity_service.dart";
@@ -52,6 +53,11 @@ import "push/push_deep_link_router.dart";
 import "push/push_notification_service.dart";
 import "broadcasts/broadcast_feed_cache.dart";
 import "broadcasts/broadcast_feed_service.dart";
+import "neighborhood_watch/neighborhood_watch_service.dart";
+import "neighborhood_watch/community_media_upload_service.dart";
+import "neighborhood_watch/community_members_screen.dart";
+import "neighborhood_watch/community_post_detail_screen.dart";
+import "neighborhood_watch/community_report_screen.dart";
 import "notifications/notification_inbox_cache.dart";
 import "notifications/notification_inbox_service.dart";
 import "startup/startup_diagnostics.dart";
@@ -703,6 +709,47 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/neighborhood-watch/patrols": (_) => const PatrolsScreen(),
               "/neighborhood-watch/alerts": (_) =>
                   const CommunityAlertsScreen(),
+              "/neighborhood-watch/members": (context) {
+                final controller = appOf(context);
+                final community = controller.selectedCommunity;
+                return CommunityMembersScreen(
+                  accessToken: controller.accessToken ?? "",
+                  communityId: community?.id ?? "",
+                  communityName: community?.name ?? "Community",
+                );
+              },
+              "/neighborhood-watch/post": (context) {
+                final controller = appOf(context);
+                final args = ModalRoute.of(context)?.settings.arguments
+                    as CommunityPostDetailRouteArgs?;
+                return CommunityPostDetailScreen(
+                  accessToken: controller.accessToken ?? "",
+                  args: args ??
+                      CommunityPostDetailRouteArgs(
+                        postId: "",
+                        postTitle: "Post",
+                        communityId: controller.selectedCommunity?.id ?? "",
+                        currentUserId: controller.cachedCitizenProfile?.id,
+                      ),
+                  isOnline: controller.online,
+                );
+              },
+              "/neighborhood-watch/report": (context) {
+                final controller = appOf(context);
+                final args = ModalRoute.of(context)?.settings.arguments
+                    as CommunityReportRouteArgs?;
+                return CommunityReportScreen(
+                  accessToken: controller.accessToken ?? "",
+                  args: args ??
+                      CommunityReportRouteArgs(
+                        communityId: controller.selectedCommunity?.id ?? "",
+                        targetType: "Community",
+                        targetId: controller.selectedCommunity?.id ?? "",
+                        targetLabel:
+                            controller.selectedCommunity?.name ?? "Community",
+                      ),
+                );
+              },
               "/profile": (_) => const ProfileScreen(),
               "/profile/edit": (_) => const ProfileEditScreen(),
               "/profile/emergency-contacts": (_) =>
@@ -912,6 +959,27 @@ class AppController extends SessionAccessor {
   String? broadcastNextCursor;
   int broadcastUnreadCount = 0;
   bool loadingMoreBroadcasts = false;
+  final NeighborhoodWatchService _neighborhoodWatchService =
+      NeighborhoodWatchService();
+  final CommunityMediaUploadService _communityMediaUploadService =
+      CommunityMediaUploadService();
+  final List<CommunitySummary> communities = [];
+  CommunitySummary? selectedCommunity;
+  bool loadingCommunities = false;
+  String? communityLoadError;
+  CommunityStatistics? communityStatistics;
+  bool loadingCommunityStatistics = false;
+  String? communityStatisticsError;
+  final List<CommunityPostItem> communityFeed = [];
+  bool loadingCommunityFeed = false;
+  String? communityFeedError;
+  final List<CommunityPostItem> communityAlerts = [];
+  bool loadingCommunityAlerts = false;
+  String? communityAlertsError;
+  final List<PatrolScheduleItem> communityPatrols = [];
+  bool loadingCommunityPatrols = false;
+  String? communityPatrolError;
+  String? communityActionMessage;
 
   ConnectivityService get connectivity => _connectivity;
   AuthService get authService => _authService;
@@ -1253,7 +1321,247 @@ class AppController extends SessionAccessor {
     broadcastLoadError = null;
     broadcastNextCursor = null;
     broadcastUnreadCount = 0;
+    communities.clear();
+    selectedCommunity = null;
+    communityLoadError = null;
+    communityFeed.clear();
+    communityFeedError = null;
+    communityAlerts.clear();
+    communityAlertsError = null;
+    communityPatrols.clear();
+    communityPatrolError = null;
+    communityActionMessage = null;
     notifyListeners();
+  }
+
+  Future<void> loadCommunitiesFromApi({bool refresh = false}) async {
+    if (!isAuthenticated || accessToken == null) {
+      communities.clear();
+      selectedCommunity = null;
+      communityLoadError = null;
+      notifyListeners();
+      return;
+    }
+    loadingCommunities = true;
+    communityLoadError = null;
+    notifyListeners();
+    try {
+      final page = await _neighborhoodWatchService.listCommunities(
+        accessToken: accessToken!,
+      );
+      communities
+        ..clear()
+        ..addAll(page.items);
+      selectedCommunity = communities.firstWhere(
+        (community) => community.isMember,
+        orElse: () => communities.isNotEmpty
+            ? communities.first
+            : CommunitySummary(
+                id: "",
+                name: "",
+                visibility: "Public",
+                memberCount: 0,
+                activeAlertsCount: 0,
+              ),
+      );
+      if (selectedCommunity?.id.isEmpty ?? true) selectedCommunity = null;
+    } on IncidentApiException catch (error) {
+      communityLoadError = error.userMessage;
+    } catch (_) {
+      communityLoadError = "Unable to load communities.";
+    } finally {
+      loadingCommunities = false;
+      notifyListeners();
+    }
+  }
+
+  void selectCommunity(CommunitySummary community) {
+    selectedCommunity = community;
+    notifyListeners();
+  }
+
+  Future<void> loadCommunityFeed({bool refresh = false}) async {
+    final community = selectedCommunity;
+    if (!isAuthenticated || accessToken == null || community == null) return;
+    loadingCommunityFeed = true;
+    communityFeedError = null;
+    notifyListeners();
+    try {
+      final page = await _neighborhoodWatchService.communityFeed(
+        accessToken: accessToken!,
+        communityId: community.id,
+      );
+      communityFeed
+        ..clear()
+        ..addAll(page.items);
+    } on IncidentApiException catch (error) {
+      communityFeedError = error.userMessage;
+    } catch (_) {
+      communityFeedError = "Unable to load community feed.";
+    } finally {
+      loadingCommunityFeed = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadCommunityAlerts({bool refresh = false}) async {
+    final community = selectedCommunity;
+    if (!isAuthenticated || accessToken == null || community == null) return;
+    loadingCommunityAlerts = true;
+    communityAlertsError = null;
+    notifyListeners();
+    try {
+      final page = await _neighborhoodWatchService.communityAlerts(
+        accessToken: accessToken!,
+        communityId: community.id,
+      );
+      communityAlerts
+        ..clear()
+        ..addAll(page.items);
+    } on IncidentApiException catch (error) {
+      communityAlertsError = error.userMessage;
+    } catch (_) {
+      communityAlertsError = "Unable to load community alerts.";
+    } finally {
+      loadingCommunityAlerts = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadCommunityPatrols() async {
+    final community = selectedCommunity;
+    if (!isAuthenticated || accessToken == null || community == null) return;
+    loadingCommunityPatrols = true;
+    communityPatrolError = null;
+    notifyListeners();
+    try {
+      communityPatrols
+        ..clear()
+        ..addAll(await _neighborhoodWatchService.listPatrols(
+          accessToken: accessToken!,
+          communityId: community.id,
+        ));
+    } on IncidentApiException catch (error) {
+      communityPatrolError = error.userMessage;
+    } catch (_) {
+      communityPatrolError = "Unable to load patrol schedules.";
+    } finally {
+      loadingCommunityPatrols = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> joinSelectedCommunity(String communityId) async {
+    if (!isAuthenticated || accessToken == null) return "Sign in required";
+    try {
+      await _neighborhoodWatchService.joinCommunity(
+        accessToken: accessToken!,
+        communityId: communityId,
+      );
+      await loadCommunitiesFromApi(refresh: true);
+      communityActionMessage = "Community join request submitted";
+      notifyListeners();
+      return null;
+    } on IncidentApiException catch (error) {
+      return error.userMessage;
+    } catch (_) {
+      return "Unable to join community.";
+    }
+  }
+
+  Future<String?> leaveSelectedCommunity() async {
+    final community = selectedCommunity;
+    if (community == null || !isAuthenticated || accessToken == null) {
+      return "No community selected";
+    }
+    try {
+      await _neighborhoodWatchService.leaveCommunity(
+        accessToken: accessToken!,
+        communityId: community.id,
+      );
+      await loadCommunitiesFromApi(refresh: true);
+      if (selectedCommunity?.id == community.id) {
+        final remaining =
+            communities.where((item) => item.isMember).toList(growable: false);
+        selectedCommunity = remaining.isEmpty ? null : remaining.first;
+      }
+      communityActionMessage = "You left the community";
+      notifyListeners();
+      return null;
+    } on IncidentApiException catch (error) {
+      return error.userMessage;
+    } catch (_) {
+      return "Unable to leave community.";
+    }
+  }
+
+  Future<void> loadCommunityStatistics() async {
+    final community = selectedCommunity;
+    if (community == null || !isAuthenticated || accessToken == null) return;
+    loadingCommunityStatistics = true;
+    communityStatisticsError = null;
+    notifyListeners();
+    try {
+      communityStatistics = await _neighborhoodWatchService.getStatistics(
+        accessToken: accessToken!,
+        communityId: community.id,
+      );
+    } on IncidentApiException catch (error) {
+      communityStatisticsError = error.userMessage;
+    } catch (_) {
+      communityStatisticsError = "Unable to load community statistics.";
+    } finally {
+      loadingCommunityStatistics = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> createCommunityPost({
+    required String type,
+    required String title,
+    required String body,
+    List<LocalEvidenceAttachment> attachments = const [],
+    CommunityMediaUploadProgress? onMediaProgress,
+  }) async {
+    final community = selectedCommunity;
+    if (community == null || !community.isMember) {
+      return "Approved community membership is required";
+    }
+    if (!isAuthenticated || accessToken == null) return "Sign in required";
+    try {
+      final location = await captureLocationOutcome();
+      var media = const <CommunityPostMediaItem>[];
+      if (attachments.isNotEmpty) {
+        try {
+          media = await _communityMediaUploadService.uploadForPost(
+            communityId: community.id,
+            attachments: attachments,
+            accessToken: accessToken!,
+            onProgress: onMediaProgress,
+          );
+        } on CommunityMediaUploadFailure catch (error) {
+          return error.message;
+        }
+      }
+      await _neighborhoodWatchService.createPost(
+        accessToken: accessToken!,
+        communityId: community.id,
+        type: type,
+        title: title,
+        body: body,
+        latitude: location.position?.latitude,
+        longitude: location.position?.longitude,
+        media: media,
+      );
+      await loadCommunityFeed(refresh: true);
+      communityActionMessage = "Post submitted for verification";
+      notifyListeners();
+      return null;
+    } on IncidentApiException catch (error) {
+      return error.userMessage;
+    } catch (_) {
+      return "Unable to create community post.";
+    }
   }
 
   Future<void> loadBroadcastsFromApi({bool refresh = false}) async {
@@ -1358,7 +1666,8 @@ class AppController extends SessionAccessor {
     final index = broadcasts.indexWhere((item) => item.id == broadcastId);
     if (index >= 0 && !broadcasts[index].read) {
       broadcasts[index] = broadcasts[index].copyWith(read: true);
-      broadcastUnreadCount = broadcastUnreadCount > 0 ? broadcastUnreadCount - 1 : 0;
+      broadcastUnreadCount =
+          broadcastUnreadCount > 0 ? broadcastUnreadCount - 1 : 0;
       notifyListeners();
     }
     try {
@@ -4354,7 +4663,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
       );
     }
 
-    if (controller.broadcastLoadError != null && controller.broadcasts.isEmpty) {
+    if (controller.broadcastLoadError != null &&
+        controller.broadcasts.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
@@ -4387,7 +4697,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
         children: const [
           SectionCard(
             title: "Alerts for your location",
-            child: Text("No active safety broadcasts match your location right now."),
+            child: Text(
+                "No active safety broadcasts match your location right now."),
           ),
         ],
       );
@@ -4395,7 +4706,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 240) {
+        if (notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 240) {
           unawaited(controller.loadMoreBroadcasts());
         }
         return false;
@@ -4445,7 +4757,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => BroadcastDetailScreen(broadcastId: item.id),
+                      builder: (_) =>
+                          BroadcastDetailScreen(broadcastId: item.id),
                     ),
                   );
                 },
@@ -4562,7 +4875,8 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                           const SizedBox(height: 12),
                           Text(
                             "${_item?.priority ?? ""} · ${_item?.type ?? ""}",
-                            style: const TextStyle(color: BrandColors.lightTextMuted),
+                            style: const TextStyle(
+                                color: BrandColors.lightTextMuted),
                           ),
                           if (_item?.expiresAt != null) ...[
                             const SizedBox(height: 8),
@@ -4570,7 +4884,8 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                               _item!.expired
                                   ? "Expired"
                                   : "Expires ${formatNotificationAge(_item!.expiresAt!)}",
-                              style: const TextStyle(color: BrandColors.lightTextMuted),
+                              style: const TextStyle(
+                                  color: BrandColors.lightTextMuted),
                             ),
                           ],
                         ],
@@ -5468,208 +5783,578 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   }
 }
 
-class NeighborhoodWatchHomeScreen extends StatelessWidget {
+class NeighborhoodWatchHomeScreen extends StatefulWidget {
   const NeighborhoodWatchHomeScreen({super.key});
 
   @override
+  State<NeighborhoodWatchHomeScreen> createState() =>
+      _NeighborhoodWatchHomeScreenState();
+}
+
+class _NeighborhoodWatchHomeScreenState
+    extends State<NeighborhoodWatchHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      await controller.loadCommunitiesFromApi(refresh: true);
+      await controller.loadCommunityStatistics();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = appOf(context);
+    final community = controller.selectedCommunity;
+    final stats = controller.communityStatistics;
     return SafetyScaffold(
       title: "Neighborhood Watch",
       selectedIndex: 3,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          SectionCard(
-            title: "Allen Avenue Estate",
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text("Private estate community - approved resident"),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                    onPressed: () => Navigator.of(context)
-                        .pushNamed("/neighborhood-watch/create"),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await controller.loadCommunitiesFromApi(refresh: true);
+          await controller.loadCommunityStatistics();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SectionCard(
+              title: community?.name ?? "Your communities",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (controller.loadingCommunities)
+                    const Center(child: CircularProgressIndicator())
+                  else if (controller.communityLoadError != null)
+                    Text(controller.communityLoadError!)
+                  else if (community == null)
+                    const Text(
+                        "Join a community to receive local safety updates.")
+                  else ...[
+                    Text(
+                      "${community.visibility} community • ${community.memberCount} members • ${community.activeAlertsCount} active alerts",
+                    ),
+                    if (community.membershipStatus != null)
+                      Text("Membership: ${community.membershipStatus}"),
+                  ],
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: community?.isMember == true
+                        ? () => Navigator.of(context)
+                            .pushNamed("/neighborhood-watch/create")
+                        : null,
                     icon: const Icon(Icons.add_alert),
-                    label: const Text("Post safety update")),
+                    label: const Text("Post safety update"),
+                  ),
+                  if (community?.isMember == true) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text("Leave community"),
+                            content: const Text(
+                              "Leave this community? Owners and moderators must transfer responsibilities first.",
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text("Cancel"),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text("Leave"),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true || !context.mounted) return;
+                        final error = await controller.leaveSelectedCommunity();
+                        if (!context.mounted) return;
+                        if (error != null) {
+                          showAppSnackBar(context, error, isError: true);
+                        } else {
+                          showAppSnackBar(context, "You left the community");
+                          await controller.loadCommunityStatistics();
+                        }
+                      },
+                      icon: const Icon(Icons.logout),
+                      label: const Text("Leave community"),
+                    ),
+                    TextButton(
+                      onPressed: community == null
+                          ? null
+                          : () => Navigator.of(context).pushNamed(
+                                "/neighborhood-watch/report",
+                                arguments: CommunityReportRouteArgs(
+                                  communityId: community.id,
+                                  targetType: "Community",
+                                  targetId: community.id,
+                                  targetLabel: community.name,
+                                ),
+                              ),
+                      child: const Text("Report community"),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (stats != null) ...[
+              const SizedBox(height: 16),
+              SectionCard(
+                title: "Community statistics",
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Members: ${stats.memberCount}"),
+                    Text("Active volunteers: ${stats.activeVolunteers}"),
+                    Text("Patrols: ${stats.patrolCount}"),
+                    Text("Active alerts: ${stats.activeAlerts}"),
+                    Text("Incidents: ${stats.incidentCount}"),
+                    Text(
+                        "Posts: ${stats.postCount} • Comments: ${stats.commentCount}"),
+                    Text("30-day member growth: ${stats.memberGrowth30Days}"),
+                  ],
+                ),
+              ),
+            ] else if (controller.loadingCommunityStatistics)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (controller.communityStatisticsError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(controller.communityStatisticsError!),
+              ),
+            const SizedBox(height: 16),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              children: [
+                ActionTile(
+                    "Members",
+                    Icons.people,
+                    Colors.brown.shade700,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/members")),
+                ActionTile(
+                    "My Communities",
+                    Icons.home_work,
+                    Colors.teal.shade700,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/communities")),
+                ActionTile(
+                    "Join Community",
+                    Icons.group_add,
+                    Colors.green.shade700,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/join")),
+                ActionTile(
+                    "Community Feed",
+                    Icons.dynamic_feed,
+                    Colors.blue.shade700,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/feed")),
+                ActionTile(
+                    "Community Map",
+                    Icons.map,
+                    Colors.indigo.shade700,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/map")),
+                ActionTile(
+                    "Community Chat",
+                    Icons.chat,
+                    Colors.purple.shade700,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/chat")),
+                ActionTile(
+                    "Volunteers",
+                    Icons.volunteer_activism,
+                    Colors.red.shade700,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/volunteers")),
+                ActionTile(
+                    "Patrols",
+                    Icons.security,
+                    Colors.orange.shade800,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/patrols")),
+                ActionTile(
+                    "Alerts",
+                    Icons.campaign,
+                    Colors.cyan.shade800,
+                    () => Navigator.of(context)
+                        .pushNamed("/neighborhood-watch/alerts")),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            children: [
-              ActionTile(
-                  "My Communities",
-                  Icons.home_work,
-                  Colors.teal.shade700,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/communities")),
-              ActionTile(
-                  "Join Community",
-                  Icons.group_add,
-                  Colors.green.shade700,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/join")),
-              ActionTile(
-                  "Community Feed",
-                  Icons.dynamic_feed,
-                  Colors.blue.shade700,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/feed")),
-              ActionTile(
-                  "Community Map",
-                  Icons.map,
-                  Colors.indigo.shade700,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/map")),
-              ActionTile(
-                  "Community Chat",
-                  Icons.chat,
-                  Colors.purple.shade700,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/chat")),
-              ActionTile(
-                  "Volunteers",
-                  Icons.volunteer_activism,
-                  Colors.red.shade700,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/volunteers")),
-              ActionTile(
-                  "Patrols",
-                  Icons.security,
-                  Colors.orange.shade800,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/patrols")),
-              ActionTile(
-                  "Alerts",
-                  Icons.campaign,
-                  Colors.cyan.shade800,
-                  () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/alerts")),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class MyCommunitiesScreen extends StatelessWidget {
+class MyCommunitiesScreen extends StatefulWidget {
   const MyCommunitiesScreen({super.key});
 
   @override
+  State<MyCommunitiesScreen> createState() => _MyCommunitiesScreenState();
+}
+
+class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      await controller.loadCommunitiesFromApi(refresh: true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final items = [
-      "Allen Avenue Estate - Private - Moderator approved",
-      "Opebi Street Watch - Public - Resident",
-      "Ikeja Business Owners - Pending approval"
-    ];
+    final controller = appOf(context);
+    final memberships = controller.communities
+        .where((community) =>
+            community.membershipStatus == "Approved" ||
+            community.membershipStatus == "Pending")
+        .toList();
     return SafetyScaffold(
       title: "My Communities",
       selectedIndex: 3,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: items
-            .map((item) => ListTileCard(
-                leading: const Icon(Icons.groups),
-                title: item.split(" - ").first,
-                subtitle: item.substring(item.indexOf(" - ") + 3)))
-            .toList(),
+      body: RefreshIndicator(
+        onRefresh: () => controller.loadCommunitiesFromApi(refresh: true),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            if (controller.loadingCommunities && memberships.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else if (memberships.isEmpty)
+              const ListTileCard(
+                leading: Icon(Icons.groups),
+                title: "No communities yet",
+                subtitle: "Join a community to appear here.",
+              )
+            else
+              ...memberships.map((community) => ListTileCard(
+                    leading: const Icon(Icons.groups),
+                    title: community.name,
+                    subtitle:
+                        "${community.visibility} • ${community.membershipStatus ?? "Unknown"}",
+                    onTap: () {
+                      controller.selectCommunity(community);
+                      Navigator.of(context).pop();
+                    },
+                    trailing: community.membershipStatus == "Approved"
+                        ? IconButton(
+                            icon: const Icon(Icons.logout),
+                            tooltip: "Leave community",
+                            onPressed: () async {
+                              controller.selectCommunity(community);
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text("Leave community"),
+                                  content: const Text(
+                                    "Leave this community? Owners and moderators must transfer responsibilities first.",
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: const Text("Cancel"),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: const Text("Leave"),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed != true || !context.mounted) return;
+                              final error =
+                                  await controller.leaveSelectedCommunity();
+                              if (!context.mounted) return;
+                              if (error != null) {
+                                showAppSnackBar(context, error, isError: true);
+                              } else {
+                                showAppSnackBar(
+                                    context, "You left the community");
+                                await controller.loadCommunitiesFromApi(
+                                    refresh: true);
+                                setState(() {});
+                              }
+                            },
+                          )
+                        : null,
+                  )),
+          ],
+        ),
       ),
     );
   }
 }
 
-class JoinCommunityScreen extends StatelessWidget {
+class JoinCommunityScreen extends StatefulWidget {
   const JoinCommunityScreen({super.key});
 
   @override
+  State<JoinCommunityScreen> createState() => _JoinCommunityScreenState();
+}
+
+class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
+  final _searchController = TextEditingController();
+  String? _actionError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      await controller.loadCommunitiesFromApi(refresh: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _join(String communityId) async {
+    final error = await appOf(context).joinSelectedCommunity(communityId);
+    if (!mounted) return;
+    setState(() => _actionError = error);
+    if (error == null) {
+      showAppSnackBar(context, "Join request submitted");
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = appOf(context);
+    final query = _searchController.text.trim().toLowerCase();
+    final items = controller.communities.where((community) {
+      if (community.isMember || community.isPending) return false;
+      if (query.isEmpty) return true;
+      return community.name.toLowerCase().contains(query) ||
+          (community.lga ?? "").toLowerCase().contains(query) ||
+          (community.state ?? "").toLowerCase().contains(query);
+    }).toList();
     return SafetyScaffold(
       title: "Join Community",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
-          const TextField(
-              decoration: InputDecoration(
-                  labelText: "Search country, state, LGA, estate, or street")),
+          TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+                labelText: "Search country, state, LGA, estate, or street"),
+            onChanged: (_) => setState(() {}),
+          ),
+          if (_actionError != null) ...[
+            const SizedBox(height: 8),
+            Text(_actionError!, style: TextStyle(color: Colors.red.shade700)),
+          ],
           const SizedBox(height: 16),
-          ListTileCard(
-              leading: const Icon(Icons.lock),
-              title: "Allen Avenue Estate",
-              subtitle: "Private estate - request approval",
-              trailing:
-                  FilledButton(onPressed: () {}, child: const Text("Request"))),
-          ListTileCard(
-              leading: const Icon(Icons.public),
-              title: "Opebi Street Watch",
-              subtitle: "Public street community",
-              trailing:
-                  FilledButton(onPressed: () {}, child: const Text("Join"))),
+          if (controller.loadingCommunities && items.isEmpty)
+            const Center(child: CircularProgressIndicator())
+          else if (items.isEmpty)
+            const ListTileCard(
+              leading: Icon(Icons.search_off),
+              title: "No communities found",
+              subtitle: "Try another search or request a new community.",
+            )
+          else
+            ...items.map((community) => ListTileCard(
+                  leading: Icon(community.visibility == "Private"
+                      ? Icons.lock
+                      : Icons.public),
+                  title: community.name,
+                  subtitle:
+                      "${community.visibility} • ${community.memberCount} members",
+                  trailing: FilledButton(
+                    onPressed: () => _join(community.id),
+                    child: Text(
+                        community.visibility == "Private" ? "Request" : "Join"),
+                  ),
+                )),
         ],
       ),
     );
   }
 }
 
-class CommunityFeedScreen extends StatelessWidget {
+class CommunityFeedScreen extends StatefulWidget {
   const CommunityFeedScreen({super.key});
 
   @override
+  State<CommunityFeedScreen> createState() => _CommunityFeedScreenState();
+}
+
+class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      if (controller.selectedCommunity == null) {
+        await controller.loadCommunitiesFromApi(refresh: true);
+      }
+      await controller.loadCommunityFeed(refresh: true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final posts = [
-      (
-        "Suspicious activity",
-        "Two unknown riders circling Gate 2",
-        "Pending Verification - 64%"
-      ),
-      ("Security meeting", "Night patrol briefing by 8 PM", "Verified - 91%"),
-      ("Missing person", "Lost child near terminal", "Disputed - 48%"),
-    ];
+    final controller = appOf(context);
     return SafetyScaffold(
       title: "Community Feed",
       selectedIndex: 3,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          FilledButton.icon(
-              onPressed: () =>
-                  Navigator.of(context).pushNamed("/neighborhood-watch/create"),
+      body: RefreshIndicator(
+        onRefresh: () => controller.loadCommunityFeed(refresh: true),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            FilledButton.icon(
+              onPressed: controller.selectedCommunity?.isMember == true
+                  ? () => Navigator.of(context)
+                      .pushNamed("/neighborhood-watch/create")
+                  : null,
               icon: const Icon(Icons.edit),
-              label: const Text("Create community post")),
-          const SizedBox(height: 16),
-          ...posts.map((post) => ListTileCard(
-              leading: const Icon(Icons.report),
-              title: "${post.$1}: ${post.$2}",
-              subtitle: post.$3)),
-        ],
+              label: const Text("Create community post"),
+            ),
+            const SizedBox(height: 16),
+            if (controller.loadingCommunityFeed &&
+                controller.communityFeed.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else if (controller.communityFeedError != null &&
+                controller.communityFeed.isEmpty)
+              ListTileCard(
+                leading: const Icon(Icons.cloud_off),
+                title: "Feed unavailable",
+                subtitle: controller.communityFeedError ?? "Unknown error",
+              )
+            else if (controller.communityFeed.isEmpty)
+              const ListTileCard(
+                leading: Icon(Icons.dynamic_feed),
+                title: "No posts yet",
+                subtitle: "Verified community posts will appear here.",
+              )
+            else
+              ...controller.communityFeed.map((post) => ListTileCard(
+                    leading: const Icon(Icons.report),
+                    title: "${post.type}: ${post.title}",
+                    subtitle:
+                        "${post.verificationStatus} • ${post.confidenceScore.round()}%",
+                    onTap: () {
+                      final community = controller.selectedCommunity;
+                      if (community == null) return;
+                      Navigator.of(context).pushNamed(
+                        "/neighborhood-watch/post",
+                        arguments: CommunityPostDetailRouteArgs(
+                          postId: post.id,
+                          postTitle: post.title,
+                          communityId: community.id,
+                          currentUserId: controller.cachedCitizenProfile?.id,
+                        ),
+                      );
+                    },
+                  )),
+          ],
+        ),
       ),
     );
   }
 }
 
-class CreateCommunityPostScreen extends StatelessWidget {
+class CreateCommunityPostScreen extends StatefulWidget {
   const CreateCommunityPostScreen({super.key});
 
   @override
+  State<CreateCommunityPostScreen> createState() =>
+      _CreateCommunityPostScreenState();
+}
+
+class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
+  static const _typeMap = {
+    "Suspicious activity": "SuspiciousActivity",
+    "Lost child": "LostChild",
+    "Missing person": "MissingPerson",
+    "Crime alert": "CrimeAlert",
+    "Accident alert": "AccidentAlert",
+    "Fire alert": "FireAlert",
+    "Flood warning": "FloodWarning",
+    "Community announcement": "CommunityAnnouncement",
+    "Security meeting": "SecurityMeeting",
+    "Patrol update": "PatrolUpdate",
+  };
+
+  String _selectedType = "Suspicious activity";
+  final _titleController = TextEditingController();
+  final _bodyController = TextEditingController();
+  final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() => _submitting = true);
+    final attachments =
+        _evidenceSectionKey.currentState?.attachments ?? const [];
+    final error = await appOf(context).createCommunityPost(
+      type: _typeMap[_selectedType] ?? "SuspiciousActivity",
+      title: _titleController.text.trim(),
+      body: _bodyController.text.trim(),
+      attachments: attachments,
+      onMediaProgress: (localId, progress) =>
+          _evidenceSectionKey.currentState?.markUploading(localId, progress),
+    );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    if (error != null) {
+      showAppSnackBar(context, error, isError: true);
+      return;
+    }
+    showAppSnackBar(context, "Post submitted for verification");
+    Navigator.of(context).pushReplacementNamed("/neighborhood-watch/feed");
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final types = [
-      "Suspicious activity",
-      "Lost child",
-      "Missing person",
-      "Crime alert",
-      "Accident alert",
-      "Fire alert",
-      "Flood warning",
-      "Community announcement",
-      "Security meeting",
-      "Patrol update"
-    ];
+    final types = _typeMap.keys.toList();
     return SafetyScaffold(
       title: "Create Post",
       selectedIndex: 3,
@@ -5677,35 +6362,72 @@ class CreateCommunityPostScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           DropdownButtonFormField<String>(
-              items: types
-                  .map((type) =>
-                      DropdownMenuItem(value: type, child: Text(type)))
-                  .toList(),
-              onChanged: (_) {},
-              decoration: const InputDecoration(labelText: "Post type")),
+            value: _selectedType,
+            items: types
+                .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                .toList(),
+            onChanged: (value) =>
+                setState(() => _selectedType = value ?? _selectedType),
+            decoration: const InputDecoration(labelText: "Post type"),
+          ),
           const SizedBox(height: 12),
-          const TextField(decoration: InputDecoration(labelText: "Title")),
+          TextField(
+            controller: _titleController,
+            decoration: const InputDecoration(labelText: "Title"),
+          ),
           const SizedBox(height: 12),
-          const TextField(
-              maxLines: 4, decoration: InputDecoration(labelText: "Details")),
+          TextField(
+            controller: _bodyController,
+            maxLines: 4,
+            decoration: const InputDecoration(labelText: "Details"),
+          ),
           const SizedBox(height: 12),
-          ManagedEvidenceSection(lowDataMode: appOf(context).lowDataMode),
+          ManagedEvidenceSection(
+            key: _evidenceSectionKey,
+            lowDataMode: appOf(context).lowDataMode,
+          ),
           const SizedBox(height: 12),
           FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pushNamed("/neighborhood-watch/feed"),
-              child: const Text("Post to community")),
+            onPressed: _submitting ? null : _submit,
+            child: _submitting
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text("Post to community"),
+          ),
         ],
       ),
     );
   }
 }
 
-class CommunityMapScreen extends StatelessWidget {
+class CommunityMapScreen extends StatefulWidget {
   const CommunityMapScreen({super.key});
 
   @override
+  State<CommunityMapScreen> createState() => _CommunityMapScreenState();
+}
+
+class _CommunityMapScreenState extends State<CommunityMapScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      if (controller.selectedCommunity == null) {
+        await controller.loadCommunitiesFromApi(refresh: true);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final community = appOf(context).selectedCommunity;
     return SafetyScaffold(
       title: "Community Map",
       selectedIndex: 3,
@@ -5713,56 +6435,130 @@ class CommunityMapScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           Container(
-              height: 360,
-              decoration: BoxDecoration(
-                  color: BrandColors.lightSurfaceMuted,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: BrandColors.lightBorder)),
-              child: const Center(
-                  child: Icon(Icons.map, size: 80, color: BrandColors.green))),
+            height: 360,
+            decoration: BoxDecoration(
+              color: BrandColors.lightSurfaceMuted,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: BrandColors.lightBorder),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.map, size: 80, color: BrandColors.green),
+                  if (community != null)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        "${community.name}\nPosts, incidents, patrol checkpoints, and stations load from the community map API.",
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           const SectionCard(
-              title: "Visible layers",
-              child: Text(
-                  "Community posts, incidents, safe points, police stations, hospitals, patrol points, and danger zones.")),
+            title: "Visible layers",
+            child: Text(
+              "Community posts, incidents, safe points, police stations, hospitals, patrol points, and danger zones.",
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class CommunityChatScreen extends StatelessWidget {
+class CommunityChatScreen extends StatefulWidget {
   const CommunityChatScreen({super.key});
 
   @override
+  State<CommunityChatScreen> createState() => _CommunityChatScreenState();
+}
+
+class _CommunityChatScreenState extends State<CommunityChatScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      if (controller.selectedCommunity == null) {
+        await controller.loadCommunitiesFromApi(refresh: true);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final channels = [
-      "General",
-      "Emergency",
-      "Security",
-      "Volunteers",
-      "Women Safety",
-      "Parents",
-      "Business Owners"
-    ];
+    final channels = appOf(context).selectedCommunity?.channels ?? const [];
     return SafetyScaffold(
       title: "Community Chat",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: channels
-            .map((channel) => ListTileCard(
-                leading: const Icon(Icons.forum),
-                title: channel,
-                subtitle: "Realtime channel"))
-            .toList(),
+        children: channels.isEmpty
+            ? const [
+                ListTileCard(
+                  leading: Icon(Icons.forum),
+                  title: "No channels available",
+                  subtitle: "Join an approved community to access channels.",
+                ),
+              ]
+            : channels
+                .map((channel) => ListTileCard(
+                      leading: const Icon(Icons.forum),
+                      title: channel.name,
+                      subtitle: channel.type,
+                    ))
+                .toList(),
       ),
     );
   }
 }
 
-class VolunteersScreen extends StatelessWidget {
+class VolunteersScreen extends StatefulWidget {
   const VolunteersScreen({super.key});
+
+  @override
+  State<VolunteersScreen> createState() => _VolunteersScreenState();
+}
+
+class _VolunteersScreenState extends State<VolunteersScreen> {
+  bool _registering = false;
+
+  Future<void> _register() async {
+    final controller = appOf(context);
+    final community = controller.selectedCommunity;
+    if (community == null || !controller.isAuthenticated) return;
+    setState(() => _registering = true);
+    try {
+      final location = await captureLocationOutcome();
+      await NeighborhoodWatchService().registerVolunteer(
+        accessToken: controller.accessToken!,
+        communityId: community.id,
+        types: const ["SecurityVolunteer"],
+        latitude: location.position?.latitude,
+        longitude: location.position?.longitude,
+      );
+      if (!mounted) return;
+      showAppSnackBar(context, "Volunteer registration submitted");
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.userMessage, isError: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, "Unable to register as volunteer",
+          isError: true);
+    } finally {
+      if (mounted) setState(() => _registering = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -5774,7 +6570,7 @@ class VolunteersScreen extends StatelessWidget {
       "Security Volunteer",
       "Fire Volunteer",
       "Search and Rescue",
-      "Blood Donor"
+      "Blood Donor",
     ];
     return SafetyScaffold(
       title: "Volunteers",
@@ -5783,73 +6579,185 @@ class VolunteersScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           FilledButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.volunteer_activism),
-              label: const Text("Register as volunteer")),
+            onPressed: _registering ? null : _register,
+            icon: const Icon(Icons.volunteer_activism),
+            label:
+                Text(_registering ? "Registering..." : "Register as volunteer"),
+          ),
           const SizedBox(height: 16),
           ...types.map((type) => ListTileCard(
-              leading: const Icon(Icons.health_and_safety),
-              title: type,
-              subtitle: "Notify nearby volunteers during emergencies")),
+                leading: const Icon(Icons.health_and_safety),
+                title: type,
+                subtitle: "Notify nearby volunteers during emergencies",
+              )),
         ],
       ),
     );
   }
 }
 
-class PatrolsScreen extends StatelessWidget {
+class PatrolsScreen extends StatefulWidget {
   const PatrolsScreen({super.key});
 
   @override
+  State<PatrolsScreen> createState() => _PatrolsScreenState();
+}
+
+class _PatrolsScreenState extends State<PatrolsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      if (controller.selectedCommunity == null) {
+        await controller.loadCommunitiesFromApi(refresh: true);
+      }
+      await controller.loadCommunityPatrols();
+    });
+  }
+
+  Future<void> _logCheckpoint() async {
+    final controller = appOf(context);
+    if (controller.communityPatrols.isEmpty || controller.accessToken == null) {
+      showAppSnackBar(context, "No active patrol schedule available",
+          isError: true);
+      return;
+    }
+    final schedule = controller.communityPatrols.first;
+    try {
+      final location = await captureLocationOutcome();
+      if (location.position == null) {
+        showAppSnackBar(context, "Location permission is required",
+            isError: true);
+        return;
+      }
+      await NeighborhoodWatchService().logCheckpoint(
+        accessToken: controller.accessToken!,
+        scheduleId: schedule.id,
+        label: "Mobile checkpoint",
+        latitude: location.position!.latitude,
+        longitude: location.position!.longitude,
+      );
+      if (!mounted) return;
+      showAppSnackBar(context, "Checkpoint logged");
+      await controller.loadCommunityPatrols();
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.userMessage, isError: true);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = appOf(context);
     return SafetyScaffold(
       title: "Patrols",
       selectedIndex: 3,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          ListTileCard(
-              leading: const Icon(Icons.route),
-              title: "Gate 2 evening patrol",
-              subtitle: "Scheduled - 4 volunteers - 6 checkpoints"),
-          ListTileCard(
-              leading: const Icon(Icons.security),
-              title: "Opebi corridor patrol",
-              subtitle: "Active - 6 volunteers - 11 checkpoints"),
-          FilledButton.icon(
-              onPressed: () {},
+      body: RefreshIndicator(
+        onRefresh: () => controller.loadCommunityPatrols(),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            if (controller.loadingCommunityPatrols &&
+                controller.communityPatrols.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else if (controller.communityPatrolError != null &&
+                controller.communityPatrols.isEmpty)
+              ListTileCard(
+                leading: const Icon(Icons.cloud_off),
+                title: "Patrol schedules unavailable",
+                subtitle: controller.communityPatrolError ?? "Unknown error",
+              )
+            else if (controller.communityPatrols.isEmpty)
+              const ListTileCard(
+                leading: Icon(Icons.security),
+                title: "No patrol schedules",
+                subtitle: "Community patrols will appear here when scheduled.",
+              )
+            else
+              ...controller.communityPatrols.map((patrol) => ListTileCard(
+                    leading: const Icon(Icons.route),
+                    title: patrol.title,
+                    subtitle: "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
+                  )),
+            FilledButton.icon(
+              onPressed: _logCheckpoint,
               icon: const Icon(Icons.add_location_alt),
-              label: const Text("Log patrol checkpoint")),
-        ],
+              label: const Text("Log patrol checkpoint"),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class CommunityAlertsScreen extends StatelessWidget {
+class CommunityAlertsScreen extends StatefulWidget {
   const CommunityAlertsScreen({super.key});
 
   @override
+  State<CommunityAlertsScreen> createState() => _CommunityAlertsScreenState();
+}
+
+class _CommunityAlertsScreenState extends State<CommunityAlertsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      if (controller.selectedCommunity == null) {
+        await controller.loadCommunitiesFromApi(refresh: true);
+      }
+      await controller.loadCommunityAlerts(refresh: true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final alerts = [
-      "Nearby suspicious activity",
-      "Community emergency alert",
-      "Missing child nearby",
-      "Security meeting reminder",
-      "Patrol request",
-      "Volunteer request"
-    ];
+    final controller = appOf(context);
     return SafetyScaffold(
       title: "Community Alerts",
       selectedIndex: 3,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: alerts
-            .map((alert) => ListTileCard(
-                leading: const Icon(Icons.campaign),
-                title: alert,
-                subtitle: "Location-based community notification"))
-            .toList(),
+      body: RefreshIndicator(
+        onRefresh: () => controller.loadCommunityAlerts(refresh: true),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            if (controller.loadingCommunityAlerts &&
+                controller.communityAlerts.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else if (controller.communityAlertsError != null &&
+                controller.communityAlerts.isEmpty)
+              ListTileCard(
+                leading: const Icon(Icons.cloud_off),
+                title: "Alerts unavailable",
+                subtitle: controller.communityAlertsError ?? "Unknown error",
+              )
+            else if (controller.communityAlerts.isEmpty)
+              const ListTileCard(
+                leading: Icon(Icons.campaign),
+                title: "No active alerts",
+                subtitle: "Verified community alerts will appear here.",
+              )
+            else
+              ...controller.communityAlerts.map((alert) => ListTileCard(
+                    leading: const Icon(Icons.campaign),
+                    title: alert.title,
+                    subtitle:
+                        "${alert.type} • ${alert.verificationStatus} • ${alert.confidenceScore.round()}%",
+                  )),
+          ],
+        ),
       ),
     );
   }

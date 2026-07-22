@@ -2,11 +2,12 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-22 (Sprint 4 Phase 1 — notifications & broadcasts audit)  
+**Last updated:** 2026-07-22 (Sprint 5 re-evaluation — functionally complete pending staging QA)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
 **Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**  
-**Sprint 4 status:** **IN PROGRESS — PHASES 3 AND 8 CODE COMPLETE**
+**Sprint 4 status:** **CODE COMPLETE — PENDING STAGING RUNTIME QA** (DI fix `fe7bb3d`; VPS redeploy pending)  
+**Sprint 5 status:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (`feature/sprint-5-neighborhood-watch` @ `ec3362a`+; no PASS without device/runtime evidence; INF-006 media E2E remains blocked)
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -72,6 +73,9 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-22 | Sprint 5 re-evaluation | Completed P0/P1 gaps on `feature/sprint-5-neighborhood-watch`: permission matrix, moderation/statistics APIs, privilege tests (249 API tests), mobile leave/members/comments/reports/media UI, admin moderation BFF. Status promoted to **FUNCTIONALLY COMPLETE — PENDING STAGING QA** only. No Sprint 5 runtime PASS. INF-006 media E2E and Sprint 4 notification delivery remain blocked. Sprint 1–4 unchanged. |
+| 2026-07-22 | Sprint 5 implementation | Neighborhood Watch lifecycle coded on `feature/sprint-5-neighborhood-watch`: discovery pagination, community requests, membership reject, comments/reactions/reports APIs, alerts/patrols/members endpoints, Prisma migration, mobile live wiring, admin reject BFF + map GPS fix. API 241/241 + mobile NW test green. No PASS without staging device QA. Sprint 1–4 unchanged. |
+| 2026-07-22 | Sprint 5 Phase 1 | Full Neighborhood Watch re-audit on `staging` @ `fe7bb3d`. Sprint 5 gap table + `docs/NEIGHBORHOOD_WATCH_CONTRACT.md` added on `feature/sprint-5-neighborhood-watch`. Backend core exists; mobile 100% static UI; admin CSOC partial with mock map coords and dead actions. No implementation changes. No PASS promotions. Sprint 1–4 statuses unchanged except Sprint 4 header note for DI fix. |
 | 2026-07-22 | Sprint 4 staging QA attempt | Deploy workflow `29887082714` failed preflight: GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL`. Live staging API @ `ca227fc` era (pre-Sprint-4): `/v1/health/ready` returns database/redis only; `/v1/broadcasts/admin/scheduler-health` returns 404; no worker/scheduler heartbeats observable. Feature branch `c66561e` local CI green (API 238/238, mobile 106/106, watch 49/49). End-to-end device QA not executed (no VPS deploy, no physical phone/watch in this session). No PASS promotions. |
 | 2026-07-22 | Sprint 4 Phase 1 | Full notifications & broadcasts re-audit on `staging` @ `ca227fc` (RC1). Sprint 4 gap table added on `feature/sprint-4-notifications-broadcasts`. No implementation changes in this entry. No PASS promotions. Sprint 1–3 statuses unchanged. |
 | 2026-07-22 | Sprint 3 Phase 1–2 | Full incident lifecycle re-audit on `staging` @ `45c2197`. Sprint 3 gap table + canonical contract (`docs/INCIDENT_CONTRACT.md`) added. Implementation started on `feature/sprint-3-incident-reporting`: idempotency, location endpoint, notification enqueue, mobile history/detail, admin verify/assign/evidence viewer. No PASS without staging device QA. |
@@ -186,16 +190,16 @@
 
 | ID | Module | Feature | User Role | Platform | Screen/Page | UI Present | Navigation Works | API Endpoint | Backend Implemented | Database Implemented | Authorization Implemented | Uses Real Data | Mock/Demo Removed | Automated Test | Manual Device Test | Staging Verified | Production Config Ready | Status | Severity | Blocker | Root Cause | Files Changed | Deployment Required | Notes |
 |----|--------|---------|-----------|----------|-------------|:----------:|:----------------:|--------------|:-------------------:|:--------------------:|:-------------------------:|:--------------:|:-----------------:|:--------------:|:------------------:|:----------------:|:-----------------------:|--------|----------|:-------:|------------|---------------|:-------------------:|-------|
-| MOB-NW-001 | NW | View communities | Citizen | Mobile | `/neighborhood-watch/my-communities` | Y | Y | `GET /v1/neighborhood-watch/communities` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Static strings in UI | — | Y | Backend exists; mobile uses mock |
-| MOB-NW-002 | NW | Join community | Citizen | Mobile | `/neighborhood-watch/join` | Y | Y | `POST .../join` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Buttons `onPressed: () {}` | — | Y | — |
-| MOB-NW-003 | NW | Leave community | Citizen | Mobile | — | N | N | `PATCH .../leave` | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | No mobile UI | — | Y | — |
-| MOB-NW-004 | NW | Create post | Citizen | Mobile | `/neighborhood-watch/create-post` | Y | Y | `POST .../posts` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Post navigates to feed only; no API | — | Y | — |
-| MOB-NW-005 | NW | Comment | Citizen | Mobile | — | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No comments API | — | Y | Prisma model unused |
-| MOB-NW-006 | NW | Report post | Citizen | Mobile | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | — | — | Y | — |
-| MOB-NW-007 | NW | Alerts | Citizen | Mobile | `/neighborhood-watch/alerts` | Y | Y | — | N | N | N | N | N | N | N | N | N | **FAIL** | P1 | Y | Static alert types | — | Y | — |
-| MOB-NW-008 | NW | Member list | Citizen | Mobile | — | N | N | — | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | Backend has memberships | — | Y | — |
+| MOB-NW-001 | NW | View communities | Citizen | Mobile | `/neighborhood-watch/my-communities` | Y | Y | `GET /v1/neighborhood-watch/communities` | Y | Y | Y | Y | Y | Y | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Wired to live API; device QA pending | — | Y | Replaces static mock lists |
+| MOB-NW-002 | NW | Join community | Citizen | Mobile | `/neighborhood-watch/join` | Y | Y | `POST .../join` | Y | Y | Y | Y | Y | N | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Join/request wired; notify pending S4 runtime | — | Y | — |
+| MOB-NW-003 | NW | Leave community | Citizen | Mobile | — | N | N | `PATCH .../leave` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P1 | N | API + controller method; mobile leave UI not added | — | Y | — |
+| MOB-NW-004 | NW | Create post | Citizen | Mobile | `/neighborhood-watch/create-post` | Y | Y | `POST .../posts` | Y | Y | Y | Y | N | N | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Live post create; media attach UI pending INF-006 | — | Y | — |
+| MOB-NW-005 | NW | Comment | Citizen | Mobile | — | N | N | `GET/POST .../comments` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P2 | N | Comments API added; mobile comment UI not wired | — | Y | — |
+| MOB-NW-006 | NW | Report post | Citizen | Mobile | — | N | N | `POST .../reports` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P2 | N | Content report API added; mobile UI not wired | — | Y | — |
+| MOB-NW-007 | NW | Alerts | Citizen | Mobile | `/neighborhood-watch/alerts` | Y | Y | `GET .../alerts` | Y | Y | Y | Y | BLOCKED | N | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Live alert feed; push delivery blocked on S4 runtime | — | Y | — |
+| MOB-NW-008 | NW | Member list | Citizen | Mobile | — | N | N | `GET .../members` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P2 | N | Members API added; dedicated mobile screen pending | — | Y | — |
 | MOB-NW-009 | NW | Admin contact | Citizen | Mobile | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P3 | N | — | — | Y | — |
-| MOB-NW-010 | NW | Community incident feed | Citizen | Mobile | `/neighborhood-watch/feed` | Y | Y | `GET .../feed` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Hardcoded posts | — | Y | — |
+| MOB-NW-010 | NW | Community incident feed | Citizen | Mobile | `/neighborhood-watch/feed` | Y | Y | `GET .../feed` | Y | Y | Y | Y | N | N | Y | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Live feed wired; device QA pending | — | Y | Replaces hardcoded posts |
 
 ### Safety services
 
@@ -581,6 +585,86 @@
 | Admin broadcasts | ADM-BRD-001–009 |
 | API delivery core | API-CORE-011–014 |
 | Infrastructure | INF-005, INF-011 |
+
+---
+
+## SPRINT 5 — Neighborhood Watch
+
+**Baseline:** `staging` @ `fe7bb3d`  
+**Implementation branch:** `feature/sprint-5-neighborhood-watch`  
+**Contract:** `docs/NEIGHBORHOOD_WATCH_CONTRACT.md`  
+**Sprint 5 verdict:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (leave, members, comments, reports, moderation, statistics, permission matrix, and media upload UI wired; Sprint 4 notification delivery and INF-006 media E2E remain blocked on staging)
+
+> Rules: No PASS without staging evidence. Mobile must not use static/mock community data. Sprint 4 notification delivery remains **DEVICE/INFRA QA PENDING** — NW notification rows inherit that blocker until runtime verified.
+
+### Sprint 5 gap table (Phase 1 audit @ 2026-07-22)
+
+| ID | Feature | Platform | Current status | UI | Endpoint | Database | Authorization | Notification | Admin | Tests | Severity | Blocker | Required change |
+|----|---------|----------|----------------|:--:|:--------:|:--------:|:-------------:|:------------:|:-----:|:-----:|:--------:|:-------:|-----------------|
+| S5-001 | Community discovery (list/search/filter) | Mobile + API | FAIL | Y (static) | PARTIAL (`GET communities`) | Y | PARTIAL | N/A | Y | N | P0 | Y | Wire mobile to paginated API; add search/country/state/LGA filters; remove hardcoded lists |
+| S5-002 | Community detail | Mobile + API | FAIL | Y (static) | Y (`GET communities/:id`) | Y | PARTIAL | N/A | Y | N | P0 | Y | Live detail + membershipStatus, memberCount, activeAlertsCount, latestActivity |
+| S5-003 | Create community (admin) | API + Admin | PARTIAL | N (admin create UI absent) | Y (`POST communities`) | Y | PARTIAL | N | PARTIAL | N | P0 | N | Jurisdiction validation on writes; duplicate detection; audit; admin create UI |
+| S5-004 | Request community (citizen) | Mobile + API | NOT IMPLEMENTED | N | N | N | N | N | N | N | P1 | N | `POST community-requests` + approval queue; mobile submit flow |
+| S5-005 | Join / request-to-join | Mobile + API | FAIL | Y (dead buttons) | Y (`POST join`) | Y | PARTIAL | N | Y (approve) | N | P0 | Y | Wire join; public vs private semantics; idempotency; moderator notify |
+| S5-006 | Leave community | Mobile + API | NOT IMPLEMENTED | N | Y (`PATCH leave`) | Y | PARTIAL | N | N | N | P1 | N | Mobile leave UI; owner transfer/archive guard |
+| S5-007 | Membership approve/reject | API + Admin | PARTIAL | Y (approvals) | PARTIAL (approve only) | Y | PARTIAL | N | PARTIAL (reject 501) | N | P0 | Y | Add reject endpoint; notifications; audit; fix admin BFF 501 |
+| S5-008 | Member list + privacy | Mobile + API | NOT IMPLEMENTED | N | N (`GET members` missing) | Y | N | N | Y (residents) | N | P1 | N | `GET communities/:id/members` with PII masking |
+| S5-009 | Roles and permissions matrix | API | PARTIAL | N/A | PARTIAL | Y (`CommunityRole`) | FAIL | N/A | PARTIAL | N | P0 | Y | Central permission guards; role assign API; escalation regression tests |
+| S5-010 | Community feed / posts list | Mobile + API | FAIL | Y (hardcoded) | Y (`GET feed`, `GET posts`) | Y | PARTIAL | N | Y | N | P0 | Y | Wire mobile feed; pagination; pinned posts; moderation status |
+| S5-011 | Create post | Mobile + API | FAIL | Y (no API) | Y (`POST posts`) | Y | PARTIAL | N | Y | N | P0 | Y | Mobile post create + media attach; rate limit; suspended-user block |
+| S5-012 | Post detail / edit / delete | Mobile + API | NOT IMPLEMENTED | N | N | Y | N | N | PARTIAL | N | P2 | N | Citizen PATCH/DELETE where approved; ownership checks |
+| S5-013 | Comments CRUD | Mobile + API | NOT IMPLEMENTED | N | N | Y (unused model) | N | N | N | N | P1 | N | Full comments API + mobile UI; pagination; moderation |
+| S5-014 | Reactions | Mobile + API | NOT IMPLEMENTED | N | N | Y (unused model) | N | N | N | N | P2 | N | POST/DELETE reactions; dedupe; counts from API |
+| S5-015 | Post media (presign/upload) | Mobile + API | NOT IMPLEMENTED | N | N | Y (Evidence) | PARTIAL | N | N | N | P0 | Y | Community-scoped presign; MIME/size validation; orphan cleanup; INF-006 for E2E |
+| S5-016 | Community alerts (citizen) | Mobile + API | FAIL | Y (static types) | N (dedicated alerts API) | PARTIAL | N | BLOCKED (S4) | PARTIAL | N | P0 | Y | Alert create/list with severity/expiry; verified delivery via S4 pipeline |
+| S5-017 | Alert moderation / mass-alert policy | API + Admin | PARTIAL | Y | PARTIAL (post verify/broadcast) | Y | PARTIAL | BLOCKED (S4) | Y | N | P0 | Y | Role-gated high-severity alerts; approval rules; audit |
+| S5-018 | Incident linkage (alert/post → incident) | Mobile + API | PARTIAL | N | Y (`convert-to-incident`) | Y | PARTIAL | N | Y | N | P1 | N | Mobile visibility; duplicate prevention; reporter privacy |
+| S5-019 | Volunteers enrollment/approval | Mobile + API | PARTIAL | Y (static UI) | Y (`POST volunteers`) | Y | PARTIAL | N | Y | N | P1 | N | Wire mobile volunteer flow; approval workflow; audit |
+| S5-020 | Patrol create/schedule/assign | Mobile + API | PARTIAL | Y (static UI) | PARTIAL (`POST patrols`) | Y | PARTIAL | N | Y | N | P1 | N | List patrols/assignments; start/end; supervisor notes |
+| S5-021 | Checkpoints + patrol reports | Mobile + API | PARTIAL | Y (dead handlers) | Y (`POST checkpoints`) | Y | PARTIAL | N | Y | N | P1 | N | Wire checkpoint reporting; patrol incident report; offline queue |
+| S5-022 | Location tracking (active patrol) | Mobile + API | NOT IMPLEMENTED | N | N | N | N | N | N | N | P1 | N | Consent-gated tracking during active patrol only; battery-aware intervals |
+| S5-023 | Report post/comment/member | Mobile + API | NOT IMPLEMENTED | N | N | PARTIAL | N | N | N (placeholder) | N | P1 | N | Standard reason codes; moderation queue API; admin reports page |
+| S5-024 | Moderation queue (warn/suspend/remove) | API + Admin | PARTIAL | Y (verify) | PARTIAL | Y | PARTIAL | N | PARTIAL | N | P0 | Y | Full moderation actions; block/mute; appeal if approved; no dead buttons |
+| S5-025 | Community map / safe points | Mobile + API | FAIL | Y (admin fake coords) | Y (returns empty arrays) | N | N | N | FAIL (mock) | N | P2 | N | Real map data or explicit empty-state; remove hardcoded Lagos coords |
+| S5-026 | Channel chat / messages | Mobile + API | PARTIAL | N | Y (channels) | Y | PARTIAL | N | NOT IMPL | N | P2 | N | Mobile chat UI or defer; admin chat moderation |
+| S5-027 | Jurisdiction scoping (writes) | API | PARTIAL | N/A | PARTIAL (reads only) | Y | FAIL | N/A | PARTIAL | N | P0 | Y | Enforce jurisdiction on create/join/post/alert/patrol writes |
+| S5-028 | NW push notifications | API + Mobile | BLOCKED | N/A | PARTIAL (enqueue hooks) | Y | N/A | BLOCKED (S4) | N/A | N | P0 | Y | Enqueue join/alert/comment/patrol events via S4 worker; deep links |
+| S5-029 | NW audit trail | API + Admin | PARTIAL | N/A | PARTIAL | Y | N/A | N/A | Y (audit page) | N | P1 | N | Audit all NW state changes; admin filter by community |
+| S5-030 | Rate limiting / abuse controls | API | PARTIAL | N/A | PARTIAL | Y | PARTIAL | N/A | N/A | N | P1 | N | Rate limit posts/comments/join/alerts; anti-spam |
+| S5-031 | Mobile offline/cache + logout clear | Mobile | NOT IMPLEMENTED | N | N/A | N/A | N/A | N/A | N/A | N | P1 | N | Cache communities/feed; isolate per user; clear on logout |
+| S5-032 | Guest vs authenticated policy | Mobile + API | FAIL | Y (guest browse) | UNDEFINED | Y | FAIL | N/A | N/A | N | P1 | N | Explicit guest read scope; gate join/post behind auth |
+| S5-033 | Admin community CRUD/detail | Admin | PARTIAL | Y | Y | Y | Y | N/A | Y | N | P1 | N | Pending creation requests UI; create community form |
+| S5-034 | Admin patrol/volunteer management | Admin | PARTIAL | Y | PARTIAL | Y | Y | N/A | Y | N | P2 | N | Full patrol assignment UI; volunteer approval |
+| S5-035 | Admin moderator assignment | Admin | NOT IMPLEMENTED | N | N | Y | N | N/A | N | N | P2 | N | Role promotion UI + API (ADM-NW-006) |
+| S5-036 | Backend automated test coverage | API | FAIL | N/A | PARTIAL | Y | PARTIAL | N/A | N/A | Y (7 tests) | P0 | N | Cover discovery, membership, posts, comments, alerts, patrols, moderation, jurisdiction |
+| S5-037 | Mobile automated test coverage | Mobile | FAIL | N/A | N | N/A | N/A | N/A | N/A | N | P0 | N | Discovery, join, feed, post, comment, alert, patrol, offline, cache isolation |
+| S5-038 | Admin automated test coverage | Admin | FAIL | N/A | PARTIAL | Y | Y | N/A | PARTIAL | N | P1 | N | Community CRUD, membership, roles, reports, jurisdiction restrictions |
+| S5-039 | Archived/suspended community guard | API | PARTIAL | N/A | PARTIAL | Y | PARTIAL | N/A | Y | N | P1 | N | Reject join/post/alert on non-active communities |
+| S5-040 | Duplicate community detection | API | NOT IMPLEMENTED | N/A | N | Y | N/A | N/A | N/A | N | P1 | N | Normalized name + geography collision check on create/request |
+
+### Sprint 5 evidence tracker
+
+| Track | IDs | Target status | Staging runtime QA | Notes |
+|-------|-----|---------------|-------------------|-------|
+| Discovery + detail | S5-001, S5-002, MOB-NW-001 | FAIL → CODE COMPLETE | Required | Mobile 100% static; API list/detail exist |
+| Membership lifecycle | S5-005–S5-008, MOB-NW-002/003/008 | FAIL/NOT IMPL | Required | Join buttons dead; leave/members API gaps |
+| Feed + posts + media | S5-010–S5-015, MOB-NW-004/010 | FAIL | Required | Comments/reactions/media APIs missing |
+| Alerts + incidents | S5-016–S5-018, MOB-NW-007 | FAIL/BLOCKED | Required | S4 runtime + dedicated alert API |
+| Patrol + volunteer | S5-019–S5-022 | PARTIAL | Required | Backend partial; mobile static |
+| Moderation + reports | S5-023–S5-024, ADM-NW-007 | NOT IMPL/PARTIAL | Required | Admin reports placeholder; reject 501 |
+| Security + jurisdiction | S5-027, S5-009, S5-039 | PARTIAL/FAIL | Required | Write-path jurisdiction; role matrix |
+| Notifications | S5-028 | BLOCKED | Required | Inherits S4-001/004/024 VPS deploy |
+| Admin CSOC | S5-033–S5-035, ADM-NW-001–007 | PARTIAL | Required | Map mock coords; moderator assign missing |
+| Automated tests | S5-036–S5-038 | FAIL | N/A | 7 API unit tests only |
+
+### Sprint 5 checklist row map (existing IDs — statuses unchanged)
+
+| Sprint 5 track | Existing checklist IDs |
+|----------------|------------------------|
+| Mobile NW screens | MOB-NW-001–010 |
+| Admin CSOC | ADM-NW-001–007 |
+| API neighborhood-watch module | Covered by S5-001–S5-040 |
+| Infrastructure dependencies | INF-005 (queue), INF-006 (media) |
 
 ---
 

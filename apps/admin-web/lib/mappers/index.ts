@@ -217,23 +217,29 @@ export function toVolunteerView(record: Record<string, unknown>): VolunteerView 
   const profile = (record.user as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile;
   const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Volunteer";
   return {
+    id: String(record.id ?? record.userId ?? ""),
     name,
     type: Array.isArray(record.types) ? record.types.join(", ") : String(record.types ?? "Volunteer"),
     community: String((record.community as { name?: string } | undefined)?.name ?? record.communityId ?? "-"),
     status: record.verified ? "Verified" : record.available ? "Available" : "Unavailable",
     distance: "-",
+    latitude: record.latitude == null ? undefined : Number(record.latitude),
+    longitude: record.longitude == null ? undefined : Number(record.longitude),
   };
 }
 
 export function toPatrolScheduleView(record: Record<string, unknown>): PatrolScheduleView {
   const checkpoints = Array.isArray(record.checkpoints) ? record.checkpoints : [];
+  const firstCheckpoint = checkpoints[0] as Record<string, unknown> | undefined;
   return {
     id: String(record.id),
     title: String(record.title ?? "Patrol"),
     community: String((record.community as { name?: string } | undefined)?.name ?? record.communityId ?? "-"),
     status: String(record.status ?? "Scheduled"),
-    volunteers: Array.isArray(record.volunteerUserIds) ? record.volunteerUserIds.length : 0,
+    volunteers: Array.isArray(record.assignments) ? record.assignments.length : Array.isArray(record.volunteerUserIds) ? record.volunteerUserIds.length : 0,
     checkpoints: checkpoints.length,
+    latitude: firstCheckpoint?.latitude == null ? undefined : Number(firstCheckpoint.latitude),
+    longitude: firstCheckpoint?.longitude == null ? undefined : Number(firstCheckpoint.longitude),
   };
 }
 
