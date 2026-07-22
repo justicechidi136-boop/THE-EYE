@@ -59,17 +59,38 @@ Sprint 4 implementation will extend enums and delivery logs without breaking exi
 ## Queue architecture
 
 - **Queue name:** `the-eye-{environment}-push` (see `queue-names.ts`)
-- **Job name:** `dispatch`
-- **Worker:** `NotificationsProcessor` (BullMQ)
-- **Redis:** Mandatory in staging and production (`THE_EYE_DISABLE_REDIS` must not be active on VPS)
+- **Job name:** `dispatch` (`NOTIFICATION_DISPATCH_JOB_NAME`)
+- **Redis prefix:** `the-eye-{environment}` (override with `BULLMQ_PREFIX`)
+- **API process:** enqueues jobs only (`NotificationsService.enqueue`)
+- **Worker process:** consumes jobs (`dist/worker.js`, `THE_EYE_RUN_NOTIFICATION_WORKER=1`)
+- **Worker heartbeat:** Redis key `{prefix}:notification-worker:heartbeat` (TTL 60s)
 
-Job payload identifiers:
+### Staging/production requirements
 
-- `notificationId`
-- `broadcastId` (optional)
-- `recipientId` / `userId`
-- `channel`
-- `idempotencyKey`
+- `THE_EYE_DISABLE_REDIS` must **not** be set
+- API enqueue is **fail-closed** when Redis/queue unavailable (no fake job IDs)
+- `/v1/health/ready` reports `redis`, `notificationQueue`, `notificationWorker`, `firebaseAdmin`, `firebaseAuth`
+- Docker Compose service: `notification-worker` (no public port; Redis dependency; heartbeat healthcheck)
+
+### Job payload contract
+
+- `notificationId`, `recipientUserId`, `pushTokenId` (optional), `broadcastId`, `incidentId`, `channel`
+- `idempotencyKey`, `createdAt`, `attempt`, `maxAttempts`
+- No provider credentials or raw tokens in jobs
+
+### Retry / dead-letter
+
+- Exponential backoff; bounded attempts (`bullJobAttempts`)
+- Non-retryable errors (invalid destination) stop retrying
+- Final failures persisted on `Notification` + `NotificationDeliveryLog`
+- Failed job count exposed via queue diagnostics (no payload leakage)
+
+### Rollback
+
+1. Scale/stop `notification-worker` container
+2. Drain or pause queue via Redis/BullMQ ops (failed jobs retained with `removeOnFail: false`)
+3. Redeploy previous API/worker image tag
+4. Verify `/v1/health/ready` queue + worker states before resuming traffic
 
 ---
 

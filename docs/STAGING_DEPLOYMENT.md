@@ -62,7 +62,7 @@ export THE_EYE_GENERATE_DEV_SSL=false
 
 docker compose -f infra/docker/docker-compose.yml --env-file .env config
 docker compose -f infra/docker/docker-compose.yml --env-file .env build api
-docker compose -f infra/docker/docker-compose.yml --env-file .env up -d
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d api notification-worker redis postgres-postgis minio livekit
 
 # Optional: validate the API runtime image tag compose will use
 export THE_EYE_IMAGE_TAG="${THE_EYE_IMAGE_TAG:-local}"
@@ -76,7 +76,16 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tool
 docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-create-admin
 ```
 
-The **API runtime** uses the `production` Docker target (`the-eye-api`). One-shot **tools** services (migrate, seed, create-admin) use the `tools` target (`the-eye-api-tools`) built from the same Dockerfile with full deploy deps (`prisma`, `tsx`). See [DOCKER_BUILD.md](./DOCKER_BUILD.md).
+The **API runtime** uses the `production` Docker target (`the-eye-api`). The **notification worker** uses the same image with `node dist/worker.js` and `THE_EYE_RUN_NOTIFICATION_WORKER=1`. One-shot **tools** services (migrate, seed, create-admin) use the `tools` target (`the-eye-api-tools`) built from the same Dockerfile with full deploy deps (`prisma`, `tsx`). See [DOCKER_BUILD.md](./DOCKER_BUILD.md).
+
+### Notification worker
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d notification-worker
+docker compose -f infra/docker/docker-compose.yml --env-file .env logs -f notification-worker
+```
+
+Rollback: stop `notification-worker`, redeploy prior image tag, then restart after `/v1/health/ready` shows `notificationQueue` ok.
 
 ## TLS (Let's Encrypt)
 

@@ -6,7 +6,7 @@
 **Release gate:** **NOT READY FOR PRODUCTION**  
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
 **Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**  
-**Sprint 4 status:** **IN PROGRESS — PHASE 1 AUDIT COMPLETE**
+**Sprint 4 status:** **IN PROGRESS — PHASES 3 AND 8 CODE COMPLETE**
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -177,8 +177,8 @@
 | MOB-NOTF-003 | Notifications | Background notifications | Citizen | Mobile | — | Y | N/A | FCM | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | FCM + backend dispatch | — | Y | — |
 | MOB-NOTF-004 | Notifications | Terminated-app notifications | Citizen | Mobile | — | Y | N/A | FCM | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | Not verified on device | — | Y | — |
 | MOB-NOTF-005 | Notifications | Deep links | Citizen | Mobile | Router | Y | Y | — | N/A | N/A | Y | Y | Y | Y | N | N | N | **PASS** | P1 | N | Routing logic only | — | N | `push_deep_link_router_test.dart` |
-| MOB-NOTF-006 | Notifications | Notification history | Citizen | Mobile | `/notifications` | Y | Y | `GET /v1/notifications` exists | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Hardcoded seed list `main.dart:851-871` | — | Y | API exists; mobile not wired |
-| MOB-NOTF-007 | Notifications | Read/unread | Citizen | Mobile | `/notifications` | Y | N | `PATCH /v1/notifications/:id/read` | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | Mock inbox only | — | Y | — |
+| MOB-NOTF-006 | Notifications | Notification history | Citizen | Mobile | `/notifications` | Y | Y | `GET /v1/notifications` | Y | Y | Y | Y | Y | Y | N | N | N | **CODE COMPLETE — DEVICE QA PENDING** | P1 | Y | Live inbox wired; device QA pending | `notification_inbox_service.dart`, `main.dart` | Y | Removed hardcoded seed |
+| MOB-NOTF-007 | Notifications | Read/unread | Citizen | Mobile | `/notifications` | Y | Y | `PATCH /v1/notifications/:id/read`, `PATCH /read-all` | Y | Y | Y | Y | Y | Y | N | N | N | **CODE COMPLETE — DEVICE QA PENDING** | P1 | Y | Mark read/all read wired | `notification_inbox_service.dart` | Y | Idempotent API + mobile actions |
 | MOB-NOTF-008 | Notifications | Notification settings | Citizen | Mobile | `/settings` | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No settings UI/API | — | Y | — |
 
 ### Neighborhood Watch
@@ -396,7 +396,7 @@
 | API-CORE-008 | API | Error responses | System | Backend | Filters | N/A | N/A | global | Y | N/A | Y | Y | Y | Y | N | Y | N | **PASS** | P1 | N | — | — | N | — |
 | API-CORE-009 | API | Audit logging | System | Backend | All modules | N/A | N/A | audit service | Y | Y | Y | Y | Y | Y | N | Y | N | **PASS** | P0 | N | Hash chain | — | N | — |
 | API-CORE-010 | API | Prisma persistence | System | Backend | Services | N/A | N/A | all | Y | Y | Y | Y | Y | Y | N | Y | N | **PASS** | P0 | N | No mock repos | — | N | — |
-| API-CORE-011 | API | Redis / BullMQ jobs | System | Backend | notifications | N/A | N/A | queue | PARTIAL | N/A | Y | N | N | Y | N | N | N | **BLOCKED** | P0 | Y | `local-dev-no-redis` skips dispatch | — | Y | — |
+| API-CORE-011 | API | Redis / BullMQ jobs | System | Backend | notifications | N/A | N/A | queue | PARTIAL | N/A | Y | N | N | Y | N | N | N | **CODE COMPLETE — STAGING INFRASTRUCTURE QA PENDING** | P0 | Y | Worker entrypoint + fail-closed enqueue coded; VPS QA pending | `worker.ts`, `queue-config.ts` | Y | Dev may still set `THE_EYE_DISABLE_REDIS=1` |
 | API-CORE-012 | API | FCM delivery | System | Backend | fcm.provider | N/A | N/A | notifications | PARTIAL | Y | Y | N | N | Y | N | N | N | **BLOCKED** | P0 | Y | Simulated without creds | — | Y | — |
 | API-CORE-013 | API | SMS delivery | System | Backend | sms.provider | N/A | N/A | auth/notifications | N | N/A | Y | N | N | Y | N | N | N | **FAIL** | P0 | Y | Default disabled placeholder | — | Y | — |
 | API-CORE-014 | API | Email delivery | System | Backend | email.provider | N/A | N/A | auth/notifications | N | N/A | Y | N | N | Y | N | N | N | **FAIL** | P0 | Y | Default disabled placeholder | — | Y | — |
@@ -532,15 +532,15 @@
 
 | ID | Feature | Platform | Current status | UI | Endpoint | Database | Queue | Provider | Device receipt | Audit | Tests | Severity | Blocker | Required change |
 |----|---------|----------|----------------|:--:|:--------:|:--------:|:-----:|:--------:|:--------------:|:-----:|:-----:|:--------:|:-------:|-----------------|
-| S4-001 | Redis mandatory | Infra | BLOCKED | N/A | health/ready partial | N/A | PARTIAL | N/A | N/A | N/A | Y | P0 | Y | Enable Redis on VPS; remove silent `THE_EYE_DISABLE_REDIS` skip in staging; queue health in `/health/ready` |
-| S4-002 | BullMQ worker pipeline | API | PARTIAL | N/A | enqueue + processor | Y | Y | N/A | N/A | N | Y | P0 | Y | Separate worker process; idempotency keys; dead-letter; graceful shutdown; queue depth observability |
+| S4-001 | Redis mandatory | Infra | CODE COMPLETE — STAGING INFRASTRUCTURE QA PENDING | N/A | health/ready partial | N/A | PARTIAL | N/A | N/A | N/A | Y | P0 | Y | Enable Redis on VPS; verify fail-closed enqueue + queue/worker diagnostics in staging |
+| S4-002 | BullMQ worker pipeline | API | CODE COMPLETE — STAGING INFRASTRUCTURE QA PENDING | N/A | enqueue + worker | Y | Y | N/A | N/A | N | Y | P0 | Y | Deploy worker container; verify idempotency, retries, heartbeat, graceful shutdown on VPS |
 | S4-003 | Notification status taxonomy | API + shared | PARTIAL | N/A | responses | Y | Y | Y | Y | N | N | P1 | N | Align enums/DTOs to Created/Queued/Processing/ProviderAccepted/Delivered/DeviceReceived/Read/Failed/RetryScheduled/InvalidToken/Cancelled |
 | S4-004 | FCM real delivery | API | BLOCKED | N/A | fcm.provider | Y | Y | PARTIAL | Y | N | Y | P0 | Y | `FCM_MODE=real`, staging creds, invalid-token deactivation, env isolation, no simulation in staging |
 | S4-005 | SMS provider | API | FAIL | N/A | sms.provider | Y | Y | FAIL | N | N | Y | P0 | Y | Replace placeholder success; real provider adapter; fail closed when disabled |
 | S4-006 | Email provider | API | FAIL | N/A | email.provider | Y | Y | FAIL | N | N | Y | P0 | Y | Replace placeholder success; real provider adapter; templated auth/incident/broadcast mail |
 | S4-007 | Mobile FCM token lifecycle | Mobile | PARTIAL | Background | push-tokens | Y | N/A | FCM | N | N | Y | P0 | Y | Real deviceId; refresh; logout deactivate; guest restriction; iOS gap documented |
 | S4-008 | Watch FCM token lifecycle | Watch | PARTIAL | Background | push-tokens | Y | N/A | FCM | N | N | Y | P0 | Y | Server deactivate on unpair; live alert presentation; server ack receipt |
-| S4-009 | Mobile notification inbox | Mobile | FAIL | `/notifications` | GET/PATCH notifications | Y | N/A | N/A | N | N | N | P1 | Y | Replace hardcoded 7-alert seed; pagination; read/unread; pull-to-refresh |
+| S4-009 | Mobile notification inbox | Mobile | CODE COMPLETE — DEVICE QA PENDING | `/notifications` | GET/PATCH notifications | Y | N/A | N/A | N | N | Y | P1 | Y | Device QA on staging APK; verify pagination, read/unread, offline cache, FCM refresh |
 | S4-010 | Mobile broadcast feed | Mobile | FAIL | `/broadcasts` | GET broadcasts/nearby | Y | N/A | N/A | N | N | N | P1 | Y | Replace hardcoded feed; geo query; detail screen |
 | S4-011 | Notification preferences | Mobile + API | NOT IMPLEMENTED | `/settings` | preferences API | N | N/A | N/A | N | N | N | P1 | Y | Server-backed typed prefs; mobile settings UI; audit on change |
 | S4-012 | Mobile deep links | Mobile | PASS | Router | payload routes | N/A | N/A | N/A | Y | N | Y | P1 | N | Extend tests for broadcast/incident routes; sync inbox on open |
@@ -555,7 +555,7 @@
 | S4-021 | Retry / dead-letter | API | PARTIAL | N/A | processor | Y | Y | all | N | N | Y | P1 | N | Bounded backoff; poison job handling; admin visibility |
 | S4-022 | Rate limiting / abuse | API | PARTIAL | N/A | send + tokens | Y | Y | all | N | N | N | P1 | Y | Rate limit notification send + token register; broadcast approval guards |
 | S4-023 | Notification audit trail | API | PARTIAL | N/A | send | Y | Y | all | N | PARTIAL | N | P1 | N | Audit notification send + preference changes (broadcasts already audited) |
-| S4-024 | Worker Docker service | Infra | PARTIAL | N/A | compose | N/A | Y | N/A | N/A | N | N | P0 | Y | Deploy worker container; health endpoint; staging isolation |
+| S4-024 | Worker Docker service | Infra | CODE COMPLETE — STAGING DEPLOY PENDING | N/A | compose | N/A | Y | N/A | N/A | N | Y | P0 | Y | Deploy `notification-worker` service on VPS; verify heartbeat healthcheck and rollback |
 | S4-025 | Auth delivery webhooks | API | PARTIAL | N/A | auth-delivery | N/A | N/A | webhook | N | Y | Y | P0 | Y | Configure OTP/password-reset webhooks on staging (Sprint 1 dependency) |
 
 ### Sprint 4 evidence tracker
