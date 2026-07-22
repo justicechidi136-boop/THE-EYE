@@ -15,8 +15,10 @@ describe("NotificationsProcessor", () => {
       recordSuccess: jest.fn().mockResolvedValue(undefined),
       recordFailure: jest.fn(),
     };
+    const prisma = { notificationDeliveryLog: { create: jest.fn().mockResolvedValue({}) } };
+    const heartbeat = { touch: jest.fn().mockResolvedValue(undefined), recordProcessedJob: jest.fn().mockResolvedValue(undefined) };
     const metrics = createMetricsMock();
-    const processor = new NotificationsProcessor(dispatcher as never, delivery as never, metrics);
+    const processor = new NotificationsProcessor(dispatcher as never, delivery as never, metrics, prisma as never, heartbeat as never);
 
     const result = await processor.process({
       id: "job-1",
@@ -50,8 +52,10 @@ describe("NotificationsProcessor", () => {
       recordSuccess: jest.fn(),
       recordFailure: jest.fn().mockResolvedValue(undefined),
     };
+    const prisma = { notificationDeliveryLog: { create: jest.fn().mockResolvedValue({}) } };
+    const heartbeat = { touch: jest.fn().mockResolvedValue(undefined), recordProcessedJob: jest.fn().mockResolvedValue(undefined) };
     const metrics = createMetricsMock();
-    const processor = new NotificationsProcessor(dispatcher as never, delivery as never, metrics);
+    const processor = new NotificationsProcessor(dispatcher as never, delivery as never, metrics, prisma as never, heartbeat as never);
 
     let caught: Error | undefined;
     try {
