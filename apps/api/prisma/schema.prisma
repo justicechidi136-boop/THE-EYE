@@ -580,6 +580,7 @@ model Broadcast {
   targetCenter   Unsupported("geography(Point,4326)")? @map("target_center")
   rejectedReason String?         @map("rejected_reason")
   publishedAt    DateTime?       @map("published_at") @db.Timestamptz(6)
+  scheduledAt    DateTime?       @map("scheduled_at") @db.Timestamptz(6)
   expiresAt      DateTime?       @map("expires_at") @db.Timestamptz(6)
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   jurisdiction   Jurisdiction?   @relation(fields: [jurisdictionId], references: [id])
@@ -594,6 +595,7 @@ model Broadcast {
   @@index([type, status])
   @@index([jurisdictionId])
   @@index([incidentId])
+  @@index([scheduledAt])
   @@map("broadcasts")
 }
 

@@ -17,6 +17,16 @@ export type CreateBroadcastDto = {
   targetAreaWkt?: string;
   requiresApproval?: boolean;
   expiresAt?: string;
+  scheduledAt?: string;
+  saveAsDraft?: boolean;
+};
+
+export type ScheduleBroadcastDto = {
+  scheduledAt: string;
+};
+
+export type CancelBroadcastDto = {
+  reason?: string;
 };
 
 export type ReviewBroadcastDto = {

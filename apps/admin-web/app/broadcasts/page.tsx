@@ -1,14 +1,20 @@
 import { AppShell } from "../../components/app-shell";
+import { BroadcastActions } from "../../components/broadcast-actions";
 import { BroadcastCreateForm } from "../../components/broadcast-create-form";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { fetchBroadcasts } from "../../lib/api/data";
+import { fetchBroadcasts, fetchNotificationDeliveryDiagnostics } from "../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function BroadcastsPage() {
-  const broadcasts = await fetchBroadcasts();
+  const [broadcasts, diagnostics] = await Promise.all([
+    fetchBroadcasts(),
+    fetchNotificationDeliveryDiagnostics(),
+  ]);
   const pending = broadcasts.filter((broadcast) => broadcast.status === "Pending approval").length;
   const published = broadcasts.filter((broadcast) => broadcast.status === "Published").length;
+  const queueWaiting = Number(diagnostics?.queue?.waiting ?? 0);
+  const workerActive = diagnostics?.worker?.active === true;
 
   return (
     <AppShell>
@@ -30,7 +36,12 @@ export default async function BroadcastsPage() {
           <Panel title="Dispatch health">
             <div className="grid gap-3">
               <StatusBadge tone="success">{published} published</StatusBadge>
-              <StatusBadge tone="info">FCM queue active</StatusBadge>
+              <StatusBadge tone={workerActive ? "success" : "warning"}>
+                Worker {workerActive ? "active" : "stale"}
+              </StatusBadge>
+              <StatusBadge tone={queueWaiting > 0 ? "warning" : "info"}>
+                Queue waiting: {queueWaiting}
+              </StatusBadge>
             </div>
           </Panel>
         </section>
@@ -51,6 +62,7 @@ export default async function BroadcastsPage() {
                   <th className="px-4 py-3">Approval</th>
                   <th className="px-4 py-3">Recipients</th>
                   <th className="px-4 py-3">Delivery</th>
+                  <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -70,6 +82,13 @@ export default async function BroadcastsPage() {
                     </td>
                     <td className="px-4 py-3">{broadcast.recipients}</td>
                     <td className="px-4 py-3"><StatusBadge tone={broadcast.delivery === "Sent" ? "success" : "info"}>{broadcast.delivery}</StatusBadge></td>
+                    <td className="px-4 py-3">
+                      <BroadcastActions
+                        broadcastId={broadcast.id}
+                        status={broadcast.status}
+                        requiresApproval={broadcast.requiresApproval}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
