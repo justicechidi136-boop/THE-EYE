@@ -16,8 +16,12 @@ abstract final class PushDeepLinkRouter {
   static String? resolveRoute(Map<String, dynamic> data) {
     final explicitRoute =
         _sanitize(data["route"] ?? data["deepLink"] ?? data["deep_link"]);
-    if (explicitRoute != null && allowedRoutes.contains(explicitRoute)) {
-      return explicitRoute;
+    if (explicitRoute != null) {
+      if (allowedRoutes.contains(explicitRoute)) return explicitRoute;
+      if (explicitRoute.startsWith("/broadcasts/") &&
+          explicitRoute.length > "/broadcasts/".length) {
+        return explicitRoute;
+      }
     }
 
     final type = (data["type"] ?? "").toString().toLowerCase();

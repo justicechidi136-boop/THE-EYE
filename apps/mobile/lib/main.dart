@@ -50,6 +50,8 @@ import "design_system/eye_design_system.dart";
 import "push/push_background_handler.dart";
 import "push/push_deep_link_router.dart";
 import "push/push_notification_service.dart";
+import "broadcasts/broadcast_feed_cache.dart";
+import "broadcasts/broadcast_feed_service.dart";
 import "notifications/notification_inbox_cache.dart";
 import "notifications/notification_inbox_service.dart";
 import "startup/startup_diagnostics.dart";
@@ -875,6 +877,8 @@ class AppController extends SessionAccessor {
       NotificationInboxService();
   final NotificationInboxCache _notificationInboxCache =
       NotificationInboxCache();
+  final BroadcastFeedService _broadcastFeedService = BroadcastFeedService();
+  final BroadcastFeedCache _broadcastFeedCache = BroadcastFeedCache();
   final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
   IncidentLocationTracker? _locationTracker;
   final ConnectivityService _connectivity;
@@ -902,6 +906,12 @@ class AppController extends SessionAccessor {
   String? notificationNextCursor;
   int notificationUnreadCount = 0;
   bool loadingMoreNotifications = false;
+  final List<BroadcastFeedItem> broadcasts = [];
+  bool loadingBroadcasts = false;
+  String? broadcastLoadError;
+  String? broadcastNextCursor;
+  int broadcastUnreadCount = 0;
+  bool loadingMoreBroadcasts = false;
 
   ConnectivityService get connectivity => _connectivity;
   AuthService get authService => _authService;
@@ -1237,8 +1247,141 @@ class AppController extends SessionAccessor {
     notificationUnreadCount = 0;
     if (cacheScope != null) {
       await _notificationInboxCache.clear(cacheScope);
+      await _broadcastFeedCache.clear(cacheScope);
+    }
+    broadcasts.clear();
+    broadcastLoadError = null;
+    broadcastNextCursor = null;
+    broadcastUnreadCount = 0;
+    notifyListeners();
+  }
+
+  Future<void> loadBroadcastsFromApi({bool refresh = false}) async {
+    if (!isAuthenticated || accessToken == null) {
+      broadcasts.clear();
+      broadcastLoadError = null;
+      broadcastNextCursor = null;
+      broadcastUnreadCount = 0;
+      notifyListeners();
+      return;
+    }
+    if (refresh) {
+      broadcastNextCursor = null;
+    }
+    loadingBroadcasts = true;
+    broadcastLoadError = null;
+    notifyListeners();
+    try {
+      final location = await captureLocationOutcome();
+      if (location.result != LocationCaptureResult.granted ||
+          location.position == null) {
+        throw StateError(locationFailureMessage(location.result));
+      }
+      final page = await _broadcastFeedService.listNearby(
+        accessToken: accessToken!,
+        latitude: location.position!.latitude,
+        longitude: location.position!.longitude,
+        cursor: refresh ? null : broadcastNextCursor,
+      );
+      if (refresh || broadcastNextCursor == null) {
+        broadcasts
+          ..clear()
+          ..addAll(page.items);
+      } else {
+        final existingIds = broadcasts.map((item) => item.id).toSet();
+        broadcasts.addAll(
+          page.items.where((item) => !existingIds.contains(item.id)),
+        );
+      }
+      broadcastNextCursor = page.nextCursor;
+      broadcastUnreadCount = await _broadcastFeedService.unreadCount(
+        accessToken: accessToken!,
+      );
+      final cacheScope = _notificationCacheScope;
+      if (cacheScope != null) {
+        await _broadcastFeedCache.save(cacheScope, broadcasts);
+      }
+    } on IncidentApiException catch (error) {
+      broadcastLoadError = error.userMessage;
+      final cacheScope = _notificationCacheScope;
+      if (cacheScope != null && broadcasts.isEmpty) {
+        broadcasts
+          ..clear()
+          ..addAll(await _broadcastFeedCache.load(cacheScope));
+      }
+    } catch (error) {
+      broadcastLoadError = error is StateError
+          ? error.message
+          : "Unable to load safety broadcasts.";
+    } finally {
+      loadingBroadcasts = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreBroadcasts() async {
+    if (!isAuthenticated ||
+        accessToken == null ||
+        broadcastNextCursor == null ||
+        loadingMoreBroadcasts) {
+      return;
+    }
+    loadingMoreBroadcasts = true;
+    notifyListeners();
+    try {
+      final location = await captureLocationOutcome();
+      if (location.result != LocationCaptureResult.granted ||
+          location.position == null) {
+        return;
+      }
+      final page = await _broadcastFeedService.listNearby(
+        accessToken: accessToken!,
+        latitude: location.position!.latitude,
+        longitude: location.position!.longitude,
+        cursor: broadcastNextCursor,
+      );
+      final existingIds = broadcasts.map((item) => item.id).toSet();
+      broadcasts.addAll(
+        page.items.where((item) => !existingIds.contains(item.id)),
+      );
+      broadcastNextCursor = page.nextCursor;
+    } on IncidentApiException catch (error) {
+      broadcastLoadError = error.userMessage;
+    } finally {
+      loadingMoreBroadcasts = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> markBroadcastRead(String broadcastId) async {
+    if (!isAuthenticated || accessToken == null) return;
+    final index = broadcasts.indexWhere((item) => item.id == broadcastId);
+    if (index >= 0 && !broadcasts[index].read) {
+      broadcasts[index] = broadcasts[index].copyWith(read: true);
+      broadcastUnreadCount = broadcastUnreadCount > 0 ? broadcastUnreadCount - 1 : 0;
+      notifyListeners();
+    }
+    try {
+      await _broadcastFeedService.markRead(
+        accessToken: accessToken!,
+        broadcastId: broadcastId,
+      );
+    } catch (_) {}
+  }
+
+  void upsertBroadcastFeedItem(BroadcastFeedItem item) {
+    final index = broadcasts.indexWhere((entry) => entry.id == item.id);
+    if (index >= 0) {
+      broadcasts[index] = item.copyWith(read: false);
+    } else {
+      broadcasts.insert(0, item.copyWith(read: false));
+      broadcastUnreadCount += 1;
     }
     notifyListeners();
+    final cacheScope = _notificationCacheScope;
+    if (cacheScope != null) {
+      unawaited(_broadcastFeedCache.save(cacheScope, broadcasts));
+    }
   }
 
   Future<SessionRestoreResult> restoreSession() async {
@@ -4160,97 +4303,281 @@ class _StolenVehicleBroadcastScreenState
   }
 }
 
-class BroadcastCenterScreen extends StatelessWidget {
+class BroadcastCenterScreen extends StatefulWidget {
   const BroadcastCenterScreen({super.key});
 
   @override
+  State<BroadcastCenterScreen> createState() => _BroadcastCenterScreenState();
+}
+
+class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      unawaited(controller.loadBroadcastsFromApi(refresh: true));
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final alerts = [
-      (
-        "Emergency broadcast",
-        "P1",
-        "Verified emergency near Allen Avenue",
-        "1.2 km away",
-        Icons.emergency,
-        Colors.red.shade700
-      ),
-      (
-        "Missing person broadcast",
-        "P2",
-        "Missing child last seen near Ikeja terminal",
-        "Ikeja LGA",
-        Icons.person_search,
-        Colors.teal.shade700
-      ),
-      (
-        "Stolen vehicle broadcast",
-        "P2",
-        "Silver Toyota Corolla, plate LAG-123-EYE",
-        "Opebi and Allen Avenue",
-        Icons.directions_car,
-        Colors.blueGrey.shade700
-      ),
-      (
-        "Crime broadcast",
-        "P2",
-        "Police response active near Allen Avenue",
-        "2 km safety radius",
-        Icons.local_police,
-        Colors.indigo.shade700
-      ),
-      (
-        "Accident broadcast",
-        "P2",
-        "Multi-vehicle collision affecting traffic",
-        "Awolowo Way",
-        Icons.car_crash,
-        Colors.orange.shade800
-      ),
-      (
-        "Government alert",
-        "Official",
-        "Temporary road closure for emergency response",
-        "Lagos State",
-        Icons.account_balance,
-        BrandColors.green
-      ),
-      (
-        "Community warning",
-        "P3",
-        "Neighborhood watch reports suspicious activity",
-        "Allen Avenue community",
-        Icons.groups,
-        BrandColors.orange
-      ),
-    ];
+    final controller = appOf(context);
+    if (!controller.isAuthenticated) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return SafetyScaffold(
       title: "Safety broadcasts",
       selectedIndex: 3,
       useFigmaShell: true,
-      body: ListView(
+      body: RefreshIndicator(
+        onRefresh: () => controller.loadBroadcastsFromApi(refresh: true),
+        child: _buildBody(controller),
+      ),
+    );
+  }
+
+  Widget _buildBody(AppController controller) {
+    if (controller.loadingBroadcasts && controller.broadcasts.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: const [
+          SizedBox(height: 120),
+          Center(child: CircularProgressIndicator()),
+        ],
+      );
+    }
+
+    if (controller.broadcastLoadError != null && controller.broadcasts.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           const SectionCard(
             title: "Alerts for your location",
             child: Text(
-                "Verified emergency and government alerts are targeted using your current community and safety radius."),
-          ),
-          const SizedBox(height: 16),
-          ...alerts.map(
-            (alert) => ListTileCard(
-              leading: CircleAvatar(
-                backgroundColor: alert.$6.withValues(alpha: 0.12),
-                foregroundColor: alert.$6,
-                child: Icon(alert.$5),
-              ),
-              title: alert.$1,
-              subtitle: "${alert.$2} - ${alert.$3}\n${alert.$4}",
-              trailing: const Icon(Icons.chevron_right),
+              "Verified emergency and government alerts are targeted using your profile jurisdiction and current location.",
             ),
           ),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: const Icon(Icons.cloud_off),
+            title: const Text("Broadcasts unavailable"),
+            subtitle: Text(controller.broadcastLoadError!),
+          ),
+          FilledButton(
+            onPressed: () =>
+                unawaited(controller.loadBroadcastsFromApi(refresh: true)),
+            child: const Text("Retry"),
+          ),
+        ],
+      );
+    }
+
+    if (controller.broadcasts.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: const [
+          SectionCard(
+            title: "Alerts for your location",
+            child: Text("No active safety broadcasts match your location right now."),
+          ),
+        ],
+      );
+    }
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 240) {
+          unawaited(controller.loadMoreBroadcasts());
+        }
+        return false;
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: [
+          SectionCard(
+            title: "Alerts for your location",
+            child: Text(
+              controller.broadcastUnreadCount > 0
+                  ? "${controller.broadcastUnreadCount} unread safety broadcasts near you."
+                  : "Verified emergency and government alerts are targeted using your profile jurisdiction and current location.",
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...controller.broadcasts.map((item) {
+            final tone = item.priority.contains("P1")
+                ? Colors.red.shade700
+                : item.priority.contains("P2")
+                    ? Colors.orange.shade800
+                    : BrandColors.green;
+            final subtitle = item.distanceMeters != null
+                ? "${(item.distanceMeters! / 1000).toStringAsFixed(1)} km away"
+                : item.expired
+                    ? "Expired"
+                    : "Active alert";
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ListTileCard(
+                leading: CircleAvatar(
+                  backgroundColor: tone.withValues(alpha: 0.12),
+                  foregroundColor: tone,
+                  child: Icon(
+                    item.type.toLowerCase().contains("missing")
+                        ? Icons.person_search
+                        : item.type.toLowerCase().contains("vehicle")
+                            ? Icons.directions_car
+                            : Icons.campaign,
+                  ),
+                ),
+                title: item.title,
+                subtitle: "${item.priority} · ${item.type}\n$subtitle",
+                trailing: item.read
+                    ? const Icon(Icons.chevron_right)
+                    : const Icon(Icons.fiber_manual_record, size: 12),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BroadcastDetailScreen(broadcastId: item.id),
+                    ),
+                  );
+                },
+              ),
+            );
+          }),
+          if (controller.loadingMoreBroadcasts)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Center(child: CircularProgressIndicator()),
+            ),
         ],
       ),
+    );
+  }
+}
+
+class BroadcastDetailScreen extends StatefulWidget {
+  const BroadcastDetailScreen({required this.broadcastId, super.key});
+
+  final String broadcastId;
+
+  @override
+  State<BroadcastDetailScreen> createState() => _BroadcastDetailScreenState();
+}
+
+class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
+  BroadcastFeedItem? _item;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadDetail());
+  }
+
+  Future<void> _loadDetail() async {
+    final controller = appOf(context);
+    if (!controller.isAuthenticated || controller.accessToken == null) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed("/login");
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      BroadcastFeedItem? cached;
+      for (final entry in controller.broadcasts) {
+        if (entry.id == widget.broadcastId) {
+          cached = entry;
+          break;
+        }
+      }
+      final item = cached ??
+          await BroadcastFeedService().getDetail(
+            accessToken: controller.accessToken!,
+            broadcastId: widget.broadcastId,
+          );
+      await controller.markBroadcastRead(widget.broadcastId);
+      if (!mounted) return;
+      setState(() {
+        _item = item;
+        _loading = false;
+      });
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.userMessage;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Unable to load broadcast detail.";
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafetyScaffold(
+      title: "Broadcast detail",
+      selectedIndex: 3,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.cloud_off),
+                      title: const Text("Broadcast unavailable"),
+                      subtitle: Text(_error!),
+                    ),
+                    FilledButton(
+                      onPressed: () => unawaited(_loadDetail()),
+                      child: const Text("Retry"),
+                    ),
+                  ],
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                  children: [
+                    SectionCard(
+                      title: _item?.title ?? "Safety broadcast",
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_item?.body ?? ""),
+                          const SizedBox(height: 12),
+                          Text(
+                            "${_item?.priority ?? ""} · ${_item?.type ?? ""}",
+                            style: const TextStyle(color: BrandColors.lightTextMuted),
+                          ),
+                          if (_item?.expiresAt != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _item!.expired
+                                  ? "Expired"
+                                  : "Expires ${formatNotificationAge(_item!.expiresAt!)}",
+                              style: const TextStyle(color: BrandColors.lightTextMuted),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
     );
   }
 }

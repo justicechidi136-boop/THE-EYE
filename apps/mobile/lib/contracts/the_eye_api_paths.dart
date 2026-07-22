@@ -57,6 +57,12 @@ abstract final class TheEyeApiPaths {
       "/notifications/$notificationId";
   static String notificationRead(String notificationId) =>
       "/notifications/$notificationId/read";
+  static const broadcastsNearby = "/broadcasts/nearby";
+  static const broadcastsUnreadCount = "/broadcasts/unread-count";
+  static String broadcastDetail(String broadcastId) =>
+      "/broadcasts/$broadcastId";
+  static String broadcastRead(String broadcastId) =>
+      "/broadcasts/$broadcastId/read";
   static String incidentsMediaPresign(String incidentId) =>
       "/incidents/$incidentId/media/presign";
   static String incidentsMediaConfirm(String incidentId) =>
