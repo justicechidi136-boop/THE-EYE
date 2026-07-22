@@ -1,22 +1,30 @@
 import { AppShell } from "../../components/app-shell";
 import { NotificationComposeForm } from "../../components/notification-compose-form";
 import { MetricCard, PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { fetchNotificationOperations } from "../../lib/api/data";
+import { fetchNotificationDeliveryDiagnostics, fetchNotificationOperations } from "../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function NotificationsPage() {
-  const notificationOperations = await fetchNotificationOperations();
+  const [notificationOperations, diagnostics] = await Promise.all([
+    fetchNotificationOperations(),
+    fetchNotificationDeliveryDiagnostics(),
+  ]);
   const delivered = notificationOperations.filter((item) => item.status === "Delivered").length;
   const critical = notificationOperations.filter((item) => item.priority === "Critical" || item.priority === "P1LifeThreatening").length;
+  const queueWaiting = Number(diagnostics?.queue?.waiting ?? 0);
+  const queueFailed = Number(diagnostics?.queue?.failed ?? 0);
+  const workerActive = diagnostics?.worker?.active === true;
+  const fcmMode = String((diagnostics?.fcm as { mode?: string } | null)?.mode ?? "unknown");
 
   return (
     <AppShell>
       <PageHeader eyebrow="Multi-channel delivery" title="Notification system" action={<StatusBadge tone="success">API connected</StatusBadge>} />
-      <div className="mb-5 grid gap-4 md:grid-cols-3">
-        <MetricCard label="Delivered" value={`${delivered}`} detail="Push and in-app confirmations" />
+      <div className="mb-5 grid gap-4 md:grid-cols-4">
+        <MetricCard label="Delivered" value={`${delivered}`} detail="Confirmed inbox or device receipts" />
         <MetricCard label="Critical alerts" value={`${critical}`} detail="Emergency and family SOS" />
-        <MetricCard label="Queue source" value="Redis/BullMQ" detail="Loaded from `/v1/notifications`" />
+        <MetricCard label="Queue waiting" value={`${queueWaiting}`} detail={`Failed jobs: ${queueFailed}`} />
+        <MetricCard label="Worker / FCM" value={workerActive ? "Active" : "Stale"} detail={`FCM mode: ${fcmMode}`} />
       </div>
 
       <Panel title="Create targeted notification">

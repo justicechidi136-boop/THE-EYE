@@ -15,8 +15,47 @@ export class NotificationsController {
 
   @Get()
   @RequirePermissions("incident:read")
-  list(@Req() request: any, @Query("unreadOnly") unreadOnly?: string, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
-    return this.notificationsService.listForActor(request.user, unreadOnly === "true", { cursor, limit });
+  list(
+    @Req() request: any,
+    @Query("unreadOnly") unreadOnly?: string,
+    @Query("category") category?: string,
+    @Query("severity") severity?: string,
+    @Query("includeExpired") includeExpired?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.notificationsService.listForActor(request.user, {
+      unreadOnly: unreadOnly === "true",
+      category,
+      severity,
+      includeExpired: includeExpired === "true",
+      cursor,
+      limit,
+    });
+  }
+
+  @Get("unread-count")
+  @RequirePermissions("incident:read")
+  unreadCount(@Req() request: any) {
+    return this.notificationsService.countUnreadForActor(request.user).then((count) => ({ unreadCount: count }));
+  }
+
+  @Patch("read-all")
+  @RequirePermissions("incident:read")
+  markAllRead(@Req() request: any) {
+    return this.notificationsService.markAllRead(request.user);
+  }
+
+  @Get("admin/delivery-operations")
+  @RequirePermissions("auth:admin")
+  deliveryOperations(@Req() request: any) {
+    return this.notificationsService.getAdminDeliveryOperations(request.user);
+  }
+
+  @Get(":id")
+  @RequirePermissions("incident:read")
+  getOne(@Param("id") id: string, @Req() request: any) {
+    return this.notificationsService.getForActor(id, request.user);
   }
 
   @Post("send")
@@ -35,6 +74,22 @@ export class NotificationsController {
   @RequirePermissions("incident:read")
   deactivatePushToken(@Body() dto: { token: string }, @Req() request: any) {
     return this.notificationsService.deactivatePushToken(dto.token, request.user);
+  }
+
+  @Patch("push-tokens/deactivate-all")
+  @RequirePermissions("incident:read")
+  deactivateAllPushTokens(@Body() dto: { deviceId?: string }, @Req() request: any) {
+    return this.notificationsService.deactivateAllPushTokens(request.user, dto.deviceId);
+  }
+
+  @Patch(":id/device-received")
+  @RequirePermissions("incident:read")
+  deviceReceived(
+    @Param("id") id: string,
+    @Body() dto: { source?: "foreground" | "background" | "opened" | "watch_ack" },
+    @Req() request: any,
+  ) {
+    return this.notificationsService.recordDeviceReceived(id, request.user, dto.source ?? "opened");
   }
 
   @Patch(":id/read")

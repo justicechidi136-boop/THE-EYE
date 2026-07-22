@@ -17,6 +17,16 @@ export type CreateBroadcastDto = {
   targetAreaWkt?: string;
   requiresApproval?: boolean;
   expiresAt?: string;
+  scheduledAt?: string;
+  saveAsDraft?: boolean;
+};
+
+export type ScheduleBroadcastDto = {
+  scheduledAt: string;
+};
+
+export type CancelBroadcastDto = {
+  reason?: string;
 };
 
 export type ReviewBroadcastDto = {
@@ -31,6 +41,11 @@ export type NearbyBroadcastsQuery = {
   latitude?: string;
   longitude?: string;
   radiusMeters?: string;
+  cursor?: string;
+  limit?: string;
+  category?: string;
+  severity?: string;
+  unreadOnly?: string;
 };
 
 export const approvalRequiredTypes = new Set<BroadcastType>([

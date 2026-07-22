@@ -1,8 +1,9 @@
+import { NOTIFICATION_DISPATCH_JOB_NAME } from "../../../common/queue/queue-jobs";
 import { createMetricsMock } from "../../../common/metrics/metrics.test-utils";
 import { NotificationsService } from "../notifications.service";
 
 function buildService() {
-  const queue = { add: jest.fn().mockResolvedValue({ id: "job-1" }) } as any;
+  const queue = { add: jest.fn().mockResolvedValue({ id: "job-1" }), getJob: jest.fn().mockResolvedValue(undefined) } as any;
   const config = {
     get: (key: string) => {
       if (key === "THE_EYE_APP_ENV") return "development";
@@ -15,6 +16,7 @@ function buildService() {
       create: jest.fn().mockResolvedValue({ id: "notification-1" }),
       findMany: jest.fn(),
       updateMany: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
       findFirst: jest.fn(),
       update: jest.fn(),
     },
@@ -43,9 +45,9 @@ describe("NotificationsService", () => {
     expect(prisma.notification.create).toHaveBeenCalledTimes(2);
     expect(queue.add).toHaveBeenCalledTimes(2);
     expect(queue.add).toHaveBeenCalledWith(
-      "dispatch",
-      expect.objectContaining({ priority: "Critical" }),
-      expect.objectContaining({ priority: 1, attempts: 8 }),
+      NOTIFICATION_DISPATCH_JOB_NAME,
+      expect.objectContaining({ priority: "Critical", idempotencyKey: "notify:notification-1:push:user-1" }),
+      expect.objectContaining({ priority: 1, attempts: 8, jobId: "notify:notification-1:push:user-1" }),
     );
     expect(prisma.notificationDeliveryLog.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "Queued", attempt: 0 }),

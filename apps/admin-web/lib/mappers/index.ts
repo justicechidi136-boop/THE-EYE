@@ -102,14 +102,30 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
   const deliveries = Array.isArray(record.deliveries) ? record.deliveries : [];
   const status = String(record.status ?? "Draft");
   const recipients = deliveries.length;
+  const scheduledAt = record.scheduledAt ? String(record.scheduledAt) : null;
+  const dispatchFailureReason = record.dispatchFailureReason ? String(record.dispatchFailureReason) : null;
   const delivery =
     status === "Published"
       ? recipients > 0
         ? "Sent"
         : "Published"
-      : status === "PendingApproval"
-        ? "Queued"
-        : "Not dispatched";
+      : status === "Failed"
+        ? "Failed"
+        : status === "Scheduled" || status === "DispatchQueued" || status === "Dispatching"
+          ? "Scheduled"
+          : status === "PendingApproval"
+            ? "Queued"
+            : "Not dispatched";
+  const autoDispatchStatus =
+    status === "Failed"
+      ? "Auto-dispatch failed"
+      : status === "DispatchQueued" || status === "Dispatching"
+        ? "Auto-dispatch in progress"
+        : status === "Scheduled" && scheduledAt
+          ? "Waiting for scheduler"
+          : status === "Published" && recipients > 0
+            ? "Dispatched"
+            : "Manual / pending";
 
   return {
     id: String(record.id),
@@ -127,6 +143,10 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
     requiresApproval: Boolean(record.requiresApproval ?? true),
     recipients,
     delivery,
+    scheduledAt,
+    schedulingState: status === "PendingApproval" ? "Pending approval" : status,
+    dispatchFailureReason,
+    autoDispatchStatus,
   };
 }
 

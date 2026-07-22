@@ -233,6 +233,9 @@ export class SmartwatchService {
     const device = await this.prisma.smartwatchDevice.findUnique({ where: { id } });
     if (!device) throw new NotFoundException("Smartwatch device not found");
     if (actor.typ === "user" && device.userId !== actor.sub) throw new ForbiddenException("You can only remove your own smartwatch devices");
+    if (device.userId) {
+      await this.notifications.deactivatePushTokensForDevice(device.userId, device.deviceId);
+    }
     const updated = await this.prisma.smartwatchDevice.update({
       where: { id },
       data: { isActive: false, isOnline: false, pairedPhoneDeviceId: null, deviceSecretHash: null, metadata: { unpairedAt: new Date().toISOString() } } as never,

@@ -10,6 +10,9 @@ import "package:permission_handler/permission_handler.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
 import "../startup/startup_diagnostics.dart";
+import "../config/app_flavor.dart";
+import "push_delivery_ack.dart";
+import "push_device_id.dart";
 import "push_deep_link_router.dart";
 import "push_notification_channels.dart";
 import "push_safe_log.dart";
@@ -23,21 +26,29 @@ class PushNotificationService {
     required AccessTokenProvider accessTokenProvider,
     FirebaseMessaging? messaging,
     FlutterLocalNotificationsPlugin? localNotifications,
+    PushDeliveryAckService? deliveryAck,
   })  : _apiClient = apiClient,
         _accessTokenProvider = accessTokenProvider,
         _messagingOverride = messaging,
         _localNotifications =
-            localNotifications ?? FlutterLocalNotificationsPlugin();
+            localNotifications ?? FlutterLocalNotificationsPlugin(),
+        _deliveryAck = deliveryAck ??
+            PushDeliveryAckService(
+              apiClient: apiClient,
+              accessTokenProvider: accessTokenProvider,
+            );
 
   final TheEyeApiClient _apiClient;
   final AccessTokenProvider _accessTokenProvider;
   final FirebaseMessaging? _messagingOverride;
   FirebaseMessaging? _messaging;
   final FlutterLocalNotificationsPlugin _localNotifications;
+  final PushDeliveryAckService _deliveryAck;
   final StreamController<String> _routeController =
       StreamController<String>.broadcast();
 
   Stream<String> get routeStream => _routeController.stream;
+  void Function(RemoteMessage message)? onForegroundMessage;
   bool _initialized = false;
   String? _lastRegisteredTokenSuffix;
 
@@ -103,21 +114,22 @@ class PushNotificationService {
 
   Future<void> deactivateCurrentToken() async {
     if (kIsWeb || !Platform.isAndroid || !_initialized) return;
-    final token = await _messagingClient.getToken();
     final accessToken = _accessTokenProvider();
-    if (token == null || accessToken == null || accessToken.isEmpty) return;
+    if (accessToken == null || accessToken.isEmpty) return;
 
+    final deviceId = await resolveMobileDeviceId();
     try {
       await _apiClient.patchJson(
-        TheEyeApiPaths.notificationsPushTokensDeactivate,
-        {"token": token},
+        TheEyeApiPaths.notificationsPushTokensDeactivateAll,
+        {"deviceId": deviceId},
         accessToken: accessToken,
       );
-      logPushEvent(
-          "Push token deactivated for suffix ${maskPushToken(token)}.");
+      logPushEvent("Push tokens deactivated for device $deviceId.");
     } catch (error) {
       logPushEvent("Push token deactivation failed.");
     }
+
+    _deliveryAck.reset();
   }
 
   Future<void> _requestPermissions() async {
@@ -194,13 +206,15 @@ class PushNotificationService {
     }
 
     try {
+      final deviceId = await resolveMobileDeviceId();
       final response = await _apiClient.postJson(
         TheEyeApiPaths.notificationsPushTokens,
         {
           "token": token,
           "platform": "android",
-          "deviceId": Platform.isAndroid ? "android-device" : null,
-        }..removeWhere((_, value) => value == null),
+          "deviceId": deviceId,
+          "appEnvironment": AppFlavorConfig.firebaseEnvName,
+        },
         accessToken: accessToken,
       );
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -216,9 +230,17 @@ class PushNotificationService {
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
+    onForegroundMessage?.call(message);
     final notification = message.notification;
     final data = message.data;
     final route = PushDeepLinkRouter.resolveRoute(data) ?? "/notifications";
+    final notificationId = data["notificationId"]?.toString() ?? "";
+    if (notificationId.isNotEmpty) {
+      unawaited(_deliveryAck.acknowledge(
+        notificationId: notificationId,
+        source: "foreground",
+      ));
+    }
     final channelId = PushNotificationChannels.resolveChannelId(
       type: data["type"]?.toString(),
       priority: data["priority"]?.toString(),
@@ -250,7 +272,15 @@ class PushNotificationService {
   }
 
   void _handleOpenedMessage(RemoteMessage message) {
-    final route = PushDeepLinkRouter.resolveRoute(message.data);
+    final data = message.data;
+    final notificationId = data["notificationId"]?.toString() ?? "";
+    if (notificationId.isNotEmpty) {
+      unawaited(_deliveryAck.acknowledge(
+        notificationId: notificationId,
+        source: "opened",
+      ));
+    }
+    final route = PushDeepLinkRouter.resolveRoute(data);
     if (route != null) {
       _routeController.add(route);
     }

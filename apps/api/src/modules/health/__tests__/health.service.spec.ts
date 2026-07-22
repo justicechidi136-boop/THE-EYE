@@ -18,11 +18,14 @@ describe("HealthService", () => {
 
   it("skips redis when disabled", async () => {
     const previous = process.env.THE_EYE_DISABLE_REDIS;
+    const previousAppEnv = process.env.THE_EYE_APP_ENV;
     process.env.THE_EYE_DISABLE_REDIS = "1";
+    process.env.THE_EYE_APP_ENV = "development";
     const prisma = { $queryRaw: async () => [{ "?column?": 1 }] };
     const config = { get: () => undefined };
     const service = new HealthService(prisma as never, config as never, createMetricsMock());
     expect(await service.checkRedis()).toBe("skipped");
     process.env.THE_EYE_DISABLE_REDIS = previous;
+    process.env.THE_EYE_APP_ENV = previousAppEnv;
   });
 });

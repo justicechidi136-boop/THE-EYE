@@ -3,10 +3,12 @@ import { Logger } from "@nestjs/common";
 import { Job } from "bullmq";
 import { NOTIFICATIONS_QUEUE_NAME } from "../../common/queue/queue-names";
 import { MetricsService } from "../../common/metrics/metrics.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { NotificationDeliveryService } from "./notification-delivery.service";
 import { NotificationDispatchError } from "./notification-dispatch.error";
 import { NotificationDispatcherService } from "./notification-dispatcher.service";
-import type { NotificationDispatchPayload } from "./notification.types";
+import type { NotificationDispatchJobPayload } from "./notification.types";
+import { WorkerHeartbeatService } from "./worker-heartbeat.service";
 
 @Processor(NOTIFICATIONS_QUEUE_NAME)
 export class NotificationsProcessor extends WorkerHost {
@@ -16,20 +18,30 @@ export class NotificationsProcessor extends WorkerHost {
     private readonly dispatcher: NotificationDispatcherService,
     private readonly delivery: NotificationDeliveryService,
     private readonly metrics: MetricsService,
+    private readonly prisma: PrismaService,
+    private readonly heartbeat: WorkerHeartbeatService,
   ) {
     super();
   }
 
-  async process(job: Job<NotificationDispatchPayload>) {
+  async process(job: Job<NotificationDispatchJobPayload>) {
     const startedAt = process.hrtime.bigint();
     const attempt = job.attemptsMade + 1;
     const maxAttempts = job.opts.attempts ?? 1;
-    const payload = job.data;
+    const payload = {
+      ...job.data,
+      attempt,
+      maxAttempts,
+    };
     const channel = String(payload.channel ?? "unknown");
+
+    await this.recordProcessing(payload, attempt);
+    await this.heartbeat.touch("job-start");
 
     try {
       const result = await this.dispatcher.dispatch(payload);
       await this.delivery.recordSuccess(payload, result, attempt);
+      await this.heartbeat.recordProcessedJob();
       const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
       this.metrics.recordNotificationDelivery(channel, durationSeconds, "success");
       this.metrics.recordQueueJob(NOTIFICATIONS_QUEUE_NAME, "completed");
@@ -61,6 +73,20 @@ export class NotificationsProcessor extends WorkerHost {
       this.logger.error(`Notification job ${job.id} failed permanently: ${message}`);
       return { status: "Failed", error: message, attempt };
     }
+  }
+
+  private async recordProcessing(payload: NotificationDispatchJobPayload, attempt: number) {
+    if (!payload.notificationId) return;
+    await (this.prisma as any).notificationDeliveryLog.create({
+      data: {
+        notificationId: payload.notificationId,
+        channel: payload.channel ?? "push",
+        provider: payload.provider ?? "unknown",
+        status: "Processing",
+        attempt,
+        requestPayload: payload,
+      } as never,
+    });
   }
 
   @OnWorkerEvent("failed")

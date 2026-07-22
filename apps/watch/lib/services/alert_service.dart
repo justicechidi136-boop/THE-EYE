@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
+import '../config/watch_flavor.dart';
 import '../models/alert.dart';
 import '../storage/secure_credential_store.dart';
 
@@ -34,8 +35,20 @@ class AlertService {
         'token': token,
         'platform': 'android_watch',
         'provider': 'fcm',
+        'appEnvironment': WatchFlavor.envName,
         if (deviceId != null) 'deviceId': deviceId,
       },
+    );
+  }
+
+  Future<void> deactivatePushTokens() async {
+    final accessToken = await _credentials.readAccessToken();
+    final deviceId = await _credentials.readDeviceId();
+    if (accessToken == null || deviceId == null) return;
+    _api.accessToken = accessToken;
+    await _api.patch(
+      WatchApiPaths.pushTokensDeactivateAll,
+      body: {'deviceId': deviceId},
     );
   }
 
@@ -45,6 +58,7 @@ class AlertService {
     required String title,
     required String body,
     String? incidentId,
+    String? notificationId,
     String priority = 'High',
   }) async {
     final alerts = await _preferences.loadAlerts();
@@ -56,18 +70,44 @@ class AlertService {
         body: body,
         receivedAt: DateTime.now(),
         incidentId: incidentId,
+        notificationId: notificationId,
         priority: priority,
       ),
     );
     await _preferences.saveAlerts(alerts.take(50).toList());
+
+    if (notificationId != null && notificationId.isNotEmpty) {
+      await acknowledgeDelivery(notificationId);
+    }
   }
 
   Future<void> acknowledge(String alertId) async {
     final alerts = await _preferences.loadAlerts();
+    WatchAlert? target;
+    for (final alert in alerts) {
+      if (alert.id == alertId) {
+        target = alert;
+        break;
+      }
+    }
     final updated = alerts
         .map((alert) =>
             alert.id == alertId ? alert.copyWith(acknowledged: true) : alert)
         .toList();
     await _preferences.saveAlerts(updated);
+    final notificationId = target?.notificationId;
+    if (notificationId != null && notificationId.isNotEmpty) {
+      await acknowledgeDelivery(notificationId);
+    }
+  }
+
+  Future<void> acknowledgeDelivery(String notificationId) async {
+    final accessToken = await _credentials.readAccessToken();
+    if (accessToken == null) return;
+    _api.accessToken = accessToken;
+    await _api.patch(
+      WatchApiPaths.notificationDeviceReceived(notificationId),
+      body: {'source': 'watch_ack'},
+    );
   }
 }

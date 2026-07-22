@@ -46,9 +46,9 @@ export function validateEnvironment(config: Record<string, unknown>) {
     assertProductionFirebaseGuard(config);
   }
 
-  if (appEnvironment === "production") {
+  if (appEnvironment === "staging" || appEnvironment === "production") {
     if (config.THE_EYE_DISABLE_REDIS === "1" || config.THE_EYE_DISABLE_REDIS === 1) {
-      throw new Error("THE_EYE_DISABLE_REDIS must be 0 in production");
+      throw new Error("THE_EYE_DISABLE_REDIS must be 0 in staging and production");
     }
   }
 

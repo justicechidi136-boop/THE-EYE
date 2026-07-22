@@ -7,6 +7,7 @@ import { MetricsModule } from "../common/metrics/metrics.module";
 import { RateLimitModule } from "../common/rate-limit/rate-limit.module";
 import { RequestContextMiddleware } from "../common/middleware/request-context.middleware";
 import { JsonSafeInterceptor } from "../common/serialization/json-safe.interceptor";
+import { resolveBullMqRootOptions, shouldRegisterBullMq } from "../common/queue/queue-config";
 import { validateEnvironment } from "../config/validate-env";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
@@ -25,7 +26,7 @@ import { StorageModule } from "./storage/storage.module";
 import { UsersModule } from "./users/users.module";
 import { VerificationModule } from "./verification/verification.module";
 
-const redisDisabled = process.env.THE_EYE_DISABLE_REDIS === "1";
+const redisDisabled = !shouldRegisterBullMq();
 
 @Module({
   imports: [
@@ -41,13 +42,20 @@ const redisDisabled = process.env.THE_EYE_DISABLE_REDIS === "1";
       : [
           BullModule.forRootAsync({
             inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-              connection: {
-                host: config.get<string>("REDIS_HOST", "localhost"),
-                port: config.get<number>("REDIS_PORT", 6379),
-                password: config.get<string>("REDIS_PASSWORD") || undefined,
-              },
-            }),
+            useFactory: (config: ConfigService) =>
+              resolveBullMqRootOptions({
+                REDIS_HOST: config.get<string>("REDIS_HOST"),
+                REDIS_PORT: config.get<number>("REDIS_PORT"),
+                REDIS_PASSWORD: config.get<string>("REDIS_PASSWORD"),
+                REDIS_DB: config.get<number>("REDIS_DB"),
+                REDIS_TLS: config.get<string>("REDIS_TLS"),
+                BULLMQ_PREFIX: config.get<string>("BULLMQ_PREFIX"),
+                REDIS_QUEUE_PREFIX: config.get<string>("REDIS_QUEUE_PREFIX"),
+                THE_EYE_APP_ENV: config.get<string>("THE_EYE_APP_ENV"),
+                FCM_PROJECT_ID: config.get<string>("FCM_PROJECT_ID"),
+                FIREBASE_PROJECT_ID: config.get<string>("FIREBASE_PROJECT_ID"),
+                NODE_ENV: process.env.NODE_ENV,
+              }),
           }),
         ]),
     PrismaModule,

@@ -4,6 +4,8 @@ export type NotificationDispatchPayload = {
   notificationId?: string;
   userId?: string;
   adminUserId?: string;
+  recipientUserId?: string;
+  pushTokenId?: string;
   channel?: NotificationChannel | string;
   title: string;
   body: string;
@@ -19,13 +21,23 @@ export type NotificationDispatchPayload = {
   targetToken?: string;
   sosEventId?: string;
   provider?: string;
+  idempotencyKey?: string;
+  createdAt?: string;
+  enqueuedAt?: string;
+  attempt?: number;
+  maxAttempts?: number;
+};
+
+export type NotificationDispatchJobPayload = NotificationDispatchPayload & {
+  idempotencyKey: string;
+  createdAt: string;
 };
 
 export type NotificationDispatchResult = {
   status: "Sent" | "Delivered";
   provider: string;
   providerMessageId?: string;
-  responsePayload?: Record<string, unknown>;
+  responsePayload?: Record<string, unknown> & { simulated?: boolean; fcmMode?: string };
   recipientCount?: number;
 };
 

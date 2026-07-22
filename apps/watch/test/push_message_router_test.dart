@@ -17,6 +17,7 @@ void main() {
         required String title,
         required String body,
         String? incidentId,
+        String? notificationId,
         String priority = 'High',
         String category = WatchPushCategories.emergencyAlert,
       }) async {

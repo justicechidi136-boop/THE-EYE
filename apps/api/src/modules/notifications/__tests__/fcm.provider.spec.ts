@@ -61,7 +61,7 @@ describe("fcm.config", () => {
 });
 
 describe("FcmProvider", () => {
-  it("simulates push delivery only when not production-like and credentials are missing", async () => {
+  it("throws when simulated runtime is used instead of returning fake success", async () => {
     const config = {
       get: (key: string) => {
         if (key === "FCM_PROJECT_ID") return "";
@@ -71,17 +71,19 @@ describe("FcmProvider", () => {
     const prisma = { userPushToken: { findMany: async () => [] } } as never;
     const provider = new FcmProvider(config, prisma);
 
-    const result = await provider.send({
-      userId: "user-1",
-      title: "Emergency nearby",
-      body: "Avoid the area",
-      priority: "Critical",
-    });
+    let caught: Error | undefined;
+    try {
+      await provider.send({
+        userId: "user-1",
+        title: "Emergency nearby",
+        body: "Avoid the area",
+        priority: "Critical",
+      });
+    } catch (error) {
+      caught = error as Error;
+    }
 
-    expect(result.status).toBe("Sent");
-    expect(result.responsePayload?.simulated).toBe(true);
-    expect(result.responsePayload?.fcmMode).toBe("simulated");
-    expect(result.responsePayload?.emergency).toBe(true);
+    expect(caught?.message).toContain("FCM dispatch unavailable");
   });
 
   it("throws when production-like runtime has missing credentials", async () => {

@@ -27,6 +27,10 @@ abstract final class WatchApiPaths {
       '/smartwatch/sos/$sosEventId/tracking';
 
   static const pushTokens = '/notifications/push-tokens';
+  static const pushTokensDeactivateAll =
+      '/notifications/push-tokens/deactivate-all';
+  static String notificationDeviceReceived(String notificationId) =>
+      '/notifications/$notificationId/device-received';
   static const issuePairingCode = '/smartwatch/devices/pairing-codes';
 
   static String pairingStatus(String deviceId) =>

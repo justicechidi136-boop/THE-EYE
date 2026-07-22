@@ -25,6 +25,7 @@ typedef WatchAlertHandler = Future<void> Function({
   required String title,
   required String body,
   String? incidentId,
+  String? notificationId,
   String priority,
   String category,
 });
@@ -59,6 +60,7 @@ class PushMessageRouter {
           'THE EYE Alert',
       body: message.notification?.body ?? data['body']?.toString() ?? '',
       incidentId: data['incidentId']?.toString(),
+      notificationId: data['notificationId']?.toString(),
       priority: data['priority']?.toString() ?? 'High',
       category: type ?? WatchPushCategories.emergencyAlert,
     );

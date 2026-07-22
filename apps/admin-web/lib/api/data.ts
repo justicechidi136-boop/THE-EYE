@@ -317,6 +317,110 @@ export async function fetchNotificationOperations(): Promise<NotificationOperati
   }, []);
 }
 
+export type NotificationDeliveryDiagnostics = {
+  queue: Record<string, unknown> | null;
+  worker: Record<string, unknown> | null;
+  fcm: Record<string, unknown> | null;
+  summary: Record<string, number>;
+  recentFailures: Record<string, unknown>[];
+  generatedAt: string;
+};
+
+export type BroadcastSchedulerHealth = {
+  active: boolean;
+  lastRunAt: string | null;
+  dueCount: number;
+  claimedCount: number;
+  dispatchFailures: number;
+  staleScheduledCount: number;
+  nextScheduledAt: string | null;
+  queue: Record<string, unknown>;
+};
+
+export async function fetchBroadcastSchedulerHealth(): Promise<BroadcastSchedulerHealth | null> {
+  return withToken(async (token) => {
+    return apiRequest<BroadcastSchedulerHealth>("/broadcasts/admin/scheduler-health", { token });
+  }, null);
+}
+
+export async function fetchNotificationDeliveryDiagnostics(): Promise<NotificationDeliveryDiagnostics | null> {
+  return withToken(async (token) => {
+    return apiRequest<NotificationDeliveryDiagnostics>("/notifications/admin/delivery-operations", { token });
+  }, null);
+}
+
+export async function approveBroadcast(id: string, note?: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/approve`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function rejectBroadcast(id: string, reason: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/reject`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function dispatchBroadcast(id: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/dispatch`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function scheduleBroadcast(id: string, scheduledAt: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/schedule`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ scheduledAt }),
+  });
+}
+
+export async function cancelBroadcast(id: string, reason?: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/cancel`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function retryBroadcast(id: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/retry`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function fetchBroadcastProgress(id: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/progress`, { token });
+}
+
+export async function estimateBroadcastRecipients(id: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/estimate-recipients`, { token });
+}
+
 export async function fetchLiveVideoSessions(): Promise<LiveVideoSessionView[]> {
   return withToken(async (token) => {
     const response = await apiRequest<{ data: Record<string, unknown>[] }>("/live-video/sessions/active", { token });

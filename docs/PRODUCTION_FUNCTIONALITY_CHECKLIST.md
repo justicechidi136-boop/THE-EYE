@@ -2,10 +2,11 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-22 (Sprint 3 incident reporting — code complete pending staging QA)  
+**Last updated:** 2026-07-22 (Sprint 4 Phase 1 — notifications & broadcasts audit)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
-**Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**
+**Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**  
+**Sprint 4 status:** **IN PROGRESS — PHASES 3 AND 8 CODE COMPLETE**
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -71,6 +72,8 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-22 | Sprint 4 staging QA attempt | Deploy workflow `29887082714` failed preflight: GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL`. Live staging API @ `ca227fc` era (pre-Sprint-4): `/v1/health/ready` returns database/redis only; `/v1/broadcasts/admin/scheduler-health` returns 404; no worker/scheduler heartbeats observable. Feature branch `c66561e` local CI green (API 238/238, mobile 106/106, watch 49/49). End-to-end device QA not executed (no VPS deploy, no physical phone/watch in this session). No PASS promotions. |
+| 2026-07-22 | Sprint 4 Phase 1 | Full notifications & broadcasts re-audit on `staging` @ `ca227fc` (RC1). Sprint 4 gap table added on `feature/sprint-4-notifications-broadcasts`. No implementation changes in this entry. No PASS promotions. Sprint 1–3 statuses unchanged. |
 | 2026-07-22 | Sprint 3 Phase 1–2 | Full incident lifecycle re-audit on `staging` @ `45c2197`. Sprint 3 gap table + canonical contract (`docs/INCIDENT_CONTRACT.md`) added. Implementation started on `feature/sprint-3-incident-reporting`: idempotency, location endpoint, notification enqueue, mobile history/detail, admin verify/assign/evidence viewer. No PASS without staging device QA. |
 | 2026-07-21 | Sprint 2 implementation | Citizen profile lifecycle coded on `feature/sprint-2-citizen-profile`: PATCH/me, emergency contacts CRUD, avatar presign/confirm, KYC submit+admin review, deletion deactivate, mobile completion/edit/contacts/KYC, admin KYC queue + citizen detail. Automated API + mobile tests green. No PASS without staging redeploy + device QA. Full erasure/preferences sync remain BLOCKED. |
 | 2026-07-21 | Sprint 2 Phase 1 | Full citizen-profile re-audit on `staging` @ `74565ff`. Sprint 2 gap table added; 13 new checklist rows (MOB-PROF-009–011, API-PROF-001–010). MOB-PROF-001 downgraded to PARTIAL pending completion flow + avatar. No implementation changes in this entry. |
@@ -175,8 +178,8 @@
 | MOB-NOTF-003 | Notifications | Background notifications | Citizen | Mobile | — | Y | N/A | FCM | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | FCM + backend dispatch | — | Y | — |
 | MOB-NOTF-004 | Notifications | Terminated-app notifications | Citizen | Mobile | — | Y | N/A | FCM | Y | Y | Y | Y | Y | N | N | N | N | **BLOCKED** | P0 | Y | Not verified on device | — | Y | — |
 | MOB-NOTF-005 | Notifications | Deep links | Citizen | Mobile | Router | Y | Y | — | N/A | N/A | Y | Y | Y | Y | N | N | N | **PASS** | P1 | N | Routing logic only | — | N | `push_deep_link_router_test.dart` |
-| MOB-NOTF-006 | Notifications | Notification history | Citizen | Mobile | `/notifications` | Y | Y | `GET /v1/notifications` exists | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Hardcoded seed list `main.dart:851-871` | — | Y | API exists; mobile not wired |
-| MOB-NOTF-007 | Notifications | Read/unread | Citizen | Mobile | `/notifications` | Y | N | `PATCH /v1/notifications/:id/read` | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | Mock inbox only | — | Y | — |
+| MOB-NOTF-006 | Notifications | Notification history | Citizen | Mobile | `/notifications` | Y | Y | `GET /v1/notifications` | Y | Y | Y | Y | Y | Y | N | N | N | **CODE COMPLETE — DEVICE QA PENDING** | P1 | Y | Live inbox wired; device QA pending | `notification_inbox_service.dart`, `main.dart` | Y | Removed hardcoded seed |
+| MOB-NOTF-007 | Notifications | Read/unread | Citizen | Mobile | `/notifications` | Y | Y | `PATCH /v1/notifications/:id/read`, `PATCH /read-all` | Y | Y | Y | Y | Y | Y | N | N | N | **CODE COMPLETE — DEVICE QA PENDING** | P1 | Y | Mark read/all read wired | `notification_inbox_service.dart` | Y | Idempotent API + mobile actions |
 | MOB-NOTF-008 | Notifications | Notification settings | Citizen | Mobile | `/settings` | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No settings UI/API | — | Y | — |
 
 ### Neighborhood Watch
@@ -394,7 +397,7 @@
 | API-CORE-008 | API | Error responses | System | Backend | Filters | N/A | N/A | global | Y | N/A | Y | Y | Y | Y | N | Y | N | **PASS** | P1 | N | — | — | N | — |
 | API-CORE-009 | API | Audit logging | System | Backend | All modules | N/A | N/A | audit service | Y | Y | Y | Y | Y | Y | N | Y | N | **PASS** | P0 | N | Hash chain | — | N | — |
 | API-CORE-010 | API | Prisma persistence | System | Backend | Services | N/A | N/A | all | Y | Y | Y | Y | Y | Y | N | Y | N | **PASS** | P0 | N | No mock repos | — | N | — |
-| API-CORE-011 | API | Redis / BullMQ jobs | System | Backend | notifications | N/A | N/A | queue | PARTIAL | N/A | Y | N | N | Y | N | N | N | **BLOCKED** | P0 | Y | `local-dev-no-redis` skips dispatch | — | Y | — |
+| API-CORE-011 | API | Redis / BullMQ jobs | System | Backend | notifications | N/A | N/A | queue | PARTIAL | N/A | Y | N | N | Y | N | N | N | **CODE COMPLETE — STAGING INFRASTRUCTURE QA PENDING** | P0 | Y | Worker entrypoint + fail-closed enqueue coded; VPS QA pending | `worker.ts`, `queue-config.ts` | Y | Dev may still set `THE_EYE_DISABLE_REDIS=1` |
 | API-CORE-012 | API | FCM delivery | System | Backend | fcm.provider | N/A | N/A | notifications | PARTIAL | Y | Y | N | N | Y | N | N | N | **BLOCKED** | P0 | Y | Simulated without creds | — | Y | — |
 | API-CORE-013 | API | SMS delivery | System | Backend | sms.provider | N/A | N/A | auth/notifications | N | N/A | Y | N | N | Y | N | N | N | **FAIL** | P0 | Y | Default disabled placeholder | — | Y | — |
 | API-CORE-014 | API | Email delivery | System | Backend | email.provider | N/A | N/A | auth/notifications | N | N/A | Y | N | N | Y | N | N | N | **FAIL** | P0 | Y | Default disabled placeholder | — | Y | — |
@@ -515,6 +518,69 @@
 | Notifications | API-CORE-011/012, S3-013 | BLOCKED | Required | Redis + FCM on VPS |
 | Live video | MOB-INCD-007, ADM-INC-009, S3-014 | BLOCKED | Required | LiveKit staging |
 | Watch SOS | WCH-SOS-001, WCH-INC-001/002 | NOT TESTED | Required | Idempotency + server poll wired |
+
+---
+
+## SPRINT 4 — Notifications and Broadcasts
+
+**Baseline:** `staging` @ `ca227fc` (Staging RC1)  
+**Implementation branch:** `feature/sprint-4-notifications-broadcasts`  
+**Sprint 4 verdict:** **IN PROGRESS — PHASES 3, 4, 8, BROADCAST LIFECYCLE, DELIVERY MONITORING CODE COMPLETE — STAGING QA PENDING**
+
+> Terminology rule: **Delivered** applies only to reliable provider delivery confirmation or approved **DeviceReceived** acknowledgement — never to queue insertion, FCM HTTP 200 alone, simulation, or webhook HTTP 200 without receipt proof.
+
+### Sprint 4 gap table (Phase 1 audit @ 2026-07-22)
+
+| ID | Feature | Platform | Current status | UI | Endpoint | Database | Queue | Provider | Device receipt | Audit | Tests | Severity | Blocker | Required change |
+|----|---------|----------|----------------|:--:|:--------:|:--------:|:-----:|:--------:|:--------------:|:-----:|:-----:|:--------:|:-------:|-----------------|
+| S4-001 | Redis mandatory | Infra | CODE COMPLETE — STAGING INFRASTRUCTURE QA PENDING | N/A | health/ready partial | N/A | PARTIAL | N/A | N/A | N/A | Y | P0 | Y | Enable Redis on VPS; verify fail-closed enqueue + queue/worker diagnostics in staging |
+| S4-002 | BullMQ worker pipeline | API | CODE COMPLETE — STAGING INFRASTRUCTURE QA PENDING | N/A | enqueue + worker | Y | Y | N/A | N/A | N | Y | P0 | Y | Deploy worker container; verify idempotency, retries, heartbeat, graceful shutdown on VPS |
+| S4-003 | Notification status taxonomy | API + shared | CODE COMPLETE — STAGING QA PENDING | N/A | responses + delivery logs | Y | Y | Y | Y | N | Y | P1 | N | ProviderAccepted vs Delivered mapping enforced; DeviceReceived ack path live |
+| S4-004 | FCM real delivery | API | CODE COMPLETE — STAGING FCM QA PENDING | N/A | fcm.provider | Y | Y | Y | Y | N | Y | P0 | Y | Fail-closed simulation; watch_push channel fix; deep links; env isolation; invalid-token cleanup |
+| S4-005 | SMS provider | API | CODE COMPLETE — PROVIDER INTEGRATION PENDING | N/A | sms.provider | Y | Y | FAIL-CLOSED | N | N | Y | P0 | Y | Disabled provider throws (no fake Sent); real SMS adapter still required |
+| S4-006 | Email provider | API | CODE COMPLETE — PROVIDER INTEGRATION PENDING | N/A | email.provider | Y | Y | FAIL-CLOSED | N | N | Y | P0 | Y | Disabled provider throws (no fake Sent); real email adapter still required |
+| S4-007 | Mobile FCM token lifecycle | Mobile | CODE COMPLETE — DEVICE QA PENDING | Background | push-tokens | Y | N/A | FCM | Y | N | Y | P0 | Y | Stable deviceId; appEnvironment; refresh; logout deactivate-all; foreground/open/background ack |
+| S4-008 | Watch FCM token lifecycle | Watch | CODE COMPLETE — DEVICE QA PENDING | Background | push-tokens | Y | N/A | FCM | Y | N | Y | P0 | Y | appEnvironment register; unpair deactivate-all; server device-received ack |
+| S4-009 | Mobile notification inbox | Mobile | CODE COMPLETE — DEVICE QA PENDING | `/notifications` | GET/PATCH notifications | Y | N/A | N/A | N | N | Y | P1 | Y | Device QA on staging APK; verify pagination, read/unread, offline cache, FCM refresh |
+| S4-010 | Mobile broadcast feed | Mobile | CODE COMPLETE — DEVICE QA PENDING | `/broadcasts` | GET broadcasts/nearby | Y | N/A | N/A | N | N | N | P1 | Y | Live API feed + cache + detail; guest login required; staging device QA pending |
+| S4-011 | Notification preferences | Mobile + API | NOT IMPLEMENTED | `/settings` | preferences API | N | N/A | N/A | N | N | N | P1 | Y | Server-backed typed prefs; mobile settings UI; audit on change |
+| S4-012 | Mobile deep links | Mobile | PASS | Router | payload routes | N/A | N/A | N/A | Y | N | Y | P1 | N | Extend tests for broadcast/incident routes; sync inbox on open |
+| S4-013 | Watch alert categories | Watch | CODE COMPLETE — DEVICE QA PENDING | Alert screens | push router | Y | N/A | FCM | Y | N | Y | P1 | N | Server ack on incoming push; notificationId propagation; device QA on staging watch APK |
+| S4-014 | Broadcast create | Admin | PARTIAL | `/broadcasts` | POST broadcasts | Y | Y | push only | N | Y | N | P0 | N | Draft save supported; jurisdiction/WKT targeting UI still thin |
+| S4-015 | Broadcast approve/dispatch | Admin | CODE COMPLETE — STAGING QA PENDING | Queue table | PATCH approve, POST dispatch | Y | Y | push | N | Y | N | P0 | Y | BFF action routes + queue table controls wired |
+| S4-016 | Broadcast schedule/cancel | Admin + API | CODE COMPLETE — STAGING WORKER QA PENDING | Queue actions | schedule/cancel/progress + worker scheduler | Y | N | N/A | N | Y | N | P2 | N | UTC scheduledAt + BullMQ auto-dispatch worker; staging worker QA pending |
+| S4-017 | Broadcast multi-channel | Admin + API | FAIL | compose | dispatch | Y | Y | push only | N | Y | N | P0 | Y | SMS/email channel selection + batched dispatch |
+| S4-018 | Delivery monitoring | Admin | CODE COMPLETE — STAGING QA PENDING | `/notifications` | admin/delivery-operations | Y | Y | Y | N | N | N | P1 | Y | Live queue/worker/FCM metrics on notifications + broadcasts pages |
+| S4-019 | Citizen broadcast nearby | API + Mobile | CODE COMPLETE — DEVICE QA PENDING | feed | GET nearby/detail/read | Y | Y | push | N | N | N | P1 | Y | Jurisdiction + geofence scoped feed; pagination/read/unread; mobile wired |
+| S4-020 | Invalid token cleanup | API | CODE COMPLETE — STAGING QA PENDING | N/A | push-tokens deactivate | Y | Y | FCM | N | N | Y | P1 | N | FCM invalid-token deactivate; client logout/unpair deactivate-all paths |
+| S4-021 | Retry / dead-letter | API | PARTIAL | N/A | processor | Y | Y | all | N | N | Y | P1 | N | Bounded backoff; poison job handling; admin visibility |
+| S4-022 | Rate limiting / abuse | API | PARTIAL | N/A | send + tokens | Y | Y | all | N | N | N | P1 | Y | Rate limit notification send + token register; broadcast approval guards |
+| S4-023 | Notification audit trail | API | PARTIAL | N/A | send | Y | Y | all | N | PARTIAL | N | P1 | N | Audit notification send + preference changes (broadcasts already audited) |
+| S4-024 | Worker Docker service | Infra | CODE COMPLETE — STAGING DEPLOY PENDING | N/A | compose | N/A | Y | N/A | N/A | N | Y | P0 | Y | Deploy `notification-worker` service on VPS; verify heartbeat healthcheck and rollback |
+| S4-025 | Auth delivery webhooks | API | PARTIAL | N/A | auth-delivery | N/A | N/A | webhook | N | Y | Y | P0 | Y | Configure OTP/password-reset webhooks on staging (Sprint 1 dependency) |
+
+### Sprint 4 evidence tracker
+
+| Track | IDs | Target status | Staging runtime QA | Notes |
+|-------|-----|---------------|-------------------|-------|
+| Queue + worker | S4-001, S4-002, S4-024, API-CORE-011 | BLOCKED/PARTIAL | Required | 2026-07-22: staging still on pre-Sprint-4 deploy; GH deploy blocked on missing `NEXT_PUBLIC_API_BASE_URL`; worker/scheduler heartbeats not observable |
+| FCM pipeline | S4-004, S4-007, S4-008, MOB-NOTF-001–004, WCH-PUSH-001 | CODE COMPLETE — STAGING FCM QA PENDING | Required | Staging Firebase creds + device push QA |
+| SMS / email | S4-005, S4-006, API-CORE-013/014 | FAIL-CLOSED — PROVIDER INTEGRATION PENDING | Required | Real provider credentials + adapters |
+| Mobile inbox + feed | S4-009, S4-010, MOB-NOTF-006/007, MOB-SAFE-007 | PARTIAL | Required | Inbox live; broadcast feed code complete — device QA pending |
+| Preferences | S4-011, MOB-NOTF-008 | NOT IMPLEMENTED | Required | Server + mobile UI |
+| Admin broadcast lifecycle | S4-014–S4-018, ADM-BRD-001–009 | CODE COMPLETE — STAGING QA PENDING | Required | Approve/dispatch/schedule/monitor wired |
+| Watch alerts | S4-013, WCH-PUSH-001 | CODE COMPLETE — DEVICE QA PENDING | Required | Staging watch push + ack QA |
+
+### Sprint 4 checklist row map (existing IDs — statuses unchanged)
+
+| Sprint 4 track | Existing checklist IDs |
+|----------------|------------------------|
+| Mobile push | MOB-NOTF-001–008 |
+| Mobile broadcast feed | MOB-SAFE-007 |
+| Watch push | WCH-PUSH-001 |
+| Admin broadcasts | ADM-BRD-001–009 |
+| API delivery core | API-CORE-011–014 |
+| Infrastructure | INF-005, INF-011 |
 
 ---
 

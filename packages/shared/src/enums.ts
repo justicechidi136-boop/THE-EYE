@@ -63,7 +63,11 @@ export enum BroadcastType {
 export enum BroadcastStatus {
   Draft = "Draft",
   PendingApproval = "PendingApproval",
+  Scheduled = "Scheduled",
+  DispatchQueued = "DispatchQueued",
+  Dispatching = "Dispatching",
   Published = "Published",
+  Failed = "Failed",
   Expired = "Expired",
   Cancelled = "Cancelled",
   Rejected = "Rejected",

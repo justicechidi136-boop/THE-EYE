@@ -2,7 +2,7 @@ import { ConfigService } from "@nestjs/config";
 import { EmailProvider } from "../providers/email.provider";
 
 describe("EmailProvider", () => {
-  it("returns a placeholder email receipt when the provider is disabled", async () => {
+  it("throws when the provider is disabled instead of returning fake success", async () => {
     const config = {
       get: (key: string, fallback?: string) => (key === "EMAIL_PROVIDER_DISABLED" ? "true" : fallback),
     } as ConfigService;
@@ -12,15 +12,18 @@ describe("EmailProvider", () => {
     } as never;
     const provider = new EmailProvider(config, prisma);
 
-    const result = await provider.send({
-      channel: "email",
-      userId: "user-1",
-      title: "Incident update",
-      body: "Your report was received",
-    });
+    let caught: Error | undefined;
+    try {
+      await provider.send({
+        channel: "email",
+        userId: "user-1",
+        title: "Incident update",
+        body: "Your report was received",
+      });
+    } catch (error) {
+      caught = error as Error;
+    }
 
-    expect(result.status).toBe("Sent");
-    expect(result.provider).toBe("email-placeholder");
-    expect(result.responsePayload?.placeholder).toBe(true);
+    expect(caught?.message).toContain("Email provider is disabled");
   });
 });

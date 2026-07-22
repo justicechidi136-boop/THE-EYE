@@ -84,6 +84,7 @@ class PushMessagingService {
     required String title,
     required String body,
     String? incidentId,
+    String? notificationId,
     String priority = 'High',
     String category = WatchPushCategories.emergencyAlert,
   }) async {
@@ -91,6 +92,7 @@ class PushMessagingService {
       title: title,
       body: body,
       incidentId: incidentId,
+      notificationId: notificationId,
       priority: priority,
     );
   }

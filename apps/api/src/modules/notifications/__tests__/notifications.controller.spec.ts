@@ -41,8 +41,7 @@ describe("NotificationsController integration", () => {
     await controller.list({ user: { typ: "user", sub: "user-1" } }, "true");
     expect(service.listForActor).toHaveBeenCalledWith(
       { typ: "user", sub: "user-1" },
-      true,
-      { cursor: undefined, limit: undefined },
+      expect.objectContaining({ unreadOnly: true }),
     );
   });
 });
