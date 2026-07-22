@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { shouldRegisterBullMq } from "../../common/queue/queue-config";
 import { NOTIFICATIONS_QUEUE_NAME } from "../../common/queue/queue-names";
 import { QueueMetricsService } from "../../common/metrics/queue-metrics.service";
+import { HealthModule } from "../health/health.module";
 import { NotificationQueueDiagnosticsService } from "./notification-queue-diagnostics.service";
 import { NotificationsCoreModule } from "./notifications-core.module";
 import { NotificationsProcessor } from "./notifications.processor";
@@ -10,6 +11,7 @@ import { WorkerHeartbeatService } from "./worker-heartbeat.service";
 
 @Module({
   imports: [
+    HealthModule,
     NotificationsCoreModule,
     ...(shouldRegisterBullMq() ? [BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE_NAME })] : []),
   ],

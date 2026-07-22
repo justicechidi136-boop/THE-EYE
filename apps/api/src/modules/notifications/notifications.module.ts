@@ -15,6 +15,7 @@ import { NotificationsService } from "./notifications.service";
 @Module({
   imports: [
     PrismaModule,
+    HealthModule,
     NotificationsCoreModule,
     ...(shouldRegisterBullMq() ? [BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE_NAME })] : []),
   ],
