@@ -50,6 +50,8 @@ import "design_system/eye_design_system.dart";
 import "push/push_background_handler.dart";
 import "push/push_deep_link_router.dart";
 import "push/push_notification_service.dart";
+import "notifications/notification_inbox_cache.dart";
+import "notifications/notification_inbox_service.dart";
 import "startup/startup_diagnostics.dart";
 import "app/app_scope.dart";
 import "app/session_accessor.dart";
@@ -869,6 +871,10 @@ class AppController extends SessionAccessor {
 
   final IncidentSubmissionService _submissionService;
   final IncidentHistoryService _historyService = IncidentHistoryService();
+  final NotificationInboxService _notificationInboxService =
+      NotificationInboxService();
+  final NotificationInboxCache _notificationInboxCache =
+      NotificationInboxCache();
   final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
   IncidentLocationTracker? _locationTracker;
   final ConnectivityService _connectivity;
@@ -890,27 +896,12 @@ class AppController extends SessionAccessor {
   final List<IncidentTrackingItem> incidents = [];
   bool loadingIncidents = false;
   String? incidentLoadError;
-  final List<BroadcastAlert> notifications = [
-    BroadcastAlert("Emergency alert", "Verified P1 emergency auto-alert",
-        "5 km from your current area", "P1", "Delivered", false),
-    BroadcastAlert("Nearby danger warning", "Safety alert for Allen Avenue",
-        "1.2 km away", "P2", "Delivered", false),
-    BroadcastAlert("Family SOS alert", "Family circle SOS from Mum",
-        "Home address radius", "P1", "Delivered", false),
-    BroadcastAlert("Community alert", "Neighborhood watch escalation",
-        "Ikeja community", "P2", "Delivered", true),
-    BroadcastAlert("Broadcast alert", "Government road closure notice",
-        "Lagos State", "Official", "Delivered", false),
-    BroadcastAlert("Watch battery alert", "SOS device battery below 20%",
-        "The Eye Watch Pro", "Info", "Queued", false),
-    BroadcastAlert(
-        "Missing person alert",
-        "Missing person broadcast is under verification",
-        "Ikeja priority area",
-        "P2",
-        "Pending",
-        true),
-  ];
+  final List<InboxNotificationItem> notifications = [];
+  bool loadingNotifications = false;
+  String? notificationLoadError;
+  String? notificationNextCursor;
+  int notificationUnreadCount = 0;
+  bool loadingMoreNotifications = false;
 
   ConnectivityService get connectivity => _connectivity;
   AuthService get authService => _authService;
@@ -926,6 +917,12 @@ class AppController extends SessionAccessor {
     return theEyeAccessToken.isEmpty ? null : theEyeAccessToken;
   }
 
+  String? get _notificationCacheScope {
+    final token = accessToken;
+    if (token == null || token.length < 8) return null;
+    return token.substring(token.length - 16);
+  }
+
   AuthSession? get session => _cachedSession;
 
   Future<void> loadPersistedSession() async {
@@ -935,6 +932,7 @@ class AppController extends SessionAccessor {
     notifyListeners();
     if (_sessionAccessToken != null && _sessionAccessToken!.isNotEmpty) {
       await _pushNotifications?.syncTokenWithBackend();
+      unawaited(loadNotificationsFromApi());
     }
   }
 
@@ -946,6 +944,152 @@ class AppController extends SessionAccessor {
     notifyListeners();
     await _pushNotifications?.syncTokenWithBackend();
     unawaited(loadIncidentsFromApi());
+    unawaited(loadNotificationsFromApi());
+  }
+
+  Future<void> loadNotificationsFromApi({bool refresh = false}) async {
+    if (!isAuthenticated || accessToken == null) {
+      notifications.clear();
+      notificationLoadError = null;
+      notificationNextCursor = null;
+      notificationUnreadCount = 0;
+      notifyListeners();
+      return;
+    }
+    if (refresh) {
+      notificationNextCursor = null;
+    }
+    loadingNotifications = true;
+    notificationLoadError = null;
+    notifyListeners();
+    try {
+      final page = await _notificationInboxService.list(
+        accessToken: accessToken!,
+        cursor: refresh ? null : notificationNextCursor,
+      );
+      if (refresh || notificationNextCursor == null) {
+        notifications
+          ..clear()
+          ..addAll(page.items);
+      } else {
+        final existingIds = notifications.map((item) => item.id).toSet();
+        notifications.addAll(
+          page.items.where((item) => !existingIds.contains(item.id)),
+        );
+      }
+      notificationNextCursor = page.nextCursor;
+      notificationUnreadCount = page.unreadCount;
+      final cacheScope = _notificationCacheScope;
+      if (cacheScope != null) {
+        await _notificationInboxCache.save(cacheScope, notifications);
+      }
+    } on IncidentApiException catch (error) {
+      notificationLoadError = error.userMessage;
+      final cacheScope = _notificationCacheScope;
+      if (cacheScope != null && notifications.isEmpty) {
+        notifications
+          ..clear()
+          ..addAll(await _notificationInboxCache.load(cacheScope));
+      }
+    } catch (_) {
+      notificationLoadError = "Unable to load notifications.";
+    } finally {
+      loadingNotifications = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreNotifications() async {
+    if (!isAuthenticated ||
+        accessToken == null ||
+        notificationNextCursor == null ||
+        loadingMoreNotifications) {
+      return;
+    }
+    loadingMoreNotifications = true;
+    notifyListeners();
+    try {
+      final page = await _notificationInboxService.list(
+        accessToken: accessToken!,
+        cursor: notificationNextCursor,
+      );
+      final existingIds = notifications.map((item) => item.id).toSet();
+      notifications.addAll(
+        page.items.where((item) => !existingIds.contains(item.id)),
+      );
+      notificationNextCursor = page.nextCursor;
+      notificationUnreadCount = page.unreadCount;
+    } on IncidentApiException catch (error) {
+      notificationLoadError = error.userMessage;
+    } finally {
+      loadingMoreNotifications = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> markNotificationRead(String notificationId) async {
+    if (!isAuthenticated || accessToken == null) return;
+    try {
+      await _notificationInboxService.markRead(
+        accessToken: accessToken!,
+        notificationId: notificationId,
+      );
+      final index = notifications.indexWhere((item) => item.id == notificationId);
+      if (index >= 0) {
+        notifications[index] =
+            notifications[index].copyWith(read: true, deliveryStatus: "Read");
+        notificationUnreadCount =
+            notifications.where((item) => !item.read).length;
+      }
+      notifyListeners();
+    } on IncidentApiException catch (error) {
+      notificationLoadError = error.userMessage;
+      notifyListeners();
+    }
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    if (!isAuthenticated || accessToken == null) return;
+    try {
+      await _notificationInboxService.markAllRead(accessToken: accessToken!);
+      for (var index = 0; index < notifications.length; index++) {
+        notifications[index] =
+            notifications[index].copyWith(read: true, deliveryStatus: "Read");
+      }
+      notificationUnreadCount = 0;
+      notifyListeners();
+    } on IncidentApiException catch (error) {
+      notificationLoadError = error.userMessage;
+      notifyListeners();
+    }
+  }
+
+  Future<void> upsertNotificationFromPush({
+    String? notificationId,
+    String? title,
+    String? body,
+    String? type,
+    String? priority,
+  }) async {
+    if (!isAuthenticated || accessToken == null) return;
+    if (notificationId != null && notificationId.isNotEmpty) {
+      final existingIndex =
+          notifications.indexWhere((item) => item.id == notificationId);
+      if (existingIndex >= 0) return;
+      try {
+        final item = await _notificationInboxService.getById(
+          accessToken: accessToken!,
+          notificationId: notificationId,
+        );
+        notifications.insert(0, item);
+        if (!item.read) notificationUnreadCount += 1;
+        notifyListeners();
+        return;
+      } catch (_) {
+        // Fall through to refresh when detail lookup fails.
+      }
+    }
+    await loadNotificationsFromApi(refresh: true);
   }
 
   Future<void> loadIncidentsFromApi() async {
@@ -1072,10 +1216,19 @@ class AppController extends SessionAccessor {
 
   @override
   Future<void> clearSession() async {
+    await _pushNotifications?.deactivateCurrentToken();
+    final cacheScope = _notificationCacheScope;
     await _authService.logout();
     _cachedSession = null;
     _sessionAccessToken = null;
     clearCitizenProfileCache();
+    notifications.clear();
+    notificationLoadError = null;
+    notificationNextCursor = null;
+    notificationUnreadCount = 0;
+    if (cacheScope != null) {
+      await _notificationInboxCache.clear(cacheScope);
+    }
     notifyListeners();
   }
 
@@ -1103,6 +1256,7 @@ class AppController extends SessionAccessor {
       notifyListeners();
       await _pushNotifications?.syncTokenWithBackend();
       unawaited(loadIncidentsFromApi());
+      unawaited(loadNotificationsFromApi(refresh: true));
       unawaited(refreshComposeDrafts());
     } else if (result.status == SessionRestoreStatus.failed ||
         result.status == SessionRestoreStatus.unauthenticated) {
@@ -1120,6 +1274,17 @@ class AppController extends SessionAccessor {
 
   void bindPushNotifications(PushNotificationService service) {
     _pushNotifications = service;
+    service.onForegroundMessage = (message) {
+      unawaited(
+        upsertNotificationFromPush(
+          notificationId: message.data["notificationId"]?.toString(),
+          title: message.notification?.title ?? message.data["title"]?.toString(),
+          body: message.notification?.body ?? message.data["body"]?.toString(),
+          type: message.data["type"]?.toString(),
+          priority: message.data["priority"]?.toString(),
+        ),
+      );
+    };
   }
 
   void attachRetryCoordinator(PendingRetryCoordinator coordinator) {
@@ -1204,29 +1369,9 @@ class AppController extends SessionAccessor {
       }
       unawaited(deleteComposeDraft(draft.clientSubmissionId));
       unawaited(loadIncidentsFromApi());
-      notifications.insert(
-        0,
-        BroadcastAlert(
-          "Incident status update",
-          "${draft.type} submitted to THE EYE command center",
-          result.userMessage ?? "Command center intake",
-          "Info",
-          "Delivered",
-          false,
-        ),
-      );
+      unawaited(loadNotificationsFromApi(refresh: true));
     } else if (result.isQueued || result.canRetry) {
-      notifications.insert(
-        0,
-        BroadcastAlert(
-          "Incident status update",
-          "${draft.type} saved for retry",
-          result.userMessage ?? "Will send when internet returns",
-          "Info",
-          "Queued",
-          false,
-        ),
-      );
+      unawaited(loadNotificationsFromApi(refresh: true));
     }
 
     lastSubmissionMessage = result.userMessage;
@@ -1258,17 +1403,7 @@ class AppController extends SessionAccessor {
     }
 
     if (results.any((result) => result.isSuccess)) {
-      notifications.insert(
-        0,
-        BroadcastAlert(
-          "Incident status update",
-          "Offline reports were sent successfully",
-          "Queued drafts synced with THE EYE API",
-          "Info",
-          "Delivered",
-          false,
-        ),
-      );
+      unawaited(loadNotificationsFromApi(refresh: true));
     }
 
     await refreshPendingDrafts();
@@ -1314,21 +1449,6 @@ class IncidentTrackingItem {
   final int confidence;
   final String verificationStatus;
   final DateTime? submittedAt;
-}
-
-class BroadcastAlert {
-  BroadcastAlert(
-      this.type, this.title, this.area, this.priority, this.delivery, this.read,
-      {DateTime? receivedAt})
-      : receivedAt = receivedAt ?? DateTime.now();
-
-  final String type;
-  final String title;
-  final String area;
-  final String priority;
-  final String delivery;
-  final bool read;
-  final DateTime receivedAt;
 }
 
 class SplashScreen extends StatefulWidget {
@@ -3792,10 +3912,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         accessToken: accessToken,
       );
     } catch (_) {
-      appOf(context).notifications.insert(
-          0,
-          BroadcastAlert("Incident status update", "GPS update queued",
-              "Will retry when connection improves", "Info", "Queued", false));
+      unawaited(appOf(context).loadNotificationsFromApi(refresh: true));
     }
   }
 
@@ -4298,12 +4415,35 @@ class PoliceStationCard extends StatelessWidget {
   }
 }
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      unawaited(controller.loadNotificationsFromApi(refresh: true));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
+    if (!controller.isAuthenticated) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       backgroundColor: EyeTokens.whiteBg,
       body: SafeArea(
@@ -4311,20 +4451,108 @@ class NotificationsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const EyePageBackHeader(),
+            if (controller.notificationUnreadCount > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () =>
+                        unawaited(controller.markAllNotificationsRead()),
+                    child: Text(
+                        "Mark all read (${controller.notificationUnreadCount})"),
+                  ),
+                ),
+              ),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                itemCount: controller.notifications.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  return BroadcastAlertTile(
-                    alert: controller.notifications[index],
-                  );
-                },
+              child: RefreshIndicator(
+                onRefresh: () => controller.loadNotificationsFromApi(refresh: true),
+                child: _buildBody(controller),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBody(AppController controller) {
+    if (controller.loadingNotifications && controller.notifications.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 120),
+          Center(child: CircularProgressIndicator()),
+        ],
+      );
+    }
+    if (controller.notificationLoadError != null &&
+        controller.notifications.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.cloud_off),
+            title: const Text("Notifications unavailable"),
+            subtitle: Text(controller.notificationLoadError!),
+          ),
+          FilledButton(
+            onPressed: () =>
+                unawaited(controller.loadNotificationsFromApi(refresh: true)),
+            child: const Text("Retry"),
+          ),
+        ],
+      );
+    }
+    if (controller.notifications.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        children: const [
+          ListTile(
+            leading: Icon(Icons.notifications_none),
+            title: Text("No notifications yet"),
+            subtitle: Text("Safety alerts and incident updates will appear here."),
+          ),
+        ],
+      );
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.pixels >=
+                notification.metrics.maxScrollExtent - 240 &&
+            controller.notificationNextCursor != null &&
+            !controller.loadingMoreNotifications) {
+          unawaited(controller.loadMoreNotifications());
+        }
+        return false;
+      },
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        itemCount: controller.notifications.length +
+            (controller.loadingMoreNotifications ? 1 : 0),
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          if (index >= controller.notifications.length) {
+            return const Padding(
+              padding: EdgeInsets.all(12),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final alert = controller.notifications[index];
+          return BroadcastAlertTile(
+            alert: alert,
+            onTap: () async {
+              await controller.markNotificationRead(alert.id);
+              final route = alert.deepLink ?? "/notifications";
+              if (!context.mounted) return;
+              if (route == "/notifications") return;
+              Navigator.of(context).pushNamed(route);
+            },
+          );
+        },
       ),
     );
   }
@@ -6366,19 +6594,24 @@ class IncidentStatusTile extends StatelessWidget {
 }
 
 class BroadcastAlertTile extends StatelessWidget {
-  const BroadcastAlertTile({required this.alert, super.key});
+  const BroadcastAlertTile({required this.alert, this.onTap, super.key});
 
-  final BroadcastAlert alert;
+  final InboxNotificationItem alert;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final showCategory = alert.type.toLowerCase().contains("health") ||
         alert.type.toLowerCase().contains("broadcast") ||
         alert.type.toLowerCase().contains("official");
-    return EyeNotificationCard(
-      category: showCategory ? alert.type : null,
-      title: alert.title,
-      timestamp: formatNotificationAge(alert.receivedAt),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: EyeNotificationCard(
+        category: showCategory ? alert.type : null,
+        title: alert.title,
+        timestamp: formatNotificationAge(alert.receivedAt),
+      ),
     );
   }
 }

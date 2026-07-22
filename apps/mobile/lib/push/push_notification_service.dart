@@ -38,6 +38,7 @@ class PushNotificationService {
       StreamController<String>.broadcast();
 
   Stream<String> get routeStream => _routeController.stream;
+  void Function(RemoteMessage message)? onForegroundMessage;
   bool _initialized = false;
   String? _lastRegisteredTokenSuffix;
 
@@ -216,6 +217,7 @@ class PushNotificationService {
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
+    onForegroundMessage?.call(message);
     final notification = message.notification;
     final data = message.data;
     final route = PushDeepLinkRouter.resolveRoute(data) ?? "/notifications";
