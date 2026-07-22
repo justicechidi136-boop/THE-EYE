@@ -15,8 +15,41 @@ export class NotificationsController {
 
   @Get()
   @RequirePermissions("incident:read")
-  list(@Req() request: any, @Query("unreadOnly") unreadOnly?: string, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
-    return this.notificationsService.listForActor(request.user, unreadOnly === "true", { cursor, limit });
+  list(
+    @Req() request: any,
+    @Query("unreadOnly") unreadOnly?: string,
+    @Query("category") category?: string,
+    @Query("severity") severity?: string,
+    @Query("includeExpired") includeExpired?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.notificationsService.listForActor(request.user, {
+      unreadOnly: unreadOnly === "true",
+      category,
+      severity,
+      includeExpired: includeExpired === "true",
+      cursor,
+      limit,
+    });
+  }
+
+  @Get("unread-count")
+  @RequirePermissions("incident:read")
+  unreadCount(@Req() request: any) {
+    return this.notificationsService.countUnreadForActor(request.user).then((count) => ({ unreadCount: count }));
+  }
+
+  @Patch("read-all")
+  @RequirePermissions("incident:read")
+  markAllRead(@Req() request: any) {
+    return this.notificationsService.markAllRead(request.user);
+  }
+
+  @Get(":id")
+  @RequirePermissions("incident:read")
+  getOne(@Param("id") id: string, @Req() request: any) {
+    return this.notificationsService.getForActor(id, request.user);
   }
 
   @Post("send")
