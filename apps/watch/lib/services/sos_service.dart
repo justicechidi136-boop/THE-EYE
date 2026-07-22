@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
+import '../models/active_emergency_status.dart';
 import '../models/connectivity_mode.dart';
 import '../models/emergency_mode.dart';
 import '../models/offline_event.dart';
@@ -170,6 +171,7 @@ class SosService {
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.failed,
         errorMessage: 'Queued offline — will retry when connected',
+        offlineQueued: true,
       ));
       return;
     }
@@ -189,6 +191,7 @@ class SosService {
         incidentId: incidentId,
         latitude: position?.latitude,
         longitude: position?.longitude,
+        offlineQueued: false,
       ));
       _vibration.confirmSos();
     } catch (error) {
@@ -196,6 +199,7 @@ class SosService {
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.failed,
         errorMessage: error.toString(),
+        offlineQueued: true,
       ));
     }
   }
@@ -227,11 +231,17 @@ class SosService {
       final event = data['event'] as Map<String, dynamic>?;
       final latest = data['latest'] as Map<String, dynamic>?;
       final incident = event?['incident'] as Map<String, dynamic>?;
+      final incidentStatus = incident?['status'] as String?;
+      if (watchIncidentTerminal(incidentStatus)) {
+        _location.stopTracking();
+      }
       _emit(_state.copyWith(
         incidentId: incident?['id'] as String? ?? _state.incidentId,
+        incidentStatus: incidentStatus ?? _state.incidentStatus,
         latitude: (latest?['latitude'] as num?)?.toDouble() ?? _state.latitude,
         longitude:
             (latest?['longitude'] as num?)?.toDouble() ?? _state.longitude,
+        offlineQueued: false,
       ));
     } catch (_) {}
   }
@@ -285,6 +295,9 @@ class SosService {
     }
 
     await _preferences.saveOfflineQueue([]);
+    if (uploadedCount > 0 && _state.offlineQueued) {
+      _emit(_state.copyWith(offlineQueued: false));
+    }
     return uploadedCount;
   }
 

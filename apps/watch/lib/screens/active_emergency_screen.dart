@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../design_system/design_system.dart';
+import '../models/active_emergency_status.dart';
+import '../models/connectivity_mode.dart';
+import '../models/emergency_mode.dart';
 import '../models/sos_event.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
@@ -24,22 +27,19 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
   @override
   void initState() {
     super.initState();
+    widget.services.heartbeat.start(emergency: true);
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       unawaited(widget.services.sos.syncEmergencyTracking());
+      unawaited(widget.services.heartbeat.sendHeartbeat());
     });
     unawaited(widget.services.sos.syncEmergencyTracking());
+    unawaited(widget.services.heartbeat.sendHeartbeat());
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
     super.dispose();
-  }
-
-  bool _isQueued(SosEventState state) {
-    return state.errorMessage?.contains('Queued') == true &&
-        (state.lifecycle == SosLifecycle.failed ||
-            state.lifecycle == SosLifecycle.active);
   }
 
   @override
@@ -49,21 +49,17 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
       initialData: widget.services.sos.state,
       builder: (context, snapshot) {
         final state = snapshot.data!;
+        final discreet = state.emergencyMode == WatchEmergencyMode.silentSos;
         final isSending = state.lifecycle == SosLifecycle.submitting;
-        final isQueued = _isQueued(state);
-
+        final isQueued = state.offlineQueued;
         final statusTitle = isSending
-            ? 'Sending SOS…'
+            ? (discreet ? 'Sending…' : 'Sending SOS…')
             : isQueued
-                ? 'SOS Queued'
-                : 'SOS Sent';
-
-        final statusBody = isQueued
-            ? (state.errorMessage ??
-                'Queued offline — will retry when connected')
-            : state.incidentId == null
-                ? 'Syncing incident status with command center…'
-                : 'Your live location has been shared. Stay on the line if possible.';
+                ? 'Queued offline'
+                : watchIncidentStatusLabel(state.incidentStatus);
+        final statusBody = watchOperationalBody(state);
+        final battery = widget.services.heartbeat.latest?.batteryLevel;
+        final connectivity = widget.services.connectivity.activeMode;
 
         return WatchScaffold(
           onBack: () => Navigator.popUntil(
@@ -78,12 +74,16 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
                 height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: EyeColors.danger.withValues(alpha: 0.15),
-                  border: Border.all(color: EyeColors.danger, width: 2),
+                  color: (discreet ? EyeColors.muted : EyeColors.danger)
+                      .withValues(alpha: 0.15),
+                  border: Border.all(
+                    color: discreet ? EyeColors.muted : EyeColors.danger,
+                    width: 2,
+                  ),
                 ),
                 child: Icon(
                   isQueued ? Icons.cloud_queue : Icons.sensors,
-                  color: EyeColors.danger,
+                  color: discreet ? EyeColors.muted : EyeColors.danger,
                   size: isQueued ? 28 : 24,
                 ),
               ),
@@ -91,8 +91,8 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
               Text(
                 statusTitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: EyeColors.danger,
+                style: TextStyle(
+                  color: discreet ? EyeColors.muted : EyeColors.danger,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                 ),
@@ -115,6 +115,12 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
                   style: const TextStyle(color: EyeColors.muted, fontSize: 9),
                 ),
               ],
+              const SizedBox(height: 8),
+              Text(
+                _telemetryLine(battery, connectivity),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: EyeColors.muted, fontSize: 9),
+              ),
               const Spacer(),
               WatchPrimaryButton(
                 label: 'Done',
@@ -125,16 +131,27 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-              WatchOutlineButton(
-                label: 'View Map',
-                onPressed: () =>
-                    Navigator.pushNamed(context, WatchRoutes.tracking),
-              ),
+              if (state.latitude != null && state.longitude != null)
+                WatchOutlineButton(
+                  label: 'View Map',
+                  onPressed: () =>
+                      Navigator.pushNamed(context, WatchRoutes.tracking),
+                ),
               const SizedBox(height: 8),
             ],
           ),
         );
       },
     );
+  }
+
+  String _telemetryLine(int? battery, WatchConnectivityMode mode) {
+    final batteryLabel = battery == null ? 'Battery —' : 'Battery $battery%';
+    final networkLabel = switch (mode) {
+      WatchConnectivityMode.offline => 'Network offline',
+      WatchConnectivityMode.pairedPhone => 'Network paired phone',
+      WatchConnectivityMode.standaloneCellular => 'Network LTE',
+    };
+    return '$batteryLabel · $networkLabel';
   }
 }

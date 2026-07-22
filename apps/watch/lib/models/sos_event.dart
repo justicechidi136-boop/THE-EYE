@@ -22,6 +22,8 @@ class SosEventState {
     this.idempotencyKey,
     this.latitude,
     this.longitude,
+    this.incidentStatus,
+    this.offlineQueued = false,
   });
 
   final SosLifecycle lifecycle;
@@ -34,6 +36,8 @@ class SosEventState {
   final String? idempotencyKey;
   final double? latitude;
   final double? longitude;
+  final String? incidentStatus;
+  final bool offlineQueued;
 
   bool get isActive =>
       lifecycle == SosLifecycle.active || lifecycle == SosLifecycle.submitting;
@@ -49,6 +53,8 @@ class SosEventState {
     String? idempotencyKey,
     double? latitude,
     double? longitude,
+    String? incidentStatus,
+    bool? offlineQueued,
   }) {
     return SosEventState(
       lifecycle: lifecycle ?? this.lifecycle,
@@ -61,6 +67,8 @@ class SosEventState {
       idempotencyKey: idempotencyKey ?? this.idempotencyKey,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      incidentStatus: incidentStatus ?? this.incidentStatus,
+      offlineQueued: offlineQueued ?? this.offlineQueued,
     );
   }
 }
