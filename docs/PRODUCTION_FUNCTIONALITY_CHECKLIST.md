@@ -7,7 +7,7 @@
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
 **Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**  
 **Sprint 4 status:** **CODE COMPLETE — PENDING STAGING RUNTIME QA** (DI fix `fe7bb3d`; VPS redeploy pending)  
-**Sprint 5 status:** **PHASE 1 AUDIT COMPLETE — IMPLEMENTATION NOT STARTED**
+**Sprint 5 status:** **CODE COMPLETE — PENDING STAGING QA** (implementation on `feature/sprint-5-neighborhood-watch`; no PASS without device/runtime evidence)
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -73,6 +73,7 @@
 
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-07-22 | Sprint 5 implementation | Neighborhood Watch lifecycle coded on `feature/sprint-5-neighborhood-watch`: discovery pagination, community requests, membership reject, comments/reactions/reports APIs, alerts/patrols/members endpoints, Prisma migration, mobile live wiring, admin reject BFF + map GPS fix. API 241/241 + mobile NW test green. No PASS without staging device QA. Sprint 1–4 unchanged. |
 | 2026-07-22 | Sprint 5 Phase 1 | Full Neighborhood Watch re-audit on `staging` @ `fe7bb3d`. Sprint 5 gap table + `docs/NEIGHBORHOOD_WATCH_CONTRACT.md` added on `feature/sprint-5-neighborhood-watch`. Backend core exists; mobile 100% static UI; admin CSOC partial with mock map coords and dead actions. No implementation changes. No PASS promotions. Sprint 1–4 statuses unchanged except Sprint 4 header note for DI fix. |
 | 2026-07-22 | Sprint 4 staging QA attempt | Deploy workflow `29887082714` failed preflight: GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL`. Live staging API @ `ca227fc` era (pre-Sprint-4): `/v1/health/ready` returns database/redis only; `/v1/broadcasts/admin/scheduler-health` returns 404; no worker/scheduler heartbeats observable. Feature branch `c66561e` local CI green (API 238/238, mobile 106/106, watch 49/49). End-to-end device QA not executed (no VPS deploy, no physical phone/watch in this session). No PASS promotions. |
 | 2026-07-22 | Sprint 4 Phase 1 | Full notifications & broadcasts re-audit on `staging` @ `ca227fc` (RC1). Sprint 4 gap table added on `feature/sprint-4-notifications-broadcasts`. No implementation changes in this entry. No PASS promotions. Sprint 1–3 statuses unchanged. |
@@ -188,16 +189,16 @@
 
 | ID | Module | Feature | User Role | Platform | Screen/Page | UI Present | Navigation Works | API Endpoint | Backend Implemented | Database Implemented | Authorization Implemented | Uses Real Data | Mock/Demo Removed | Automated Test | Manual Device Test | Staging Verified | Production Config Ready | Status | Severity | Blocker | Root Cause | Files Changed | Deployment Required | Notes |
 |----|--------|---------|-----------|----------|-------------|:----------:|:----------------:|--------------|:-------------------:|:--------------------:|:-------------------------:|:--------------:|:-----------------:|:--------------:|:------------------:|:----------------:|:-----------------------:|--------|----------|:-------:|------------|---------------|:-------------------:|-------|
-| MOB-NW-001 | NW | View communities | Citizen | Mobile | `/neighborhood-watch/my-communities` | Y | Y | `GET /v1/neighborhood-watch/communities` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Static strings in UI | — | Y | Backend exists; mobile uses mock |
-| MOB-NW-002 | NW | Join community | Citizen | Mobile | `/neighborhood-watch/join` | Y | Y | `POST .../join` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Buttons `onPressed: () {}` | — | Y | — |
-| MOB-NW-003 | NW | Leave community | Citizen | Mobile | — | N | N | `PATCH .../leave` | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P1 | Y | No mobile UI | — | Y | — |
-| MOB-NW-004 | NW | Create post | Citizen | Mobile | `/neighborhood-watch/create-post` | Y | Y | `POST .../posts` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Post navigates to feed only; no API | — | Y | — |
-| MOB-NW-005 | NW | Comment | Citizen | Mobile | — | N | N | — | N | Y | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | No comments API | — | Y | Prisma model unused |
-| MOB-NW-006 | NW | Report post | Citizen | Mobile | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | — | — | Y | — |
-| MOB-NW-007 | NW | Alerts | Citizen | Mobile | `/neighborhood-watch/alerts` | Y | Y | — | N | N | N | N | N | N | N | N | N | **FAIL** | P1 | Y | Static alert types | — | Y | — |
-| MOB-NW-008 | NW | Member list | Citizen | Mobile | — | N | N | — | Y | Y | Y | N | N | N | N | N | N | **NOT IMPLEMENTED** | P2 | N | Backend has memberships | — | Y | — |
+| MOB-NW-001 | NW | View communities | Citizen | Mobile | `/neighborhood-watch/my-communities` | Y | Y | `GET /v1/neighborhood-watch/communities` | Y | Y | Y | Y | Y | Y | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Wired to live API; device QA pending | — | Y | Replaces static mock lists |
+| MOB-NW-002 | NW | Join community | Citizen | Mobile | `/neighborhood-watch/join` | Y | Y | `POST .../join` | Y | Y | Y | Y | Y | N | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Join/request wired; notify pending S4 runtime | — | Y | — |
+| MOB-NW-003 | NW | Leave community | Citizen | Mobile | — | N | N | `PATCH .../leave` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P1 | N | API + controller method; mobile leave UI not added | — | Y | — |
+| MOB-NW-004 | NW | Create post | Citizen | Mobile | `/neighborhood-watch/create-post` | Y | Y | `POST .../posts` | Y | Y | Y | Y | N | N | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Live post create; media attach UI pending INF-006 | — | Y | — |
+| MOB-NW-005 | NW | Comment | Citizen | Mobile | — | N | N | `GET/POST .../comments` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P2 | N | Comments API added; mobile comment UI not wired | — | Y | — |
+| MOB-NW-006 | NW | Report post | Citizen | Mobile | — | N | N | `POST .../reports` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P2 | N | Content report API added; mobile UI not wired | — | Y | — |
+| MOB-NW-007 | NW | Alerts | Citizen | Mobile | `/neighborhood-watch/alerts` | Y | Y | `GET .../alerts` | Y | Y | Y | Y | BLOCKED | N | N | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Live alert feed; push delivery blocked on S4 runtime | — | Y | — |
+| MOB-NW-008 | NW | Member list | Citizen | Mobile | — | N | N | `GET .../members` | Y | Y | Y | Y | N | N | N | N | N | **PARTIAL** | P2 | N | Members API added; dedicated mobile screen pending | — | Y | — |
 | MOB-NW-009 | NW | Admin contact | Citizen | Mobile | — | N | N | — | N | N | N | N | N | N | N | N | N | **NOT IMPLEMENTED** | P3 | N | — | — | Y | — |
-| MOB-NW-010 | NW | Community incident feed | Citizen | Mobile | `/neighborhood-watch/feed` | Y | Y | `GET .../feed` | Y | Y | Y | N | N | N | N | N | N | **FAIL** | P1 | Y | Hardcoded posts | — | Y | — |
+| MOB-NW-010 | NW | Community incident feed | Citizen | Mobile | `/neighborhood-watch/feed` | Y | Y | `GET .../feed` | Y | Y | Y | Y | N | N | Y | N | N | **CODE COMPLETE — STAGING QA PENDING** | P1 | Y | Live feed wired; device QA pending | — | Y | Replaces hardcoded posts |
 
 ### Safety services
 
@@ -591,7 +592,7 @@
 **Baseline:** `staging` @ `fe7bb3d`  
 **Implementation branch:** `feature/sprint-5-neighborhood-watch`  
 **Contract:** `docs/NEIGHBORHOOD_WATCH_CONTRACT.md`  
-**Sprint 5 verdict:** **PHASE 1 AUDIT COMPLETE — IMPLEMENTATION NOT STARTED**
+**Sprint 5 verdict:** **CODE COMPLETE — PENDING STAGING QA** (backend + mobile + admin wiring; Sprint 4 notification delivery and INF-006 media E2E remain blocked on staging)
 
 > Rules: No PASS without staging evidence. Mobile must not use static/mock community data. Sprint 4 notification delivery remains **DEVICE/INFRA QA PENDING** — NW notification rows inherit that blocker until runtime verified.
 
