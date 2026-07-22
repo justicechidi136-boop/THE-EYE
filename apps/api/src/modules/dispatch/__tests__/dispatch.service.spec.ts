@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { AdminRoleName, IncidentAssignmentStatus, IncidentStatus, ResponderAvailability } from "@the-eye/shared";
 import { DispatchService } from "../dispatch.service";
 
@@ -219,5 +219,136 @@ describe("DispatchService", () => {
 
     expect(result.data.availability).toBe(ResponderAvailability.Available);
     expect(prisma.responder.update).toHaveBeenCalled();
+  });
+
+  it("rejects assignment acceptance after timeout", async () => {
+    const { service, prisma } = buildDispatchService({
+      prisma: {
+        incidentAssignment: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "assignment-1",
+            status: IncidentAssignmentStatus.Assigned,
+            version: 1,
+            expiresAt: new Date(Date.now() - 60_000),
+            agencyId: "agency-1",
+            incident: { id: "inc-1", status: IncidentStatus.Assigned, reporterId: "user-1", isAnonymous: false },
+            responder: { userId: "resp-user-1" },
+          }),
+        },
+      },
+    });
+
+    await expect(
+      service.updateAssignment(
+        "assignment-1",
+        { status: IncidentAssignmentStatus.Accepted, version: 1 },
+        { sub: "resp-user-1", typ: "user", role: "responder", permissions: ["incident:update"] } as any,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("returns duplicate assignment action by clientActionId", async () => {
+    const existingAssignment = {
+      id: "assignment-1",
+      status: IncidentAssignmentStatus.Accepted,
+      version: 2,
+      agencyId: "agency-1",
+      incident: { id: "inc-1", status: IncidentStatus.Responding },
+      responder: { userId: "resp-user-1" },
+    };
+    const { service, prisma } = buildDispatchService({
+      prisma: {
+        dispatchEvent: {
+          findFirst: jest.fn().mockResolvedValue({ id: "evt-1", eventType: "assignment.accepted" }),
+        },
+        incidentAssignment: {
+          findUnique: jest.fn().mockResolvedValue(existingAssignment),
+          updateMany: jest.fn(),
+        },
+      },
+    });
+
+    const result = await service.updateAssignment(
+      "assignment-1",
+      {
+        status: IncidentAssignmentStatus.Accepted,
+        version: 2,
+        clientActionId: "action-dup-1",
+      },
+      { sub: "resp-user-1", typ: "user", role: "responder", permissions: ["incident:update"] } as any,
+    );
+
+    expect(result.duplicate).toBe(true);
+    expect(result.data).toEqual(existingAssignment);
+    expect(prisma.incidentAssignment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("blocks responder from reading another responder assignment", async () => {
+    const { service, prisma } = buildDispatchService({
+      prisma: {
+        incidentAssignment: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "assignment-1",
+            agencyId: "agency-1",
+            responder: { userId: "other-responder" },
+            incident: { id: "inc-1" },
+          }),
+        },
+      },
+    });
+
+    await expect(
+      service.getAssignment("assignment-1", {
+        sub: "resp-user-1",
+        typ: "user",
+        role: "responder",
+        permissions: ["incident:read"],
+      } as any),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.incidentAssignment.findUnique).toHaveBeenCalled();
+  });
+
+  it("resolves responder profile from authenticated session", async () => {
+    const { service, prisma } = buildDispatchService({
+      prisma: {
+        responder: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: "resp-1",
+            displayName: "Unit 12",
+            agencyId: "agency-1",
+            userId: "resp-user-1",
+          }),
+        },
+      },
+    });
+
+    const result = await service.getResponderMe({
+      sub: "resp-user-1",
+      typ: "user",
+      role: "responder",
+      permissions: ["incident:read"],
+    } as any);
+
+    expect(result.data.id).toBe("resp-1");
+    expect(prisma.responder.findFirst).toHaveBeenCalled();
+  });
+
+  it("throws when session has no responder profile", async () => {
+    const { service, prisma } = buildDispatchService({
+      prisma: {
+        responder: {
+          findFirst: jest.fn().mockResolvedValue(null),
+        },
+      },
+    });
+
+    await expect(
+      service.getResponderMe({
+        sub: "user-no-responder",
+        typ: "user",
+        role: "responder",
+        permissions: ["incident:read"],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
