@@ -94,6 +94,7 @@ export type SmartwatchHeartbeatDto = {
   batteryLevel?: number;
   signalStrength?: number;
   firmwareVersion?: string;
+  appVersion?: string;
   firmwareSignatureStatus?: FirmwareSignatureStatus;
 };
 

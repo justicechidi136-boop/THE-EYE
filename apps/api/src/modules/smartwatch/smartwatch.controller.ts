@@ -148,6 +148,64 @@ export class SmartwatchController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/devices/:id")
+  @RequirePermissions("user:manage")
+  adminDevice(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.adminDevice(id, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/firmware")
+  @RequirePermissions("user:manage")
+  listAdminFirmware(@Req() request: any) {
+    return this.smartwatch.listAdminFirmware(request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Post("devices/:id/revoke")
+  @RequirePermissions("user:manage")
+  revokeDevice(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.revokeDevice(id, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post("devices/:deviceId/telemetry")
+  recordTelemetry(@Param("deviceId") deviceId: string, @Body() dto: SmartwatchHeartbeatDto, @Req() request: any) {
+    return this.smartwatch.recordTelemetry(deviceId, dto, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post("devices/:deviceId/push-tokens")
+  registerDevicePushToken(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: { deviceSecret: string; token: string; platform?: string; provider?: string; appEnvironment?: string },
+  ) {
+    return this.smartwatch.registerDevicePushToken(deviceId, dto);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch("devices/:deviceId/push-tokens/deactivate")
+  deactivateDevicePushTokens(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: { deviceSecret: string },
+  ) {
+    return this.smartwatch.deactivateDevicePushTokens(deviceId, dto);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch("devices/:deviceId/notifications/:notificationId/ack")
+  acknowledgeNotificationForDevice(
+    @Param("deviceId") deviceId: string,
+    @Param("notificationId") notificationId: string,
+    @Body() dto: { deviceSecret: string; source?: "foreground" | "background" | "opened" | "watch_ack" },
+  ) {
+    return this.smartwatch.acknowledgeNotificationForDevice(deviceId, notificationId, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Post("devices/:id/critical-alert")
   @RequirePermissions("broadcast:publish")
   criticalAlert(@Param("id") id: string, @Body() dto: SendCriticalAlertDto, @Req() request: any) {
