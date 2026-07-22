@@ -3,6 +3,7 @@ import { IncidentPriority, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { BroadcastsService } from "../broadcasts/broadcasts.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConfidenceScorerService } from "./confidence-scorer.service";
 import {
@@ -32,6 +33,7 @@ export class VerificationService {
     private readonly scorer: ConfidenceScorerService,
     private readonly broadcasts: BroadcastsService,
     private readonly metrics: MetricsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async verifyIncident(incidentId: string, dto: VerifyIncidentDto = {}, actor?: JwtPayload) {
@@ -196,17 +198,30 @@ export class VerificationService {
     }
 
     if (candidateUsers.length) {
-      await this.prisma.notification.createMany({
-        data: candidateUsers.map((user) => ({
-          userId: user.id,
-          incidentId,
-          channel: "push",
-          title: "Can you confirm a nearby incident?",
-          body: `THE EYE needs confirmation for: ${incident.title}`,
-          status: "Pending" as never,
-          provider: "fcm",
-        })),
-      });
+      await Promise.all(
+        candidateUsers.map(async (user) => {
+          const notification = await this.prisma.notification.create({
+            data: {
+              userId: user.id,
+              incidentId,
+              channel: "push",
+              title: "Can you confirm a nearby incident?",
+              body: `THE EYE needs confirmation for: ${incident.title}`,
+              status: "Pending" as never,
+              provider: "fcm",
+            },
+          });
+          await this.notifications.enqueue({
+            notificationId: notification.id,
+            userId: user.id,
+            channel: "push",
+            title: notification.title,
+            body: notification.body,
+            incidentId,
+            provider: "fcm",
+          });
+        }),
+      );
     }
 
     await this.prisma.incidentTimeline.create({
@@ -257,6 +272,37 @@ export class VerificationService {
     });
 
     return this.verifyIncident(incidentId, { locationConsistencyMeters: this.estimateLocationConsistency(incident, dto) }, actor);
+  }
+
+  async listWitnessConfirmations(incidentId: string) {
+    const incident = await this.prisma.incident.findUnique({ where: { id: incidentId } });
+    if (!incident) throw new NotFoundException("Incident not found");
+
+    const rows = await this.prisma.incidentVerification.findMany({
+      where: {
+        incidentId,
+        method: { in: ["nearby_user_confirmation", "trusted_reporter_confirmation"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { verifier: { include: { profile: true } } },
+    });
+
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        incidentId: row.incidentId,
+        verifierId: row.verifierId,
+        verifierName: row.verifier?.profile
+          ? `${row.verifier.profile.firstName} ${row.verifier.profile.lastName}`.trim()
+          : row.verifier?.email ?? "Witness",
+        method: row.method,
+        result: row.result,
+        confidence: row.confidence ? Number(row.confidence) : null,
+        notes: row.notes,
+        createdAt: row.createdAt,
+      })),
+    };
   }
 
   async dashboard() {

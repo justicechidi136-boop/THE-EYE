@@ -68,7 +68,13 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     incidentVerification: { create: jest.fn().mockResolvedValue({ id: "verification-1" }) },
     incidentTimeline: { create: jest.fn().mockResolvedValue({ id: "timeline-1" }) },
     incidentMedia: { findMany: jest.fn().mockResolvedValue([]) },
-    notification: { createMany: jest.fn() },
+    notification: {
+      createMany: jest.fn(),
+      create: jest.fn().mockImplementation(async (args: any) => ({
+        id: `notification-${args.data.userId}`,
+        ...args.data,
+      })),
+    },
     user: { findMany: jest.fn().mockResolvedValue([]) },
     trustedReporter: { findUnique: jest.fn().mockResolvedValue(null) },
     $queryRaw: jest.fn().mockResolvedValue([{ id: "duplicate-1", distance_meters: 40 }]),
@@ -78,6 +84,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 
 function buildBroadcasts() {
   return { autoBroadcastVerifiedIncident: jest.fn().mockResolvedValue({ skipped: false }) } as any;
+}
+
+function buildNotifications() {
+  return { enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }) } as any;
 }
 
 describe("VerificationService", () => {
@@ -95,7 +105,7 @@ describe("VerificationService", () => {
       }),
     } as any;
     const broadcasts = buildBroadcasts();
-    const service = new VerificationService(prisma, scorer, broadcasts, createMetricsMock());
+    const service = new VerificationService(prisma, scorer, broadcasts, createMetricsMock(), buildNotifications());
 
     const result = await service.verifyIncident("incident-1", {}, { typ: "admin", sub: "admin-1" } as any);
 
@@ -127,14 +137,68 @@ describe("VerificationService", () => {
         breakdown: { gpsAccuracy: 6 },
       }),
     } as any;
-    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock());
+    const notifications = buildNotifications();
+    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock(), notifications);
 
     await service.verifyIncident("incident-1");
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(prisma.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.arrayContaining([expect.objectContaining({ userId: "witness-1" })]),
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ userId: "witness-1" }),
     }));
+    expect(notifications.enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "witness-1",
+      incidentId: "incident-1",
+    }));
+  });
+
+  it("enqueues crowd confirmation notifications through BullMQ", async () => {
+    const prisma = buildPrisma({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: "witness-1" }]) },
+      $queryRaw: jest.fn().mockResolvedValue([{ userId: "witness-1", distanceMeters: 120 }]),
+    });
+    const notifications = buildNotifications();
+    const service = new VerificationService(prisma, {} as any, buildBroadcasts(), createMetricsMock(), notifications);
+
+    await service.requestCrowdConfirmation("incident-1", { limit: 5, radiusMeters: 500 });
+
+    expect(prisma.notification.create).toHaveBeenCalled();
+    expect(notifications.enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "witness-1",
+      channel: "push",
+      incidentId: "incident-1",
+    }));
+  });
+
+  it("lists witness confirmations for an incident", async () => {
+    const prisma = buildPrisma({
+      incidentVerification: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "verification-1",
+            incidentId: "incident-1",
+            verifierId: "witness-1",
+            method: "nearby_user_confirmation",
+            result: "confirmed",
+            confidence: 70,
+            notes: "I saw it",
+            createdAt: new Date("2026-07-22T00:00:00.000Z"),
+            verifier: { email: "witness@example.com", profile: { firstName: "Witness", lastName: "One" } },
+          },
+        ]),
+      },
+    });
+    const service = new VerificationService(prisma, {} as any, buildBroadcasts(), createMetricsMock(), buildNotifications());
+
+    const result = await service.listWitnessConfirmations("incident-1");
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: "verification-1",
+        verifierName: "Witness One",
+        result: "confirmed",
+      }),
+    ]);
   });
 
   it("records admin manual verification reviews", async () => {
@@ -150,7 +214,7 @@ describe("VerificationService", () => {
         breakdown: { adminConfirmation: 15 },
       }),
     } as any;
-    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock());
+    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock(), buildNotifications());
 
     await service.adminReviewIncident(
       "incident-1",

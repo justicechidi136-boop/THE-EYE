@@ -62,8 +62,15 @@ export class IncidentsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
   @RequirePermissions("incident:read")
-  list(@Req() request: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
-    return this.incidentsService.list(request.user, { cursor, limit });
+  list(
+    @Req() request: any,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+    @Query("status") status?: string,
+    @Query("priority") priority?: string,
+    @Query("type") type?: string,
+  ) {
+    return this.incidentsService.list(request.user, { status, priority, type }, { cursor, limit });
   }
 
   @Get(":id")

@@ -41,11 +41,19 @@ export class IncidentsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async list(actor?: JwtPayload, query: CursorPageQuery = {}) {
+  async list(
+    actor?: JwtPayload,
+    filters: { status?: string; priority?: string; type?: string } = {},
+    query: CursorPageQuery = {},
+  ) {
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeIncidentCursor(query.cursor);
+    const filterWhere: Record<string, unknown> = {};
+    if (filters.status?.trim()) filterWhere.status = filters.status.trim();
+    if (filters.priority?.trim()) filterWhere.priority = filters.priority.trim();
+    if (filters.type?.trim()) filterWhere.type = filters.type.trim();
     const rows = await this.prisma.incident.findMany({
-      where: { ...this.incidentScopeWhere(actor), ...incidentCursorWhere(cursor) } as never,
+      where: { ...this.incidentScopeWhere(actor), ...incidentCursorWhere(cursor), ...filterWhere } as never,
       include: {
         media: true,
         timeline: { orderBy: { createdAt: "desc" }, take: 10 },
