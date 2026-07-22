@@ -114,6 +114,38 @@ export class IncidentsController {
     return this.incidentsService.recordLocation(id, dto, request.user);
   }
 
+  @Get(":id/live-location")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:read")
+  liveLocation(@Param("id") id: string, @Req() request: any) {
+    return this.incidentsService.getLiveLocation(id, request.user);
+  }
+
+  @Get(":id/location-history")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:read")
+  locationHistory(@Param("id") id: string, @Req() request: any, @Query("limit") limit?: string, @Query("cursor") cursor?: string) {
+    return this.incidentsService.getLocationHistory(id, request.user, limit, cursor);
+  }
+
+  @Get(":id/timeline")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:read")
+  timeline(@Param("id") id: string, @Req() request: any) {
+    return this.incidentsService.getTimeline(id, request.user);
+  }
+
+  @Post(":id/cancel")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:create")
+  cancel(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
+    return this.incidentsService.cancelEmergency(id, body.reason, request.user);
+  }
+
   @Get(":id/media/:mediaId/view")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
