@@ -51,7 +51,8 @@ class IncidentDetail extends IncidentSummary {
 
 class IncidentHistoryService {
   IncidentHistoryService({TheEyeApiClient? apiClient})
-      : _apiClient = apiClient ?? TheEyeApiClient(baseUrl: TheEyeApiPaths.defaultBaseUrl);
+      : _apiClient = apiClient ??
+            TheEyeApiClient(baseUrl: TheEyeApiPaths.defaultBaseUrl);
 
   final TheEyeApiClient _apiClient;
 
@@ -74,7 +75,8 @@ class IncidentHistoryService {
       }
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) {
-        throw IncidentApiException(response.statusCode, "Unexpected incident list response.");
+        throw IncidentApiException(
+            response.statusCode, "Unexpected incident list response.");
       }
       final map = Map<String, dynamic>.from(decoded);
       final rows = map["data"];
@@ -106,7 +108,8 @@ class IncidentHistoryService {
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! Map) {
-      throw IncidentApiException(response.statusCode, "Unexpected incident detail response.");
+      throw IncidentApiException(
+          response.statusCode, "Unexpected incident detail response.");
     }
     return _detailFromJson(Map<String, dynamic>.from(decoded));
   }
@@ -121,13 +124,16 @@ class IncidentHistoryService {
         : json["status"] == "Verified"
             ? 85
             : 55;
-    final verificationStatus = _verificationLabel(json["status"]?.toString(), latestVerification?["result"]?.toString());
+    final verificationStatus = _verificationLabel(
+        json["status"]?.toString(), latestVerification?["result"]?.toString());
     final assignedAgency = json["assignedAgencyId"]?.toString();
     return IncidentSummary(
       id: json["id"]?.toString() ?? "",
       type: json["type"]?.toString() ?? "Incident",
       status: json["status"]?.toString() ?? "Submitted",
-      agency: assignedAgency == null || assignedAgency.isEmpty ? "Awaiting assignment" : assignedAgency,
+      agency: assignedAgency == null || assignedAgency.isEmpty
+          ? "Awaiting assignment"
+          : assignedAgency,
       confidence: confidence,
       verificationStatus: verificationStatus,
       submittedAt: _parseDate(json["submittedAt"]),
@@ -146,7 +152,9 @@ class IncidentHistoryService {
           final item = Map<String, dynamic>.from(entry);
           timeline.add({
             "time": item["createdAt"]?.toString() ?? "",
-            "event": item["message"]?.toString() ?? item["eventType"]?.toString() ?? "Update",
+            "event": item["message"]?.toString() ??
+                item["eventType"]?.toString() ??
+                "Update",
             "actor": item["actorType"]?.toString() ?? "system",
           });
         }
@@ -185,8 +193,10 @@ class IncidentHistoryService {
   }
 
   String _verificationLabel(String? status, String? verificationResult) {
-    if (verificationResult == "reject" || status == "FalseReport") return "False Information";
-    if (verificationResult == "confirm" || status == "Verified") return "Verified";
+    if (verificationResult == "reject" || status == "FalseReport")
+      return "False Information";
+    if (verificationResult == "confirm" || status == "Verified")
+      return "Verified";
     if (status == "Verifying") return "Pending";
     return "Pending";
   }

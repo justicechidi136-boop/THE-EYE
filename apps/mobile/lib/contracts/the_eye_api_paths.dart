@@ -23,7 +23,8 @@ abstract final class TheEyeApiPaths {
   static const incidentsReport = "/incidents/report";
   static const incidents = "/incidents";
   static String incidentDetail(String incidentId) => "/incidents/$incidentId";
-  static String incidentLocation(String incidentId) => "/incidents/$incidentId/location";
+  static String incidentLocation(String incidentId) =>
+      "/incidents/$incidentId/location";
   static const health = "/health";
   static const authLogin = "/auth/login";
   static const authRegister = "/auth/register";

@@ -55,7 +55,8 @@ void main() {
     final client = TheEyeApiClient(
       baseUrl: "https://api.test/v1",
       httpClient: MockClient((request) async {
-        expect(request.url.path, endsWith(TheEyeApiPaths.usersMeEmergencyContacts));
+        expect(request.url.path,
+            endsWith(TheEyeApiPaths.usersMeEmergencyContacts));
         return http.Response(
           jsonEncode({
             "data": [
@@ -84,7 +85,8 @@ void main() {
       baseUrl: "https://api.test/v1",
       httpClient: MockClient((request) async {
         expect(request.method, "POST");
-        expect(request.url.path, endsWith(TheEyeApiPaths.usersMeDeletionRequest));
+        expect(
+            request.url.path, endsWith(TheEyeApiPaths.usersMeDeletionRequest));
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body["confirm"], isTrue);
         return http.Response(

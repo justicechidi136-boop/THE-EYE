@@ -5,7 +5,8 @@ import "package:shared_preferences/shared_preferences.dart";
 import "incident_draft.dart";
 
 class ComposeDraftStore {
-  ComposeDraftStore({SharedPreferences? preferences}) : _preferences = preferences;
+  ComposeDraftStore({SharedPreferences? preferences})
+      : _preferences = preferences;
 
   static const storageKey = "the_eye_compose_incident_drafts";
 
@@ -19,7 +20,8 @@ class ComposeDraftStore {
     final prefs = await _prefs();
     final raw = prefs.getStringList(storageKey) ?? const [];
     return raw
-        .map((entry) => IncidentDraft.fromJson(jsonDecode(entry) as Map<String, dynamic>))
+        .map((entry) =>
+            IncidentDraft.fromJson(jsonDecode(entry) as Map<String, dynamic>))
         .toList();
   }
 
@@ -35,7 +37,8 @@ class ComposeDraftStore {
     final drafts = await loadDrafts();
     final next = [
       draft,
-      ...drafts.where((item) => item.clientSubmissionId != draft.clientSubmissionId),
+      ...drafts
+          .where((item) => item.clientSubmissionId != draft.clientSubmissionId),
     ];
     await saveDrafts(next);
   }
@@ -43,7 +46,9 @@ class ComposeDraftStore {
   Future<void> deleteDraft(String clientSubmissionId) async {
     final drafts = await loadDrafts();
     await saveDrafts(
-      drafts.where((item) => item.clientSubmissionId != clientSubmissionId).toList(),
+      drafts
+          .where((item) => item.clientSubmissionId != clientSubmissionId)
+          .toList(),
     );
   }
 }

@@ -858,6 +858,21 @@ class TheEyeApiClient {
     );
   }
 
+  Future<void> postIncidentLocation({
+    required String incidentId,
+    required Map<String, Object?> payload,
+    String? accessToken,
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.incidentLocation(incidentId),
+      payload,
+      accessToken: accessToken,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw IncidentApiException.fromResponse(response);
+    }
+  }
+
   Future<void> registerSmartwatch(Map<String, Object?> payload,
       {String? accessToken}) async {
     await postJson(TheEyeApiPaths.smartwatchRegister, payload,

@@ -27,6 +27,20 @@ abstract final class TheEyePayloads {
     };
   }
 
+  static Map<String, Object?> incidentLocationUpdate({
+    required Position position,
+    required int sequenceNumber,
+    String sourceDeviceId = "mobile-primary",
+  }) {
+    return {
+      ...gpsFields(position),
+      "accuracyMeters": position.accuracy,
+      "capturedAt": position.timestamp.toUtc().toIso8601String(),
+      "sourceDeviceId": sourceDeviceId,
+      "sequenceNumber": sequenceNumber,
+    };
+  }
+
   static Map<String, Object?> registerSmartwatchDevice({
     required String deviceId,
     required String provider,
@@ -50,8 +64,10 @@ abstract final class TheEyePayloads {
       "pairingMethod": pairingMethod,
       "failoverEnabled": failoverEnabled,
       "criticalAlertsEnabled": criticalAlertsEnabled,
-      if (pairingCode != null && pairingCode.isNotEmpty) "pairingCode": pairingCode,
-      if (firebaseEnv != null && firebaseEnv.isNotEmpty) "firebaseEnv": firebaseEnv,
+      if (pairingCode != null && pairingCode.isNotEmpty)
+        "pairingCode": pairingCode,
+      if (firebaseEnv != null && firebaseEnv.isNotEmpty)
+        "firebaseEnv": firebaseEnv,
     };
   }
 

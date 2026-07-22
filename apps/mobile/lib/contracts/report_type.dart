@@ -11,6 +11,13 @@ enum ReportType {
   suspiciousActivity
 }
 
+ReportType? reportTypeForIncidentType(String incidentType) {
+  for (final value in ReportType.values) {
+    if (value.incidentType == incidentType) return value;
+  }
+  return null;
+}
+
 extension ReportTypeContract on ReportType {
   String get incidentType {
     switch (this) {
@@ -51,6 +58,25 @@ extension ReportTypeContract on ReportType {
   }
 
   /// Figma screen titles (`286:188`, `712:3265`, etc.).
+  String get routePath {
+    switch (this) {
+      case ReportType.emergency:
+        return "/report/emergency";
+      case ReportType.crime:
+        return "/report/crime";
+      case ReportType.accident:
+        return "/report/accident";
+      case ReportType.fire:
+        return "/report/fire";
+      case ReportType.kidnapping:
+        return "/report/kidnapping";
+      case ReportType.abuse:
+        return "/report/abuse";
+      case ReportType.suspiciousActivity:
+        return "/report/suspicious-activity";
+    }
+  }
+
   String get figmaTitle {
     switch (this) {
       case ReportType.emergency:

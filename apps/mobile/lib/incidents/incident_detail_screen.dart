@@ -96,7 +96,8 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
               ),
               if (_detail!.statusHistory.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text("Status history", style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text("Status history",
+                    style: TextStyle(fontWeight: FontWeight.w800)),
                 ..._detail!.statusHistory.map(
                   (entry) => ListTile(
                     title: Text("${entry["from"]} → ${entry["to"]}"),
@@ -106,7 +107,8 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
               ],
               if (_detail!.timeline.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text("Timeline", style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text("Timeline",
+                    style: TextStyle(fontWeight: FontWeight.w800)),
                 ..._detail!.timeline.map(
                   (entry) => ListTile(
                     title: Text(entry["event"] ?? "Update"),

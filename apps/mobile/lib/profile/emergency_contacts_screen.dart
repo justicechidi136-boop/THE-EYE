@@ -235,7 +235,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(_editingContactId == null ? "Add contact" : "Save"),
+                      : Text(
+                          _editingContactId == null ? "Add contact" : "Save"),
                 ),
                 if (_editingContactId != null) ...[
                   const SizedBox(height: 8),

@@ -30,7 +30,8 @@ void main() {
     );
 
     await store.upsertDraft(draft);
-    expect((await store.loadDrafts()).single.clientSubmissionId, "compose-draft-1");
+    expect((await store.loadDrafts()).single.clientSubmissionId,
+        "compose-draft-1");
 
     await store.deleteDraft("compose-draft-1");
     expect(await store.loadDrafts(), isEmpty);

@@ -24,7 +24,8 @@ class EyePageBackHeader extends StatelessWidget {
           IconButton(
             tooltip: "Back",
             onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back, color: EyeTokens.greenMain, size: 24),
+            icon: const Icon(Icons.arrow_back,
+                color: EyeTokens.greenMain, size: 24),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           ),

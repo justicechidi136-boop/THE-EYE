@@ -176,22 +176,24 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         field: TextField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
-                          decoration: profileFieldDecoration(hintText: "+234..."),
+                          decoration:
+                              profileFieldDecoration(hintText: "+234..."),
                         ),
                       ),
                       profileLabeledField(
                         label: "Address",
                         field: TextField(
                           controller: _addressController,
-                          decoration:
-                              profileFieldDecoration(hintText: "Street address"),
+                          decoration: profileFieldDecoration(
+                              hintText: "Street address"),
                         ),
                       ),
                       profileLabeledField(
                         label: "Country",
                         field: TextField(
                           controller: _countryController,
-                          decoration: profileFieldDecoration(hintText: "Country"),
+                          decoration:
+                              profileFieldDecoration(hintText: "Country"),
                         ),
                       ),
                       profileLabeledField(
@@ -212,11 +214,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         label: "Gender",
                         field: DropdownButtonFormField<String>(
                           value: _gender,
-                          decoration: profileFieldDecoration(hintText: "Select"),
+                          decoration:
+                              profileFieldDecoration(hintText: "Select"),
                           items: const [
-                            DropdownMenuItem(value: "Female", child: Text("Female")),
-                            DropdownMenuItem(value: "Male", child: Text("Male")),
-                            DropdownMenuItem(value: "Other", child: Text("Other")),
+                            DropdownMenuItem(
+                                value: "Female", child: Text("Female")),
+                            DropdownMenuItem(
+                                value: "Male", child: Text("Male")),
+                            DropdownMenuItem(
+                                value: "Other", child: Text("Other")),
                           ],
                           onChanged: (value) => setState(() => _gender = value),
                         ),
@@ -242,7 +248,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Text("Save changes"),
                       ),

@@ -44,6 +44,5 @@ abstract final class BrandAssets {
   static const appIconWhite = "assets/images/brand/the-eye-app-icon-white.png";
   static const appIconDarkGreen =
       "assets/images/brand/the-eye-app-icon-dark-green.png";
-  static const otpEmailSent =
-      "assets/images/figma/otp-email-sent.png";
+  static const otpEmailSent = "assets/images/figma/otp-email-sent.png";
 }
