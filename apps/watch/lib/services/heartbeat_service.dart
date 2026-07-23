@@ -4,6 +4,7 @@ import 'package:battery_plus/battery_plus.dart';
 
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
+import '../config/watch_app_info.dart';
 import '../models/device_status.dart';
 import '../storage/secure_credential_store.dart';
 import 'connectivity_service.dart';
@@ -46,8 +47,8 @@ class HeartbeatService {
 
   Future<DeviceStatusSnapshot?> sendHeartbeat({
     int? batteryLevel,
-    int signalStrength = 80,
-    String firmwareVersion = '0.1.0',
+    int? signalStrength,
+    String? firmwareVersion,
   }) async {
     final deviceId = await _credentials.readDeviceId();
     final deviceSecret = await _credentials.readDeviceSecret();
@@ -61,6 +62,11 @@ class HeartbeatService {
       // Keep caller/default fallback when platform battery API is unavailable.
     }
 
+    final resolvedSignal =
+        signalStrength ?? (_connectivity.internetAvailable ? 100 : 0);
+    final resolvedFirmware =
+        firmwareVersion ?? WatchAppInfo.firmwareVersion;
+
     await _api.post(
       WatchApiPaths.heartbeat(deviceId),
       body: {
@@ -70,18 +76,19 @@ class HeartbeatService {
         'pairedPhoneAvailable': _connectivity.pairedPhoneAvailable,
         'internetAvailable': _connectivity.internetAvailable,
         'batteryLevel': resolvedBattery,
-        'signalStrength': signalStrength,
-        'firmwareVersion': firmwareVersion,
+        'signalStrength': resolvedSignal,
+        'firmwareVersion': resolvedFirmware,
+        'appVersion': WatchAppInfo.appVersion,
       },
     );
 
     _latest = DeviceStatusSnapshot(
       deviceId: deviceId,
       batteryLevel: resolvedBattery,
-      signalStrength: signalStrength,
+      signalStrength: resolvedSignal,
       connectivityMode: _connectivity.activeMode,
       isOnline: true,
-      firmwareVersion: firmwareVersion,
+      firmwareVersion: resolvedFirmware,
       lastSeenAt: DateTime.now(),
       pairedPhoneAvailable: _connectivity.pairedPhoneAvailable,
       internetAvailable: _connectivity.internetAvailable,

@@ -98,6 +98,7 @@ class PreferencesStore {
   static const _isPairedKey = 'watch.is_paired';
   static const _launcherOnboardingDismissedKey =
       'watch.launcher_onboarding_dismissed';
+  static const _versionPolicyCacheKey = 'watch.version_policy.cache';
 
   Future<List<OfflineEvent>> loadOfflineQueue() async {
     final store = await prefs;
@@ -167,5 +168,22 @@ class PreferencesStore {
   Future<void> setLauncherOnboardingDismissed(bool value) async {
     final store = await prefs;
     await store.setBool(_launcherOnboardingDismissedKey, value);
+  }
+
+  Future<void> saveVersionPolicyCache(Map<String, dynamic> json) async {
+    final store = await prefs;
+    await store.setString(_versionPolicyCacheKey, jsonEncode(json));
+  }
+
+  Future<Map<String, dynamic>?> readVersionPolicyCache() async {
+    final store = await prefs;
+    final raw = store.getString(_versionPolicyCacheKey);
+    if (raw == null || raw.isEmpty) return null;
+    return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+  }
+
+  Future<void> clearVersionPolicyCache() async {
+    final store = await prefs;
+    await store.remove(_versionPolicyCacheKey);
   }
 }

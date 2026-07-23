@@ -94,6 +94,7 @@ export type SmartwatchHeartbeatDto = {
   batteryLevel?: number;
   signalStrength?: number;
   firmwareVersion?: string;
+  appVersion?: string;
   firmwareSignatureStatus?: FirmwareSignatureStatus;
 };
 
@@ -122,6 +123,43 @@ export type IssueSmartwatchPairingCodeDto = {
   pairingCode: string;
   firebaseEnv?: string;
 };
+
+export type AdminSmartwatchDeviceActionDto = {
+  reason?: string;
+  note?: string;
+};
+
+export type SmartwatchVersionPolicyDto = {
+  deviceSecret?: string;
+  currentVersion?: string;
+  versionCode?: number;
+  targetType?: string;
+  environment?: string;
+};
+
+export type SmartwatchDeviceSettingsPolicyDto = {
+  criticalAlertsMandatory?: boolean;
+  maxSosCountdownSeconds?: number;
+  displayNameLocked?: boolean;
+  connectionPreferenceLocked?: boolean;
+  approvedNotificationCategories?: string[];
+};
+
+export type SmartwatchDeviceSettingsDto = {
+  displayName?: string;
+  notificationCategories?: string[];
+  connectionPreference?: SmartwatchConnectivityMode;
+  sosCountdownSeconds?: number;
+  criticalAlertsEnabled?: boolean;
+  policy?: SmartwatchDeviceSettingsPolicyDto;
+};
+
+export type SmartwatchDeviceSettingsPatchDto = Partial<
+  Pick<
+    SmartwatchDeviceSettingsDto,
+    "displayName" | "notificationCategories" | "connectionPreference" | "sosCountdownSeconds" | "criticalAlertsEnabled"
+  >
+> & { deviceSecret?: string };
 
 const modes = new Set<string>(Object.values(SmartwatchConnectivityMode));
 const pairingMethods = new Set<string>(Object.values(SmartwatchPairingMethod));

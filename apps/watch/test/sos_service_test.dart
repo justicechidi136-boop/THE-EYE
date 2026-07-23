@@ -8,6 +8,8 @@ import 'package:the_eye_watch/services/connectivity_service.dart';
 import 'package:the_eye_watch/services/location_service.dart';
 import 'package:the_eye_watch/services/sos_service.dart';
 import 'package:the_eye_watch/services/vibration_service.dart';
+import 'package:the_eye_watch/storage/encrypted_offline_queue_store.dart';
+import 'package:the_eye_watch/services/emergency_foreground_service.dart';
 import 'package:the_eye_watch/storage/secure_credential_store.dart';
 
 class InMemoryPreferencesStore extends PreferencesStore {
@@ -40,16 +42,21 @@ void main() {
 
   test('offline SOS is queued when connectivity is offline', () async {
     final preferences = InMemoryPreferencesStore();
+    final offlineQueue = EncryptedOfflineQueueStore(
+      memory: {},
+      legacyPreferences: preferences,
+    );
     final connectivity = ConnectivityService(internetAvailable: false);
     final sos = _buildSosService(
       MockClient((_) async => http.Response('{}', 200)),
       preferences: preferences,
+      offlineQueue: offlineQueue,
       connectivity: connectivity,
       idGenerator: () => '11111111-1111-1111-1111-111111111111',
     );
 
     await sos.submitSos();
-    final queue = await preferences.loadOfflineQueue();
+    final queue = await offlineQueue.loadQueue();
     expect(queue, hasLength(1));
     expect(queue.first.type, OfflineEventType.sos);
     expect(queue.first.idempotencyKey, '11111111-1111-1111-1111-111111111111');
@@ -100,6 +107,7 @@ void main() {
 SosService _buildSosService(
   http.Client client, {
   PreferencesStore? preferences,
+  EncryptedOfflineQueueStore? offlineQueue,
   ConnectivityService? connectivity,
   String Function()? idGenerator,
 }) {
@@ -114,6 +122,8 @@ SosService _buildSosService(
     skipEnvGuard: true,
   );
   final prefs = preferences ?? InMemoryPreferencesStore();
+  final queue = offlineQueue ??
+      EncryptedOfflineQueueStore(memory: {}, legacyPreferences: prefs);
   final conn = connectivity ?? ConnectivityService(internetAvailable: true);
   var idCount = 0;
   return SosService(
@@ -128,6 +138,8 @@ SosService _buildSosService(
       positionProvider: () async => null,
     ),
     vibration: VibrationService(),
+    offlineQueue: queue,
+    emergencyForeground: EmergencyForegroundService(),
     idGenerator: idGenerator ??
         () {
           idCount += 1;

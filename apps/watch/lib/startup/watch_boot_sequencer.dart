@@ -74,7 +74,10 @@ class WatchBootSequencer {
       () async {
         await services.preferences.isPaired();
         await services.preferences.isLauncherOnboardingDismissed();
-        await services.preferences.loadOfflineQueue();
+        if (services.offlineQueue.isAvailable) {
+          await services.offlineQueue.loadQueue();
+        }
+        await services.settings.load();
       },
       stageTimeout,
       onTimeout: () => notes.add('Settings load slow'),
@@ -164,7 +167,13 @@ class WatchBootSequencer {
       WatchBootStage.pairingRestored.progress,
     );
     await _guarded(
-      () => services.startRuntimeServices(
+      () => services.versionCompatibility.evaluate(allowCached: true),
+      stageTimeout,
+      onTimeout: () => notes.add('Version policy timed out — cached policy used'),
+      onError: (e) => notes.add('Version policy unavailable'),
+    );
+    await _guarded(
+      () => services.initialize(
         firebaseReady: firebaseReady,
         pushTimeout: pushTimeout,
       ),

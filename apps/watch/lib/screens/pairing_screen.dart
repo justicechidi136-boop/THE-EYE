@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/pairing_state.dart';
@@ -131,7 +132,8 @@ class _PairingScreenState extends State<PairingScreen> {
             color: EyeColors.orange,
             onPressed: () => _showStandaloneDialog(context),
           ),
-          if (state.phase == PairingPhase.awaitingPhoneConfirmation) ...[
+          if (kDebugMode &&
+              state.phase == PairingPhase.awaitingPhoneConfirmation) ...[
             const SizedBox(height: 6),
             WatchOutlineButton(
               label: 'Simulate Paired (Dev)',

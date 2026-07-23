@@ -14,6 +14,9 @@ open class LauncherHomeActivity : FlutterActivity() {
 
     private val vibrationChannel = "com.theeye.watch/vibration"
     private val launcherChannel = "com.theeye.watch/launcher"
+    private val emergencyChannel = "com.theeye.watch/emergency"
+    private val companionChannel = "com.theeye.watch/companion"
+    private val crashChannel = "com.theeye.watch/crash"
 
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
         return FlutterEngineCache.getInstance().get(FLUTTER_ENGINE_ID)
@@ -46,6 +49,15 @@ open class LauncherHomeActivity : FlutterActivity() {
             .setMethodCallHandler(
                 LauncherChannelHandler(this, packageName),
             )
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, emergencyChannel)
+            .setMethodCallHandler(EmergencyServiceChannelHandler(this))
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, companionChannel)
+            .setMethodCallHandler(WearCompanionChannelHandler(this))
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, crashChannel)
+            .setMethodCallHandler(CrashRecoveryChannelHandler(this))
     }
 
     private fun vibrator(): Vibrator? {

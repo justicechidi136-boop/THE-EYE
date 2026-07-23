@@ -291,8 +291,100 @@ export async function fetchSmartwatchDevices(): Promise<SmartwatchDeviceView[]> 
 }
 
 export async function fetchSmartwatchDevice(id: string): Promise<SmartwatchDeviceView | null> {
-  const devices = await fetchSmartwatchDevices();
-  return devices.find((device) => device.id === id || device.deviceId === id) ?? null;
+  return fetchSmartwatchDeviceDetail(id);
+}
+
+export async function fetchSmartwatchDeviceDetail(id: string): Promise<SmartwatchDeviceView | null> {
+  return withToken(async (token) => {
+    try {
+      const response = await apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/admin/devices/${id}`, { token });
+      return toSmartwatchDeviceView(response.data);
+    } catch {
+      const devices = await fetchSmartwatchDevices();
+      return devices.find((device) => device.id === id || device.deviceId === id) ?? null;
+    }
+  }, null);
+}
+
+export type SmartwatchTelemetryView = {
+  batteryLevel: number | null;
+  signalStrength: number | null;
+  lastSeenAt: string | null;
+  lastGps: { lat: number | null; lng: number | null; accuracy: string | number | null };
+  stale: boolean;
+};
+
+export type SmartwatchAuditEntry = {
+  id: string;
+  action: string;
+  createdAt: string;
+};
+
+export type SmartwatchEmergencyHistoryEntry = {
+  id: string;
+  triggeredAt: string;
+  status: string;
+  incidentId: string | null;
+};
+
+export async function fetchSmartwatchDeviceTelemetry(id: string): Promise<SmartwatchTelemetryView | null> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/admin/devices/${id}/telemetry`, { token });
+    const data = response.data;
+    const lastGps = (data.lastGps as Record<string, unknown> | undefined) ?? {};
+    return {
+      batteryLevel: data.batteryLevel == null ? null : Number(data.batteryLevel),
+      signalStrength: data.signalStrength == null ? null : Number(data.signalStrength),
+      lastSeenAt: data.lastSeenAt ? String(data.lastSeenAt) : null,
+      lastGps: {
+        lat: lastGps.lat == null ? null : Number(lastGps.lat),
+        lng: lastGps.lng == null ? null : Number(lastGps.lng),
+        accuracy: lastGps.accuracy == null ? null : String(lastGps.accuracy),
+      },
+      stale: Boolean(data.stale),
+    };
+  }, null);
+}
+
+export async function fetchSmartwatchDeviceActiveIncident(id: string): Promise<{ incidentId: string | null } | null> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> | null }>(
+      `/smartwatch/admin/devices/${id}/active-incident`,
+      { token },
+    );
+    const incident = response.data?.incident as Record<string, unknown> | undefined;
+    return { incidentId: incident?.id ? String(incident.id) : null };
+  }, null);
+}
+
+export async function fetchSmartwatchDeviceEmergencyHistory(id: string): Promise<SmartwatchEmergencyHistoryEntry[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>(
+      `/smartwatch/admin/devices/${id}/emergency-history`,
+      { token },
+    );
+    return response.data.map((row) => ({
+      id: String(row.id),
+      triggeredAt: String(row.triggeredAt ?? row.createdAt ?? "-"),
+      status: String((row.incident as { status?: string } | undefined)?.status ?? row.status ?? "Unknown"),
+      incidentId: (row.incident as { id?: string } | undefined)?.id
+        ? String((row.incident as { id?: string }).id)
+        : row.incidentId
+          ? String(row.incidentId)
+          : null,
+    }));
+  }, []);
+}
+
+export async function fetchSmartwatchDeviceAudit(id: string): Promise<SmartwatchAuditEntry[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>(`/smartwatch/admin/devices/${id}/audit`, { token });
+    return response.data.map((row) => ({
+      id: String(row.id),
+      action: String(row.action ?? "unknown"),
+      createdAt: String(row.createdAt ?? "-"),
+    }));
+  }, []);
 }
 
 export async function fetchSosEvents(): Promise<SosEventView[]> {

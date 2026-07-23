@@ -7,6 +7,11 @@ class WatchAlert {
     this.incidentId,
     this.notificationId,
     this.acknowledged = false,
+    this.read = false,
+    this.dismissed = false,
+    this.expired = false,
+    this.category,
+    this.locationLabel,
     this.priority = 'High',
   });
 
@@ -17,9 +22,19 @@ class WatchAlert {
   final String? incidentId;
   final String? notificationId;
   final bool acknowledged;
+  final bool read;
+  final bool dismissed;
+  final bool expired;
+  final String? category;
+  final String? locationLabel;
   final String priority;
 
-  WatchAlert copyWith({bool? acknowledged}) {
+  WatchAlert copyWith({
+    bool? acknowledged,
+    bool? read,
+    bool? dismissed,
+    bool? expired,
+  }) {
     return WatchAlert(
       id: id,
       title: title,
@@ -28,6 +43,11 @@ class WatchAlert {
       incidentId: incidentId,
       notificationId: notificationId,
       acknowledged: acknowledged ?? this.acknowledged,
+      read: read ?? this.read,
+      dismissed: dismissed ?? this.dismissed,
+      expired: expired ?? this.expired,
+      category: category,
+      locationLabel: locationLabel,
       priority: priority,
     );
   }
@@ -40,6 +60,11 @@ class WatchAlert {
         'incidentId': incidentId,
         'notificationId': notificationId,
         'acknowledged': acknowledged,
+        'read': read,
+        'dismissed': dismissed,
+        'expired': expired,
+        'category': category,
+        'locationLabel': locationLabel,
         'priority': priority,
       };
 
@@ -52,6 +77,31 @@ class WatchAlert {
       incidentId: json['incidentId'] as String?,
       notificationId: json['notificationId'] as String?,
       acknowledged: json['acknowledged'] as bool? ?? false,
+      read: json['read'] as bool? ?? false,
+      dismissed: json['dismissed'] as bool? ?? false,
+      expired: json['expired'] as bool? ?? false,
+      category: json['category'] as String?,
+      locationLabel: json['locationLabel'] as String?,
+      priority: json['priority'] as String? ?? 'High',
+    );
+  }
+
+  factory WatchAlert.fromApiJson(Map<String, dynamic> json) {
+    return WatchAlert(
+      id: json['id'] as String? ?? json['notificationId'] as String? ?? '',
+      title: json['title'] as String? ?? 'THE EYE Alert',
+      body: json['body'] as String? ?? '',
+      receivedAt: DateTime.tryParse(json['receivedAt'] as String? ?? '') ??
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      incidentId: json['incidentId'] as String?,
+      notificationId: json['notificationId'] as String? ?? json['id'] as String?,
+      acknowledged: json['acknowledged'] as bool? ?? false,
+      read: json['read'] as bool? ?? json['isRead'] as bool? ?? false,
+      dismissed: json['dismissed'] as bool? ?? false,
+      expired: json['expired'] as bool? ?? false,
+      category: json['category'] as String? ?? json['type'] as String?,
+      locationLabel: json['locationLabel'] as String?,
       priority: json['priority'] as String? ?? 'High',
     );
   }

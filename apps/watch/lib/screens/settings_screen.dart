@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../config/watch_flavor.dart';
+import '../models/connectivity_mode.dart';
 import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
+import '../storage/watch_settings_store.dart';
 import '../theme/eye_colors.dart';
 import '../widgets/watch_ui.dart';
 import 'routes.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     required this.services,
@@ -18,29 +20,81 @@ class SettingsScreen extends StatelessWidget {
   final LauncherService launcher;
 
   @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  WatchSettings? _settings;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final settings = await widget.services.settings.load();
+    if (!mounted) return;
+    setState(() => _settings = settings);
+    widget.services.vibration.setEnabled(settings.vibrationEnabled);
+    widget.services.connectivity.update(
+      failoverEnabled: settings.failoverEnabled,
+      preferredMode: settings.preferredConnectionMode == 'standaloneCellular'
+          ? WatchConnectivityMode.standaloneCellular
+          : WatchConnectivityMode.pairedPhone,
+    );
+  }
+
+  Future<void> _save(WatchSettings next) async {
+    await widget.services.settings.save(next);
+    setState(() => _settings = next);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final settings = _settings;
     return WatchScreenShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const WatchSectionTitle('Settings'),
-          _SettingToggle(
-            label: 'Vibration',
-            value: true,
-            onChanged: services.vibration.setEnabled,
-          ),
-          _SettingToggle(
-            label: 'Failover to LTE',
-            value: services.connectivity.failoverEnabled,
-            onChanged: (value) {
-              services.connectivity.update(failoverEnabled: value);
-            },
-          ),
+          if (settings == null)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('Loading settings…', style: TextStyle(color: EyeColors.muted)),
+            )
+          else ...[
+            _SettingToggle(
+              label: 'Vibration',
+              value: settings.vibrationEnabled,
+              onChanged: (value) => _save(settings.copyWith(vibrationEnabled: value)),
+            ),
+            _SettingToggle(
+              label: 'Failover to LTE',
+              value: settings.failoverEnabled,
+              onChanged: (value) =>
+                  _save(settings.copyWith(failoverEnabled: value)),
+            ),
+            _SettingToggle(
+              label: 'Diagnostic display',
+              value: settings.diagnosticDisplay,
+              onChanged: (value) =>
+                  _save(settings.copyWith(diagnosticDisplay: value)),
+            ),
+          ],
           const SizedBox(height: 8),
           WatchOutlineButton(
-            label: 'Alert Radius',
-            onPressed: () =>
-                Navigator.pushNamed(context, WatchRoutes.settingsRadius),
+            label: 'Alert Radius (${settings?.alertRadiusMeters ?? 500}m)',
+            onPressed: () async {
+              final radius = await Navigator.pushNamed<int>(
+                context,
+                WatchRoutes.settingsRadius,
+                arguments: settings?.alertRadiusMeters ?? 500,
+              );
+              if (radius != null && settings != null) {
+                await _save(settings.copyWith(alertRadiusMeters: radius));
+              }
+            },
           ),
           const SizedBox(height: 6),
           WatchOutlineButton(
@@ -70,46 +124,22 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 6),
             WatchOutlineButton(
               label: 'Change Default Home',
-              onPressed: launcher.openHomeSettings,
+              onPressed: widget.launcher.openHomeSettings,
             ),
           ],
           const SizedBox(height: 6),
           WatchOutlineButton(
             label: 'System Settings',
-            onPressed: launcher.openSystemSettings,
-          ),
-          const Spacer(),
-          WatchPrimaryButton(
-            label: 'Re-pair Device',
-            color: EyeColors.orange,
-            onPressed: () async {
-              await services.push.revokeToken();
-              await services.pairing.unpair();
-              if (!context.mounted) return;
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                WatchRoutes.pairing,
-                (route) => false,
-              );
-            },
+            onPressed: widget.launcher.openSystemSettings,
           ),
           const SizedBox(height: 6),
-          WatchPrimaryButton(
-            label: 'Unpair & Wipe',
-            color: EyeColors.danger,
+          WatchOutlineButton(
+            label: 'Reset settings',
             onPressed: () async {
-              await services.push.revokeToken();
-              await services.pairing.unpair();
-              await services.credentials.wipe();
-              if (!context.mounted) return;
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                WatchRoutes.pairing,
-                (route) => false,
-              );
+              await widget.services.settings.resetToDefaults();
+              await _load();
             },
           ),
-          const SizedBox(height: 8),
         ],
       ),
     );
@@ -129,20 +159,11 @@ class _SettingToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 12)),
-          Switch(
-            value: value,
-            activeThumbColor: EyeColors.green,
-            onChanged: onChanged,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ],
-      ),
+    return SwitchListTile(
+      title: Text(label, style: const TextStyle(color: EyeColors.white, fontSize: 13)),
+      value: value,
+      activeThumbColor: EyeColors.green,
+      onChanged: onChanged,
     );
   }
 }

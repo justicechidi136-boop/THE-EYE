@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
+import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchConnectivityMode, SmartwatchPairingMethod } from "@the-eye/shared";
 import { randomToken, hashToken } from "../../common/auth/crypto";
 import { signJwt, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret } from "../../common/auth/jwt-secrets";
@@ -30,7 +30,20 @@ import {
   validateSmartwatchGpsDto,
   validateSmartwatchSosDto,
   validateSmartwatchStatusDto,
+  SmartwatchDeviceSettingsDto,
+  SmartwatchDeviceSettingsPatchDto,
 } from "./dto/smartwatch.dto";
+
+type SmartwatchDeviceOperation =
+  | "pairing"
+  | "telemetry"
+  | "push_register"
+  | "settings_read"
+  | "settings_write"
+  | "sos_emergency"
+  | "emergency_gps"
+  | "notifications"
+  | "offline_sync";
 
 const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
 
@@ -48,6 +61,11 @@ export class SmartwatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can pair smartwatch devices");
     validateRegisterSmartwatchDeviceDto(dto);
     await this.assertValidPairingCode(dto);
+
+    const existing = await this.prisma.smartwatchDevice.findUnique({ where: { deviceId: dto.deviceId } });
+    if (existing) {
+      await this.assertDeviceOperationAllowed(existing, "pairing");
+    }
 
     const deviceSecret = randomToken(32);
     const device = await this.prisma.smartwatchDevice.upsert({
@@ -265,6 +283,7 @@ export class SmartwatchService {
   async heartbeat(deviceLookup: string, dto: SmartwatchHeartbeatDto, actor?: JwtPayload) {
     validateHeartbeatDto(dto);
     const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
+    await this.assertDeviceOperationAllowed(device, "telemetry");
     const nextMode = this.resolveMode(device as any, dto);
     const updated = await this.prisma.smartwatchDevice.update({
       where: { id: device.id },
@@ -280,6 +299,7 @@ export class SmartwatchService {
           pairedPhoneAvailable: dto.pairedPhoneAvailable ?? null,
           internetAvailable: dto.internetAvailable ?? null,
           failover: nextMode !== (device as any).connectivityMode,
+          appVersion: dto.appVersion ?? null,
         },
       } as never,
     });
@@ -289,6 +309,10 @@ export class SmartwatchService {
   async recordGps(deviceIdOrPublicId: string, dto: SmartwatchGpsDto, actor?: JwtPayload) {
     validateSmartwatchGpsDto(dto);
     const device = await this.findAuthorizedDevice(deviceIdOrPublicId, dto.deviceSecret, actor);
+    await this.assertDeviceOperationAllowed(
+      device,
+      dto.sosEventId ? "emergency_gps" : "telemetry",
+    );
     const capturedAt = dto.capturedAt ? new Date(dto.capturedAt) : new Date();
     const sourceMode = dto.sourceMode ?? (device as any).connectivityMode ?? "PairedPhone";
 
@@ -334,6 +358,7 @@ export class SmartwatchService {
     const lookup = dto.deviceId ?? dto.sourceDeviceId;
     if (!lookup) throw new UnauthorizedException("deviceId is required for smartwatch SOS");
     const device = await this.findAuthorizedDevice(lookup, dto.deviceSecret, actor);
+    await this.assertDeviceOperationAllowed(device, "sos_emergency");
     const sourceMode = dto.sourceMode ?? (device as any).connectivityMode ?? "PairedPhone";
     const metadata = dto.metadata as Record<string, unknown> | undefined;
     const clientSubmissionId =
@@ -438,6 +463,16 @@ export class SmartwatchService {
   async syncOfflineEvents(deviceLookup: string, dto: SmartwatchOfflineSyncDto, actor?: JwtPayload) {
     validateOfflineSyncDto(dto);
     const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
+    const security = this.deviceSecurityStatus(device);
+    if (security) {
+      const blocked = dto.events.filter((event) => String(event.eventType).toLowerCase() !== "sos");
+      if (blocked.length) {
+        await this.denyDeviceOperation(device, "offline_sync", security.toLowerCase(), actor);
+        throw new ForbiddenException("Lost or stolen devices may only upload emergency SOS events");
+      }
+    } else {
+      await this.assertDeviceOperationAllowed(device, "telemetry", actor);
+    }
     const created = await Promise.all(dto.events.map((event) =>
       (this.prisma as any).smartwatchOfflineEvent.create({
         data: {
@@ -509,6 +544,367 @@ export class SmartwatchService {
     };
   }
 
+  async adminDevice(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view smartwatch devices");
+    const device = await this.prisma.smartwatchDevice.findUnique({
+      where: { id },
+      include: {
+        user: { include: { profile: true } },
+        sosEvents: { orderBy: { triggeredAt: "desc" }, take: 10 },
+      },
+    });
+    if (!device || !this.adminCanAccessUserProfile(device.user?.profile, actor)) {
+      throw new NotFoundException("Smartwatch device not found");
+    }
+    return { data: device };
+  }
+
+  async listAdminFirmware(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list firmware releases");
+    const releases = await (this.prisma as any).smartwatchFirmwareRelease.findMany({
+      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+      take: 50,
+    });
+    return { data: releases };
+  }
+
+  async recordTelemetry(deviceLookup: string, dto: SmartwatchHeartbeatDto, actor?: JwtPayload) {
+    return this.heartbeat(deviceLookup, dto, actor);
+  }
+
+  async registerDevicePushToken(
+    deviceLookup: string,
+    dto: { deviceSecret: string; token: string; platform?: string; provider?: string; appEnvironment?: string },
+  ) {
+    if (!dto.deviceSecret?.trim()) throw new BadRequestException("deviceSecret is required");
+    if (!dto.token?.trim()) throw new BadRequestException("token is required");
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret);
+    if (!device.userId) throw new ForbiddenException("Device is not paired to a user");
+    await this.assertDeviceOperationAllowed(device, "push_register");
+    const expectedEnvironment = this.defaultFirebaseEnv();
+    if (dto.appEnvironment && dto.appEnvironment !== expectedEnvironment) {
+      throw new ForbiddenException(`Push tokens must be registered for ${expectedEnvironment}`);
+    }
+    await this.notifications.registerPushTokenForUser(device.userId, {
+      token: dto.token,
+      platform: (dto.platform ?? "android_watch") as "android_watch",
+      provider: dto.provider ?? "firebase-cloud-messaging",
+      deviceId: device.deviceId,
+      appEnvironment: (dto.appEnvironment ?? expectedEnvironment) as "development" | "staging" | "production",
+    });
+    return { registered: true };
+  }
+
+  async deactivateDevicePushTokens(deviceLookup: string, dto: { deviceSecret: string }) {
+    if (!dto.deviceSecret?.trim()) throw new BadRequestException("deviceSecret is required");
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret);
+    if (device.userId) {
+      await this.notifications.deactivatePushTokensForDevice(device.userId, device.deviceId);
+    }
+    return { deactivated: true };
+  }
+
+  async acknowledgeNotificationForDevice(
+    deviceLookup: string,
+    notificationId: string,
+    dto: { deviceSecret: string; source?: "foreground" | "background" | "opened" | "watch_ack" },
+  ) {
+    if (!dto.deviceSecret?.trim()) throw new BadRequestException("deviceSecret is required");
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret);
+    if (!device.userId) throw new ForbiddenException("Device is not paired to a user");
+    return this.notifications.recordDeviceReceivedForUser(
+      device.userId,
+      notificationId,
+      dto.source ?? "watch_ack",
+    );
+  }
+
+  async revokeDevice(id: string, actor: JwtPayload, dto?: { reason?: string }) {
+    const device = await this.prisma.smartwatchDevice.findUnique({ where: { id } });
+    if (!device) throw new NotFoundException("Smartwatch device not found");
+    if (actor.typ === "admin" && !this.adminCanAccessUserProfile((device as any).user?.profile, actor)) {
+      throw new ForbiddenException("Smartwatch device is outside your scope");
+    }
+    if (actor.typ === "admin" && !dto?.reason?.trim()) {
+      throw new BadRequestException("reason is required to revoke a device");
+    }
+    const deactivated = await this.deactivateDevice(id, actor);
+    if (actor.typ === "admin") {
+      if (device?.userId) {
+        await this.notifications.deactivatePushTokensForDevice(device.userId, device.deviceId);
+      }
+      await this.prisma.smartwatchDevice.update({
+        where: { id },
+        data: {
+          deviceSecretHash: null,
+          isOnline: false,
+          metadata: {
+            ...(((device as any).metadata ?? {}) as Record<string, unknown>),
+            revokedAt: new Date().toISOString(),
+            revokeReason: dto?.reason ?? null,
+          },
+        } as never,
+      });
+      await this.audit(actor, "smartwatch.device_revoked", "smartwatch_devices", id, {
+        deviceId: device?.deviceId,
+        reason: dto?.reason ?? null,
+      });
+    }
+    return deactivated;
+  }
+
+  async adminDeviceAction(id: string, action: string, dto: { reason?: string; note?: string }, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can manage smartwatch devices");
+    const device = await this.prisma.smartwatchDevice.findUnique({
+      where: { id },
+      include: { user: { include: { profile: true } } },
+    });
+    if (!device || !this.adminCanAccessUserProfile(device.user?.profile, actor)) {
+      throw new NotFoundException("Smartwatch device not found");
+    }
+
+    const metadata = { ...(((device as any).metadata ?? {}) as Record<string, unknown>) };
+    const auditMeta: Record<string, unknown> = { deviceId: device.deviceId, action };
+
+    switch (action) {
+      case "revoke":
+        return this.revokeDevice(id, actor, { reason: dto.reason });
+      case "unpair":
+        return this.unpairDevice(id, actor);
+      case "mark-lost":
+      case "mark-stolen":
+        if (!dto.reason?.trim()) throw new BadRequestException("reason is required");
+        metadata.securityStatus = action === "mark-lost" ? "Lost" : "Stolen";
+        metadata.securityReason = dto.reason;
+        metadata.securityMarkedAt = new Date().toISOString();
+        auditMeta.reason = dto.reason;
+        break;
+      case "clear-security":
+        metadata.securityStatus = null;
+        metadata.securityReason = null;
+        metadata.securityMarkedAt = null;
+        metadata.securityClearedAt = new Date().toISOString();
+        break;
+      case "require-re-pair":
+        metadata.requireRePair = true;
+        metadata.requireRePairAt = new Date().toISOString();
+        break;
+      case "deactivate-push":
+        if (device.userId) {
+          await this.notifications.deactivatePushTokensForDevice(device.userId, device.deviceId);
+        }
+        return { deactivated: true };
+      default:
+        throw new BadRequestException("Unsupported admin device action");
+    }
+
+    const updated = await this.prisma.smartwatchDevice.update({
+      where: { id },
+      data: { metadata } as never,
+    });
+    await this.audit(actor, `smartwatch.device_${action.replace(/-/g, "_")}`, "smartwatch_devices", id, auditMeta);
+    return { data: updated };
+  }
+
+  async adminDeviceAudit(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view device audit history");
+    const device = await this.prisma.smartwatchDevice.findUnique({
+      where: { id },
+      include: { user: { include: { profile: true } } },
+    });
+    if (!device || !this.adminCanAccessUserProfile(device.user?.profile, actor)) {
+      throw new NotFoundException("Smartwatch device not found");
+    }
+    const logs = await (this.prisma as any).auditLog.findMany({
+      where: { entityType: "smartwatch_devices", entityId: id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    return {
+      data: logs.map((log: Record<string, unknown>) => ({
+        id: log.id,
+        action: log.action,
+        createdAt: log.createdAt,
+        metadata: log.metadata,
+      })),
+    };
+  }
+
+  async adminDeviceTelemetry(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view device telemetry");
+    const device = await this.prisma.smartwatchDevice.findUnique({
+      where: { id },
+      include: { user: { include: { profile: true } } },
+    });
+    if (!device || !this.adminCanAccessUserProfile(device.user?.profile, actor)) {
+      throw new NotFoundException("Smartwatch device not found");
+    }
+    const stale = device.lastSeenAt
+      ? Date.now() - new Date(device.lastSeenAt).getTime() > 15 * 60 * 1000
+      : true;
+    return {
+      data: {
+        batteryLevel: (device as any).batteryLevel ?? null,
+        signalStrength: (device as any).signalStrength ?? null,
+        lastSeenAt: device.lastSeenAt,
+        lastGps: {
+          lat: (device as any).lastLatitude ?? null,
+          lng: (device as any).lastLongitude ?? null,
+          accuracy: (device as any).lastGpsAccuracy ?? null,
+        },
+        stale,
+      },
+    };
+  }
+
+  async adminDeviceActiveIncident(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view active incidents");
+    const device = await this.prisma.smartwatchDevice.findUnique({
+      where: { id },
+      include: { user: { include: { profile: true } } },
+    });
+    if (!device || !this.adminCanAccessUserProfile(device.user?.profile, actor)) {
+      throw new NotFoundException("Smartwatch device not found");
+    }
+    const event = await this.prisma.sosEvent.findFirst({
+      where: {
+        deviceId: device.id,
+        incident: { status: { notIn: ["Resolved", "Closed", "FalseReport"] } },
+      },
+      include: { incident: true },
+      orderBy: { triggeredAt: "desc" },
+    });
+    return { data: event ?? null };
+  }
+
+  async adminDeviceEmergencyHistory(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view SOS history");
+    const device = await this.prisma.smartwatchDevice.findUnique({
+      where: { id },
+      include: { user: { include: { profile: true } } },
+    });
+    if (!device || !this.adminCanAccessUserProfile(device.user?.profile, actor)) {
+      throw new NotFoundException("Smartwatch device not found");
+    }
+    const events = await this.prisma.sosEvent.findMany({
+      where: { deviceId: device.id },
+      include: { incident: true },
+      orderBy: { triggeredAt: "desc" },
+      take: 20,
+    });
+    return { data: events };
+  }
+
+  compareSemver(a: string, b: string) {
+    const pa = a.split("+")[0].split(".").map((part) => Number(part) || 0);
+    const pb = b.split("+")[0].split(".").map((part) => Number(part) || 0);
+    while (pa.length < 3) pa.push(0);
+    while (pb.length < 3) pb.push(0);
+    for (let i = 0; i < 3; i += 1) {
+      if (pa[i] !== pb[i]) return pa[i] > pb[i] ? 1 : -1;
+    }
+    return 0;
+  }
+
+  async versionPolicy(
+    deviceLookup: string,
+    dto: { deviceSecret?: string; currentVersion?: string; versionCode?: number; targetType?: string; environment?: string },
+    actor?: JwtPayload,
+  ) {
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
+    const env = this.defaultFirebaseEnv();
+    const release = await (this.prisma as any).smartwatchFirmwareRelease.findFirst({
+      where: { status: "Published" },
+      orderBy: { publishedAt: "desc" },
+    });
+    const minimumSupportedVersion = release?.minimumSupportedVersion ?? "0.1.0";
+    const recommendedVersion = release?.version ?? dto.currentVersion ?? "0.1.0";
+    const currentVersion = dto.currentVersion ?? (device as any).firmwareVersion ?? "0.0.0";
+    let updateStatus: "Supported" | "UpdateRecommended" | "UpdateRequired" | "ApiIncompatible" = "Supported";
+    if (this.compareSemver(currentVersion, minimumSupportedVersion) < 0) {
+      updateStatus = "UpdateRequired";
+    } else if (release && this.compareSemver(currentVersion, recommendedVersion) < 0) {
+      updateStatus = "UpdateRecommended";
+    }
+    const downloadUrl = release?.downloadUrl ?? null;
+    if (downloadUrl && !/^https:\/\/.+/i.test(downloadUrl)) {
+      throw new BadRequestException("Firmware download URL must use HTTPS");
+    }
+    return {
+      data: {
+        environment: dto.environment ?? env,
+        targetType: dto.targetType ?? "watch",
+        currentVersion,
+        minimumSupportedVersion,
+        recommendedVersion,
+        updateStatus,
+        downloadUrl,
+        fileHash: release?.fileHash ?? null,
+        signature: release?.signature ?? null,
+        versionCodeMinimum: release?.versionCodeMinimum ?? null,
+      },
+    };
+  }
+
+  async listDeviceNotifications(
+    deviceLookup: string,
+    dto: { deviceSecret?: string },
+    query: { cursor?: string; limit?: string },
+  ) {
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret);
+    if (!device.userId) throw new ForbiddenException("Device is not paired to a user");
+    await this.assertDeviceOperationAllowed(device, "notifications");
+    const limit = Math.min(Number(query.limit ?? 20) || 20, 50);
+    const notifications = await this.prisma.notification.findMany({
+      where: {
+        userId: device.userId,
+        channel: { in: ["watch_push", "push", "in_app"] as never[] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit + 1,
+      ...(query.cursor
+        ? { cursor: { id: query.cursor }, skip: 1 }
+        : {}),
+    });
+    const page = notifications.slice(0, limit);
+    const hasMore = notifications.length > limit;
+    return {
+      data: page.map((row) => ({
+        id: row.id,
+        notificationId: row.id,
+        title: row.title,
+        body: row.body,
+        priority: row.priority,
+        type: row.type,
+        category: row.type,
+        incidentId: row.incidentId,
+        createdAt: row.createdAt,
+        receivedAt: row.createdAt,
+        read: !!row.readAt,
+        acknowledged: row.status === "Read" || !!row.readAt,
+        expired: false,
+      })),
+      hasMore,
+      nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+      limit,
+    };
+  }
+
+  async markNotificationReadForDevice(deviceLookup: string, notificationId: string, dto: { deviceSecret?: string }) {
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret);
+    if (!device.userId) throw new ForbiddenException("Device is not paired to a user");
+    await this.assertDeviceOperationAllowed(device, "notifications");
+    const notification = await this.prisma.notification.findFirst({
+      where: { id: notificationId, userId: device.userId },
+    });
+    if (!notification) throw new NotFoundException("Notification not found");
+    await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: { readAt: new Date(), status: "Read" as never },
+    });
+    return { read: true };
+  }
+
   private adminCanAccessUserProfile(
     profile: { country?: string | null; state?: string | null; lga?: string | null } | null | undefined,
     actor: JwtPayload,
@@ -518,6 +914,169 @@ export class SmartwatchService {
       { country: profile.country ?? "", state: profile.state ?? "", lga: profile.lga ?? "", assignedAgencyId: null },
       actor,
     );
+  }
+
+  async getDeviceSettings(
+    deviceLookup: string,
+    dto: { deviceSecret?: string },
+    actor?: JwtPayload,
+  ) {
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
+    await this.assertDeviceOperationAllowed(device, "settings_read", actor);
+    return { data: this.buildDeviceSettingsDto(device) };
+  }
+
+  async patchDeviceSettings(
+    deviceLookup: string,
+    dto: SmartwatchDeviceSettingsPatchDto & { deviceSecret?: string },
+    actor?: JwtPayload,
+  ) {
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
+    await this.assertDeviceOperationAllowed(device, "settings_write", actor);
+
+    const metadata = { ...(((device as any).metadata ?? {}) as Record<string, unknown>) };
+    const stored = { ...(((metadata.deviceSettings ?? {}) as Record<string, unknown>)) };
+    const policy = { ...(((metadata.adminPolicyOverrides ?? {}) as Record<string, unknown>)) };
+
+    if (dto.displayName !== undefined) {
+      if (policy.displayNameLocked === true) {
+        throw new ForbiddenException("Display name is locked by admin policy");
+      }
+      stored.displayName = dto.displayName;
+    }
+    if (dto.notificationCategories !== undefined) {
+      stored.notificationCategories = dto.notificationCategories;
+    }
+    if (dto.connectionPreference !== undefined) {
+      if (policy.connectionPreferenceLocked === true) {
+        throw new ForbiddenException("Connection preference is locked by admin policy");
+      }
+      stored.connectionPreference = dto.connectionPreference;
+    }
+    if (dto.sosCountdownSeconds !== undefined) {
+      const max = typeof policy.maxSosCountdownSeconds === "number" ? policy.maxSosCountdownSeconds : 10;
+      stored.sosCountdownSeconds = Math.min(Math.max(1, dto.sosCountdownSeconds), max);
+    }
+    if (dto.criticalAlertsEnabled !== undefined) {
+      if (policy.criticalAlertsMandatory === true && dto.criticalAlertsEnabled === false) {
+        throw new ForbiddenException("Critical alerts are mandatory for this device");
+      }
+      stored.criticalAlertsEnabled = dto.criticalAlertsEnabled;
+    }
+
+    metadata.deviceSettings = stored;
+    const updated = await this.prisma.smartwatchDevice.update({
+      where: { id: device.id },
+      data: {
+        displayName: stored.displayName as string | undefined ?? (device as any).displayName,
+        preferredMode: stored.connectionPreference as string | undefined ?? (device as any).preferredMode,
+        criticalAlertsEnabled: stored.criticalAlertsEnabled as boolean | undefined ?? (device as any).criticalAlertsEnabled,
+        metadata,
+      } as never,
+    });
+
+    await this.audit(actor ?? ({ sub: device.userId ?? "system", typ: "user" } as JwtPayload), "smartwatch.device_settings_updated", "smartwatch_devices", device.id, {
+      fields: Object.keys(dto).filter((key) => key !== "deviceSecret"),
+    });
+    return { data: this.buildDeviceSettingsDto(updated) };
+  }
+
+  private buildDeviceSettingsDto(device: Record<string, unknown>): SmartwatchDeviceSettingsDto {
+    const metadata = ((device.metadata ?? {}) as Record<string, unknown>);
+    const stored = ((metadata.deviceSettings ?? {}) as Record<string, unknown>);
+    const policy = ((metadata.adminPolicyOverrides ?? {}) as Record<string, unknown>);
+    return {
+      displayName: (stored.displayName as string | undefined) ?? (device.displayName as string | undefined),
+      notificationCategories: (stored.notificationCategories as string[] | undefined) ?? [],
+      connectionPreference: (stored.connectionPreference as SmartwatchConnectivityMode | undefined)
+        ?? (device.preferredMode as SmartwatchConnectivityMode | undefined)
+        ?? SmartwatchConnectivityMode.PairedPhone,
+      sosCountdownSeconds: (stored.sosCountdownSeconds as number | undefined)
+        ?? ((metadata.sosDefaults as Record<string, unknown> | undefined)?.countdown as number | undefined)
+        ?? 3,
+      criticalAlertsEnabled: (stored.criticalAlertsEnabled as boolean | undefined)
+        ?? (device.criticalAlertsEnabled as boolean | undefined)
+        ?? true,
+      policy: {
+        criticalAlertsMandatory: policy.criticalAlertsMandatory === true,
+        maxSosCountdownSeconds: typeof policy.maxSosCountdownSeconds === "number" ? policy.maxSosCountdownSeconds : undefined,
+        displayNameLocked: policy.displayNameLocked === true,
+        connectionPreferenceLocked: policy.connectionPreferenceLocked === true,
+        approvedNotificationCategories: (policy.approvedNotificationCategories as string[] | undefined) ?? [],
+      },
+    };
+  }
+
+  private deviceSecurityStatus(device: Record<string, unknown>): "Lost" | "Stolen" | null {
+    const status = ((device.metadata ?? {}) as Record<string, unknown>).securityStatus;
+    if (status === "Lost" || status === "Stolen") return status;
+    return null;
+  }
+
+  private deviceRequiresRePair(device: Record<string, unknown>): boolean {
+    return Boolean(((device.metadata ?? {}) as Record<string, unknown>).requireRePair);
+  }
+
+  private deviceIsRevoked(device: Record<string, unknown>): boolean {
+    return !(device.deviceSecretHash as string | null | undefined);
+  }
+
+  private async assertDeviceOperationAllowed(
+    device: { id: string; deviceId: string; userId?: string | null; metadata?: unknown; deviceSecretHash?: string | null },
+    operation: SmartwatchDeviceOperation,
+    actor?: JwtPayload,
+  ) {
+    if (actor?.typ === "admin") return;
+
+    if (this.deviceIsRevoked(device)) {
+      await this.denyDeviceOperation(device, operation, "revoked", actor);
+      throw new ForbiddenException("Device access has been revoked");
+    }
+
+    if (operation === "settings_read") return;
+
+    if (operation === "sos_emergency" || operation === "emergency_gps") return;
+
+    const security = this.deviceSecurityStatus(device as Record<string, unknown>);
+    const requireRePair = this.deviceRequiresRePair(device as Record<string, unknown>);
+
+    if (operation === "pairing") {
+      if (security || requireRePair) {
+        await this.denyDeviceOperation(device, operation, security ? security.toLowerCase() : "require_re_pair", actor);
+        throw new ForbiddenException("Device cannot pair without admin clearance");
+      }
+      return;
+    }
+
+    if (security || requireRePair) {
+      await this.denyDeviceOperation(
+        device,
+        operation,
+        security ? security.toLowerCase() : "require_re_pair",
+        actor,
+      );
+      throw new ForbiddenException(
+        security
+          ? `${security} devices cannot perform this operation`
+          : "Device requires admin re-pair clearance",
+      );
+    }
+  }
+
+  private async denyDeviceOperation(
+    device: { id: string; deviceId: string; userId?: string | null },
+    operation: string,
+    reason: string,
+    actor?: JwtPayload,
+  ) {
+    await this.auditService.record({
+      actor: actor ?? ({ sub: device.userId ?? "system", typ: "user" } as JwtPayload),
+      actorType: actor ? undefined : "device",
+      action: "smartwatch.device_operation_denied",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      metadata: { operation, reason },
+    });
   }
 
   async firmwareCheck(deviceLookup: string, dto: { deviceSecret?: string; currentVersion?: string }, actor?: JwtPayload) {
@@ -585,6 +1144,7 @@ export class SmartwatchService {
 
     if (actor?.typ === "admin") return device;
     if (!deviceSecret || (device as any).deviceSecretHash !== hashToken(deviceSecret)) throw new UnauthorizedException("Valid device secret is required");
+    if (!(device as any).deviceSecretHash) throw new UnauthorizedException("Device credentials are revoked");
     return device;
   }
 

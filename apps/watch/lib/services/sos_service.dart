@@ -9,8 +9,11 @@ import '../models/connectivity_mode.dart';
 import '../models/emergency_mode.dart';
 import '../models/offline_event.dart';
 import '../models/sos_event.dart';
+import '../pairing/watch_companion_transport.dart';
+import '../storage/encrypted_offline_queue_store.dart';
 import '../storage/secure_credential_store.dart';
 import 'connectivity_service.dart';
+import 'emergency_foreground_service.dart';
 import 'location_service.dart';
 import 'vibration_service.dart';
 
@@ -22,23 +25,28 @@ class SosService {
     required ConnectivityService connectivity,
     required LocationService location,
     required VibrationService vibration,
+    EncryptedOfflineQueueStore? offlineQueue,
+    EmergencyForegroundService? emergencyForeground,
     String Function()? idGenerator,
     this.holdDurationMs = 3000,
     this.tickIntervalMs = 100,
   })  : _api = api,
         _credentials = credentials,
-        _preferences = preferences,
         _connectivity = connectivity,
         _location = location,
         _vibration = vibration,
+        _offlineQueue = offlineQueue ??
+            EncryptedOfflineQueueStore(legacyPreferences: preferences),
+        _emergencyForeground = emergencyForeground ?? EmergencyForegroundService(),
         _idGenerator = idGenerator ?? (() => const Uuid().v4());
 
   final WatchApiClient _api;
   final SecureCredentialStore _credentials;
-  final PreferencesStore _preferences;
   final ConnectivityService _connectivity;
   final LocationService _location;
   final VibrationService _vibration;
+  final EncryptedOfflineQueueStore _offlineQueue;
+  final EmergencyForegroundService _emergencyForeground;
   final String Function() _idGenerator;
 
   final int holdDurationMs;
@@ -177,6 +185,9 @@ class SosService {
 
     if (_connectivity.activeMode == WatchConnectivityMode.offline) {
       await _enqueueOfflineSos(payload, idempotencyKey);
+      await _emergencyForeground.start(
+        silent: emergencyMode == WatchEmergencyMode.silentSos,
+      );
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.failed,
         errorMessage: 'Queued offline — will retry when connected',
@@ -194,6 +205,11 @@ class SosService {
       final incidentId = incident?['id'] as String?;
 
       _location.startEmergencyTracking(sosEventId: sosEventId);
+      await _emergencyForeground.start(
+        sosEventId: sosEventId,
+        incidentId: incidentId,
+        silent: emergencyMode == WatchEmergencyMode.silentSos,
+      );
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.active,
         sosEventId: sosEventId,
@@ -207,6 +223,9 @@ class SosService {
       }
     } catch (error) {
       await _enqueueOfflineSos(payload, idempotencyKey);
+      await _emergencyForeground.start(
+        silent: emergencyMode == WatchEmergencyMode.silentSos,
+      );
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.failed,
         errorMessage: error.toString(),
@@ -219,7 +238,10 @@ class SosService {
     Map<String, dynamic> payload,
     String idempotencyKey,
   ) async {
-    final queue = await _preferences.loadOfflineQueue();
+    if (!_offlineQueue.isAvailable) {
+      throw StateError('Encrypted offline queue unavailable');
+    }
+    final queue = await _offlineQueue.loadQueue();
     if (queue.any((event) => event.idempotencyKey == idempotencyKey)) return;
     if (_submittedIdempotencyKeys.contains(idempotencyKey)) return;
     queue.add(OfflineEvent(
@@ -229,7 +251,16 @@ class SosService {
       occurredAt: DateTime.now(),
       idempotencyKey: idempotencyKey,
     ));
-    await _preferences.saveOfflineQueue(queue);
+    await _offlineQueue.saveQueue(queue);
+  }
+
+  Future<void> restoreEmergencyAfterBoot() async {
+    await _emergencyForeground.restoreAfterBoot();
+    if (!_offlineQueue.isAvailable) return;
+    final queue = await _offlineQueue.loadQueue();
+    if (queue.isNotEmpty || _emergencyForeground.isActive) {
+      await _emergencyForeground.start(silent: false);
+    }
   }
 
   Future<void> syncEmergencyTracking() async {
@@ -245,6 +276,7 @@ class SosService {
       final incidentStatus = incident?['status'] as String?;
       if (watchIncidentTerminal(incidentStatus)) {
         _location.stopTracking();
+        unawaited(_emergencyForeground.stop());
       }
       _emit(_state.copyWith(
         incidentId: incident?['id'] as String? ?? _state.incidentId,
@@ -263,7 +295,8 @@ class SosService {
     if (deviceId == null || deviceSecret == null) return 0;
     if (_connectivity.activeMode == WatchConnectivityMode.offline) return 0;
 
-    final queue = await _preferences.loadOfflineQueue();
+    if (!_offlineQueue.isAvailable) return 0;
+    final queue = await _offlineQueue.loadQueue();
     if (queue.isEmpty) return 0;
 
     final pending = queue.where((event) => !event.uploaded).toList();
@@ -305,9 +338,13 @@ class SosService {
       uploadedCount += remaining.length;
     }
 
-    await _preferences.saveOfflineQueue([]);
+    await _offlineQueue.saveQueue([]);
     if (uploadedCount > 0 && _state.offlineQueued) {
       _emit(_state.copyWith(offlineQueued: false));
+      if (!watchIncidentTerminal(_state.incidentStatus) &&
+          _state.lifecycle != SosLifecycle.active) {
+        await _emergencyForeground.stop();
+      }
     }
     return uploadedCount;
   }
@@ -315,6 +352,7 @@ class SosService {
   void reset() {
     _holdTimer?.cancel();
     _location.stopTracking();
+    unawaited(_emergencyForeground.stop());
     _emit(const SosEventState(lifecycle: SosLifecycle.idle));
   }
 

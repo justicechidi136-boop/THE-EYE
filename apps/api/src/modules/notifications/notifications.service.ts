@@ -111,6 +111,10 @@ export class NotificationsService {
 
   async registerPushToken(dto: RegisterPushTokenDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new NotFoundException("Push tokens can only be registered for citizen users");
+    return this.registerPushTokenForUser(actor.sub, dto);
+  }
+
+  async registerPushTokenForUser(userId: string, dto: RegisterPushTokenDto) {
     validateRegisterPushTokenDto(dto);
     const expectedEnvironment = this.resolveWorkerAppEnvironment();
     if (dto.appEnvironment && dto.appEnvironment !== expectedEnvironment) {
@@ -120,7 +124,7 @@ export class NotificationsService {
     const token = await (this.prisma as any).userPushToken.upsert({
       where: { token: dto.token },
       update: {
-        userId: actor.sub,
+        userId,
         platform: dto.platform,
         deviceId: dto.deviceId,
         provider: dto.provider ?? "firebase-cloud-messaging",
@@ -129,7 +133,7 @@ export class NotificationsService {
         lastSeenAt: new Date(),
       },
       create: {
-        userId: actor.sub,
+        userId,
         token: dto.token,
         platform: dto.platform,
         deviceId: dto.deviceId,
@@ -175,12 +179,14 @@ export class NotificationsService {
     source: "foreground" | "background" | "opened" | "watch_ack" = "opened",
   ) {
     const scope = this.resolveActorScope(actor);
+    if (scope.userId) {
+      return this.recordDeviceReceivedForUser(scope.userId, notificationId, source);
+    }
+
     const notification = await this.prisma.notification.findFirst({
       where: scope.oversightAdmin
         ? { id: notificationId }
-        : scope.userId
-          ? { id: notificationId, userId: scope.userId }
-          : { id: notificationId, adminUserId: scope.adminUserId },
+        : { id: notificationId, adminUserId: scope.adminUserId },
     });
     if (!notification) throw new NotFoundException("Notification not found");
 
@@ -214,6 +220,52 @@ export class NotificationsService {
           deviceReceivedSource: source,
         },
       } as never,
+    });
+
+    await this.syncBroadcastDelivery(notificationId, "Delivered");
+    return { acknowledged: true, notificationId, source };
+  }
+
+  async recordDeviceReceivedForUser(
+    userId: string,
+    notificationId: string,
+    source: "foreground" | "background" | "opened" | "watch_ack" = "watch_ack",
+  ) {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id: notificationId, userId },
+    });
+    if (!notification) throw new NotFoundException("Notification not found");
+
+    const metadata = (notification.metadata as Record<string, unknown> | null) ?? {};
+    if (
+      (notification.status === "Delivered" || notification.status === "Read") &&
+      typeof metadata.deviceReceivedAt === "string"
+    ) {
+      return { acknowledged: true, notificationId, source, duplicate: true };
+    }
+
+    await (this.prisma as any).notificationDeliveryLog.create({
+      data: {
+        notificationId,
+        channel: notification.channel ?? "push",
+        provider: notification.provider ?? "firebase-cloud-messaging",
+        status: "DeviceReceived",
+        attempt: 0,
+        responsePayload: { source, receivedAt: new Date().toISOString() },
+        deliveredAt: new Date(),
+      } as never,
+    });
+
+    await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: {
+        status: notification.status === "Read" ? "Read" : ("Delivered" as never),
+        metadata: {
+          ...metadata,
+          deviceReceivedAt: new Date().toISOString(),
+          deviceReceivedSource: source,
+        },
+      },
     });
 
     await this.syncBroadcastDelivery(notificationId, "Delivered");

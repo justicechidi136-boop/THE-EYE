@@ -16,6 +16,7 @@ import {
   SmartwatchStandaloneLoginDto,
   UpdateSmartwatchStatusDto,
   IssueSmartwatchPairingCodeDto,
+  SmartwatchDeviceSettingsPatchDto,
 } from "./dto/smartwatch.dto";
 import { SmartwatchService } from "./smartwatch.service";
 
@@ -148,6 +149,109 @@ export class SmartwatchController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/devices/:id")
+  @RequirePermissions("user:manage")
+  adminDevice(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.adminDevice(id, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/firmware")
+  @RequirePermissions("user:manage")
+  listAdminFirmware(@Req() request: any) {
+    return this.smartwatch.listAdminFirmware(request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Post("devices/:id/revoke")
+  @RequirePermissions("user:manage")
+  revokeDevice(@Param("id") id: string, @Body() dto: { reason?: string }, @Req() request: any) {
+    return this.smartwatch.revokeDevice(id, request.user, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Post("admin/devices/:id/actions/:action")
+  @RequirePermissions("user:manage")
+  adminDeviceAction(
+    @Param("id") id: string,
+    @Param("action") action: string,
+    @Body() dto: { reason?: string; note?: string },
+    @Req() request: any,
+  ) {
+    return this.smartwatch.adminDeviceAction(id, action, dto, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/devices/:id/audit")
+  @RequirePermissions("user:manage")
+  adminDeviceAudit(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.adminDeviceAudit(id, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/devices/:id/telemetry")
+  @RequirePermissions("user:manage")
+  adminDeviceTelemetry(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.adminDeviceTelemetry(id, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/devices/:id/active-incident")
+  @RequirePermissions("user:manage")
+  adminDeviceActiveIncident(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.adminDeviceActiveIncident(id, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/devices/:id/emergency-history")
+  @RequirePermissions("user:manage")
+  adminDeviceEmergencyHistory(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.adminDeviceEmergencyHistory(id, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post("devices/:deviceId/telemetry")
+  recordTelemetry(@Param("deviceId") deviceId: string, @Body() dto: SmartwatchHeartbeatDto, @Req() request: any) {
+    return this.smartwatch.recordTelemetry(deviceId, dto, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post("devices/:deviceId/push-tokens")
+  registerDevicePushToken(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: { deviceSecret: string; token: string; platform?: string; provider?: string; appEnvironment?: string },
+  ) {
+    return this.smartwatch.registerDevicePushToken(deviceId, dto);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch("devices/:deviceId/push-tokens/deactivate")
+  deactivateDevicePushTokens(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: { deviceSecret: string },
+  ) {
+    return this.smartwatch.deactivateDevicePushTokens(deviceId, dto);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch("devices/:deviceId/notifications/:notificationId/ack")
+  acknowledgeNotificationForDevice(
+    @Param("deviceId") deviceId: string,
+    @Param("notificationId") notificationId: string,
+    @Body() dto: { deviceSecret: string; source?: "foreground" | "background" | "opened" | "watch_ack" },
+  ) {
+    return this.smartwatch.acknowledgeNotificationForDevice(deviceId, notificationId, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Post("devices/:id/critical-alert")
   @RequirePermissions("broadcast:publish")
   criticalAlert(@Param("id") id: string, @Body() dto: SendCriticalAlertDto, @Req() request: any) {
@@ -155,9 +259,62 @@ export class SmartwatchController {
   }
 
   @UseGuards(OptionalJwtAuthGuard)
+  @Get("devices/:deviceId/settings")
+  getDeviceSettings(
+    @Param("deviceId") deviceId: string,
+    @Req() request: any,
+  ) {
+    const deviceSecret = request.query?.deviceSecret as string | undefined;
+    return this.smartwatch.getDeviceSettings(deviceId, { deviceSecret }, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch("devices/:deviceId/settings")
+  patchDeviceSettings(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: SmartwatchDeviceSettingsPatchDto,
+    @Req() request: any,
+  ) {
+    return this.smartwatch.patchDeviceSettings(deviceId, dto, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
   @Post("devices/:deviceId/firmware/check")
   firmwareCheck(@Param("deviceId") deviceId: string, @Body() dto: { deviceSecret?: string; currentVersion?: string }, @Req() request: any) {
     return this.smartwatch.firmwareCheck(deviceId, dto, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post("devices/:deviceId/version-policy")
+  versionPolicy(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: { deviceSecret?: string; currentVersion?: string; versionCode?: number; targetType?: string; environment?: string },
+    @Req() request: any,
+  ) {
+    return this.smartwatch.versionPolicy(deviceId, dto, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get("devices/:deviceId/notifications")
+  listDeviceNotifications(
+    @Param("deviceId") deviceId: string,
+    @Req() request: any,
+  ) {
+    const deviceSecret = request.query?.deviceSecret as string | undefined;
+    return this.smartwatch.listDeviceNotifications(deviceId, { deviceSecret }, {
+      cursor: request.query?.cursor as string | undefined,
+      limit: request.query?.limit as string | undefined,
+    });
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch("devices/:deviceId/notifications/:notificationId/read")
+  markNotificationRead(
+    @Param("deviceId") deviceId: string,
+    @Param("notificationId") notificationId: string,
+    @Body() dto: { deviceSecret: string },
+  ) {
+    return this.smartwatch.markNotificationReadForDevice(deviceId, notificationId, dto);
   }
 
   @UseGuards(OptionalJwtAuthGuard)
