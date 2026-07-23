@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
+import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchConnectivityMode, SmartwatchPairingMethod } from "@the-eye/shared";
 import { randomToken, hashToken } from "../../common/auth/crypto";
 import { signJwt, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret } from "../../common/auth/jwt-secrets";
@@ -988,9 +988,9 @@ export class SmartwatchService {
     return {
       displayName: (stored.displayName as string | undefined) ?? (device.displayName as string | undefined),
       notificationCategories: (stored.notificationCategories as string[] | undefined) ?? [],
-      connectionPreference: (stored.connectionPreference as SmartwatchDeviceSettingsDto["connectionPreference"])
-        ?? (device.preferredMode as SmartwatchDeviceSettingsDto["connectionPreference"])
-        ?? "PairedPhone",
+      connectionPreference: (stored.connectionPreference as SmartwatchConnectivityMode | undefined)
+        ?? (device.preferredMode as SmartwatchConnectivityMode | undefined)
+        ?? SmartwatchConnectivityMode.PairedPhone,
       sosCountdownSeconds: (stored.sosCountdownSeconds as number | undefined)
         ?? ((metadata.sosDefaults as Record<string, unknown> | undefined)?.countdown as number | undefined)
         ?? 3,
