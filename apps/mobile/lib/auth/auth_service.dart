@@ -200,6 +200,75 @@ class AuthService {
     }
   }
 
+  Future<AuthRequestResult> requestAccountRecovery(String email) async {
+    if (!isValidEmail(email.trim())) {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.validationError,
+        userMessage: "Enter the email linked to your Google account.",
+        fieldErrors: {"email": "Enter a valid email address."},
+      );
+    }
+    try {
+      await _apiClient.requestAccountRecovery(
+          email: email.trim().toLowerCase());
+      logAuthEvent("Account recovery requested");
+      return const AuthRequestResult(
+        status: AuthRequestStatus.success,
+        userMessage:
+            "If an eligible account exists, recovery instructions have been sent.",
+      );
+    } on AuthApiException catch (error) {
+      return _mapAuthException(error);
+    } on SocketException {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.networkError,
+        userMessage: "Unable to reach THE EYE right now. Try again shortly.",
+      );
+    }
+  }
+
+  Future<AuthRequestResult> verifyAccountRecovery(String token) async {
+    try {
+      await _apiClient.verifyAccountRecovery(token: token);
+      return const AuthRequestResult(status: AuthRequestStatus.success);
+    } on AuthApiException catch (error) {
+      return _mapAuthException(error);
+    } on SocketException {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.networkError,
+        userMessage: "Unable to reach THE EYE right now. Try again shortly.",
+      );
+    }
+  }
+
+  Future<AuthRequestResult> completeAccountRecovery({
+    required String token,
+    required String idToken,
+    required String provider,
+  }) async {
+    try {
+      final session = await _apiClient.completeAccountRecovery(
+        token: token,
+        idToken: idToken,
+        provider: provider,
+      );
+      await _sessionStore.save(session);
+      logAuthEvent("Account recovery completed");
+      return AuthRequestResult(
+        status: AuthRequestStatus.success,
+        session: session,
+        profileComplete: true,
+      );
+    } on AuthApiException catch (error) {
+      return _mapAuthException(error);
+    } on SocketException {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.networkError,
+        userMessage: "Unable to reach THE EYE right now. Try again shortly.",
+      );
+    }
+  }
+
   Future<AuthRequestResult> requestPhoneOtp(String phone,
       {String purpose = "login"}) async {
     if (_otpRequestInFlight) {

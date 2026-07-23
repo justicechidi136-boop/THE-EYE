@@ -410,6 +410,61 @@ class TheEyeApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> requestAccountRecovery({
+    required String email,
+    String? platform,
+    String? deviceId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.authAccountRecoveryRequest,
+      {
+        "email": email,
+        if (platform != null) "platform": platform,
+        if (deviceId != null) "deviceId": deviceId,
+      },
+      timeout: timeout,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AuthApiException.fromResponse(response);
+    }
+    final decoded = jsonDecode(response.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> verifyAccountRecovery({
+    required String token,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.authAccountRecoveryVerify,
+      {"token": token},
+      timeout: timeout,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AuthApiException.fromResponse(response);
+    }
+    final decoded = jsonDecode(response.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  Future<AuthSession> completeAccountRecovery({
+    required String token,
+    required String idToken,
+    required String provider,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.authAccountRecoveryComplete,
+      {"token": token, "idToken": idToken, "provider": provider},
+      timeout: timeout,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AuthApiException.fromResponse(response);
+    }
+    return _sessionFromResponse(response);
+  }
+
   Future<void> requestPhoneOtp({
     required String phone,
     String purpose = "login",
