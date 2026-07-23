@@ -1,10 +1,10 @@
 # Staging Runtime Blockers
 
-Branch: `fix/staging-runtime-stabilization`  
+Branch: `staging` (merged PR #19 at `841d96a`)  
 Environment: staging  
 Last updated: 2026-07-23  
 
-Statuses: `OPEN` | `ROOT CAUSE CONFIRMED` | `CODE FIXED` | `DEPLOYED` | `DEVICE VERIFIED` | `BLOCKED BY PROVIDER`
+Statuses: `OPEN` | `ROOT CAUSE CONFIRMED` | `CODE FIXED` | `CI VERIFIED` | `DEPLOYED` | `DEVICE VERIFIED` | `BLOCKED BY PROVIDER` | `FAILED`
 
 Do not mark `DEVICE VERIFIED` from code inspection alone.
 
@@ -28,8 +28,8 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | Auth delivery depended on external webhook app instead of direct SMTP adapter |
 | **Fix** | `SmtpEmailProvider` + `AuthDeliveryService` prefers SMTP; webhook optional fallback |
 | **Automated test** | `smtp-email.provider.spec.ts`, `auth-delivery.service.spec.ts` |
-| **Runtime evidence** | Pending device QA after deploy |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | CI run 29991834750 + Validate Staging 29991936821 green; SMTP E2E pending VPS deploy + inbox QA |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -51,7 +51,7 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | Webhook-only delivery; sender ID `THE EYE` pending Termii approval |
 | **Fix** | `TermiiSmsProvider` direct adapter; fail closed when unconfigured |
 | **Automated test** | `termii-sms.provider.spec.ts`, `auth-delivery.service.spec.ts` |
-| **Runtime evidence** | Pending OTP receipt on device / formal provider block |
+| **Runtime evidence** | CI verified; Termii sender ID `THE EYE` pending approval — SMS receipt blocked |
 | **Status** | BLOCKED BY PROVIDER |
 
 ---
@@ -74,8 +74,8 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | `NotificationInboxService` defaulted to compile-time localhost base URL |
 | **Fix** | Use `TheEyeApiClient()` → `TheEyeApiConfig.resolveBaseUrl()`; dark-mode card contrast |
 | **Automated test** | Mobile contract tests; manual inbox load |
-| **Runtime evidence** | Pending device QA |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | CI/mobile tests green; device inbox load pending VPS deploy + APK install |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -97,8 +97,8 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | Same localhost default in `BroadcastFeedService` / detail fetch |
 | **Fix** | Resolved base URL; detail uses controller `broadcastFeedService` |
 | **Automated test** | Mobile contract tests |
-| **Runtime evidence** | Pending device QA |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | CI/mobile tests green; device feed load pending VPS deploy + APK install |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -120,8 +120,8 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | MIME/extension mismatch for `.jpeg`/uppercase names; possible S3 env gaps on staging |
 | **Fix** | `EvidenceValidation.normalizeMimeType` in avatar upload; avatar-specific presign validation |
 | **Automated test** | `s3-presign.ts` avatar path; manual device upload |
-| **Runtime evidence** | Pending device QA |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | CI/API presign tests green; device upload pending VPS deploy + Spaces QA |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -143,8 +143,8 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | Missing timeouts/try-catch on client; SOS draft missing category; localhost API on some services |
 | **Fix** | Submission timeouts, error codes, SOS `emergencyCategory: "Other"`; API persists incident before async notifications |
 | **Automated test** | Incident submission tests; mobile smoke |
-| **Runtime evidence** | Pending device QA per report type |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | CI/mobile timeout tests green; per-report-type device QA pending deploy |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -164,7 +164,8 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | Misleading UI copy |
 | **Fix** | Updated copy to "Upload photos (JPEG, PNG, WEBP)" |
 | **Automated test** | Evidence validation tests |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | Copy fix in CI build; device UI verification pending |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -185,8 +186,10 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | Staging LiveKit configuration not verified end-to-end |
 | **Fix** | Honest unavailable messaging on 503/generic failure; timeout on start path |
 | **Automated test** | `validate-env.livekit.spec.ts`, live video API tests |
-| **Runtime evidence** | Pending DNS/TLS/room join QA |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | Honest-unavailable messaging in CI build; DNS/TLS/room join pending staging infra QA |
+| **Status** | CI VERIFIED |
+
+Note: If staging seed lacks verified nationwide police data, empty results must be shown honestly — not demo stations as real.
 
 ---
 
@@ -207,8 +210,8 @@ Do not mark `DEVICE VERIFIED` from code inspection alone.
 | **Root cause** | Mobile used static demo data; API list endpoint missing |
 | **Fix** | API `GET /police-stations`; mobile `PoliceStationsService` + screen |
 | **Automated test** | Police stations service tests (pending expansion) |
-| **Runtime evidence** | Pending QA against verified station dataset |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | API list endpoint in CI; verified dataset + device filters pending deploy |
+| **Status** | CI VERIFIED |
 
 Note: If staging seed lacks verified nationwide police data, empty results must be shown honestly — not demo stations as real.
 
@@ -227,7 +230,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Frontend route** | Home grid |
 | **Root cause** | Incorrect navigation target |
 | **Fix** | Snackbar "Job vacancies are coming soon." |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | Verified in mobile CI tests; device tap pending APK install |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -243,7 +247,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Actual** | Low contrast on manual location / anonymous / notify contact; notification cards hardcoded light green |
 | **Root cause** | Hardcoded `EyeTokens` colors on themed surfaces |
 | **Fix** | `Theme.of(context).textTheme` on switches; `EyeNotificationCard` uses `ColorScheme` |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | CI analyze/tests green; light/dark device pass pending |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -261,8 +266,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | Middleware redirected unauthenticated users to login with API path in `next` |
 | **Fix** | `/api/auth/logout` public in middleware; sanitize `next` in login form |
 | **Automated test** | `admin-auth-validation-test.cjs` |
-| **Runtime evidence** | Pending manual admin QA |
-| **Status** | CODE FIXED |
+| **Runtime evidence** | `admin-auth-validation-test.cjs` green in CI; live admin session QA pending VPS deploy |
+| **Status** | CI VERIFIED |
 
 ---
 
@@ -284,17 +289,23 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 
 | Gate | Status |
 |---|---|
-| Password reset email received | Pending deploy + device QA |
+| PR #19 merged to staging | PASS (`841d96a`) |
+| CI + Validate Staging green | PASS (runs 29991834750, 29991936821) |
+| VPS deploy (API/worker/admin) | **PENDING** — manual VPS step not executed this session |
+| Password reset email received | Pending deploy + inbox QA |
 | OTP received or blocked by sender ID only | BLOCKED BY PROVIDER |
-| Profile image uploads | Pending device QA |
-| Notifications load | Pending device QA |
-| SOS creates incident | Pending device QA |
-| All report types terminate correctly | Pending device QA |
-| Broadcasts load | Pending device QA |
-| Police filters vs verified data | Pending data + device QA |
-| Admin logout without 405 | Pending device QA |
+| Profile image uploads | Pending deploy + device QA |
+| Notifications load | Pending deploy + device QA |
+| SOS creates incident | Pending deploy + device QA |
+| All report types terminate correctly | Pending deploy + device QA |
+| Broadcasts load | Pending deploy + device QA |
+| Police filters vs verified data | Pending deploy + data/device QA |
+| Admin logout without 405 | Pending deploy + admin QA |
 | Theme text readable | Pending device QA |
-| LiveKit works or honestly disabled | Pending device QA |
+| LiveKit works or honestly disabled | Pending deploy + infra/device QA |
+| Fresh staging APK built | PASS (local build from `841d96a`) |
+| Physical device QA | **BLOCKED** — no ADB/device in session |
+| RC1 tag | **NOT CREATED** — release gate not passed |
 
 ---
 
@@ -302,6 +313,14 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 
 **PARTIALLY BLOCKED**
 
-Code fixes are on branch `fix/staging-runtime-stabilization`. Staging is **not** `STAGING RUNTIME STABILIZED` until deploy, CI green, fresh APK, and manual device QA update this matrix.
+PR #19 merged to `staging` at `841d96a`. CI and Validate Staging are green. **Staging VPS has not been redeployed** in this session (API/worker/admin still on pre-#19 runtime). Fresh staging APK built locally; **device QA blocked** (no ADB/physical device). **RC1 tag not created.**
 
-Remaining provider blocker: **Termii Sender ID approval** (SRB-002).
+Remaining blockers:
+- **VPS deploy** required before runtime QA (Phases 4–6, 8–12).
+- **Termii Sender ID approval** (SRB-002).
+- **Physical device + admin manual QA** for all SRB rows.
+
+**Gate documents (2026-07-23):**
+- `docs/SPRINT_8_ENTRY_GATE.md`
+- `docs/RELEASE_CANDIDATE_TEST_MATRIX.md`
+- `docs/SPRINT_8_AUTHORIZATION_REPORT.md` → **SPRINT 8 NOT AUTHORIZED**
