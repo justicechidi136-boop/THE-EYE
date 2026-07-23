@@ -4,6 +4,7 @@ import "package:geolocator/geolocator.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_payloads.dart";
+import "../location/location_permission_service.dart";
 
 class IncidentLocationTracker {
   IncidentLocationTracker({required TheEyeApiClient apiClient})
@@ -42,11 +43,9 @@ class IncidentLocationTracker {
     if (incidentId == null || accessToken == null) return;
 
     try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
+      final position = await _readPosition();
+      if (position == null) return;
+
       final sequence = _sequence++;
       await _apiClient.postIncidentLocation(
         incidentId: incidentId,
@@ -58,6 +57,29 @@ class IncidentLocationTracker {
       );
     } catch (_) {
       // Best-effort live stream; caller may surface connectivity elsewhere.
+    }
+  }
+
+  Future<Position?> _readPosition() async {
+    final permission = await Geolocator.checkPermission().timeout(
+      kLocationPermissionTimeout,
+      onTimeout: () => LocationPermission.denied,
+    );
+    if (!locationPermissionAllowsRead(permission)) {
+      return null;
+    }
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      return null;
+    }
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 8),
+        ),
+      ).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      return null;
     }
   }
 }

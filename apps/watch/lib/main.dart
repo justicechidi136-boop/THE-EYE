@@ -11,6 +11,7 @@ import 'screens/device_status_screen.dart';
 import 'screens/emergency_type_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/incoming_alert_screen.dart';
+import 'screens/location_settings_screen.dart';
 import 'screens/location_onboarding_screen.dart';
 import 'screens/notification_summary_screen.dart';
 import 'screens/pairing_screen.dart';
@@ -192,6 +193,14 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
             return _darkPage(const SettingsRadiusScreen(), settings);
           case WatchRoutes.settingsContacts:
             return _darkPage(const SettingsContactsScreen(), settings);
+          case WatchRoutes.settingsLocation:
+            return _darkPage(
+              LocationSettingsScreen(
+                services: _services,
+                launcher: _launcher,
+              ),
+              settings,
+            );
           case WatchRoutes.reportCategory:
             return _darkPage(const ReportCategoryScreen(), settings);
           case WatchRoutes.reportDescribe:

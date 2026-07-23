@@ -50,6 +50,12 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           WatchOutlineButton(
+            label: 'Location',
+            onPressed: () =>
+                Navigator.pushNamed(context, WatchRoutes.settingsLocation),
+          ),
+          const SizedBox(height: 6),
+          WatchOutlineButton(
             label: 'Connection',
             onPressed: () =>
                 Navigator.pushNamed(context, WatchRoutes.connectionStatus),

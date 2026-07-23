@@ -13,6 +13,7 @@ import "package:path_provider/path_provider.dart";
 import "package:url_launcher/url_launcher.dart";
 
 import "auth/auth_service.dart";
+import "auth/account_recovery_flow.dart";
 import "auth/auth_session_store.dart";
 import "auth/auth_validation.dart";
 import "auth/social_auth_service.dart";
@@ -41,6 +42,7 @@ import "emergency/active_emergency_screen.dart";
 import "emergency/active_emergency_service.dart";
 import "emergency/active_emergency_store.dart";
 import "incidents/pending_submission_store.dart";
+import "location/location_permission_service.dart";
 import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
 import "live_video/live_video_evidence_overlay.dart";
@@ -76,6 +78,28 @@ import "police/police_stations_screen.dart";
 import "profile/profile_screen.dart";
 
 export "app/app_scope.dart" show AppScope;
+export "location/location_permission_service.dart"
+    show
+        LocationAccessResult,
+        LocationCaptureOutcome,
+        LocationCaptureResult,
+        LocationPermissionState,
+        LocationRecoveryAction,
+        LocationSource,
+        captureLocationOutcome,
+        kEmergencyLocationTimeout,
+        kLocationCaptureTimeout,
+        kLocationPermissionTimeout,
+        locationFailureMessage,
+        locationMetadataFields,
+        locationStateMessage,
+        nearbyLocationNotice,
+        openAppSettings,
+        openLocationSettings,
+        resolveLocationAccess,
+        resolveLocationPermission,
+        resolveLocationPermissionState,
+        sosLocationUserMessage;
 import "theme/the_eye_theme.dart";
 import "theme/theme_preferences.dart";
 import "theme/theme_provider.dart";
@@ -106,69 +130,8 @@ Future<void> openMaps(double latitude, double longitude) async {
   }
 }
 
-enum LocationCaptureResult {
-  granted,
-  denied,
-  deniedForever,
-  serviceDisabled,
-  timeout,
-}
-
-const kLocationCaptureTimeout = Duration(seconds: 20);
-const kLocationPermissionTimeout = Duration(seconds: 15);
 const kSosSubmissionTimeout = Duration(seconds: 45);
 const kLiveVideoStartTimeout = Duration(seconds: 45);
-
-class LocationCaptureOutcome {
-  const LocationCaptureOutcome({this.position, required this.result});
-
-  final Position? position;
-  final LocationCaptureResult result;
-}
-
-Future<LocationCaptureOutcome> captureLocationOutcome({
-  LocationAccuracy accuracy = LocationAccuracy.high,
-  Duration timeout = kLocationCaptureTimeout,
-}) async {
-  final enabled = await Geolocator.isLocationServiceEnabled();
-  if (!enabled) {
-    return const LocationCaptureOutcome(
-        result: LocationCaptureResult.serviceDisabled);
-  }
-  var permission = await Geolocator.checkPermission().timeout(
-      kLocationPermissionTimeout,
-      onTimeout: () => LocationPermission.denied);
-  if (permission == LocationPermission.denied) {
-    permission = await Geolocator.requestPermission().timeout(
-        kLocationPermissionTimeout,
-        onTimeout: () => LocationPermission.denied);
-  }
-  if (permission == LocationPermission.deniedForever) {
-    return const LocationCaptureOutcome(
-        result: LocationCaptureResult.deniedForever);
-  }
-  if (permission == LocationPermission.denied) {
-    return const LocationCaptureOutcome(result: LocationCaptureResult.denied);
-  }
-  try {
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: LocationSettings(
-        accuracy: accuracy,
-        timeLimit: timeout,
-      ),
-    ).timeout(timeout);
-    return LocationCaptureOutcome(
-        position: position, result: LocationCaptureResult.granted);
-  } on TimeoutException {
-    return const LocationCaptureOutcome(result: LocationCaptureResult.timeout);
-  } catch (_) {
-    return const LocationCaptureOutcome(result: LocationCaptureResult.timeout);
-  }
-}
-
-Future<void> openLocationSettings() => Geolocator.openLocationSettings();
-
-Future<void> openAppSettings() => Geolocator.openAppSettings();
 
 void showAppSnackBar(BuildContext context, String message,
     {bool isError = false}) {
@@ -183,21 +146,6 @@ void showAppSnackBar(BuildContext context, String message,
       duration: Duration(seconds: isError ? 5 : 3),
     ),
   );
-}
-
-String locationFailureMessage(LocationCaptureResult result) {
-  switch (result) {
-    case LocationCaptureResult.serviceDisabled:
-      return "Turn on location services so responders can find you.";
-    case LocationCaptureResult.deniedForever:
-      return "Location permission is blocked. Open settings to allow GPS for emergencies.";
-    case LocationCaptureResult.denied:
-      return "Location permission is required for emergency reporting.";
-    case LocationCaptureResult.timeout:
-      return "Could not get GPS in time. Move to an open area and try again.";
-    case LocationCaptureResult.granted:
-      return "";
-  }
 }
 
 String formatEvidenceTimestamp(DateTime value) {
@@ -631,13 +579,12 @@ class _TheEyeAppState extends State<TheEyeApp> {
     if (navigator == null) return;
 
     if (request.route == "/active-emergency") {
-      final currentRoute = ModalRoute.of(theEyeNavigatorKey.currentContext!)
-          ?.settings
-          .name;
+      final currentRoute =
+          ModalRoute.of(theEyeNavigatorKey.currentContext!)?.settings.name;
       if (currentRoute == "/active-emergency") return;
       final incidentId = request.incidentId ??
           (await controller.activeEmergencyService
-              .restoreActiveEmergency(controller.accessToken ?? ""))
+                  .restoreActiveEmergency(controller.accessToken ?? ""))
               ?.incidentId;
       if (incidentId == null || incidentId.isEmpty) {
         navigator.pushNamed("/tracking");
@@ -690,6 +637,26 @@ class _TheEyeAppState extends State<TheEyeApp> {
             routes: {
               "/": (_) => const SplashScreen(),
               "/login": (_) => const LoginRegisterScreen(),
+              "/account-recovery": (context) => AccountRecoveryRequestScreen(
+                    authService: appOf(context).authService,
+                  ),
+              "/account-recovery/complete": (context) {
+                final token =
+                    ModalRoute.of(context)?.settings.arguments as String? ?? "";
+                final controller = appOf(context);
+                return AccountRecoveryCompleteScreen(
+                  token: token,
+                  authService: controller.authService,
+                  socialAuthService: controller.socialAuthService,
+                  onRecoveryComplete: (session,
+                      {required profileComplete}) async {
+                    await controller.setSession(session);
+                    if (!profileComplete) {
+                      await controller.loadCitizenProfile(forceRefresh: true);
+                    }
+                  },
+                );
+              },
               "/register": (_) => const EmailRegistrationScreen(),
               "/otp-verification": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments
@@ -732,7 +699,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
                 final controller = appOf(context);
                 final token = controller.accessToken ?? "";
                 if (incidentId != null && incidentId.isNotEmpty) {
-                  unawaited(controller.startIncidentLocationTracking(incidentId));
+                  unawaited(
+                      controller.startIncidentLocationTracking(incidentId));
                 }
                 return ActiveEmergencyScreen(
                   incidentId: incidentId ?? "",
@@ -1324,7 +1292,8 @@ class AppController extends SessionAccessor {
         apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
       );
 
-  Future<void> activateActiveEmergency(String incidentId, {bool silent = false}) {
+  Future<void> activateActiveEmergency(String incidentId,
+      {bool silent = false}) {
     return activeEmergencyService.activateIncident(incidentId, silent: silent);
   }
 
@@ -2516,6 +2485,24 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                   ),
                   child: const Text(
                     "Forgot password?",
+                    style: TextStyle(color: BrandColors.accentHover),
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: submitting
+                      ? null
+                      : () =>
+                          Navigator.of(context).pushNamed("/account-recovery"),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    "Recover account",
                     style: TextStyle(color: BrandColors.accentHover),
                   ),
                 ),
@@ -3939,18 +3926,16 @@ class _ReportScreenState extends State<ReportScreen> {
     }
 
     try {
-      final result = await controller
-          .submitIncident(
-            draft,
-            onEvidenceProgress: (localId, progress) {
-              if (progress >= 1) {
-                _evidenceSectionKey.currentState?.markUploaded(localId);
-              } else {
-                _evidenceSectionKey.currentState?.markUploading(localId, progress);
-              }
-            },
-          )
-          .timeout(kSosSubmissionTimeout);
+      final result = await controller.submitIncident(
+        draft,
+        onEvidenceProgress: (localId, progress) {
+          if (progress >= 1) {
+            _evidenceSectionKey.currentState?.markUploaded(localId);
+          } else {
+            _evidenceSectionKey.currentState?.markUploading(localId, progress);
+          }
+        },
+      ).timeout(kSosSubmissionTimeout);
 
       if (!context.mounted) return;
       setState(() => submitting = false);
@@ -3974,7 +3959,8 @@ class _ReportScreenState extends State<ReportScreen> {
           submissionError = result.userMessage;
           descriptionError = result.fieldErrors["description"];
         });
-        showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
+        showAppSnackBar(
+            context, result.userMessage ?? "Unable to submit report.",
             isError: true);
         return;
       }
@@ -3996,7 +3982,8 @@ class _ReportScreenState extends State<ReportScreen> {
         showAppSnackBar(context,
             result.userMessage ?? "${widget.type.label} saved for retry.");
       } else {
-        showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
+        showAppSnackBar(
+            context, result.userMessage ?? "Unable to submit report.",
             isError: true);
         return;
       }
@@ -4069,9 +4056,8 @@ class _MissingPersonBroadcastScreenState
       localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
     );
 
-    final result = await controller
-        .submitIncident(draft)
-        .timeout(kSosSubmissionTimeout);
+    final result =
+        await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
     if (!mounted) return;
     setState(() => submitting = false);
 
@@ -4649,9 +4635,8 @@ class _StolenVehicleBroadcastScreenState
       localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
     );
 
-    final result = await controller
-        .submitIncident(draft)
-        .timeout(kSosSubmissionTimeout);
+    final result =
+        await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
     if (!mounted) return;
     setState(() => submitting = false);
 
@@ -4969,12 +4954,10 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
         }
       }
       final item = cached ??
-          await appOf(context)
-              .broadcastFeedService
-              .getDetail(
-            accessToken: controller.accessToken!,
-            broadcastId: widget.broadcastId,
-          );
+          await appOf(context).broadcastFeedService.getDetail(
+                accessToken: controller.accessToken!,
+                broadcastId: widget.broadcastId,
+              );
       await controller.markBroadcastRead(widget.broadcastId);
       if (!mounted) return;
       setState(() {
@@ -6435,6 +6418,8 @@ class CommunityMapScreen extends StatefulWidget {
 }
 
 class _CommunityMapScreenState extends State<CommunityMapScreen> {
+  String? _locationNotice;
+
   @override
   void initState() {
     super.initState();
@@ -6446,6 +6431,11 @@ class _CommunityMapScreenState extends State<CommunityMapScreen> {
       }
       if (controller.selectedCommunity == null) {
         await controller.loadCommunitiesFromApi(refresh: true);
+      }
+      final permission = await resolveLocationPermission();
+      if (!mounted) return;
+      if (permission != LocationCaptureResult.granted) {
+        setState(() => _locationNotice = nearbyLocationNotice(permission));
       }
     });
   }
@@ -6459,6 +6449,13 @@ class _CommunityMapScreenState extends State<CommunityMapScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
+          if (_locationNotice != null) ...[
+            LocationDeniedBanner(
+              message: _locationNotice!,
+              onOpenSettings: () => openAppSettings(),
+            ),
+            const SizedBox(height: 12),
+          ],
           Container(
             height: 360,
             decoration: BoxDecoration(
@@ -7110,6 +7107,134 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
   }
 }
 
+class LocationPermissionSettingsSection extends StatefulWidget {
+  const LocationPermissionSettingsSection({super.key});
+
+  @override
+  State<LocationPermissionSettingsSection> createState() =>
+      _LocationPermissionSettingsSectionState();
+}
+
+class _LocationPermissionSettingsSectionState
+    extends State<LocationPermissionSettingsSection> {
+  LocationPermissionState? _permission;
+  LocationAccessResult? _access;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refresh(requestIfDenied: false));
+  }
+
+  Future<void> _refresh({bool requestIfDenied = false}) async {
+    setState(() => _loading = true);
+    final permission = await resolveLocationPermissionState(
+      requestIfDenied: requestIfDenied,
+    );
+    final access = await resolveLocationAccess(
+      requestIfDenied: requestIfDenied,
+      allowCachedFallback: true,
+      timeout: const Duration(seconds: 8),
+    );
+    if (!mounted) return;
+    setState(() {
+      _permission = permission;
+      _access = access;
+      _loading = false;
+    });
+  }
+
+  String _permissionLabel(LocationPermissionState? state) {
+    switch (state) {
+      case LocationPermissionState.grantedPrecise:
+        return "Precise location allowed";
+      case LocationPermissionState.grantedApproximate:
+        return "Approximate location allowed";
+      case LocationPermissionState.denied:
+        return "Permission denied";
+      case LocationPermissionState.deniedPermanently:
+        return "Permission blocked in Settings";
+      case LocationPermissionState.serviceDisabled:
+        return "Location services off";
+      case LocationPermissionState.restricted:
+        return "Restricted";
+      case LocationPermissionState.timedOut:
+        return "GPS timed out";
+      case LocationPermissionState.unavailable:
+        return "GPS unavailable";
+      case LocationPermissionState.notRequested:
+      case null:
+        return "Not requested yet";
+      case LocationPermissionState.acquiring:
+        return "Acquiring GPS";
+      case LocationPermissionState.error:
+        return "Location error";
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final access = _access;
+    return SectionCard(
+      title: "Location & permissions",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.location_on_outlined),
+              title: Text(_permissionLabel(_permission)),
+              subtitle: Text(
+                access?.hasFix == true
+                    ? "Last fix ±${access!.position!.accuracy.toStringAsFixed(0)} m"
+                    : access?.message.isNotEmpty == true
+                        ? access!.message
+                        : "Location is required for SOS, broadcasts, and nearby police.",
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _refresh(requestIfDenied: true),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text("Retry permission"),
+                ),
+                if (_permission == LocationPermissionState.serviceDisabled)
+                  OutlinedButton.icon(
+                    onPressed: openLocationSettings,
+                    icon: const Icon(Icons.settings),
+                    label: const Text("Open location settings"),
+                  ),
+                if (_permission == LocationPermissionState.deniedPermanently ||
+                    _permission == LocationPermissionState.restricted)
+                  OutlinedButton.icon(
+                    onPressed: openAppSettings,
+                    icon: const Icon(Icons.settings),
+                    label: const Text("Open app settings"),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: () => _refresh(requestIfDenied: true),
+                  icon: const Icon(Icons.my_location),
+                  label: const Text("Test current location"),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -7184,6 +7309,8 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          const LocationPermissionSettingsSection(),
           const SizedBox(height: 16),
           SectionCard(
             title: "Your car",
@@ -7437,7 +7564,8 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
   }
 
   void _startSilentCountdown() {
-    if (sendingAlert || sendingSilentAlert || silentCountdownSeconds > 0) return;
+    if (sendingAlert || sendingSilentAlert || silentCountdownSeconds > 0)
+      return;
     setState(() => silentCountdownSeconds = 3);
     _silentCountdownTimer?.cancel();
     _silentCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -7455,6 +7583,59 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     });
   }
 
+  Future<void> _submitSosDraft({
+    required BuildContext parentContext,
+    required AppController controller,
+    required IncidentDraft draft,
+    required LocationAccessResult access,
+    required bool silent,
+  }) async {
+    final result =
+        await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
+    if (!parentContext.mounted) return;
+
+    if (result.status == IncidentSubmissionStatus.duplicateInFlight) {
+      showAppSnackBar(
+        parentContext,
+        result.userMessage ?? "SOS is already sending.",
+        isError: true,
+      );
+      return;
+    }
+
+    if (result.isSuccess || result.isQueued || result.canRetry) {
+      final incidentId = result.incidentId;
+      if (incidentId != null && incidentId.isNotEmpty) {
+        await controller.activateActiveEmergency(incidentId, silent: silent);
+        if (result.isSuccess) {
+          await controller.startIncidentLocationTracking(incidentId);
+        }
+        if (!parentContext.mounted) return;
+        showAppSnackBar(
+          parentContext,
+          sosLocationUserMessage(access, submitted: true),
+        );
+        Navigator.of(parentContext).pushNamed(
+          "/active-emergency",
+          arguments: {"incidentId": incidentId, "silent": silent},
+        );
+        return;
+      }
+      showAppSnackBar(
+        parentContext,
+        sosLocationUserMessage(access, submitted: true),
+      );
+      Navigator.of(parentContext).pushNamed("/tracking");
+      return;
+    }
+
+    showAppSnackBar(
+      parentContext,
+      result.userMessage ?? "Unable to send SOS right now. Try again.",
+      isError: true,
+    );
+  }
+
   Future<void> _sendSilentSosAlert() async {
     if (sendingSilentAlert || sendingAlert) return;
     setState(() => sendingSilentAlert = true);
@@ -7464,51 +7645,34 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     Navigator.of(context).pop();
 
     try {
-      final outcome = await captureLocationOutcome().timeout(
+      final access = await resolveLocationAccess(
+        timeout: kEmergencyLocationTimeout,
+        allowCachedFallback: true,
+      ).timeout(
         kSosSubmissionTimeout,
-        onTimeout: () =>
-            const LocationCaptureOutcome(result: LocationCaptureResult.timeout),
+        onTimeout: () => const LocationAccessResult(
+          state: LocationPermissionState.timedOut,
+        ),
       );
       if (!parentContext.mounted) return;
 
-      if (outcome.result != LocationCaptureResult.granted ||
-          outcome.position == null) {
-        return;
-      }
-
-      final draft = IncidentDraft(
-        clientSubmissionId: createClientSubmissionId(),
-        type: IncidentType.sos,
+      final draft = buildSosIncidentDraft(
+        access: access,
         description: "Discreet assistance request from mobile app.",
-        latitude: outcome.position!.latitude,
-        longitude: outcome.position!.longitude,
-        locationAccuracyMeters: outcome.position!.accuracy,
-        capturedAt: outcome.position!.timestamp.toUtc(),
-        title: "Silent SOS",
         anonymous: true,
         notifyEmergencyContacts: false,
         silent: true,
+        title: "Silent SOS",
         emergencyCategory: "SilentSos",
       );
 
-      final result =
-          await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
-      if (!parentContext.mounted) return;
-
-      if (result.isSuccess || result.isQueued) {
-        final incidentId = result.incidentId;
-        if (incidentId != null && incidentId.isNotEmpty) {
-          await controller.activateActiveEmergency(incidentId, silent: true);
-          if (result.isSuccess) {
-            await controller.startIncidentLocationTracking(incidentId);
-          }
-          if (!parentContext.mounted) return;
-          Navigator.of(parentContext).pushNamed(
-            "/active-emergency",
-            arguments: {"incidentId": incidentId, "silent": true},
-          );
-        }
-      }
+      await _submitSosDraft(
+        parentContext: parentContext,
+        controller: controller,
+        draft: draft,
+        access: access,
+        silent: true,
+      );
     } catch (_) {
       // Silent SOS stays discreet — no alarm-style error UI.
     } finally {
@@ -7529,78 +7693,56 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     showAppSnackBar(parentContext, "Sending SOS alert...");
 
     try {
-      final outcome = await captureLocationOutcome().timeout(
+      final access = await resolveLocationAccess(
+        timeout: kEmergencyLocationTimeout,
+        allowCachedFallback: true,
+      ).timeout(
         kSosSubmissionTimeout,
-        onTimeout: () =>
-            const LocationCaptureOutcome(result: LocationCaptureResult.timeout),
+        onTimeout: () => const LocationAccessResult(
+          state: LocationPermissionState.timedOut,
+        ),
       );
       if (!parentContext.mounted) return;
 
-      if (outcome.result != LocationCaptureResult.granted ||
-          outcome.position == null) {
-        final message = locationFailureMessage(outcome.result);
-        showAppSnackBar(parentContext, message, isError: true);
+      if (!access.allowsEmergencySubmission) {
+        showAppSnackBar(
+          parentContext,
+          sosLocationUserMessage(access, submitted: false),
+          isError: true,
+        );
         return;
       }
 
-      final draft = buildIncidentDraft(
-        type: IncidentType.sos,
+      final draft = buildSosIncidentDraft(
+        access: access,
         description: "SOS emergency triggered from mobile app.",
-        position: outcome.position!,
         notifyEmergencyContacts: true,
         title: "SOS emergency",
         emergencyCategory: "Other",
       );
 
-      final result =
-          await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
-      if (!parentContext.mounted) return;
-
-      if (result.status == IncidentSubmissionStatus.duplicateInFlight) {
-        showAppSnackBar(
-            parentContext, result.userMessage ?? "SOS is already sending.",
-            isError: true);
-        return;
-      }
-
-      if (result.isSuccess || result.isQueued || result.canRetry) {
-        final incidentId = result.incidentId;
-        if (incidentId != null && incidentId.isNotEmpty) {
-          await controller.activateActiveEmergency(incidentId);
-          if (result.isSuccess) {
-            await controller.startIncidentLocationTracking(incidentId);
-          }
-          if (!parentContext.mounted) return;
-          showAppSnackBar(
-            parentContext,
-            result.userMessage ?? "SOS sent with your GPS location.",
-          );
-          Navigator.of(parentContext).pushNamed(
-            "/active-emergency",
-            arguments: {"incidentId": incidentId, "silent": false},
-          );
-          return;
-        }
-        showAppSnackBar(parentContext,
-            result.userMessage ?? "SOS sent with your GPS location.");
-        Navigator.of(parentContext).pushNamed("/tracking");
-        return;
-      }
-
-      showAppSnackBar(
-          parentContext, result.userMessage ?? "Unable to send SOS.",
-          isError: true);
+      await _submitSosDraft(
+        parentContext: parentContext,
+        controller: controller,
+        draft: draft,
+        access: access,
+        silent: false,
+      );
     } on TimeoutException {
       if (parentContext.mounted) {
-        showAppSnackBar(parentContext,
-            "SOS timed out. Check your connection and try again.",
-            isError: true);
+        showAppSnackBar(
+          parentContext,
+          "SOS timed out while sending. Try again.",
+          isError: true,
+        );
       }
     } catch (_) {
       if (parentContext.mounted) {
-        showAppSnackBar(parentContext,
-            "Unable to send SOS. Check your connection and try again.",
-            isError: true);
+        showAppSnackBar(
+          parentContext,
+          "Unable to send SOS right now. Try again.",
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => sendingAlert = false);

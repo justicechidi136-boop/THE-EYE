@@ -98,6 +98,48 @@ class PreferencesStore {
   static const _isPairedKey = 'watch.is_paired';
   static const _launcherOnboardingDismissedKey =
       'watch.launcher_onboarding_dismissed';
+  static const _locationOnboardingDismissedKey =
+      'watch.location_onboarding_dismissed';
+  static const _activeEmergencyTrackingKey = 'watch.active_emergency_tracking';
+
+  Future<void> saveActiveEmergencyTracking({
+    required bool active,
+    String? sosEventId,
+  }) async {
+    final store = await prefs;
+    if (!active) {
+      await store.remove(_activeEmergencyTrackingKey);
+      return;
+    }
+    await store.setString(
+      _activeEmergencyTrackingKey,
+      jsonEncode({
+        'active': true,
+        if (sosEventId != null) 'sosEventId': sosEventId,
+      }),
+    );
+  }
+
+  Future<({bool active, String? sosEventId})?> loadActiveEmergencyTracking() async {
+    final store = await prefs;
+    final raw = store.getString(_activeEmergencyTrackingKey);
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    return (
+      active: decoded['active'] as bool? ?? false,
+      sosEventId: decoded['sosEventId'] as String?,
+    );
+  }
+
+  Future<bool> isLocationOnboardingDismissed() async {
+    final store = await prefs;
+    return store.getBool(_locationOnboardingDismissedKey) ?? false;
+  }
+
+  Future<void> setLocationOnboardingDismissed(bool value) async {
+    final store = await prefs;
+    await store.setBool(_locationOnboardingDismissedKey, value);
+  }
 
   Future<List<OfflineEvent>> loadOfflineQueue() async {
     final store = await prefs;

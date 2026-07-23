@@ -35,6 +35,7 @@ void main() {
       location: LocationService(
         api: api,
         credentials: credentials,
+        preferences: preferences,
         connectivity: connectivity,
         positionProvider: () async => null,
       ),

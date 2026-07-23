@@ -50,7 +50,7 @@ void main() {
   test("locationFailureMessage describes GPS timeout", () {
     expect(
       locationFailureMessage(LocationCaptureResult.timeout),
-      "Could not get GPS in time. Move to an open area and try again.",
+      contains("GPS fix"),
     );
   });
 

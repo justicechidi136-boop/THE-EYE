@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:the_eye_watch/config/firebase_bootstrap.dart';
 import 'package:the_eye_watch/services/launcher_service.dart';
 import 'package:the_eye_watch/services/watch_app_services.dart';
@@ -86,6 +87,10 @@ Future<void> _pumpBootChrome(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUpAll(() {
+    GeolocatorPlatform.instance = _ImmediateGeolocatorPlatform();
+  });
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
@@ -141,4 +146,34 @@ void main() {
       services: services,
     );
   });
+}
+
+class _ImmediateGeolocatorPlatform extends GeolocatorPlatform {
+  @override
+  Future<LocationPermission> checkPermission() async =>
+      LocationPermission.whileInUse;
+
+  @override
+  Future<LocationPermission> requestPermission() async =>
+      LocationPermission.whileInUse;
+
+  @override
+  Future<bool> isLocationServiceEnabled() async => true;
+
+  @override
+  Future<Position> getCurrentPosition(
+      {LocationSettings? locationSettings}) async {
+    return Position(
+      latitude: 6.5244,
+      longitude: 3.3792,
+      timestamp: DateTime.now(),
+      accuracy: 5,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
+  }
 }

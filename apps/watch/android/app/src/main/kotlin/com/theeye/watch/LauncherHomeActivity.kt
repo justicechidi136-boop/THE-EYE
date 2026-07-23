@@ -46,6 +46,25 @@ open class LauncherHomeActivity : FlutterActivity() {
             .setMethodCallHandler(
                 LauncherChannelHandler(this, packageName),
             )
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.theeye.watch/emergency_tracking",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startEmergencyTracking" -> {
+                    val silent = call.argument<Boolean>("silent") ?: false
+                    val sosEventId = call.argument<String>("sosEventId")
+                    EmergencyTrackingService.start(this, sosEventId, silent)
+                    result.success(null)
+                }
+                "stopEmergencyTracking" -> {
+                    EmergencyTrackingService.stop(this)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     private fun vibrator(): Vibrator? {

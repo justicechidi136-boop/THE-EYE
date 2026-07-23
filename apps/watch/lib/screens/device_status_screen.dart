@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../location/location_permission_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
 import '../widgets/watch_ui.dart';
@@ -25,7 +26,31 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
   Future<void> _refresh() async {
     setState(() => _loading = true);
     await widget.services.heartbeat.sendHeartbeat();
+    await widget.services.location.readPermissionState();
     if (mounted) setState(() => _loading = false);
+  }
+
+  String _gpsLabel() {
+    final access = widget.services.location.lastAccess;
+    final permission = access?.state;
+    if (permission == WatchLocationPermissionState.serviceDisabled) {
+      return 'Location off';
+    }
+    if (permission == WatchLocationPermissionState.denied ||
+        permission == WatchLocationPermissionState.deniedPermanently) {
+      return 'Permission blocked';
+    }
+    if (access?.hasFix == true) {
+      final age = access!.ageSeconds;
+      if (access.isCached && age != null) {
+        return 'Cached ${age}s';
+      }
+      return 'Live fix';
+    }
+    if (widget.services.location.isEmergencyActive) {
+      return 'Retrying';
+    }
+    return 'Waiting';
   }
 
   @override
@@ -67,9 +92,7 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                 ),
                 WatchInfoRow(
                   label: 'GPS',
-                  value: widget.services.sos.state.latitude != null
-                      ? 'Active'
-                      : 'Ready',
+                  value: _gpsLabel(),
                   valueColor: EyeColors.green,
                 ),
                 WatchInfoRow(
