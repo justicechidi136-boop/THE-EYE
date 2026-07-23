@@ -2,13 +2,13 @@
 
 **Single source of truth for release readiness.**  
 **Branch baseline:** `staging`  
-**Last updated:** 2026-07-22 (Sprint 6 Phase B — silent SOS, dispatch actions, timeline, deep links, SLA display)  
+**Last updated:** 2026-07-23 (Sprint 6 Phase C — reassign flow, queue SLA indicators, security regressions)  
 **Release gate:** **NOT READY FOR PRODUCTION**  
 **Sprint 2 status:** **CODE COMPLETE — PENDING STAGING QA** (no PASS without device/runtime evidence)  
 **Sprint 3 status:** **CODE COMPLETE — PENDING STAGING QA**  
 **Sprint 4 status:** **CODE COMPLETE — PENDING STAGING RUNTIME QA** (DI fix `fe7bb3d`; VPS redeploy pending)  
 **Sprint 5 status:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (`feature/sprint-5-neighborhood-watch` @ `ec3362a`+; no PASS without device/runtime evidence; INF-006 media E2E remains blocked)  
-**Sprint 6 status:** **IN PROGRESS — CODE COMPLETE PENDING STAGING/DEVICE QA** (branch `feature/sprint-6-emergency-response-command-center`; silent SOS, command-center actions, incident detail/timeline, push deep-link refresh, SLA display landed; staging/device/admin QA pending; no PASS promotions)
+**Sprint 6 status:** **CODE COMPLETE — PENDING STAGING QA** (branch `feature/sprint-6-emergency-response-command-center`; silent SOS, command-center actions, incident detail/timeline, push deep-link refresh, SLA display, reassign flow; staging/device/admin QA pending; no PASS promotions)
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 
@@ -675,7 +675,7 @@
 **Baseline:** `staging` @ `7d71615` (post Sprint 5 merge, Validate Staging green)  
 **Implementation branch:** `feature/sprint-6-emergency-response-command-center`  
 **Contracts:** `docs/EMERGENCY_RESPONSE_CONTRACT.md`, `docs/AGENCY_DISPATCH_ARCHITECTURE.md`  
-**Sprint 6 verdict:** **IN PROGRESS — CODE COMPLETE PENDING STAGING/DEVICE QA** (staging/device/admin QA pending; embedded map **BLOCKED**; road ETA **BLOCKED** without provider integration; automated SLA escalation **NOT IMPLEMENTED**)
+**Sprint 6 verdict:** **CODE COMPLETE — PENDING STAGING QA** (staging/device/admin QA pending; embedded map **BLOCKED**; road ETA **BLOCKED** without provider integration; automated SLA escalation **NOT IMPLEMENTED**)
 
 > Rules: No mock responders, fake maps, placeholder agency data, or simulated success. Reuse existing Redis/FCM/S3/LiveKit integrations or mark **BLOCKED**. Do not promote Sprint 1–5 rows to PASS without new live evidence. Do not start Sprint 7.
 
@@ -702,7 +702,7 @@
 | S6-017 | Responder availability | API | CODE COMPLETE — STAGING QA PENDING | N/A | `/dispatch/responders` | Y | `Responder` | N | N | N/A | Y | Y | P0 | Y | Staging QA |
 | S6-018 | Incident assignment lifecycle | API + Admin | CODE COMPLETE — STAGING ADMIN QA PENDING | Dispatch assign/reassign UI | `/dispatch/incidents/:id/assign` | Y | `IncidentAssignment` | N | Partial enqueue | N/A | Y | Y | P0 | Y | Staging admin QA |
 | S6-019 | Responder accept/decline/en route/arrive | API | CODE COMPLETE — STAGING QA PENDING | Responder PATCH actions | `/dispatch/assignments/:id` | Y | Y | N | Partial | N/A | N | Y | P0 | Y | Staging QA |
-| S6-020 | Reassignment chain | API + Admin | CODE COMPLETE — STAGING ADMIN QA PENDING | Escalate/reassign via dispatch detail | Y | Y | Y | N | N | N/A | Y | Partial | P1 | N | Auto-reassign on decline/expiry still pending |
+| S6-020 | Reassignment chain | API + Admin | CODE COMPLETE — STAGING ADMIN QA PENDING | Escalate/reassign via dispatch detail + `/reassign` endpoint | Y | Y | Y | N | N | N/A | Y | Partial | P1 | N | Auto-reassign on decline/expiry still pending |
 | S6-021 | Live citizen location (server) | API | CODE COMPLETE — STAGING DEVICE QA PENDING | N/A | `POST/GET /incidents/:id/location*` | Y | `IncidentLocationUpdate` | PostGIS jurisdiction | N | N/A | Coordinate list | Y | P0 | N | Staging device QA |
 | S6-022 | Live responder location | API + Admin | CODE COMPLETE — STAGING QA PENDING | Assignment location stream | `/dispatch/assignments/:id/location` | Y | `ResponderLocationUpdate` | Y | N | N/A | Coordinate list | Y | P0 | Y | Staging QA |
 | S6-023 | ETA and distance | API + Mobile + Admin | CODE COMPLETE — STAGING QA PENDING | Straight-line distance + Maps link | Partial | `EtaService` | N | Haversine/PostGIS | N | N/A | External link | Y | P1 | Y | Road ETA **BLOCKED** without provider integration |

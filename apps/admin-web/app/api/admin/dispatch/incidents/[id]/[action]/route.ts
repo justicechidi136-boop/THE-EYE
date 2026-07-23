@@ -4,6 +4,7 @@ import {
   assignDispatchIncident,
   escalateDispatchIncident,
   fetchDispatchAssignment,
+  reassignDispatchIncident,
   requestDispatchInfo,
   updateDispatchTriage,
 } from "../../../../../../../lib/api/dispatch";
@@ -16,7 +17,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   try {
     if (action === "assign" || action === "reassign") {
-      const result = await assignDispatchIncident(id, body);
+      const result =
+        action === "reassign"
+          ? await reassignDispatchIncident(id, body)
+          : await assignDispatchIncident(id, body);
       return NextResponse.json({ ok: true, data: result });
     }
     if (action === "escalate") {
@@ -32,9 +36,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ ok: true, data: result });
     }
     if (action === "triage") {
+      const overrideReason = String(body.overrideReason ?? body.reason ?? "").trim();
       const result = await updateDispatchTriage(id, {
         priority: String(body.priority ?? "P1LifeThreatening"),
-        reason: String(body.reason ?? "Triage updated from command center"),
+        overrideReason: overrideReason || "Priority updated from command center",
       });
       return NextResponse.json({ ok: true, data: result });
     }
