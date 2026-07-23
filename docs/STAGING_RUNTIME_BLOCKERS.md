@@ -322,8 +322,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | Missing manifest permissions; no centralized permission lifecycle; SOS blocked on GPS failure; generic network errors |
 | **Fix** | Manifest permissions; `location_permission_service.dart` typed states; SOS pending-location policy; Settings location section; police/settings recovery UI |
 | **Automated test** | `location_permission_service_test.dart`, `sos_location_policy_test.dart`, `sos_actions_test.dart` |
-| **Runtime evidence** | Automated tests green locally; **physical phone QA NOT DONE** |
-| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+| **Runtime evidence** | PR #22 merged @ `cd13a80`; Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green; local APK @ `cd13a80` SHA-256 `E1501B3E…53D6E`; **physical phone QA NOT DONE** (no ADB) |
+| **Status** | CI VERIFIED — **DEVICE QA PENDING** |
 
 ---
 
@@ -340,8 +340,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | No typed watch permission service; no `EmergencyTrackingService`; offline GPS never queued; no location settings diagnostics |
 | **Fix** | Watch `location_permission_service.dart`; `EmergencyTrackingService` + boot receiver; SOS pending policy; location settings screen; device status reads real state |
 | **Automated test** | `location_permission_service_test.dart`, `sos_service_test.dart` |
-| **Runtime evidence** | Automated tests green locally; **physical watch QA NOT DONE** |
-| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+| **Runtime evidence** | PR #22 merged @ `cd13a80`; Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green; **physical watch QA NOT DONE** |
+| **Status** | CI VERIFIED — **WATCH QA PENDING** |
 
 ---
 
@@ -358,8 +358,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | Hard-fail jurisdiction lookup; citizen JWT lacks country/state/lga; staging jurisdictions seeded without polygons |
 | **Fix** | `JurisdictionResolutionService` with polygon/nearest/profile/default/global fallback; incident metadata records resolution status; admin diagnose endpoint; staging seed adds Ikeja polygon |
 | **Automated test** | `jurisdiction-resolution.service.spec.ts` |
-| **Runtime evidence** | API tests green locally; **physical device Live Video QA NOT DONE** |
-| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+| **Runtime evidence** | PR #22 merged @ `cd13a80`; Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green; VPS deploy blocked (DEP-002); jurisdiction seed not applied on VPS; **Live Video device QA NOT DONE** |
+| **Status** | CI VERIFIED — **DEVICE QA PENDING** (depends on SRB-020 + VPS deploy) |
 
 ---
 
@@ -376,8 +376,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | Screen not using Figma back header pattern or PopScope fallback |
 | **Fix** | `EyePageBackHeader` + `PopScope` with `/home` fallback in `police_stations_screen.dart` |
 | **Automated test** | `police_navigation_test.dart` |
-| **Runtime evidence** | Mobile widget test green locally; **device navigation QA NOT DONE** |
-| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+| **Runtime evidence** | PR #22 merged @ `cd13a80`; Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green; local APK @ `cd13a80`; **device navigation QA NOT DONE** |
+| **Status** | CI VERIFIED — **DEVICE QA PENDING** |
 
 ---
 
@@ -394,8 +394,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | No `AccountRecoveryChallenge` model/endpoints; no mobile recovery screens |
 | **Fix** | Account recovery API + SMTP delivery + security push + mobile Recover Account flow |
 | **Automated test** | `account-recovery.service.spec.ts` |
-| **Runtime evidence** | API tests green locally; **email/push/device recovery QA NOT DONE** |
-| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+| **Runtime evidence** | PR #22 merged @ `cd13a80`; Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green; migration `20260723210000_account_recovery_challenges` **not deployed** (Deploy [30048809537](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048809537) failed); **email/push/device recovery QA NOT DONE** |
+| **Status** | CI VERIFIED — **DEVICE QA PENDING** |
 
 ---
 
@@ -403,12 +403,12 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 
 **PARTIALLY BLOCKED**
 
-PR #19 merged to `staging` at `841d96a`. CI and Validate Staging are green. **Staging VPS has not been redeployed** in this session (API/worker/admin still on pre-#19 runtime). Fresh staging APK built locally; **device QA blocked** (no ADB/physical device). **RC1 tag not created.**
+PR #22 merged to `staging` at `cd13a8040960b3b4ba29ba5fbd8a8f8b8f3dc860` (2026-07-23T22:04:59Z). Post-merge Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green (API 317/317, mobile 140/140, watch 60/60). **Staging VPS deploy not completed** — Deploy workflow [30048809537](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048809537) failed: GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL` (DEP-002). Live API health @ 2026-07-23T22:08Z reports pre-deploy runtime. Fresh local APK built from `cd13a80` (0.1.0+1, SHA-256 `E1501B3EF46ED37DFC7943005E3DE8420356036B7448972557B928C6FFA53D6E`); **device QA blocked** (no ADB/physical device). **RC1 tag not created.**
 
 Remaining blockers:
-- **VPS deploy** required before runtime QA (Phases 4–6, 8–12).
+- **DEP-002** — set `vars.NEXT_PUBLIC_API_BASE_URL=https://staging-api.theeye.com.ng/v1` in GitHub `staging` environment, then redeploy VPS (backup → migrate → seed → recreate services).
 - **Termii Sender ID approval** (SRB-002).
-- **Physical device + admin manual QA** for all SRB rows.
+- **Physical device + watch manual QA** for SRB-020–024.
 
 **Gate documents (2026-07-23):**
 - `docs/SPRINT_8_ENTRY_GATE.md`

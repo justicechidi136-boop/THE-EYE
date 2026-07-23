@@ -126,8 +126,13 @@
 
 | ID | Description |
 |----|-------------|
-| DEP-001 | Staging VPS not redeployed to certified commit lineage |
-| DEP-002 | GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL` — blocks Deploy workflow |
+| DEP-001 | Staging VPS not redeployed to certified commit lineage (post–PR #22 @ `cd13a80`) |
+| DEP-002 | GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL` — Deploy [30048809537](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048809537) failed |
+| SRB-020 | Mobile location permission — CI verified; device QA pending |
+| SRB-021 | Watch location permission — CI verified; watch QA pending |
+| SRB-022 | Live Video jurisdiction — CI verified; device QA pending (depends SRB-020 + VPS deploy) |
+| SRB-023 | Police back navigation — CI verified; device QA pending |
+| SRB-024 | Google account recovery — CI verified; migration not deployed; device QA pending |
 | SRB-001 | Password reset email — no live SMTP inbox proof |
 | SRB-003 | Notification inbox — device QA pending |
 | SRB-004 | Broadcasts — device QA pending |

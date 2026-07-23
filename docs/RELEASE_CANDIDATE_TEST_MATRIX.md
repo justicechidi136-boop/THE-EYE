@@ -183,7 +183,12 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | SRB-008 | P0 | LiveKit room join or honest disable | NOT TESTED |
 | SRB-009 | P1 | Police dataset + filters | NOT TESTED |
 | SRB-011 | P1 | Theme contrast device pass | NOT TESTED |
-| DEP-001 | P0 | VPS not redeployed to certified staging lineage | OPEN |
+| SRB-020 | P0 | Mobile location permission lifecycle | CI VERIFIED — DEVICE QA PENDING |
+| SRB-021 | P0 | Watch location permission lifecycle | CI VERIFIED — WATCH QA PENDING |
+| SRB-022 | P0 | Live Video jurisdiction resolution | CI VERIFIED — DEVICE QA PENDING |
+| SRB-023 | P1 | Police back navigation | CI VERIFIED — DEVICE QA PENDING |
+| SRB-024 | P0/P1 | Google-linked account recovery | CI VERIFIED — DEVICE QA PENDING |
+| DEP-001 | P0 | VPS not redeployed to certified staging lineage (`cd13a80` post–PR #22) | OPEN |
 | DEP-002 | P0 | GitHub `staging` env missing `NEXT_PUBLIC_API_BASE_URL` | OPEN |
 | PR18-001 | P0 | Sprint 7 watch not merged (PR #18 rebased @ `2b0db6e`, CI green, not merged) | OPEN |
 
