@@ -359,6 +359,12 @@ async function main() {
     results.push(await seedAccount(spec));
   }
 
+  await prisma.$executeRawUnsafe(`
+    UPDATE jurisdictions
+    SET boundary = ST_GeogFromText('SRID=4326;MULTIPOLYGON(((3.30 6.55,3.45 6.55,3.45 6.70,3.30 6.70,3.30 6.55)))')
+    WHERE country = 'Nigeria' AND state = 'Lagos' AND lga = 'Ikeja'
+  `);
+
   console.log("Staging test accounts upserted:");
   for (const result of results) {
     const extras = [

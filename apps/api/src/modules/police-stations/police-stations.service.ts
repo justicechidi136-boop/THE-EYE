@@ -58,7 +58,7 @@ export class PoliceStationsService {
       parsed.agencyType ?? null,
       parsed.limit,
     ) as Array<Record<string, unknown>>;
-    return { data: rows.map((row) => ({ ...row, navigationUrl: this.googleMapsUrl(row.latitude, row.longitude) })) };
+    return { data: rows.map((row) => this.mapStationRow(row)) };
   }
 
   async search(query: PoliceStationSearchQuery) {
@@ -125,6 +125,13 @@ export class PoliceStationsService {
 
   private googleMapsUrl(latitude: unknown, longitude: unknown) {
     return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`;
+  }
+
+  private mapStationRow(row: Record<string, unknown>) {
+    return {
+      ...row,
+      navigationUrl: this.googleMapsUrl(row.latitude, row.longitude),
+    };
   }
 
   private audit(actor: JwtPayload, action: string, entityId: string, metadata: Record<string, unknown>) {
