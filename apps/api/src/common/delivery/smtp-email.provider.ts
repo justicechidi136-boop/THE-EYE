@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
-import nodemailer from "nodemailer";
+import { createTransport } from "nodemailer";
 import type { EmailMessage, ProviderDeliveryResult } from "./delivery.types";
 import { maskEmail } from "./safe-delivery-log";
 
@@ -29,7 +29,7 @@ export class SmtpEmailProvider {
       };
     }
 
-    const transporter = nodemailer.createTransport({
+    const transporter = createTransport({
       host: this.config.get<string>("SMTP_HOST"),
       port: Number(this.config.get<string>("SMTP_PORT") ?? 587),
       secure: this.config.get<string>("SMTP_SECURE") === "true",
