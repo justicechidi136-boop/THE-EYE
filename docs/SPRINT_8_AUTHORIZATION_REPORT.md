@@ -1,6 +1,6 @@
 # THE EYE — Sprint 8 Authorization Report
 
-**Report date:** 2026-07-23  
+**Report date:** 2026-07-23 (cycle 2 — entry-gate operator session)  
 **Prepared by:** Principal Release Gatekeeper / QA Director  
 **Decision:** **SPRINT 8 NOT AUTHORIZED**
 
@@ -10,10 +10,12 @@
 
 | Field | Value |
 |-------|-------|
-| **Certified Git head** | `841d96a217d51fd2d0ed27479b30fbed240d250a` |
-| **Description** | Merge pull request #19 — staging runtime stabilization |
-| **Validate Staging** | [29991936821](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29991936821) — SUCCESS |
-| **Live VPS runtime** | **Not certified** — redeploy to `841d96a` not executed this cycle |
+| **Certified Git head** | `703be04cb91c9db6080c74fe59e582a59cd9e146` |
+| **Lineage** | PR #19 `841d96a` → PR #20 `be387c6` (Sprint 6) → PR #21 `703be04` (entry-gate docs) |
+| **Original RC commit** | `841d96a217d51fd2d0ed27479b30fbed240d250a` (PR #19 merge) |
+| **Validate Staging (PR #19)** | [29991936821](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29991936821) — SUCCESS |
+| **Live VPS runtime** | **Not certified** — automated deploy failed; manual VPS deploy not executed |
+| **Deploy attempt** | [29995445139](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29995445139) — **FAILED** (GitHub `staging` env missing `vars.NEXT_PUBLIC_API_BASE_URL`) |
 
 ---
 
@@ -21,13 +23,15 @@
 
 | Field | Value |
 |-------|-------|
-| **APK** | `app-staging-release.apk` (prior build from `841d96a`) |
+| **APK** | `app-staging-release.apk` (fresh build 2026-07-23 post-`703be04`) |
 | **Package** | `com.theeye.app.staging` |
 | **Version** | `0.1.0+1` |
-| **SHA-256** | `C823F10BF21576A254787C01A71F2ED39C7E3B0F53C5DA251BB656FE23C38C22` |
+| **SHA-256** | `E5C3F9BEAE60EDD4FD5BF7F3E78E93DBFA88BE4090865082BFB01411A9355E3B` |
+| **Size** | 99,137,303 bytes |
+| **Git commit** | `703be04` |
 | **API URL** | `https://staging-api.theeye.com.ng/v1` |
 | **Firebase** | `the-eye-2stg` |
-| **Device** | **None** — ADB unavailable; no physical Android in session |
+| **Device** | **None** — ADB unavailable; APK not installed |
 | **Gate A result** | **0 / 25 PASS** · 24 NOT TESTED · 1 BLOCKED BY PROVIDER |
 
 ---
@@ -47,9 +51,10 @@
 
 | Field | Value |
 |-------|-------|
-| **PR #18** | OPEN @ `723a238` (diverged +20/−4 vs staging) |
-| **Watch APK** | Not built from certified staging |
-| **Device/emulator** | **None** in session |
+| **PR #18** | OPEN @ `2b0db6e` (rebased onto `be387c6`; force-with-lease pushed) |
+| **PR #18 CI** | Run [29996852196](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29996852196) — **IN PROGRESS** at report time |
+| **Local validation** | API 299/299 · Watch 55/55 · secret scan PASS |
+| **Merge status** | **NOT MERGED** (awaiting green CI + explicit approval) |
 | **Gate C result** | **0 / 20 PASS** · 19 NOT TESTED · 1 BLOCKED BY HARDWARE |
 
 ---
@@ -121,7 +126,8 @@
 
 | ID | Description |
 |----|-------------|
-| DEP-001 | Staging VPS not redeployed to certified commit `841d96a` |
+| DEP-001 | Staging VPS not redeployed to certified commit lineage |
+| DEP-002 | GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL` — blocks Deploy workflow |
 | SRB-001 | Password reset email — no live SMTP inbox proof |
 | SRB-003 | Notification inbox — device QA pending |
 | SRB-004 | Broadcasts — device QA pending |
@@ -189,13 +195,13 @@ All tracked as **NOT TESTED**, not closed.
 
 Mandatory next actions (strict order):
 
-1. **Deploy** staging VPS to `841d96a` (API, worker, admin) with backup and migration gate.  
-2. **Rebuild** mobile APK from deployed commit; install on physical Android.  
-3. **Execute** Gate A matrix (25 flows) with evidence.  
-4. **Execute** Gate B in staging browser across roles.  
-5. **Rebase and merge PR #18** only after steps 1–4 stable; rebuild watch APK; execute Gate C.  
-6. **Complete** Gate D on certified runtime including SMTP inbox test and provider fault checks.  
-7. **Update** matrix rows to PASS only with evidence; re-run this authorization report.
+1. **Set** GitHub `staging` environment variable `NEXT_PUBLIC_API_BASE_URL=https://staging-api.theeye.com.ng/v1`.  
+2. **Deploy** VPS to `703be04` (or approved descendant) via Deploy workflow or manual SSH per `STAGING_DEPLOYMENT.md` with backup.  
+3. **Rebuild** mobile APK from deployed commit; install on physical Android via ADB.  
+4. **Execute** Gate A (25) and Gate B (20) with evidence.  
+5. **Wait** for PR #18 CI green; obtain explicit merge approval; merge/deploy; Gate C on hardware.  
+6. **Complete** Gate D fault-injection on certified runtime.  
+7. **Reissue** this report.
 
 **Do not** create Sprint 8 branch. **Do not** begin production-readiness implementation.
 
