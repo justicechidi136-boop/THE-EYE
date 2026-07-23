@@ -162,7 +162,7 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | API Docker image | `841d96a` | `the-eye-api:staging-validate` (CI) | CI build only | Not deployed to VPS |
 | Worker image | `841d96a` | same API image | — | Not redeployed |
 | Admin web image | `841d96a` | `the-eye-admin-web:staging-validate` | CI build only | Not deployed |
-| Mobile APK | `841d96a` | `0.1.0+1` / `com.theeye.app.staging` | `C823F10B…38C22` | Built; **rebuild required** (clean removed artifact) |
+| Mobile APK | `703be04` | `0.1.0+1` / `com.theeye.app.staging` | `E5C3F9BE…9355E3B` | Built 2026-07-23; **not installed** |
 | Watch APK | — | — | — | **Not built** (PR #18 not merged) |
 
 **Firebase:** `the-eye-2stg` · **API URL:** `https://staging-api.theeye.com.ng/v1`
@@ -183,8 +183,9 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | SRB-008 | P0 | LiveKit room join or honest disable | NOT TESTED |
 | SRB-009 | P1 | Police dataset + filters | NOT TESTED |
 | SRB-011 | P1 | Theme contrast device pass | NOT TESTED |
-| DEP-001 | P0 | VPS not redeployed to `841d96a` | OPEN |
-| PR18-001 | P0 | Sprint 7 watch reliability not on staging | OPEN (PR #18) |
+| DEP-001 | P0 | VPS not redeployed to certified staging lineage | OPEN |
+| DEP-002 | P0 | GitHub `staging` env missing `NEXT_PUBLIC_API_BASE_URL` | OPEN |
+| PR18-001 | P0 | Sprint 7 watch not merged (PR #18 rebased @ `2b0db6e`, CI green, not merged) | OPEN |
 
 ---
 

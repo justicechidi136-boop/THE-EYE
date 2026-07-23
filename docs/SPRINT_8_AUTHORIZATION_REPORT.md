@@ -178,14 +178,13 @@ All tracked as **NOT TESTED**, not closed.
 
 | Evidence | Reference |
 |----------|-----------|
+| Entry-gate docs PR | [#21 MERGED](https://github.com/justicechidi136-boop/THE-EYE/pull/21) → `703be04` |
 | PR #19 merge | `841d96a` · [PR #19](https://github.com/justicechidi136-boop/THE-EYE/pull/19) |
-| PR CI green | [29991834750](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29991834750) |
-| Validate Staging | [29991936821](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29991936821) |
-| Runtime blockers | `docs/STAGING_RUNTIME_BLOCKERS.md` |
-| Test matrix | `docs/RELEASE_CANDIDATE_TEST_MATRIX.md` (83 rows) |
-| Entry gate criteria | `docs/SPRINT_8_ENTRY_GATE.md` |
-| Staging health probe | `GET /v1/health/ready` @ 2026-07-23T09:04:24Z |
-| Mobile APK hash | SHA-256 `C823F10B…38C22` @ commit `841d96a` |
+| PR #20 merge | `be387c6` · Sprint 6 dispatch delta |
+| Deploy failure | [29995445139](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29995445139) |
+| PR #18 rebase + CI | `2b0db6e` · [29996852196](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/29996852196) SUCCESS |
+| Fresh mobile APK | SHA-256 `E5C3F9BE…9355E3B` @ `703be04` |
+| Staging health (uncertified VPS) | `GET /v1/health/ready` @ 2026-07-23T09:29Z — observational only |
 
 ---
 
@@ -199,7 +198,7 @@ Mandatory next actions (strict order):
 2. **Deploy** VPS to `703be04` (or approved descendant) via Deploy workflow or manual SSH per `STAGING_DEPLOYMENT.md` with backup.  
 3. **Rebuild** mobile APK from deployed commit; install on physical Android via ADB.  
 4. **Execute** Gate A (25) and Gate B (20) with evidence.  
-5. **Wait** for PR #18 CI green; obtain explicit merge approval; merge/deploy; Gate C on hardware.  
+5. **Obtain explicit merge approval for PR #18** (CI green @ `2b0db6e`); merge/deploy; Gate C on hardware.  
 6. **Complete** Gate D fault-injection on certified runtime.  
 7. **Reissue** this report.
 
