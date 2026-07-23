@@ -1,5 +1,8 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { SmtpEmailProvider } from "../../common/delivery/smtp-email.provider";
+import { TermiiSmsProvider } from "../../common/delivery/termii-sms.provider";
+import { maskEmail, maskPhone } from "../../common/delivery/safe-delivery-log";
 
 type AuthDeliveryPayload =
   | {
@@ -17,30 +20,68 @@ type AuthDeliveryPayload =
 @Injectable()
 export class AuthDeliveryService {
   private readonly logger = new Logger(AuthDeliveryService.name);
+  private readonly smtp: SmtpEmailProvider;
+  private readonly termii: TermiiSmsProvider;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService) {
+    this.smtp = new SmtpEmailProvider(config);
+    this.termii = new TermiiSmsProvider(config);
+  }
 
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
-    await this.dispatch(
+    if (this.smtp.isConfigured()) {
+      const resetBase = this.config.get<string>("PASSWORD_RESET_LINK_BASE_URL")?.trim()
+        ?? this.config.get<string>("MOBILE_PASSWORD_RESET_URL")?.trim();
+      const resetLink = resetBase
+        ? `${resetBase}${resetBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
+        : null;
+      const result = await this.smtp.send({
+        to: email,
+        subject: "Reset your THE EYE password",
+        text: resetLink
+          ? `Use this link to reset your password (valid for 30 minutes): ${resetLink}`
+          : "Use the password reset code in THE EYE to complete your request.",
+        html: resetLink
+          ? `<p>Use this link to reset your password (valid for 30 minutes):</p><p><a href="${resetLink}">Reset password</a></p>`
+          : "<p>Use the password reset code in THE EYE to complete your request.</p>",
+      });
+      if (result.status === "ProviderAccepted") {
+        this.logger.log(`Password reset email accepted by SMTP for ${maskEmail(email)}`);
+        return;
+      }
+      throw new ServiceUnavailableException({
+        message: "Password reset email could not be sent. Try again shortly.",
+        code: "AUTH_DELIVERY_FAILED",
+      });
+    }
+
+    await this.dispatchWebhook(
       this.config.get<string>("AUTH_PASSWORD_RESET_WEBHOOK_URL"),
-      {
-        type: "password_reset",
-        email,
-        token,
-      },
+      { type: "password_reset", email, token },
       "password reset email",
     );
   }
 
   async sendPhoneOtp(phone: string, code: string, purpose: string): Promise<void> {
-    await this.dispatch(
-      this.config.get<string>("AUTH_PHONE_OTP_WEBHOOK_URL"),
-      {
-        type: "phone_otp",
-        phone,
-        code,
+    if (this.termii.isConfigured()) {
+      const result = await this.termii.send({
+        to: phone,
+        text: `Your THE EYE verification code is ${code}. It expires in 10 minutes.`,
         purpose,
-      },
+      });
+      if (result.status === "ProviderAccepted") {
+        this.logger.log(`Phone OTP accepted by Termii for ${maskPhone(phone)} purpose=${purpose}`);
+        return;
+      }
+      throw new ServiceUnavailableException({
+        message: "Verification SMS could not be sent. Try again shortly.",
+        code: "AUTH_DELIVERY_FAILED",
+      });
+    }
+
+    await this.dispatchWebhook(
+      this.config.get<string>("AUTH_PHONE_OTP_WEBHOOK_URL"),
+      { type: "phone_otp", phone, code, purpose },
       "phone OTP",
     );
   }
@@ -52,7 +93,7 @@ export class AuthDeliveryService {
     );
   }
 
-  private async dispatch(
+  private async dispatchWebhook(
     webhookUrl: string | undefined,
     payload: AuthDeliveryPayload,
     channelLabel: string,
@@ -65,7 +106,7 @@ export class AuthDeliveryService {
 
     if (this.allowDevAuthCodes()) {
       this.logger.warn(
-        `${channelLabel} delivery skipped in development; configure AUTH_* webhook or disable ALLOW_DEV_AUTH_CODES for production-like behavior.`,
+        `${channelLabel} delivery skipped in development; configure SMTP/Termii or AUTH_* webhook.`,
       );
       return;
     }

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { parseNearestQuery, PoliceStationSearchQuery, NearestPoliceStationsQuery, UpsertPoliceStationDto, validatePoliceStationDto } from "./dto/police-station.dto";
+import { parseNearestQuery, PoliceStationListQuery, PoliceStationSearchQuery, NearestPoliceStationsQuery, UpsertPoliceStationDto, validatePoliceStationDto } from "./dto/police-station.dto";
 
 @Injectable()
 export class PoliceStationsService {
@@ -10,6 +10,25 @@ export class PoliceStationsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
+
+  async list(query: PoliceStationListQuery) {
+    if (query.latitude && query.longitude) {
+      return this.nearest({
+        latitude: query.latitude,
+        longitude: query.longitude,
+        radiusMeters: query.radius,
+        limit: query.limit,
+        agencyType: query.agencyType,
+      });
+    }
+    return this.search({
+      state: query.state,
+      lga: query.lga,
+      q: query.search ?? query.q,
+      agencyType: query.agencyType,
+      limit: query.limit,
+    });
+  }
 
   async nearest(query: NearestPoliceStationsQuery) {
     const parsed = parseNearestQuery(query);
@@ -43,6 +62,7 @@ export class PoliceStationsService {
   }
 
   async search(query: PoliceStationSearchQuery) {
+    const limit = query.limit ? Math.min(Math.max(Number(query.limit), 1), 100) : 100;
     const rows = await this.prisma.policeStation.findMany({
       where: {
         agencyType: query.agencyType,
@@ -50,14 +70,16 @@ export class PoliceStationsService {
           state: query.state,
           lga: query.lga,
         },
-        OR: query.q ? [
-          { name: { contains: query.q, mode: "insensitive" } },
-          { address: { contains: query.q, mode: "insensitive" } },
-        ] : undefined,
+        OR: (query.q ?? query.search)
+          ? [
+              { name: { contains: query.q ?? query.search, mode: "insensitive" } },
+              { address: { contains: query.q ?? query.search, mode: "insensitive" } },
+            ]
+          : undefined,
       } as never,
       include: { agency: true, jurisdiction: true },
       orderBy: { name: "asc" },
-      take: 100,
+      take: limit,
     });
     return { data: rows.map((station) => ({ ...station, navigationUrl: this.googleMapsUrl(station.latitude, station.longitude) })) };
   }

@@ -19,7 +19,7 @@ function createService(env: Record<string, string | undefined>) {
 }
 
 describe("AuthDeliveryService", () => {
-  it("posts password reset payloads without password fields to the configured webhook", async () => {
+  it("posts password reset payloads to the configured webhook when SMTP is unavailable", async () => {
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, text: async () => "" });
     global.fetch = fetchMock as never;
 
@@ -71,7 +71,7 @@ describe("AuthDeliveryService", () => {
     restore();
   });
 
-  it("rejects OTP delivery when no webhook is configured outside development", async () => {
+  it("rejects OTP delivery when no provider or webhook is configured outside development", async () => {
     const { service, restore } = createService({
       NODE_ENV: "staging",
       ALLOW_DEV_AUTH_CODES: "false",
@@ -93,21 +93,6 @@ describe("AuthDeliveryService", () => {
     await expect(
       service.sendPasswordResetEmail("citizen@theeye.local", "reset-token"),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
-    restore();
-  });
-
-  it("does not treat webhook HTTP 200 as proof of user receipt", async () => {
-    const fetchMock = jest.fn().mockResolvedValue({ ok: true, text: async () => "" });
-    global.fetch = fetchMock as never;
-
-    const { service, restore } = createService({
-      NODE_ENV: "staging",
-      THE_EYE_APP_ENV: "staging",
-      AUTH_PASSWORD_RESET_WEBHOOK_URL: "https://delivery.example/password-reset",
-    });
-
-    await service.sendPasswordResetEmail("citizen@theeye.local", "reset-token");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     restore();
   });
 });

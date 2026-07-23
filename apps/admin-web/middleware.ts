@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { ACCESS_TOKEN_COOKIE } from "./lib/session";
 import { verifyAdminAccessToken } from "./lib/verify-jwt";
 
-const publicPaths = ["/login", "/api/auth/login"];
+const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -72,6 +72,7 @@ import "profile/car_profile_store.dart";
 import "profile/emergency_contacts_screen.dart";
 import "profile/kyc_screen.dart";
 import "profile/profile_edit_screen.dart";
+import "police/police_stations_screen.dart";
 import "profile/profile_screen.dart";
 
 export "app/app_scope.dart" show AppScope;
@@ -1041,6 +1042,7 @@ class AppController extends SessionAccessor {
 
   ConnectivityService get connectivity => _connectivity;
   AuthService get authService => _authService;
+  BroadcastFeedService get broadcastFeedService => _broadcastFeedService;
   SocialAuthService get socialAuthService => _socialAuthService;
   ConnectivityState get connectivityState => _connectivity.state;
   bool get online => _connectivity.isOnline;
@@ -3387,7 +3389,10 @@ class HomeScreen extends StatelessWidget {
                   description:
                       "Discover job opportunities tailored to your skills and interests",
                   icon: Icons.work_outline,
-                  onTap: () => Navigator.of(context).pushNamed("/broadcasts"),
+                  onTap: () => showAppSnackBar(
+                    context,
+                    "Job vacancies are coming soon.",
+                  ),
                 ),
               ],
             ),
@@ -3719,8 +3724,14 @@ class _ReportScreenState extends State<ReportScreen> {
                     value: manualLocation,
                     onChanged: (value) =>
                         setState(() => manualLocation = value),
-                    title: const Text("Manual location adjustment"),
-                    subtitle: const Text("GPS is captured automatically"),
+                    title: Text(
+                      "Manual location adjustment",
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    subtitle: Text(
+                      "GPS is captured automatically",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                   if (manualLocation) ...[
                     const SizedBox(height: 8),
@@ -3791,7 +3802,10 @@ class _ReportScreenState extends State<ReportScreen> {
                     contentPadding: EdgeInsets.zero,
                     value: anonymous,
                     onChanged: (value) => setState(() => anonymous = value),
-                    title: const Text("Report anonymously"),
+                    title: Text(
+                      "Report anonymously",
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -3801,7 +3815,10 @@ class _ReportScreenState extends State<ReportScreen> {
                       if (value) unawaited(_loadEmergencyContacts());
                       _scheduleComposeDraftSave();
                     },
-                    title: const Text("Notify emergency contact"),
+                    title: Text(
+                      "Notify emergency contact",
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
                   ),
                   if (notifyEmergencyContact) ...[
                     if (loadingEmergencyContacts)
@@ -3921,66 +3938,81 @@ class _ReportScreenState extends State<ReportScreen> {
       _evidenceSectionKey.currentState?.markUploading(attachment.localId, 0);
     }
 
-    final result = await controller.submitIncident(
-      draft,
-      onEvidenceProgress: (localId, progress) {
-        if (progress >= 1) {
-          _evidenceSectionKey.currentState?.markUploaded(localId);
-        } else {
-          _evidenceSectionKey.currentState?.markUploading(localId, progress);
+    try {
+      final result = await controller
+          .submitIncident(
+            draft,
+            onEvidenceProgress: (localId, progress) {
+              if (progress >= 1) {
+                _evidenceSectionKey.currentState?.markUploaded(localId);
+              } else {
+                _evidenceSectionKey.currentState?.markUploading(localId, progress);
+              }
+            },
+          )
+          .timeout(kSosSubmissionTimeout);
+
+      if (!context.mounted) return;
+      setState(() => submitting = false);
+
+      for (final attachment in draft.localMedia) {
+        if (result.isSuccess &&
+            result.userMessage != null &&
+            result.userMessage!.contains("Evidence upload failed")) {
+          _evidenceSectionKey.currentState
+              ?.markUploadFailed(attachment.localId, result.userMessage!);
         }
-      },
-    );
-    if (!context.mounted) return;
-    setState(() => submitting = false);
-
-    for (final attachment in draft.localMedia) {
-      if (result.isSuccess &&
-          result.userMessage != null &&
-          result.userMessage!.contains("Evidence upload failed")) {
-        _evidenceSectionKey.currentState
-            ?.markUploadFailed(attachment.localId, result.userMessage!);
       }
-    }
 
-    if (result.status == IncidentSubmissionStatus.duplicateInFlight) {
-      return;
-    }
+      if (result.status == IncidentSubmissionStatus.duplicateInFlight) {
+        return;
+      }
 
-    if (result.status == IncidentSubmissionStatus.validationError ||
-        result.status == IncidentSubmissionStatus.serverValidationError) {
-      setState(() {
-        submissionError = result.userMessage;
-        descriptionError = result.fieldErrors["description"];
-      });
-      showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
+      if (result.status == IncidentSubmissionStatus.validationError ||
+          result.status == IncidentSubmissionStatus.serverValidationError) {
+        setState(() {
+          submissionError = result.userMessage;
+          descriptionError = result.fieldErrors["description"];
+        });
+        showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
+            isError: true);
+        return;
+      }
+
+      if (result.status == IncidentSubmissionStatus.unauthorized) {
+        showAppSnackBar(context, result.userMessage ?? "Sign in is required.",
+            isError: true);
+        Navigator.of(context).pushNamed("/login");
+        return;
+      }
+
+      if (result.isSuccess) {
+        showAppSnackBar(
+            context,
+            urgent
+                ? "Emergency sent. Track status in Incident status."
+                : "${widget.type.label} report submitted.");
+      } else if (result.isQueued || result.canRetry) {
+        showAppSnackBar(context,
+            result.userMessage ?? "${widget.type.label} saved for retry.");
+      } else {
+        showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
+            isError: true);
+        return;
+      }
+
+      Navigator.of(context).pushNamed("/tracking");
+    } on TimeoutException {
+      if (!context.mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Report submission timed out (ERR-INC-408).",
           isError: true);
-      return;
-    }
-
-    if (result.status == IncidentSubmissionStatus.unauthorized) {
-      showAppSnackBar(context, result.userMessage ?? "Sign in is required.",
+    } catch (_) {
+      if (!context.mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Unable to submit report (ERR-INC-500).",
           isError: true);
-      Navigator.of(context).pushNamed("/login");
-      return;
     }
-
-    if (result.isSuccess) {
-      showAppSnackBar(
-          context,
-          urgent
-              ? "Emergency sent. Track status in Incident status."
-              : "${widget.type.label} report submitted.");
-    } else if (result.isQueued || result.canRetry) {
-      showAppSnackBar(context,
-          result.userMessage ?? "${widget.type.label} saved for retry.");
-    } else {
-      showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
-          isError: true);
-      return;
-    }
-
-    Navigator.of(context).pushNamed("/tracking");
   }
 }
 
@@ -4037,7 +4069,9 @@ class _MissingPersonBroadcastScreenState
       localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
     );
 
-    final result = await controller.submitIncident(draft);
+    final result = await controller
+        .submitIncident(draft)
+        .timeout(kSosSubmissionTimeout);
     if (!mounted) return;
     setState(() => submitting = false);
 
@@ -4048,8 +4082,7 @@ class _MissingPersonBroadcastScreenState
       return;
     }
 
-    showAppSnackBar(context,
-        result.userMessage ?? "Unable to submit missing person report.",
+    showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
         isError: true);
   }
 
@@ -4438,12 +4471,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           isError: true);
     } on IncidentApiException catch (error) {
       if (!mounted) return;
-      showAppSnackBar(
-          context, mapLiveVideoApiError(error.statusCode, error.userMessage),
-          isError: true);
+      final message = error.statusCode == 503
+          ? "Live video is temporarily unavailable."
+          : mapLiveVideoApiError(error.statusCode, error.userMessage);
+      showAppSnackBar(context, message, isError: true);
     } catch (_) {
       if (!mounted) return;
-      showAppSnackBar(context, "Unable to start live video right now.",
+      showAppSnackBar(context, "Live video is temporarily unavailable.",
           isError: true);
     } finally {
       _streamStartInFlight = false;
@@ -4615,7 +4649,9 @@ class _StolenVehicleBroadcastScreenState
       localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
     );
 
-    final result = await controller.submitIncident(draft);
+    final result = await controller
+        .submitIncident(draft)
+        .timeout(kSosSubmissionTimeout);
     if (!mounted) return;
     setState(() => submitting = false);
 
@@ -4933,7 +4969,9 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
         }
       }
       final item = cached ??
-          await BroadcastFeedService().getDetail(
+          await appOf(context)
+              .broadcastFeedService
+              .getDetail(
             accessToken: controller.accessToken!,
             broadcastId: widget.broadcastId,
           );
@@ -5058,136 +5096,6 @@ class BroadcastForm extends StatelessWidget {
   }
 }
 
-class NearbyPoliceStationsScreen extends StatelessWidget {
-  const NearbyPoliceStationsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final stations = [
-      PoliceStationView("Ikeja Central Police Station", "+2348000003001",
-          "Ikeja, Lagos", "police", 6.6018, 3.3515, "0.2 km"),
-      PoliceStationView(
-          "Alausa Security Post",
-          "+2348000003002",
-          "Alausa Secretariat Road, Ikeja",
-          "security",
-          6.6172,
-          3.3589,
-          "2.4 km"),
-      PoliceStationView("Opebi Police Desk", "+2348000003003",
-          "Opebi Road, Ikeja", "police", 6.5988, 3.3521, "1.1 km"),
-    ];
-
-    return SafetyScaffold(
-      title: "Nearby police",
-      selectedIndex: 1,
-      useFigmaShell: true,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          Container(
-            height: 240,
-            decoration: BoxDecoration(
-              color: BrandColors.lightSurfaceMuted,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: BrandColors.lightBorder),
-            ),
-            child: const Center(
-                child: Icon(Icons.map, size: 72, color: BrandColors.green)),
-          ),
-          const SizedBox(height: 16),
-          const TextField(
-              decoration: InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  labelText: "Search by state, LGA, or location")),
-          const SizedBox(height: 12),
-          ...stations.map((station) => PoliceStationCard(station: station)),
-        ],
-      ),
-    );
-  }
-}
-
-class PoliceStationView {
-  PoliceStationView(this.name, this.phone, this.address, this.agencyType,
-      this.latitude, this.longitude, this.distance);
-
-  final String name;
-  final String phone;
-  final String address;
-  final String agencyType;
-  final double latitude;
-  final double longitude;
-  final String distance;
-
-  Uri get navigationUri => Uri.parse(
-      "https://www.google.com/maps/dir/?api=1&destination=$latitude,$longitude&travelmode=driving");
-}
-
-class PoliceStationCard extends StatelessWidget {
-  const PoliceStationCard({required this.station, super.key});
-
-  final PoliceStationView station;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: BrandColors.lightBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(
-                  station.agencyType == "police"
-                      ? Icons.local_police
-                      : Icons.security,
-                  color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text(station.name,
-                      style: const TextStyle(fontWeight: FontWeight.w900))),
-              Text(station.distance,
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(station.address),
-          const SizedBox(height: 4),
-          Text(
-              "${station.phone} - ${station.agencyType} - ${station.latitude}, ${station.longitude}",
-              style: const TextStyle(color: BrandColors.lightTextMuted)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                  child: OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.phone),
-                      label: const Text("Call"))),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () => launchUrl(station.navigationUri,
-                      mode: LaunchMode.externalApplication),
-                  icon: const Icon(Icons.navigation),
-                  label: const Text("Navigate"),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -5218,7 +5126,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
     }
     return Scaffold(
-      backgroundColor: EyeTokens.whiteBg,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -7641,6 +7549,7 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
         position: outcome.position!,
         notifyEmergencyContacts: true,
         title: "SOS emergency",
+        emergencyCategory: "Other",
       );
 
       final result =
@@ -7693,6 +7602,8 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
             "Unable to send SOS. Check your connection and try again.",
             isError: true);
       }
+    } finally {
+      if (mounted) setState(() => sendingAlert = false);
     }
   }
 

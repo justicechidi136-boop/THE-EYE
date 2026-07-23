@@ -89,8 +89,7 @@ class NotificationInboxPage {
 
 class NotificationInboxService {
   NotificationInboxService({TheEyeApiClient? apiClient})
-      : _apiClient = apiClient ??
-            TheEyeApiClient(baseUrl: TheEyeApiPaths.defaultBaseUrl);
+      : _apiClient = apiClient ?? TheEyeApiClient();
 
   final TheEyeApiClient _apiClient;
 
