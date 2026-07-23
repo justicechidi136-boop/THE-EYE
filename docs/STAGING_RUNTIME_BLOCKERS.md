@@ -208,12 +208,12 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Backend endpoint** | `PoliceStationsController.list` |
 | **Database dependency** | `police_stations`, PostGIS, verified seed data |
 | **Root cause** | Mobile used static demo data; API list endpoint missing |
-| **Fix** | API `GET /police-stations`; mobile `PoliceStationsService` + screen |
-| **Automated test** | Police stations service tests (pending expansion) |
-| **Runtime evidence** | API list endpoint in CI; verified dataset + device filters pending deploy |
-| **Status** | CI VERIFIED |
+| **Fix** | Hybrid locator: verified `police_stations` + server-side Google Places fallback; mobile `/police-stations/nearby` with source labels and attribution |
+| **Automated test** | `police-locator.service.spec.ts`, `police_locator_test.dart` |
+| **Runtime evidence** | Local API 324/324 + mobile 142/142; migration `20260723230000_police_station_verification`; staging Google key + device QA pending |
+| **Status** | CODE FIXED — **DEVICE QA PENDING** |
 
-Note: If staging seed lacks verified nationwide police data, empty results must be shown honestly — not demo stations as real.
+Note: Nationwide verified official police dataset remains incomplete. Google supplemental results are labelled `googlePlaces` and are not official THE EYE verification. Empty/honest results must still be shown outside seeded areas.
 
 ---
 
