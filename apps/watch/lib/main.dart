@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'models/alert.dart';
@@ -21,6 +23,8 @@ import 'screens/settings_screen.dart';
 import 'screens/settings_sub_screens.dart';
 import 'screens/sos_confirm_screen.dart';
 import 'screens/tracking_screen.dart';
+import 'services/alert_navigation_service.dart';
+import 'services/crash_recovery_service.dart';
 import 'services/launcher_service.dart';
 import 'services/watch_app_services.dart';
 import 'startup/watch_boot_screen.dart';
@@ -30,7 +34,9 @@ import 'widgets/watch_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  final crashRecovery = CrashRecoveryService();
   FlutterError.onError = (details) {
+    unawaited(crashRecovery.recordFlutterCrash());
     FlutterError.presentError(details);
   };
   runApp(const TheEyeWatchApp());
@@ -46,28 +52,25 @@ class TheEyeWatchApp extends StatefulWidget {
 class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
   final WatchAppServices _services = WatchAppServices();
   final LauncherService _launcher = LauncherService();
+  final CrashRecoveryService _crashRecovery = CrashRecoveryService();
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
+  late final AlertNavigationService _alertNavigation;
 
   @override
   void initState() {
     super.initState();
-    _services.push.onActiveEmergencyRefresh = ({required String? incidentId, required String category}) async {
-      await _services.sos.syncEmergencyTracking();
-      final nav = _navKey.currentState;
-      if (nav == null) return;
-      if (ModalRoute.of(nav.context)?.settings.name ==
-          WatchRoutes.activeEmergency) {
-        return;
-      }
-      nav.pushNamed(
-        WatchRoutes.activeEmergency,
-        arguments: incidentId,
-      );
-    };
+    _alertNavigation = AlertNavigationService(
+      navigatorKey: _navKey,
+      alerts: _services.alerts,
+      sos: _services.sos,
+      credentials: _services.credentials,
+    );
+    _services.push.bindNavigation(_alertNavigation);
   }
 
   @override
   void dispose() {
+    unawaited(_crashRecovery.markUncleanShutdown());
     _services.dispose();
     super.dispose();
   }

@@ -6,6 +6,8 @@ import '../pairing/pairing_service.dart';
 import '../pairing/watch_companion_transport.dart';
 import '../services/alert_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/crash_recovery_service.dart';
+import '../services/device_settings_service.dart';
 import '../services/device_telemetry_service.dart';
 import '../services/emergency_foreground_service.dart';
 import '../services/heartbeat_service.dart';
@@ -29,6 +31,7 @@ class WatchAppServices {
     WatchSettingsStore? settingsStore,
     EncryptedOfflineQueueStore? offlineQueue,
     EmergencyForegroundService? emergencyForeground,
+    CrashRecoveryService? crashRecovery,
     bool enablePush = true,
   })  : api = apiClient ?? WatchApiClient(),
         credentials = credentials ?? SecureCredentialStore(),
@@ -41,6 +44,7 @@ class WatchAppServices {
               legacyPreferences: preferences ?? PreferencesStore(),
             ),
         emergencyForeground = emergencyForeground ?? EmergencyForegroundService(),
+        crashRecovery = crashRecovery ?? CrashRecoveryService(),
         _enablePush = enablePush {
     final creds = this.credentials;
     final directCompanion = DirectHttpsCompanionTransport(
@@ -84,6 +88,11 @@ class WatchAppServices {
       credentials: creds,
       preferences: this.preferences,
     );
+    deviceSettings = DeviceSettingsService(
+      api: api,
+      credentials: creds,
+      settings: this.settings,
+    );
     push = PushMessagingService(alerts: alerts, credentials: creds);
   }
 
@@ -95,6 +104,7 @@ class WatchAppServices {
   final WatchSettingsStore settings;
   final EncryptedOfflineQueueStore offlineQueue;
   final EmergencyForegroundService emergencyForeground;
+  final CrashRecoveryService crashRecovery;
   final bool _enablePush;
 
   late final WatchCompanionCoordinator companion;
@@ -105,6 +115,7 @@ class WatchAppServices {
   late final HeartbeatService heartbeat;
   late final AlertService alerts;
   late final VersionCompatibilityService versionCompatibility;
+  late final DeviceSettingsService deviceSettings;
   late final PushMessagingService push;
   DeviceTelemetryService? _telemetry;
 
@@ -114,6 +125,7 @@ class WatchAppServices {
   }) async {
     await standaloneAuth.hydrateApiAuth();
     await pairing.initialize();
+    final recovery = await crashRecovery.readState();
     await companion.refreshConnectivity(({
       pairedPhoneAvailable,
       internetAvailable,
@@ -123,15 +135,22 @@ class WatchAppServices {
         internetAvailable: internetAvailable,
       );
     });
-    final localSettings = await settings.load();
+    final syncedSettings = await deviceSettings.syncFromServer();
     connectivity.update(
-      failoverEnabled: localSettings.failoverEnabled,
-      preferredMode: localSettings.preferredConnectionMode == 'standaloneCellular'
+      failoverEnabled: syncedSettings.failoverEnabled,
+      preferredMode: syncedSettings.preferredConnectionMode == 'standaloneCellular'
           ? WatchConnectivityMode.standaloneCellular
           : WatchConnectivityMode.pairedPhone,
     );
-    vibration.setEnabled(localSettings.vibrationEnabled);
-    await sos.restoreEmergencyAfterBoot();
+    vibration.setEnabled(syncedSettings.vibrationEnabled);
+    if (!recovery.recoveryLoopBlocked) {
+      await sos.restoreEmergencyAfterBoot();
+    }
+    await crashRecovery.snapshotEmergencyState(
+      activeEmergency: emergencyForeground.isActive,
+      queuedSos: offlineQueue.isAvailable &&
+          (await offlineQueue.loadQueue()).isNotEmpty,
+    );
     _telemetry = DeviceTelemetryService(
       connectivity: connectivity,
       onBackOnline: watchOfflineReplay(sos),
@@ -142,6 +161,8 @@ class WatchAppServices {
       pushTimeout: pushTimeout,
     );
     unawaited(alerts.syncHistoryFromServer());
+    await crashRecovery.markCleanShutdown();
+    await crashRecovery.clearRecovery();
   }
 
   /// Starts heartbeat / location / optional push without blocking forever on FCM.
