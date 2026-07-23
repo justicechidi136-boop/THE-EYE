@@ -3,17 +3,36 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
-import { NearestPoliceStationsQuery, PoliceStationListQuery, PoliceStationSearchQuery, UpsertPoliceStationDto } from "./dto/police-station.dto";
+import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
+import {
+  NearestPoliceStationsQuery,
+  NearbyPoliceStationsQuery,
+  PoliceStationListQuery,
+  PoliceStationSearchQuery,
+  UpsertPoliceStationDto,
+  VerifyPoliceStationDto,
+  validateVerifyPoliceStationDto,
+} from "./dto/police-station.dto";
+import { PoliceLocatorService } from "./police-locator.service";
 import { PoliceStationsService } from "./police-stations.service";
 
 @ApiTags("police-stations")
 @Controller("police-stations")
 export class PoliceStationsController {
-  constructor(private readonly policeStations: PoliceStationsService) {}
+  constructor(
+    private readonly policeStations: PoliceStationsService,
+    private readonly policeLocator: PoliceLocatorService,
+  ) {}
 
   @Get()
   list(@Query() query: PoliceStationListQuery) {
     return this.policeStations.list(query);
+  }
+
+  @Get("nearby")
+  @RateLimit("policeSearch")
+  nearby(@Query() query: NearbyPoliceStationsQuery) {
+    return this.policeLocator.nearby(query);
   }
 
   @Get("nearest")
@@ -40,5 +59,14 @@ export class PoliceStationsController {
   @RequirePermissions("agency:manage")
   update(@Param("id") id: string, @Body() dto: UpsertPoliceStationDto, @Req() request: any) {
     return this.policeStations.update(id, dto, request.user);
+  }
+
+  @Patch(":id/verify")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions("agency:manage")
+  verify(@Param("id") id: string, @Body() dto: VerifyPoliceStationDto, @Req() request: any) {
+    validateVerifyPoliceStationDto(dto);
+    return this.policeLocator.verifyStation(id, dto, request.user);
   }
 }
