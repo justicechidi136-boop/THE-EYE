@@ -58,6 +58,13 @@ export class DispatchController {
     return this.dispatchService.assignIncident(id, dto, request.user);
   }
 
+  @Post("incidents/:id/reassign")
+  @RequirePermissions("incident:assign")
+  @RateLimit("incidentCreate")
+  reassignIncident(@Param("id") id: string, @Body() dto: AssignDispatchIncidentDto, @Req() request: any) {
+    return this.dispatchService.reassignIncident(id, dto, request.user);
+  }
+
   @Post("incidents/:id/escalate")
   @RequirePermissions("incident:escalate")
   escalateIncident(@Param("id") id: string, @Body() dto: EscalateDispatchIncidentDto, @Req() request: any) {

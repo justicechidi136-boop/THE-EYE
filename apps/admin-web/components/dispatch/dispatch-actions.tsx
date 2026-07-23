@@ -96,12 +96,12 @@ export function DispatchActions({ incidentId, responders, assignmentVersion }: D
           Assign
         </Button>
         <Button
-          disabled={busy !== null || !responderId || !agencyId}
+          disabled={busy !== null || !responderId || !agencyId || reason.trim().length < 5}
           onClick={() =>
             runAction("reassign", {
               agencyId,
               responderId,
-              reason: reason || "Reassigned from command center",
+              reason: reason.trim(),
               clientAssignmentId: crypto.randomUUID(),
             })
           }
@@ -116,12 +116,14 @@ export function DispatchActions({ incidentId, responders, assignmentVersion }: D
         </Button>
         <Button
           disabled={busy !== null}
-          onClick={() =>
-            runAction("triage", {
-              priority,
-              reason: reason || "Priority updated from command center",
-            })
-          }
+          onClick={() => {
+            const overrideReason = reason.trim().length >= 5 ? reason.trim() : "";
+            if (!overrideReason) {
+              setError("Enter at least 5 characters in Reason / note for triage updates.");
+              return;
+            }
+            runAction("triage", { priority, overrideReason });
+          }}
         >
           Update triage
         </Button>

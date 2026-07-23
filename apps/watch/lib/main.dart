@@ -59,7 +59,10 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
           WatchRoutes.activeEmergency) {
         return;
       }
-      nav.pushNamed(WatchRoutes.activeEmergency);
+      nav.pushNamed(
+        WatchRoutes.activeEmergency,
+        arguments: incidentId,
+      );
     };
   }
 
@@ -127,8 +130,14 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
               settings,
             );
           case WatchRoutes.activeEmergency:
+            final incidentId = settings.arguments is String
+                ? settings.arguments! as String
+                : null;
             return _darkPage(
-              ActiveEmergencyScreen(services: _services),
+              ActiveEmergencyScreen(
+                services: _services,
+                incidentId: incidentId,
+              ),
               settings,
             );
           case WatchRoutes.tracking:

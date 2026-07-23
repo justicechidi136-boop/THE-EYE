@@ -418,6 +418,74 @@ export class DispatchService {
     return { data: assignment };
   }
 
+  async reassignIncident(id: string, dto: AssignDispatchIncidentDto, actor: JwtPayload) {
+    this.assertDispatcher(actor);
+    validateAssignDispatchIncidentDto(dto);
+    if (!dto.reason?.trim() || dto.reason.trim().length < 5) {
+      throw new BadRequestException("reason must be at least 5 characters for reassignment");
+    }
+
+    const incident = await this.prisma.incident.findFirst({
+      where: { id, ...this.dispatchScopeWhere(actor) } as never,
+    });
+    if (!incident) throw new NotFoundException("Incident not found or outside dispatch scope");
+
+    const activeAssignment = await (this.prisma as any).incidentAssignment.findFirst({
+      where: { incidentId: id, status: { in: ACTIVE_ASSIGNMENT_STATUSES } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!activeAssignment) {
+      throw new BadRequestException("No active assignment to reassign");
+    }
+
+    if (!canTransitionAssignment(activeAssignment.status as IncidentAssignmentStatus, IncidentAssignmentStatus.Reassigned)) {
+      throw new BadRequestException(`Assignment in status ${activeAssignment.status} cannot be reassigned`);
+    }
+
+    await this.assertAgencyInScope(dto.agencyId, actor, incident.jurisdictionId);
+    if (dto.responderId) {
+      await this.assertResponderAssignable(dto.responderId, dto.agencyId);
+    }
+
+    const reassignedAt = new Date();
+    const updateResult = await (this.prisma as any).incidentAssignment.updateMany({
+      where: { id: activeAssignment.id, version: activeAssignment.version },
+      data: {
+        status: IncidentAssignmentStatus.Reassigned,
+        version: { increment: 1 },
+        metadata: {
+          ...(activeAssignment.metadata ?? {}),
+          reassignedAt: reassignedAt.toISOString(),
+          reassignedByAdminId: actor.sub,
+          reassignedReason: dto.reason,
+        },
+      },
+    });
+    if (updateResult.count === 0) {
+      throw new ConflictException("Assignment version conflict; refresh and retry");
+    }
+
+    await this.recordDispatchEvent(id, actor, "assignment.reassigned", dto.reason, {
+      previousAssignmentId: activeAssignment.id,
+      previousResponderId: activeAssignment.responderId,
+      nextAgencyId: dto.agencyId,
+      nextResponderId: dto.responderId,
+    });
+
+    await this.audit.record({
+      actor,
+      action: "assignment.reassigned",
+      entityType: "incident_assignments",
+      entityId: activeAssignment.id,
+      reason: dto.reason,
+      beforeState: { status: activeAssignment.status, version: activeAssignment.version },
+      afterState: { status: IncidentAssignmentStatus.Reassigned, version: activeAssignment.version + 1 },
+      metadata: { incidentId: id, nextAgencyId: dto.agencyId, nextResponderId: dto.responderId },
+    });
+
+    return this.assignIncident(id, dto, actor);
+  }
+
   async escalateIncident(id: string, dto: EscalateDispatchIncidentDto, actor: JwtPayload) {
     this.assertDispatcher(actor);
     validateEscalateDispatchIncidentDto(dto);

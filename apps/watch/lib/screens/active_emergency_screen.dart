@@ -13,9 +13,14 @@ import '../widgets/watch_ui.dart';
 import 'routes.dart';
 
 class ActiveEmergencyScreen extends StatefulWidget {
-  const ActiveEmergencyScreen({super.key, required this.services});
+  const ActiveEmergencyScreen({
+    super.key,
+    required this.services,
+    this.incidentId,
+  });
 
   final WatchAppServices services;
+  final String? incidentId;
 
   @override
   State<ActiveEmergencyScreen> createState() => _ActiveEmergencyScreenState();
