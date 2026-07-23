@@ -189,7 +189,12 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
               settings,
             );
           case WatchRoutes.settingsRadius:
-            return _darkPage(const SettingsRadiusScreen(), settings);
+            return _darkPage(
+              SettingsRadiusScreen(
+                initialRadiusM: settings.arguments as int? ?? 500,
+              ),
+              settings,
+            );
           case WatchRoutes.settingsContacts:
             return _darkPage(const SettingsContactsScreen(), settings);
           case WatchRoutes.reportCategory:

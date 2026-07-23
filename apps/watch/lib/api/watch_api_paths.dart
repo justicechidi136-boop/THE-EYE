@@ -37,6 +37,14 @@ abstract final class WatchApiPaths {
       '/smartwatch/devices/$deviceId/telemetry';
   static String notificationAck(String deviceId, String notificationId) =>
       '/smartwatch/devices/$deviceId/notifications/$notificationId/ack';
+  static String notificationRead(String deviceId, String notificationId) =>
+      '/smartwatch/devices/$deviceId/notifications/$notificationId/read';
+  static String deviceNotifications(String deviceId) =>
+      '/smartwatch/devices/$deviceId/notifications';
+  static String versionPolicy(String deviceId) =>
+      '/smartwatch/devices/$deviceId/version-policy';
+  static String deviceSettings(String deviceId) =>
+      '/smartwatch/devices/$deviceId/settings';
   static String notificationDeviceReceived(String notificationId) =>
       '/notifications/$notificationId/device-received';
   static const issuePairingCode = '/smartwatch/devices/pairing-codes';
