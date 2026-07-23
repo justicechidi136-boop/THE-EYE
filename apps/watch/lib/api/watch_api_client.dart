@@ -64,10 +64,12 @@ class WatchApiClient {
 
   Future<Map<String, dynamic>> get(
     String path, {
+    Map<String, String>? query,
     Map<String, String>? headers,
   }) async {
+    final uri = _uri(path).replace(queryParameters: query);
     final response = await _http.get(
-      _uri(path),
+      uri,
       headers: {..._headers(jsonBody: false), ...?headers},
     );
     return _decode(response);
