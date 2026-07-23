@@ -7,6 +7,9 @@ import {
   FirebaseLinkDto,
   GoogleLoginDto,
   LoginDto,
+  AccountRecoveryCompleteDto,
+  AccountRecoveryRequestDto,
+  AccountRecoveryVerifyDto,
   PasswordResetConfirmDto,
   PasswordResetRequestDto,
   PhoneOtpRequestDto,
@@ -15,12 +18,16 @@ import {
   RegisterDto,
 } from "./dto/auth.dto";
 import { AuthService } from "./auth.service";
+import { AccountRecoveryService } from "./account-recovery.service";
 
 @ApiTags("auth")
 @Controller("auth")
 @RateLimit("auth")
 export class AuthController {
-  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(AccountRecoveryService) private readonly accountRecovery: AccountRecoveryService,
+  ) {}
 
   @Post("login")
   login(@Body() dto: LoginDto) {
@@ -72,6 +79,31 @@ export class AuthController {
   @Post("password-reset/confirm")
   confirmPasswordReset(@Body() dto: PasswordResetConfirmDto) {
     return this.authService.confirmPasswordReset(dto.token, dto.newPassword);
+  }
+
+  @Post("account-recovery/request")
+  requestAccountRecovery(@Body() dto: AccountRecoveryRequestDto) {
+    return this.accountRecovery.requestRecovery(dto.email, {
+      platform: dto.platform,
+      deviceId: dto.deviceId,
+    });
+  }
+
+  @Post("account-recovery/verify")
+  verifyAccountRecovery(@Body() dto: AccountRecoveryVerifyDto) {
+    return this.accountRecovery.verifyRecoveryToken(dto.token);
+  }
+
+  @Post("account-recovery/complete")
+  async completeAccountRecovery(@Body() dto: AccountRecoveryCompleteDto) {
+    const recovery = await this.accountRecovery.completeRecovery(dto.token, dto.idToken, dto.provider);
+    const session = await this.authService.issueRecoverySession(recovery.userId);
+    return { ...session, recoveryCompleted: true };
+  }
+
+  @Post("account-recovery/cancel")
+  cancelAccountRecovery(@Body() dto: AccountRecoveryVerifyDto) {
+    return this.accountRecovery.cancelRecovery(dto.token);
   }
 
   @Post("phone/request-otp")

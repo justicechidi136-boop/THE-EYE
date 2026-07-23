@@ -11,6 +11,11 @@ type AuthDeliveryPayload =
       token: string;
     }
   | {
+      type: "account_recovery";
+      email: string;
+      token: string;
+    }
+  | {
       type: "phone_otp";
       phone: string;
       code: string;
@@ -59,6 +64,44 @@ export class AuthDeliveryService {
       this.config.get<string>("AUTH_PASSWORD_RESET_WEBHOOK_URL"),
       { type: "password_reset", email, token },
       "password reset email",
+    );
+  }
+
+  async sendAccountRecoveryEmail(email: string, token: string, expiresAt: Date): Promise<void> {
+    const recoveryBase = this.config.get<string>("ACCOUNT_RECOVERY_LINK_BASE_URL")?.trim()
+      ?? this.config.get<string>("MOBILE_ACCOUNT_RECOVERY_URL")?.trim()
+      ?? this.config.get<string>("MOBILE_PASSWORD_RESET_URL")?.trim();
+    const recoveryLink = recoveryBase
+      ? `${recoveryBase}${recoveryBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
+      : null;
+    const expiryText = expiresAt.toISOString();
+    const fromName = this.config.get<string>("SMTP_FROM_NAME") ?? "THE EYE";
+
+    if (this.smtp.isConfigured()) {
+      const result = await this.smtp.send({
+        to: email,
+        subject: "Recover your THE EYE account",
+        text: recoveryLink
+          ? `A recovery request was made for your THE EYE account. Use this secure link before ${expiryText}: ${recoveryLink}\n\nIf you did not request this, secure your account immediately.`
+          : "A recovery request was made for your THE EYE account. Open THE EYE to continue recovery.",
+        html: recoveryLink
+          ? `<p>A recovery request was made for your ${fromName} account.</p><p><a href="${recoveryLink}">Recover account</a></p><p>This link expires at ${expiryText}.</p><p>If you did not request this, secure your account immediately.</p>`
+          : `<p>A recovery request was made for your ${fromName} account. Open THE EYE to continue recovery.</p>`,
+      });
+      if (result.status === "ProviderAccepted") {
+        this.logger.log(`Account recovery email accepted by SMTP for ${maskEmail(email)}`);
+        return;
+      }
+      throw new ServiceUnavailableException({
+        message: "Account recovery email could not be sent. Try again shortly.",
+        code: "AUTH_DELIVERY_FAILED",
+      });
+    }
+
+    await this.dispatchWebhook(
+      this.config.get<string>("AUTH_ACCOUNT_RECOVERY_WEBHOOK_URL"),
+      { type: "account_recovery", email, token },
+      "account recovery email",
     );
   }
 

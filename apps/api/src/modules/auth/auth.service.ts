@@ -302,6 +302,17 @@ export class AuthService {
     return { ok: true };
   }
 
+  async issueRecoverySession(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true, trustedReporter: true },
+    });
+    if (!user) throw new UnauthorizedException("Recovery session could not be issued.");
+    const profileComplete = isCitizenProfileComplete(user.profile ?? null);
+    const session = await this.issueUserSession(user);
+    return { ...session, profileComplete };
+  }
+
   async requestPhoneOtp(phone: string, purpose: string) {
     const normalizedPhone = normalizePhoneNumber(phone);
     if (!isValidPhoneNumber(normalizedPhone)) throw new BadRequestException("Enter a valid phone number");

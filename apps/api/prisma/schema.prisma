@@ -298,6 +298,7 @@ model User {
   refreshTokens         RefreshToken[]
   phoneOtps             PhoneOtp[]
   passwordResetTokens   PasswordResetToken[]
+  accountRecoveryChallenges AccountRecoveryChallenge[]
   mediaAccessLogs       IncidentMediaAccessLog[]
   communityMemberships  CommunityMembership[]
   communityPosts        CommunityPost[]
@@ -1566,6 +1567,30 @@ model PasswordResetToken {
 
   @@index([userId, expiresAt])
   @@map("password_reset_tokens")
+}
+
+model AccountRecoveryChallenge {
+  id                     String    @id @default(uuid()) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  provider               String
+  emailHash              String    @map("email_hash")
+  tokenHash              String    @unique @map("token_hash")
+  purpose                String    @default("recover_access")
+  status                 String    @default("pending")
+  expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt                 DateTime? @map("used_at") @db.Timestamptz(6)
+  cancelledAt            DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  requestedAt            DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  requestIpHash          String?   @map("request_ip_hash")
+  requestDevice          Json      @default("{}") @map("request_device")
+  completedByProviderUid String?   @map("completed_by_provider_uid")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@map("account_recovery_challenges")
 }
 
 
