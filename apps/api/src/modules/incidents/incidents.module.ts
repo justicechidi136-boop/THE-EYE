@@ -10,11 +10,12 @@ import { VerificationModule } from "../verification/verification.module";
 import { DispatchModule } from "../dispatch/dispatch.module";
 import { IncidentsController } from "./incidents.controller";
 import { IncidentsService } from "./incidents.service";
+import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
 
 @Module({
   imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, DispatchModule],
   controllers: [IncidentsController],
-  providers: [IncidentsService, JwtAuthGuard, OptionalJwtAuthGuard, PermissionsGuard, IncidentScopeGuard],
-  exports: [IncidentsService],
+  providers: [IncidentsService, JurisdictionResolutionService, JwtAuthGuard, OptionalJwtAuthGuard, PermissionsGuard, IncidentScopeGuard],
+  exports: [IncidentsService, JurisdictionResolutionService],
 })
 export class IncidentsModule {}

@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+﻿import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UseGuards, BadRequestException } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IncidentStatus } from "@the-eye/shared";
 import { IncidentScopeGuard } from "../../common/auth/incident-scope.guard";
@@ -152,6 +152,23 @@ export class IncidentsController {
   @RequirePermissions("incident:read")
   viewMedia(@Param("id") id: string, @Param("mediaId") mediaId: string, @Req() request: any) {
     return this.incidentsService.accessMedia(id, mediaId, "view", request.user);
+  }
+
+  @Get("jurisdiction/diagnose")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions("incident:read")
+  diagnoseJurisdiction(
+    @Query("latitude") latitude: string,
+    @Query("longitude") longitude: string,
+    @Req() request: any,
+  ) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadRequestException("latitude and longitude query parameters are required");
+    }
+    return this.incidentsService.diagnoseJurisdiction(lat, lng, request.user);
   }
 
   @Get(":id/media/:mediaId/download")

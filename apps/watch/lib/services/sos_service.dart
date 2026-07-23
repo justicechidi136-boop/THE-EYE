@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
+import '../location/location_permission_service.dart';
 import '../models/active_emergency_status.dart';
 import '../models/connectivity_mode.dart';
 import '../models/emergency_mode.dart';
@@ -154,25 +155,33 @@ class SosService {
       return;
     }
 
-    final position = await _location.getCurrentPosition();
+    final access = await _location.resolveAccess(
+      requestIfDenied: true,
+      allowCachedFallback: true,
+    );
+    final position = access.position;
+    final metadata = {
+      'idempotencyKey': idempotencyKey,
+      'client': 'watch-os',
+      ...watchLocationMetadataFields(access),
+    };
     final payload = {
       'deviceId': deviceId,
       'deviceSecret': deviceSecret,
-      'latitude': position?.latitude ?? 0,
-      'longitude': position?.longitude ?? 0,
+      if (position != null) 'latitude': position.latitude,
+      if (position != null) 'longitude': position.longitude,
       if (position != null) 'accuracy': position.accuracy,
       if (position != null) 'speed': position.speed,
       if (position != null) 'heading': position.heading,
       if (position != null) 'altitude': position.altitude,
-      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+      if (position == null) 'latitude': 0,
+      if (position == null) 'longitude': 0,
+      'capturedAt': (position?.timestamp ?? DateTime.now()).toUtc().toIso8601String(),
       'sourceMode': _connectivity.activeMode.apiValue,
       'emergencyMode': emergencyMode.apiValue,
       'longPressDurationMs': holdDurationMs,
       if (description != null) 'description': description,
-      'metadata': {
-        'idempotencyKey': idempotencyKey,
-        'client': 'watch-os',
-      },
+      'metadata': metadata,
     };
 
     if (_connectivity.activeMode == WatchConnectivityMode.offline) {
@@ -193,7 +202,6 @@ class SosService {
       final sosEventId = data['id'] as String?;
       final incidentId = incident?['id'] as String?;
 
-      _location.startEmergencyTracking(sosEventId: sosEventId);
       _emit(_state.copyWith(
         lifecycle: SosLifecycle.active,
         sosEventId: sosEventId,
@@ -201,7 +209,17 @@ class SosService {
         latitude: position?.latitude,
         longitude: position?.longitude,
         offlineQueued: false,
+        errorMessage: access.hasFix
+            ? null
+            : watchSosLocationMessage(access, submitted: true),
       ));
+      try {
+        await _location.startEmergencyTracking(
+          sosEventId: sosEventId,
+        );
+      } catch (_) {
+        // SOS must remain active even if foreground tracking cannot start.
+      }
       if (emergencyMode != WatchEmergencyMode.silentSos) {
         _vibration.confirmSos();
       }
@@ -244,7 +262,7 @@ class SosService {
       final incident = event?['incident'] as Map<String, dynamic>?;
       final incidentStatus = incident?['status'] as String?;
       if (watchIncidentTerminal(incidentStatus)) {
-        _location.stopTracking();
+        await _location.stopTracking();
       }
       _emit(_state.copyWith(
         incidentId: incident?['id'] as String? ?? _state.incidentId,
@@ -312,9 +330,9 @@ class SosService {
     return uploadedCount;
   }
 
-  void reset() {
+  Future<void> reset() async {
     _holdTimer?.cancel();
-    _location.stopTracking();
+    await _location.stopTracking();
     _emit(const SosEventState(lifecycle: SosLifecycle.idle));
   }
 

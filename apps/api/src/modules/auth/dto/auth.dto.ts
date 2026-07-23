@@ -156,3 +156,42 @@ export class FirebaseLinkDto {
   @IsString()
   provider!: FirebaseProvider;
 }
+
+export class AccountRecoveryRequestDto {
+  @ApiProperty({ example: "citizen@theeye.local" })
+  @IsEmail()
+  email!: string;
+
+  @ApiPropertyOptional({ enum: ["android", "ios", "web"] })
+  @IsOptional()
+  @IsString()
+  platform?: "android" | "ios" | "web";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
+}
+
+export class AccountRecoveryVerifyDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(10)
+  token!: string;
+}
+
+export class AccountRecoveryCompleteDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(10)
+  token!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(20)
+  idToken!: string;
+
+  @ApiProperty({ enum: FIREBASE_PROVIDERS })
+  @IsString()
+  provider!: FirebaseProvider;
+}

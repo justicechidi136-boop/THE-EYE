@@ -23,10 +23,14 @@ class IncidentSubmissionValidator {
           "Description must be at least ${TheEyeEnums.descriptionMinLength} characters.";
     }
 
-    if (!_isCoordinate(draft.latitude, -90, 90)) {
+    if (!_isCoordinate(draft.latitude, -90, 90) &&
+        !(draft.type == IncidentType.sos &&
+            draft.locationMetadata["locationStatus"] == "pending")) {
       errors["latitude"] = "Latitude is required.";
     }
-    if (!_isCoordinate(draft.longitude, -180, 180)) {
+    if (!_isCoordinate(draft.longitude, -180, 180) &&
+        !(draft.type == IncidentType.sos &&
+            draft.locationMetadata["locationStatus"] == "pending")) {
       errors["longitude"] = "Longitude is required.";
     }
 

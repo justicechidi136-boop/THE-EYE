@@ -38,7 +38,9 @@ class PoliceStationItem {
       name: (json["name"] as String?) ?? "Police station",
       phone: json["phone"] as String?,
       address: (json["address"] as String?) ?? "",
-      agencyType: (json["agencyType"] as String?) ?? "police",
+      agencyType: (json["agencyType"] as String?) ??
+          (json["agency_type"] as String?) ??
+          "police",
       latitude: (json["latitude"] as num?)?.toDouble() ?? 0,
       longitude: (json["longitude"] as num?)?.toDouble() ?? 0,
       distanceMeters: (json["distance_meters"] as num?)?.toDouble() ??
@@ -97,7 +99,8 @@ class PoliceStationsService {
         : const [];
     return rows
         .whereType<Map>()
-        .map((row) => PoliceStationItem.fromJson(Map<String, dynamic>.from(row)))
+        .map(
+            (row) => PoliceStationItem.fromJson(Map<String, dynamic>.from(row)))
         .toList();
   }
 }

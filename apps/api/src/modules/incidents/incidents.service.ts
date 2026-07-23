@@ -23,6 +23,7 @@ import { DispatchService } from "../dispatch/dispatch.service";
 import { EmergencyClassificationService } from "../dispatch/emergency-classification.service";
 import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { canTransitionIncident } from "./incident-lifecycle";
+import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
 import {
   ConfirmIncidentMediaDto,
   PresignIncidentMediaDto,
@@ -32,10 +33,6 @@ import {
   validateMediaDraft,
   validateReportIncidentDto,
 } from "./dto/report-incident.dto";
-
-const DEFAULT_COUNTRY = "Nigeria";
-const DEFAULT_STATE = "Lagos";
-const DEFAULT_LGA = "Ikeja";
 
 @Injectable()
 export class IncidentsService {
@@ -50,6 +47,7 @@ export class IncidentsService {
     private readonly locationTracking: LocationTrackingService,
     private readonly incidentTimeline: IncidentTimelineService,
     private readonly etaService: EtaService,
+    private readonly jurisdictionResolution: JurisdictionResolutionService,
   ) {}
 
   async list(
@@ -151,7 +149,11 @@ export class IncidentsService {
       throw new BadRequestException("Identified reporting requires authentication");
     }
 
-    const jurisdiction = await this.findJurisdiction(dto.manualLatitude ?? dto.latitude, dto.manualLongitude ?? dto.longitude, actor);
+    const jurisdiction = await this.jurisdictionResolution.resolve({
+      latitude: dto.manualLatitude ?? dto.latitude,
+      longitude: dto.manualLongitude ?? dto.longitude,
+      actor,
+    });
     const now = new Date();
     const incidentTitle = dto.title ?? this.defaultTitle(dto.type);
     const priority = dto.priority ?? this.defaultPriority(dto.type);
@@ -184,6 +186,11 @@ export class IncidentsService {
           intake: emergencyFastPath ? "emergency_fast_path" : "standard",
           reportingMode: isAnonymous ? "anonymous" : "identified",
           emergencyContactNotificationRequested: dto.notifyEmergencyContacts ?? false,
+          jurisdictionResolutionStatus: jurisdiction.resolutionStatus,
+          jurisdictionResolutionSource: jurisdiction.resolutionSource,
+          ...(jurisdiction.distanceMeters !== undefined
+            ? { jurisdictionDistanceMeters: jurisdiction.distanceMeters }
+            : {}),
         },
         timeline: {
           create: {
@@ -475,6 +482,10 @@ export class IncidentsService {
     };
   }
 
+  async diagnoseJurisdiction(latitude: number, longitude: number, actor?: JwtPayload) {
+    return this.jurisdictionResolution.diagnose(latitude, longitude, actor);
+  }
+
   private buildReportResponse(incident: { id: string; status: unknown; priority: unknown; submittedAt: Date }, emergencyFastPath: boolean, duplicate: boolean) {
     return {
       id: incident.id,
@@ -485,29 +496,6 @@ export class IncidentsService {
       duplicate,
       targetProcessingTimeMs: emergencyFastPath ? 3000 : undefined,
     };
-  }
-
-  private async findJurisdiction(latitude: number, longitude: number, actor?: JwtPayload) {
-    const matches = await this.prisma.$queryRaw<Array<{ id: string; country: string; state: string; lga: string }>>`
-      SELECT id, country, state, lga
-      FROM jurisdictions
-      WHERE boundary IS NOT NULL
-        AND ST_Covers(boundary, ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography)
-      LIMIT 1
-    `;
-
-    if (matches[0]) return matches[0];
-
-    const fallback = await this.prisma.jurisdiction.findFirst({
-      where: {
-        country: actor?.country ?? DEFAULT_COUNTRY,
-        state: actor?.state ?? DEFAULT_STATE,
-        lga: actor?.lga ?? DEFAULT_LGA,
-      },
-    });
-
-    if (!fallback) throw new BadRequestException("No jurisdiction found for incident location");
-    return fallback;
   }
 
   private async attachInitialMedia(incidentId: string, mediaItems: NonNullable<ReportIncidentDto["media"]>, actor: JwtPayload | undefined, isAnonymous: boolean, fallbackLatitude: number, fallbackLongitude: number) {

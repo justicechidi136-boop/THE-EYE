@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:the_eye_watch/api/watch_api_client.dart';
@@ -8,6 +9,8 @@ import 'package:the_eye_watch/services/connectivity_service.dart';
 import 'package:the_eye_watch/services/location_service.dart';
 import 'package:the_eye_watch/services/sos_service.dart';
 import 'package:the_eye_watch/services/vibration_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:the_eye_watch/platform/emergency_tracking_platform.dart';
 import 'package:the_eye_watch/storage/secure_credential_store.dart';
 
 class InMemoryPreferencesStore extends PreferencesStore {
@@ -26,6 +29,10 @@ class InMemoryPreferencesStore extends PreferencesStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
 
   test('SOS hold can be cancelled before submission', () async {
     final sos = _buildSosService(
@@ -124,8 +131,10 @@ SosService _buildSosService(
     location: LocationService(
       api: api,
       credentials: credentials,
+      preferences: prefs,
       connectivity: conn,
       positionProvider: () async => null,
+      trackingPlatform: _NoOpEmergencyTrackingPlatform(),
     ),
     vibration: VibrationService(),
     idGenerator: idGenerator ??
@@ -136,4 +145,12 @@ SosService _buildSosService(
     holdDurationMs: 300,
     tickIntervalMs: 50,
   );
+}
+
+class _NoOpEmergencyTrackingPlatform extends EmergencyTrackingPlatform {
+  @override
+  Future<void> startEmergencyTracking({String? sosEventId, bool silent = false}) async {}
+
+  @override
+  Future<void> stopEmergencyTracking() async {}
 }

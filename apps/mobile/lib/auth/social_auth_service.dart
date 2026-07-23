@@ -144,6 +144,69 @@ class SocialAuthService {
     }
   }
 
+  Future<({bool isSuccess, String? idToken, String? userMessage})>
+      obtainGoogleIdToken() async {
+    if (_signInInFlight) {
+      return (
+        isSuccess: false,
+        idToken: null,
+        userMessage: "A sign-in request is already in progress.",
+      );
+    }
+    _signInInFlight = true;
+    try {
+      final credential = await _googleCredentialFactory();
+      if (credential == null) {
+        return (
+          isSuccess: false,
+          idToken: null,
+          userMessage: "Google sign-in was cancelled.",
+        );
+      }
+      final idToken = await credential.user?.getIdToken(true);
+      if (idToken == null || idToken.isEmpty) {
+        return (
+          isSuccess: false,
+          idToken: null,
+          userMessage: "Unable to verify your Google sign-in. Try again.",
+        );
+      }
+      return (isSuccess: true, idToken: idToken, userMessage: null);
+    } on FirebaseAuthException catch (error) {
+      return (
+        isSuccess: false,
+        idToken: null,
+        userMessage: _firebaseAuthMessage(error),
+      );
+    } on PlatformException catch (error) {
+      return (
+        isSuccess: false,
+        idToken: null,
+        userMessage: _googlePlatformMessage(error),
+      );
+    } on SocketException {
+      return (
+        isSuccess: false,
+        idToken: null,
+        userMessage: _networkReachabilityMessage(),
+      );
+    } on http.ClientException {
+      return (
+        isSuccess: false,
+        idToken: null,
+        userMessage: _networkReachabilityMessage(),
+      );
+    } on TimeoutException {
+      return (
+        isSuccess: false,
+        idToken: null,
+        userMessage: _networkReachabilityMessage(),
+      );
+    } finally {
+      _signInInFlight = false;
+    }
+  }
+
   Future<SocialAuthResult> signInWithApple({String? deviceId}) async {
     if (!isAppleSignInSupported) {
       return const SocialAuthResult(

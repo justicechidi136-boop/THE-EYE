@@ -309,6 +309,96 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 
 ---
 
+## SRB-020 — Mobile location permission not requested
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile (Android) |
+| **User flow** | Nearby Police, SOS, incident reporting, broadcasts, live tracking |
+| **Severity** | P0 |
+| **Reproduction** | Install staging APK → Settings → Apps → Permissions → Location — THE EYE not listed; SOS/police fail without GPS |
+| **Expected** | Manifest declares location; runtime prompt on feature entry; factual errors; SOS submits with pending location policy |
+| **Actual (pre-fix)** | `AndroidManifest.xml` missing `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`; runtime Geolocator calls ineffective |
+| **Root cause** | Missing manifest permissions; no centralized permission lifecycle; SOS blocked on GPS failure; generic network errors |
+| **Fix** | Manifest permissions; `location_permission_service.dart` typed states; SOS pending-location policy; Settings location section; police/settings recovery UI |
+| **Automated test** | `location_permission_service_test.dart`, `sos_location_policy_test.dart`, `sos_actions_test.dart` |
+| **Runtime evidence** | Automated tests green locally; **physical phone QA NOT DONE** |
+| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+
+---
+
+## SRB-021 — Watch location permission and GPS lifecycle not verified
+
+| Field | Value |
+|---|---|
+| **Platform** | Watch (Android / Wear OS) |
+| **User flow** | SOS, silent SOS, emergency tracking, offline replay, reboot recovery |
+| **Severity** | P0 |
+| **Reproduction** | Watch SOS at 0,0 without permission; no foreground service; fake GPS UI; GPS ticks dropped offline |
+| **Expected** | Watch-side permission prompt; factual SOS without fix; foreground emergency service; offline GPS queue; real diagnostics |
+| **Actual (pre-fix)** | Permission onboarding skippable; SOS used `latitude ?? 0`; timer-only tracking; hardcoded GPS status |
+| **Root cause** | No typed watch permission service; no `EmergencyTrackingService`; offline GPS never queued; no location settings diagnostics |
+| **Fix** | Watch `location_permission_service.dart`; `EmergencyTrackingService` + boot receiver; SOS pending policy; location settings screen; device status reads real state |
+| **Automated test** | `location_permission_service_test.dart`, `sos_service_test.dart` |
+| **Runtime evidence** | Automated tests green locally; **physical watch QA NOT DONE** |
+| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+
+---
+
+## SRB-022 — Live video jurisdiction resolution failure
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / API / LiveKit |
+| **User flow** | Start Live Video → incident creation → jurisdiction lookup → LiveKit join |
+| **Severity** | P0 |
+| **Reproduction** | Start Live Video on staging with GPS enabled |
+| **Expected** | Server resolves jurisdiction from coordinates/profile fallback; incident persists; LiveKit session starts |
+| **Actual (pre-fix)** | `findJurisdiction` threw 400 when staging DB lacked fallback row or polygon; mobile showed jurisdiction error before LiveKit |
+| **Root cause** | Hard-fail jurisdiction lookup; citizen JWT lacks country/state/lga; staging jurisdictions seeded without polygons |
+| **Fix** | `JurisdictionResolutionService` with polygon/nearest/profile/default/global fallback; incident metadata records resolution status; admin diagnose endpoint; staging seed adds Ikeja polygon |
+| **Automated test** | `jurisdiction-resolution.service.spec.ts` |
+| **Runtime evidence** | API tests green locally; **physical device Live Video QA NOT DONE** |
+| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+
+---
+
+## SRB-023 — Police locator missing back navigation
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile |
+| **User flow** | Home/Services → Nearby Police → return to previous screen |
+| **Severity** | P1 |
+| **Reproduction** | Open Nearby Police; no reliable back control when opened as tab root |
+| **Expected** | AppBar/back header; Android back; safe fallback to `/home` |
+| **Actual (pre-fix)** | Plain AppBar with title only; no explicit back fallback |
+| **Root cause** | Screen not using Figma back header pattern or PopScope fallback |
+| **Fix** | `EyePageBackHeader` + `PopScope` with `/home` fallback in `police_stations_screen.dart` |
+| **Automated test** | `police_navigation_test.dart` |
+| **Runtime evidence** | Mobile widget test green locally; **device navigation QA NOT DONE** |
+| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+
+---
+
+## SRB-024 — Google-linked account recovery unavailable
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / API |
+| **User flow** | Login → Recover account → email + security push → Google re-auth → restored session |
+| **Severity** | P0/P1 |
+| **Reproduction** | Google-only user loses device access; password reset ineffective |
+| **Expected** | Provider-aware recovery with generic anti-enumeration response, SMTP email, security push, Google re-auth completion |
+| **Actual (pre-fix)** | Only password reset request existed; no Google recovery flow or completion UI |
+| **Root cause** | No `AccountRecoveryChallenge` model/endpoints; no mobile recovery screens |
+| **Fix** | Account recovery API + SMTP delivery + security push + mobile Recover Account flow |
+| **Automated test** | `account-recovery.service.spec.ts` |
+| **Runtime evidence** | API tests green locally; **email/push/device recovery QA NOT DONE** |
+| **Status** | CODE FIXED — **DEVICE VERIFIED pending** |
+
+---
+
 ## Final status
 
 **PARTIALLY BLOCKED**

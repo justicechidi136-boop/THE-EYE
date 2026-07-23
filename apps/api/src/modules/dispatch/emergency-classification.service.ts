@@ -13,6 +13,10 @@ export type EmergencyIndicatorMetadata = {
   networkType?: string;
   deviceId?: string;
   capturedAt?: string;
+  locationSource?: string;
+  locationStatus?: string;
+  isCached?: boolean;
+  ageSeconds?: number;
 };
 
 @Injectable()
@@ -73,6 +77,10 @@ export class EmergencyClassificationService {
       networkType: dto.networkType,
       deviceId: dto.deviceId,
       capturedAt: dto.capturedAt,
+      locationSource: dto.locationSource,
+      locationStatus: dto.locationStatus,
+      isCached: dto.isCached,
+      ageSeconds: dto.ageSeconds,
     };
   }
 }

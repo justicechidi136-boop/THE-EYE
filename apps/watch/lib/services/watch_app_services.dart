@@ -35,6 +35,7 @@ class WatchAppServices {
     location = LocationService(
       api: api,
       credentials: creds,
+      preferences: this.preferences,
       connectivity: this.connectivity,
     );
     sos = SosService(
@@ -91,7 +92,8 @@ class WatchAppServices {
     Duration pushTimeout = const Duration(seconds: 3),
   }) async {
     heartbeat.start();
-    location.startIdleTracking();
+    await location.restoreEmergencyTrackingIfNeeded();
+    await location.startIdleTracking();
     if (firebaseReady && _enablePush) {
       try {
         await push.start().timeout(pushTimeout);

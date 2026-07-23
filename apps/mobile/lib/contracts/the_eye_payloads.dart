@@ -168,18 +168,22 @@ abstract final class TheEyePayloads {
     bool notifyEmergencyContacts = false,
     String? capturedAt,
     String? clientSubmissionId,
+    Map<String, Object?>? locationMetadata,
   }) {
     return {
       "emergencyCategory": emergencyCategory,
       "latitude": latitude,
       "longitude": longitude,
-      if (description != null && description.isNotEmpty) "description": description,
+      if (description != null && description.isNotEmpty)
+        "description": description,
       "silent": silent,
       "anonymous": anonymous,
       "notifyEmergencyContacts": notifyEmergencyContacts,
       if (capturedAt != null && capturedAt.isNotEmpty) "capturedAt": capturedAt,
       if (clientSubmissionId != null && clientSubmissionId.isNotEmpty)
         "clientSubmissionId": clientSubmissionId,
+      if (locationMetadata != null && locationMetadata.isNotEmpty)
+        ...locationMetadata,
     };
   }
 

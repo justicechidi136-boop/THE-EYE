@@ -144,7 +144,7 @@ class IncidentSubmissionService {
       if (error.statusCode == 400) {
         return IncidentSubmissionResult(
           status: IncidentSubmissionStatus.serverValidationError,
-          userMessage: error.userMessage,
+          userMessage: _mapIncidentValidationMessage(error.userMessage),
         );
       }
       return IncidentSubmissionResult(
@@ -213,6 +213,7 @@ class IncidentSubmissionService {
       notifyEmergencyContacts: draft.notifyEmergencyContacts,
       capturedAt: draft.capturedAt.toUtc().toIso8601String(),
       clientSubmissionId: draft.clientSubmissionId,
+      locationMetadata: draft.locationMetadata,
     );
   }
 
@@ -301,6 +302,18 @@ class IncidentSubmissionService {
       return "$baseMessage Evidence upload failed. Try again from incident tracking.";
     }
   }
+}
+
+String _mapIncidentValidationMessage(String message) {
+  final normalized = message.toLowerCase();
+  if (normalized.contains("jurisdiction")) {
+    return "We could not map your location to a supported area yet. "
+        "Your report is being routed for dispatcher review.";
+  }
+  if (normalized.contains("livekit") || normalized.contains("live video")) {
+    return "Live video is temporarily unavailable. Your incident has still been submitted.";
+  }
+  return message;
 }
 
 class IncidentApiException implements Exception {

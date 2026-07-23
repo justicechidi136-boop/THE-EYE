@@ -108,6 +108,7 @@ class IncidentDraft {
     this.stolenVehicle,
     this.silent = false,
     this.emergencyCategory,
+    this.locationMetadata = const {},
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now().toUtc();
 
@@ -132,6 +133,7 @@ class IncidentDraft {
   final StolenVehicleDetails? stolenVehicle;
   final bool silent;
   final String? emergencyCategory;
+  final Map<String, Object?> locationMetadata;
   final DateTime createdAt;
 
   Map<String, dynamic> toJson() => {
@@ -157,6 +159,7 @@ class IncidentDraft {
         "silent": silent,
         if (emergencyCategory != null && emergencyCategory!.isNotEmpty)
           "emergencyCategory": emergencyCategory,
+        if (locationMetadata.isNotEmpty) "locationMetadata": locationMetadata,
         "createdAt": createdAt.toUtc().toIso8601String(),
       };
 
@@ -200,6 +203,9 @@ class IncidentDraft {
               Map<String, dynamic>.from(json["stolenVehicle"] as Map)),
       silent: json["silent"] as bool? ?? false,
       emergencyCategory: json["emergencyCategory"] as String?,
+      locationMetadata: Map<String, Object?>.from(
+        json["locationMetadata"] as Map? ?? const {},
+      ),
       createdAt: DateTime.parse(json["createdAt"] as String),
     );
   }

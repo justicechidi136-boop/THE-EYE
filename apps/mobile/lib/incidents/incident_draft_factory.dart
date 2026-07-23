@@ -2,6 +2,7 @@ import "dart:math";
 
 import "package:geolocator/geolocator.dart";
 
+import "../location/location_permission_service.dart";
 import "../contracts/the_eye_enums.dart";
 import "../evidence/local_evidence_attachment.dart";
 import "incident_draft.dart";
@@ -57,5 +58,36 @@ IncidentDraft buildIncidentDraft({
     stolenVehicle: stolenVehicle,
     localMedia: localMedia,
     emergencyCategory: emergencyCategory,
+  );
+}
+
+IncidentDraft buildSosIncidentDraft({
+  required LocationAccessResult access,
+  required String description,
+  bool anonymous = false,
+  bool notifyEmergencyContacts = true,
+  bool silent = false,
+  String? title,
+  String? clientSubmissionId,
+  String? emergencyCategory,
+}) {
+  final position = access.position;
+  return IncidentDraft(
+    clientSubmissionId: clientSubmissionId ?? createClientSubmissionId(),
+    type: IncidentType.sos,
+    description: normalizeIncidentDescription(
+      description,
+      fallback: title ?? "SOS emergency",
+    ),
+    latitude: position?.latitude ?? 0,
+    longitude: position?.longitude ?? 0,
+    locationAccuracyMeters: position?.accuracy,
+    capturedAt: position?.timestamp.toUtc() ?? DateTime.now().toUtc(),
+    title: title ?? "SOS emergency",
+    anonymous: anonymous,
+    notifyEmergencyContacts: notifyEmergencyContacts,
+    silent: silent,
+    emergencyCategory: emergencyCategory,
+    locationMetadata: locationMetadataFields(access),
   );
 }

@@ -42,6 +42,10 @@ export type SosReportDto = {
   networkType?: string;
   deviceId?: string;
   capturedAt?: string;
+  locationSource?: string;
+  locationStatus?: string;
+  isCached?: boolean;
+  ageSeconds?: number;
 };
 
 export function validateSosReportDto(dto: SosReportDto) {
