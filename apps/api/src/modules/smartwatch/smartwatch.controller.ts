@@ -16,6 +16,7 @@ import {
   SmartwatchStandaloneLoginDto,
   UpdateSmartwatchStatusDto,
   IssueSmartwatchPairingCodeDto,
+  SmartwatchDeviceSettingsPatchDto,
 } from "./dto/smartwatch.dto";
 import { SmartwatchService } from "./smartwatch.service";
 
@@ -255,6 +256,26 @@ export class SmartwatchController {
   @RequirePermissions("broadcast:publish")
   criticalAlert(@Param("id") id: string, @Body() dto: SendCriticalAlertDto, @Req() request: any) {
     return this.smartwatch.sendCriticalAlert(id, dto, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get("devices/:deviceId/settings")
+  getDeviceSettings(
+    @Param("deviceId") deviceId: string,
+    @Req() request: any,
+  ) {
+    const deviceSecret = request.query?.deviceSecret as string | undefined;
+    return this.smartwatch.getDeviceSettings(deviceId, { deviceSecret }, request.user);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch("devices/:deviceId/settings")
+  patchDeviceSettings(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: SmartwatchDeviceSettingsPatchDto,
+    @Req() request: any,
+  ) {
+    return this.smartwatch.patchDeviceSettings(deviceId, dto, request.user);
   }
 
   @UseGuards(OptionalJwtAuthGuard)
