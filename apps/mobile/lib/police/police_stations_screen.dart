@@ -23,11 +23,16 @@ class _NearbyPoliceStationsScreenState
     extends State<NearbyPoliceStationsScreen> {
   final _service = PoliceStationsService();
   final _searchController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _lgaController = TextEditingController();
   List<PoliceStationItem> _stations = [];
   bool _loading = true;
   String? _error;
   String? _locationNotice;
+  String? _attributionNotice;
+  bool _providerFailed = false;
   LocationCaptureResult? _locationBlock;
+  int _radiusMeters = 25000;
 
   @override
   void initState() {
@@ -42,6 +47,8 @@ class _NearbyPoliceStationsScreenState
   @override
   void dispose() {
     _searchController.dispose();
+    _stateController.dispose();
+    _lgaController.dispose();
     super.dispose();
   }
 
@@ -126,20 +133,27 @@ class _NearbyPoliceStationsScreenState
       _loading = true;
       _error = null;
       _locationNotice = null;
+      _attributionNotice = null;
+      _providerFailed = false;
       _locationBlock = null;
     });
     try {
       final coords = await _resolveCoordinates();
-      final stations = await _service.list(
+      final result = await _service.nearby(
         search: search ?? _searchController.text.trim(),
+        state: _stateController.text.trim(),
+        lga: _lgaController.text.trim(),
         latitude: coords.latitude,
         longitude: coords.longitude,
+        radiusMeters: _radiusMeters,
       );
       if (!mounted) return;
       setState(() {
-        _stations = stations;
+        _stations = result.stations;
         _locationNotice = coords.notice;
         _locationBlock = coords.block;
+        _attributionNotice = result.googleAttributionNotice;
+        _providerFailed = result.providerFailed;
         _loading = false;
       });
     } on IncidentApiException catch (error) {
@@ -185,6 +199,13 @@ class _NearbyPoliceStationsScreenState
         appBar: AppBar(
           automaticallyImplyLeading: false,
           title: const Text("Nearby police"),
+          actions: [
+            IconButton(
+              tooltip: "Refresh stations",
+              onPressed: _loading ? null : () => _load(),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -201,10 +222,54 @@ class _NearbyPoliceStationsScreenState
                     controller: _searchController,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.search),
-                      labelText: "Search by state, LGA, or location",
+                      labelText: "Search by name or address",
                     ),
                     onSubmitted: (_) =>
                         _load(search: _searchController.text.trim()),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _stateController,
+                          decoration: const InputDecoration(
+                            labelText: "State",
+                          ),
+                          onSubmitted: (_) => _load(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _lgaController,
+                          decoration: const InputDecoration(
+                            labelText: "LGA",
+                          ),
+                          onSubmitted: (_) => _load(),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    value: _radiusMeters,
+                    decoration: const InputDecoration(
+                      labelText: "Search radius",
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 5000, child: Text("5 km")),
+                      DropdownMenuItem(value: 10000, child: Text("10 km")),
+                      DropdownMenuItem(value: 25000, child: Text("25 km")),
+                      DropdownMenuItem(value: 50000, child: Text("50 km")),
+                    ],
+                    onChanged: _loading
+                        ? null
+                        : (value) {
+                            if (value == null) return;
+                            setState(() => _radiusMeters = value);
+                            unawaited(_load());
+                          },
                   ),
                   const SizedBox(height: 12),
                   if (_locationNotice != null)
@@ -253,6 +318,16 @@ class _NearbyPoliceStationsScreenState
                         ],
                       ),
                     ),
+                  if (_providerFailed)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        "Google Maps supplemental results are temporarily unavailable. Showing verified THE EYE records only.",
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                   if (_loading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 48),
@@ -273,12 +348,29 @@ class _NearbyPoliceStationsScreenState
                     )
                   else if (_stations.isEmpty)
                     Text(
-                      "No verified police stations matched your search.",
+                      "No verified police stations matched your search. Try widening the radius or adjusting filters.",
                       style: theme.textTheme.bodyMedium,
                     )
-                  else
+                  else ...[
                     ..._stations
                         .map((station) => _PoliceStationTile(station: station)),
+                    if (_attributionNotice != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _attributionNotice!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      "Distances are straight-line estimates from THE EYE. Directions open Google Maps navigation.",
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -304,11 +396,29 @@ class _PoliceStationTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              station.name,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    station.name,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (station.isVerifiedByTheEye)
+                  Chip(
+                    label: const Text("Verified"),
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor:
+                        theme.colorScheme.primaryContainer.withValues(alpha: 0.7),
+                  )
+                else if (station.isGoogleResult)
+                  Chip(
+                    label: const Text("Google Maps result"),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
             ),
             const SizedBox(height: 4),
             Text(station.address, style: theme.textTheme.bodySmall),

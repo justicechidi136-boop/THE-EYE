@@ -4,6 +4,17 @@ import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
 import "../incidents/incident_submission_service.dart";
 
+enum PoliceDataSource { verifiedDatabase, googlePlaces }
+
+enum PoliceVerificationStatus {
+  verifiedOfficial,
+  verifiedByAdmin,
+  unverified,
+  closed,
+  duplicate,
+  googleMapsResult,
+}
+
 class PoliceStationItem {
   const PoliceStationItem({
     required this.id,
@@ -17,6 +28,10 @@ class PoliceStationItem {
     this.navigationUrl,
     this.state,
     this.lga,
+    this.dataSource = PoliceDataSource.verifiedDatabase,
+    this.verificationStatus = PoliceVerificationStatus.verifiedOfficial,
+    this.googleAttribution,
+    this.googlePlaceId,
   });
 
   final String id;
@@ -30,6 +45,10 @@ class PoliceStationItem {
   final String? navigationUrl;
   final String? state;
   final String? lga;
+  final PoliceDataSource dataSource;
+  final PoliceVerificationStatus verificationStatus;
+  final String? googleAttribution;
+  final String? googlePlaceId;
 
   factory PoliceStationItem.fromJson(Map<String, dynamic> json) {
     final jurisdiction = json["jurisdiction"] as Map<String, dynamic>?;
@@ -40,6 +59,7 @@ class PoliceStationItem {
       address: (json["address"] as String?) ?? "",
       agencyType: (json["agencyType"] as String?) ??
           (json["agency_type"] as String?) ??
+          (json["stationType"] as String?) ??
           "police",
       latitude: (json["latitude"] as num?)?.toDouble() ?? 0,
       longitude: (json["longitude"] as num?)?.toDouble() ?? 0,
@@ -48,18 +68,66 @@ class PoliceStationItem {
       navigationUrl: json["navigationUrl"] as String?,
       state: jurisdiction?["state"] as String? ?? json["state"] as String?,
       lga: jurisdiction?["lga"] as String? ?? json["lga"] as String?,
+      dataSource: _parseDataSource(json["dataSource"] as String?),
+      verificationStatus:
+          _parseVerificationStatus(json["verificationStatus"] as String?),
+      googleAttribution: json["googleAttribution"] as String?,
+      googlePlaceId: json["googlePlaceId"] as String?,
     );
+  }
+
+  static PoliceDataSource _parseDataSource(String? raw) {
+    return raw == "googlePlaces"
+        ? PoliceDataSource.googlePlaces
+        : PoliceDataSource.verifiedDatabase;
+  }
+
+  static PoliceVerificationStatus _parseVerificationStatus(String? raw) {
+    switch (raw) {
+      case "VerifiedByAdmin":
+        return PoliceVerificationStatus.verifiedByAdmin;
+      case "Unverified":
+        return PoliceVerificationStatus.unverified;
+      case "Closed":
+        return PoliceVerificationStatus.closed;
+      case "Duplicate":
+        return PoliceVerificationStatus.duplicate;
+      case "GoogleMapsResult":
+        return PoliceVerificationStatus.googleMapsResult;
+      case "VerifiedOfficial":
+      default:
+        return PoliceVerificationStatus.verifiedOfficial;
+    }
   }
 
   String get distanceLabel {
     if (distanceMeters == null) return "";
     if (distanceMeters! < 1000) {
-      return "${distanceMeters!.round()} m";
+      return "${distanceMeters!.round()} m straight-line";
     }
-    return "${(distanceMeters! / 1000).toStringAsFixed(1)} km";
+    return "${(distanceMeters! / 1000).toStringAsFixed(1)} km straight-line";
   }
 
   bool get canCall => phone != null && phone!.trim().length >= 7;
+
+  bool get isVerifiedByTheEye =>
+      dataSource == PoliceDataSource.verifiedDatabase &&
+      (verificationStatus == PoliceVerificationStatus.verifiedOfficial ||
+          verificationStatus == PoliceVerificationStatus.verifiedByAdmin);
+
+  bool get isGoogleResult => dataSource == PoliceDataSource.googlePlaces;
+}
+
+class PoliceStationsListResult {
+  const PoliceStationsListResult({
+    required this.stations,
+    this.googleAttributionNotice,
+    this.providerFailed = false,
+  });
+
+  final List<PoliceStationItem> stations;
+  final String? googleAttributionNotice;
+  final bool providerFailed;
 }
 
 class PoliceStationsService {
@@ -68,7 +136,7 @@ class PoliceStationsService {
 
   final TheEyeApiClient _api;
 
-  Future<List<PoliceStationItem>> list({
+  Future<PoliceStationsListResult> nearby({
     String? state,
     String? lga,
     String? search,
@@ -87,7 +155,7 @@ class PoliceStationsService {
       if (latitude != null && longitude != null) "radius": "$radiusMeters",
     };
     final response = await _api.getJson(
-      TheEyeApiPaths.policeStations,
+      TheEyeApiPaths.policeStationsNearby,
       query: query,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -97,10 +165,36 @@ class PoliceStationsService {
     final rows = decoded is Map && decoded["data"] is List
         ? decoded["data"] as List
         : const [];
-    return rows
-        .whereType<Map>()
-        .map(
-            (row) => PoliceStationItem.fromJson(Map<String, dynamic>.from(row)))
-        .toList();
+    final meta = decoded is Map ? decoded["meta"] as Map<String, dynamic>? : null;
+    return PoliceStationsListResult(
+      stations: rows
+          .whereType<Map>()
+          .map(
+              (row) => PoliceStationItem.fromJson(Map<String, dynamic>.from(row)))
+          .toList(),
+      googleAttributionNotice: meta?["attribution"] as String?,
+      providerFailed: meta?["googleProviderStatus"] == "failed",
+    );
+  }
+
+  Future<List<PoliceStationItem>> list({
+    String? state,
+    String? lga,
+    String? search,
+    double? latitude,
+    double? longitude,
+    int radiusMeters = 25000,
+    int limit = 25,
+  }) async {
+    final result = await nearby(
+      state: state,
+      lga: lga,
+      search: search,
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: radiusMeters,
+      limit: limit,
+    );
+    return result.stations;
   }
 }
