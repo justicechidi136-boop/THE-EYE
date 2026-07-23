@@ -1,12 +1,25 @@
 import { AppShell } from "../../../components/app-shell";
+import { SmartwatchDeviceActions } from "../../../components/smartwatch-device-actions";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchSmartwatchDevice } from "../../../lib/api/data";
+import {
+  fetchSmartwatchDeviceDetail,
+  fetchSmartwatchDeviceAudit,
+  fetchSmartwatchDeviceTelemetry,
+  fetchSmartwatchDeviceActiveIncident,
+  fetchSmartwatchDeviceEmergencyHistory,
+} from "../../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function WatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const device = await fetchSmartwatchDevice(id);
+  const [device, telemetry, activeIncident, history, audit] = await Promise.all([
+    fetchSmartwatchDeviceDetail(id),
+    fetchSmartwatchDeviceTelemetry(id),
+    fetchSmartwatchDeviceActiveIncident(id),
+    fetchSmartwatchDeviceEmergencyHistory(id),
+    fetchSmartwatchDeviceAudit(id),
+  ]);
 
   if (!device) {
     return (
@@ -18,7 +31,11 @@ export default async function WatchDetailPage({ params }: { params: Promise<{ id
 
   return (
     <AppShell>
-      <PageHeader eyebrow="Watch Detail" title={device.deviceId} action={<StatusBadge tone={device.status === "Online" ? "success" : "warning"}>{device.status}</StatusBadge>} />
+      <PageHeader
+        eyebrow="Watch Detail"
+        title={device.deviceId}
+        action={<StatusBadge tone={device.status === "Online" ? "success" : "warning"}>{device.status}</StatusBadge>}
+      />
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         <Panel title="Identity and pairing">
           <div className="grid gap-3 text-sm md:grid-cols-2">
@@ -33,25 +50,52 @@ export default async function WatchDetailPage({ params }: { params: Promise<{ id
           </div>
         </Panel>
         <Panel title="Remote commands">
-          <div className="grid gap-3">
-            <button className="rounded-md border border-line px-4 py-3 text-sm font-semibold">Send heartbeat request</button>
-            <button className="rounded-md border border-line px-4 py-3 text-sm font-semibold">Schedule firmware update</button>
-            <button className="rounded-md border border-amber-200 px-4 py-3 text-sm font-semibold text-amber-700">Remote disable</button>
-            <button className="rounded-md border border-red-200 px-4 py-3 text-sm font-semibold text-red-700">Remote wipe</button>
-          </div>
+          <SmartwatchDeviceActions deviceId={device.id} deviceLabel={device.deviceId} />
         </Panel>
         <Panel title="Latest location">
-          <div className="leaflet-grid relative min-h-[340px] rounded-lg border border-line">
-            <span className="absolute left-[52%] top-[45%] h-5 w-5 rounded-full bg-red-600 ring-4 ring-red-600/20" />
+          <div className="grid gap-2 text-sm">
+            <p>
+              <span className="font-semibold">GPS:</span>{" "}
+              {telemetry?.lastGps.lat ?? device.lastGps.lat},{" "}
+              {telemetry?.lastGps.lng ?? device.lastGps.lng}
+            </p>
+            <p>
+              <span className="font-semibold">Accuracy:</span>{" "}
+              {telemetry?.lastGps.accuracy ?? device.lastGps.accuracy}
+              {telemetry?.stale ? " (stale telemetry)" : ""}
+            </p>
           </div>
         </Panel>
         <Panel title="Health">
           <div className="grid gap-3 text-sm">
-            <p><span className="font-semibold">Battery:</span> {device.battery}%</p>
-            <p><span className="font-semibold">Signal:</span> {device.signal}%</p>
+            <p><span className="font-semibold">Battery:</span> {telemetry?.batteryLevel ?? device.battery}%</p>
+            <p><span className="font-semibold">Signal:</span> {telemetry?.signalStrength ?? device.signal}%</p>
             <p><span className="font-semibold">Last seen:</span> {device.lastSeen}</p>
-            <p><span className="font-semibold">GPS:</span> {device.lastGps.lat}, {device.lastGps.lng}</p>
+            <p>
+              <span className="font-semibold">Active incident:</span>{" "}
+              {activeIncident?.incidentId ?? "None"}
+            </p>
           </div>
+        </Panel>
+        <Panel title="Emergency history">
+          <ul className="grid gap-2 text-sm">
+            {(history ?? []).slice(0, 5).map((event) => (
+              <li key={event.id}>
+                {event.triggeredAt} — {event.status} {event.incidentId ? `(incident ${event.incidentId})` : ""}
+              </li>
+            ))}
+            {(history ?? []).length === 0 ? <li>No SOS events recorded.</li> : null}
+          </ul>
+        </Panel>
+        <Panel title="Audit history">
+          <ul className="grid gap-2 text-sm">
+            {(audit ?? []).slice(0, 8).map((entry) => (
+              <li key={entry.id}>
+                {entry.createdAt} — {entry.action}
+              </li>
+            ))}
+            {(audit ?? []).length === 0 ? <li>No audit entries.</li> : null}
+          </ul>
         </Panel>
       </div>
     </AppShell>

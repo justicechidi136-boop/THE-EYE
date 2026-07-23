@@ -124,6 +124,19 @@ export type IssueSmartwatchPairingCodeDto = {
   firebaseEnv?: string;
 };
 
+export type AdminSmartwatchDeviceActionDto = {
+  reason?: string;
+  note?: string;
+};
+
+export type SmartwatchVersionPolicyDto = {
+  deviceSecret?: string;
+  currentVersion?: string;
+  versionCode?: number;
+  targetType?: string;
+  environment?: string;
+};
+
 const modes = new Set<string>(Object.values(SmartwatchConnectivityMode));
 const pairingMethods = new Set<string>(Object.values(SmartwatchPairingMethod));
 const emergencyModes = new Set<string>(Object.values(SmartwatchEmergencyMode));
