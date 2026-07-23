@@ -22,17 +22,20 @@ class EyeNotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final muted = onSurface.withValues(alpha: 0.72);
     final child = Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       decoration: BoxDecoration(
-        color: EyeTokens.notificationCardBg,
+        color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x40000000),
+            color: theme.shadowColor.withValues(alpha: 0.25),
             blurRadius: 4,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -40,11 +43,11 @@ class EyeNotificationCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (category != null) ...[
-            Text(category!, style: EyeTypography.fieldHint),
+            Text(category!, style: EyeTypography.fieldHint.copyWith(color: muted)),
             const SizedBox(height: 4),
           ],
           Text(title,
-              style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1)),
+              style: EyeTypography.fieldHint.copyWith(color: onSurface)),
           if (thumbnails.isNotEmpty) ...[
             const SizedBox(height: 8),
             Row(
@@ -59,7 +62,7 @@ class EyeNotificationCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(timestamp,
               style: EyeTypography.fieldHint
-                  .copyWith(fontSize: 12, color: EyeTokens.black1)),
+                  .copyWith(fontSize: 12, color: muted)),
         ],
       ),
     );

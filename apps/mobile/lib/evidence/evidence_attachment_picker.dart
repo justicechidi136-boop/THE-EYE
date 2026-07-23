@@ -74,7 +74,7 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "Upload Images or live video",
+            "Upload photos (JPEG, PNG, WEBP)",
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w500,

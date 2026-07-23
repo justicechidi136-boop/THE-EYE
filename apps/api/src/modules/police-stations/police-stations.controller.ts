@@ -3,13 +3,18 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
-import { NearestPoliceStationsQuery, PoliceStationSearchQuery, UpsertPoliceStationDto } from "./dto/police-station.dto";
+import { NearestPoliceStationsQuery, PoliceStationListQuery, PoliceStationSearchQuery, UpsertPoliceStationDto } from "./dto/police-station.dto";
 import { PoliceStationsService } from "./police-stations.service";
 
 @ApiTags("police-stations")
 @Controller("police-stations")
 export class PoliceStationsController {
   constructor(private readonly policeStations: PoliceStationsService) {}
+
+  @Get()
+  list(@Query() query: PoliceStationListQuery) {
+    return this.policeStations.list(query);
+  }
 
   @Get("nearest")
   nearest(@Query() query: NearestPoliceStationsQuery) {

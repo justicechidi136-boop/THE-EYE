@@ -65,6 +65,9 @@ abstract final class TheEyeApiPaths {
   static String notificationRead(String notificationId) =>
       "/notifications/$notificationId/read";
   static const broadcastsNearby = "/broadcasts/nearby";
+  static const policeStations = "/police-stations";
+  static const policeStationsNearest = "/police-stations/nearest";
+  static const policeStationsSearch = "/police-stations/search";
   static const broadcastsUnreadCount = "/broadcasts/unread-count";
   static String broadcastDetail(String broadcastId) =>
       "/broadcasts/$broadcastId";

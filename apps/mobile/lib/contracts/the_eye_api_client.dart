@@ -6,6 +6,7 @@ import "package:http/http.dart" as http;
 
 import "../auth/auth_session_store.dart";
 import "../auth/auth_service.dart";
+import "../config/the_eye_api_config.dart";
 import "../incidents/incident_submission_service.dart";
 import "../incidents/incident_media_reference.dart";
 import "the_eye_api_paths.dart";
@@ -231,7 +232,7 @@ class PresignedEvidenceTarget {
 
 class TheEyeApiClient {
   TheEyeApiClient({String? baseUrl, http.Client? httpClient})
-      : baseUrl = baseUrl ?? TheEyeApiPaths.defaultBaseUrl,
+      : baseUrl = baseUrl ?? TheEyeApiConfig.resolveBaseUrl(),
         _http = httpClient ?? http.Client();
 
   final String baseUrl;

@@ -80,8 +80,7 @@ class BroadcastFeedPage {
 
 class BroadcastFeedService {
   BroadcastFeedService({TheEyeApiClient? apiClient})
-      : _apiClient = apiClient ??
-            TheEyeApiClient(baseUrl: TheEyeApiPaths.defaultBaseUrl);
+      : _apiClient = apiClient ?? TheEyeApiClient();
 
   final TheEyeApiClient _apiClient;
 

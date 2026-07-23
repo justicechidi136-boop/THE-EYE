@@ -91,7 +91,13 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900,
   if (!endpoint || !bucket || !accessKey || !secretKey) {
     throw new InternalServerErrorException("Evidence storage is not configured");
   }
-  if (contentType) validateEvidenceUpload(contentType);
+  if (contentType) {
+    if (objectKey.startsWith("avatars/")) {
+      validateAvatarUpload(contentType);
+    } else {
+      validateEvidenceUpload(contentType);
+    }
+  }
 
   const now = new Date();
   const date = now.toISOString().replace(/[:-]|\.\d{3}/g, "");

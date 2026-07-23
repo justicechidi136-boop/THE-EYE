@@ -38,6 +38,13 @@ abstract final class TheEyeApiConfig {
   static const String stagingAdminHost = "staging-dashboard8jps.theeye.com.ng";
 
   static String resolveBaseUrl() {
+    const dartDefineFlavor = String.fromEnvironment("THE_EYE_FLAVOR");
+    const flutterFlavor = String.fromEnvironment("FLUTTER_APP_FLAVOR");
+    if (dartDefineFlavor.isEmpty && flutterFlavor.isEmpty) {
+      // Widget/unit tests and legacy harnesses without a build flavor.
+      return TheEyeApiPaths.defaultBaseUrl;
+    }
+
     final flavor = AppFlavorConfig.current;
 
     if (_dartDefineUrl.isNotEmpty) {

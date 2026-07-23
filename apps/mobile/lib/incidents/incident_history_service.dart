@@ -51,8 +51,7 @@ class IncidentDetail extends IncidentSummary {
 
 class IncidentHistoryService {
   IncidentHistoryService({TheEyeApiClient? apiClient})
-      : _apiClient = apiClient ??
-            TheEyeApiClient(baseUrl: TheEyeApiPaths.defaultBaseUrl);
+      : _apiClient = apiClient ?? TheEyeApiClient();
 
   final TheEyeApiClient _apiClient;
 

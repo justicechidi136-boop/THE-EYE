@@ -4,6 +4,7 @@ import "package:path/path.dart" as p;
 
 import "../contracts/the_eye_api_client.dart";
 import "../evidence/evidence_compressor.dart";
+import "../evidence/evidence_validation.dart";
 
 class AvatarUploadService {
   AvatarUploadService({
@@ -20,14 +21,15 @@ class AvatarUploadService {
     required String sourcePath,
     required bool lowDataMode,
   }) async {
-    final extension = p.extension(sourcePath).toLowerCase();
-    final contentType = switch (extension) {
-      ".png" => "image/png",
-      ".webp" => "image/webp",
-      _ => "image/jpeg",
-    };
-    final fileName =
+    final rawFileName =
         p.basename(sourcePath).isEmpty ? "avatar.jpg" : p.basename(sourcePath);
+    final fileName = rawFileName.toLowerCase().endsWith(".jpeg")
+        ? rawFileName.replaceFirst(RegExp(r"\.jpeg$", caseSensitive: false), ".jpg")
+        : rawFileName;
+    final contentType = EvidenceValidation.normalizeMimeType(null, fileName: fileName);
+    if (!const {"image/jpeg", "image/png", "image/webp"}.contains(contentType)) {
+      throw ArgumentError("Avatar must be JPEG, PNG, or WebP.");
+    }
 
     final uploadPath = await _compressor.prepareUploadCopy(
       sourcePath: sourcePath,

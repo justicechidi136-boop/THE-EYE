@@ -6,6 +6,15 @@ import { useId, useState } from "react";
 import { validateLoginForm } from "../lib/auth-validation";
 import { Button, FormField, InlineAlert, TextInput } from "./form-primitives";
 
+function resolvePostLoginPath(rawNext: string | null): string {
+  if (!rawNext || rawNext === "/") return "/";
+  if (!rawNext.startsWith("/")) return "/";
+  if (rawNext.startsWith("//")) return "/";
+  if (rawNext.startsWith("/api/")) return "/";
+  if (rawNext.includes("logout")) return "/";
+  return rawNext;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -41,7 +50,7 @@ export function LoginForm() {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
         throw new Error(payload?.message ?? "Login failed");
       }
-      const next = searchParams.get("next") ?? "/";
+      const next = resolvePostLoginPath(searchParams.get("next"));
       router.push(next);
       router.refresh();
     } catch (submitError) {

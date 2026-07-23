@@ -4,7 +4,16 @@ export type PoliceStationSearchQuery = {
   state?: string;
   lga?: string;
   q?: string;
+  search?: string;
   agencyType?: string;
+  cursor?: string;
+  limit?: string;
+};
+
+export type PoliceStationListQuery = PoliceStationSearchQuery & {
+  latitude?: string;
+  longitude?: string;
+  radius?: string;
 };
 
 export type NearestPoliceStationsQuery = {

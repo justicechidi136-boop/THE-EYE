@@ -35,6 +35,7 @@ IncidentDraft buildIncidentDraft({
   String? title,
   List<LocalEvidenceAttachment> localMedia = const [],
   String? clientSubmissionId,
+  String? emergencyCategory,
 }) {
   return IncidentDraft(
     clientSubmissionId: clientSubmissionId ?? createClientSubmissionId(),
@@ -55,5 +56,6 @@ IncidentDraft buildIncidentDraft({
     missingPerson: missingPerson,
     stolenVehicle: stolenVehicle,
     localMedia: localMedia,
+    emergencyCategory: emergencyCategory,
   );
 }
