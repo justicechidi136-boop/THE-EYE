@@ -776,7 +776,7 @@
 | S7-005 | Secure pairing (code flow) | A/B | PARTIAL | Pairing screen + poll | Y | pairing-codes/register/status | `SmartwatchPairingSession` | N/A | Y | N/A | Y | N | P0 | N | Replay/expiry tests exist; remove dev simulate in release |
 | S7-006 | Device-scoped credential | A/B | PARTIAL | Secure storage | Y | deviceSecret auth | `SmartwatchDevice` | N/A | Y | N/A | Y | N | P0 | N | No user JWT on watch; standalone login for cellular |
 | S7-007 | Push token (device auth) | A/B | CODE COMPLETE — FCM/WATCH QA PENDING | FCM init | Y | device register/deactivate | `user_push_tokens` | Y | PARTIAL | N/A | Partial | Y (FCM) | P0 | N | Device-scoped register/deactivate wired |
-| S7-008 | Push routing / active emergency refresh | A/B | PARTIAL | Push handlers | Y | N/A | N/A | PARTIAL | PARTIAL | N/A | Y | Y (FCM) | P0 | Y | Background handler Firebase init; navigate on alert |
+| S7-008 | Push routing / active emergency refresh | A/B | CODE COMPLETE — FCM/WATCH QA PENDING | Push handlers + alert navigation | Y | N/A | N/A | PARTIAL | PARTIAL | N/A | Y | Y (FCM) | P0 | N | Foreground/background routes to IncomingAlertScreen or active emergency; server state authoritative |
 | S7-009 | Alert acknowledgement (server) | A/B | PARTIAL | Alert history UI | Y | notifications device-received | Y | PARTIAL | N/A | N/A | Partial | N | P1 | N | Device-authenticated ack endpoint |
 | S7-010 | Alert history | A/B | CODE COMPLETE — FCM/WATCH QA PENDING | Local + API sync | Y | device notifications list/read/ack | N/A | PARTIAL | Y | N/A | Partial | N | P1 | N | Server merge + dedupe; device QA pending |
 | S7-011 | Standard SOS E2E | A/B | PARTIAL | Hold/countdown/cancel | Y | `POST /smartwatch/sos` | `SosEvent` | Partial | PARTIAL | SOS monitor | Y | Y | P0 | N | Device QA; emergency type not in default flow |
@@ -784,18 +784,18 @@
 | S7-013 | Offline queue / replay | A/B | CODE COMPLETE — DEVICE SECURITY QA PENDING | Encrypted queue UI | Y | offline-sync | `SmartwatchOfflineEvent` | N/A | Y | N/A | Y | N | P0 | N | Keystore-backed queue + auto-flush |
 | S7-014 | Real telemetry (battery/network/GPS) | A/B | PARTIAL | Home/footer/status | battery_plus, connectivity_plus | heartbeat | `SmartwatchDevice` | N/A | FAIL | Health page | Partial | Y | P0 | Y | Remove fake signal 80; real app version; telemetry endpoint |
 | S7-015 | Emergency GPS tracking | A/B | PARTIAL | Active emergency + tracking | geolocator | `POST .../gps` | `SmartwatchGpsTrack` | N/A | PARTIAL | Live tracking UI placeholder | Partial | Y | P0 | N | Wire admin tracking API; no continuous non-emergency tracking |
-| S7-016 | Paired-phone connectivity mode | A/B | CODE COMPLETE — WEAR OS/MOBILE QA PENDING | Connection status UI | Companion transport + HTTPS fallback | heartbeat field | Y | N/A | N/A | Partial | Y | P1 | N | Wear Data Layer adapter stub; mobile relay QA pending |
+| S7-016 | Paired-phone connectivity mode | A/B | PARTIAL — DEFERRED | Connection status UI | HTTPS standalone only | heartbeat field | Y | N/A | N/A | Partial | Y | P1 | N | Wear Data Layer mobile relay deferred to Sprint 8; staging gate covers standalone HTTPS only |
 | S7-017 | Active emergency UX | A/B | CODE COMPLETE — WATCH QA PENDING | Poll + push refresh | Y | tracking GET | Y | PARTIAL | PARTIAL | Partial | Y | Y | P0 | N | No fake ETA/responder; cancel rules |
-| S7-018 | Watch settings (persisted) | A/B | CODE COMPLETE — DEVICE QA PENDING | Settings screens | Y | local schema v1 | N/A | N/A | N/A | N/A | N | N | P1 | N | Failover, radius, vibration persisted |
-| S7-019 | Unpair / revoke | A/B | PARTIAL | Settings unpair | Y | PATCH unpair + revoke | Y | Deactivate tokens | Y | Revoke buttons unwired | Y | N | P0 | N | Wire admin revoke; immediate credential invalidation |
+| S7-018 | Watch settings (persisted) | A/B | CODE COMPLETE — DEVICE QA PENDING | Settings screens | Y | GET/PATCH `/devices/:id/settings` typed DTO | Y | N/A | N/A | N/A | N | N | P1 | N | Local-only fields remain local; server sync for approved settings |
+| S7-019 | Unpair / revoke / lost-stolen enforcement | A/B | CODE COMPLETE — STAGING QA PENDING | Settings unpair | Y | PATCH unpair + revoke + security gates | Y | Deactivate tokens | Y | Revoke/lost/stolen actions | Y | N | P0 | N | Lost/stolen blocks push/telemetry/settings/pairing; SOS emergency-only; audited denials |
 | S7-020 | Device management API | API + Admin | PARTIAL | N/A | N/A | list devices; **missing GET :id, GET firmware** | Y | N/A | N/A | PARTIAL | Partial | N | P0 | N | Add admin detail, firmware list, telemetry GET, revoke POST |
 | S7-021 | Admin watch console | Admin | CODE COMPLETE — STAGING ADMIN QA PENDING | `/smartwatch/*` pages | Y | admin actions/audit/telemetry | Y | N/A | N/A | PARTIAL | N | N | P1 | N | Wired revoke/lost/stolen/unpair actions |
 | S7-022 | Version / update policy | A/B | CODE COMPLETE — STAGING/DEVICE QA PENDING | Boot gate + device status | Y | version-policy | `SmartwatchFirmwareRelease` | N/A | N/A | Partial | Partial | N | P1 | N | Semantic gate at boot; signed HTTPS metadata |
 | S7-023 | Background foreground service | B | CODE COMPLETE — PHYSICAL DEVICE QA PENDING | EmergencyTrackingService | Y | N/A | N/A | N/A | Y | N/A | N | Y (OEM) | P0 | N | Wear persists state; Target B foreground service |
-| S7-024 | Crash recovery / escape | B | PARTIAL | RecoveryActivity, debug PIN | CrashSentinel unwired | N/A | N/A | N/A | PARTIAL | N/A | N | N | P1 | N | Wire crash sentinel; operator escape documented |
+| S7-024 | Crash recovery / escape | B | CODE COMPLETE — DEVICE QA PENDING | RecoveryActivity + CrashSentinel | Y | N/A | N/A | N/A | PARTIAL | N/A | Y | N | P1 | N | Unclean shutdown detection; emergency restore; loop guard; sanitized metadata |
 | S7-025 | Physical buttons / fall / HR | All | BLOCKED | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N | Y | P3 | Y | Audit only — no diagnostic claims |
 | S7-026 | Square / round layouts | A/B | PARTIAL | Flutter layouts | Y | N/A | N/A | N/A | N/A | N/A | Partial | N | P2 | N | Emulator layout tests |
-| S7-027 | Security regression suite | API + Watch | PARTIAL | N/A | Y | pairing/revoke/SOS | Y | token lifecycle | N/A | jurisdiction | Partial | N | P0 | N | Expand replay, revoke, cross-user, idempotency tests |
+| S7-027 | Security regression suite | API + Watch | CODE COMPLETE — QA PENDING | N/A | Y | pairing/revoke/SOS/lost-stolen/settings | Y | token lifecycle | N/A | jurisdiction | Y | N | P0 | N | Lost/stolen, clear-security, crash recovery, settings PATCH covered |
 | S7-028 | Emulator / device QA plan | A/B | NOT TESTED | N/A | N/A | N/A | N/A | Y (FCM) | Y | N/A | N | Y | P0 | Y | Execute matrix in Phase 22 before any PASS |
 
 ### Sprint 7 evidence tracker (no PASS without device/emulator proof)
@@ -805,7 +805,7 @@
 | Identity & pairing | S7-005–S7-007, S7-019 | CODE COMPLETE — STAGING QA PENDING | Required |
 | Launcher & boot | S7-002–S7-004, S7-023–S7-024 | CODE COMPLETE — DEVICE QA PENDING | Emulator + physical B |
 | SOS & offline | S7-011–S7-013 | CODE COMPLETE — WATCH QA PENDING | Required |
-| Telemetry & location | S7-014–S7-016 | CODE COMPLETE — DEVICE QA PENDING | GPS/battery on hardware |
+| Telemetry & location | S7-014–S7-016 | PARTIAL — S7-016 DEFERRED | GPS/battery on hardware; paired relay Sprint 8 |
 | Push & alerts | S7-007–S7-010 | CODE COMPLETE — FCM/WATCH QA PENDING | FCM on watch hardware |
 | Admin & device mgmt | S7-020–S7-022 | CODE COMPLETE — STAGING ADMIN QA PENDING | Staging admin QA |
 | Hardware-only | S7-025 | BLOCKED | Cannot PASS from code alone |

@@ -47,6 +47,19 @@ class ConnectionStatusScreen extends StatelessWidget {
             label: 'Failover',
             value: services.connectivity.failoverEnabled,
           ),
+          _StatusRow(
+            label: 'Phone relay',
+            value: false,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'Paired Wear Data Layer relay is deferred for Sprint 7. '
+              'Standalone HTTPS is active for staging.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: EyeColors.muted, fontSize: 9),
+            ),
+          ),
           const Spacer(),
           WatchPrimaryButton(
             label: 'Flush Offline Queue',

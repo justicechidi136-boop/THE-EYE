@@ -24,7 +24,7 @@
 | **Display** | Round + square layouts via Flutter responsive constraints |
 | **QA method** | Wear OS emulator + physical Wear device |
 
-**Known limits:** Phone relay via Wear Data Layer **NOT IMPLEMENTED** (companion stub). Paired-phone mode falls back to watch internet until Data Layer wired.
+**Known limits:** Phone relay via Wear Data Layer **DEFERRED to Sprint 8** (watch-side stub only; no mobile bridge). Sprint 7 Android staging gate validates **standalone HTTPS** only. Paired-phone UI shows deferred status; do not treat relay as supported.
 
 ---
 
