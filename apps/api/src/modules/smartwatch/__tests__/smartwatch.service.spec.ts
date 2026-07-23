@@ -3,7 +3,7 @@ import { hashToken } from "../../../common/auth/crypto";
 import { SmartwatchConnectivityMode, SmartwatchOfflineEventType, SmartwatchPairingMethod } from "@the-eye/shared";
 import { SmartwatchService } from "../smartwatch.service";
 
-function buildService(overrides: { config?: Record<string, string>; pairingSession?: any } = {}) {
+function buildService(overrides: { config?: Record<string, string>; pairingSession?: any; firmwareRelease?: any } = {}) {
   const device = {
     id: "device-uuid",
     userId: "user-1",
@@ -55,6 +55,11 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
       create: jest.fn().mockImplementation(async (args: any) => ({ id: "offline-1", ...args.data })),
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({ id: "offline-1", status: "Processed" }),
+    },
+    smartwatchFirmwareRelease: {
+      findFirst: jest.fn().mockResolvedValue(overrides.firmwareRelease ?? null),
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
     },
   } as any;
   const incidents = {
@@ -316,6 +321,64 @@ describe("SmartwatchService", () => {
       "user-1",
       "notification-1",
       "watch_ack",
+    );
+  });
+
+  it("requires reason when admin revokes a device", async () => {
+    const { service, prisma } = buildService();
+    prisma.smartwatchDevice.findUnique.mockResolvedValue({
+      id: "device-1",
+      userId: "user-1",
+      deviceId: "EYE-WATCH-001",
+      user: { profile: { country: "NG", state: "LA", lga: "Ikeja" } },
+    });
+    await expect(
+      service.revokeDevice("device-1", { sub: "admin-1", typ: "admin", role: "Super Admin" } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("returns version policy with semantic comparison", async () => {
+    const { service, prisma } = buildService({
+      firmwareRelease: {
+        version: "0.2.0",
+        minimumSupportedVersion: "0.1.0",
+        downloadUrl: "https://cdn.example.com/watch.apk",
+        fileHash: "abc",
+        signature: "sig",
+        status: "Published",
+      },
+    });
+
+    const result = await service.versionPolicy(
+      "EYE-WATCH-001",
+      { deviceSecret: "watch-secret", currentVersion: "0.1.0", targetType: "watch" },
+    );
+
+    expect(result.data.updateStatus).toBe("UpdateRecommended");
+    expect(result.data.downloadUrl).toMatch(/^https:\/\//);
+    expect(prisma.smartwatchFirmwareRelease.findFirst).toHaveBeenCalled();
+  });
+
+  it("marks device lost with audit metadata", async () => {
+    const { service, prisma } = buildService();
+    const actor = { sub: "admin-1", typ: "admin", role: "Super Admin" } as any;
+
+    prisma.smartwatchDevice.findUnique.mockResolvedValue({
+      id: "device-1",
+      userId: "user-1",
+      deviceId: "EYE-WATCH-001",
+      user: { profile: { country: "NG", state: "LA", lga: "Ikeja" } },
+      metadata: {},
+    });
+
+    await service.adminDeviceAction("device-1", "mark-lost", { reason: "Reported missing" }, actor);
+
+    expect(prisma.smartwatchDevice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          metadata: expect.objectContaining({ securityStatus: "Lost" }),
+        }),
+      }),
     );
   });
 });

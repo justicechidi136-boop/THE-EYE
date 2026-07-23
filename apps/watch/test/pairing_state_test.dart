@@ -45,6 +45,7 @@ class FakeWatchApiClient extends WatchApiClient {
   @override
   Future<Map<String, dynamic>> get(
     String path, {
+    Map<String, String>? query,
     Map<String, String>? headers,
   }) async {
     return {
