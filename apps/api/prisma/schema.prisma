@@ -784,24 +784,48 @@ model MissingPersonReport {
 }
 
 model PoliceStation {
-  id             String       @id @default(uuid()) @db.Uuid
-  agencyId       String?      @map("agency_id") @db.Uuid
-  jurisdictionId String       @map("jurisdiction_id") @db.Uuid
-  name           String
-  phone          String?
-  address        String
-  agencyType     String       @default("police") @map("agency_type")
-  latitude       Decimal      @db.Decimal(9, 6)
-  longitude      Decimal      @db.Decimal(9, 6)
-  gpsLocation    Unsupported("geography(Point,4326)") @map("gps_location")
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  agency         Agency?      @relation(fields: [agencyId], references: [id])
-  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id])
+  id                 String       @id @default(uuid()) @db.Uuid
+  agencyId           String?      @map("agency_id") @db.Uuid
+  jurisdictionId     String       @map("jurisdiction_id") @db.Uuid
+  name               String
+  phone              String?
+  address            String
+  agencyType         String       @default("police") @map("agency_type")
+  stationType        String?      @map("station_type")
+  country            String?
+  state              String?
+  lga                String?
+  officialPhone      String?      @map("official_phone")
+  emergencyPhone     String?      @map("emergency_phone")
+  source             String?
+  sourceReference    String?      @map("source_reference")
+  verifiedAt         DateTime?    @map("verified_at") @db.Timestamptz(6)
+  verifiedBy         String?      @map("verified_by") @db.Uuid
+  verificationStatus String       @default("Unverified") @map("verification_status")
+  isActive           Boolean      @default(true) @map("is_active")
+  lastReviewedAt     DateTime?    @map("last_reviewed_at") @db.Timestamptz(6)
+  googlePlaceId      String?      @map("google_place_id")
+  latitude           Decimal      @db.Decimal(9, 6)
+  longitude          Decimal      @db.Decimal(9, 6)
+  gpsLocation        Unsupported("geography(Point,4326)") @map("gps_location")
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  agency             Agency?      @relation(fields: [agencyId], references: [id])
+  jurisdiction       Jurisdiction @relation(fields: [jurisdictionId], references: [id])
 
   @@index([jurisdictionId])
   @@index([agencyType])
+  @@index([verificationStatus, isActive])
+  @@index([googlePlaceId])
   @@map("police_stations")
+}
+
+model GooglePlaceReference {
+  placeId       String   @id @map("place_id")
+  lastFetchedAt DateTime @default(now()) @map("last_fetched_at") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("google_place_references")
 }
 
 model Notification {
