@@ -49,6 +49,7 @@ export class PoliceStationsService {
          JOIN jurisdictions j ON j.id = ps.jurisdiction_id
          LEFT JOIN agencies a ON a.id = ps.agency_id
         WHERE ST_DWithin(ps.gps_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+        AND ps.is_active = true
           AND ($4::text IS NULL OR ps.agency_type = $4)
         ORDER BY ps.gps_location <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
         LIMIT $5`,
@@ -86,16 +87,31 @@ export class PoliceStationsService {
 
   async create(dto: UpsertPoliceStationDto, actor: JwtPayload) {
     validatePoliceStationDto(dto);
+    const verificationStatus = dto.verificationStatus ?? "Unverified";
     const station = await (this.prisma as any).policeStation.create({
       data: {
         agencyId: dto.agencyId,
         jurisdictionId: dto.jurisdictionId,
         name: dto.name,
-        phone: dto.phone,
+        phone: dto.officialPhone ?? dto.phone,
+        officialPhone: dto.officialPhone ?? dto.phone,
+        emergencyPhone: dto.emergencyPhone,
         address: dto.address,
         agencyType: dto.agencyType,
+        stationType: dto.agencyType,
         latitude: dto.latitude,
         longitude: dto.longitude,
+        source: dto.source,
+        sourceReference: dto.sourceReference,
+        verificationStatus,
+        verifiedAt: verificationStatus === "VerifiedOfficial" || verificationStatus === "VerifiedByAdmin"
+          ? new Date()
+          : null,
+        verifiedBy: verificationStatus === "VerifiedOfficial" || verificationStatus === "VerifiedByAdmin"
+          ? actor.sub
+          : null,
+        googlePlaceId: dto.googlePlaceId,
+        isActive: verificationStatus !== "Closed" && verificationStatus !== "Duplicate",
       } as never,
     });
     await this.audit(actor, "police_station.created", station.id, { name: dto.name, agencyType: dto.agencyType });

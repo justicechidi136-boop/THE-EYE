@@ -4,7 +4,8 @@ export type RateLimitPolicyName =
   | "incidentCreate"
   | "broadcastCreate"
   | "liveStreamCreate"
-  | "communityPostCreate";
+  | "communityPostCreate"
+  | "policeSearch";
 
 export type RateLimitActorRole = "anonymous" | "user" | "admin";
 
@@ -44,6 +45,11 @@ export const RATE_LIMIT_POLICIES: Record<RateLimitPolicyName, RateLimitPolicy> =
     windowSeconds: 300,
     ipLimit: 20,
     roleLimits: { user: 15, admin: 40 },
+  },
+  policeSearch: {
+    windowSeconds: 60,
+    ipLimit: 30,
+    roleLimits: { anonymous: 20, user: 40, admin: 80 },
   },
 };
 

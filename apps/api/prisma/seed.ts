@@ -110,9 +110,17 @@ async function main() {
   `);
 
   await seedSql(`
-    INSERT INTO police_stations (agency_id, jurisdiction_id, name, phone, address, agency_type, latitude, longitude, gps_location) VALUES
-      ('${policeAgencyId}', '${jurisdictionId}', 'Ikeja Central Police Station', '+2348000003001', 'Ikeja, Lagos', 'police', 6.601800, 3.351500, ST_SetSRID(ST_MakePoint(3.351500, 6.601800), 4326)::geography),
-      ('${policeAgencyId}', '${jurisdictionId}', 'Alausa Security Post', '+2348000003002', 'Alausa Secretariat Road, Ikeja', 'security', 6.617200, 3.358900, ST_SetSRID(ST_MakePoint(3.358900, 6.617200), 4326)::geography)
+    INSERT INTO police_stations (
+      agency_id, jurisdiction_id, name, phone, address, agency_type, station_type,
+      country, state, lga, official_phone, source, source_reference,
+      verification_status, verified_at, latitude, longitude, gps_location
+    ) VALUES
+      ('${policeAgencyId}', '${jurisdictionId}', 'Ikeja Central Police Station', '+2348000003001', 'Ikeja, Lagos', 'police', 'police',
+       'Nigeria', 'Lagos', 'Ikeja', '+2348000003001', 'Lagos State Police Command', 'dev-seed/ikeja-central',
+       'VerifiedOfficial', NOW(), 6.601800, 3.351500, ST_SetSRID(ST_MakePoint(3.351500, 6.601800), 4326)::geography),
+      ('${policeAgencyId}', '${jurisdictionId}', 'Alausa Security Post', '+2348000003002', 'Alausa Secretariat Road, Ikeja', 'security', 'security',
+       'Nigeria', 'Lagos', 'Ikeja', '+2348000003002', 'Lagos State Police Command', 'dev-seed/alausa-security',
+       'VerifiedOfficial', NOW(), 6.617200, 3.358900, ST_SetSRID(ST_MakePoint(3.358900, 6.617200), 4326)::geography)
     ON CONFLICT DO NOTHING
   `);
 
