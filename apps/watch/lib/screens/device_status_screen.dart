@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../location/location_permission_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
+import '../theme/eye_semantic_colors.dart';
 import '../widgets/watch_ui.dart';
 
 class DeviceStatusScreen extends StatefulWidget {
@@ -88,7 +89,7 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                 WatchInfoRow(
                   label: 'Mode',
                   value: status?.connectivityMode.apiValue ?? 'Unknown',
-                  valueColor: EyeColors.green,
+                  valueColor: EyeSemanticColors.of(context).interactiveText,
                 ),
                 WatchInfoRow(
                   label: 'GPS',

@@ -210,8 +210,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | Mobile used static demo data; API list endpoint missing |
 | **Fix** | Hybrid locator: verified `police_stations` + server-side Google Places fallback; mobile `/police-stations/nearby` with source labels and attribution |
 | **Automated test** | `police-locator.service.spec.ts`, `police_locator_test.dart` |
-| **Runtime evidence** | Local API 324/324 + mobile 142/142; migration `20260723230000_police_station_verification`; staging Google key + device QA pending |
-| **Status** | CODE FIXED — **DEVICE QA PENDING** |
+| **Runtime evidence** | Endpoint live @ 2026-07-24 returns HTTP 200 (no longer 404); `googlePlacesEnabled:false`, `googleProviderStatus:"disabled"` — API container not recreated after VPS key add; hybrid Google fallback **not active** on staging; local API tests + mobile 158/158; migration `20260723230000_police_station_verification` pending VPS apply |
+| **Status** | CODE FIXED — **CI VERIFIED** — **DEPLOYED (endpoint only)** — **DEVICE QA PENDING** — Google provider **DISABLED on staging API** |
 
 Note: Nationwide verified official police dataset remains incomplete. Google supplemental results are labelled `googlePlaces` and are not official THE EYE verification. Empty/honest results must still be shown outside seeded areas.
 
@@ -396,6 +396,31 @@ Note: Nationwide verified official police dataset remains incomplete. Google sup
 | **Automated test** | `account-recovery.service.spec.ts` |
 | **Runtime evidence** | PR #22 merged @ `cd13a80`; Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green; migration `20260723210000_account_recovery_challenges` **not deployed** (Deploy [30048809537](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048809537) failed); **email/push/device recovery QA NOT DONE** |
 | **Status** | CI VERIFIED — **DEVICE QA PENDING** |
+
+---
+
+## SRB-025 — Dark-mode green text accessibility
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / Watch |
+| **User flow** | Dark theme across auth, settings, smartwatch pairing, police, notifications, and watch pairing screens |
+| **Severity** | P1 |
+| **Reproduction** | Enable Dark Mode; open auth links, smartwatch pairing method cards, settings status text, watch connection labels |
+| **Expected** | Interactive/link text uses accessible orange (`#FF9933` semantic tokens); success states keep green icons/borders with readable foreground text |
+| **Actual (pre-fix)** | Hardcoded `BrandColors.green`, `BrandColors.accentHover`, and `EyeColors.green` used for small body/link text on `#0B0F14` |
+| **Root cause** | No typed semantic color layer; feature widgets referenced brand constants directly |
+| **Fix** | `EyeSemanticColors` ThemeExtension (mobile + watch); theme registration in `buildTheme`/`buildDarkTheme`/`buildEyeWatchTheme`; auth links, pairing `_ModeCard`, settings status, verification chips, watch interactive labels migrated to semantic tokens |
+| **Automated test** | `eye_semantic_colors_test.dart` (mobile 7 tests, watch 3 tests); full mobile 158/158, watch 63/63 |
+| **Runtime evidence** | Local staging APK rebuilt 2026-07-24 (mobile SHA-256 `3B2761BF…`, watch `9979E362…`); **physical device dark-mode pass NOT DONE** |
+| **Status** | CODE FIXED — **CI VERIFIED** — **DEVICE QA PENDING** |
+
+Contrast notes (WCAG AA on `#0B0F14`):
+| Foreground | Background | Ratio | Normal text | Large / UI |
+|---|---|---:|---|---|
+| `#FF9933` (brand orange) | `#0B0F14` | ~5.9:1 | PASS | PASS |
+| `#009933` (brand green) | `#0B0F14` | ~3.2:1 | FAIL | PASS |
+| `#FFFFFF` (successText dark) | `#0B0F14` | ~16.8:1 | PASS | PASS |
 
 ---
 

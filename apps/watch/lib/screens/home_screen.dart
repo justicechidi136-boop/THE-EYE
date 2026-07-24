@@ -10,6 +10,7 @@ import '../models/sos_event.dart';
 import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
+import '../theme/eye_semantic_colors.dart';
 import '../widgets/watch_ui.dart';
 import 'app_drawer_screen.dart';
 import 'launcher_escape_dialog.dart';
@@ -144,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 6),
                   _ModeBadge(
                     label: widget.services.connectivity.activeMode.apiValue,
-                    color: EyeColors.green,
+                    color: EyeSemanticColors.of(context).interactiveText,
                   ),
                 ],
               ),
@@ -219,8 +220,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Text(
                       widget.services.connectivity.activeMode.apiValue,
-                      style: const TextStyle(
-                        color: EyeColors.green,
+                      style: TextStyle(
+                        color: EyeSemanticColors.of(context).linkText,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                       ),
