@@ -19,6 +19,14 @@ describe("police station locator dto", () => {
 
   it("rejects invalid coordinates", () => {
     expect(() => parseNearestQuery({ latitude: "200", longitude: "3.3515" })).toThrow(BadRequestException);
-    expect(() => validatePoliceStationDto({ jurisdictionId: "j1", name: "A", address: "Ikeja", agencyType: "police", latitude: 6, longitude: 200 })).toThrow(BadRequestException);
+    expect(() => validatePoliceStationDto({
+      name: "A",
+      address: "Ikeja",
+      agencyType: "police",
+      latitude: 6,
+      longitude: 200,
+      source: "Admin intake",
+      sourceReference: "ref-1",
+    })).toThrow(BadRequestException);
   });
 });

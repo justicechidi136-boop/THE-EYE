@@ -398,15 +398,29 @@ export function toPoliceStationView(record: Record<string, unknown>): PoliceStat
   return {
     id: String(record.id),
     name: String(record.name ?? "Station"),
-    phone: String(record.phone ?? "-"),
+    phone: String(record.phone ?? record.officialPhone ?? "-"),
+    officialPhone: String(record.officialPhone ?? record.phone ?? "-"),
+    emergencyPhone: String(record.emergencyPhone ?? "-"),
     address: String(record.address ?? "-"),
+    country: String(record.country ?? jurisdiction.country ?? "-"),
     state: String(jurisdiction.state ?? record.state ?? "-"),
     lga: String(jurisdiction.lga ?? record.lga ?? "-"),
     latitude,
     longitude,
     agencyType: String(record.agency_type ?? record.agencyType ?? "police"),
+    stationType: String(record.station_type ?? record.stationType ?? record.agency_type ?? record.agencyType ?? "police"),
     distance: distanceMeters ? `${Math.round(distanceMeters)} m` : "-",
     navigationUrl: String(record.navigationUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`),
+    verificationStatus: String(record.verification_status ?? record.verificationStatus ?? "Unverified"),
+    isActive: record.is_active === false || record.isActive === false ? false : true,
+    source: String(record.source ?? "-"),
+    sourceReference: String(record.source_reference ?? record.sourceReference ?? "-"),
+    googlePlaceId: record.google_place_id != null || record.googlePlaceId != null
+      ? String(record.google_place_id ?? record.googlePlaceId)
+      : null,
+    verifiedAt: record.verified_at != null || record.verifiedAt != null
+      ? String(record.verified_at ?? record.verifiedAt)
+      : null,
   };
 }
 

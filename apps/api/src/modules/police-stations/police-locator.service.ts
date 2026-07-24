@@ -16,6 +16,14 @@ import {
   type PoliceVerificationStatus,
   VERIFIED_POLICE_STATUSES,
 } from "./police-station.types";
+import {
+  assertActorCanManagePolice,
+  assertJurisdictionScope,
+  assertSourceNotGoogleOnlyForOfficialVerification,
+  normalizePhone,
+  sanitizeSource,
+  sanitizeSourceReference,
+} from "./police-station-scope";
 
 const DEDUPE_DISTANCE_METERS = 150;
 
@@ -88,30 +96,45 @@ export class PoliceLocatorService {
   }
 
   async verifyStation(id: string, dto: VerifyPoliceStationDto, actor: JwtPayload) {
-    const existing = await this.prisma.policeStation.findUnique({ where: { id } });
+    assertActorCanManagePolice(actor);
+    const source = sanitizeSource(dto.source);
+    const sourceReference = sanitizeSourceReference(dto.sourceReference);
+    assertSourceNotGoogleOnlyForOfficialVerification(source, dto.verificationStatus);
+
+    const existing = await this.prisma.policeStation.findUnique({
+      where: { id },
+      include: { jurisdiction: true },
+    });
     if (!existing) throw new NotFoundException("Police station not found");
+    assertJurisdictionScope(actor, existing.jurisdiction);
+
+    const officialPhone = normalizePhone(dto.officialPhone);
+    const emergencyPhone = normalizePhone(dto.emergencyPhone);
 
     const station = await this.prisma.policeStation.update({
       where: { id },
       data: {
         verificationStatus: dto.verificationStatus,
-        source: dto.source,
-        sourceReference: dto.sourceReference,
-        verifiedAt: dto.verificationStatus === "Closed" || dto.verificationStatus === "Duplicate"
+        source,
+        sourceReference,
+        verifiedAt: dto.verificationStatus === "Closed" || dto.verificationStatus === "Duplicate" || dto.verificationStatus === "Unverified"
           ? null
           : new Date(),
-        verifiedBy: actor.sub,
+        verifiedBy: dto.verificationStatus === "Closed" || dto.verificationStatus === "Duplicate" || dto.verificationStatus === "Unverified"
+          ? null
+          : actor.sub,
         lastReviewedAt: new Date(),
         isActive: dto.verificationStatus !== "Closed" && dto.verificationStatus !== "Duplicate",
-        officialPhone: dto.officialPhone,
-        emergencyPhone: dto.emergencyPhone,
-        googlePlaceId: dto.googlePlaceId,
+        officialPhone,
+        emergencyPhone,
+        googlePlaceId: dto.googlePlaceId?.trim() || existing.googlePlaceId,
         latitude: dto.latitude,
         longitude: dto.longitude,
-        address: dto.address,
-        name: dto.officialName,
-        phone: dto.officialPhone,
+        address: dto.address.trim(),
+        name: dto.officialName.trim(),
+        phone: officialPhone,
       } as never,
+      include: { jurisdiction: true },
     });
 
     await this.auditService.record({
@@ -121,9 +144,10 @@ export class PoliceLocatorService {
       entityId: id,
       metadata: {
         verificationStatus: dto.verificationStatus,
-        source: dto.source,
-        sourceReference: dto.sourceReference,
+        source,
+        sourceReference,
         verificationNotes: dto.verificationNotes ?? null,
+        duplicateOverrideReason: dto.duplicateOverrideReason ?? null,
         before: { verificationStatus: existing.verificationStatus, isActive: existing.isActive },
         after: { verificationStatus: station.verificationStatus, isActive: station.isActive },
       },

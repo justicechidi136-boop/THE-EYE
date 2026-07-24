@@ -471,6 +471,57 @@ export async function fetchPoliceStations(query?: {
   }, []);
 }
 
+export async function fetchPoliceStation(id: string): Promise<PoliceStationView | null> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/police-stations/${id}`, { token });
+    return toPoliceStationView(response.data);
+  }, null);
+}
+
+export async function createPoliceStation(input: Record<string, unknown>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>("/police-stations", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+  return toPoliceStationView(response.data);
+}
+
+export async function updatePoliceStation(id: string, input: Record<string, unknown>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>(`/police-stations/${id}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(input),
+  });
+  return toPoliceStationView(response.data);
+}
+
+export async function verifyPoliceStation(id: string, input: Record<string, unknown>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>(`/police-stations/${id}/verify`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(input),
+  });
+  return toPoliceStationView(response.data);
+}
+
+export async function checkPoliceStationDuplicates(input: Record<string, unknown>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/police-stations/check-duplicates", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
 export async function fetchIncidentsByType(type: string): Promise<Incident[]> {
   const incidents = await fetchIncidents();
   return incidents.filter((incident) => incident.type === type);

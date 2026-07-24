@@ -5,12 +5,14 @@ import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import {
+  CheckPoliceDuplicatesDto,
   NearestPoliceStationsQuery,
   NearbyPoliceStationsQuery,
   PoliceStationListQuery,
   PoliceStationSearchQuery,
   UpsertPoliceStationDto,
   VerifyPoliceStationDto,
+  validateCheckPoliceDuplicatesDto,
   validateVerifyPoliceStationDto,
 } from "./dto/police-station.dto";
 import { PoliceLocatorService } from "./police-locator.service";
@@ -43,6 +45,23 @@ export class PoliceStationsController {
   @Get("search")
   search(@Query() query: PoliceStationSearchQuery) {
     return this.policeStations.search(query);
+  }
+
+  @Post("check-duplicates")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions("agency:manage")
+  checkDuplicates(@Body() dto: CheckPoliceDuplicatesDto, @Req() request: any) {
+    validateCheckPoliceDuplicatesDto(dto);
+    return this.policeStations.checkDuplicates(dto, request.user);
+  }
+
+  @Get(":id")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions("agency:manage")
+  getById(@Param("id") id: string, @Req() request: any) {
+    return this.policeStations.getById(id, request.user);
   }
 
   @Post()

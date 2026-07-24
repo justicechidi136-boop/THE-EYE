@@ -28,14 +28,24 @@ export type PoliceStationView = {
   id: string;
   name: string;
   phone: string;
+  officialPhone: string;
+  emergencyPhone: string;
   address: string;
+  country: string;
   state: string;
   lga: string;
   latitude: number;
   longitude: number;
   agencyType: string;
+  stationType: string;
   distance: string;
   navigationUrl: string;
+  verificationStatus: string;
+  isActive: boolean;
+  source: string;
+  sourceReference: string;
+  googlePlaceId: string | null;
+  verifiedAt: string | null;
 };
 
 export type DuplicateReportView = {

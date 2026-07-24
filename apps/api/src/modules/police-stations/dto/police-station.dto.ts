@@ -38,19 +38,37 @@ export type NearestPoliceStationsQuery = {
 
 export type UpsertPoliceStationDto = {
   agencyId?: string;
-  jurisdictionId: string;
+  jurisdictionId?: string;
   name: string;
   phone?: string;
   address: string;
   agencyType: string;
+  stationType?: string;
+  country?: string;
+  state?: string;
+  lga?: string;
   latitude: number;
   longitude: number;
-  source?: string;
-  sourceReference?: string;
+  source: string;
+  sourceReference: string;
   verificationStatus?: string;
   officialPhone?: string;
   emergencyPhone?: string;
   googlePlaceId?: string;
+  isActive?: boolean;
+  duplicateOverrideReason?: string;
+};
+
+export type CheckPoliceDuplicatesDto = {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  officialPhone?: string;
+  emergencyPhone?: string;
+  googlePlaceId?: string;
+  sourceReference?: string;
+  excludeId?: string;
 };
 
 export type VerifyPoliceStationDto = {
@@ -65,6 +83,7 @@ export type VerifyPoliceStationDto = {
   emergencyPhone?: string;
   googlePlaceId?: string;
   verificationNotes?: string;
+  duplicateOverrideReason?: string;
 };
 
 export function parseNearestQuery(query: NearestPoliceStationsQuery) {
@@ -121,18 +140,28 @@ export function encodePoliceCursor(offset: number) {
 }
 
 export function validatePoliceStationDto(dto: UpsertPoliceStationDto) {
-  if (!dto.jurisdictionId) throw new BadRequestException("jurisdictionId is required");
   if (!dto.name || dto.name.trim().length < 2) throw new BadRequestException("Station name is required");
   if (!dto.address || dto.address.trim().length < 5) throw new BadRequestException("Address is required");
   if (!dto.agencyType || dto.agencyType.trim().length < 2) throw new BadRequestException("agencyType is required");
   if (typeof dto.latitude !== "number" || dto.latitude < -90 || dto.latitude > 90) throw new BadRequestException("latitude must be between -90 and 90");
   if (typeof dto.longitude !== "number" || dto.longitude < -180 || dto.longitude > 180) throw new BadRequestException("longitude must be between -180 and 180");
+  if (!dto.source?.trim()) throw new BadRequestException("source is required");
+  if (!dto.sourceReference?.trim()) throw new BadRequestException("sourceReference is required");
   if (dto.verificationStatus && !["VerifiedOfficial", "VerifiedByAdmin", "Unverified", "Closed", "Duplicate"].includes(dto.verificationStatus)) {
     throw new BadRequestException("verificationStatus is invalid");
   }
-  if (dto.verificationStatus && dto.verificationStatus !== "Unverified" && (!dto.source || !dto.sourceReference)) {
-    throw new BadRequestException("source and sourceReference are required for verified police records");
-  }
+}
+
+export function validateCheckPoliceDuplicatesDto(dto: CheckPoliceDuplicatesDto) {
+  validatePoliceStationDto({
+    name: dto.name,
+    address: dto.address,
+    agencyType: "police",
+    latitude: dto.latitude,
+    longitude: dto.longitude,
+    source: "duplicate-check",
+    sourceReference: dto.sourceReference ?? "duplicate-check",
+  });
 }
 
 export function validateVerifyPoliceStationDto(dto: VerifyPoliceStationDto) {
@@ -141,11 +170,15 @@ export function validateVerifyPoliceStationDto(dto: VerifyPoliceStationDto) {
   if (!dto.source?.trim()) throw new BadRequestException("source is required");
   if (!dto.sourceReference?.trim()) throw new BadRequestException("sourceReference is required");
   validatePoliceStationDto({
-    jurisdictionId: "00000000-0000-0000-0000-000000000001",
     name: dto.officialName,
     address: dto.address,
     agencyType: "police",
     latitude: dto.latitude,
     longitude: dto.longitude,
+    source: dto.source,
+    sourceReference: dto.sourceReference,
   });
+  if (!["VerifiedOfficial", "VerifiedByAdmin", "Unverified", "Closed", "Duplicate"].includes(dto.verificationStatus)) {
+    throw new BadRequestException("verificationStatus is invalid");
+  }
 }
