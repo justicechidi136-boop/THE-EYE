@@ -9,14 +9,14 @@ void main() {
     test("describes denied permission", () {
       expect(
         locationFailureMessage(LocationCaptureResult.denied),
-        contains("Location permission is required"),
+        contains("Location access is off"),
       );
     });
 
     test("describes permanently denied permission", () {
       expect(
         locationFailureMessage(LocationCaptureResult.deniedForever),
-        contains("permanently denied"),
+        contains("Location access is off"),
       );
     });
 
@@ -30,7 +30,7 @@ void main() {
     test("describes GPS timeout", () {
       expect(
         locationFailureMessage(LocationCaptureResult.timeout),
-        contains("GPS fix"),
+        contains("precise location"),
       );
     });
   });
@@ -109,17 +109,23 @@ void main() {
   });
 
   group("captureLocationOutcome", () {
+    setUp(() {
+      resetSharedEmergencyLocationCoordinator();
+    });
+
     tearDown(() {
-      GeolocatorPlatform.instance = GeolocatorPlatform.instance;
+      resetSharedEmergencyLocationCoordinator();
     });
 
     test("returns position when permission granted and GPS available",
         () async {
-      GeolocatorPlatform.instance = _FakeLocationPlatform(
+      final platform = _FakeLocationPlatform(
         permission: LocationPermission.whileInUse,
       );
+      GeolocatorPlatform.instance = platform;
       final outcome = await captureLocationOutcome(
         timeout: const Duration(seconds: 1),
+        geolocator: platform,
       );
       expect(outcome.result, LocationCaptureResult.granted);
       expect(outcome.position, isNotNull);
@@ -127,43 +133,51 @@ void main() {
     });
 
     test("returns denied without hanging when permission declined", () async {
-      GeolocatorPlatform.instance = _FakeLocationPlatform(
+      final platform = _FakeLocationPlatform(
         permission: LocationPermission.denied,
       );
+      GeolocatorPlatform.instance = platform;
       final outcome = await captureLocationOutcome(
         timeout: const Duration(seconds: 1),
+        geolocator: platform,
       );
       expect(outcome.result, LocationCaptureResult.denied);
       expect(outcome.position, isNull);
     });
 
     test("returns deniedForever without requesting position", () async {
-      GeolocatorPlatform.instance = _FakeLocationPlatform(
+      final platform = _FakeLocationPlatform(
         permission: LocationPermission.deniedForever,
       );
+      GeolocatorPlatform.instance = platform;
       final outcome = await captureLocationOutcome(
         timeout: const Duration(seconds: 1),
+        geolocator: platform,
       );
       expect(outcome.result, LocationCaptureResult.deniedForever);
       expect(outcome.position, isNull);
     });
 
     test("returns serviceDisabled when location services are off", () async {
-      GeolocatorPlatform.instance = _FakeLocationPlatform(
+      final platform = _FakeLocationPlatform(
         permission: LocationPermission.whileInUse,
         serviceEnabled: false,
       );
+      GeolocatorPlatform.instance = platform;
       final outcome = await captureLocationOutcome(
         timeout: const Duration(seconds: 1),
+        geolocator: platform,
       );
       expect(outcome.result, LocationCaptureResult.serviceDisabled);
       expect(outcome.position, isNull);
     });
 
     test("returns timeout when GPS read fails", () async {
-      GeolocatorPlatform.instance = _FailingPositionPlatform();
+      final platform = _FailingPositionPlatform();
+      GeolocatorPlatform.instance = platform;
       final outcome = await captureLocationOutcome(
         timeout: const Duration(seconds: 1),
+        geolocator: platform,
       );
       expect(outcome.result, LocationCaptureResult.timeout);
       expect(outcome.position, isNull);

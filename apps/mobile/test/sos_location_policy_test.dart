@@ -31,6 +31,7 @@ void main() {
       ageSeconds: 42,
     );
     expect(locationMetadataFields(access)['locationStatus'], 'cached');
+    expect(locationMetadataFields(access)['locationSource'], 'cachedDevice');
     expect(locationMetadataFields(access)['isCached'], isTrue);
     expect(locationMetadataFields(access)['ageSeconds'], 42);
   });
@@ -41,7 +42,7 @@ void main() {
         const LocationAccessResult(state: LocationPermissionState.timedOut),
         submitted: true,
       ),
-      contains('not available yet'),
+      contains('still trying to get your precise location'),
     );
   });
 }
