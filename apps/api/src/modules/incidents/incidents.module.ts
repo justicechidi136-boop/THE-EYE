@@ -1,4 +1,4 @@
-﻿import { Module } from "@nestjs/common";
+﻿import { Module, forwardRef } from "@nestjs/common";
 import { IncidentScopeGuard } from "../../common/auth/incident-scope.guard";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../../common/auth/optional-jwt-auth.guard";
@@ -11,11 +11,20 @@ import { DispatchModule } from "../dispatch/dispatch.module";
 import { IncidentsController } from "./incidents.controller";
 import { IncidentsService } from "./incidents.service";
 import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
+import { JurisdictionCorrectionService } from "./jurisdiction-correction.service";
 
 @Module({
-  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, DispatchModule],
+  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, forwardRef(() => DispatchModule)],
   controllers: [IncidentsController],
-  providers: [IncidentsService, JurisdictionResolutionService, JwtAuthGuard, OptionalJwtAuthGuard, PermissionsGuard, IncidentScopeGuard],
-  exports: [IncidentsService, JurisdictionResolutionService],
+  providers: [
+    IncidentsService,
+    JurisdictionResolutionService,
+    JurisdictionCorrectionService,
+    JwtAuthGuard,
+    OptionalJwtAuthGuard,
+    PermissionsGuard,
+    IncidentScopeGuard,
+  ],
+  exports: [IncidentsService, JurisdictionResolutionService, JurisdictionCorrectionService],
 })
 export class IncidentsModule {}

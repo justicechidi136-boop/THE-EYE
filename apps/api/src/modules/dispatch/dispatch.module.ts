@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { IncidentScopeGuard } from "../../common/auth/incident-scope.guard";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
@@ -13,9 +13,10 @@ import { EtaService } from "./eta.service";
 import { IncidentTimelineService } from "./incident-timeline.service";
 import { LocationTrackingService } from "./location-tracking.service";
 import { TriageService } from "./triage.service";
+import { IncidentsModule } from "../incidents/incidents.module";
 
 @Module({
-  imports: [PrismaModule, AuditModule, NotificationsModule],
+  imports: [PrismaModule, AuditModule, NotificationsModule, forwardRef(() => IncidentsModule)],
   controllers: [DispatchController],
   providers: [
     DispatchService,

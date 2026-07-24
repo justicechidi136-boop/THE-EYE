@@ -53,7 +53,10 @@ export class LiveVideoService {
     });
 
     await this.timeline(incidentId, actor, "live_video.started", dto.lowBandwidthMode ? "Emergency live video started in low-bandwidth mode." : "Emergency live video started.", { sessionId: session.id, roomName });
-    const location = await this.createLocationUpdate(session.id, incidentId, dto);
+    const location =
+      dto.latitude != null && dto.longitude != null
+        ? await this.createLocationUpdate(session.id, incidentId, dto as LiveVideoLocationUpdateDto)
+        : null;
     await this.audit(actor, "live_video.started", session.id, { incidentId, roomName, lowBandwidthMode: dto.lowBandwidthMode ?? false });
     this.metrics.recordLiveVideoOperation("start", (Date.now() - startedAt) / 1000, "success");
 

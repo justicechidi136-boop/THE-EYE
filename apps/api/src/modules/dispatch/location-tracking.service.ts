@@ -3,6 +3,8 @@ import { AdminRoleName, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { LOCATION_STALE_SECONDS } from "./assignment-lifecycle";
+import { JurisdictionCorrectionService } from "../incidents/jurisdiction-correction.service";
+import { isMissingLocationPlaceholder } from "../incidents/location-status";
 
 export type LocationUpdateInput = {
   latitude: number;
@@ -15,13 +17,20 @@ export type LocationUpdateInput = {
   batteryLevel?: number;
   networkType?: string;
   sourceDeviceId?: string;
+  source?: string;
+  quality?: string;
+  isCached?: boolean;
+  ageSeconds?: number;
 };
 
 const TERMINAL_INCIDENT_STATUSES = new Set<string>([IncidentStatus.Resolved, IncidentStatus.Closed, IncidentStatus.FalseReport]);
 
 @Injectable()
 export class LocationTrackingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jurisdictionCorrection: JurisdictionCorrectionService,
+  ) {}
 
   async recordCitizenLocation(incidentId: string, dto: LocationUpdateInput, actor?: JwtPayload) {
     this.validateCoordinates(dto);
@@ -62,6 +71,10 @@ export class LocationTrackingService {
           headingDegrees: dto.headingDegrees,
           batteryLevel: dto.batteryLevel,
           networkType: dto.networkType,
+          source: dto.source,
+          quality: dto.quality,
+          isCached: dto.isCached,
+          ageSeconds: dto.ageSeconds,
         },
       },
     });
@@ -75,6 +88,19 @@ export class LocationTrackingService {
         liveLocationStale: false,
       } as never,
     });
+
+    await this.jurisdictionCorrection.evaluateImprovedLocation(
+      incidentId,
+      {
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        quality: dto.quality,
+        source: dto.source,
+        accuracyMeters: dto.accuracyMeters,
+        capturedAt,
+      },
+      actor,
+    );
 
     return this.toCitizenLiveLocation(update, incident, capturedAt);
   }
@@ -225,14 +251,17 @@ export class LocationTrackingService {
   }
 
   private validateCoordinates(dto: LocationUpdateInput) {
+    if (isMissingLocationPlaceholder(dto.latitude, dto.longitude)) {
+      throw new BadRequestException("latitude/longitude 0,0 is not allowed as a missing-location placeholder");
+    }
     if (typeof dto.latitude !== "number" || dto.latitude < -90 || dto.latitude > 90) {
       throw new BadRequestException("latitude must be between -90 and 90");
     }
     if (typeof dto.longitude !== "number" || dto.longitude < -180 || dto.longitude > 180) {
       throw new BadRequestException("longitude must be between -180 and 180");
     }
-    if (dto.accuracyMeters !== undefined && dto.accuracyMeters < 0) {
-      throw new BadRequestException("accuracyMeters must be non-negative");
+    if (dto.accuracyMeters !== undefined && dto.accuracyMeters <= 0) {
+      throw new BadRequestException("accuracyMeters must be a positive number");
     }
   }
 

@@ -53,12 +53,15 @@ export class JurisdictionResolutionService {
   }
 
   async resolve(input: {
-    latitude: number;
-    longitude: number;
+    latitude?: number | null;
+    longitude?: number | null;
     actor?: JwtPayload;
   }): Promise<ResolvedJurisdiction> {
     const { latitude, longitude, actor } = input;
-    const hasValidCoords = this.isValidCoordinate(latitude, longitude);
+    const hasValidCoords =
+      latitude != null &&
+      longitude != null &&
+      this.isValidCoordinate(latitude, longitude);
 
     if (hasValidCoords) {
       const polygonMatch = await this.matchByPolygon(latitude, longitude);
