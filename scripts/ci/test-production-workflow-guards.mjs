@@ -8,8 +8,11 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildReadinessReport,
+  CI_STATIC_COMPILE_API_URL,
   STAGING_CANONICAL_API_URL,
+} from "./deploy-api-url-validation.mjs";
+import {
+  buildReadinessReport,
   validateProductionApiUrl,
   validateProductionGoogleServicesJson,
   validateStagingApiUrl,
@@ -68,7 +71,7 @@ scenario("A — No secrets", () => {
 });
 
 scenario("B — Only API URL present", () => {
-  const apiUrl = "https://api.theeye.com.ng";
+  const apiUrl = "https://api.theeye.com.ng/v1";
   const report = buildReadinessReport({
     mobileSecret: "",
     watchSecret: "",
@@ -86,7 +89,7 @@ scenario("B — Only API URL present", () => {
 });
 
 scenario("C — All production values present", () => {
-  const apiUrl = "https://api.theeye.com.ng";
+  const apiUrl = "https://api.theeye.com.ng/v1";
   const report = buildReadinessReport({
     mobileSecret: PRODUCTION_MOBILE_JSON,
     watchSecret: PRODUCTION_MOBILE_JSON,
@@ -116,7 +119,7 @@ scenario("D — Staging JSON posing as production", () => {
   const report = buildReadinessReport({
     mobileSecret: STAGING_MOBILE_JSON,
     watchSecret: PRODUCTION_MOBILE_JSON,
-    apiUrl: "https://api.theeye.com.ng",
+    apiUrl: "https://api.theeye.com.ng/v1",
     staticPassed: true,
     releaseBlocked: true,
   });
@@ -125,11 +128,11 @@ scenario("D — Staging JSON posing as production", () => {
 
 scenario("E — Placeholder/staging API URL rejected", () => {
   const badUrls = [
-    "https://staging-api.theeye.com.ng",
-    "https://localhost/api",
-    "http://api.theeye.com.ng",
-    "https://api.example.com",
-    "https://ci-placeholder.theeye.com",
+    "https://staging-api.theeye.com.ng/v1",
+    "https://localhost/v1",
+    "http://api.theeye.com.ng/v1",
+    "https://api.example.com/v1",
+    "https://api.theeye.com.ng/v2",
   ];
 
   for (const url of badUrls) {
@@ -138,12 +141,12 @@ scenario("E — Placeholder/staging API URL rejected", () => {
   }
 
   const ciCompile = validateProductionApiUrl(
-    "https://production-ci-compile.theeye.internal",
+    CI_STATIC_COMPILE_API_URL,
     { allowCiCompileUrl: true },
   );
   assert(ciCompile.ok && ciCompile.ciCompileOnly, "allows CI static compile URL only in static mode");
 
-  const realProd = validateProductionApiUrl("https://api.theeye.com.ng");
+  const realProd = validateProductionApiUrl("https://api.theeye.com.ng/v1");
   assert(realProd.ok && !realProd.ciCompileOnly, "accepts real production API URL");
 });
 
@@ -151,11 +154,17 @@ scenario("F — Staging API URL isolation", () => {
   const staging = validateStagingApiUrl(STAGING_CANONICAL_API_URL);
   assert(staging.ok, "accepts canonical staging API URL");
 
+  const stagingSlash = validateStagingApiUrl("https://staging-api.theeye.com.ng/v1/");
+  assert(stagingSlash.ok, "accepts canonical staging API URL with trailing slash");
+
   const production = validateStagingApiUrl("https://api.theeye.com.ng/v1");
   assert(!production.ok, "rejects production API host for staging");
 
   const dashboard = validateStagingApiUrl("https://staging-dashboard8jps.theeye.com.ng/v1");
   assert(!dashboard.ok, "rejects admin dashboard host for staging API");
+
+  const substringTrap = validateStagingApiUrl("https://staging-api.theeye.com.ng/v1");
+  assert(substringTrap.ok, "does not reject staging-api because of production substring api.theeye.com.ng");
 
   const wrongHost = validateStagingApiUrl("https://staging-admin.theeye.com.ng/v1");
   assert(!wrongHost.ok, "rejects non-canonical staging API host");

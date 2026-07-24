@@ -59,20 +59,20 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - name: Require staging NEXT_PUBLIC_API_BASE_URL
-        run: |
-          set -euo pipefail
-          URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
-          if [ -z "$URL" ]; then
-            echo "GitHub environment 'staging' must define vars.NEXT_PUBLIC_API_BASE_URL"
-            exit 1
-          fi
-          case "$URL" in
-            *localhost*|*127.0.0.1*|*api.theeye.com.ng*)
-              echo "Staging NEXT_PUBLIC_API_BASE_URL must not use localhost or production API hosts"
-              exit 1
-              ;;
-          esac
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Require staging deploy environment
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+          THE_EYE_APP_ENV: ${{ vars.THE_EYE_APP_ENV }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FCM_PROJECT_ID: ${{ vars.FCM_PROJECT_ID }}
+          NEXT_PUBLIC_APP_ENV: ${{ vars.NEXT_PUBLIC_APP_ENV }}
+        run: node scripts/ci/validate-staging-deploy-gate.mjs
 
   build:
     needs: [production-deploy-preflight, staging-deploy-preflight]
@@ -121,25 +121,26 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Validate admin-web build args (no fallback)
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
         run: |
           set -euo pipefail
-          URL="${{ vars.NEXT_PUBLIC_API_BASE_URL }}"
-          if [ -z "$URL" ]; then
+          if [ -z "$NEXT_PUBLIC_API_BASE_URL" ]; then
             echo "GitHub environment '${{ github.event.inputs.environment }}' must define vars.NEXT_PUBLIC_API_BASE_URL"
             exit 1
           fi
           case "${{ github.event.inputs.environment }}" in
             staging)
-              if echo "$URL" | grep -Eiq 'localhost|127\.0\.0\.1|api\.theeye\.com\.ng'; then
-                echo "Staging NEXT_PUBLIC_API_BASE_URL must not use localhost or production API hosts"
-                exit 1
-              fi
+              node scripts/ci/validate-staging-api-url.mjs "$NEXT_PUBLIC_API_BASE_URL"
               ;;
             production)
-              URL="$URL" node -e "
-                import { validateProductionApiUrl } from './scripts/ci/production-readiness-report.mjs';
-                const result = validateProductionApiUrl(process.env.URL);
-                if (!result.ok) { console.error(result.reason); process.exit(1); }
+              node -e "
+                import { validateProductionApiUrl, logDeployUrlValidationFailure } from './scripts/ci/deploy-api-url-validation.mjs';
+                const result = validateProductionApiUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
+                if (!result.ok) {
+                  logDeployUrlValidationFailure(result);
+                  process.exit(1);
+                }
               "
               ;;
           esac

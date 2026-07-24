@@ -1,12 +1,15 @@
 #!/usr/bin/env node
-import { validateStagingApiUrl } from "./production-readiness-report.mjs";
+import {
+  logDeployUrlValidationFailure,
+  validateStagingApiUrl,
+} from "./deploy-api-url-validation.mjs";
 
-const url = process.argv[2] ?? process.env.URL ?? "";
+const url = process.argv[2] ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.URL ?? "";
 const result = validateStagingApiUrl(url);
 
 if (!result.ok) {
-  console.error(result.reason);
+  logDeployUrlValidationFailure(result);
   process.exit(1);
 }
 
-console.log(url);
+console.log(url.trim());

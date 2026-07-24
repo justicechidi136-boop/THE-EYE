@@ -11,105 +11,26 @@
  */
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
+import {
+  CI_STATIC_COMPILE_API_URL,
+  STAGING_CANONICAL_API_URL,
+  validateProductionApiUrl,
+  validateStagingApiUrl,
+} from "./deploy-api-url-validation.mjs";
+
+export {
+  CI_STATIC_COMPILE_API_URL,
+  STAGING_CANONICAL_API_URL,
+  validateProductionApiUrl,
+  validateStagingApiUrl,
+} from "./deploy-api-url-validation.mjs";
 
 const PRODUCTION_PROJECT_ID = "the-eye-2pd-d0217";
 const STAGING_PROJECT_IDS = ["the-eye-2stg", "the-eye-29cff"];
-const CI_STATIC_COMPILE_API_URL = "https://production-ci-compile.theeye.internal";
-export const STAGING_CANONICAL_API_URL = "https://staging-api.theeye.com.ng/v1";
-const PRODUCTION_API_HOST = "api.theeye.com.ng";
-const STAGING_API_HOST = "staging-api.theeye.com.ng";
-const STAGING_ADMIN_HOST = "staging-dashboard8jps.theeye.com.ng";
-
-const FORBIDDEN_API_URL_PATTERNS = [
-  /localhost/i,
-  /127\.0\.0\.1/i,
-  /staging-api/i,
-  /example\.com/i,
-  /example\.test/i,
-  /placeholder/i,
-];
 
 /** @param {string | undefined | null} value */
 export function presence(value) {
   return value && String(value).trim() !== "" ? "PRESENT" : "MISSING";
-}
-
-/**
- * @param {string | undefined | null} url
- * @param {{ allowCiCompileUrl?: boolean }} [options]
- */
-export function validateProductionApiUrl(url, options = {}) {
-  const { allowCiCompileUrl = false } = options;
-  const trimmed = String(url ?? "").trim();
-
-  if (!trimmed) {
-    return { ok: false, reason: "Production API URL is missing" };
-  }
-
-  if (!/^https:\/\//i.test(trimmed)) {
-    return { ok: false, reason: "Production API URL must use HTTPS" };
-  }
-
-  if (allowCiCompileUrl && trimmed === CI_STATIC_COMPILE_API_URL) {
-    return { ok: true, ciCompileOnly: true };
-  }
-
-  for (const pattern of FORBIDDEN_API_URL_PATTERNS) {
-    if (pattern.test(trimmed)) {
-      return { ok: false, reason: `Production API URL rejected forbidden pattern: ${pattern}` };
-    }
-  }
-
-  return { ok: true, ciCompileOnly: false };
-}
-
-/**
- * @param {string | undefined | null} url
- */
-export function validateStagingApiUrl(url) {
-  const trimmed = String(url ?? "").trim();
-
-  if (!trimmed) {
-    return { ok: false, reason: "Staging API URL is missing" };
-  }
-
-  if (!/^https:\/\//i.test(trimmed)) {
-    return { ok: false, reason: "Staging API URL must use HTTPS" };
-  }
-
-  let host;
-  try {
-    host = new URL(trimmed).hostname.toLowerCase();
-  } catch {
-    return { ok: false, reason: "Staging API URL is not a valid URL" };
-  }
-
-  if (host === "localhost" || host === "127.0.0.1") {
-    return { ok: false, reason: "Staging API URL must not use localhost" };
-  }
-
-  if (host === PRODUCTION_API_HOST) {
-    return {
-      ok: false,
-      reason: `Staging API URL must not use production API host (${PRODUCTION_API_HOST})`,
-    };
-  }
-
-  if (host === STAGING_ADMIN_HOST) {
-    return {
-      ok: false,
-      reason: `Staging API URL must not use admin dashboard host (${STAGING_ADMIN_HOST}) — use ${STAGING_API_HOST}`,
-    };
-  }
-
-  if (host !== STAGING_API_HOST) {
-    return {
-      ok: false,
-      reason: `Staging API URL must use canonical staging API host (${STAGING_API_HOST})`,
-    };
-  }
-
-  return { ok: true };
 }
 
 /**
