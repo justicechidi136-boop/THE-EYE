@@ -38,6 +38,24 @@ void main() {
       expect(result.evidenceOverlay?["incidentId"], "incident-1");
     });
 
+    test("parses livekit credentials nested under data", () {
+      final result = LiveVideoStartResult.fromResponse({
+        "data": {
+          "id": "session-2",
+          "incidentId": "incident-2",
+          "roomName": "eye-incident-incident-2",
+          "livekit": {
+            "url": "wss://livekit.example",
+            "roomName": "eye-incident-incident-2",
+            "token": "nested-token",
+          },
+        },
+      });
+
+      expect(result.livekit.isValid, isTrue);
+      expect(result.livekit.token, "nested-token");
+    });
+
     test("maps token failure without leaking secrets", () {
       final message = mapLiveVideoApiError(
           403, "Forbidden room access for token abc-secret");

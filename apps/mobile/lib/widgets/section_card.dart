@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../design_system/eye_semantic_colors.dart";
 import "../theme/the_eye_theme.dart";
 
 class SectionCard extends StatelessWidget {
@@ -20,7 +21,12 @@ class SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: EyeSemanticColors.of(context).bodyText,
+                ),
+          ),
           const SizedBox(height: 12),
           child,
         ],

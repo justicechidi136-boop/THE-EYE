@@ -210,8 +210,8 @@ Note: If staging seed lacks verified nationwide police data, empty results must 
 | **Root cause** | Mobile used static demo data; API list endpoint missing |
 | **Fix** | Hybrid locator: verified `police_stations` + server-side Google Places fallback; mobile `/police-stations/nearby` with source labels and attribution |
 | **Automated test** | `police-locator.service.spec.ts`, `police_locator_test.dart` |
-| **Runtime evidence** | Endpoint live @ 2026-07-24 returns HTTP 200 (no longer 404); `googlePlacesEnabled:false`, `googleProviderStatus:"disabled"` — API container not recreated after VPS key add; hybrid Google fallback **not active** on staging; local API tests + mobile 158/158; migration `20260723230000_police_station_verification` pending VPS apply |
-| **Status** | CODE FIXED — **CI VERIFIED** — **DEPLOYED (endpoint only)** — **DEVICE QA PENDING** — Google provider **DISABLED on staging API** |
+| **Runtime evidence** | PR #24 merged @ `131e125` (2026-07-24); Validate Staging [30104553344](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30104553344) green. Live API @ 2026-07-24T15:28Z: HTTP 200, `googlePlacesEnabled:true`, `googleProviderStatus:"ok"`, `googleCount:10`, `dataSource:googlePlaces`, `verificationStatus:GoogleMapsResult`, attribution + navigation URLs present, no API key in response. Invalid lat → HTTP 400. Radius cap clamps to 50000. **Automated Deploy [30104864524](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30104864524) failed** (DEP-003 deploy-gate). VPS SHA + migration `20260723230000_police_station_verification` **not SSH-verified**. **Mobile device QA NOT DONE**. |
+| **Status** | CODE FIXED — **CI VERIFIED** — **API RUNTIME VERIFIED (HTTP)** — **DEVICE QA PENDING** |
 
 Note: Nationwide verified official police dataset remains incomplete. Google supplemental results are labelled `googlePlaces` and are not official THE EYE verification. Empty/honest results must still be shown outside seeded areas.
 
@@ -412,15 +412,100 @@ Note: Nationwide verified official police dataset remains incomplete. Google sup
 | **Root cause** | No typed semantic color layer; feature widgets referenced brand constants directly |
 | **Fix** | `EyeSemanticColors` ThemeExtension (mobile + watch); theme registration in `buildTheme`/`buildDarkTheme`/`buildEyeWatchTheme`; auth links, pairing `_ModeCard`, settings status, verification chips, watch interactive labels migrated to semantic tokens |
 | **Automated test** | `eye_semantic_colors_test.dart` (mobile 7 tests, watch 3 tests); full mobile 158/158, watch 63/63 |
-| **Runtime evidence** | Local staging APK rebuilt 2026-07-24 (mobile SHA-256 `3B2761BF…`, watch `9979E362…`); **physical device dark-mode pass NOT DONE** |
-| **Status** | CODE FIXED — **CI VERIFIED** — **DEVICE QA PENDING** |
+| **Runtime evidence** | PR #24 merged @ `131e125`; Validate Staging [30104553344](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30104553344) green (mobile 159/159, watch 63/63 incl. semantic tests). Deploy [30104864524](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30104864524) **failed** — VPS app deploy not confirmed. **No certification APK** (prior local APK hashes discarded). **Physical device dark-mode pass NOT DONE**. |
+| **Status** | CODE FIXED — **CI VERIFIED** — **DEVICE QA PENDING** (extended fix branch adds home/services/broadcast/smartwatch/profile semantic migration) |
 
-Contrast notes (WCAG AA on `#0B0F14`):
-| Foreground | Background | Ratio | Normal text | Large / UI |
-|---|---|---:|---|---|
-| `#FF9933` (brand orange) | `#0B0F14` | ~5.9:1 | PASS | PASS |
-| `#009933` (brand green) | `#0B0F14` | ~3.2:1 | FAIL | PASS |
-| `#FFFFFF` (successText dark) | `#0B0F14` | ~16.8:1 | PASS | PASS |
+---
+
+## SRB-026 — Start SOS Live Video app shutdown (P0)
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / Android |
+| **User flow** | SOS sheet → Start SOS live video → incident + LiveKit + GPS |
+| **Severity** | P0 |
+| **Reproduction (code-inferred)** | Tap Start SOS live video on staging APK with active session |
+| **Expected** | Incident created; LiveKit starts when available; app stays running; factual errors with reference IDs |
+| **Actual (reported)** | App crashes or shuts down |
+| **Root cause (confirmed in code)** | Double `startLocalPreview` on auto-start path; unsafe `accessToken!`; missing `activateActiveEmergency`; `dispose()` used `appOf(context)` after unmount |
+| **Fix** | Skip duplicate preview when already previewing; guard null session token (`LIVE-VIDEO-AUTH-001`); activate active emergency after incident; safe dispose via cached `AppController`; stop location tracking on exit |
+| **Automated test** | `live_video_session_test.dart` livekit nesting; manual/device logcat pending |
+| **Runtime evidence** | Code fix on branch `fix/runtime-stabilization-srb025-030`; device logcat + APK verification pending |
+| **Status** | ROOT CAUSE CONFIRMED → **CODE FIXED** |
+
+---
+
+## SRB-027 — Google Sign-In fails after uninstall/reinstall
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / Firebase / API |
+| **User flow** | Clean install → Continue with Google |
+| **Severity** | P0 |
+| **Reproduction (reported)** | Uninstall staging APK, reinstall, Google sign-in shows generic failure |
+| **Expected** | Firebase token exchange succeeds or stable diagnostic code |
+| **Actual** | "Sign in failed. Try again later." |
+| **Root cause** | Release SHA-1/SHA-256 may be missing in Firebase `the-eye-2stg` for `com.theeye.app.staging`; generic Firebase/platform error mapping |
+| **Fix** | Stable codes `AUTH-GOOGLE-001`…`005`; configuration mismatch and exchange failure surfaced without raw Firebase exceptions |
+| **Automated test** | `social_auth_service_test.dart` (cancellation, config, exchange codes) |
+| **Runtime evidence** | Ops must register staging release cert fingerprints in Firebase; clean reinstall device QA pending |
+| **Status** | ROOT CAUSE CONFIRMED → **CODE FIXED** (config verification + device QA pending) |
+
+---
+
+## SRB-028 — Account recovery email delivery not configured
+
+| Field | Value |
+|---|---|
+| **Platform** | API / Mobile |
+| **User flow** | Recover Account → email queued → inbox |
+| **Severity** | P0 |
+| **Reproduction** | Request account recovery on staging |
+| **Expected** | SMTP accepts; inbox receives recovery link |
+| **Actual** | "Account recovery email delivery is not configured." (`AUTH_DELIVERY_UNAVAILABLE`) |
+| **Root cause** | Staging VPS API/worker missing `SMTP_*` env vars; falls through to unset webhook |
+| **Fix (code)** | `AuthDeliveryService` already prefers `SmtpEmailProvider`; mobile maps `AUTH-DELIVERY-001` |
+| **Infrastructure** | Apply `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_EMAIL=security@theeye.com.ng` on staging API |
+| **Automated test** | `auth-delivery.service.spec.ts` |
+| **Runtime evidence** | Controlled inbox test pending VPS SMTP configuration |
+| **Status** | ROOT CAUSE CONFIRMED → **BLOCKED BY PROVIDER** (ops SMTP config) |
+
+---
+
+## SRB-029 — Forgot password authentication delivery fails
+
+| Field | Value |
+|---|---|
+| **Platform** | API / Mobile |
+| **User flow** | Forgot password → email → reset |
+| **Severity** | P0 |
+| **Reproduction** | Request password reset on staging |
+| **Expected** | SMTP accepts; inbox receives reset link |
+| **Actual** | "Authentication delivery failed. Try again shortly." (`AUTH_DELIVERY_FAILED`) or delivery-not-configured |
+| **Root cause** | Same SMTP gap as SRB-028; legacy webhook path or SMTP rejection on VPS |
+| **Fix (code)** | Direct SMTP path verified; mobile maps `AUTH-DELIVERY-002` |
+| **Infrastructure** | Same SMTP env as SRB-028 + `PASSWORD_RESET_LINK_BASE_URL` staging deep link |
+| **Automated test** | `auth-delivery.service.spec.ts` |
+| **Runtime evidence** | Controlled inbox test pending VPS SMTP configuration |
+| **Status** | ROOT CAUSE CONFIRMED → **BLOCKED BY PROVIDER** (ops SMTP config) |
+
+---
+
+## SRB-030 — Add Family Members button does not respond
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile |
+| **User flow** | Family Circle → Add family member |
+| **Severity** | P1 |
+| **Reproduction** | Open `/family`, tap Add family member |
+| **Expected** | Navigate to member form / emergency contacts workflow |
+| **Actual** | `onPressed: () {}` empty handler with placeholder list |
+| **Root cause** | Stub screen never wired to existing `/profile/emergency-contacts` API |
+| **Fix** | Button navigates to `EmergencyContactsScreen` (`GET/POST /users/me/emergency-contacts`) |
+| **Automated test** | Widget/navigation test pending; manual device QA pending |
+| **Runtime evidence** | Code fix on branch `fix/runtime-stabilization-srb025-030` |
+| **Status** | ROOT CAUSE CONFIRMED → **CODE FIXED** |
 
 ---
 
@@ -428,14 +513,19 @@ Contrast notes (WCAG AA on `#0B0F14`):
 
 **PARTIALLY BLOCKED**
 
-PR #22 merged to `staging` at `cd13a8040960b3b4ba29ba5fbd8a8f8b8f3dc860` (2026-07-23T22:04:59Z). Post-merge Validate Staging [30048619870](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048619870) green (API 317/317, mobile 140/140, watch 60/60). **Staging VPS deploy not completed** — Deploy workflow [30048809537](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048809537) failed: GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL` (DEP-002). Live API health @ 2026-07-23T22:08Z reports pre-deploy runtime. Fresh local APK built from `cd13a80` (0.1.0+1, SHA-256 `E1501B3EF46ED37DFC7943005E3DE8420356036B7448972557B928C6FFA53D6E`); **device QA blocked** (no ADB/physical device). **RC1 tag not created.**
+PR #24 merged to `staging` at `131e1256e8fbd5a18d10084132e53b630afbed0b` (2026-07-24T15:16:10Z). Post-merge Validate Staging [30104553344](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30104553344) green. **Automated Deploy [30104864524](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30104864524) failed** at staging preflight: `vars.NEXT_PUBLIC_API_BASE_URL=https://staging-api.theeye.com.ng/v1` is rejected because deploy gate substring-matches production host `api.theeye.com.ng` (**DEP-003**). SSH deploy job skipped — **VPS SHA not certified** against `131e125`.
+
+Live staging API @ 2026-07-24T15:28Z: Google Places hybrid locator **HTTP-verified** (`googlePlacesEnabled:true`, attribution present). **No certification APK built**; **no physical device QA** for SRB-009 or SRB-025.
 
 Remaining blockers:
-- **DEP-002** — set `vars.NEXT_PUBLIC_API_BASE_URL=https://staging-api.theeye.com.ng/v1` in GitHub `staging` environment, then redeploy VPS (backup → migrate → seed → recreate services).
+- **DEP-003** — fix staging deploy gate to accept `staging-api.theeye.com.ng/v1`, then rerun Deploy workflow with `DEPLOY_*` secrets.
+- **VPS SSH verification** — confirm `git rev-parse HEAD` = `131e125`, migration applied, API container env.
+- **Certification APKs** — build only from deployed staging SHA after successful Deploy.
+- **Physical device QA** — SRB-009 police locator + SRB-025 dark-mode sweep.
 - **Termii Sender ID approval** (SRB-002).
-- **Physical device + watch manual QA** for SRB-020–024.
+- **Nationwide verified police dataset** incomplete (data-quality gate separate from hybrid locator).
 
-**Gate documents (2026-07-23):**
+**Gate documents (2026-07-24):**
 - `docs/SPRINT_8_ENTRY_GATE.md`
 - `docs/RELEASE_CANDIDATE_TEST_MATRIX.md`
 - `docs/SPRINT_8_AUTHORIZATION_REPORT.md` → **SPRINT 8 NOT AUTHORIZED**

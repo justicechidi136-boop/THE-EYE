@@ -1,4 +1,5 @@
 import "package:firebase_auth/firebase_auth.dart";
+import "package:flutter/services.dart";
 import "package:the_eye_mobile/auth/auth_session_store.dart";
 import "package:the_eye_mobile/auth/auth_service.dart";
 import "package:the_eye_mobile/auth/social_auth_service.dart";
@@ -105,6 +106,50 @@ void main() {
 
     final result = await service.signInWithGoogle();
     expect(result.status, SocialAuthStatus.cancelled);
-    expect(result.userMessage, contains("cancelled"));
+    expect(result.userMessage, contains("AUTH-GOOGLE-002"));
+  });
+
+  test("google configuration errors surface AUTH-GOOGLE-001", () async {
+    final service = SocialAuthService(
+      apiClient: _FakeApiClient(
+        onExchange: () async => const AuthExchangeResult(
+          session: AuthSession(accessToken: "access", refreshToken: "refresh"),
+          profileComplete: true,
+        ),
+      ),
+      sessionStore: InMemoryAuthSessionStore(),
+      firebaseAuth: _FakeFirebaseAuth(),
+      googleSignIn: FakeGoogleSignIn(),
+      googleCredentialFactory: () async {
+        throw PlatformException(code: "10", message: "Developer error");
+      },
+    );
+
+    final result = await service.signInWithGoogle();
+    expect(result.status, SocialAuthStatus.providerError);
+    expect(result.userMessage, contains("AUTH-GOOGLE-001"));
+  });
+
+  test("backend exchange failures surface AUTH-GOOGLE-004", () async {
+    final service = SocialAuthService(
+      apiClient: _FakeApiClient(
+        onExchange: () async {
+          throw AuthApiException(
+            503,
+            "Service unavailable",
+            errorCode: "SERVER_ERROR",
+          );
+        },
+      ),
+      sessionStore: InMemoryAuthSessionStore(),
+      firebaseAuth: _FakeFirebaseAuth(),
+      googleSignIn: FakeGoogleSignIn(),
+      googleCredentialFactory: () async =>
+          _FakeUserCredential(_FakeUser("firebase-id-token")),
+    );
+
+    final result = await service.signInWithGoogle();
+    expect(result.status, SocialAuthStatus.serverError);
+    expect(result.userMessage, contains("AUTH-GOOGLE-004"));
   });
 }
