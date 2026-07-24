@@ -494,9 +494,9 @@ model Incident {
   country             String
   state               String
   lga                 String
-  latitude            Decimal                 @db.Decimal(9, 6)
-  longitude           Decimal                 @db.Decimal(9, 6)
-  gpsLocation         Unsupported("geography(Point,4326)") @map("gps_location")
+  latitude            Decimal?                @db.Decimal(9, 6)
+  longitude           Decimal?                @db.Decimal(9, 6)
+  gpsLocation         Unsupported("geography(Point,4326)")? @map("gps_location")
   manualLatitude      Decimal?                @map("manual_latitude") @db.Decimal(9, 6)
   manualLongitude     Decimal?                @map("manual_longitude") @db.Decimal(9, 6)
   manualGpsLocation   Unsupported("geography(Point,4326)")? @map("manual_gps_location")

@@ -3,6 +3,7 @@ import { EmergencyCategory, IncidentPriority, IncidentType } from "@the-eye/shar
 import { classifyEmergencyCategory } from "./emergency-category";
 import { SosReportDto, validateSosReportDto } from "./dto/dispatch.dto";
 import type { ReportIncidentDto } from "../incidents/dto/report-incident.dto";
+import { incidentHasSubmissionCoordinates } from "../incidents/location-status";
 
 export type EmergencyIndicatorMetadata = {
   activeThreat?: boolean;
@@ -38,13 +39,15 @@ export class EmergencyClassificationService {
 
   toReportIncidentDto(dto: SosReportDto): ReportIncidentDto {
     const classified = this.classifySosReport(dto);
+    const hasCoords = incidentHasSubmissionCoordinates(dto);
     return {
       type: classified.incidentType,
       priority: classified.priority,
       title: classified.title,
       description: classified.description,
-      latitude: dto.latitude,
-      longitude: dto.longitude,
+      ...(hasCoords
+        ? { latitude: dto.latitude ?? undefined, longitude: dto.longitude ?? undefined }
+        : {}),
       manualLatitude: dto.manualLatitude,
       manualLongitude: dto.manualLongitude,
       manualAddress: dto.manualAddress,
@@ -54,6 +57,12 @@ export class EmergencyClassificationService {
       emergencyContactIds: dto.emergencyContactIds,
       clientSubmissionId: dto.clientSubmissionId,
       occurredAt: dto.occurredAt,
+      locationStatus: dto.locationStatus,
+      locationSource: dto.locationSource,
+      isCached: dto.isCached,
+      ageSeconds: dto.ageSeconds,
+      accuracyMeters: dto.accuracyMeters,
+      quality: dto.quality,
     };
   }
 

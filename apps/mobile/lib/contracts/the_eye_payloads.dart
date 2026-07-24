@@ -5,12 +5,12 @@ import "the_eye_enums.dart";
 /// JSON payload builders matching NestJS DTO field names exactly.
 abstract final class TheEyePayloads {
   static Map<String, Object?> liveVideoStart({
-    required Position position,
+    Position? position,
     bool lowBandwidthMode = true,
     String sourceDeviceId = "mobile-primary",
   }) {
     return {
-      ...gpsFields(position),
+      if (position != null) ...gpsFields(position),
       "lowBandwidthMode": lowBandwidthMode,
       "sourceDeviceId": sourceDeviceId,
     };
@@ -31,6 +31,10 @@ abstract final class TheEyePayloads {
     required Position position,
     required int sequenceNumber,
     String sourceDeviceId = "mobile-primary",
+    String? source,
+    String? quality,
+    bool? isCached,
+    int? ageSeconds,
   }) {
     return {
       ...gpsFields(position),
@@ -38,6 +42,10 @@ abstract final class TheEyePayloads {
       "capturedAt": position.timestamp.toUtc().toIso8601String(),
       "sourceDeviceId": sourceDeviceId,
       "sequenceNumber": sequenceNumber,
+      if (source != null) "source": source,
+      if (quality != null) "quality": quality,
+      if (isCached != null) "isCached": isCached,
+      if (ageSeconds != null) "ageSeconds": ageSeconds,
     };
   }
 
@@ -160,8 +168,8 @@ abstract final class TheEyePayloads {
 
   static Map<String, Object?> reportSos({
     required String emergencyCategory,
-    required double latitude,
-    required double longitude,
+    double? latitude,
+    double? longitude,
     String? description,
     bool silent = false,
     bool anonymous = true,
@@ -172,8 +180,8 @@ abstract final class TheEyePayloads {
   }) {
     return {
       "emergencyCategory": emergencyCategory,
-      "latitude": latitude,
-      "longitude": longitude,
+      if (latitude != null) "latitude": latitude,
+      if (longitude != null) "longitude": longitude,
       if (description != null && description.isNotEmpty)
         "description": description,
       "silent": silent,
@@ -190,8 +198,8 @@ abstract final class TheEyePayloads {
   static Map<String, Object?> reportIncident({
     required String type,
     required String description,
-    required double latitude,
-    required double longitude,
+    double? latitude,
+    double? longitude,
     double? manualLatitude,
     double? manualLongitude,
     String? manualAddress,
@@ -205,12 +213,13 @@ abstract final class TheEyePayloads {
     Map<String, Object?>? missingPerson,
     Map<String, Object?>? stolenVehicle,
     String? capturedAt,
+    Map<String, Object?>? locationMetadata,
   }) {
     return {
       "type": type,
       "description": description,
-      "latitude": latitude,
-      "longitude": longitude,
+      if (latitude != null) "latitude": latitude,
+      if (longitude != null) "longitude": longitude,
       if (manualLatitude != null) "manualLatitude": manualLatitude,
       if (manualLongitude != null) "manualLongitude": manualLongitude,
       if (manualAddress != null && manualAddress.isNotEmpty)
@@ -228,6 +237,8 @@ abstract final class TheEyePayloads {
       if (stolenVehicle != null && stolenVehicle.isNotEmpty)
         "stolenVehicle": stolenVehicle,
       if (capturedAt != null && capturedAt.isNotEmpty) "capturedAt": capturedAt,
+      if (locationMetadata != null && locationMetadata.isNotEmpty)
+        ...locationMetadata,
     };
   }
 

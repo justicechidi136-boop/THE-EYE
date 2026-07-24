@@ -90,8 +90,8 @@ class IncidentDraft {
     required this.clientSubmissionId,
     required this.type,
     required this.description,
-    required this.latitude,
-    required this.longitude,
+    this.latitude,
+    this.longitude,
     required this.capturedAt,
     this.locationAccuracyMeters,
     this.manualLatitude,
@@ -115,8 +115,8 @@ class IncidentDraft {
   final String clientSubmissionId;
   final String type;
   final String description;
-  final double latitude;
-  final double longitude;
+  final double? latitude;
+  final double? longitude;
   final double? locationAccuracyMeters;
   final DateTime capturedAt;
   final double? manualLatitude;
@@ -140,8 +140,8 @@ class IncidentDraft {
         "clientSubmissionId": clientSubmissionId,
         "type": type,
         "description": description,
-        "latitude": latitude,
-        "longitude": longitude,
+        if (latitude != null) "latitude": latitude,
+        if (longitude != null) "longitude": longitude,
         "locationAccuracyMeters": locationAccuracyMeters,
         "capturedAt": capturedAt.toUtc().toIso8601String(),
         "manualLatitude": manualLatitude,
@@ -168,8 +168,8 @@ class IncidentDraft {
       clientSubmissionId: json["clientSubmissionId"] as String,
       type: json["type"] as String,
       description: json["description"] as String,
-      latitude: (json["latitude"] as num).toDouble(),
-      longitude: (json["longitude"] as num).toDouble(),
+      latitude: (json["latitude"] as num?)?.toDouble(),
+      longitude: (json["longitude"] as num?)?.toDouble(),
       locationAccuracyMeters:
           (json["locationAccuracyMeters"] as num?)?.toDouble(),
       capturedAt: DateTime.parse(json["capturedAt"] as String),

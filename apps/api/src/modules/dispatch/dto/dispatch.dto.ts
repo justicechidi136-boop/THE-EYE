@@ -1,5 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
 import { EmergencyCategory, IncidentAssignmentStatus, IncidentPriority, ResponderAvailability } from "@the-eye/shared";
+import {
+  assertLocationMetadataConsistency,
+  assertNoZeroCoordinatePlaceholder,
+  incidentHasSubmissionCoordinates,
+} from "../../incidents/location-status";
 import { ASSIGNMENT_ACTION_TO_STATUS } from "../assignment-lifecycle";
 
 const emergencyCategories = new Set<string>(Object.values(EmergencyCategory));
@@ -22,8 +27,8 @@ function assertText(value: unknown, label: string, min = 2): asserts value is st
 export type SosReportDto = {
   emergencyCategory: EmergencyCategory;
   description?: string;
-  latitude: number;
-  longitude: number;
+  latitude?: number | null;
+  longitude?: number | null;
   manualLatitude?: number;
   manualLongitude?: number;
   manualAddress?: string;
@@ -50,8 +55,17 @@ export type SosReportDto = {
 
 export function validateSosReportDto(dto: SosReportDto) {
   if (!emergencyCategories.has(dto.emergencyCategory)) throw new BadRequestException("Unsupported emergency category");
-  assertCoordinate(dto.latitude, "latitude", -90, 90);
-  assertCoordinate(dto.longitude, "longitude", -180, 180);
+  assertLocationMetadataConsistency({
+    latitude: dto.latitude,
+    longitude: dto.longitude,
+    locationStatus: dto.locationStatus,
+    locationSource: dto.locationSource,
+  });
+  if (incidentHasSubmissionCoordinates(dto)) {
+    assertCoordinate(dto.latitude, "latitude", -90, 90);
+    assertCoordinate(dto.longitude, "longitude", -180, 180);
+    assertNoZeroCoordinatePlaceholder(dto.latitude, dto.longitude);
+  }
   if (dto.manualLatitude !== undefined || dto.manualLongitude !== undefined) {
     assertCoordinate(dto.manualLatitude, "manualLatitude", -90, 90);
     assertCoordinate(dto.manualLongitude, "manualLongitude", -180, 180);

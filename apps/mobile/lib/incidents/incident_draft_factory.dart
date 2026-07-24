@@ -61,6 +61,40 @@ IncidentDraft buildIncidentDraft({
   );
 }
 
+IncidentDraft buildEmergencyIncidentDraft({
+  required LocationAccessResult access,
+  required String type,
+  required String description,
+  bool anonymous = false,
+  bool notifyEmergencyContacts = true,
+  String? title,
+  String? clientSubmissionId,
+  String? emergencyCategory,
+  List<String> emergencyContactIds = const [],
+  List<LocalEvidenceAttachment> localMedia = const [],
+}) {
+  final position = access.position;
+  return IncidentDraft(
+    clientSubmissionId: clientSubmissionId ?? createClientSubmissionId(),
+    type: type,
+    description: normalizeIncidentDescription(
+      description,
+      fallback: title ?? type,
+    ),
+    latitude: position?.latitude,
+    longitude: position?.longitude,
+    locationAccuracyMeters: position?.accuracy,
+    capturedAt: position?.timestamp.toUtc() ?? DateTime.now().toUtc(),
+    title: title,
+    anonymous: anonymous,
+    notifyEmergencyContacts: notifyEmergencyContacts,
+    emergencyContactIds: emergencyContactIds,
+    localMedia: localMedia,
+    emergencyCategory: emergencyCategory,
+    locationMetadata: locationMetadataFields(access),
+  );
+}
+
 IncidentDraft buildSosIncidentDraft({
   required LocationAccessResult access,
   required String description,
@@ -79,8 +113,8 @@ IncidentDraft buildSosIncidentDraft({
       description,
       fallback: title ?? "SOS emergency",
     ),
-    latitude: position?.latitude ?? 0,
-    longitude: position?.longitude ?? 0,
+    latitude: position?.latitude,
+    longitude: position?.longitude,
     locationAccuracyMeters: position?.accuracy,
     capturedAt: position?.timestamp.toUtc() ?? DateTime.now().toUtc(),
     title: title ?? "SOS emergency",

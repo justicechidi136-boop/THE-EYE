@@ -24,6 +24,7 @@ import { EmergencyClassificationService } from "../dispatch/emergency-classifica
 import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { canTransitionIncident } from "./incident-lifecycle";
 import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
+import { incidentHasSubmissionCoordinates } from "./location-status";
 import {
   ConfirmIncidentMediaDto,
   PresignIncidentMediaDto,
@@ -149,9 +150,15 @@ export class IncidentsService {
       throw new BadRequestException("Identified reporting requires authentication");
     }
 
-    const jurisdiction = await this.jurisdictionResolution.resolve({
+    const hasCoordinates = incidentHasSubmissionCoordinates({
       latitude: dto.manualLatitude ?? dto.latitude,
       longitude: dto.manualLongitude ?? dto.longitude,
+      locationStatus: dto.locationStatus,
+    });
+
+    const jurisdiction = await this.jurisdictionResolution.resolve({
+      latitude: hasCoordinates ? (dto.manualLatitude ?? dto.latitude ?? null) : null,
+      longitude: hasCoordinates ? (dto.manualLongitude ?? dto.longitude ?? null) : null,
       actor,
     });
     const now = new Date();
@@ -171,8 +178,8 @@ export class IncidentsService {
         country: jurisdiction.country,
         state: jurisdiction.state,
         lga: jurisdiction.lga,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
+        latitude: hasCoordinates ? (dto.latitude ?? null) : null,
+        longitude: hasCoordinates ? (dto.longitude ?? null) : null,
         manualLatitude: dto.manualLatitude,
         manualLongitude: dto.manualLongitude,
         manualAddress: dto.manualAddress,
@@ -188,6 +195,14 @@ export class IncidentsService {
           emergencyContactNotificationRequested: dto.notifyEmergencyContacts ?? false,
           jurisdictionResolutionStatus: jurisdiction.resolutionStatus,
           jurisdictionResolutionSource: jurisdiction.resolutionSource,
+          ...(dto.locationStatus ? { locationStatus: dto.locationStatus } : {}),
+          ...(dto.locationSource ? { locationSource: dto.locationSource } : {}),
+          ...(dto.isCached !== undefined ? { isCached: dto.isCached } : {}),
+          ...(dto.ageSeconds !== undefined ? { ageSeconds: dto.ageSeconds } : {}),
+          ...(dto.accuracyMeters !== undefined ? { locationAccuracyMeters: dto.accuracyMeters } : {}),
+          ...(dto.quality ? { locationQuality: dto.quality } : {}),
+          ...(dto.locationErrorCode ? { locationErrorCode: dto.locationErrorCode } : {}),
+          ...(dto.locationRequestId ? { locationRequestId: dto.locationRequestId } : {}),
           ...(jurisdiction.distanceMeters !== undefined
             ? { jurisdictionDistanceMeters: jurisdiction.distanceMeters }
             : {}),

@@ -30,8 +30,8 @@ class EvidenceUploadService {
     required String incidentId,
     required List<LocalEvidenceAttachment> attachments,
     required String? accessToken,
-    required double fallbackLatitude,
-    required double fallbackLongitude,
+    required double? fallbackLatitude,
+    required double? fallbackLongitude,
     EvidenceUploadProgress? onProgress,
   }) async {
     if (attachments.isEmpty) return [];

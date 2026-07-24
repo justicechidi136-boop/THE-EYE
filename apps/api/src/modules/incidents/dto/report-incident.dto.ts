@@ -1,5 +1,12 @@
 ﻿import { BadRequestException } from "@nestjs/common";
 import { IncidentPriority, IncidentType } from "@the-eye/shared";
+import {
+  ALLOWED_LOCATION_QUALITIES,
+  ALLOWED_LOCATION_SOURCES,
+  assertLocationMetadataConsistency,
+  assertNoZeroCoordinatePlaceholder,
+  incidentHasSubmissionCoordinates,
+} from "../location-status";
 
 const allowedIncidentTypes = new Set<string>(Object.values(IncidentType));
 const allowedPriorities = new Set<string>(Object.values(IncidentPriority));
@@ -20,8 +27,8 @@ export type IncidentMediaDraft = {
 export type ReportIncidentDto = {
   type: IncidentType;
   description: string;
-  latitude: number;
-  longitude: number;
+  latitude?: number | null;
+  longitude?: number | null;
   manualLatitude?: number;
   manualLongitude?: number;
   manualAddress?: string;
@@ -33,6 +40,14 @@ export type ReportIncidentDto = {
   emergencyContactIds?: string[];
   occurredAt?: string;
   clientSubmissionId?: string;
+  locationStatus?: string;
+  locationSource?: string;
+  isCached?: boolean;
+  ageSeconds?: number;
+  accuracyMeters?: number;
+  quality?: string;
+  locationErrorCode?: string;
+  locationRequestId?: string;
   media?: IncidentMediaDraft[];
   missingPerson?: {
     fullName: string;
@@ -70,6 +85,14 @@ export type UpdateIncidentLocationDto = {
   capturedAt?: string;
   sourceDeviceId?: string;
   sequenceNumber?: number;
+  source?: string;
+  quality?: string;
+  isCached?: boolean;
+  ageSeconds?: number;
+  speedMps?: number;
+  headingDegrees?: number;
+  batteryLevel?: number;
+  networkType?: string;
 };
 
 function assertCoordinate(value: unknown, label: string, min: number, max: number): asserts value is number {
@@ -81,8 +104,24 @@ function assertCoordinate(value: unknown, label: string, min: number, max: numbe
 export function validateReportIncidentDto(dto: ReportIncidentDto) {
   if (!allowedIncidentTypes.has(dto.type)) throw new BadRequestException("Unsupported incident type");
   if (!dto.description || dto.description.trim().length < 5) throw new BadRequestException("Description is required");
-  assertCoordinate(dto.latitude, "latitude", -90, 90);
-  assertCoordinate(dto.longitude, "longitude", -180, 180);
+
+  assertLocationMetadataConsistency({
+    latitude: dto.latitude,
+    longitude: dto.longitude,
+    locationStatus: dto.locationStatus,
+    locationSource: dto.locationSource,
+    accuracyMeters: dto.accuracyMeters,
+  });
+
+  if (dto.quality && !ALLOWED_LOCATION_QUALITIES.has(dto.quality)) {
+    throw new BadRequestException("Unsupported location quality");
+  }
+
+  if (incidentHasSubmissionCoordinates(dto)) {
+    assertCoordinate(dto.latitude, "latitude", -90, 90);
+    assertCoordinate(dto.longitude, "longitude", -180, 180);
+    assertNoZeroCoordinatePlaceholder(dto.latitude, dto.longitude);
+  }
 
   if (dto.manualLatitude !== undefined || dto.manualLongitude !== undefined) {
     assertCoordinate(dto.manualLatitude, "manualLatitude", -90, 90);
@@ -102,13 +141,21 @@ export function validateMediaDraft(dto: IncidentMediaDraft) {
   if (dto.latitude !== undefined || dto.longitude !== undefined) {
     assertCoordinate(dto.latitude, "latitude", -90, 90);
     assertCoordinate(dto.longitude, "longitude", -180, 180);
+    assertNoZeroCoordinatePlaceholder(dto.latitude, dto.longitude);
   }
 }
 
 export function validateIncidentLocationDto(dto: UpdateIncidentLocationDto) {
   assertCoordinate(dto.latitude, "latitude", -90, 90);
   assertCoordinate(dto.longitude, "longitude", -180, 180);
-  if (dto.accuracyMeters !== undefined && (typeof dto.accuracyMeters !== "number" || dto.accuracyMeters < 0)) {
-    throw new BadRequestException("accuracyMeters must be a non-negative number");
+  assertNoZeroCoordinatePlaceholder(dto.latitude, dto.longitude);
+  if (dto.accuracyMeters !== undefined && (typeof dto.accuracyMeters !== "number" || dto.accuracyMeters <= 0)) {
+    throw new BadRequestException("accuracyMeters must be a positive number");
+  }
+  if (dto.source && !ALLOWED_LOCATION_SOURCES.has(dto.source)) {
+    throw new BadRequestException("Unsupported location source");
+  }
+  if (dto.quality && !ALLOWED_LOCATION_QUALITIES.has(dto.quality)) {
+    throw new BadRequestException("Unsupported location quality");
   }
 }

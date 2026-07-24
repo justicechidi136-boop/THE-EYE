@@ -2,8 +2,8 @@ import { BadRequestException } from "@nestjs/common";
 
 export type StartLiveVideoDto = {
   lowBandwidthMode?: boolean;
-  latitude: number;
-  longitude: number;
+  latitude?: number;
+  longitude?: number;
   accuracy?: number;
   speed?: number;
   heading?: number;
@@ -32,8 +32,14 @@ export function validateEvidenceLink(dto: LinkLiveVideoEvidenceDto) {
 }
 
 export function validateLocationUpdate(dto: LiveVideoLocationUpdateDto | StartLiveVideoDto) {
+  if (dto.latitude == null || dto.longitude == null) {
+    return;
+  }
   assertCoordinate(dto.latitude, "latitude", -90, 90);
   assertCoordinate(dto.longitude, "longitude", -180, 180);
+  if (dto.latitude === 0 && dto.longitude === 0) {
+    throw new BadRequestException("latitude/longitude 0,0 is not allowed as a missing-location placeholder");
+  }
   if (dto.accuracy !== undefined && (typeof dto.accuracy !== "number" || dto.accuracy < 0)) throw new BadRequestException("accuracy must be a positive number");
   if (dto.speed !== undefined && typeof dto.speed !== "number") throw new BadRequestException("speed must be a number");
   if (dto.heading !== undefined && (typeof dto.heading !== "number" || dto.heading < 0 || dto.heading > 360)) throw new BadRequestException("heading must be between 0 and 360");

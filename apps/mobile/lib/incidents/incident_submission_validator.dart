@@ -23,14 +23,21 @@ class IncidentSubmissionValidator {
           "Description must be at least ${TheEyeEnums.descriptionMinLength} characters.";
     }
 
-    if (!_isCoordinate(draft.latitude, -90, 90) &&
-        !(draft.type == IncidentType.sos &&
-            draft.locationMetadata["locationStatus"] == "pending")) {
+    if (draft.latitude != null &&
+        !_isCoordinate(draft.latitude!, -90, 90) &&
+        !_allowsPendingLocation(draft)) {
       errors["latitude"] = "Latitude is required.";
     }
-    if (!_isCoordinate(draft.longitude, -180, 180) &&
-        !(draft.type == IncidentType.sos &&
-            draft.locationMetadata["locationStatus"] == "pending")) {
+    if (draft.longitude != null &&
+        !_isCoordinate(draft.longitude!, -180, 180) &&
+        !_allowsPendingLocation(draft)) {
+      errors["longitude"] = "Longitude is required.";
+    }
+    if ((draft.latitude == null || draft.longitude == null) &&
+        !_allowsPendingLocation(draft) &&
+        draft.type != IncidentType.sos &&
+        draft.type != IncidentType.emergency) {
+      errors["latitude"] = "Latitude is required.";
       errors["longitude"] = "Longitude is required.";
     }
 
@@ -111,5 +118,17 @@ class IncidentSubmissionValidator {
 
   bool _isCoordinate(double value, double min, double max) {
     return !value.isNaN && value >= min && value <= max;
+  }
+
+  bool _allowsPendingLocation(IncidentDraft draft) {
+    final status = draft.locationMetadata["locationStatus"];
+    if (status != "pending" &&
+        status != "denied" &&
+        status != "serviceDisabled" &&
+        status != "unavailable") {
+      return false;
+    }
+    return draft.type == IncidentType.sos ||
+        draft.type == IncidentType.emergency;
   }
 }
