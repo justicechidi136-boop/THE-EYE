@@ -434,6 +434,22 @@ class AuthService {
   }
 
   AuthRequestResult _mapAuthException(AuthApiException error) {
+    final code = error.errorCode ?? "";
+    if (code == "AUTH_DELIVERY_UNAVAILABLE") {
+      return AuthRequestResult(
+        status: AuthRequestStatus.serverError,
+        userMessage: error.userMessage.contains("recovery")
+            ? "AUTH-DELIVERY-001 Account recovery email delivery is not configured."
+            : "AUTH-DELIVERY-001 Password reset email delivery is not configured.",
+      );
+    }
+    if (code == "AUTH_DELIVERY_FAILED") {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.serverError,
+        userMessage:
+            "AUTH-DELIVERY-002 Authentication delivery failed. Try again shortly.",
+      );
+    }
     if (error.statusCode == 401) {
       return const AuthRequestResult(
         status: AuthRequestStatus.invalidCredentials,

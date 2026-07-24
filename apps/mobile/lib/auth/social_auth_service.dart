@@ -95,7 +95,7 @@ class SocialAuthService {
       if (credential == null) {
         return const SocialAuthResult(
           status: SocialAuthStatus.cancelled,
-          userMessage: "Google sign-in was cancelled.",
+          userMessage: "AUTH-GOOGLE-002 Google sign-in was cancelled.",
         );
       }
 
@@ -103,7 +103,8 @@ class SocialAuthService {
       if (idToken == null || idToken.isEmpty) {
         return const SocialAuthResult(
           status: SocialAuthStatus.invalidToken,
-          userMessage: "Unable to verify your Google sign-in. Try again.",
+          userMessage:
+              "AUTH-GOOGLE-003 Unable to verify your Google sign-in. Try again.",
         );
       }
 
@@ -363,18 +364,28 @@ class SocialAuthService {
   String _googlePlatformMessage(PlatformException error) {
     final code = error.code;
     if (code == "sign_in_canceled" || code == "sign_in_cancelled") {
-      return "Google sign-in was cancelled.";
+      return "AUTH-GOOGLE-002 Google sign-in was cancelled.";
     }
     if (code == "sign_in_failed" ||
         code == "10" ||
+        code == "missing-google-web-client-id" ||
+        code == "missing-id-token" ||
         (error.message ?? "").contains("10:")) {
-      return "Google sign-in is not configured for this build. Add your app SHA-1 and SHA-256 in Firebase Console (project ${AppFlavorConfig.firebaseProjectId}), download an updated google-services.json, then rebuild.";
+      final projectId = _firebaseProjectLabel();
+      return "AUTH-GOOGLE-001 Google sign-in is not configured for this build. "
+          "Add your app SHA-1 and SHA-256 in Firebase Console "
+          "(project $projectId), download an updated "
+          "google-services.json, then rebuild.";
     }
-    if (code == "missing-google-web-client-id" || code == "missing-id-token") {
-      return error.message ??
-          "Google sign-in is not fully configured for this build.";
+    return "AUTH-GOOGLE-003 Google sign-in failed. Try again later.";
+  }
+
+  String _firebaseProjectLabel() {
+    try {
+      return AppFlavorConfig.firebaseProjectId;
+    } catch (_) {
+      return "the-eye-2stg";
     }
-    return "Google sign-in failed. Try again.";
   }
 
   Future<UserCredential?> _firebaseAppleCredential() async {
@@ -470,15 +481,25 @@ class SocialAuthService {
         return SocialAuthResult(
           status: SocialAuthStatus.invalidToken,
           userMessage:
-              "Firebase project mismatch: this app issued a token for `$tokenProject` "
-              "but the API expects `$apiProject`. Rebuild with "
+              "AUTH-GOOGLE-001 Firebase project mismatch: this app issued a token "
+              "for `$tokenProject` but the API expects `$apiProject`. Rebuild with "
               "`flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging`, "
               "or ask ops to verify FIREBASE_PROJECT_ID on the staging API.",
         );
       }
+      if (code == "PROVIDER_UID_MISMATCH" ||
+          code == "PROVIDER_ACCOUNT_MISMATCH") {
+        return SocialAuthResult(
+          status: SocialAuthStatus.accountConflict,
+          userMessage:
+              "AUTH-GOOGLE-005 This Google account does not match your THE EYE profile. "
+              "Use account recovery if you recently changed devices.",
+        );
+      }
       return SocialAuthResult(
         status: SocialAuthStatus.invalidToken,
-        userMessage: error.userMessage,
+        userMessage:
+            "AUTH-GOOGLE-004 ${error.userMessage.isNotEmpty ? error.userMessage : "Backend sign-in exchange failed."}",
       );
     }
     if (error.statusCode == 429) {
@@ -489,20 +510,29 @@ class SocialAuthService {
     }
     return SocialAuthResult(
       status: SocialAuthStatus.serverError,
-      userMessage: error.userMessage,
+      userMessage:
+          "AUTH-GOOGLE-004 ${error.userMessage.isNotEmpty ? error.userMessage : "Backend sign-in exchange failed."}",
     );
   }
 
   String _firebaseAuthMessage(FirebaseAuthException error) {
+    if (_isGoogleSignInCancelled(error.code)) {
+      return "AUTH-GOOGLE-002 Google sign-in was cancelled.";
+    }
     switch (error.code) {
       case "account-exists-with-different-credential":
-        return "This email is linked to another sign-in method. Use your original method, then link this provider from Settings.";
+        return "AUTH-GOOGLE-005 This email is linked to another sign-in method. "
+            "Use your original method, then link this provider from Settings.";
       case "user-disabled":
         return "This sign-in account is disabled.";
       case "credential-already-in-use":
-        return "This provider is already linked to another THE EYE account.";
+        return "AUTH-GOOGLE-005 This provider is already linked to another THE EYE account.";
+      case "invalid-credential":
+      case "invalid-verification-code":
+      case "invalid-verification-id":
+        return "AUTH-GOOGLE-003 Unable to verify your Google sign-in. Try again.";
       default:
-        return "Sign-in failed. Try again.";
+        return "AUTH-GOOGLE-003 Sign-in failed. Try again later.";
     }
   }
 
