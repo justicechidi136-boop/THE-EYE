@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/eye_colors.dart';
+import '../theme/eye_semantic_colors.dart';
 
 /// Brand asset paths (copied from mobile).
 abstract final class WatchBrandAssets {
@@ -180,6 +181,11 @@ class WatchStatusChip extends StatelessWidget {
       WatchStatusTone.warning => EyeColors.orange,
       WatchStatusTone.danger => EyeColors.danger,
     };
+    final labelColor = switch (tone) {
+      WatchStatusTone.safe => EyeSemanticColors.of(context).successText,
+      WatchStatusTone.warning => EyeSemanticColors.of(context).warning,
+      WatchStatusTone.danger => EyeColors.danger,
+    };
 
     return Container(
       height: 40,
@@ -210,7 +216,7 @@ class WatchStatusChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: labelColor,
               fontSize: 8,
               fontWeight: FontWeight.w700,
             ),
@@ -237,6 +243,7 @@ class WatchMetricColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = EyeSemanticColors.of(context).interactiveText;
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -244,8 +251,8 @@ class WatchMetricColumn extends StatelessWidget {
         children: [
           Text(
             value,
-            style: const TextStyle(
-              color: EyeColors.green,
+            style: TextStyle(
+              color: accent,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -433,22 +440,23 @@ class WatchOutlineButton extends StatelessWidget {
     super.key,
     required this.label,
     required this.onPressed,
-    this.color = EyeColors.green,
+    this.color,
   });
 
   final String label;
   final VoidCallback? onPressed;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final foreground = color ?? EyeSemanticColors.of(context).interactiveText;
     return SizedBox(
       width: double.infinity,
       height: 32,
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
-          foregroundColor: color,
-          side: BorderSide(color: color),
+          foregroundColor: foreground,
+          side: BorderSide(color: foreground),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(999),
           ),

@@ -181,7 +181,8 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | SRB-006 | P0 | SOS/report termination — per-type device QA | NOT TESTED |
 | SRB-012 | P0 | Admin logout — live browser QA pending | NOT TESTED |
 | SRB-008 | P0 | LiveKit room join or honest disable | NOT TESTED |
-| SRB-009 | P1 | Police hybrid locator (verified DB + Google fallback) | CODE FIXED — DEVICE QA PENDING |
+| SRB-009 | P1 | Police hybrid locator (verified DB + Google fallback) | CODE FIXED — CI VERIFIED — Google provider DISABLED on staging — DEVICE QA PENDING |
+| SRB-025 | P1 | Dark-mode green text accessibility (semantic orange tokens) | CODE FIXED — CI VERIFIED — DEVICE QA PENDING |
 | SRB-011 | P1 | Theme contrast device pass | NOT TESTED |
 | SRB-020 | P0 | Mobile location permission lifecycle | CI VERIFIED — DEVICE QA PENDING |
 | SRB-021 | P0 | Watch location permission lifecycle | CI VERIFIED — WATCH QA PENDING |

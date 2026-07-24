@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../eye_semantic_colors.dart";
 import "../tokens.dart";
 import "../typography.dart";
 
@@ -24,8 +25,8 @@ class EyePageBackHeader extends StatelessWidget {
           IconButton(
             tooltip: "Back",
             onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back,
-                color: EyeTokens.greenMain, size: 24),
+            icon: Icon(Icons.arrow_back,
+                color: EyeSemanticColors.of(context).interactiveText, size: 24),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           ),

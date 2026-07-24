@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../design_system/eye_semantic_colors.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "community_media_upload_service.dart";
@@ -138,7 +139,9 @@ class _CommunityReportScreenState extends State<CommunityReportScreen> {
             Text(
               _resultMessage!,
               style: TextStyle(
-                color: _success ? Colors.green.shade700 : Colors.red.shade700,
+                color: _success
+                    ? EyeSemanticColors.of(context).successText
+                    : EyeSemanticColors.of(context).errorText,
               ),
             ),
           FilledButton(

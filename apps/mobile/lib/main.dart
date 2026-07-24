@@ -828,20 +828,27 @@ ThemeData buildTheme(bool highContrast) {
           onSurface: BrandColors.lightText,
         );
 
+  const semantics = EyeSemanticColors.light;
+
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
     scaffoldBackgroundColor: BrandColors.lightBackground,
     fontFamily: _montserratFontFamily(),
     textTheme: textTheme,
+    extensions: const [semantics],
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        backgroundColor: semantics.primaryAction,
+        foregroundColor: semantics.primaryActionForeground,
         minimumSize: const Size.fromHeight(56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
+        foregroundColor: semantics.interactiveText,
+        side: BorderSide(color: semantics.interactiveText),
         minimumSize: const Size.fromHeight(56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
@@ -858,7 +865,10 @@ ThemeData buildTheme(bool highContrast) {
       style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      style: TextButton.styleFrom(
+        foregroundColor: semantics.linkText,
+        minimumSize: const Size(48, 48),
+      ),
     ),
     cardTheme: CardThemeData(
         color: BrandColors.lightSurface,
@@ -872,10 +882,12 @@ ThemeData buildTheme(bool highContrast) {
 ThemeData buildDarkTheme(bool highContrast) {
   final baseTextTheme = ThemeData.dark().textTheme;
   final textTheme = _montserratTextTheme(baseTextTheme);
+  const semantics = EyeSemanticColors.dark;
   final scheme = ColorScheme.fromSeed(
-    seedColor: BrandColors.green,
+    seedColor: BrandColors.orange,
     brightness: Brightness.dark,
-    primary: BrandColors.green,
+    primary: semantics.primaryAction,
+    onPrimary: semantics.primaryActionForeground,
     secondary: BrandColors.orange,
     surface: BrandColors.darkSurface,
     onSurface: BrandColors.darkText,
@@ -888,14 +900,19 @@ ThemeData buildDarkTheme(bool highContrast) {
     scaffoldBackgroundColor: BrandColors.darkBackground,
     fontFamily: _montserratFontFamily(),
     textTheme: textTheme,
+    extensions: const [semantics],
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        backgroundColor: semantics.primaryAction,
+        foregroundColor: semantics.primaryActionForeground,
         minimumSize: const Size.fromHeight(56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
+        foregroundColor: semantics.interactiveText,
+        side: BorderSide(color: semantics.interactiveText),
         minimumSize: const Size.fromHeight(56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
@@ -912,7 +929,10 @@ ThemeData buildDarkTheme(bool highContrast) {
       style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      style: TextButton.styleFrom(
+        foregroundColor: semantics.linkText,
+        minimumSize: const Size(48, 48),
+      ),
     ),
     cardTheme: CardThemeData(
         color: BrandColors.darkSurface,
@@ -2491,9 +2511,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
+                  child: Text(
                     "Forgot password?",
-                    style: TextStyle(color: BrandColors.accentHover),
+                    style: EyeTypography.linkFor(context),
                   ),
                 ),
               ),
@@ -2509,9 +2529,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
+                  child: Text(
                     "Recover account",
-                    style: TextStyle(color: BrandColors.accentHover),
+                    style: EyeTypography.linkFor(context),
                   ),
                 ),
               ),
@@ -2529,9 +2549,11 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: canSubmit
-                      ? BrandColors.accentHover
+                      ? EyeSemanticColors.of(context).primaryAction
                       : BrandColors.authInactive,
-                  foregroundColor: Colors.white,
+                  foregroundColor: canSubmit
+                      ? EyeSemanticColors.of(context).primaryActionForeground
+                      : BrandColors.ash,
                   minimumSize: const Size.fromHeight(51),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -2582,9 +2604,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                 onPressed: submitting || socialBusy
                     ? null
                     : () => Navigator.of(context).pushReplacementNamed("/home"),
-                child: const Text(
+                child: Text(
                   "Continue without signing in",
-                  style: TextStyle(color: BrandColors.accentHover),
+                  style: EyeTypography.linkFor(context),
                 ),
               ),
               const SizedBox(height: 8),
@@ -2605,9 +2627,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                               ? null
                               : () =>
                                   Navigator.of(context).pushNamed("/register"),
-                          child: const Text(
+                          child: Text(
                             "Create an account",
-                            style: TextStyle(color: BrandColors.accentHover),
+                            style: EyeTypography.linkFor(context),
                           ),
                         ),
                       ),
@@ -2897,9 +2919,11 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: canSubmit
-                      ? BrandColors.accentHover
+                      ? EyeSemanticColors.of(context).primaryAction
                       : BrandColors.authInactive,
-                  foregroundColor: Colors.white,
+                  foregroundColor: canSubmit
+                      ? EyeSemanticColors.of(context).primaryActionForeground
+                      : BrandColors.ash,
                   minimumSize: const Size.fromHeight(51),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -2935,9 +2959,9 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                               ? null
                               : () => Navigator.of(context)
                                   .pushReplacementNamed("/login"),
-                          child: const Text(
+                          child: Text(
                             "Log in",
-                            style: TextStyle(color: BrandColors.accentHover),
+                            style: EyeTypography.linkFor(context),
                           ),
                         ),
                       ),
@@ -2973,14 +2997,15 @@ class _SocialSignInButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Semantics(
       button: true,
       label: semanticLabel,
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(54),
-          side: const BorderSide(color: BrandColors.accentHover, width: 1),
-          foregroundColor: BrandColors.accentHover,
+          side: BorderSide(color: semantics.interactiveText, width: 1),
+          foregroundColor: semantics.interactiveText,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         onPressed: enabled && !loading ? onPressed : null,
@@ -2992,7 +3017,7 @@ class _SocialSignInButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 28, color: BrandColors.accentHover),
+                  Icon(icon, size: 28, color: semantics.interactiveText),
                   const SizedBox(width: 8),
                   Text(
                     label,
@@ -5462,7 +5487,7 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
                     title: "Paired phone",
                     subtitle: "Watch relays SOS through this phone",
                     selected: !standaloneCellular,
-                    color: BrandColors.green,
+                    standalone: false,
                     onTap: () => setState(() => standaloneCellular = false),
                   ),
                 ),
@@ -5472,7 +5497,7 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
                     title: "Standalone",
                     subtitle: "Watch uses LTE/WiFi directly",
                     selected: standaloneCellular,
-                    color: BrandColors.orange,
+                    standalone: true,
                     onTap: () => setState(() => standaloneCellular = true),
                   ),
                 ),
@@ -7432,7 +7457,7 @@ class SettingsScreen extends StatelessWidget {
                             ? Icons.cloud_sync
                             : Icons.cloud_off,
                     color: controller.online
-                        ? BrandColors.green
+                        ? EyeSemanticColors.of(context).success
                         : BrandColors.orange,
                   ),
                   title: const Text("Internet connection"),
@@ -7441,9 +7466,10 @@ class SettingsScreen extends StatelessWidget {
                     controller.online ? "Online" : "Auto-detected",
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: controller.online
-                          ? BrandColors.green
-                          : BrandColors.orange,
+                      color: EyeSemanticColors.statusLabel(
+                        context,
+                        positive: controller.online,
+                      ),
                     ),
                   ),
                 ),
@@ -8135,39 +8161,29 @@ class IncidentStatusTile extends StatelessWidget {
   final IncidentTrackingItem incident;
   final VoidCallback? onTap;
 
-  Color _verificationColor(String status) {
-    switch (status) {
-      case "Verified":
-        return BrandColors.green;
-      case "Disputed":
-        return BrandColors.orange;
-      case "False Information":
-        return Colors.red.shade700;
-      default:
-        return BrandColors.lightTextMuted;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final verificationStatus = incident.verificationStatus;
+    final tint =
+        EyeSemanticColors.verificationTint(context, verificationStatus);
+    final labelColor =
+        EyeSemanticColors.verificationLabel(context, verificationStatus);
     return ListTileCard(
       onTap: onTap,
       leading: const Icon(Icons.radar),
       title: "${incident.id} - ${incident.type}",
       subtitle:
-          "${incident.status} - ${incident.agency} - ${incident.confidence}% confidence\nVerification: ${incident.verificationStatus}",
+          "${incident.status} - ${incident.agency} - ${incident.confidence}% confidence\nVerification: $verificationStatus",
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: _verificationColor(incident.verificationStatus)
-              .withValues(alpha: 0.12),
+          color: tint.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tint.withValues(alpha: 0.45)),
         ),
-        child: Text(incident.verificationStatus,
+        child: Text(verificationStatus,
             style: TextStyle(
-                color: _verificationColor(incident.verificationStatus),
-                fontWeight: FontWeight.w800,
-                fontSize: 11)),
+                color: labelColor, fontWeight: FontWeight.w800, fontSize: 11)),
       ),
     );
   }
@@ -8197,21 +8213,37 @@ class BroadcastAlertTile extends StatelessWidget {
 }
 
 class _ModeCard extends StatelessWidget {
-  const _ModeCard(
-      {required this.title,
-      required this.subtitle,
-      required this.selected,
-      required this.color,
-      required this.onTap});
+  const _ModeCard({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.standalone,
+    required this.onTap,
+  });
 
   final String title;
   final String subtitle;
   final bool selected;
-  final Color color;
+  final bool standalone;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
+    final accent = EyeSemanticColors.pairingModeAccent(
+      context,
+      standalone: standalone,
+    );
+    final borderColor = selected
+        ? accent
+        : (context.isDarkTheme ? semantics.divider : BrandColors.lightBorder);
+    final fillColor = selected
+        ? accent.withValues(alpha: 0.08)
+        : (context.isDarkTheme ? semantics.cardSurface : Colors.white);
+    final titleColor = selected
+        ? accent
+        : (context.isDarkTheme ? semantics.bodyText : BrandColors.command);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
@@ -8219,22 +8251,22 @@ class _ModeCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-              color: selected ? color : BrandColors.lightBorder,
-              width: selected ? 2 : 1),
-          color: selected ? color.withValues(alpha: 0.08) : Colors.white,
+          border: Border.all(color: borderColor, width: selected ? 2 : 1),
+          color: fillColor,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: selected ? color : BrandColors.command)),
+                style:
+                    TextStyle(fontWeight: FontWeight.w800, color: titleColor)),
             const SizedBox(height: 4),
             Text(subtitle,
-                style: const TextStyle(
-                    fontSize: 12, color: BrandColors.lightTextMuted)),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: context.isDarkTheme
+                        ? semantics.secondaryText
+                        : BrandColors.lightTextMuted)),
           ],
         ),
       ),

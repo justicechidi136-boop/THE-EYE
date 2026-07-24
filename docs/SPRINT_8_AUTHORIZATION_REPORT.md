@@ -148,8 +148,9 @@
 
 | ID | Description |
 |----|-------------|
-| SRB-009 | Police station filters vs verified dataset |
+| SRB-009 | Police station filters vs verified dataset + Google Places staging enablement |
 | SRB-011 | Theme contrast — device verification pending |
+| SRB-025 | Dark-mode green text accessibility — semantic tokens landed; device QA pending |
 | SRB-007 | Media UI honesty — device verification pending |
 
 All tracked as **NOT TESTED**, not closed.

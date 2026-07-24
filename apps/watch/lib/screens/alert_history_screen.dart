@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/alert.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
+import '../theme/eye_semantic_colors.dart';
 import '../widgets/watch_ui.dart';
 import 'routes.dart';
 
@@ -59,11 +60,11 @@ class _AlertHistoryScreenState extends State<AlertHistoryScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'SEE DETAILS →',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: EyeColors.green,
+                  color: EyeSemanticColors.of(context).linkText,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5,

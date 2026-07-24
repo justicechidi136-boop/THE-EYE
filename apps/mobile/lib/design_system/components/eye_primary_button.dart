@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../eye_semantic_colors.dart";
 import "../tokens.dart";
 import "../typography.dart";
 
@@ -19,16 +20,18 @@ class EyePrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     final active = enabled && !loading && onPressed != null;
     return SizedBox(
       width: double.infinity,
       height: EyeTokens.buttonHeight,
       child: FilledButton(
         style: FilledButton.styleFrom(
-          backgroundColor: active ? EyeTokens.greenMain : EyeTokens.inactive,
-          foregroundColor: Colors.white,
+          backgroundColor:
+              active ? semantics.primaryAction : EyeTokens.inactive,
+          foregroundColor: semantics.primaryActionForeground,
           disabledBackgroundColor: EyeTokens.inactive,
-          disabledForegroundColor: Colors.white,
+          disabledForegroundColor: semantics.primaryActionForeground,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
           ),
@@ -71,14 +74,15 @@ class EyeOutlinedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     final active = enabled && !loading && onPressed != null;
     return SizedBox(
       width: double.infinity,
       height: 54,
       child: OutlinedButton(
         style: OutlinedButton.styleFrom(
-          foregroundColor: EyeTokens.greenMain,
-          side: const BorderSide(color: EyeTokens.greenMain),
+          foregroundColor: semantics.interactiveText,
+          side: BorderSide(color: semantics.interactiveText),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
           ),
@@ -97,7 +101,7 @@ class EyeOutlinedButton extends StatelessWidget {
                   Text(
                     label,
                     style: EyeTypography.fieldHint
-                        .copyWith(color: EyeTokens.greenMain),
+                        .copyWith(color: semantics.interactiveText),
                   ),
                 ],
               ),

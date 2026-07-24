@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:google_fonts/google_fonts.dart";
 
+import "eye_semantic_colors.dart";
 import "tokens.dart";
 
 /// Montserrat text styles mapped from Figma Biennale scale.
@@ -101,6 +102,21 @@ abstract final class EyeTypography {
     fontWeight: FontWeight.w400,
     color: EyeTokens.greenMain,
   );
+
+  static TextStyle linkFor(BuildContext context) =>
+      link.copyWith(color: EyeSemanticColors.of(context).linkText);
+
+  static TextStyle navLabelFor(BuildContext context,
+          {required bool selected}) =>
+      TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        color: selected
+            ? EyeSemanticColors.of(context).interactiveText
+            : (Theme.of(context).brightness == Brightness.dark
+                ? EyeSemanticColors.of(context).mutedText
+                : EyeTokens.black1),
+      );
 
   static const heroTitle = TextStyle(
     fontSize: 32,

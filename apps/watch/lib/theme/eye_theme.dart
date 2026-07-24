@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'eye_colors.dart';
+import 'eye_semantic_colors.dart';
 
 ThemeData buildEyeWatchTheme() {
+  const semantics = EyeSemanticColors.watch;
   const colorScheme = ColorScheme.dark(
     primary: EyeColors.green,
     secondary: EyeColors.orange,
@@ -18,6 +20,7 @@ ThemeData buildEyeWatchTheme() {
     // True black avoids white flash between native splash → boot → home.
     scaffoldBackgroundColor: const Color(0xFF000000),
     colorScheme: colorScheme,
+    extensions: const [semantics],
     textTheme: const TextTheme(
       headlineLarge: TextStyle(
         color: EyeColors.white,
@@ -47,8 +50,8 @@ ThemeData buildEyeWatchTheme() {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: EyeColors.white,
-        side: const BorderSide(color: EyeColors.muted),
+        foregroundColor: semantics.interactiveText,
+        side: BorderSide(color: semantics.interactiveText),
         minimumSize: const Size.fromHeight(44),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
