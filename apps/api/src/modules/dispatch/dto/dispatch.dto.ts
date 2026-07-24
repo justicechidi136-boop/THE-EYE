@@ -3,6 +3,7 @@ import { EmergencyCategory, IncidentAssignmentStatus, IncidentPriority, Responde
 import {
   assertLocationMetadataConsistency,
   assertNoZeroCoordinatePlaceholder,
+  ALLOWED_LOCATION_QUALITIES,
   incidentHasSubmissionCoordinates,
 } from "../../incidents/location-status";
 import { ASSIGNMENT_ACTION_TO_STATUS } from "../assignment-lifecycle";
@@ -51,6 +52,8 @@ export type SosReportDto = {
   locationStatus?: string;
   isCached?: boolean;
   ageSeconds?: number;
+  accuracyMeters?: number;
+  quality?: string;
 };
 
 export function validateSosReportDto(dto: SosReportDto) {
@@ -81,6 +84,12 @@ export function validateSosReportDto(dto: SosReportDto) {
   }
   if (dto.batteryLevel !== undefined && (dto.batteryLevel < 0 || dto.batteryLevel > 100)) {
     throw new BadRequestException("batteryLevel must be between 0 and 100");
+  }
+  if (dto.accuracyMeters !== undefined && (typeof dto.accuracyMeters !== "number" || dto.accuracyMeters <= 0)) {
+    throw new BadRequestException("accuracyMeters must be a positive number");
+  }
+  if (dto.quality && !ALLOWED_LOCATION_QUALITIES.has(dto.quality)) {
+    throw new BadRequestException("Unsupported location quality");
   }
 }
 
