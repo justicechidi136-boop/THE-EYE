@@ -881,8 +881,11 @@ ThemeData buildTheme(bool highContrast) {
 
 ThemeData buildDarkTheme(bool highContrast) {
   final baseTextTheme = ThemeData.dark().textTheme;
-  final textTheme = _montserratTextTheme(baseTextTheme);
   const semantics = EyeSemanticColors.dark;
+  final textTheme = _montserratTextTheme(baseTextTheme).apply(
+    bodyColor: semantics.bodyText,
+    displayColor: semantics.bodyText,
+  );
   final scheme = ColorScheme.fromSeed(
     seedColor: BrandColors.orange,
     brightness: Brightness.dark,
@@ -3355,15 +3358,20 @@ class HomeScreen extends StatelessWidget {
                 IconButton(
                   tooltip: "Incident history",
                   onPressed: () => Navigator.of(context).pushNamed("/tracking"),
-                  icon: const Icon(Icons.history, color: EyeTokens.greenMain),
+                  icon: Icon(
+                    Icons.history,
+                    color: EyeSemanticColors.of(context).interactiveText,
+                  ),
                 ),
                 const Spacer(),
                 IconButton(
                   tooltip: "Notifications",
                   onPressed: () =>
                       Navigator.of(context).pushNamed("/notifications"),
-                  icon: const Icon(Icons.notifications_none,
-                      color: EyeTokens.greenMain),
+                  icon: Icon(
+                    Icons.notifications_none,
+                    color: EyeSemanticColors.of(context).interactiveText,
+                  ),
                 ),
               ],
             ),
@@ -4184,12 +4192,19 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   Position? latestPosition;
   DateTime? lastCapturedAt;
   EmergencyLocationListener? _locationListener;
+  AppController? _appController;
 
   @override
   void initState() {
     super.initState();
     liveVideoController.addListener(_onLiveVideoChanged);
     unawaited(_initializeLiveVideo());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _appController ??= appOf(context);
   }
 
   Future<void> _initializeLiveVideo() async {
@@ -4220,9 +4235,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   @override
   void dispose() {
     final listener = _locationListener;
-    if (listener != null) {
-      appOf(context).locationCoordinator.removeListener(listener);
+    final appController = _appController;
+    if (listener != null && appController != null) {
+      appController.locationCoordinator.removeListener(listener);
     }
+    appController?.stopIncidentLocationTracking();
     liveVideoController.removeListener(_onLiveVideoChanged);
     liveVideoController.dispose();
     super.dispose();
@@ -4395,9 +4412,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
     final appController = appOf(context);
     try {
-      final previewFuture = liveVideoController
-          .startLocalPreview(lowBandwidth: lowBandwidth)
-          .timeout(kLiveVideoStartTimeout);
+      final alreadyPreviewing = liveVideoController.connectionState ==
+          LiveVideoConnectionState.previewing;
+      final previewFuture = alreadyPreviewing
+          ? Future.value(true)
+          : liveVideoController
+              .startLocalPreview(lowBandwidth: lowBandwidth)
+              .timeout(kLiveVideoStartTimeout);
       final accessFuture =
           appController.locationCoordinator.resolveImmediateEmergencyAccess();
 
@@ -4453,6 +4474,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       }
 
       activeIncidentId = submission.incidentId;
+      await appController.activateActiveEmergency(activeIncidentId!);
+      if (!mounted) return;
       if (access.hasFix) {
         latestPosition = access.position;
         lastCapturedAt = access.position!.timestamp;
@@ -4468,6 +4491,17 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         showAppSnackBar(context, emergencyLocationRetryMessage(access));
       }
 
+      final accessToken = appController.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        setState(() => locationStatusMessage = "Sign in required");
+        showAppSnackBar(
+          context,
+          "Sign in required to start live video. Reference: LIVE-VIDEO-AUTH-001",
+          isError: true,
+        );
+        return;
+      }
+
       final envelope = await apiClient
           .startLiveVideo(
             incidentId: activeIncidentId!,
@@ -4475,7 +4509,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
               position: access.position,
               lowBandwidthMode: lowBandwidth,
             ),
-            accessToken: appController.accessToken!,
+            accessToken: accessToken,
           )
           .timeout(kLiveVideoStartTimeout);
       final startResult = LiveVideoStartResult.fromResponse(envelope);
@@ -4925,7 +4959,7 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
                 ? Colors.red.shade700
                 : item.priority.contains("P2")
                     ? Colors.orange.shade800
-                    : BrandColors.green;
+                    : EyeSemanticColors.of(context).verified;
             final subtitle = item.distanceMeters != null
                 ? "${(item.distanceMeters! / 1000).toStringAsFixed(1)} km away"
                 : item.expired
@@ -5421,7 +5455,8 @@ class FamilySafetyCircleScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           FilledButton.icon(
-              onPressed: () {},
+              onPressed: () => Navigator.of(context)
+                  .pushNamed("/profile/emergency-contacts"),
               icon: const Icon(Icons.group_add),
               label: const Text("Add family member")),
           const SizedBox(height: 16),
@@ -5608,6 +5643,10 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
                         latestPosition!.latitude, latestPosition!.longitude),
                     icon: const Icon(Icons.map),
                     label: const Text("Open GPS in maps"),
+                    style: TextButton.styleFrom(
+                      foregroundColor:
+                          EyeSemanticColors.of(context).interactiveText,
+                    ),
                   ),
                 ProfileRow(
                     "Accuracy",
@@ -8084,8 +8123,9 @@ class ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Material(
-      color: Colors.white,
+      color: context.eyeSurface,
       borderRadius: BorderRadius.circular(18),
       child: Semantics(
         button: true,
@@ -8098,7 +8138,7 @@ class ActionTile extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                border: Border.all(color: BrandColors.lightBorder),
+                border: Border.all(color: context.eyeBorder),
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Column(
@@ -8106,9 +8146,14 @@ class ActionTile extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Icon(icon, color: color, size: 34),
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w800)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: semantics.bodyText,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -8136,19 +8181,29 @@ class ListTileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.eyeSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: BrandColors.lightBorder),
+        border: Border.all(color: context.eyeBorder),
       ),
       child: ListTile(
         onTap: onTap,
         minVerticalPadding: 14,
         leading: leading,
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text(subtitle),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: semantics.bodyText,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(color: semantics.secondaryText),
+        ),
         trailing: trailing,
       ),
     );
@@ -8364,14 +8419,24 @@ class ProfileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           Expanded(
-              child: Text(label,
-                  style: const TextStyle(color: BrandColors.lightTextMuted))),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+            child: Text(
+              label,
+              style: TextStyle(color: semantics.secondaryText),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: semantics.bodyText,
+            ),
+          ),
         ],
       ),
     );

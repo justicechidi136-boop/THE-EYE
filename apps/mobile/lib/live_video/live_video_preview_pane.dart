@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:livekit_client/livekit_client.dart";
 
+import "../design_system/eye_semantic_colors.dart";
 import "live_video_connection_state.dart";
 import "live_video_evidence_overlay.dart";
 import "live_video_session_controller.dart";
@@ -25,6 +26,9 @@ class LiveVideoPreviewPane extends StatelessWidget {
     final failed =
         controller.connectionState == LiveVideoConnectionState.failed;
     final dark = streaming || failed;
+    final semantics = EyeSemanticColors.of(context);
+    final placeholderIconColor =
+        dark ? Colors.white : semantics.interactiveText;
 
     return Stack(
       children: [
@@ -50,7 +54,7 @@ class LiveVideoPreviewPane extends StatelessWidget {
                             ? Icons.videocam
                             : Icons.videocam_off,
                         size: 72,
-                        color: dark ? Colors.white : const Color(0xFF009933),
+                        color: placeholderIconColor,
                       ),
                       const SizedBox(height: 12),
                       Text(
