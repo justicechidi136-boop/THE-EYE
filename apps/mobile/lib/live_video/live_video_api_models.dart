@@ -40,8 +40,9 @@ class LiveVideoStartResult {
         Map<String, dynamic>.from((decoded["data"] as Map?) ?? const {});
     final incident =
         Map<String, dynamic>.from((data["incident"] as Map?) ?? const {});
+    final livekitRaw = decoded["livekit"] ?? data["livekit"];
     final livekit = LiveKitCredentials.fromJson(
-        Map<String, dynamic>.from((decoded["livekit"] as Map?) ?? const {}));
+        livekitRaw is Map ? Map<String, dynamic>.from(livekitRaw) : null);
     return LiveVideoStartResult(
       sessionId: data["id"] as String? ?? "",
       incidentId:
