@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../brand.dart";
 import "../../theme/the_eye_theme.dart";
+import "../eye_semantic_colors.dart";
 import "../tokens.dart";
 import "../typography.dart";
 
@@ -166,9 +167,10 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     final color = selected
-        ? EyeTokens.greenMain
-        : (context.isDarkTheme ? BrandColors.darkTextMuted : EyeTokens.black1);
+        ? semantics.interactiveText
+        : (context.isDarkTheme ? semantics.mutedText : EyeTokens.black1);
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -179,9 +181,7 @@ class _NavItem extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               label,
-              style: selected
-                  ? EyeTypography.navLabelActive
-                  : EyeTypography.navLabel,
+              style: EyeTypography.navLabelFor(context, selected: selected),
             ),
           ],
         ),
