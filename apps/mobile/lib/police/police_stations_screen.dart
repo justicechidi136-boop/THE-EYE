@@ -410,8 +410,8 @@ class _PoliceStationTile extends StatelessWidget {
                   Chip(
                     label: const Text("Verified"),
                     visualDensity: VisualDensity.compact,
-                    backgroundColor:
-                        theme.colorScheme.primaryContainer.withValues(alpha: 0.7),
+                    backgroundColor: theme.colorScheme.primaryContainer
+                        .withValues(alpha: 0.7),
                   )
                 else if (station.isGoogleResult)
                   Chip(

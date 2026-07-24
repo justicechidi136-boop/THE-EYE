@@ -953,7 +953,7 @@ class AppController extends SessionAccessor {
   final BroadcastFeedService _broadcastFeedService = BroadcastFeedService();
   final BroadcastFeedCache _broadcastFeedCache = BroadcastFeedCache();
   final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
-  IncidentLocationTracker? _locationTracker;
+  EmergencyLocationCoordinator? _locationCoordinator;
   ActiveEmergencyService? _activeEmergencyService;
   final ConnectivityService _connectivity;
   final AuthService _authService;
@@ -1269,22 +1269,30 @@ class AppController extends SessionAccessor {
         type == IncidentType.sos;
   }
 
-  void _ensureLocationTracker() {
-    _locationTracker ??= IncidentLocationTracker(
-        apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl));
+  void _ensureLocationCoordinator() {
+    _locationCoordinator ??= sharedEmergencyLocationCoordinator();
   }
 
-  Future<void> startIncidentLocationTracking(String incidentId) async {
+  EmergencyLocationCoordinator get locationCoordinator {
+    _ensureLocationCoordinator();
+    return _locationCoordinator!;
+  }
+
+  Future<void> startIncidentLocationTracking(
+    String incidentId, {
+    String? liveVideoSessionId,
+  }) async {
     if (accessToken == null) return;
-    _ensureLocationTracker();
-    _locationTracker!.start(
+    locationCoordinator.startTracking(
       incidentId: incidentId,
       accessToken: accessToken!,
+      apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+      liveVideoSessionId: liveVideoSessionId,
     );
   }
 
   void stopIncidentLocationTracking() {
-    _locationTracker?.stop();
+    _locationCoordinator?.stopTracking();
   }
 
   ActiveEmergencyService get activeEmergencyService =>
@@ -1879,7 +1887,7 @@ class AppController extends SessionAccessor {
 
   @override
   void dispose() {
-    _locationTracker?.stop();
+    _locationCoordinator?.stopTracking();
     _connectivity.removeListener(_onConnectivityChanged);
     _themeProvider.removeListener(_onThemeChanged);
     super.dispose();
@@ -4144,12 +4152,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   bool _streamStartInFlight = false;
   bool permissionDenied = false;
   String? permissionError;
+  String? locationStatusMessage;
   String? activeIncidentId;
   String roomName = "eye-incident-active-emergency";
   String liveSessionId = "";
   Position? latestPosition;
   DateTime? lastCapturedAt;
-  Timer? locationTimer;
+  EmergencyLocationListener? _locationListener;
 
   @override
   void initState() {
@@ -4185,7 +4194,10 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
   @override
   void dispose() {
-    locationTimer?.cancel();
+    final listener = _locationListener;
+    if (listener != null) {
+      appOf(context).locationCoordinator.removeListener(listener);
+    }
     liveVideoController.removeListener(_onLiveVideoChanged);
     liveVideoController.dispose();
     super.dispose();
@@ -4337,8 +4349,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           SectionCard(
             title: "Location sharing",
             child: Text(streaming
-                ? "Your live GPS is being shared with authorized emergency admins every 5 seconds."
-                : "Location is captured before the LiveKit stream starts and stored with the evidence timeline."),
+                ? (locationStatusMessage ??
+                    "Your live location is shared with authorized emergency admins while this stream is active.")
+                : "Location is acquired in the background while your emergency is created. Precise GPS retry continues automatically."),
           ),
         ],
       ),
@@ -4352,17 +4365,24 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       startingStream = true;
       permissionDenied = false;
       permissionError = null;
+      locationStatusMessage = "Creating emergency...";
     });
 
+    final appController = appOf(context);
     try {
-      final previewOk = await liveVideoController
+      final previewFuture = liveVideoController
           .startLocalPreview(lowBandwidth: lowBandwidth)
           .timeout(kLiveVideoStartTimeout);
+      final accessFuture =
+          appController.locationCoordinator.resolveImmediateEmergencyAccess();
+
+      final previewOk = await previewFuture;
       if (!mounted) return;
       if (!previewOk) {
         setState(() {
           permissionDenied = true;
           permissionError = liveVideoController.errorMessage;
+          locationStatusMessage = "Video unavailable";
         });
         if (liveVideoController.errorMessage != null) {
           showAppSnackBar(context, liveVideoController.errorMessage!,
@@ -4371,34 +4391,34 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         return;
       }
 
-      final outcome = await captureLocationOutcome(
-          accuracy:
-              lowBandwidth ? LocationAccuracy.medium : LocationAccuracy.high);
+      setState(() => locationStatusMessage = "Getting location...");
+      final access = await accessFuture;
       if (!mounted) return;
-      if (outcome.position == null) {
-        final message = locationFailureMessage(outcome.result);
-        setState(() {
-          permissionDenied = true;
-          permissionError = message;
-        });
-        showAppSnackBar(context, message, isError: true);
-        return;
-      }
 
-      final position = outcome.position!;
-      final appController = appOf(context);
-      final draft = buildIncidentDraft(
-        type: IncidentType.emergency,
-        description: "Live emergency video started with GPS.",
-        position: position,
-        notifyEmergencyContacts: true,
-        title: "Live emergency video",
-      );
+      final draft = access.hasFix
+          ? buildIncidentDraft(
+              type: IncidentType.emergency,
+              description: "Live emergency video started with GPS.",
+              position: access.position!,
+              notifyEmergencyContacts: true,
+              title: "Live emergency video",
+            )
+          : buildEmergencyIncidentDraft(
+              access: access,
+              type: IncidentType.emergency,
+              description:
+                  "Live emergency video started while location is pending.",
+              notifyEmergencyContacts: true,
+              title: "Live emergency video",
+            );
+
+      setState(() => locationStatusMessage = "Creating emergency...");
       final submission = await appController
           .submitIncident(draft)
           .timeout(kLiveVideoStartTimeout);
       if (!mounted) return;
       if (!submission.isSuccess || submission.incidentId == null) {
+        setState(() => locationStatusMessage = "Emergency submission failed");
         showAppSnackBar(
             context,
             submission.userMessage ??
@@ -4408,34 +4428,62 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       }
 
       activeIncidentId = submission.incidentId;
+      if (access.hasFix) {
+        latestPosition = access.position;
+        lastCapturedAt = access.position!.timestamp;
+      }
       setState(() {
-        latestPosition = position;
-        lastCapturedAt = position.timestamp;
         roomName = "eye-incident-$activeIncidentId";
+        locationStatusMessage = access.hasFix
+            ? "Starting secure video..."
+            : emergencyLocationRetryMessage(access);
       });
 
-      final accessToken = appController.session?.accessToken ??
-          (theEyeAccessToken.isNotEmpty ? theEyeAccessToken : null);
+      if (!access.hasFix) {
+        showAppSnackBar(context, emergencyLocationRetryMessage(access));
+      }
+
       final envelope = await apiClient
           .startLiveVideo(
             incidentId: activeIncidentId!,
             payload: TheEyePayloads.liveVideoStart(
-                position: position, lowBandwidthMode: lowBandwidth),
-            accessToken: accessToken,
+              position: access.position,
+              lowBandwidthMode: lowBandwidth,
+            ),
+            accessToken: appController.accessToken!,
           )
           .timeout(kLiveVideoStartTimeout);
       final startResult = LiveVideoStartResult.fromResponse(envelope);
       liveSessionId = startResult.sessionId;
       roomName = startResult.roomName;
+
+      await appController.startIncidentLocationTracking(
+        activeIncidentId!,
+        liveVideoSessionId: liveSessionId,
+      );
+      _locationListener ??= (fix) {
+        if (!mounted) return;
+        setState(() {
+          latestPosition = fix.toPosition();
+          lastCapturedAt = fix.capturedAt.toLocal();
+          locationStatusMessage = fix.isCached
+              ? cachedLocationUserMessage(fix.ageSeconds)
+              : "Emergency submitted";
+        });
+      };
+      appController.locationCoordinator.addListener(_locationListener!);
+
+      setState(() => locationStatusMessage = "Starting secure video...");
       final connected = await liveVideoController
           .connectPublisher(startResult)
           .timeout(kLiveVideoStartTimeout);
       if (!mounted) return;
       if (!connected) {
+        setState(() => locationStatusMessage = "Video unavailable");
         showAppSnackBar(
             context,
             liveVideoController.errorMessage ??
-                "Unable to join live video room.",
+                "Unable to join live video room. Your emergency was still submitted.",
             isError: true);
         return;
       }
@@ -4444,26 +4492,34 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       setState(() {
         permissionDenied = false;
         permissionError = null;
+        locationStatusMessage = access.hasFix
+            ? "Emergency submitted"
+            : emergencyLocationRetryMessage(access);
       });
       showAppSnackBar(
-          context, "Live stream started. GPS is shared every 5 seconds.");
-      locationTimer?.cancel();
-      locationTimer =
-          Timer.periodic(const Duration(seconds: 5), (_) => _sendGpsUpdate());
+        context,
+        access.hasFix
+            ? "Live stream started. Location updates continue automatically."
+            : emergencyLocationRetryMessage(access),
+      );
     } on TimeoutException {
       if (!mounted) return;
+      setState(() => locationStatusMessage = "Video unavailable");
       showAppSnackBar(context,
           "Live video start timed out. Check your connection and try again.",
           isError: true);
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       final message = error.statusCode == 503
-          ? "Live video is temporarily unavailable."
+          ? "Live video is temporarily unavailable. Your emergency may still have been submitted."
           : mapLiveVideoApiError(error.statusCode, error.userMessage);
+      setState(() => locationStatusMessage = "Video unavailable");
       showAppSnackBar(context, message, isError: true);
     } catch (_) {
       if (!mounted) return;
-      showAppSnackBar(context, "Live video is temporarily unavailable.",
+      setState(() => locationStatusMessage = "Video unavailable");
+      showAppSnackBar(context,
+          "Live video is temporarily unavailable. Your emergency may still have been submitted.",
           isError: true);
     } finally {
       _streamStartInFlight = false;
@@ -4475,7 +4531,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     if (stoppingStream) return;
     setState(() => stoppingStream = true);
     try {
-      locationTimer?.cancel();
+      final listener = _locationListener;
+      if (listener != null) {
+        appOf(context).locationCoordinator.removeListener(listener);
+        _locationListener = null;
+      }
       if (liveSessionId.isNotEmpty) {
         try {
           final accessToken = appOf(context).session?.accessToken ??
@@ -4497,33 +4557,6 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     } finally {
       if (mounted) setState(() => stoppingStream = false);
     }
-  }
-
-  Future<void> _sendGpsUpdate() async {
-    final position = await _captureLocation();
-    if (position == null || !mounted || liveSessionId.isEmpty) return;
-    setState(() {
-      latestPosition = position;
-      lastCapturedAt = position.timestamp;
-    });
-    try {
-      final accessToken = appOf(context).session?.accessToken ??
-          (theEyeAccessToken.isNotEmpty ? theEyeAccessToken : null);
-      await apiClient.postLiveVideoLocation(
-        sessionId: liveSessionId,
-        payload: TheEyePayloads.liveVideoLocationUpdate(position: position),
-        accessToken: accessToken,
-      );
-    } catch (_) {
-      unawaited(appOf(context).loadNotificationsFromApi(refresh: true));
-    }
-  }
-
-  Future<Position?> _captureLocation() async {
-    final outcome = await captureLocationOutcome(
-        accuracy:
-            lowBandwidth ? LocationAccuracy.medium : LocationAccuracy.high);
-    return outcome.position;
   }
 }
 

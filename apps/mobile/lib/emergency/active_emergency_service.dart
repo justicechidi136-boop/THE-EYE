@@ -55,7 +55,8 @@ class ActiveEmergencyService {
 
     final snapshot = ActiveEmergencySnapshot.fromJson(detail, silent: silent);
 
-    await _store.saveActiveIncident(incidentId, silent: snapshot.silent || silent);
+    await _store.saveActiveIncident(incidentId,
+        silent: snapshot.silent || silent);
 
     DateTime? lastLocationAt;
     try {

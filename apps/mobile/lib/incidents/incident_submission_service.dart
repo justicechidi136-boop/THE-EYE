@@ -246,6 +246,8 @@ class IncidentSubmissionService {
       missingPerson: draft.missingPerson?.toJson(),
       stolenVehicle: draft.stolenVehicle?.toJson(),
       capturedAt: draft.capturedAt.toUtc().toIso8601String(),
+      locationMetadata:
+          draft.locationMetadata.isEmpty ? null : draft.locationMetadata,
     );
   }
 
