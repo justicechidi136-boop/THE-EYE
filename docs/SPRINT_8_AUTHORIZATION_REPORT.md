@@ -128,6 +128,9 @@
 |----|-------------|
 | DEP-001 | Staging VPS not redeployed to certified commit lineage (post–PR #22 @ `cd13a80`) |
 | DEP-002 | GitHub `staging` environment missing `vars.NEXT_PUBLIC_API_BASE_URL` — Deploy [30048809537](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30048809537) failed |
+| DEP-003 | Deploy gate rejects valid staging URL `https://staging-api.theeye.com.ng/v1` (substring match on `api.theeye.com.ng`) — Deploy [30104864524](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30104864524) failed after PR #24 merge @ `131e125` | RESOLVED |
+| DEP-004 | GitHub `staging` environment missing `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH` — Deploy [30161689343](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30161689343) failed; VPS SHA uncertified | OPEN |
+| SRB-031–037 | Post-update runtime blockers (PR #26 @ `c59d837`) — CI verified [30160196196](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30160196196); deploy blocked; device QA pending |
 | SRB-020 | Mobile location permission — CI verified; device QA pending |
 | SRB-021 | Watch location permission — CI verified; watch QA pending |
 | SRB-022 | Live Video jurisdiction — CI verified; device QA pending (depends SRB-020 + VPS deploy) |
@@ -200,13 +203,14 @@ All tracked as **NOT TESTED**, not closed.
 
 Mandatory next actions (strict order):
 
-1. **Set** GitHub `staging` environment variable `NEXT_PUBLIC_API_BASE_URL=https://staging-api.theeye.com.ng/v1`.  
-2. **Deploy** VPS to `703be04` (or approved descendant) via Deploy workflow or manual SSH per `STAGING_DEPLOYMENT.md` with backup.  
-3. **Rebuild** mobile APK from deployed commit; install on physical Android via ADB.  
-4. **Execute** Gate A (25) and Gate B (20) with evidence.  
-5. **Obtain explicit merge approval for PR #18** (CI green @ `2b0db6e`); merge/deploy; Gate C on hardware.  
-6. **Complete** Gate D fault-injection on certified runtime.  
-7. **Reissue** this report.
+1. **Fix DEP-003** — update staging deploy gate to allow `staging-api.theeye.com.ng/v1` (not production `api.theeye.com.ng`).  
+2. **Deploy** VPS to `131e125` (PR #24 merge) via Deploy workflow or manual SSH per `STAGING_DEPLOYMENT.md`.  
+3. **Build certification APKs** from deployed commit only; discard prior local APK hashes.  
+4. **Execute** SRB-009 mobile police locator device QA and SRB-025 dark-mode device QA on physical hardware.  
+5. **Execute** Gate A (25) and Gate B (20) with evidence.  
+6. **Obtain explicit merge approval for PR #18** (CI green @ `2b0db6e`); merge/deploy; Gate C on hardware.  
+7. **Complete** Gate D fault-injection on certified runtime.  
+8. **Reissue** this report.
 
 **Do not** create Sprint 8 branch. **Do not** begin production-readiness implementation.
 

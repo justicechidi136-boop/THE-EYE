@@ -181,16 +181,25 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | SRB-006 | P0 | SOS/report termination — per-type device QA | NOT TESTED |
 | SRB-012 | P0 | Admin logout — live browser QA pending | NOT TESTED |
 | SRB-008 | P0 | LiveKit room join or honest disable | NOT TESTED |
-| SRB-009 | P1 | Police hybrid locator (verified DB + Google fallback) | CODE FIXED — CI VERIFIED — Google provider DISABLED on staging — DEVICE QA PENDING |
-| SRB-025 | P1 | Dark-mode green text accessibility (semantic orange tokens) | CODE FIXED — CI VERIFIED — DEVICE QA PENDING |
+| SRB-009 | P1 | Police hybrid locator (verified DB + Google fallback) | CODE FIXED — CI VERIFIED — API HTTP VERIFIED — DEVICE QA PENDING |
+| SRB-025 | P1 | Dark-mode green text accessibility (semantic orange tokens) | CODE FIXED — CI VERIFIED (PR #24 @ 131e125) — DEVICE QA PENDING |
 | SRB-011 | P1 | Theme contrast device pass | NOT TESTED |
 | SRB-020 | P0 | Mobile location permission lifecycle | CI VERIFIED — DEVICE QA PENDING |
 | SRB-021 | P0 | Watch location permission lifecycle | CI VERIFIED — WATCH QA PENDING |
 | SRB-022 | P0 | Live Video jurisdiction resolution | CI VERIFIED — DEVICE QA PENDING |
 | SRB-023 | P1 | Police back navigation | CI VERIFIED — DEVICE QA PENDING |
 | SRB-024 | P0/P1 | Google-linked account recovery | CI VERIFIED — DEVICE QA PENDING |
+| SRB-031 | P1 | Dark-mode surface/input contrast | CODE FIXED — CI VERIFIED (PR #26 @ c59d837) — DEPLOY BLOCKED — DEVICE QA PENDING |
+| SRB-032 | P1 | Google auth error classification | CODE FIXED — CI VERIFIED — DEPLOY BLOCKED — DEVICE QA PENDING |
+| SRB-033 | P1 | Account recovery email link generation | CODE FIXED — CI VERIFIED — DEPLOY BLOCKED — DEVICE QA PENDING |
+| SRB-034 | P0 | SOS Live Video crash prevention | CODE FIXED — CI VERIFIED — DEPLOY BLOCKED — DEVICE QA PENDING |
+| SRB-035 | P1 | Neighborhood Watch API/seed/runtime | CODE FIXED — CI VERIFIED — DEPLOY BLOCKED — DEVICE QA PENDING |
+| SRB-036 | P1 | Family Circle relationship persistence | CODE FIXED — CI VERIFIED — DEPLOY BLOCKED — DEVICE QA PENDING |
+| SRB-037 | P1 | Real SOS device state (no simulation) | CODE FIXED — CI VERIFIED — DEPLOY BLOCKED — DEVICE QA PENDING |
 | DEP-001 | P0 | VPS not redeployed to certified staging lineage (`cd13a80` post–PR #22) | OPEN |
-| DEP-002 | P0 | GitHub `staging` env missing `NEXT_PUBLIC_API_BASE_URL` | OPEN |
+| DEP-002 | P0 | GitHub `staging` env missing `NEXT_PUBLIC_API_BASE_URL` | RESOLVED |
+| DEP-003 | P0 | Deploy gate rejected valid staging API URL | RESOLVED (PR #25 lineage) |
+| DEP-004 | P0 | GitHub `staging` env missing `DEPLOY_*` SSH secrets — Deploy [30161689343](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30161689343) | OPEN |
 | PR18-001 | P0 | Sprint 7 watch not merged (PR #18 rebased @ `2b0db6e`, CI green, not merged) | OPEN |
 
 ---

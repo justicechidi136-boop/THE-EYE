@@ -595,14 +595,28 @@ Note: Nationwide verified official police dataset remains incomplete. Google sup
 
 ## Final status (SRB-031–037)
 
-**CODE COMPLETE — DEVICE QA PENDING**
+**CI VERIFIED — DEPLOY BLOCKED (DEP-004) — DEVICE QA PENDING**
 
-Branch: `fix/runtime-srb031-037`. No physical-device reproduction matrix captured yet. No certification APK built from this branch. Full CI suites and PR to `staging` not yet run.
+| Milestone | Evidence |
+|---|---|
+| Feature branch | `fix/runtime-srb031-037` @ `75c11b3` |
+| PR | [#26](https://github.com/justicechidi136-boop/THE-EYE/pull/26) merged to `staging` @ `c59d837` (2026-07-25) |
+| CI (PR) | [30159904843](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30159904843) — API 346/346, mobile 170/170, watch 63/63 |
+| Validate Staging (post-merge) | [30160196196](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30160196196) green @ `c59d837` |
+| Deploy | **BLOCKED** — [30161689343](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30161689343) failed **DEP-004**: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH` not configured in GitHub `staging` environment |
+| VPS HEAD | **NOT SSH-VERIFIED** — cannot confirm `git rev-parse HEAD` = `origin/staging` |
+| Certification APK | **NOT BUILT** — feature-branch artifact classified **VALIDATION ARTIFACT — NOT CERTIFICATION BUILD** (SHA-256 `C3EDA053…`) |
+| Physical QA | **NOT TESTED** — no `adb` on release controller host |
+
+**SRB progression:** CODE FIXED → **CI VERIFIED** → *(DEPLOY blocked)* → DEVICE VERIFIED pending.
 
 Remaining before **DEVICE VERIFIED**:
-- Deploy staging with `ACCOUNT_RECOVERY_LINK_BASE_URL` and re-seed citizen NW data
-- Build staging APK from deployed SHA
-- Phase 12 physical QA on clean-install device for all seven blockers
+1. Configure GitHub `staging` secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`
+2. Run Deploy workflow (`--ref staging`) targeting merge SHA `c59d837` (or current `origin/staging`)
+3. SSH-verify VPS: `git rev-parse HEAD`, `docker compose ps`, migrations, idempotent NW seed
+4. Set VPS `ACCOUNT_RECOVERY_LINK_BASE_URL=https://staging-app.theeye.com.ng/account-recovery` + SMTP vars
+5. Register staging release SHA-1/SHA-256 in Firebase `the-eye-2stg`
+6. Build **CERTIFICATION STAGING APK** from deployed SHA only; clean-install; Phase 12 QA
 
 **Sprint 8:** NOT AUTHORIZED until SRB-031–037 reach DEVICE VERIFIED.
 
