@@ -84,8 +84,8 @@ abstract final class TheEyePayloads {
     required String deviceId,
     String? deviceSecret,
     required bool standaloneCellular,
-    required int batteryLevel,
-    required int signalStrength,
+    int? batteryLevel,
+    int? signalStrength,
   }) {
     return {
       "deviceId": deviceId,
@@ -96,8 +96,8 @@ abstract final class TheEyePayloads {
       "sourceMode": standaloneCellular
           ? SmartwatchConnectivityMode.standaloneCellular
           : SmartwatchConnectivityMode.pairedPhone,
-      "batteryLevel": batteryLevel,
-      "signalStrength": signalStrength,
+      if (batteryLevel != null) "batteryLevel": batteryLevel,
+      if (signalStrength != null) "signalStrength": signalStrength,
     };
   }
 
@@ -106,8 +106,8 @@ abstract final class TheEyePayloads {
     required String deviceId,
     String? deviceSecret,
     required bool standaloneCellular,
-    required int batteryLevel,
-    required int signalStrength,
+    int? batteryLevel,
+    int? signalStrength,
     required String emergencyMode,
     String description = "Smartwatch SOS triggered from citizen mobile app",
     int longPressDurationMs = TheEyeEnums.sosLongPressMinMs,
@@ -132,8 +132,8 @@ abstract final class TheEyePayloads {
     required String deviceId,
     String? deviceSecret,
     required bool standaloneCellular,
-    required int batteryLevel,
-    required int signalStrength,
+    int? batteryLevel,
+    int? signalStrength,
     String firmwareVersion = "1.0.1",
     String firmwareSignatureStatus = FirmwareSignatureStatus.valid,
   }) {
@@ -146,8 +146,8 @@ abstract final class TheEyePayloads {
           : SmartwatchConnectivityMode.pairedPhone,
       "pairedPhoneAvailable": !standaloneCellular,
       "internetAvailable": true,
-      "batteryLevel": batteryLevel,
-      "signalStrength": signalStrength,
+      if (batteryLevel != null) "batteryLevel": batteryLevel,
+      if (signalStrength != null) "signalStrength": signalStrength,
       "firmwareVersion": firmwareVersion,
       "firmwareSignatureStatus": firmwareSignatureStatus,
     };
