@@ -164,9 +164,9 @@ jobs:
 
   deploy:
     needs: build
+    if: ${{ needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
-    if: github.event_name == 'workflow_dispatch' && needs.build.result == 'success'
     steps:
       - uses: actions/checkout@v4
 
