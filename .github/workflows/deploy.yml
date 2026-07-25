@@ -162,15 +162,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    needs: build
-    if: ${{ needs.build.result == 'success' }}
-    runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
-    steps:
-      - uses: actions/checkout@v4
+      - name: Require VPS deploy secrets (staging)
+        if: github.event.inputs.environment == 'staging'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::GitHub staging environment secret ${name} is not configured (DEP-004)."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Configure DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, and DEPLOY_PATH in the staging environment before certifying VPS deployment."
+            exit 1
+          fi
 
-      - name: Deploy over SSH
+      - name: Deploy staging over SSH
+        if: github.event.inputs.environment == 'staging'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -180,20 +194,27 @@ jobs:
           script: |
             set -euo pipefail
             cd ${{ secrets.DEPLOY_PATH }}
-            export THE_EYE_IMAGE_TAG=${{ needs.build.outputs.image_tag }}
-            export ADMIN_WEB_APP_ENV=${{ github.event.inputs.environment }}
+            export THE_EYE_IMAGE_TAG=${{ steps.meta.outputs.tag }}
+            export ADMIN_WEB_APP_ENV=staging
             export NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
             git fetch --tags origin
             git checkout ${{ github.sha }}
-            docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web || true
+            echo "VPS HEAD: $(git rev-parse HEAD)"
+            git status --short
+            docker compose -f infra/docker/docker-compose.yml --env-file .env ps
+            docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web notification-worker || true
             docker compose -f infra/docker/docker-compose.yml --env-file .env build api admin-web
-            ${{ github.event.inputs.run_migrations && 'docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate' || 'echo "Skipping migrations"' }}
-            docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --wait
+            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate
+            docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate api notification-worker admin-web
+            docker compose -f infra/docker/docker-compose.yml --env-file .env ps
             curl -fsS http://127.0.0.1/healthz
             curl -fsSk https://127.0.0.1/v1/health/ready || curl -fsS http://127.0.0.1/v1/health/ready
 
-      - name: Post-deploy smoke (optional)
-        if: ${{ vars.SMOKE_BASE_URL != '' }}
-        run: |
-          curl -fsS "${{ vars.SMOKE_BASE_URL }}/v1/health"
-          curl -fsS "${{ vars.SMOKE_BASE_URL }}/v1/health/ready"
+  deploy:
+    needs: build
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Deprecated deploy job
+        run: echo "SSH deploy runs in build job for staging."
