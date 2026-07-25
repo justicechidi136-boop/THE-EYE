@@ -833,6 +833,23 @@ class TheEyeApiClient {
     );
   }
 
+  Future<IncidentReportResponse> reportEmergency({
+    required Map<String, Object?> payload,
+    String? accessToken,
+    String? clientSubmissionId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    return _parseIncidentReportResponse(
+      await postJson(
+        TheEyeApiPaths.incidentsEmergency,
+        payload,
+        accessToken: accessToken,
+        clientSubmissionId: clientSubmissionId,
+        timeout: timeout,
+      ),
+    );
+  }
+
   Future<IncidentReportResponse> reportSos({
     required Map<String, Object?> payload,
     String? accessToken,

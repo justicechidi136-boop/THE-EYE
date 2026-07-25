@@ -102,6 +102,23 @@ describe("JurisdictionResolutionService", () => {
     expect(result.resolutionSource).toBe("global_unassigned_queue");
   });
 
+  it("falls back when PostGIS polygon lookup fails", async () => {
+    prisma.$queryRaw
+      .mockRejectedValueOnce(new Error("function st_covers(geography, geography) does not exist"))
+      .mockRejectedValueOnce(new Error("function st_distance(geography, geography) does not exist"));
+    prisma.profile.findUnique.mockResolvedValue(null);
+    prisma.jurisdiction.findFirst.mockResolvedValue({
+      id: "j4",
+      country: "Nigeria",
+      state: "Lagos",
+      lga: "Ikeja",
+    });
+
+    const result = await service.resolve({ latitude: 6.6018, longitude: 3.3515 });
+    expect(result.resolutionStatus).toBe(JurisdictionResolutionStatus.OutsideSupportedJurisdiction);
+    expect(result.resolutionSource).toBe("default_hierarchy");
+  });
+
   it("throws only when jurisdiction table is empty", async () => {
     prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     prisma.profile.findUnique.mockResolvedValue(null);

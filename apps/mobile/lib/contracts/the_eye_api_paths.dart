@@ -22,6 +22,7 @@ abstract final class TheEyeApiPaths {
       "/smartwatch/devices/$deviceId/offline-sync";
 
   static const incidentsReport = "/incidents/report";
+  static const incidentsEmergency = "/incidents/emergency";
   static const incidentsSos = "/incidents/sos";
   static const incidents = "/incidents";
   static String incidentDetail(String incidentId) => "/incidents/$incidentId";

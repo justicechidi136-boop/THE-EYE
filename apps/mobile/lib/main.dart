@@ -4452,6 +4452,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
               type: IncidentType.emergency,
               description: "Live emergency video started with GPS.",
               position: access.position!,
+              anonymous: false,
               notifyEmergencyContacts: true,
               title: "Live emergency video",
             )
@@ -4460,6 +4461,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
               type: IncidentType.emergency,
               description:
                   "Live emergency video started while location is pending.",
+              anonymous: false,
               notifyEmergencyContacts: true,
               title: "Live emergency video",
             );
