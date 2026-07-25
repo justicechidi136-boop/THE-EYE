@@ -1,5 +1,5 @@
 import { AdminRoleName, adminRolePermissions } from "@the-eye/shared";
-import { CommunityLevel, CommunityRoleName, CommunityVisibility } from "@prisma/client";
+import { CommunityLevel, CommunityRoleName, CommunityVisibility, PatrolStatus } from "@prisma/client";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword, hashToken, randomToken } from "../src/common/auth/crypto";
 import { assertStagingOnlySeedAllowed } from "./staging-guard";
@@ -161,6 +161,45 @@ async function ensureCommunityRoles(communityId: string) {
   });
 
   return moderatorRole;
+}
+
+async function ensureCitizenCommunityMembership(userId: string, communityId: string) {
+  const residentRole = await prisma.communityRole.findFirst({
+    where: { communityId, name: CommunityRoleName.Resident },
+  });
+  await prisma.communityMembership.upsert({
+    where: { communityId_userId: { communityId, userId } },
+    update: {
+      status: "Approved",
+      approvedAt: new Date(),
+      roleId: residentRole?.id ?? null,
+    },
+    create: {
+      communityId,
+      userId,
+      roleId: residentRole?.id ?? null,
+      status: "Approved",
+      approvedAt: new Date(),
+    },
+  });
+}
+
+async function ensureActivePatrolSchedule(communityId: string) {
+  const existing = await prisma.patrolSchedule.findFirst({
+    where: { communityId, status: PatrolStatus.Active },
+  });
+  if (existing) return existing;
+
+  const now = new Date();
+  return prisma.patrolSchedule.create({
+    data: {
+      communityId,
+      title: "Staging evening patrol (QA)",
+      status: PatrolStatus.Active,
+      startsAt: new Date(now.getTime() - 60 * 60 * 1000),
+      endsAt: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+    },
+  });
 }
 
 async function upsertAdminAccount(spec: StagingTestAccountSpec) {
@@ -327,6 +366,11 @@ async function seedAccount(spec: StagingTestAccountSpec) {
   }
 
   const user = await upsertCitizenAccount(spec);
+  const jurisdiction = await upsertJurisdiction("lga");
+  const community = await upsertCommunity(jurisdiction.id);
+  await ensureCommunityRoles(community.id);
+  await ensureCitizenCommunityMembership(user.id, community.id);
+  await ensureActivePatrolSchedule(community.id);
   let deviceId: string | null = null;
   if (spec.key === "WATCH_PAIRED_CITIZEN") {
     deviceId = readWatchDeviceId();

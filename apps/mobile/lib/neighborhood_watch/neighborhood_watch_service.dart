@@ -1,5 +1,6 @@
 import "dart:convert";
 
+import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
 
@@ -316,7 +317,7 @@ class CommunityPage<T> {
 class NeighborhoodWatchService {
   NeighborhoodWatchService({TheEyeApiClient? apiClient})
       : _apiClient = apiClient ??
-            TheEyeApiClient(baseUrl: TheEyeApiPaths.defaultBaseUrl);
+            TheEyeApiClient(baseUrl: TheEyeApiConfig.resolveBaseUrl());
 
   final TheEyeApiClient _apiClient;
 
