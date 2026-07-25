@@ -12,6 +12,7 @@ abstract final class TheEyeApiPaths {
       "/live-video/sessions/$sessionId/location";
 
   static const smartwatchRegister = "/smartwatch/devices/register";
+  static const smartwatchDevices = "/smartwatch/devices";
   static String smartwatchGps(String deviceId) =>
       "/smartwatch/devices/$deviceId/gps";
   static const smartwatchSos = "/smartwatch/sos";

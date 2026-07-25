@@ -83,6 +83,65 @@ class EmergencyContact {
   }
 }
 
+class SmartwatchDeviceRecord {
+  const SmartwatchDeviceRecord({
+    required this.id,
+    required this.deviceId,
+    required this.displayName,
+    required this.connectivityMode,
+    required this.criticalAlertsEnabled,
+    required this.failoverEnabled,
+    required this.isActive,
+    required this.isOnline,
+    this.batteryLevel,
+    this.signalStrength,
+    this.lastLatitude,
+    this.lastLongitude,
+    this.lastGpsAccuracy,
+    this.lastGpsAt,
+  });
+
+  final String id;
+  final String deviceId;
+  final String? displayName;
+  final String connectivityMode;
+  final bool criticalAlertsEnabled;
+  final bool failoverEnabled;
+  final bool isActive;
+  final bool isOnline;
+  final int? batteryLevel;
+  final int? signalStrength;
+  final double? lastLatitude;
+  final double? lastLongitude;
+  final double? lastGpsAccuracy;
+  final DateTime? lastGpsAt;
+
+  factory SmartwatchDeviceRecord.fromJson(Map<String, dynamic> json) {
+    double? parseDouble(Object? value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString());
+    }
+
+    return SmartwatchDeviceRecord(
+      id: (json["id"] as String?) ?? "",
+      deviceId: (json["deviceId"] as String?) ?? "",
+      displayName: json["displayName"] as String?,
+      connectivityMode: (json["connectivityMode"] as String?) ?? "PairedPhone",
+      criticalAlertsEnabled: json["criticalAlertsEnabled"] as bool? ?? true,
+      failoverEnabled: json["failoverEnabled"] as bool? ?? true,
+      isActive: json["isActive"] as bool? ?? false,
+      isOnline: json["isOnline"] as bool? ?? false,
+      batteryLevel: (json["batteryLevel"] as num?)?.toInt(),
+      signalStrength: (json["signalStrength"] as num?)?.toInt(),
+      lastLatitude: parseDouble(json["lastLatitude"]),
+      lastLongitude: parseDouble(json["lastLongitude"]),
+      lastGpsAccuracy: parseDouble(json["lastGpsAccuracy"]),
+      lastGpsAt: DateTime.tryParse((json["lastGpsAt"] as String?) ?? ""),
+    );
+  }
+}
+
 class KycSubmissionResult {
   const KycSubmissionResult({
     required this.id,
@@ -948,6 +1007,25 @@ class TheEyeApiClient {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw IncidentApiException.fromResponse(response);
     }
+  }
+
+  Future<List<SmartwatchDeviceRecord>> listSmartwatchDevices({
+    required String accessToken,
+  }) async {
+    final response = await getJson(
+      TheEyeApiPaths.smartwatchDevices,
+      accessToken: accessToken,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AuthApiException.fromResponse(response);
+    }
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded["data"] : null;
+    if (data is! List) return const [];
+    return data
+        .map((item) => SmartwatchDeviceRecord.fromJson(
+            Map<String, dynamic>.from(item as Map)))
+        .toList();
   }
 
   Future<void> registerSmartwatch(Map<String, Object?> payload,

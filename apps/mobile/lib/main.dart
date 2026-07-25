@@ -101,6 +101,7 @@ export "location/location_permission_service.dart"
         resolveLocationPermissionState,
         sosLocationUserMessage;
 import "theme/the_eye_theme.dart";
+import "theme/eye_theme_builder.dart";
 import "theme/theme_preferences.dart";
 import "theme/theme_provider.dart";
 import "widgets/section_card.dart";
@@ -853,14 +854,11 @@ ThemeData buildTheme(bool highContrast) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-      filled: true,
-      fillColor: BrandColors.lightSurface,
-      errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: BrandColors.danger, width: 2)),
-    ),
+    inputDecorationTheme: EyeThemeBuilder.inputDecoration(semantics),
+    textSelectionTheme: EyeThemeBuilder.textSelection(semantics),
+    dialogTheme: EyeThemeBuilder.dialog(semantics),
+    bottomSheetTheme: EyeThemeBuilder.bottomSheet(semantics),
+    navigationBarTheme: EyeThemeBuilder.navigationBar(semantics),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
     ),
@@ -920,14 +918,11 @@ ThemeData buildDarkTheme(bool highContrast) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-      filled: true,
-      fillColor: BrandColors.darkSurfaceMuted,
-      errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: BrandColors.danger, width: 2)),
-    ),
+    inputDecorationTheme: EyeThemeBuilder.inputDecoration(semantics),
+    textSelectionTheme: EyeThemeBuilder.textSelection(semantics),
+    dialogTheme: EyeThemeBuilder.dialog(semantics),
+    bottomSheetTheme: EyeThemeBuilder.bottomSheet(semantics),
+    navigationBarTheme: EyeThemeBuilder.navigationBar(semantics),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
     ),
@@ -2386,60 +2381,42 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
         !socialBusy &&
         _identifierController.text.trim().isNotEmpty &&
         _passwordController.text.isNotEmpty;
+    final semantics = EyeSemanticColors.of(context);
 
     return Scaffold(
-      backgroundColor: BrandColors.lightBackground,
+      backgroundColor: semantics.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 42, 16, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "Welcome back!",
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
-                  color: BrandColors.command,
+                  color: semantics.bodyText,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 "Glad to have you back",
-                style: TextStyle(fontSize: 16, color: BrandColors.ash),
+                style: TextStyle(fontSize: 16, color: semantics.secondaryText),
               ),
               const SizedBox(height: 32),
-              const Text(
-                "Email",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: BrandColors.command,
-                ),
-              ),
+              Text("Email", style: EyeInputTheme.labelStyle(context)),
               const SizedBox(height: 8),
               TextField(
                 controller: _identifierController,
-                decoration: InputDecoration(
+                style: EyeInputTheme.textStyle(context),
+                cursorColor: EyeInputTheme.focusBorderColor(context),
+                decoration: EyeInputTheme.decoration(
+                  context,
                   hintText: "Enter your correct email",
                   errorText: identifierError,
-                  filled: true,
-                  fillColor: Colors.white,
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                        color: BrandColors.authStroke, width: 1),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                        color: BrandColors.accentHover, width: 1),
-                  ),
                 ),
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.username],
@@ -2453,38 +2430,19 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                 },
               ),
               const SizedBox(height: 12),
-              const Text(
-                "Password",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: BrandColors.command,
-                ),
-              ),
+              Text("Password", style: EyeInputTheme.labelStyle(context)),
               const SizedBox(height: 8),
               TextField(
                 controller: _passwordController,
                 obscureText: obscurePassword,
-                decoration: InputDecoration(
+                style: EyeInputTheme.textStyle(context),
+                cursorColor: EyeInputTheme.focusBorderColor(context),
+                decoration: EyeInputTheme.decoration(
+                  context,
                   hintText: "Enter password",
                   errorText: passwordError,
-                  filled: true,
-                  fillColor: Colors.white,
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                        color: BrandColors.authStroke, width: 1),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                        color: BrandColors.accentHover, width: 1),
-                  ),
                   suffixIcon: IconButton(
                     onPressed: () =>
                         setState(() => obscurePassword = !obscurePassword),
@@ -2492,7 +2450,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                       obscurePassword
                           ? Icons.visibility_off_outlined
                           : Icons.visibility_outlined,
-                      color: BrandColors.ash,
+                      color: semantics.secondaryText,
                     ),
                   ),
                 ),
@@ -4193,6 +4151,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   DateTime? lastCapturedAt;
   EmergencyLocationListener? _locationListener;
   AppController? _appController;
+  bool _disposed = false;
 
   @override
   void initState() {
@@ -4208,10 +4167,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   }
 
   Future<void> _initializeLiveVideo() async {
-    await _preparePreview();
-    if (!mounted || !widget.autoStartStream || streaming) return;
+    if (!widget.autoStartStream) {
+      await _preparePreview();
+    }
+    if (!mounted || _disposed || !widget.autoStartStream || streaming) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || streaming) return;
+      if (!mounted || _disposed || streaming) return;
       unawaited(_startStream(context));
     });
   }
@@ -4234,6 +4195,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
   @override
   void dispose() {
+    _disposed = true;
     final listener = _locationListener;
     final appController = _appController;
     if (listener != null && appController != null) {
@@ -4582,7 +4544,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           isError: true);
     } finally {
       _streamStartInFlight = false;
-      if (mounted) setState(() => startingStream = false);
+      if (mounted && !_disposed) setState(() => startingStream = false);
     }
   }
 
@@ -5480,8 +5442,7 @@ class SmartwatchDeviceScreen extends StatefulWidget {
 
 class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   final TheEyeApiClient apiClient = TheEyeApiClient(baseUrl: theEyeApiUrl);
-  final TextEditingController deviceIdController =
-      TextEditingController(text: "EYE-WATCH-SEED-001");
+  final TextEditingController deviceIdController = TextEditingController();
   final TextEditingController deviceSecretController = TextEditingController();
   final TextEditingController pairingCodeController = TextEditingController();
   bool standaloneCellular = false;
@@ -5489,13 +5450,79 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   bool failoverEnabled = true;
   String pairingMethod = SmartwatchPairingMethod.pairingCode;
   String emergencyMode = SmartwatchEmergencyMode.normalSos;
-  int batteryLevel = 82;
-  int signalStrength = 74;
+  int? batteryLevel;
+  int? signalStrength;
   bool locationDenied = false;
   bool sending = false;
-  String status = "No device activity yet";
+  bool loadingDevices = false;
+  String? loadError;
+  String status = "No paired device loaded yet";
   Position? latestPosition;
+  SmartwatchDeviceRecord? selectedDevice;
   final List<String> sosHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => unawaited(_loadDevices()));
+  }
+
+  Future<void> _loadDevices() async {
+    final token = appOf(context).accessToken;
+    if (token == null) return;
+    setState(() {
+      loadingDevices = true;
+      loadError = null;
+    });
+    try {
+      final devices = await apiClient.listSmartwatchDevices(accessToken: token);
+      if (!mounted) return;
+      SmartwatchDeviceRecord? device;
+      if (devices.isNotEmpty) {
+        device = devices.firstWhere((item) => item.isActive,
+            orElse: () => devices.first);
+      }
+      setState(() {
+        selectedDevice = device;
+        loadingDevices = false;
+        if (device != null) {
+          deviceIdController.text = device.deviceId;
+          standaloneCellular = device.connectivityMode == "StandaloneCellular";
+          criticalAlerts = device.criticalAlertsEnabled;
+          failoverEnabled = device.failoverEnabled;
+          batteryLevel = device.batteryLevel;
+          signalStrength = device.signalStrength;
+          status = device.isOnline
+              ? "Device online"
+              : "Device paired — awaiting heartbeat";
+          if (device.lastLatitude != null && device.lastLongitude != null) {
+            latestPosition = Position(
+              latitude: device.lastLatitude!,
+              longitude: device.lastLongitude!,
+              timestamp: device.lastGpsAt ?? DateTime.now(),
+              accuracy: device.lastGpsAccuracy ?? 0,
+              altitude: 0,
+              altitudeAccuracy: 0,
+              heading: 0,
+              headingAccuracy: 0,
+              speed: 0,
+              speedAccuracy: 0,
+            );
+          }
+        } else {
+          status = "No paired SOS device found. Pair a watch to continue.";
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        loadingDevices = false;
+        loadError = "Unable to load SOS devices from staging.";
+        status = "Device list unavailable";
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -5542,10 +5569,22 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
           const SizedBox(height: 16),
           SmartwatchCompanionPreview(
             standalone: standaloneCellular,
-            batteryLevel: batteryLevel,
-            signalStrength: signalStrength,
+            batteryLevel: batteryLevel ?? 0,
+            signalStrength: signalStrength ?? 0,
             sosActive: emergencyMode != SmartwatchEmergencyMode.normalSos,
+            hasTelemetry: batteryLevel != null && signalStrength != null,
           ),
+          if (loadingDevices)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (loadError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(loadError!,
+                  style: const TextStyle(color: BrandColors.danger)),
+            ),
           const SizedBox(height: 16),
           SectionCard(
             title: "Pair smartwatch",
@@ -5630,8 +5669,13 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
                     "Critical alerts", criticalAlerts ? "Enabled" : "Disabled"),
                 ProfileRow(
                     "Failover", failoverEnabled ? "Enabled" : "Disabled"),
-                ProfileRow("Battery", "$batteryLevel%"),
-                ProfileRow("Signal", "$signalStrength%"),
+                ProfileRow("Battery",
+                    batteryLevel == null ? "Unavailable" : "$batteryLevel%"),
+                ProfileRow(
+                    "Signal",
+                    signalStrength == null
+                        ? "Unavailable"
+                        : "$signalStrength%"),
                 ProfileRow(
                     "Latest GPS",
                     latestPosition == null
@@ -5761,6 +5805,7 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
       ),
       "Device paired — watch will receive credentials shortly",
     );
+    await _loadDevices();
   }
 
   Future<void> _sendGpsUpdate() async {
@@ -6723,6 +6768,19 @@ class PatrolsScreen extends StatefulWidget {
 }
 
 class _PatrolsScreenState extends State<PatrolsScreen> {
+  List<PatrolScheduleItem> _activePatrols(List<PatrolScheduleItem> patrols) {
+    return patrols
+        .where((patrol) => patrol.status.toLowerCase() == "active")
+        .toList();
+  }
+
+  PatrolScheduleItem? _selectCheckpointPatrol(
+      List<PatrolScheduleItem> patrols) {
+    final active = _activePatrols(patrols);
+    if (active.isNotEmpty) return active.first;
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -6741,12 +6799,19 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
 
   Future<void> _logCheckpoint() async {
     final controller = appOf(context);
-    if (controller.communityPatrols.isEmpty || controller.accessToken == null) {
-      showAppSnackBar(context, "No active patrol schedule available",
-          isError: true);
+    final activePatrol = _selectCheckpointPatrol(controller.communityPatrols);
+    if (activePatrol == null || controller.accessToken == null) {
+      final hasScheduled = controller.communityPatrols.isNotEmpty;
+      showAppSnackBar(
+        context,
+        hasScheduled
+            ? "No active patrol is running right now. Check upcoming schedules or ask a coordinator to start one."
+            : "No patrol schedules are available for your community yet.",
+        isError: true,
+      );
       return;
     }
-    final schedule = controller.communityPatrols.first;
+    final schedule = activePatrol;
     try {
       final location = await captureLocationOutcome();
       if (location.position == null) {
@@ -6773,6 +6838,7 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
+    final activePatrols = _activePatrols(controller.communityPatrols);
     return SafetyScaffold(
       title: "Patrols",
       selectedIndex: 3,
@@ -6798,14 +6864,26 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
                 title: "No patrol schedules",
                 subtitle: "Community patrols will appear here when scheduled.",
               )
-            else
+            else ...[
+              if (activePatrols.isEmpty)
+                const ListTileCard(
+                  leading: Icon(Icons.info_outline),
+                  title: "No active patrol right now",
+                  subtitle:
+                      "Upcoming patrols are listed below. Checkpoints can only be logged during an active patrol you are authorized for.",
+                ),
               ...controller.communityPatrols.map((patrol) => ListTileCard(
-                    leading: const Icon(Icons.route),
+                    leading: Icon(
+                      patrol.status.toLowerCase() == "active"
+                          ? Icons.play_circle
+                          : Icons.route,
+                    ),
                     title: patrol.title,
                     subtitle: "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
                   )),
+            ],
             FilledButton.icon(
-              onPressed: _logCheckpoint,
+              onPressed: activePatrols.isEmpty ? null : _logCheckpoint,
               icon: const Icon(Icons.add_location_alt),
               label: const Text("Log patrol checkpoint"),
             ),
@@ -7566,11 +7644,8 @@ class SafetyScaffold extends StatelessWidget {
         : EyeNavRoutes.selectedIndexForRoute(routeName);
 
     return Scaffold(
-      backgroundColor: useFigmaShell
-          ? (context.isDarkTheme
-              ? Theme.of(context).scaffoldBackgroundColor
-              : EyeTokens.whiteBg)
-          : null,
+      backgroundColor:
+          useFigmaShell ? EyeSemanticColors.of(context).background : null,
       appBar: useFigmaShell
           ? null
           : AppBar(
@@ -7858,6 +7933,7 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
           20, 8, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
@@ -7912,7 +7988,8 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
           const SizedBox(height: 10),
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.black,
+              backgroundColor: semantics.primaryAction,
+              foregroundColor: semantics.primaryActionForeground,
               minimumSize: const Size.fromHeight(EyeTokens.sosButtonHeight),
             ),
             onPressed: sendingAlert ? null : _startSosLiveVideo,
@@ -7920,9 +7997,9 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
             label: const Text("Start SOS live video"),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             "Live video opens the emergency stream screen. GPS and contact alerts are sent when streaming starts.",
-            style: TextStyle(fontSize: 12, color: BrandColors.lightTextMuted),
+            style: TextStyle(fontSize: 12, color: semantics.secondaryText),
           ),
           const SizedBox(height: 10),
           OutlinedButton(
@@ -8330,17 +8407,20 @@ class _ModeCard extends StatelessWidget {
 }
 
 class SmartwatchCompanionPreview extends StatelessWidget {
-  const SmartwatchCompanionPreview(
-      {required this.standalone,
-      required this.batteryLevel,
-      required this.signalStrength,
-      required this.sosActive,
-      super.key});
+  const SmartwatchCompanionPreview({
+    required this.standalone,
+    required this.batteryLevel,
+    required this.signalStrength,
+    required this.sosActive,
+    this.hasTelemetry = true,
+    super.key,
+  });
 
   final bool standalone;
   final int batteryLevel;
   final int signalStrength;
   final bool sosActive;
+  final bool hasTelemetry;
 
   @override
   Widget build(BuildContext context) {
@@ -8395,10 +8475,10 @@ class SmartwatchCompanionPreview extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("Bat $batteryLevel%",
+                  Text(hasTelemetry ? "Bat $batteryLevel%" : "Bat —",
                       style:
                           const TextStyle(color: Colors.white70, fontSize: 10)),
-                  Text("Sig $signalStrength%",
+                  Text(hasTelemetry ? "Sig $signalStrength%" : "Sig —",
                       style:
                           const TextStyle(color: Colors.white70, fontSize: 10)),
                 ],

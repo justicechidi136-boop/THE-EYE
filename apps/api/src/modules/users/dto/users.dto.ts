@@ -69,6 +69,19 @@ export class UpdateCitizenProfileDto {
   phone?: string | null;
 }
 
+export const EMERGENCY_CONTACT_RELATIONSHIPS = [
+  "Parent",
+  "Spouse",
+  "Sibling",
+  "Child",
+  "Guardian",
+  "Relative",
+  "Friend",
+  "Neighbour",
+  "Colleague",
+  "Other",
+] as const;
+
 export class UpsertEmergencyContactDto {
   @ApiProperty({ example: "Chinwe Okeke" })
   @IsString()
@@ -84,7 +97,7 @@ export class UpsertEmergencyContactDto {
 
   @ApiProperty({ example: "Spouse" })
   @IsString()
-  @MinLength(1)
+  @IsIn(EMERGENCY_CONTACT_RELATIONSHIPS)
   @MaxLength(80)
   relationship!: string;
 

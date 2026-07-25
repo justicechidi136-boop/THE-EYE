@@ -5,6 +5,7 @@ import "package:flutter/material.dart";
 import "../app/app_scope.dart";
 import "../brand.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../design_system/eye_input_theme.dart";
 import "../widgets/section_card.dart";
 import "profile_widgets.dart";
 
@@ -156,66 +157,107 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       profileLabeledField(
+                        context: context,
                         label: "First name",
                         field: TextField(
                           controller: _firstNameController,
-                          decoration:
-                              profileFieldDecoration(hintText: "First name"),
+                          style: EyeInputTheme.textStyle(context),
+                          cursorColor: EyeInputTheme.focusBorderColor(context),
+                          decoration: profileFieldDecoration(
+                            context: context,
+                            hintText: "First name",
+                          ),
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "Last name",
                         field: TextField(
                           controller: _lastNameController,
-                          decoration:
-                              profileFieldDecoration(hintText: "Last name"),
+                          style: EyeInputTheme.textStyle(context),
+                          cursorColor: EyeInputTheme.focusBorderColor(context),
+                          decoration: profileFieldDecoration(
+                            context: context,
+                            hintText: "Last name",
+                          ),
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "Phone",
                         field: TextField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
-                          decoration:
-                              profileFieldDecoration(hintText: "+234..."),
+                          style: EyeInputTheme.textStyle(context),
+                          cursorColor: EyeInputTheme.focusBorderColor(context),
+                          decoration: profileFieldDecoration(
+                            context: context,
+                            hintText: "+234...",
+                          ),
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "Address",
                         field: TextField(
                           controller: _addressController,
+                          style: EyeInputTheme.textStyle(context),
+                          cursorColor: EyeInputTheme.focusBorderColor(context),
                           decoration: profileFieldDecoration(
-                              hintText: "Street address"),
+                            context: context,
+                            hintText: "Street address",
+                          ),
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "Country",
                         field: TextField(
                           controller: _countryController,
-                          decoration:
-                              profileFieldDecoration(hintText: "Country"),
+                          style: EyeInputTheme.textStyle(context),
+                          cursorColor: EyeInputTheme.focusBorderColor(context),
+                          decoration: profileFieldDecoration(
+                            context: context,
+                            hintText: "Country",
+                          ),
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "State",
                         field: TextField(
                           controller: _stateController,
-                          decoration: profileFieldDecoration(hintText: "State"),
+                          style: EyeInputTheme.textStyle(context),
+                          cursorColor: EyeInputTheme.focusBorderColor(context),
+                          decoration: profileFieldDecoration(
+                            context: context,
+                            hintText: "State",
+                          ),
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "LGA",
                         field: TextField(
                           controller: _lgaController,
-                          decoration: profileFieldDecoration(hintText: "LGA"),
+                          style: EyeInputTheme.textStyle(context),
+                          cursorColor: EyeInputTheme.focusBorderColor(context),
+                          decoration: profileFieldDecoration(
+                            context: context,
+                            hintText: "LGA",
+                          ),
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "Gender",
                         field: DropdownButtonFormField<String>(
                           value: _gender,
-                          decoration:
-                              profileFieldDecoration(hintText: "Select"),
+                          style: EyeInputTheme.textStyle(context),
+                          decoration: profileFieldDecoration(
+                            context: context,
+                            hintText: "Select",
+                          ),
                           items: const [
                             DropdownMenuItem(
                                 value: "Female", child: Text("Female")),
@@ -228,6 +270,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         ),
                       ),
                       profileLabeledField(
+                        context: context,
                         label: "Date of birth",
                         field: OutlinedButton(
                           onPressed: _pickDateOfBirth,

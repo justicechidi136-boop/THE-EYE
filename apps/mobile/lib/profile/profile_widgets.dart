@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
-import "../brand.dart";
+import "../design_system/eye_input_theme.dart";
+import "../design_system/eye_semantic_colors.dart";
 
 class ProfileRow extends StatelessWidget {
   const ProfileRow(this.label, this.value, {super.key});
@@ -10,6 +11,7 @@ class ProfileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -17,14 +19,17 @@ class ProfileRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(color: BrandColors.lightTextMuted),
+              style: TextStyle(color: semantics.secondaryText),
             ),
           ),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: semantics.bodyText,
+              ),
             ),
           ),
         ],
@@ -34,38 +39,26 @@ class ProfileRow extends StatelessWidget {
 }
 
 InputDecoration profileFieldDecoration({
+  required BuildContext context,
   required String hintText,
   String? errorText,
 }) {
-  return InputDecoration(
+  return EyeInputTheme.decoration(
+    context,
     hintText: hintText,
     errorText: errorText,
-    filled: true,
-    fillColor: Colors.white,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: BrandColors.authStroke, width: 1),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: BrandColors.accentHover, width: 1),
-    ),
   );
 }
 
 Widget profileLabeledField({
+  required BuildContext context,
   required String label,
   required Widget field,
 }) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        label,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
+      Text(label, style: EyeInputTheme.labelStyle(context)),
       const SizedBox(height: 8),
       field,
       const SizedBox(height: 12),

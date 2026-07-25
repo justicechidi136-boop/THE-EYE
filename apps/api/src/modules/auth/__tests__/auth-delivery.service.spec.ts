@@ -95,4 +95,59 @@ describe("AuthDeliveryService", () => {
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
     restore();
   });
+
+  it("rejects account recovery email when SMTP is configured without recovery link base", async () => {
+    const { service, restore } = createService({
+      NODE_ENV: "staging",
+      THE_EYE_APP_ENV: "staging",
+      EMAIL_PROVIDER: "smtp",
+      SMTP_HOST: "smtp.example.com",
+      SMTP_USERNAME: "user",
+      SMTP_PASSWORD: "secret",
+      SMTP_FROM_EMAIL: "security@theeye.com.ng",
+    });
+
+    try {
+      await service.sendAccountRecoveryEmail(
+        "citizen@theeye.local",
+        "recovery-token",
+        new Date(Date.now() + 30 * 60 * 1000),
+      );
+      throw new Error("Expected account recovery email to fail without recovery link base");
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      const response = error.getResponse() as { code?: string };
+      expect(response.code).toBe("AUTH_RECOVERY_LINK_BASE_MISSING");
+    } finally {
+      restore();
+    }
+  });
+
+  it("renders account recovery email with button and plain-text link", async () => {
+    const sendMock = jest.fn().mockResolvedValue({ status: "ProviderAccepted" });
+    const { service, restore } = createService({
+      NODE_ENV: "staging",
+      THE_EYE_APP_ENV: "staging",
+      EMAIL_PROVIDER: "smtp",
+      SMTP_HOST: "smtp.example.com",
+      SMTP_USERNAME: "user",
+      SMTP_PASSWORD: "secret",
+      SMTP_FROM_EMAIL: "security@theeye.com.ng",
+      ACCOUNT_RECOVERY_LINK_BASE_URL: "https://staging-app.theeye.com.ng/account-recovery",
+    });
+    (service as unknown as { smtp: { send: typeof sendMock } }).smtp.send = sendMock;
+
+    await service.sendAccountRecoveryEmail(
+      "citizen@theeye.local",
+      "recovery-token",
+      new Date("2026-07-25T12:00:00.000Z"),
+    );
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const payload = sendMock.mock.calls[0]?.[0] as { html: string; text: string };
+    expect(payload.html).toContain("Recover account");
+    expect(payload.html).toContain("https://staging-app.theeye.com.ng/account-recovery?token=recovery-token");
+    expect(payload.text).toContain("https://staging-app.theeye.com.ng/account-recovery?token=recovery-token");
+    restore();
+  });
 });

@@ -6,6 +6,8 @@ import "../app/app_scope.dart";
 import "../brand.dart";
 import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../family/emergency_contact_relationships.dart";
+import "../design_system/eye_input_theme.dart";
 import "../widgets/section_card.dart";
 import "profile_widgets.dart";
 
@@ -28,7 +30,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _relationshipController = TextEditingController();
+  String _relationship = EmergencyContactRelationships.values.first;
   String? _editingContactId;
 
   bool _loadStarted = false;
@@ -37,7 +39,6 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _relationshipController.dispose();
     super.dispose();
   }
 
@@ -87,7 +88,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       _editingContactId = contact.id;
       _nameController.text = contact.name;
       _phoneController.text = contact.phone;
-      _relationshipController.text = contact.relationship;
+      _relationship =
+          EmergencyContactRelationships.normalize(contact.relationship);
     });
   }
 
@@ -96,7 +98,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       _editingContactId = null;
       _nameController.clear();
       _phoneController.clear();
-      _relationshipController.clear();
+      _relationship = EmergencyContactRelationships.values.first;
     });
   }
 
@@ -104,10 +106,17 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     final token = AppScope.of(context).accessToken;
     if (token == null) return;
 
+    final normalizedRelationship =
+        EmergencyContactRelationships.normalize(_relationship);
+    if (!EmergencyContactRelationships.isValid(normalizedRelationship)) {
+      setState(() => _error = "Select a valid relationship.");
+      return;
+    }
+
     final payload = {
       "name": _nameController.text.trim(),
       "phone": _phoneController.text.trim(),
-      "relationship": _relationshipController.text.trim(),
+      "relationship": normalizedRelationship,
     };
 
     setState(() {
@@ -115,6 +124,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       _error = null;
     });
 
+    final session = AppScope.of(context);
     try {
       if (_editingContactId != null) {
         await _apiClient.updateEmergencyContact(
@@ -128,7 +138,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           payload: payload,
         );
       }
-      AppScope.of(context).clearCitizenProfileCache();
+      if (!mounted) return;
+      session.clearCitizenProfileCache();
       _clearForm();
       await _loadContacts();
       if (!mounted) return;
@@ -171,12 +182,14 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     );
     if (confirmed != true) return;
 
+    final session = AppScope.of(context);
     try {
       await _apiClient.deleteEmergencyContact(
         accessToken: token,
         contactId: contact.id,
       );
-      AppScope.of(context).clearCitizenProfileCache();
+      if (!mounted) return;
+      session.clearCitizenProfileCache();
       if (_editingContactId == contact.id) _clearForm();
       await _loadContacts();
     } on AuthApiException catch (error) {
@@ -198,25 +211,54 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 profileLabeledField(
+                  context: context,
                   label: "Name",
                   field: TextField(
                     controller: _nameController,
-                    decoration: profileFieldDecoration(hintText: "Full name"),
+                    style: EyeInputTheme.textStyle(context),
+                    cursorColor: EyeInputTheme.focusBorderColor(context),
+                    decoration: profileFieldDecoration(
+                      context: context,
+                      hintText: "Full name",
+                    ),
                   ),
                 ),
                 profileLabeledField(
+                  context: context,
                   label: "Phone",
                   field: TextField(
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
-                    decoration: profileFieldDecoration(hintText: "+234..."),
+                    style: EyeInputTheme.textStyle(context),
+                    cursorColor: EyeInputTheme.focusBorderColor(context),
+                    decoration: profileFieldDecoration(
+                      context: context,
+                      hintText: "+234...",
+                    ),
                   ),
                 ),
                 profileLabeledField(
+                  context: context,
                   label: "Relationship",
-                  field: TextField(
-                    controller: _relationshipController,
-                    decoration: profileFieldDecoration(hintText: "Spouse"),
+                  field: DropdownButtonFormField<String>(
+                    value: _relationship,
+                    style: EyeInputTheme.textStyle(context),
+                    decoration: profileFieldDecoration(
+                      context: context,
+                      hintText: "Select relationship",
+                    ),
+                    items: EmergencyContactRelationships.values
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _relationship = value);
+                    },
                   ),
                 ),
                 if (_error != null)
@@ -265,7 +307,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                                 contentPadding: EdgeInsets.zero,
                                 title: Text(contact.name),
                                 subtitle: Text(
-                                  "${contact.relationship} · ${contact.phone}",
+                                  "${EmergencyContactRelationships.normalize(contact.relationship)} · ${contact.phone}",
                                 ),
                                 trailing: PopupMenuButton<String>(
                                   onSelected: (value) {

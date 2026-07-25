@@ -509,6 +509,105 @@ Note: Nationwide verified official police dataset remains incomplete. Google sup
 
 ---
 
+## SRB-031 — Dark-mode theme and text-field contrast regressions
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile |
+| **Severity** | P0 |
+| **Root cause** | Hardcoded `Colors.white` / light surfaces on auth, home figma shell, service cards, and form widgets; `InputDecorationTheme` not wired to semantic tokens |
+| **Fix** | `EyeInputTheme`, `EyeThemeBuilder`, semantic `buildDarkTheme`/`buildTheme` extensions; `SafetyScaffold` uses `#0B0F14` background; login/account recovery/profile inputs use semantic colors; SOS live video action uses orange |
+| **Automated test** | `runtime_srb031_037_test.dart` |
+| **Status** | **CODE FIXED** — device QA pending |
+
+---
+
+## SRB-032 — Google Sign-In AUTH-GOOGLE-003
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / Firebase / API |
+| **Root cause** | Over-broad AUTH-GOOGLE-003 mapping; config errors not classified as AUTH-GOOGLE-001 |
+| **Fix** | Narrow `_firebaseAuthMessage` / `_googlePlatformMessage` to stable codes AUTH-GOOGLE-001–005 |
+| **Infrastructure** | Release SHA-1/256 in Firebase `the-eye-2stg` still required for physical verification |
+| **Status** | **CODE FIXED** — device + Firebase console QA pending |
+
+---
+
+## SRB-033 — Account recovery email missing link
+
+| Field | Value |
+|---|---|
+| **Platform** | API / SMTP |
+| **Root cause** | `ACCOUNT_RECOVERY_LINK_BASE_URL` unset → linkless fallback email sent |
+| **Fix** | Fail closed with `AUTH_RECOVERY_LINK_BASE_MISSING`; HTML button + plain-text URL; `.env.staging.example` updated |
+| **Infrastructure** | Set `ACCOUNT_RECOVERY_LINK_BASE_URL` on staging VPS |
+| **Automated test** | `auth-delivery.service.spec.ts` |
+| **Status** | **CODE FIXED** — inbox QA pending |
+
+---
+
+## SRB-034 — Start SOS Live Video crash (P0)
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile |
+| **Root cause** | Double camera preview init on auto-start path; async callbacks after dispose |
+| **Fix** | Skip `_preparePreview` when `autoStartStream`; `_disposed` guard; safe finally in `_startStream` |
+| **Status** | **CODE FIXED** — physical logcat QA pending |
+
+---
+
+## SRB-035 — Neighborhood Watch runtime failures
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / API seed |
+| **Root cause** | `NeighborhoodWatchService` defaulted to `localhost:4000`; staging seed lacked citizen membership + active patrol |
+| **Fix** | `TheEyeApiConfig.resolveBaseUrl()`; patrol checkpoint filters `Active` status; improved no-schedule UX; seed adds approved membership + active patrol |
+| **Automated test** | `neighborhood_watch_service_test.dart` |
+| **Status** | **CODE FIXED** — device QA pending |
+
+---
+
+## SRB-036 — Family Circle relationship persistence
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / API |
+| **Root cause** | Free-text relationship field; backend accepted any string |
+| **Fix** | Canonical enum dropdown + `EmergencyContactRelationships.normalize()`; API `@IsIn` validation |
+| **Automated test** | `runtime_srb031_037_test.dart` |
+| **Status** | **CODE FIXED** — device QA pending |
+
+---
+
+## SRB-037 — SOS device simulation in staging
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile |
+| **Root cause** | Hardcoded battery/signal/device ID; no `GET /smartwatch/devices` client |
+| **Fix** | `listSmartwatchDevices` API client; load paired device on screen open; telemetry only from API; optional battery/signal in payloads |
+| **Status** | **CODE FIXED** — physical watch QA pending |
+
+---
+
+## Final status (SRB-031–037)
+
+**CODE COMPLETE — DEVICE QA PENDING**
+
+Branch: `fix/runtime-srb031-037`. No physical-device reproduction matrix captured yet. No certification APK built from this branch. Full CI suites and PR to `staging` not yet run.
+
+Remaining before **DEVICE VERIFIED**:
+- Deploy staging with `ACCOUNT_RECOVERY_LINK_BASE_URL` and re-seed citizen NW data
+- Build staging APK from deployed SHA
+- Phase 12 physical QA on clean-install device for all seven blockers
+
+**Sprint 8:** NOT AUTHORIZED until SRB-031–037 reach DEVICE VERIFIED.
+
+---
+
 ## Final status
 
 **PARTIALLY BLOCKED**

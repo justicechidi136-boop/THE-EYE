@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../tokens.dart";
+import "../eye_input_theme.dart";
 import "../typography.dart";
 
 class EyeTextField extends StatelessWidget {
@@ -34,7 +34,7 @@ class EyeTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: EyeTypography.fieldLabel),
+        Text(label, style: EyeInputTheme.labelStyle(context)),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
@@ -43,33 +43,16 @@ class EyeTextField extends StatelessWidget {
           textInputAction: textInputAction,
           autofillHints: autofillHints,
           onChanged: onChanged,
-          style: EyeTypography.fieldHint.copyWith(color: EyeTokens.black1),
-          decoration: InputDecoration(
+          style: EyeInputTheme.textStyle(context),
+          cursorColor: EyeInputTheme.focusBorderColor(context),
+          decoration: EyeInputTheme.decoration(
+            context,
             hintText: hint,
-            hintStyle: EyeTypography.fieldHint,
             errorText: errorText,
-            filled: true,
-            fillColor: Colors.white,
+            suffixIcon: suffix,
+            radius: 8,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            suffixIcon: suffix,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-              borderSide: const BorderSide(color: EyeTokens.stroke),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-              borderSide:
-                  const BorderSide(color: EyeTokens.greenMain, width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-              borderSide: const BorderSide(color: EyeTokens.danger, width: 2),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-              borderSide: const BorderSide(color: EyeTokens.danger, width: 2),
-            ),
           ),
         ),
       ],
