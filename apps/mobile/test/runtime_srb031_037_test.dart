@@ -1,6 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "dart:io";
+
 import "package:the_eye_mobile/config/the_eye_api_config.dart";
 import "package:the_eye_mobile/brand.dart";
 import "package:the_eye_mobile/design_system/eye_input_theme.dart";
@@ -80,6 +82,26 @@ void main() {
     test("constructs with resolved API config path", () {
       expect(NeighborhoodWatchService(), isA<NeighborhoodWatchService>());
       expect(TheEyeApiConfig.resolveBaseUrl(), isNotEmpty);
+    });
+  });
+
+  group("ReportScreen dark mode", () {
+    test("report compose screen avoids hardcoded light surfaces", () {
+      final mainDart = File("lib/main.dart");
+      final lines = mainDart.readAsLinesSync();
+      final start =
+          lines.indexWhere((line) => line.contains("class _ReportScreenState"));
+      final end = lines.indexWhere(
+        (line) =>
+            line.contains("Future<void> _submit(BuildContext context"),
+      );
+      expect(start, greaterThanOrEqualTo(0));
+      expect(end, greaterThan(start));
+
+      final reportBlock = lines.sublist(start, end).join("\n");
+      expect(reportBlock.contains("EyeTokens.whiteBg"), isFalse);
+      expect(reportBlock.contains("fillColor: Colors.white"), isFalse);
+      expect(reportBlock.contains("semantics.background"), isTrue);
     });
   });
 

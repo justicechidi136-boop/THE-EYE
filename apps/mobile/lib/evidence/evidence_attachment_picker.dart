@@ -7,6 +7,9 @@ import "evidence_media_source.dart";
 import "evidence_permission_service.dart";
 import "evidence_permission_state.dart";
 import "local_evidence_attachment.dart";
+import "../design_system/eye_input_theme.dart";
+import "../design_system/eye_semantic_colors.dart";
+import "../theme/the_eye_theme.dart";
 import "../widgets/section_card.dart";
 
 class ManagedEvidenceSection extends StatefulWidget {
@@ -60,26 +63,25 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: EyeSemanticColors.of(context).cardSurface,
         borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 4,
-            offset: Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: EyeSemanticColors.of(context).border),
+        boxShadow: context.isDarkTheme
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x40000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 4),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             "Upload photos (JPEG, PNG, WEBP)",
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF032221),
-            ),
+            style: EyeInputTheme.labelStyle(context),
           ),
           const SizedBox(height: 12),
           picker,
@@ -162,6 +164,7 @@ class EvidenceAttachmentPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
@@ -171,7 +174,9 @@ class EvidenceAttachmentPicker extends StatelessWidget {
           children: [
             if (figmaStyle) ...[
               Material(
-                color: const Color(0xFFE7F2EE),
+                color: context.isDarkTheme
+                    ? semantics.elevatedSurface
+                    : const Color(0xFFE7F2EE),
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
                   onTap: controller.busy || !controller.canAddMore
@@ -182,14 +187,16 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                     height: 94,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Icon(Icons.upload_rounded,
-                            color: Color(0xFF0B7E5D), size: 24),
-                        SizedBox(height: 8),
+                            color: semantics.interactiveText, size: 24),
+                        const SizedBox(height: 8),
                         Text(
                           "Click here to upload",
-                          style:
-                              TextStyle(fontSize: 12, color: Color(0xFF032221)),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: semantics.bodyText,
+                          ),
                         ),
                       ],
                     ),
@@ -197,9 +204,9 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 "Uploaded files",
-                style: TextStyle(fontSize: 14, color: Color(0xFF032221)),
+                style: TextStyle(fontSize: 14, color: semantics.bodyText),
               ),
               const SizedBox(height: 8),
             ] else

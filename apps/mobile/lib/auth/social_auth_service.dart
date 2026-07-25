@@ -490,7 +490,8 @@ class SocialAuthService {
       return SocialAuthResult(
         status: SocialAuthStatus.accountConflict,
         userMessage:
-            "${error.userMessage} Ref: ${diagnostic.referenceId}",
+            "AUTH-GOOGLE-005 ${error.userMessage.isNotEmpty ? error.userMessage : "This Google account conflicts with an existing THE EYE profile."} "
+            "Ref: ${diagnostic.referenceId}",
       );
     }
     if (error.statusCode == 403 && code == "ACCOUNT_SUSPENDED") {

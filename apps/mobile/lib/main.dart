@@ -3649,9 +3649,10 @@ class _ReportScreenState extends State<ReportScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
+    final semantics = EyeSemanticColors.of(context);
     final isEmergency = widget.type == ReportType.emergency;
     return Scaffold(
-      backgroundColor: EyeTokens.whiteBg,
+      backgroundColor: semantics.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -3704,7 +3705,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     const SizedBox(height: 16),
                   ],
                   Text("Location of the incident",
-                      style: EyeTypography.fieldLabel),
+                      style: EyeInputTheme.labelStyle(context)),
                   const SizedBox(height: 8),
                   if (locationError != null) ...[
                     LocationDeniedBanner(
@@ -3740,43 +3741,24 @@ class _ReportScreenState extends State<ReportScreen> {
                     isEmergency
                         ? "Injuries or fatalities"
                         : "${widget.type.label} description",
-                    style: EyeTypography.fieldLabel,
+                    style: EyeInputTheme.labelStyle(context),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: descriptionController,
                     maxLines: isEmergency ? 5 : 4,
-                    style: EyeTypography.fieldHint
-                        .copyWith(color: EyeTokens.black1),
-                    decoration: InputDecoration(
+                    style: EyeInputTheme.textStyle(context),
+                    cursorColor: EyeInputTheme.focusBorderColor(context),
+                    decoration: EyeInputTheme.decoration(
+                      context,
                       hintText: isEmergency
                           ? "Enter information about the injuries"
                           : "Describe what happened",
-                      hintStyle: EyeTypography.fieldHint,
                       errorText: descriptionError,
-                      filled: true,
-                      fillColor: Colors.white,
+                      radius: EyeTokens.radiusSm,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 12,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-                        borderSide: const BorderSide(color: EyeTokens.stroke),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-                        borderSide: const BorderSide(
-                          color: EyeTokens.greenMain,
-                          width: 2,
-                        ),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-                        borderSide: const BorderSide(
-                          color: EyeTokens.danger,
-                          width: 2,
-                        ),
                       ),
                     ),
                     onChanged: (_) {
@@ -3857,7 +3839,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     const SizedBox(height: 12),
                     Text(
                       submissionError!,
-                      style: const TextStyle(color: BrandColors.danger),
+                      style: TextStyle(color: semantics.errorText),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -6736,19 +6718,96 @@ class VolunteersScreen extends StatefulWidget {
 }
 
 class _VolunteersScreenState extends State<VolunteersScreen> {
+  static const _volunteerTypeOptions = <String, String>{
+    "Doctor": "Doctor",
+    "Nurse": "Nurse",
+    "First Aid": "FirstAid",
+    "Lawyer": "Lawyer",
+    "Security Volunteer": "SecurityVolunteer",
+    "Fire Volunteer": "FireVolunteer",
+    "Search and Rescue": "SearchAndRescue",
+    "Blood Donor": "BloodDonor",
+  };
+
   bool _registering = false;
+  final Set<String> _selectedTypes = {"SecurityVolunteer"};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      if (controller.selectedCommunity == null) {
+        await controller.loadCommunitiesFromApi(refresh: true);
+      }
+    });
+  }
+
+  void _toggleType(String apiType) {
+    setState(() {
+      if (_selectedTypes.contains(apiType)) {
+        if (_selectedTypes.length > 1) {
+          _selectedTypes.remove(apiType);
+        }
+      } else {
+        _selectedTypes.add(apiType);
+      }
+    });
+  }
 
   Future<void> _register() async {
     final controller = appOf(context);
-    final community = controller.selectedCommunity;
-    if (community == null || !controller.isAuthenticated) return;
+    if (!controller.isAuthenticated) {
+      showAppSnackBar(context, "Sign in required", isError: true);
+      return;
+    }
+    if (controller.accessToken == null) {
+      showAppSnackBar(context, "Sign in required", isError: true);
+      return;
+    }
+    var community = controller.selectedCommunity;
+    if (community == null) {
+      await controller.loadCommunitiesFromApi(refresh: true);
+      if (!mounted) return;
+      community = controller.selectedCommunity;
+    }
+    if (community == null) {
+      showAppSnackBar(
+        context,
+        "Join a community before registering as a volunteer.",
+        isError: true,
+      );
+      return;
+    }
+    if (!community.isMember) {
+      showAppSnackBar(
+        context,
+        community.isPending
+            ? "Your community membership is pending approval."
+            : "Approved community membership is required to volunteer.",
+        isError: true,
+      );
+      return;
+    }
+    if (_selectedTypes.isEmpty) {
+      showAppSnackBar(
+        context,
+        "Select at least one volunteer type.",
+        isError: true,
+      );
+      return;
+    }
     setState(() => _registering = true);
     try {
       final location = await captureLocationOutcome();
       await NeighborhoodWatchService().registerVolunteer(
         accessToken: controller.accessToken!,
         communityId: community.id,
-        types: const ["SecurityVolunteer"],
+        types: _selectedTypes.toList(growable: false),
         latitude: location.position?.latitude,
         longitude: location.position?.longitude,
       );
@@ -6768,35 +6827,74 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final types = [
-      "Doctor",
-      "Nurse",
-      "First Aid",
-      "Lawyer",
-      "Security Volunteer",
-      "Fire Volunteer",
-      "Search and Rescue",
-      "Blood Donor",
-    ];
+    final controller = appOf(context);
+    final community = controller.selectedCommunity;
     return SafetyScaffold(
       title: "Volunteers",
       selectedIndex: 3,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          FilledButton.icon(
-            onPressed: _registering ? null : _register,
-            icon: const Icon(Icons.volunteer_activism),
-            label:
-                Text(_registering ? "Registering..." : "Register as volunteer"),
-          ),
-          const SizedBox(height: 16),
-          ...types.map((type) => ListTileCard(
-                leading: const Icon(Icons.health_and_safety),
-                title: type,
+      body: RefreshIndicator(
+        onRefresh: () => controller.loadCommunitiesFromApi(refresh: true),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            if (controller.loadingCommunities && community == null)
+              const Center(child: CircularProgressIndicator())
+            else if (community == null)
+              const ListTileCard(
+                leading: Icon(Icons.groups_outlined),
+                title: "No community selected",
+                subtitle:
+                    "Join a community from Neighborhood Watch, then register here.",
+              )
+            else
+              ListTileCard(
+                leading: const Icon(Icons.groups),
+                title: community.name,
+                subtitle: community.isMember
+                    ? "Registering for this community"
+                    : community.isPending
+                        ? "Membership pending approval"
+                        : "Approved membership required to volunteer",
+              ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _registering ? null : _register,
+              icon: const Icon(Icons.volunteer_activism),
+              label:
+                  Text(_registering ? "Registering..." : "Register as volunteer"),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Select one or more volunteer types",
+              style: TextStyle(
+                color: EyeSemanticColors.of(context).secondaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ..._volunteerTypeOptions.entries.map((entry) {
+              final selected = _selectedTypes.contains(entry.value);
+              return ListTileCard(
+                leading: Icon(
+                  selected
+                      ? Icons.check_circle
+                      : Icons.health_and_safety_outlined,
+                  color: selected
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
+                title: entry.key,
                 subtitle: "Notify nearby volunteers during emergencies",
-              )),
-        ],
+                trailing: selected
+                    ? Icon(Icons.check,
+                        color: Theme.of(context).colorScheme.primary)
+                    : null,
+                onTap: () => _toggleType(entry.value),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
