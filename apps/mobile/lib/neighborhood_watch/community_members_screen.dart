@@ -1,6 +1,8 @@
 import "package:flutter/material.dart";
 
+import "../design_system/eye_semantic_colors.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../widgets/eye_scaffold.dart";
 import "neighborhood_watch_service.dart";
 
 class CommunityMembersScreen extends StatefulWidget {
@@ -96,8 +98,9 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("${widget.communityName} members")),
+    final semantics = EyeSemanticColors.of(context);
+    return EyeScaffold(
+      title: "${widget.communityName} members",
       body: RefreshIndicator(
         onRefresh: () => _load(refresh: true),
         child: ListView(
@@ -120,14 +123,23 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
               const Center(child: CircularProgressIndicator())
             else if (_error != null && _members.isEmpty)
               ListTile(
-                leading: const Icon(Icons.cloud_off),
-                title: const Text("Members unavailable"),
-                subtitle: Text(_error!),
+                leading: Icon(Icons.cloud_off, color: semantics.errorText),
+                title: Text(
+                  "Members unavailable",
+                  style: TextStyle(color: semantics.bodyText),
+                ),
+                subtitle: Text(
+                  _error!,
+                  style: TextStyle(color: semantics.secondaryText),
+                ),
               )
             else if (_members.isEmpty)
-              const ListTile(
-                leading: Icon(Icons.groups),
-                title: Text("No members found"),
+              ListTile(
+                leading: Icon(Icons.groups, color: semantics.mutedText),
+                title: Text(
+                  "No members found",
+                  style: TextStyle(color: semantics.bodyText),
+                ),
               )
             else
               ..._members.map((member) {
