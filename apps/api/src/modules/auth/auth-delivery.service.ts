@@ -70,23 +70,36 @@ export class AuthDeliveryService {
   async sendAccountRecoveryEmail(email: string, token: string, expiresAt: Date): Promise<void> {
     const recoveryBase = this.config.get<string>("ACCOUNT_RECOVERY_LINK_BASE_URL")?.trim()
       ?? this.config.get<string>("MOBILE_ACCOUNT_RECOVERY_URL")?.trim()
-      ?? this.config.get<string>("MOBILE_PASSWORD_RESET_URL")?.trim();
-    const recoveryLink = recoveryBase
-      ? `${recoveryBase}${recoveryBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
-      : null;
+      ?? this.config.get<string>("AUTH_RECOVERY_DEEP_LINK_BASE")?.trim();
     const expiryText = expiresAt.toISOString();
+    const requestedAt = new Date().toISOString();
     const fromName = this.config.get<string>("SMTP_FROM_NAME") ?? "THE EYE";
 
     if (this.smtp.isConfigured()) {
+      if (!recoveryBase) {
+        throw new ServiceUnavailableException({
+          message: "Account recovery email is not configured for this environment.",
+          code: "AUTH_RECOVERY_LINK_BASE_MISSING",
+        });
+      }
+      const recoveryLink = `${recoveryBase}${recoveryBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
       const result = await this.smtp.send({
         to: email,
         subject: "Recover your THE EYE account",
-        text: recoveryLink
-          ? `A recovery request was made for your THE EYE account. Use this secure link before ${expiryText}: ${recoveryLink}\n\nIf you did not request this, secure your account immediately.`
-          : "A recovery request was made for your THE EYE account. Open THE EYE to continue recovery.",
-        html: recoveryLink
-          ? `<p>A recovery request was made for your ${fromName} account.</p><p><a href="${recoveryLink}">Recover account</a></p><p>This link expires at ${expiryText}.</p><p>If you did not request this, secure your account immediately.</p>`
-          : `<p>A recovery request was made for your ${fromName} account. Open THE EYE to continue recovery.</p>`,
+        text: [
+          `A recovery request was made for your ${fromName} account at ${requestedAt}.`,
+          `Use this secure link before ${expiryText}:`,
+          recoveryLink,
+          "",
+          "If you did not request this, secure your account immediately.",
+        ].join("\n"),
+        html: [
+          `<p>A recovery request was made for your ${fromName} account at ${requestedAt}.</p>`,
+          `<p><a href="${recoveryLink}" style="display:inline-block;padding:12px 18px;background:#FF9933;color:#0B0F14;text-decoration:none;border-radius:8px;font-weight:700;">Recover account</a></p>`,
+          `<p>Or copy this link: <a href="${recoveryLink}">${recoveryLink}</a></p>`,
+          `<p>This link expires at ${expiryText} and can be used once.</p>`,
+          `<p>If you did not request this, secure your account immediately.</p>`,
+        ].join(""),
       });
       if (result.status === "ProviderAccepted") {
         this.logger.log(`Account recovery email accepted by SMTP for ${maskEmail(email)}`);

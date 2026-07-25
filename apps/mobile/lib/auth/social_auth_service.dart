@@ -530,7 +530,15 @@ class SocialAuthService {
       case "invalid-credential":
       case "invalid-verification-code":
       case "invalid-verification-id":
+      case "wrong-password":
         return "AUTH-GOOGLE-003 Unable to verify your Google sign-in. Try again.";
+      case "network-request-failed":
+      case "too-many-requests":
+        return "AUTH-GOOGLE-003 Sign-in failed. Check your connection and try again.";
+      case "operation-not-allowed":
+      case "app-not-authorized":
+        return "AUTH-GOOGLE-001 Google sign-in is not configured for this build. "
+            "Verify Firebase project settings and rebuild.";
       default:
         return "AUTH-GOOGLE-003 Sign-in failed. Try again later.";
     }

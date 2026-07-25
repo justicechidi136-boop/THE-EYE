@@ -4,6 +4,8 @@ import "../auth/auth_service.dart";
 import "../auth/auth_session_store.dart";
 import "../auth/auth_validation.dart";
 import "../auth/social_auth_service.dart";
+import "../design_system/eye_input_theme.dart";
+import "../design_system/eye_semantic_colors.dart";
 
 typedef RecoverySessionHandler = Future<void> Function(
   AuthSession session, {
@@ -58,31 +60,38 @@ class _AccountRecoveryRequestScreenState
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Scaffold(
+      backgroundColor: semantics.background,
       appBar: AppBar(title: const Text("Recover account")),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
+          Text(
             "Recover your Google-linked THE EYE account using your verified email. "
             "We will send recovery instructions and notify your trusted devices.",
+            style: TextStyle(color: semantics.bodyText),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: "Email used with Google Sign-In",
+            style: EyeInputTheme.textStyle(context),
+            cursorColor: EyeInputTheme.focusBorderColor(context),
+            decoration: EyeInputTheme.decoration(
+              context,
+              hintText: "Email used with Google Sign-In",
             ),
           ),
           if (errorMessage != null) ...[
             const SizedBox(height: 12),
-            Text(errorMessage!, style: const TextStyle(color: Colors.red)),
+            Text(errorMessage!, style: TextStyle(color: semantics.error)),
           ],
           if (sent) ...[
             const SizedBox(height: 12),
-            const Text(
+            Text(
               "If an eligible account exists, recovery instructions have been sent.",
+              style: TextStyle(color: semantics.secondaryText),
             ),
           ],
           const SizedBox(height: 16),
@@ -183,22 +192,26 @@ class _AccountRecoveryCompleteScreenState
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     if (loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: semantics.background,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
     return Scaffold(
+      backgroundColor: semantics.background,
       appBar: AppBar(title: const Text("Complete recovery")),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
+          Text(
             "Confirm your identity with Google to restore access to your THE EYE account.",
+            style: TextStyle(color: semantics.bodyText),
           ),
           if (errorMessage != null) ...[
             const SizedBox(height: 12),
-            Text(errorMessage!, style: const TextStyle(color: Colors.red)),
+            Text(errorMessage!, style: TextStyle(color: semantics.error)),
           ],
           const SizedBox(height: 16),
           FilledButton(
