@@ -4,6 +4,7 @@ import "../app/app_scope.dart";
 import "../brand.dart";
 import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../design_system/eye_input_theme.dart";
 import "../widgets/section_card.dart";
 import "profile_widgets.dart";
 
@@ -153,6 +154,7 @@ class _KycScreenState extends State<KycScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         profileLabeledField(
+                          context: context,
                           label: "Document type",
                           field: DropdownButtonFormField<String>(
                             value: _documentType,
@@ -170,16 +172,23 @@ class _KycScreenState extends State<KycScreen> {
                                     if (value == null) return;
                                     setState(() => _documentType = value);
                                   },
+                            style: EyeInputTheme.textStyle(context),
                             decoration: profileFieldDecoration(
+                              context: context,
                               hintText: "Document type",
                             ),
                           ),
                         ),
                         profileLabeledField(
+                          context: context,
                           label: "Document number (optional)",
                           field: TextField(
                             controller: _documentNumberController,
+                            style: EyeInputTheme.textStyle(context),
+                            cursorColor:
+                                EyeInputTheme.focusBorderColor(context),
                             decoration: profileFieldDecoration(
+                              context: context,
                               hintText: "ID number",
                             ),
                           ),

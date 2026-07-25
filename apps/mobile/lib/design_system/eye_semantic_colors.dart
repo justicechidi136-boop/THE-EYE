@@ -7,6 +7,7 @@ import "../brand.dart";
 @immutable
 class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
   const EyeSemanticColors({
+    required this.background,
     required this.primaryAction,
     required this.primaryActionForeground,
     required this.secondaryAction,
@@ -29,10 +30,17 @@ class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
     required this.surface,
     required this.elevatedSurface,
     required this.cardSurface,
+    required this.inputFill,
+    required this.inputText,
+    required this.inputHint,
+    required this.inputLabel,
     required this.divider,
+    required this.border,
+    required this.focusBorder,
     required this.disabledText,
   });
 
+  final Color background;
   final Color primaryAction;
   final Color primaryActionForeground;
   final Color secondaryAction;
@@ -55,10 +63,17 @@ class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
   final Color surface;
   final Color elevatedSurface;
   final Color cardSurface;
+  final Color inputFill;
+  final Color inputText;
+  final Color inputHint;
+  final Color inputLabel;
   final Color divider;
+  final Color border;
+  final Color focusBorder;
   final Color disabledText;
 
   static const light = EyeSemanticColors(
+    background: BrandColors.lightBackground,
     primaryAction: BrandColors.green,
     primaryActionForeground: Colors.white,
     secondaryAction: BrandColors.orange,
@@ -81,11 +96,18 @@ class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
     surface: BrandColors.lightSurface,
     elevatedSurface: BrandColors.lightSurfaceMuted,
     cardSurface: BrandColors.lightSurface,
+    inputFill: BrandColors.lightSurface,
+    inputText: BrandColors.command,
+    inputHint: BrandColors.lightTextMuted,
+    inputLabel: BrandColors.command,
     divider: BrandColors.lightBorder,
+    border: BrandColors.lightBorder,
+    focusBorder: BrandColors.green,
     disabledText: BrandColors.ash,
   );
 
   static const dark = EyeSemanticColors(
+    background: BrandColors.darkBackground,
     primaryAction: BrandColors.orange,
     primaryActionForeground: BrandColors.darkBackground,
     secondaryAction: BrandColors.orange,
@@ -108,7 +130,13 @@ class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
     surface: BrandColors.darkSurface,
     elevatedSurface: BrandColors.darkSurfaceMuted,
     cardSurface: BrandColors.darkSurface,
+    inputFill: BrandColors.darkSurfaceMuted,
+    inputText: BrandColors.darkText,
+    inputHint: BrandColors.darkTextMuted,
+    inputLabel: BrandColors.darkText,
     divider: BrandColors.darkBorder,
+    border: BrandColors.darkBorder,
+    focusBorder: BrandColors.orange,
     disabledText: BrandColors.darkTextMuted,
   );
 
@@ -183,6 +211,7 @@ class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
 
   @override
   EyeSemanticColors copyWith({
+    Color? background,
     Color? primaryAction,
     Color? primaryActionForeground,
     Color? secondaryAction,
@@ -205,10 +234,17 @@ class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
     Color? surface,
     Color? elevatedSurface,
     Color? cardSurface,
+    Color? inputFill,
+    Color? inputText,
+    Color? inputHint,
+    Color? inputLabel,
     Color? divider,
+    Color? border,
+    Color? focusBorder,
     Color? disabledText,
   }) {
     return EyeSemanticColors(
+      background: background ?? this.background,
       primaryAction: primaryAction ?? this.primaryAction,
       primaryActionForeground:
           primaryActionForeground ?? this.primaryActionForeground,
@@ -232,7 +268,13 @@ class EyeSemanticColors extends ThemeExtension<EyeSemanticColors> {
       surface: surface ?? this.surface,
       elevatedSurface: elevatedSurface ?? this.elevatedSurface,
       cardSurface: cardSurface ?? this.cardSurface,
+      inputFill: inputFill ?? this.inputFill,
+      inputText: inputText ?? this.inputText,
+      inputHint: inputHint ?? this.inputHint,
+      inputLabel: inputLabel ?? this.inputLabel,
       divider: divider ?? this.divider,
+      border: border ?? this.border,
+      focusBorder: focusBorder ?? this.focusBorder,
       disabledText: disabledText ?? this.disabledText,
     );
   }

@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 
-import "../tokens.dart";
-import "../typography.dart";
+import "../eye_semantic_colors.dart";
+import "../eye_input_theme.dart";
 
 class EyeServiceCard extends StatelessWidget {
   const EyeServiceCard({
@@ -19,14 +19,15 @@ class EyeServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
+      color: semantics.cardSurface,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: SizedBox(
-          height: EyeTokens.serviceCardHeight,
+          height: 150,
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Column(
@@ -36,11 +37,11 @@ class EyeServiceCard extends StatelessWidget {
                   width: 50,
                   height: 47,
                   decoration: BoxDecoration(
-                    color: EyeTokens.whiteBg,
-                    borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
+                    color: semantics.elevatedSurface,
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   alignment: Alignment.center,
-                  child: Icon(icon, size: 32, color: EyeTokens.black1),
+                  child: Icon(icon, size: 32, color: semantics.bodyText),
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -48,7 +49,11 @@ class EyeServiceCard extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: EyeTypography.serviceTitle,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: semantics.bodyText,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -56,7 +61,11 @@ class EyeServiceCard extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: EyeTypography.serviceDescription,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: semantics.secondaryText,
+                  ),
                 ),
               ],
             ),

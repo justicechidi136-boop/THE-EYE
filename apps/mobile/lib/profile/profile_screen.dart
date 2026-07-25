@@ -7,6 +7,7 @@ import "../app/app_scope.dart";
 import "../brand.dart";
 import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../design_system/eye_input_theme.dart";
 import "../widgets/section_card.dart";
 import "avatar_upload_service.dart";
 import "profile_widgets.dart";
@@ -250,50 +251,78 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
           ),
           const SizedBox(height: 16),
           profileLabeledField(
+            context: context,
             label: "First name",
             field: TextField(
               controller: _firstNameController,
               textInputAction: TextInputAction.next,
+              style: EyeInputTheme.textStyle(context),
+              cursorColor: EyeInputTheme.focusBorderColor(context),
               decoration: profileFieldDecoration(
-                  hintText: "Ada", errorText: _firstNameError),
+                context: context,
+                hintText: "Ada",
+                errorText: _firstNameError,
+              ),
             ),
           ),
           profileLabeledField(
+            context: context,
             label: "Last name",
             field: TextField(
               controller: _lastNameController,
               textInputAction: TextInputAction.next,
+              style: EyeInputTheme.textStyle(context),
+              cursorColor: EyeInputTheme.focusBorderColor(context),
               decoration: profileFieldDecoration(
-                  hintText: "Okeke", errorText: _lastNameError),
+                context: context,
+                hintText: "Okeke",
+                errorText: _lastNameError,
+              ),
             ),
           ),
           profileLabeledField(
+            context: context,
             label: "Country",
             field: TextField(
               controller: _countryController,
               textInputAction: TextInputAction.next,
+              style: EyeInputTheme.textStyle(context),
+              cursorColor: EyeInputTheme.focusBorderColor(context),
               decoration: profileFieldDecoration(
+                context: context,
                 hintText: "Nigeria",
                 errorText: _countryError,
               ),
             ),
           ),
           profileLabeledField(
+            context: context,
             label: "State",
             field: TextField(
               controller: _stateController,
               textInputAction: TextInputAction.next,
+              style: EyeInputTheme.textStyle(context),
+              cursorColor: EyeInputTheme.focusBorderColor(context),
               decoration: profileFieldDecoration(
-                  hintText: "Lagos", errorText: _stateError),
+                context: context,
+                hintText: "Lagos",
+                errorText: _stateError,
+              ),
             ),
           ),
           profileLabeledField(
+            context: context,
             label: "LGA",
             field: TextField(
               controller: _lgaController,
               textInputAction: TextInputAction.done,
+              style: EyeInputTheme.textStyle(context),
+              cursorColor: EyeInputTheme.focusBorderColor(context),
               decoration: profileFieldDecoration(
-                  hintText: "Ikeja", errorText: _lgaError),
+                context: context,
+                hintText: "Ikeja",
+                errorText: _lgaError,
+              ),
             ),
           ),
           if (_completionError != null)
