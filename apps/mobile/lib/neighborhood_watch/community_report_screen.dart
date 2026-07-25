@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../design_system/eye_semantic_colors.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../widgets/eye_scaffold.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "community_media_upload_service.dart";
 import "community_members_screen.dart";
@@ -104,8 +105,8 @@ class _CommunityReportScreenState extends State<CommunityReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Report content")),
+    return EyeScaffold(
+      title: "Report content",
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [

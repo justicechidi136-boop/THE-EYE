@@ -593,6 +593,65 @@ Note: Nationwide verified official police dataset remains incomplete. Google sup
 
 ---
 
+## SRB-032 — Google Sign-In remains broken
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile / Firebase / API |
+| **Installed APK (2026-07-25)** | `com.theeye.app.staging` v0.1.0 code 1 @ `9e156a6` — SHA-256 `58E80E96…` |
+| **Physical evidence** | Sign-in attempt logcat **PENDING** on certification APK; Firebase config verified (`the-eye-2stg`, debug SHA-1 `5da2e2eb…` in `google-services.json`) |
+| **Code fix** | Layered `AuthDiagnostics` (layers 1–8), reference IDs on user messages, Settings → Build diagnostics (version, SHA, cert suffix) |
+| **Failure layer** | **PENDING** — requires physical Google tap on new APK |
+| **Status** | **PARTIALLY BLOCKED** — CODE FIXED — DEVICE QA PENDING |
+
+---
+
+## SRB-034 — Live SOS Video continues to crash (P0)
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile (Android FGS) |
+| **Physical logcat (confirmed 2026-07-25)** | `ForegroundServiceDidNotStartInTimeException` on `EmergencyLocationForegroundService` during `/active-emergency` restore @ 17:51 |
+| **Root cause (log-matched)** | `startForeground()` not reached within Android deadline when FGS starts on active-emergency restore |
+| **Code fix** | `onCreate()` immediate `startForeground`; `ic_notification.xml`; fallback icon + try/catch; `LiveVideoStartupPhase` state machine; incident-first ordering |
+| **Artifact** | `artifacts/mobile/logcat-fgs-crash-9e156a6-sanitized.txt` |
+| **Status** | **CODE FIXED — DEVICE QA PENDING** |
+
+---
+
+## SRB-038 — Neighborhood Watch Dark Mode incomplete
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile UI |
+| **Physical evidence** | White/light surfaces on NW sub-screens reported on APK @ `9e156a6` |
+| **Code fix** | `EyeScaffold` semantic surfaces; NW routes in `main.dart`; post/report/members screens; map card dark surfaces; orange interactive icons in dark mode |
+| **Automated test** | `neighborhood_watch_dark_mode_test.dart` (source guard + main.dart NW section), `neighborhood_watch_theme_widgets_test.dart` |
+| **Status** | **CODE FIXED — DEVICE QA PENDING** |
+
+---
+
+## Final status (SRB-032 / SRB-034 / SRB-038)
+
+**PARTIALLY BLOCKED — CODE FIXED — DEVICE QA PENDING**
+
+| Milestone | Evidence |
+|---|---|
+| Prior installed APK | `9e156a6` — FGS crash **log-confirmed**; does not include SRB-032/034/038 fixes |
+| Fix branch | `fix/runtime-srb032-034-038` @ `7e7af0c` |
+| Mobile tests | **179/179 PASS** (includes new auth/theme/runtime tests) |
+| Certification APK | **BUILD IN PROGRESS** — requires `--dart-define=THE_EYE_BUILD_SHA=7e7af0c` |
+| Physical QA | **NOT PASS** — Google sign-in layer, NW dark mode sweep, Live Video no-crash |
+
+**Remaining before DEVICE VERIFIED:**
+1. Merge PR to `staging`; configure DEP-004 deploy secrets
+2. Build certification APK from merged SHA; clean-uninstall → install
+3. Phase 5 physical QA: Google (8 steps), NW dark mode (all routes), Live Video (14 steps)
+
+**Sprint 8:** NOT AUTHORIZED until SRB-032/034/038 reach DEVICE VERIFIED.
+
+---
+
 ## Final status (SRB-031–037)
 
 **CI VERIFIED — DEPLOY BLOCKED (DEP-004) — DEVICE QA PENDING**

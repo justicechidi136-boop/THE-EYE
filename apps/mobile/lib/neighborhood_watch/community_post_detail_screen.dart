@@ -1,6 +1,8 @@
 import "package:flutter/material.dart";
 
+import "../design_system/eye_semantic_colors.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../widgets/eye_scaffold.dart";
 import "community_members_screen.dart";
 import "neighborhood_watch_service.dart";
 
@@ -242,26 +244,25 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.args.postTitle),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.flag_outlined),
-            onPressed: () {
-              Navigator.of(context).pushNamed(
-                "/neighborhood-watch/report",
-                arguments: CommunityReportRouteArgs(
-                  communityId: widget.args.communityId,
-                  targetType: "Post",
-                  targetId: widget.args.postId,
-                  targetLabel: widget.args.postTitle,
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+    final semantics = EyeSemanticColors.of(context);
+    return EyeScaffold(
+      title: widget.args.postTitle,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.flag_outlined),
+          onPressed: () {
+            Navigator.of(context).pushNamed(
+              "/neighborhood-watch/report",
+              arguments: CommunityReportRouteArgs(
+                communityId: widget.args.communityId,
+                targetType: "Post",
+                targetId: widget.args.postId,
+                targetLabel: widget.args.postTitle,
+              ),
+            );
+          },
+        ),
+      ],
       body: Column(
         children: [
           if (!widget.isOnline)
@@ -375,7 +376,8 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
             ),
           ),
           SafeArea(
-            child: Padding(
+            child: Container(
+              color: semantics.surface,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Row(
                 children: [

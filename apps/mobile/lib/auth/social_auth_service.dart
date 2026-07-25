@@ -13,6 +13,7 @@ import "package:sign_in_with_apple/sign_in_with_apple.dart";
 
 import "../config/app_flavor.dart";
 import "../contracts/the_eye_api_client.dart";
+import "auth_diagnostics.dart";
 import "auth_safe_log.dart";
 import "auth_session_store.dart";
 import "google_sign_in_config.dart";
@@ -114,16 +115,22 @@ class SocialAuthService {
         deviceId: deviceId,
       );
     } on FirebaseAuthException catch (error) {
+      final diagnostic = AuthDiagnostics.forFirebaseAuthException(error.code);
+      AuthDiagnostics.logSnapshot(diagnostic);
       logAuthEvent("Google provider error: ${error.code}");
       return SocialAuthResult(
         status: SocialAuthStatus.providerError,
-        userMessage: _firebaseAuthMessage(error),
+        userMessage:
+            "${_firebaseAuthMessage(error)} Ref: ${diagnostic.referenceId}",
       );
     } on PlatformException catch (error) {
+      final diagnostic = AuthDiagnostics.forPlatformException(error);
+      AuthDiagnostics.logSnapshot(diagnostic);
       logAuthEvent("Google platform error: ${error.code}");
       return SocialAuthResult(
         status: SocialAuthStatus.providerError,
-        userMessage: _googlePlatformMessage(error),
+        userMessage:
+            "${_googlePlatformMessage(error)} Ref: ${diagnostic.referenceId}",
       );
     } on SocketException {
       return SocialAuthResult(
@@ -298,19 +305,21 @@ class SocialAuthService {
     return _firebaseGoogleCredentialWithGoogleSignIn();
   }
 
-  /// Uses Firebase's native activity flow so the app reliably resumes after
-  /// account selection (avoids google_sign_in callback issues on Android).
+  /// Tries Firebase GenericIdp first, then falls back to [google_sign_in] when
+  /// OEM keystore cannot load Firebear keys (log: GenericIdpActivity encryption
+  /// key failure → FirebaseAuthException code `unknown`).
   Future<UserCredential?> _firebaseGoogleCredentialAndroid() async {
-    final provider = GoogleAuthProvider();
-    provider.addScope("email");
-    provider.setCustomParameters(const {"prompt": "select_account"});
     try {
-      return await _firebaseAuth
-          .signInWithProvider(provider)
-          .timeout(const Duration(minutes: 2));
+      return await _firebaseGoogleCredentialWithProvider();
     } on FirebaseAuthException catch (error) {
       if (_isGoogleSignInCancelled(error.code)) {
         return null;
+      }
+      if (_shouldFallbackToGoogleSignInPlugin(error.code)) {
+        logAuthEvent(
+          "Google signInWithProvider failed (${error.code}); using google_sign_in fallback",
+        );
+        return _firebaseGoogleCredentialWithGoogleSignIn();
       }
       rethrow;
     } on TimeoutException {
@@ -321,6 +330,23 @@ class SocialAuthService {
       );
     }
   }
+
+  Future<UserCredential?> _firebaseGoogleCredentialWithProvider() async {
+    final provider = GoogleAuthProvider();
+    provider.addScope("email");
+    provider.setCustomParameters(const {"prompt": "select_account"});
+    return _firebaseAuth
+        .signInWithProvider(provider)
+        .timeout(const Duration(minutes: 2));
+  }
+
+  static bool shouldFallbackToGoogleSignInPlugin(String firebaseAuthCode) {
+    return firebaseAuthCode == "unknown" ||
+        firebaseAuthCode == "internal-error";
+  }
+
+  bool _shouldFallbackToGoogleSignInPlugin(String code) =>
+      shouldFallbackToGoogleSignInPlugin(code);
 
   Future<UserCredential?> _firebaseGoogleCredentialWithGoogleSignIn() async {
     if (!kIsWeb &&
@@ -453,12 +479,18 @@ class SocialAuthService {
   }
 
   SocialAuthResult _mapExchangeException(AuthApiException error) {
+    final diagnostic = AuthDiagnostics.forBackendExchange(
+      httpStatus: error.statusCode,
+      apiErrorCode: error.errorCode ?? "",
+    );
+    AuthDiagnostics.logSnapshot(diagnostic);
     final code = error.errorCode ?? "";
     if (error.statusCode == 409 ||
         code == "ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL") {
       return SocialAuthResult(
         status: SocialAuthStatus.accountConflict,
-        userMessage: error.userMessage,
+        userMessage:
+            "${error.userMessage} Ref: ${diagnostic.referenceId}",
       );
     }
     if (error.statusCode == 403 && code == "ACCOUNT_SUSPENDED") {
@@ -539,6 +571,10 @@ class SocialAuthService {
       case "app-not-authorized":
         return "AUTH-GOOGLE-001 Google sign-in is not configured for this build. "
             "Verify Firebase project settings and rebuild.";
+      case "unknown":
+      case "internal-error":
+        return "AUTH-GOOGLE-003 Google sign-in could not start on this device. "
+            "Try again or use email sign-in.";
       default:
         return "AUTH-GOOGLE-003 Sign-in failed. Try again later.";
     }

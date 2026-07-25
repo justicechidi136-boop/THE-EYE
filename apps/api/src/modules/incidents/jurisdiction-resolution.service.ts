@@ -146,43 +146,52 @@ export class JurisdictionResolutionService {
   }
 
   private async matchByPolygon(latitude: number, longitude: number) {
-    const matches = await this.prisma.$queryRaw<Array<{ id: string; country: string; state: string; lga: string }>>`
-      SELECT id, country, state, lga
-      FROM jurisdictions
-      WHERE boundary IS NOT NULL
-        AND ST_Covers(boundary, ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography)
-      LIMIT 1
-    `;
-    return matches[0] ?? null;
+    try {
+      const matches = await this.prisma.$queryRaw<Array<{ id: string; country: string; state: string; lga: string }>>`
+        SELECT id, country, state, lga
+        FROM jurisdictions
+        WHERE boundary IS NOT NULL
+          AND ST_Covers(boundary, ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography)
+        LIMIT 1
+      `;
+      return matches[0] ?? null;
+    } catch {
+      // PostGIS may be unavailable on some staging hosts; fall through to other resolvers.
+      return null;
+    }
   }
 
   private async matchNearestBoundary(latitude: number, longitude: number) {
-    const matches = await this.prisma.$queryRaw<
-      Array<{ id: string; country: string; state: string; lga: string; distance_meters: number }>
-    >`
-      SELECT
-        id,
-        country,
-        state,
-        lga,
-        ST_Distance(
-          boundary,
-          ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography
-        ) AS distance_meters
-      FROM jurisdictions
-      WHERE boundary IS NOT NULL
-      ORDER BY distance_meters ASC
-      LIMIT 1
-    `;
-    const match = matches[0];
-    if (!match || match.distance_meters > NEAREST_TOLERANCE_METERS) return null;
-    return {
-      id: match.id,
-      country: match.country,
-      state: match.state,
-      lga: match.lga,
-      distanceMeters: Math.round(match.distance_meters),
-    };
+    try {
+      const matches = await this.prisma.$queryRaw<
+        Array<{ id: string; country: string; state: string; lga: string; distance_meters: number }>
+      >`
+        SELECT
+          id,
+          country,
+          state,
+          lga,
+          ST_Distance(
+            boundary,
+            ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography
+          ) AS distance_meters
+        FROM jurisdictions
+        WHERE boundary IS NOT NULL
+        ORDER BY distance_meters ASC
+        LIMIT 1
+      `;
+      const match = matches[0];
+      if (!match || match.distance_meters > NEAREST_TOLERANCE_METERS) return null;
+      return {
+        id: match.id,
+        country: match.country,
+        state: match.state,
+        lga: match.lga,
+        distanceMeters: Math.round(match.distance_meters),
+      };
+    } catch {
+      return null;
+    }
   }
 
   private async matchProfileFallback(actor?: JwtPayload) {

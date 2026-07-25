@@ -39,6 +39,7 @@ import "incidents/incident_location_tracker.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
 import "emergency/active_emergency_screen.dart";
+import "emergency/live_video_startup_phase.dart";
 import "emergency/active_emergency_service.dart";
 import "emergency/active_emergency_store.dart";
 import "incidents/pending_submission_store.dart";
@@ -76,6 +77,7 @@ import "profile/kyc_screen.dart";
 import "profile/profile_edit_screen.dart";
 import "police/police_stations_screen.dart";
 import "profile/profile_screen.dart";
+import "settings/build_diagnostics_screen.dart";
 
 export "app/app_scope.dart" show AppScope;
 export "location/location_permission_service.dart"
@@ -783,6 +785,7 @@ class _TheEyeAppState extends State<TheEyeApp> {
                   const EmergencyContactsScreen(),
               "/profile/kyc": (_) => const KycScreen(),
               "/settings": (_) => const SettingsScreen(),
+              "/settings/diagnostics": (_) => const BuildDiagnosticsScreen(),
               "/your-car": (_) => const YourCarScreen(),
               "/account-status": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments
@@ -938,6 +941,11 @@ ThemeData buildDarkTheme(bool highContrast) {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: const BorderSide(color: BrandColors.darkBorder))),
+    appBarTheme: AppBarTheme(
+      backgroundColor: BrandColors.darkSurface,
+      foregroundColor: BrandColors.darkText,
+      surfaceTintColor: Colors.transparent,
+    ),
   );
 }
 
@@ -4141,6 +4149,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   bool startingStream = false;
   bool stoppingStream = false;
   bool _streamStartInFlight = false;
+  LiveVideoStartupPhase _startupPhase = LiveVideoStartupPhase.idle;
   bool permissionDenied = false;
   String? permissionError;
   String? locationStatusMessage;
@@ -4196,6 +4205,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   @override
   void dispose() {
     _disposed = true;
+    _startupPhase = LiveVideoStartupPhase.disposed;
     final listener = _locationListener;
     final appController = _appController;
     if (listener != null && appController != null) {
@@ -4352,14 +4362,36 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           const SizedBox(height: 16),
           SectionCard(
             title: "Location sharing",
-            child: Text(streaming
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (startingStream)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _startupPhase.label,
+                      style: TextStyle(
+                        color: EyeSemanticColors.of(context).secondaryText,
+                      ),
+                    ),
+                  ),
+                Text(streaming
                 ? (locationStatusMessage ??
                     "Your live location is shared with authorized emergency admins while this stream is active.")
                 : "Location is acquired in the background while your emergency is created. Precise GPS retry continues automatically."),
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  void _setStartupPhase(LiveVideoStartupPhase phase) {
+    if (_disposed || !mounted) return;
+    _startupPhase = phase;
+    locationStatusMessage = phase.label;
+    setState(() {});
   }
 
   Future<void> _startStream(BuildContext context) async {
@@ -4369,11 +4401,23 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       startingStream = true;
       permissionDenied = false;
       permissionError = null;
-      locationStatusMessage = "Creating emergency...";
     });
+    _setStartupPhase(LiveVideoStartupPhase.checkingPermissions);
 
     final appController = appOf(context);
     try {
+      _setStartupPhase(LiveVideoStartupPhase.validatingSession);
+      final accessToken = appController.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        _setStartupPhase(LiveVideoStartupPhase.failed);
+        showAppSnackBar(
+          context,
+          "Sign in required to start live video. Reference: LIVE-VIDEO-AUTH-001",
+          isError: true,
+        );
+        return;
+      }
+
       final alreadyPreviewing = liveVideoController.connectionState ==
           LiveVideoConnectionState.previewing;
       final previewFuture = alreadyPreviewing
@@ -4381,16 +4425,17 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           : liveVideoController
               .startLocalPreview(lowBandwidth: lowBandwidth)
               .timeout(kLiveVideoStartTimeout);
+      _setStartupPhase(LiveVideoStartupPhase.acquiringLocation);
       final accessFuture =
           appController.locationCoordinator.resolveImmediateEmergencyAccess();
 
       final previewOk = await previewFuture;
-      if (!mounted) return;
+      if (!mounted || _disposed) return;
       if (!previewOk) {
+        _setStartupPhase(LiveVideoStartupPhase.failed);
         setState(() {
           permissionDenied = true;
           permissionError = liveVideoController.errorMessage;
-          locationStatusMessage = "Video unavailable";
         });
         if (liveVideoController.errorMessage != null) {
           showAppSnackBar(context, liveVideoController.errorMessage!,
@@ -4399,15 +4444,15 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         return;
       }
 
-      setState(() => locationStatusMessage = "Getting location...");
       final access = await accessFuture;
-      if (!mounted) return;
+      if (!mounted || _disposed) return;
 
       final draft = access.hasFix
           ? buildIncidentDraft(
               type: IncidentType.emergency,
               description: "Live emergency video started with GPS.",
               position: access.position!,
+              anonymous: false,
               notifyEmergencyContacts: true,
               title: "Live emergency video",
             )
@@ -4416,17 +4461,18 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
               type: IncidentType.emergency,
               description:
                   "Live emergency video started while location is pending.",
+              anonymous: false,
               notifyEmergencyContacts: true,
               title: "Live emergency video",
             );
 
-      setState(() => locationStatusMessage = "Creating emergency...");
+      _setStartupPhase(LiveVideoStartupPhase.creatingIncident);
       final submission = await appController
           .submitIncident(draft)
           .timeout(kLiveVideoStartTimeout);
-      if (!mounted) return;
+      if (!mounted || _disposed) return;
       if (!submission.isSuccess || submission.incidentId == null) {
-        setState(() => locationStatusMessage = "Emergency submission failed");
+        _setStartupPhase(LiveVideoStartupPhase.failed);
         showAppSnackBar(
             context,
             submission.userMessage ??
@@ -4437,33 +4483,19 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
       activeIncidentId = submission.incidentId;
       await appController.activateActiveEmergency(activeIncidentId!);
-      if (!mounted) return;
+      if (!mounted || _disposed) return;
       if (access.hasFix) {
         latestPosition = access.position;
         lastCapturedAt = access.position!.timestamp;
       }
       setState(() {
         roomName = "eye-incident-$activeIncidentId";
-        locationStatusMessage = access.hasFix
-            ? "Starting secure video..."
-            : emergencyLocationRetryMessage(access);
       });
-
       if (!access.hasFix) {
         showAppSnackBar(context, emergencyLocationRetryMessage(access));
       }
 
-      final accessToken = appController.accessToken;
-      if (accessToken == null || accessToken.isEmpty) {
-        setState(() => locationStatusMessage = "Sign in required");
-        showAppSnackBar(
-          context,
-          "Sign in required to start live video. Reference: LIVE-VIDEO-AUTH-001",
-          isError: true,
-        );
-        return;
-      }
-
+      _setStartupPhase(LiveVideoStartupPhase.requestingLiveKitToken);
       final envelope = await apiClient
           .startLiveVideo(
             incidentId: activeIncidentId!,
@@ -4478,12 +4510,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       liveSessionId = startResult.sessionId;
       roomName = startResult.roomName;
 
+      _setStartupPhase(LiveVideoStartupPhase.startingForegroundService);
       await appController.startIncidentLocationTracking(
         activeIncidentId!,
         liveVideoSessionId: liveSessionId,
       );
       _locationListener ??= (fix) {
-        if (!mounted) return;
+        if (!mounted || _disposed) return;
         setState(() {
           latestPosition = fix.toPosition();
           lastCapturedAt = fix.capturedAt.toLocal();
@@ -4494,13 +4527,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       };
       appController.locationCoordinator.addListener(_locationListener!);
 
-      setState(() => locationStatusMessage = "Starting secure video...");
+      _setStartupPhase(LiveVideoStartupPhase.connectingRoom);
       final connected = await liveVideoController
           .connectPublisher(startResult)
           .timeout(kLiveVideoStartTimeout);
-      if (!mounted) return;
+      if (!mounted || _disposed) return;
       if (!connected) {
-        setState(() => locationStatusMessage = "Video unavailable");
+        _setStartupPhase(LiveVideoStartupPhase.recovering);
         showAppSnackBar(
             context,
             liveVideoController.errorMessage ??
@@ -4509,7 +4542,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         return;
       }
 
-      if (!mounted) return;
+      if (!mounted || _disposed) return;
+      _setStartupPhase(LiveVideoStartupPhase.streaming);
       setState(() {
         permissionDenied = false;
         permissionError = null;
@@ -4524,21 +4558,25 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             : emergencyLocationRetryMessage(access),
       );
     } on TimeoutException {
-      if (!mounted) return;
-      setState(() => locationStatusMessage = "Video unavailable");
+      if (!mounted || _disposed) return;
+      _setStartupPhase(LiveVideoStartupPhase.failed);
       showAppSnackBar(context,
           "Live video start timed out. Check your connection and try again.",
           isError: true);
     } on IncidentApiException catch (error) {
-      if (!mounted) return;
+      if (!mounted || _disposed) return;
       final message = error.statusCode == 503
           ? "Live video is temporarily unavailable. Your emergency may still have been submitted."
           : mapLiveVideoApiError(error.statusCode, error.userMessage);
-      setState(() => locationStatusMessage = "Video unavailable");
+      _setStartupPhase(activeIncidentId == null
+          ? LiveVideoStartupPhase.failed
+          : LiveVideoStartupPhase.recovering);
       showAppSnackBar(context, message, isError: true);
     } catch (_) {
-      if (!mounted) return;
-      setState(() => locationStatusMessage = "Video unavailable");
+      if (!mounted || _disposed) return;
+      _setStartupPhase(activeIncidentId == null
+          ? LiveVideoStartupPhase.failed
+          : LiveVideoStartupPhase.recovering);
       showAppSnackBar(context,
           "Live video is temporarily unavailable. Your emergency may still have been submitted.",
           isError: true);
@@ -5962,6 +6000,9 @@ class _NeighborhoodWatchHomeScreenState
     final controller = appOf(context);
     final community = controller.selectedCommunity;
     final stats = controller.communityStatistics;
+    final semantics = EyeSemanticColors.of(context);
+    Color nwIcon(Color light) =>
+        context.isDarkTheme ? semantics.interactiveText : light;
     return SafetyScaffold(
       title: "Neighborhood Watch",
       selectedIndex: 3,
@@ -6095,55 +6136,55 @@ class _NeighborhoodWatchHomeScreenState
                 ActionTile(
                     "Members",
                     Icons.people,
-                    Colors.brown.shade700,
+                    nwIcon(Colors.brown.shade700),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/members")),
                 ActionTile(
                     "My Communities",
                     Icons.home_work,
-                    Colors.teal.shade700,
+                    nwIcon(Colors.teal.shade700),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/communities")),
                 ActionTile(
                     "Join Community",
                     Icons.group_add,
-                    Colors.green.shade700,
+                    nwIcon(Colors.green.shade700),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/join")),
                 ActionTile(
                     "Community Feed",
                     Icons.dynamic_feed,
-                    Colors.blue.shade700,
+                    nwIcon(Colors.blue.shade700),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/feed")),
                 ActionTile(
                     "Community Map",
                     Icons.map,
-                    Colors.indigo.shade700,
+                    nwIcon(Colors.indigo.shade700),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/map")),
                 ActionTile(
                     "Community Chat",
                     Icons.chat,
-                    Colors.purple.shade700,
+                    nwIcon(Colors.purple.shade700),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/chat")),
                 ActionTile(
                     "Volunteers",
                     Icons.volunteer_activism,
-                    Colors.red.shade700,
+                    nwIcon(Colors.red.shade700),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/volunteers")),
                 ActionTile(
                     "Patrols",
                     Icons.security,
-                    Colors.orange.shade800,
+                    nwIcon(Colors.orange.shade800),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/patrols")),
                 ActionTile(
                     "Alerts",
                     Icons.campaign,
-                    Colors.cyan.shade800,
+                    nwIcon(Colors.cyan.shade800),
                     () => Navigator.of(context)
                         .pushNamed("/neighborhood-watch/alerts")),
               ],
@@ -6585,6 +6626,7 @@ class _CommunityMapScreenState extends State<CommunityMapScreen> {
   @override
   Widget build(BuildContext context) {
     final community = appOf(context).selectedCommunity;
+    final semantics = EyeSemanticColors.of(context);
     return SafetyScaffold(
       title: "Community Map",
       selectedIndex: 3,
@@ -6601,15 +6643,15 @@ class _CommunityMapScreenState extends State<CommunityMapScreen> {
           Container(
             height: 360,
             decoration: BoxDecoration(
-              color: BrandColors.lightSurfaceMuted,
+              color: semantics.cardSurface,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: BrandColors.lightBorder),
+              border: Border.all(color: semantics.border),
             ),
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.map, size: 80, color: BrandColors.green),
+                  Icon(Icons.map, size: 80, color: semantics.interactiveText),
                   if (community != null)
                     Padding(
                       padding: const EdgeInsets.all(16),
@@ -7508,6 +7550,25 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          if (!AppFlavorConfig.isProduction)
+            SectionCard(
+              title: "Diagnostics",
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.bug_report_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: const Text("Build & runtime info"),
+                subtitle: const Text(
+                  "Version, build SHA, API host, Firebase project (no secrets).",
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context).pushNamed("/settings/diagnostics"),
+              ),
+            ),
+          if (!AppFlavorConfig.isProduction) const SizedBox(height: 16),
           SectionCard(
             title: "Appearance",
             child: Column(
@@ -7644,8 +7705,7 @@ class SafetyScaffold extends StatelessWidget {
         : EyeNavRoutes.selectedIndexForRoute(routeName);
 
     return Scaffold(
-      backgroundColor:
-          useFigmaShell ? EyeSemanticColors.of(context).background : null,
+      backgroundColor: EyeSemanticColors.of(context).background,
       appBar: useFigmaShell
           ? null
           : AppBar(

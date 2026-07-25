@@ -130,6 +130,21 @@ void main() {
     expect(result.userMessage, contains("AUTH-GOOGLE-001"));
   });
 
+  test("android GenericIdp unknown error triggers google_sign_in fallback", () {
+    expect(
+      SocialAuthService.shouldFallbackToGoogleSignInPlugin("unknown"),
+      isTrue,
+    );
+    expect(
+      SocialAuthService.shouldFallbackToGoogleSignInPlugin("internal-error"),
+      isTrue,
+    );
+    expect(
+      SocialAuthService.shouldFallbackToGoogleSignInPlugin("app-not-authorized"),
+      isFalse,
+    );
+  });
+
   test("backend exchange failures surface AUTH-GOOGLE-004", () async {
     final service = SocialAuthService(
       apiClient: _FakeApiClient(

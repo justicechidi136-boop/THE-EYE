@@ -8,6 +8,7 @@ import "../evidence/evidence_capture_service.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
+import "../contracts/the_eye_enums.dart";
 import "../contracts/the_eye_payloads.dart";
 import "incident_draft.dart";
 import "incident_submission_result.dart";
@@ -92,23 +93,33 @@ class IncidentSubmissionService {
 
     _inFlightSubmissionIds.add(draft.clientSubmissionId);
     try {
-      final response = draft.emergencyCategory != null
-          ? await _apiClient
-              .reportSos(
-                payload: _payloadForSosDraft(draft),
-                accessToken: accessToken,
-                clientSubmissionId: draft.clientSubmissionId,
-                timeout: requestTimeout,
-              )
-              .timeout(requestTimeout)
-          : await _apiClient
-              .reportIncident(
-                payload: _payloadForDraft(draft),
-                accessToken: accessToken,
-                clientSubmissionId: draft.clientSubmissionId,
-                timeout: requestTimeout,
-              )
-              .timeout(requestTimeout);
+      final payload = draft.emergencyCategory != null
+          ? _payloadForSosDraft(draft)
+          : _payloadForDraft(draft);
+      final Future<IncidentReportResponse> request;
+      if (draft.emergencyCategory != null) {
+        request = _apiClient.reportSos(
+          payload: payload,
+          accessToken: accessToken,
+          clientSubmissionId: draft.clientSubmissionId,
+          timeout: requestTimeout,
+        );
+      } else if (draft.type == IncidentType.emergency) {
+        request = _apiClient.reportEmergency(
+          payload: payload,
+          accessToken: accessToken,
+          clientSubmissionId: draft.clientSubmissionId,
+          timeout: requestTimeout,
+        );
+      } else {
+        request = _apiClient.reportIncident(
+          payload: payload,
+          accessToken: accessToken,
+          clientSubmissionId: draft.clientSubmissionId,
+          timeout: requestTimeout,
+        );
+      }
+      final response = await request.timeout(requestTimeout);
 
       await _removeQueuedDraft(draft.clientSubmissionId);
       final message = await _finalizeEvidenceUpload(
@@ -345,6 +356,9 @@ class IncidentApiException implements Exception {
     } else if (response.statusCode == 429) {
       message =
           "Too many reports were sent recently. Please wait and try again.";
+    } else if (response.statusCode >= 500) {
+      message =
+          "THE EYE servers could not process your report (ERR-INC-${response.statusCode}). Please try again shortly.";
     }
 
     return IncidentApiException(response.statusCode, message);
