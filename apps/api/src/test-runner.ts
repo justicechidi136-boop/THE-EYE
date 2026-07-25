@@ -36,6 +36,14 @@ function makeMock(impl?: (...args: unknown[]) => unknown) {
     fn.mock.onceQueue.push(value);
     return fn;
   };
+  fn.mockRejectedValue = (value: unknown) => {
+    fn.mock.impl = () => Promise.reject(value);
+    return fn;
+  };
+  fn.mockRejectedValueOnce = (value: unknown) => {
+    fn.mock.onceQueue.push(Promise.reject(value));
+    return fn;
+  };
   fn.mockReturnValue = (value: unknown) => {
     fn.mock.impl = () => value;
     return fn;
