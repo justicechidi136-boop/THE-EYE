@@ -34,4 +34,10 @@ void main() {
     );
     expect(snapshot.layer, GoogleAuthFailureLayer.accountSelectionFailed);
   });
+
+  test("maps Firebase unknown to signInWithCredential layer", () {
+    final snapshot = AuthDiagnostics.forFirebaseAuthException("unknown");
+    expect(snapshot.layer, GoogleAuthFailureLayer.firebaseSignInFailed);
+    expect(snapshot.firebaseExceptionCode, "unknown");
+  });
 }

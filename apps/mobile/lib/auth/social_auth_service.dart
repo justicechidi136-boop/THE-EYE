@@ -305,19 +305,21 @@ class SocialAuthService {
     return _firebaseGoogleCredentialWithGoogleSignIn();
   }
 
-  /// Uses Firebase's native activity flow so the app reliably resumes after
-  /// account selection (avoids google_sign_in callback issues on Android).
+  /// Tries Firebase GenericIdp first, then falls back to [google_sign_in] when
+  /// OEM keystore cannot load Firebear keys (log: GenericIdpActivity encryption
+  /// key failure → FirebaseAuthException code `unknown`).
   Future<UserCredential?> _firebaseGoogleCredentialAndroid() async {
-    final provider = GoogleAuthProvider();
-    provider.addScope("email");
-    provider.setCustomParameters(const {"prompt": "select_account"});
     try {
-      return await _firebaseAuth
-          .signInWithProvider(provider)
-          .timeout(const Duration(minutes: 2));
+      return await _firebaseGoogleCredentialWithProvider();
     } on FirebaseAuthException catch (error) {
       if (_isGoogleSignInCancelled(error.code)) {
         return null;
+      }
+      if (_shouldFallbackToGoogleSignInPlugin(error.code)) {
+        logAuthEvent(
+          "Google signInWithProvider failed (${error.code}); using google_sign_in fallback",
+        );
+        return _firebaseGoogleCredentialWithGoogleSignIn();
       }
       rethrow;
     } on TimeoutException {
@@ -328,6 +330,23 @@ class SocialAuthService {
       );
     }
   }
+
+  Future<UserCredential?> _firebaseGoogleCredentialWithProvider() async {
+    final provider = GoogleAuthProvider();
+    provider.addScope("email");
+    provider.setCustomParameters(const {"prompt": "select_account"});
+    return _firebaseAuth
+        .signInWithProvider(provider)
+        .timeout(const Duration(minutes: 2));
+  }
+
+  static bool shouldFallbackToGoogleSignInPlugin(String firebaseAuthCode) {
+    return firebaseAuthCode == "unknown" ||
+        firebaseAuthCode == "internal-error";
+  }
+
+  bool _shouldFallbackToGoogleSignInPlugin(String code) =>
+      shouldFallbackToGoogleSignInPlugin(code);
 
   Future<UserCredential?> _firebaseGoogleCredentialWithGoogleSignIn() async {
     if (!kIsWeb &&
@@ -552,6 +571,10 @@ class SocialAuthService {
       case "app-not-authorized":
         return "AUTH-GOOGLE-001 Google sign-in is not configured for this build. "
             "Verify Firebase project settings and rebuild.";
+      case "unknown":
+      case "internal-error":
+        return "AUTH-GOOGLE-003 Google sign-in could not start on this device. "
+            "Try again or use email sign-in.";
       default:
         return "AUTH-GOOGLE-003 Sign-in failed. Try again later.";
     }
