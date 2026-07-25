@@ -104,4 +104,18 @@ void main() {
     expect(stats.memberCount, 10);
     expect(stats.commentCount, 6);
   });
+
+  test("uses configured API client instead of compile-time localhost default",
+      () async {
+    const stagingBase = "https://staging-api.theeye.com.ng/v1";
+    final apiClient = TheEyeApiClient(
+      baseUrl: stagingBase,
+      httpClient: MockClient((request) async {
+        expect(request.url.toString(), startsWith(stagingBase));
+        return http.Response(jsonEncode({"data": []}), 200);
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+    await service.listCommunities(accessToken: "token");
+  });
 }
