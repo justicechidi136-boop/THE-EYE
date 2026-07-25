@@ -13,6 +13,7 @@ import "package:sign_in_with_apple/sign_in_with_apple.dart";
 
 import "../config/app_flavor.dart";
 import "../contracts/the_eye_api_client.dart";
+import "auth_diagnostics.dart";
 import "auth_safe_log.dart";
 import "auth_session_store.dart";
 import "google_sign_in_config.dart";
@@ -114,16 +115,22 @@ class SocialAuthService {
         deviceId: deviceId,
       );
     } on FirebaseAuthException catch (error) {
+      final diagnostic = AuthDiagnostics.forFirebaseAuthException(error.code);
+      AuthDiagnostics.logSnapshot(diagnostic);
       logAuthEvent("Google provider error: ${error.code}");
       return SocialAuthResult(
         status: SocialAuthStatus.providerError,
-        userMessage: _firebaseAuthMessage(error),
+        userMessage:
+            "${_firebaseAuthMessage(error)} Ref: ${diagnostic.referenceId}",
       );
     } on PlatformException catch (error) {
+      final diagnostic = AuthDiagnostics.forPlatformException(error);
+      AuthDiagnostics.logSnapshot(diagnostic);
       logAuthEvent("Google platform error: ${error.code}");
       return SocialAuthResult(
         status: SocialAuthStatus.providerError,
-        userMessage: _googlePlatformMessage(error),
+        userMessage:
+            "${_googlePlatformMessage(error)} Ref: ${diagnostic.referenceId}",
       );
     } on SocketException {
       return SocialAuthResult(
@@ -453,12 +460,18 @@ class SocialAuthService {
   }
 
   SocialAuthResult _mapExchangeException(AuthApiException error) {
+    final diagnostic = AuthDiagnostics.forBackendExchange(
+      httpStatus: error.statusCode,
+      apiErrorCode: error.errorCode ?? "",
+    );
+    AuthDiagnostics.logSnapshot(diagnostic);
     final code = error.errorCode ?? "";
     if (error.statusCode == 409 ||
         code == "ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL") {
       return SocialAuthResult(
         status: SocialAuthStatus.accountConflict,
-        userMessage: error.userMessage,
+        userMessage:
+            "${error.userMessage} Ref: ${diagnostic.referenceId}",
       );
     }
     if (error.statusCode == 403 && code == "ACCOUNT_SUSPENDED") {
