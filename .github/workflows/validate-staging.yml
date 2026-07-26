@@ -223,6 +223,38 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Validate staging Android signing configuration
+        run: node scripts/ci/validate-staging-signing-config.cjs
+
+      - name: Materialize staging Android keystore
+        id: staging_keystore
+        env:
+          STAGING_ANDROID_KEYSTORE_BASE64: ${{ secrets.STAGING_ANDROID_KEYSTORE_BASE64 }}
+          STAGING_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.STAGING_ANDROID_KEYSTORE_PASSWORD }}
+          STAGING_ANDROID_KEY_ALIAS: ${{ secrets.STAGING_ANDROID_KEY_ALIAS }}
+          STAGING_ANDROID_KEY_PASSWORD: ${{ secrets.STAGING_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${STAGING_ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::warning::staging secret STAGING_ANDROID_KEYSTORE_BASE64 is not set — skipping staging release APK build until dedicated signing is configured"
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for name in STAGING_ANDROID_KEYSTORE_PASSWORD STAGING_ANDROID_KEY_ALIAS STAGING_ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::GitHub staging secret ${name} is required when STAGING_ANDROID_KEYSTORE_BASE64 is set"
+              exit 1
+            fi
+          done
+          KEYSTORE_PATH="${RUNNER_TEMP}/the-eye-staging-release.jks"
+          echo "${STAGING_ANDROID_KEYSTORE_BASE64}" | base64 -d > "${KEYSTORE_PATH}"
+          chmod 600 "${KEYSTORE_PATH}"
+          echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          echo "THE_EYE_STAGING_KEYSTORE_PATH=${KEYSTORE_PATH}" >> "$GITHUB_ENV"
+          echo "THE_EYE_STAGING_KEYSTORE_PASSWORD=${STAGING_ANDROID_KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+          echo "THE_EYE_STAGING_KEY_ALIAS=${STAGING_ANDROID_KEY_ALIAS}" >> "$GITHUB_ENV"
+          echo "THE_EYE_STAGING_KEY_PASSWORD=${STAGING_ANDROID_KEY_PASSWORD}" >> "$GITHUB_ENV"
+
       - name: Materialize mobile google-services.json files
         id: mobile_gs_json
         env:
@@ -284,12 +316,34 @@ jobs:
           fi
 
       - name: Build staging APK
-        if: steps.mobile_gs_json.outputs.has_secret == 'true'
+        if: steps.mobile_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
         run: pnpm --dir apps/mobile exec flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging
 
       - name: Validate mobile staging artifact
-        if: steps.mobile_gs_json.outputs.has_secret == 'true'
-        run: node scripts/validate-staging-artifacts.cjs --mobile-apk apps/mobile/build/app/outputs/flutter-apk/app-staging-release.apk
+        if: steps.mobile_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
+        env:
+          STAGING_ANDROID_EXPECTED_SHA1: ${{ vars.STAGING_ANDROID_EXPECTED_SHA1 }}
+          STAGING_ANDROID_EXPECTED_SHA256: ${{ vars.STAGING_ANDROID_EXPECTED_SHA256 }}
+        run: |
+          set -euo pipefail
+          APK="apps/mobile/build/app/outputs/flutter-apk/app-staging-release.apk"
+          node scripts/validate-staging-artifacts.cjs --mobile-apk "$APK"
+          ARGS=(--apk "$APK" --reject-debug)
+          if [ -n "${STAGING_ANDROID_EXPECTED_SHA1:-}" ]; then
+            ARGS+=(--expected-sha1 "${STAGING_ANDROID_EXPECTED_SHA1}")
+          fi
+          if [ -n "${STAGING_ANDROID_EXPECTED_SHA256:-}" ]; then
+            ARGS+=(--expected-sha256 "${STAGING_ANDROID_EXPECTED_SHA256}")
+          fi
+          node scripts/validate-staging-apk-signing.cjs "${ARGS[@]}"
+
+      - name: Cleanup staging Android keystore
+        if: always() && steps.staging_keystore.outputs.has_keystore == 'true'
+        run: |
+          set -euo pipefail
+          if [ -n "${THE_EYE_STAGING_KEYSTORE_PATH:-}" ] && [ -f "${THE_EYE_STAGING_KEYSTORE_PATH}" ]; then
+            rm -f "${THE_EYE_STAGING_KEYSTORE_PATH}"
+          fi
 
   watch:
     name: Watch staging analyze, test, build
@@ -454,6 +508,12 @@ jobs:
 
       - name: Validate nginx config
         run: node scripts/validate-nginx-config.cjs
+
+      - name: Validate nginx deploy lifecycle
+        run: node scripts/ci/validate-nginx-deploy-lifecycle.cjs
+
+      - name: Validate api-tools compose service
+        run: node scripts/ci/validate-api-tools-compose.cjs
 
       - name: Build staging API Docker image
         run: |

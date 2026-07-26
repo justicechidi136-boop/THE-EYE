@@ -166,10 +166,15 @@ function assertSharedSnippetMarkers() {
   const livekit = read("infra/docker/nginx/snippets/livekit-locations.conf");
   const entrypoint = read(entrypointRel);
 
-  for (const needle of ["upstream the_eye_api", "upstream the_eye_admin_web", "upstream the_eye_livekit"]) {
+  for (const needle of ["upstream the_eye_api", "upstream the_eye_admin_web", "upstream the_eye_livekit", " resolve;"]) {
     if (!upstreams.includes(needle)) {
       fail(`upstreams.conf missing ${needle}`);
     }
+  }
+
+  const nginxConf = read("infra/docker/nginx/nginx.conf");
+  if (!nginxConf.includes("resolver 127.0.0.11")) {
+    fail("nginx.conf missing Docker embedded DNS resolver");
   }
 
   if ((healthz.match(/location\s*=\s*\/healthz/g) || []).length !== 1) {
@@ -177,13 +182,14 @@ function assertSharedSnippetMarkers() {
   }
 
   for (const [file, content, needles] of [
-    ["admin-locations.conf", admin, ["proxy_pass http://the_eye_admin_web", "DEPRECATED"]],
-    ["api-locations.conf", api, ["proxy_pass http://the_eye_api", "location /v1/"]],
+    ["admin-locations.conf", admin, ["set $the_eye_admin_backend", "proxy_pass $the_eye_admin_backend", "DEPRECATED"]],
+    ["api-locations.conf", api, ["set $the_eye_api_backend", "proxy_pass $the_eye_api_backend", "location /v1/"]],
     [
       "livekit-locations.conf",
       livekit,
       [
-        "proxy_pass http://the_eye_livekit",
+        "set $the_eye_livekit_backend",
+        "proxy_pass $the_eye_livekit_backend",
         "proxy_set_header Upgrade $http_upgrade",
         "proxy_set_header Connection $connection_upgrade",
       ],

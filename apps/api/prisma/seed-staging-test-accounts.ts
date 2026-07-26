@@ -202,6 +202,68 @@ async function ensureActivePatrolSchedule(communityId: string) {
   });
 }
 
+const STAGING_POLICE_STATION = {
+  name: "Ikeja Gate Staging Police Post (CERT)",
+  sourceReference: "staging-cert-ikeja-gate-001",
+  address: "12 Allen Avenue, Ikeja, Lagos (Staging CERT)",
+  latitude: 6.6018,
+  longitude: 3.3515,
+} as const;
+
+async function ensureStagingPoliceStation(jurisdictionId: string, agencyId: string) {
+  const existing = await prisma.policeStation.findFirst({
+    where: { sourceReference: STAGING_POLICE_STATION.sourceReference },
+  });
+  if (existing) {
+    return prisma.policeStation.update({
+      where: { id: existing.id },
+      data: {
+        name: STAGING_POLICE_STATION.name,
+        address: STAGING_POLICE_STATION.address,
+        jurisdictionId,
+        agencyId,
+        verificationStatus: "VerifiedOfficial",
+        isActive: true,
+        source: "staging-certification",
+        country: PROFILE_LOCATION.country,
+        state: PROFILE_LOCATION.state,
+        lga: PROFILE_LOCATION.lga,
+        latitude: STAGING_POLICE_STATION.latitude,
+        longitude: STAGING_POLICE_STATION.longitude,
+      },
+    });
+  }
+
+  const created = await prisma.policeStation.create({
+    data: {
+      jurisdictionId,
+      agencyId,
+      name: STAGING_POLICE_STATION.name,
+      address: STAGING_POLICE_STATION.address,
+      phone: "+2348001002002",
+      officialPhone: "+2348001002002",
+      source: "staging-certification",
+      sourceReference: STAGING_POLICE_STATION.sourceReference,
+      verificationStatus: "VerifiedOfficial",
+      verifiedAt: new Date(),
+      isActive: true,
+      country: PROFILE_LOCATION.country,
+      state: PROFILE_LOCATION.state,
+      lga: PROFILE_LOCATION.lga,
+      latitude: STAGING_POLICE_STATION.latitude,
+      longitude: STAGING_POLICE_STATION.longitude,
+    },
+  });
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE police_stations
+    SET gps_location = ST_SetSRID(ST_MakePoint(${STAGING_POLICE_STATION.longitude}, ${STAGING_POLICE_STATION.latitude}), 4326)::geography
+    WHERE id = '${created.id}'
+  `);
+
+  return created;
+}
+
 async function upsertAdminAccount(spec: StagingTestAccountSpec) {
   const key = spec.key as keyof typeof ADMIN_ROLE_BY_KEY;
   const roleName = ADMIN_ROLE_BY_KEY[key];
@@ -403,6 +465,13 @@ async function main() {
     results.push(await seedAccount(spec));
   }
 
+  const jurisdiction = await upsertJurisdiction("lga");
+  const agency = await upsertAgency(jurisdiction.id);
+  const community = await upsertCommunity(jurisdiction.id);
+  await ensureCommunityRoles(community.id);
+  const patrol = await ensureActivePatrolSchedule(community.id);
+  const policeStation = await ensureStagingPoliceStation(jurisdiction.id, agency.id);
+
   await prisma.$executeRawUnsafe(`
     UPDATE jurisdictions
     SET boundary = ST_GeogFromText('SRID=4326;MULTIPOLYGON(((3.30 6.55,3.45 6.55,3.45 6.70,3.30 6.70,3.30 6.55)))')
@@ -421,6 +490,13 @@ async function main() {
       .join(", ");
     console.log(`- ${result.label}: ${result.email} (${extras})`);
   }
+
+  console.log("Staging certification dataset:");
+  console.log(`- communityId=${community.id} name=${community.name}`);
+  console.log(`- activePatrolId=${patrol.id} title=${patrol.title}`);
+  console.log(
+    `- policeStationId=${policeStation.id} sourceReference=${STAGING_POLICE_STATION.sourceReference}`,
+  );
 }
 
 main()

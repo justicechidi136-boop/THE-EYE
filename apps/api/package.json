@@ -19,6 +19,7 @@
     "db:create-admin": "tsx prisma/create-admin.ts",
     "seed:staging:test-accounts": "tsx --require ./src/preload-env.cjs prisma/seed-staging-test-accounts.ts",
     "verify:staging:test-accounts": "tsx --require ./src/preload-env.cjs scripts/verify-staging-test-accounts.ts",
+    "verify:staging:certification-data": "tsx --require ./src/preload-env.cjs scripts/verify-staging-certification-data.ts",
     "test": "tsx src/test-runner.ts"
   },
   "dependencies": {

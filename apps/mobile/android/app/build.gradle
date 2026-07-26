@@ -5,6 +5,29 @@ plugins {
     id "com.google.gms.google-services"
 }
 
+def keystorePropertiesFile = rootProject.file("key.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def stagingStorePath = System.getenv("THE_EYE_STAGING_KEYSTORE_PATH") ?:
+        keystoreProperties.getProperty("stagingStoreFile")
+def stagingStorePassword = System.getenv("THE_EYE_STAGING_KEYSTORE_PASSWORD") ?:
+        keystoreProperties.getProperty("stagingStorePassword")
+def stagingKeyAlias = System.getenv("THE_EYE_STAGING_KEY_ALIAS") ?:
+        keystoreProperties.getProperty("stagingKeyAlias")
+def stagingKeyPassword = System.getenv("THE_EYE_STAGING_KEY_PASSWORD") ?:
+        keystoreProperties.getProperty("stagingKeyPassword")
+def allowDebugStagingRelease =
+        (System.getenv("THE_EYE_ALLOW_DEBUG_STAGING_RELEASE") ?: "false") == "true"
+
+def hasStagingReleaseSigning =
+        stagingStorePath &&
+        stagingStorePassword &&
+        stagingKeyAlias &&
+        stagingKeyPassword
+
 android {
     namespace = "com.theeye.app"
     compileSdk = flutter.compileSdkVersion
@@ -28,6 +51,17 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        stagingRelease {
+            if (hasStagingReleaseSigning) {
+                storeFile file(stagingStorePath)
+                storePassword stagingStorePassword
+                keyAlias stagingKeyAlias
+                keyPassword stagingKeyPassword
+            }
+        }
+    }
+
     flavorDimensions += "environment"
     productFlavors {
         development {
@@ -48,8 +82,40 @@ android {
 
     buildTypes {
         release {
+            // Per-variant signing is applied in afterEvaluate (staging vs other flavors).
+        }
+        debug {
             signingConfig = signingConfigs.debug
         }
+    }
+}
+
+afterEvaluate {
+    android.applicationVariants.configureEach { variant ->
+        if (variant.buildType.name != "release") {
+            return
+        }
+
+        if (variant.flavorName == "staging") {
+            if (allowDebugStagingRelease) {
+                variant.signingConfig = android.signingConfigs.debug
+                return
+            }
+            if (!hasStagingReleaseSigning) {
+                throw new GradleException(
+                    "Staging release signing is not configured. " +
+                    "Set THE_EYE_STAGING_KEYSTORE_PATH, THE_EYE_STAGING_KEYSTORE_PASSWORD, " +
+                    "THE_EYE_STAGING_KEY_ALIAS, and THE_EYE_STAGING_KEY_PASSWORD " +
+                    "(or android/key.properties staging* entries). " +
+                    "Emergency override only: THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true"
+                )
+            }
+            variant.signingConfig = android.signingConfigs.stagingRelease
+            return
+        }
+
+        // development/production release — unchanged until dedicated release keys land.
+        variant.signingConfig = android.signingConfigs.debug
     }
 }
 

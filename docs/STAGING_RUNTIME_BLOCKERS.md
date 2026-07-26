@@ -681,6 +681,75 @@ Remaining before **DEVICE VERIFIED**:
 
 ---
 
+## DEP-005 — Nginx stale upstream after container recreation
+
+| Field | Value |
+|---|---|
+| **Symptom** | After `docker compose up -d --force-recreate api admin-web`, staging returns **502** until nginx is manually restarted |
+| **Root cause** | Nginx resolves Compose service names (`api`, `admin-web`, `livekit`) at startup/reload only; static `/healthz` still returns 200 while proxied routes hit stale container IPs. GitHub Deploy workflow recreated backends but did not reload nginx or probe proxied `/v1/health/ready` with `Host:` headers |
+| **Fix branch** | `fix/deploy-nginx-api-tools` |
+| **Code fix** | Docker embedded DNS `resolver 127.0.0.11`; upstream `resolve` + variable `proxy_pass`; `scripts/reload-nginx-upstreams.sh`; `scripts/staging-smoke-check.sh`; `scripts/deploy-staging.sh`; Deploy workflow reload + smoke |
+| **Automated test** | `scripts/ci/validate-nginx-deploy-lifecycle.cjs`, `docker-compose-smoke.cjs`, `validate-nginx-config.cjs` |
+| **Status** | **CODE FIXED — CI VERIFIED (PR #28 @ `8e0f9ea`) — RUNTIME VERIFIED PENDING** |
+
+---
+
+## DEP-006 — Staging seed runner unavailable
+
+| Field | Value |
+|---|---|
+| **Symptom** | Docs referenced `api-tools` Compose service; only `api-seed-staging` existed |
+| **Fix** | Added generic `api-tools` service (`profile: tools`, image `the-eye-api-tools`, entrypoint `tsx`) |
+| **Canonical command** | `docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts` |
+| **Verify command** | `… api-tools scripts/verify-staging-certification-data.ts` |
+| **Seed hardening** | Idempotent staging police station (`staging-cert-ikeja-gate-001`), active patrol, community membership; production guard unchanged |
+| **Automated test** | `scripts/ci/validate-api-tools-compose.cjs` |
+| **Status** | **CODE FIXED — CI VERIFIED (PR #28 @ `8e0f9ea`) — RUNTIME VERIFIED PENDING** |
+
+---
+
+## SRB-032 — Firebase release certificate (staging)
+
+| Field | Value |
+|---|---|
+| **Package** | `com.theeye.app.staging` |
+| **Firebase project** | `the-eye-2stg` |
+| **Current staging release signing** | **Migrating to dedicated keystore** — see [STAGING_ANDROID_SIGNING.md](./STAGING_ANDROID_SIGNING.md) |
+| **Deprecated debug APK fingerprints** | SHA-1 `5da2e2eb…` / SHA-256 `a6e66ccc…` — do **not** register as final identity |
+| **Dedicated staging fingerprints** | **PENDING** — generate keystore, register in Firebase |
+| **Registration** | **OPS ACTION REQUIRED** |
+| **Status** | **CODE FIXED (signing guard) — BLOCKED (OPS)** |
+
+---
+
+## RC-APK-001 / RC-QA-001 — Certification artifact & device QA
+
+| ID | Status |
+|---|---|
+| RC-APK-001 | **BLOCKED** — rebuild required after Firebase fingerprints registered + `origin/staging` includes DEP-005/006 fixes |
+| RC-QA-001 | **OPEN** — physical QA not executed on certification APK |
+
+---
+
+## Final status (staging certification — 2026-07-26)
+
+**PARTIALLY BLOCKED**
+
+| Milestone | Evidence |
+|---|---|
+| Deployed VPS SHA (reported) | `38c5156ee8340f75bb255b52b9753431f94be386` (`origin/staging` post PR #27) |
+| DEP-004 | **CONFIGURED** — GitHub deploy secrets present; VPS reachable |
+| DEP-005 / DEP-006 fix PR | **READY TO MERGE** — PR #28 CI green @ `8e0f9ea` (await explicit approval; do not auto-merge) |
+| Staging signing architecture | **CODE FIXED** — dedicated keystore required; CI skips APK until `STAGING_ANDROID_*` secrets set |
+| Nginx auto-reload | **NOT RUNTIME VERIFIED** on VPS until fix deployed |
+| Seed via api-tools | **NOT RUNTIME VERIFIED** on VPS until fix deployed |
+| Firebase fingerprints | **NOT REGISTERED** in `the-eye-2stg` |
+| Certification APK | Prior build @ `d0a51cd` uses **debug certificate** — label **NOT CERTIFICATION READY** until Firebase ops complete |
+
+**Sprint 8:** NOT AUTHORIZED.
+
+---
+
 ## Final status
 
 **PARTIALLY BLOCKED**

@@ -200,6 +200,15 @@ jobs:
           done
           echo "CI Firebase guard passed (staging project IDs only)."
 
+      - name: Staging Android signing configuration guard
+        run: node scripts/ci/validate-staging-signing-config.cjs
+
+      - name: Nginx deploy lifecycle guard
+        run: node scripts/ci/validate-nginx-deploy-lifecycle.cjs
+
+      - name: api-tools compose guard
+        run: node scripts/ci/validate-api-tools-compose.cjs
+
       - name: Secret scan (tracked files)
         run: pnpm run test:secrets
 

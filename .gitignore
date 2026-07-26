@@ -28,6 +28,13 @@ out/
 # Apple push notification keys
 *.p8
 
+# Android release keystores — never commit
+apps/mobile/android/key.properties
+apps/watch/android/key.properties
+**/*.jks
+**/*.keystore
+!**/*.example
+
 Thumbs.db
 
 *.log
