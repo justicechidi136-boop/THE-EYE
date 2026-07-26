@@ -1,0 +1,12 @@
+# Copy to key.properties (gitignored) for local staging release builds.
+# Never commit key.properties or any .jks / .keystore file.
+#
+# Alternative: set THE_EYE_STAGING_* environment variables (preferred in CI).
+
+stagingStoreFile=/absolute/path/to/the-eye-staging-release.jks
+stagingStorePassword=
+stagingKeyAlias=the-eye-staging
+stagingKeyPassword=
+
+# Emergency only — allows staging release APKs signed with the debug certificate.
+# THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true

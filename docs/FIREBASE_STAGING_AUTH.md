@@ -39,8 +39,10 @@ Build (always pass `THE_EYE_FLAVOR` — do not rely on Gradle flavor alone):
 
 ```bash
 cd apps/mobile
-flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging
+flutter build apk --release --flavor staging --dart-define=THE_EYE_FLAVOR=staging
 ```
+
+**Signing:** Staging release builds require a dedicated staging keystore — see [STAGING_ANDROID_SIGNING.md](./STAGING_ANDROID_SIGNING.md). Debug-signed staging APKs must not be used as the long-term Firebase identity.
 
 Validate:
 

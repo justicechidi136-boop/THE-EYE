@@ -77,23 +77,20 @@ Status until fingerprints are registered: **OPS ACTION REQUIRED**
 
 Build only after Firebase fingerprints are registered and staging is deployed.
 
+**Note:** Staging release builds require a **dedicated staging keystore** — see [STAGING_ANDROID_SIGNING.md](./STAGING_ANDROID_SIGNING.md). Prior APKs signed with the debug certificate are **not** certification-ready.
+
 ```bash
 git fetch origin
 git worktree add ../the-eye-certification origin/staging
 cd ../the-eye-certification/apps/mobile
+# Configure THE_EYE_STAGING_* env vars or android/key.properties first
 flutter clean && flutter pub get
 flutter test
 flutter build apk --release --flavor staging --dart-define=THE_EYE_FLAVOR=staging
+node ../../scripts/validate-staging-apk-signing.cjs \
+  --apk build/app/outputs/flutter-apk/app-staging-release.apk \
+  --reject-debug
 ```
-
-Record in artifact manifest (do not commit APK):
-
-- Source/deployed SHA
-- SHA-256 / SHA-512 of APK file
-- Signing certificate SHA-1 / SHA-256 (from `apksigner verify --print-certs`)
-- Package `com.theeye.app.staging`
-
-**Note:** Current `apps/mobile/android/app/build.gradle` binds staging **release** builds to the **debug keystore** — treat fingerprints as debug certificate until a dedicated staging release keystore is configured.
 
 ## 5. Physical QA (RC-QA-001)
 
