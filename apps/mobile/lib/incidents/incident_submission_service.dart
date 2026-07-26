@@ -12,6 +12,7 @@ import "../contracts/the_eye_enums.dart";
 import "../contracts/the_eye_payloads.dart";
 import "incident_draft.dart";
 import "incident_submission_result.dart";
+import "incident_submission_retry.dart";
 import "incident_submission_validator.dart";
 import "pending_submission_store.dart";
 
@@ -93,6 +94,24 @@ class IncidentSubmissionService {
 
     _inFlightSubmissionIds.add(draft.clientSubmissionId);
     try {
+      return await submitIncidentWithTransientRetry(
+        submit: () => _submitAttempt(
+          draft,
+          accessToken: accessToken,
+          onEvidenceProgress: onEvidenceProgress,
+        ),
+      );
+    } finally {
+      _inFlightSubmissionIds.remove(draft.clientSubmissionId);
+    }
+  }
+
+  Future<IncidentSubmissionResult> _submitAttempt(
+    IncidentDraft draft, {
+    String? accessToken,
+    EvidenceUploadProgress? onEvidenceProgress,
+  }) async {
+    try {
       final payload = draft.emergencyCategory != null
           ? _payloadForSosDraft(draft)
           : _payloadForDraft(draft);
@@ -137,47 +156,52 @@ class IncidentSubmissionService {
         userMessage: message,
         reportType: draft.type,
         silent: response.silent || draft.silent,
+        clientSubmissionId: draft.clientSubmissionId,
       );
     } on TimeoutException {
       await _queueDraft(draft);
-      return const IncidentSubmissionResult(
+      return IncidentSubmissionResult(
         status: IncidentSubmissionStatus.timeout,
         userMessage:
             "Submission timed out. Your report was saved and will retry when connectivity returns.",
+        clientSubmissionId: draft.clientSubmissionId,
       );
     } on IncidentApiException catch (error) {
       if (error.statusCode == 401 || error.statusCode == 403) {
-        return const IncidentSubmissionResult(
+        return IncidentSubmissionResult(
           status: IncidentSubmissionStatus.unauthorized,
           userMessage: "Sign in is required to submit this report.",
+          clientSubmissionId: draft.clientSubmissionId,
         );
       }
       if (error.statusCode == 400) {
         return IncidentSubmissionResult(
           status: IncidentSubmissionStatus.serverValidationError,
           userMessage: _mapIncidentValidationMessage(error.userMessage),
+          clientSubmissionId: draft.clientSubmissionId,
         );
       }
       return IncidentSubmissionResult(
         status: IncidentSubmissionStatus.serverValidationError,
         userMessage: error.userMessage,
+        clientSubmissionId: draft.clientSubmissionId,
       );
     } on SocketException {
       await _queueDraft(draft);
-      return const IncidentSubmissionResult(
+      return IncidentSubmissionResult(
         status: IncidentSubmissionStatus.networkError,
         userMessage:
             "No internet connection. Your report was saved and will retry automatically.",
+        clientSubmissionId: draft.clientSubmissionId,
       );
     } on http.ClientException {
       await _queueDraft(draft);
-      return const IncidentSubmissionResult(
+      return IncidentSubmissionResult(
         status: IncidentSubmissionStatus.networkError,
         userMessage:
             "Unable to reach THE EYE servers. Your report was saved for retry.",
+        clientSubmissionId: draft.clientSubmissionId,
       );
-    } finally {
-      _inFlightSubmissionIds.remove(draft.clientSubmissionId);
     }
   }
 

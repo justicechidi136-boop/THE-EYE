@@ -37,16 +37,40 @@ export function stagingTestEnvName(key: StagingTestAccountKey, field: "EMAIL" | 
   return `STAGING_TEST_${key}_${field}`;
 }
 
+/** Canonical email shape shared by seed and login (trim + lowercase). */
+export function normalizeStagingCredentialEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/** Trim whitespace/newlines from env-provided passwords without logging values. */
+export function normalizeStagingCredentialPassword(value: string): string {
+  return value.trim();
+}
+
 export function readStagingTestCredentials(
   env: Record<string, string | undefined> = process.env,
 ): StagingTestCredentials[] {
   const accounts: StagingTestCredentials[] = [];
 
   for (const key of STAGING_TEST_ACCOUNT_KEYS) {
-    const email = String(env[stagingTestEnvName(key, "EMAIL")] ?? "").trim();
-    const password = String(env[stagingTestEnvName(key, "PASSWORD")] ?? "").trim();
+    const rawEmail = String(env[stagingTestEnvName(key, "EMAIL")] ?? "");
+    const rawPassword = String(env[stagingTestEnvName(key, "PASSWORD")] ?? "");
+    const email = normalizeStagingCredentialEmail(rawEmail);
+    const password = normalizeStagingCredentialPassword(rawPassword);
     if (!email || !password) continue;
-    accounts.push({ key, email, password });
+    accounts.push(
+      Object.defineProperties(
+        { key, email },
+        {
+          password: {
+            value: password,
+            enumerable: false,
+            writable: true,
+            configurable: true,
+          },
+        },
+      ) as StagingTestCredentials,
+    );
   }
 
   return accounts;

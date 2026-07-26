@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, HttpException } from "@nestjs/common";
-import { hashOtp } from "../../../common/auth/crypto";
+import { BadRequestException, ConflictException, HttpException, UnauthorizedException } from "@nestjs/common";
+import { hashOtp, hashPassword } from "../../../common/auth/crypto";
 import { AuthService } from "../auth.service";
 
 function createAuthService(overrides: Record<string, unknown> = {}) {
@@ -241,5 +241,73 @@ describe("AuthService phone OTP", () => {
       expect(String((error as BadRequestException).message)).toContain("Invalid OTP code");
       expect(prisma.phoneOtp.update).toHaveBeenCalled();
     }
+  });
+});
+
+describe("AuthService login", () => {
+  it("accepts case-insensitive email lookup for citizens", async () => {
+    const password = "Password123!";
+    const { service, prisma } = createAuthService({
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "user-1",
+          email: "staging.citizen@theeye.local",
+          phone: null,
+          passwordHash: hashPassword(password),
+          status: "Active",
+          trustedReporter: null,
+        }),
+      },
+    });
+
+    const result = await service.login({
+      email: "  Staging.Citizen@theeye.local ",
+      password,
+    });
+
+    expect(result.accessToken.length).toBeGreaterThan(0);
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              email: { equals: "staging.citizen@theeye.local", mode: "insensitive" },
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("rejects invalid credentials without revealing account existence", async () => {
+    const { service } = createAuthService({
+      user: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+    });
+
+    await expect(
+      service.login({ email: "missing@theeye.local", password: "Password123!" }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("blocks suspended citizens from signing in", async () => {
+    const password = "Password123!";
+    const { service } = createAuthService({
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "user-1",
+          email: "staging.citizen@theeye.local",
+          phone: null,
+          passwordHash: hashPassword(password),
+          status: "Suspended",
+          trustedReporter: null,
+        }),
+      },
+    });
+
+    await expect(
+      service.login({ email: "staging.citizen@theeye.local", password }),
+    ).rejects.toBeInstanceOf(HttpException);
   });
 });

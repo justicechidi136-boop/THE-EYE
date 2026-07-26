@@ -40,6 +40,77 @@ describe("AuditService", () => {
     expect(result.broken[0].reason).toBe("previous_hash_mismatch");
   });
 
+  it("records anonymous incident audit events without actor IDs", async () => {
+    const { service, created } = buildService();
+    await service.record({
+      actorType: "anonymous",
+      action: "incident.created",
+      entityType: "incidents",
+      entityId: "11111111-1111-1111-1111-111111111111",
+    });
+
+    expect(created[0].actorType).toBe("anonymous");
+    expect(created[0].actorUserId).toBeUndefined();
+    expect(created[0].actorAdminId).toBeUndefined();
+  });
+
+  it("records citizen and admin actor IDs distinctly", async () => {
+    const { service, created } = buildService();
+    await service.record({
+      actorType: "user",
+      actorUserId: "user-1",
+      action: "incident.created",
+      entityType: "incidents",
+    });
+    await service.record({
+      actorType: "admin",
+      actorAdminId: "admin-1",
+      action: "admin.login",
+      entityType: "admin_users",
+    });
+
+    expect(created[0].actorUserId).toBe("user-1");
+    expect(created[1].actorAdminId).toBe("admin-1");
+  });
+
+  it("records system actor events without actor IDs", async () => {
+    const { service, created } = buildService();
+    await service.record({
+      actorType: "system",
+      action: "incident.verified",
+      entityType: "incidents",
+    });
+
+    expect(created[0].actorType).toBe("system");
+    expect(created[0].actorUserId).toBeUndefined();
+    expect(created[0].actorAdminId).toBeUndefined();
+  });
+
+  it("rejects mixed actor IDs before persistence", async () => {
+    const { service } = buildService();
+    await expect(
+      service.record({
+        actorType: "anonymous",
+        actorUserId: "user-1",
+        action: "incident.created",
+        entityType: "incidents",
+      }),
+    ).rejects.toThrow("Anonymous audit events cannot include actor IDs");
+  });
+
+  it("ignores jwt actor IDs when actorType is anonymous", async () => {
+    const { service, created } = buildService();
+    await service.record({
+      actor: { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      actorType: "anonymous",
+      action: "incident.created",
+      entityType: "incidents",
+    });
+
+    expect(created[0].actorType).toBe("anonymous");
+    expect(created[0].actorUserId).toBeUndefined();
+  });
+
   it("returns audit rows that become JSON-safe via centralized serialization", async () => {
     const { service, prisma } = buildService();
     prisma.auditLog.findMany.mockResolvedValue([

@@ -36,12 +36,25 @@ export class AuditService {
     const previous = await this.prisma.auditLog.findFirst({ orderBy: { sequence: "desc" as never } });
     const sequence = await this.nextSequence(previous?.sequence ? BigInt(previous.sequence) + 1n : 1n);
     const createdAt = new Date();
+    const actorType = input.actorType ?? input.actor?.typ ?? "system";
+    if (actorType === "anonymous" && (input.actorUserId || input.actorAdminId)) {
+      throw new Error("Anonymous audit events cannot include actor IDs");
+    }
+    const actorUserId =
+      actorType === "anonymous"
+        ? null
+        : input.actorUserId ?? (input.actor?.typ === "user" ? input.actor.sub : null);
+    const actorAdminId =
+      actorType === "anonymous"
+        ? null
+        : input.actorAdminId ?? (input.actor?.typ === "admin" ? input.actor.sub : null);
+    this.assertActorShape(actorType, actorUserId, actorAdminId);
     const payload = {
       sequence: sequence.toString(),
       previousHash: previous?.eventHash ?? null,
-      actorUserId: input.actorUserId ?? (input.actor?.typ === "user" ? input.actor.sub : null),
-      actorAdminId: input.actorAdminId ?? (input.actor?.typ === "admin" ? input.actor.sub : null),
-      actorType: input.actorType ?? input.actor?.typ ?? "system",
+      actorUserId,
+      actorAdminId,
+      actorType,
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId ?? null,
@@ -117,6 +130,21 @@ export class AuditService {
 
   private hashPayload(payload: Record<string, unknown>) {
     return createHash("sha256").update(this.stableStringify(payload)).digest("hex");
+  }
+
+  private assertActorShape(actorType: string, actorUserId: string | null, actorAdminId: string | null) {
+    if (actorUserId && actorAdminId) {
+      throw new Error("Audit actor cannot reference both user and admin IDs");
+    }
+    if (actorType === "anonymous" && (actorUserId || actorAdminId)) {
+      throw new Error("Anonymous audit events cannot include actor IDs");
+    }
+    if (actorType === "user" && !actorUserId) {
+      throw new Error("User audit events require actorUserId");
+    }
+    if (actorType === "admin" && !actorAdminId) {
+      throw new Error("Admin audit events require actorAdminId");
+    }
   }
 
   private async nextSequence(fallback: bigint) {

@@ -690,11 +690,7 @@ Remaining before **DEVICE VERIFIED**:
 | **Fix branch** | `fix/deploy-nginx-api-tools` |
 | **Code fix** | Docker embedded DNS `resolver 127.0.0.11`; upstream `resolve` + variable `proxy_pass`; `scripts/reload-nginx-upstreams.sh`; `scripts/staging-smoke-check.sh`; `scripts/deploy-staging.sh`; Deploy workflow reload + smoke |
 | **Automated test** | `scripts/ci/validate-nginx-deploy-lifecycle.cjs`, `docker-compose-smoke.cjs`, `validate-nginx-config.cjs` |
-| **Status** | **CODE FIXED — CI VERIFIED (PR #28 @ `8e0f9ea`) — RUNTIME VERIFIED PENDING** |
-
----
-
-## DEP-006 — Staging seed runner unavailable
+| **Status** | **RUNTIME VERIFIED** — Deploy [30196034966](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30196034966) @ `f6f6dee`: HTTPS smoke PASS, nginx recreate + reload, public API/admin OK after container recreate |
 
 | Field | Value |
 |---|---|
@@ -704,7 +700,7 @@ Remaining before **DEVICE VERIFIED**:
 | **Verify command** | `… api-tools scripts/verify-staging-certification-data.ts` |
 | **Seed hardening** | Idempotent staging police station (`staging-cert-ikeja-gate-001`), active patrol, community membership; production guard unchanged |
 | **Automated test** | `scripts/ci/validate-api-tools-compose.cjs` |
-| **Status** | **CODE FIXED — CI VERIFIED (PR #28 @ `8e0f9ea`) — RUNTIME VERIFIED PENDING** |
+| **Status** | **RUNTIME VERIFIED** — Deploy [30196034966](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30196034966) @ `f6f6dee`: seed ×2 + verify script PASS via `api-tools` |
 
 ---
 
@@ -716,9 +712,20 @@ Remaining before **DEVICE VERIFIED**:
 | **Firebase project** | `the-eye-2stg` |
 | **Current staging release signing** | **Migrating to dedicated keystore** — see [STAGING_ANDROID_SIGNING.md](./STAGING_ANDROID_SIGNING.md) |
 | **Deprecated debug APK fingerprints** | SHA-1 `5da2e2eb…` / SHA-256 `a6e66ccc…` — do **not** register as final identity |
-| **Dedicated staging fingerprints** | **PENDING** — generate keystore, register in Firebase |
-| **Registration** | **OPS ACTION REQUIRED** |
-| **Status** | **CODE FIXED (signing guard) — BLOCKED (OPS)** |
+| **Dedicated staging fingerprints** | SHA-1 `9b03f499…` / SHA-256 `de758a04…` — keystore generated 2026-07-26; **Firebase registration OPS PENDING** |
+| **Registration** | **OPS ACTION REQUIRED** — add fingerprints in Firebase Console → `the-eye-2stg` → `com.theeye.app.staging` |
+| **Status** | **BLOCKED BY PROVIDER** — dedicated keystore exists; `google-services.json` still references debug OAuth client |
+
+---
+
+## AUTH-001 — Staging citizen login 401
+
+| Field | Value |
+|---|---|
+| **Symptom** | `POST /v1/auth/login` for controlled citizen returns **401 Invalid credentials** when probed with example `.env.staging.example` password |
+| **Root cause** | Operator probes used example credentials while VPS `STAGING_TEST_CITIZEN_PASSWORD` is authoritative; optional env whitespace could also desync hash until seed re-run |
+| **Fix** | Normalize/trim `STAGING_TEST_*` credentials in seed; case-insensitive login lookup; idempotent password hash refresh; deploy runs `verify-staging-test-accounts.ts` against public API |
+| **Status** | **CODE FIXED — DEPLOY PENDING** (after push to `staging`) |
 
 ---
 
@@ -726,8 +733,8 @@ Remaining before **DEVICE VERIFIED**:
 
 | ID | Status |
 |---|---|
-| RC-APK-001 | **BLOCKED** — rebuild required after Firebase fingerprints registered + `origin/staging` includes DEP-005/006 fixes |
-| RC-QA-001 | **OPEN** — physical QA not executed on certification APK |
+| RC-APK-001 | **INTERIM BUILT** — prior `THE-EYE-staging-0.1.0-f6f6dee.apk` @ dedicated release cert; **must not be reused** for final Google Sign-In certification |
+| RC-QA-001 | **NOT TESTED** — final APK rebuild blocked on Firebase OPS + PR #29 merge |
 
 ---
 
@@ -737,16 +744,19 @@ Remaining before **DEVICE VERIFIED**:
 
 | Milestone | Evidence |
 |---|---|
-| Deployed VPS SHA (reported) | `38c5156ee8340f75bb255b52b9753431f94be386` (`origin/staging` post PR #27) |
-| DEP-004 | **CONFIGURED** — GitHub deploy secrets present; VPS reachable |
-| DEP-005 / DEP-006 fix PR | **READY TO MERGE** — PR #28 CI green @ `8e0f9ea` (await explicit approval; do not auto-merge) |
-| Staging signing architecture | **CODE FIXED** — dedicated keystore required; CI skips APK until `STAGING_ANDROID_*` secrets set |
-| Nginx auto-reload | **NOT RUNTIME VERIFIED** on VPS until fix deployed |
-| Seed via api-tools | **NOT RUNTIME VERIFIED** on VPS until fix deployed |
-| Firebase fingerprints | **NOT REGISTERED** in `the-eye-2stg` |
-| Certification APK | Prior build @ `d0a51cd` uses **debug certificate** — label **NOT CERTIFICATION READY** until Firebase ops complete |
+| PR #28 merge | **MERGED** @ `01cd1ed` (2026-07-26T07:58:37Z); post-merge hotfixes through `f6f6dee` |
+| Deployed VPS SHA | **`f6f6dee071a19f206b2fc5fd78da4df056a1131f`** — Deploy [30196034966](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30196034966) SUCCESS |
+| DEP-005 Nginx upstream | **RUNTIME VERIFIED** — HTTPS smoke PASS; nginx recreate; public `/v1/health/ready` OK |
+| DEP-006 api-tools seed | **RUNTIME VERIFIED** — seed ×2 + verify JSON PASS |
+| Staging signing | **KEY GENERATED** — dedicated keystore + GitHub `STAGING_ANDROID_*` secrets configured |
+| Firebase fingerprints | **NOT REGISTERED** (OPS) — canonical SHA-1/SHA-256 awaiting Console registration |
+| Certification APK | **INTERIM ONLY** — prior build @ dedicated release cert; final rebuild **BLOCKED** on Firebase OPS |
+| Physical device QA | **NOT TESTED** — do not certify Google Sign-In on interim APK |
+| Gradle signing hotfix | **PR #29 OPEN** @ `1bd50e6` — CI in progress; await approval before merge |
 
 **Sprint 8:** NOT AUTHORIZED.
+
+**Overall:** `PARTIALLY BLOCKED` — **FIREBASE OPS ACTION REQUIRED**
 
 ---
 

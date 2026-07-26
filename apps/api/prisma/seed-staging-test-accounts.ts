@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import { hashPassword, hashToken, randomToken } from "../src/common/auth/crypto";
 import { assertStagingOnlySeedAllowed } from "./staging-guard";
 import {
+  normalizeStagingCredentialEmail,
   requireStagingTestCredentials,
   readWatchDeviceId,
   toAccountSpec,
@@ -281,11 +282,13 @@ async function upsertAdminAccount(spec: StagingTestAccountSpec) {
   const role = await upsertAdminRole(roleName);
   const jurisdiction = await upsertJurisdiction(scope.jurisdictionKey);
   const agency = scope.needsAgency ? await upsertAgency(jurisdiction.id) : null;
+  const email = normalizeStagingCredentialEmail(spec.email);
+  const passwordHash = hashPassword(spec.password);
 
   const admin = await prisma.adminUser.upsert({
-    where: { email: spec.email },
+    where: { email },
     update: {
-      passwordHash: hashPassword(spec.password),
+      passwordHash,
       roleId: role.id,
       jurisdictionId: jurisdiction.id,
       agencyId: agency?.id ?? null,
@@ -296,8 +299,8 @@ async function upsertAdminAccount(spec: StagingTestAccountSpec) {
       isActive: true,
     },
     create: {
-      email: spec.email,
-      passwordHash: hashPassword(spec.password),
+      email,
+      passwordHash,
       roleId: role.id,
       jurisdictionId: jurisdiction.id,
       agencyId: agency?.id ?? null,
@@ -317,18 +320,48 @@ async function upsertAdminAccount(spec: StagingTestAccountSpec) {
   return { admin, roleName, jurisdiction, agency };
 }
 
+async function reconcileCitizenEmail(email: string) {
+  const normalizedEmail = normalizeStagingCredentialEmail(email);
+  const matches = await prisma.user.findMany({
+    where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+    select: { id: true, email: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (matches.length <= 1) {
+    return normalizedEmail;
+  }
+
+  const [primary, ...duplicates] = matches;
+  for (const duplicate of duplicates) {
+    await prisma.user.delete({ where: { id: duplicate.id } });
+  }
+
+  if (primary.email !== normalizedEmail) {
+    await prisma.user.update({
+      where: { id: primary.id },
+      data: { email: normalizedEmail },
+    });
+  }
+
+  return normalizedEmail;
+}
+
 async function upsertCitizenAccount(spec: StagingTestAccountSpec) {
+  const email = await reconcileCitizenEmail(spec.email);
+  const passwordHash = hashPassword(spec.password);
+
   const user = await prisma.user.upsert({
-    where: { email: spec.email },
+    where: { email },
     update: {
-      passwordHash: hashPassword(spec.password),
+      passwordHash,
       phone: spec.phone ?? undefined,
       status: "Active",
     },
     create: {
-      email: spec.email,
+      email,
       phone: spec.phone,
-      passwordHash: hashPassword(spec.password),
+      passwordHash,
       status: "Active",
     },
   });

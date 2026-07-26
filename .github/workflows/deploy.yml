@@ -215,6 +215,10 @@ jobs:
             docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
             echo "=== Staging seed (idempotency second run) ==="
             docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
+            echo "=== Staging login verification ==="
+            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+              -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
+              api-tools scripts/verify-staging-test-accounts.ts
             docker compose -f infra/docker/docker-compose.yml --env-file .env ps
 
   deploy:
