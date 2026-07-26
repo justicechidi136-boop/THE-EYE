@@ -82,7 +82,7 @@ android {
 
     buildTypes {
         release {
-            // Per-variant signing is applied in afterEvaluate (staging vs other flavors).
+            // Per-flavor signing is applied via androidComponents below.
         }
         debug {
             signingConfig = signingConfigs.debug
@@ -90,15 +90,13 @@ android {
     }
 }
 
-afterEvaluate {
-    android.applicationVariants.configureEach { variant ->
-        if (variant.buildType.name != "release") {
-            return
-        }
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        def envFlavor = variant.productFlavors.find { it.first == "environment" }?.second
 
-        if (variant.flavorName == "staging") {
+        if (envFlavor == "staging") {
             if (allowDebugStagingRelease) {
-                variant.signingConfig = android.signingConfigs.debug
+                variant.signingConfig?.setConfig(android.signingConfigs.debug)
                 return
             }
             if (!hasStagingReleaseSigning) {
@@ -110,12 +108,12 @@ afterEvaluate {
                     "Emergency override only: THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true"
                 )
             }
-            variant.signingConfig = android.signingConfigs.stagingRelease
+            variant.signingConfig?.setConfig(android.signingConfigs.stagingRelease)
             return
         }
 
         // development/production release — unchanged until dedicated release keys land.
-        variant.signingConfig = android.signingConfigs.debug
+        variant.signingConfig?.setConfig(android.signingConfigs.debug)
     }
 }
 
