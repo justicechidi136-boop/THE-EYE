@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:the_eye_mobile/config/the_eye_api_config.dart";
+import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
 import "package:the_eye_mobile/brand.dart";
 import "package:the_eye_mobile/design_system/eye_input_theme.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
@@ -77,9 +78,28 @@ void main() {
   });
 
   group("NeighborhoodWatchService base URL", () {
-    test("constructs with resolved API config path", () {
-      expect(NeighborhoodWatchService(), isA<NeighborhoodWatchService>());
+    const testBaseUrl = "https://test-api.theeye.local/v1";
+
+    tearDown(TheEyeApiConfig.resetTestOverrideBaseUrl);
+
+    test("constructs with injected test API client", () {
+      final service = NeighborhoodWatchService(
+        apiClient: TheEyeApiClient(baseUrl: testBaseUrl),
+      );
+      expect(service, isA<NeighborhoodWatchService>());
+    });
+
+    test("resolveBaseUrl honors explicit test override", () {
+      TheEyeApiConfig.setTestOverrideBaseUrl(testBaseUrl);
+      expect(TheEyeApiConfig.resolveBaseUrl(), testBaseUrl);
+    });
+
+    test("resolveBaseUrl uses unit-test fallback without flavor defines", () {
       expect(TheEyeApiConfig.resolveBaseUrl(), isNotEmpty);
+      expect(
+        TheEyeApiConfig.resolveBaseUrl(),
+        TheEyeApiConfig.unitTestFallbackBaseUrl,
+      );
     });
   });
 
