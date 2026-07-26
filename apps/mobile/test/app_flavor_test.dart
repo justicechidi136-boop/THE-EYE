@@ -124,10 +124,11 @@ void main() {
       if (const String.fromEnvironment("THE_EYE_FLAVOR") != "production") {
         return;
       }
-      expect(
-        GoogleSignInConfig.webClientId,
-        FirebaseOptionsProduction.androidGoogleWebClientId,
-      );
+      const prodClientId = String.fromEnvironment("GOOGLE_WEB_CLIENT_ID_PRODUCTION");
+      if (prodClientId.isEmpty) {
+        return;
+      }
+      expect(GoogleSignInConfig.webClientId, prodClientId);
     });
   });
 

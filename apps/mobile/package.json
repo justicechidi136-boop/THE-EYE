@@ -6,7 +6,7 @@
     "clean": "flutter clean",
     "pub-get": "flutter pub get",
     "analyze": "flutter analyze --no-fatal-warnings --no-fatal-infos lib test",
-    "test": "flutter test --dart-define=THE_EYE_FLAVOR=production --dart-define=THE_EYE_PROD_API_URL=https://api.theeye.com.ng/v1",
+    "test": "flutter test --dart-define=THE_EYE_FLAVOR=production --dart-define=THE_EYE_PROD_API_URL=https://api.theeye.com.ng/v1 --dart-define=GOOGLE_WEB_CLIENT_ID_PRODUCTION=137367371675-7sikh2svb9k1c7ft8mqsmkmjpqpnav36.apps.googleusercontent.com",
     "validate:firebase": "node ../../scripts/validate-mobile-firebase.cjs",
     "run:staging": "flutter run --flavor staging --dart-define=THE_EYE_FLAVOR=staging",
     "run:production": "flutter run --flavor production --dart-define=THE_EYE_FLAVOR=production",
