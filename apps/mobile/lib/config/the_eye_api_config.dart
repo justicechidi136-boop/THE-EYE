@@ -105,6 +105,13 @@ abstract final class TheEyeApiConfig {
         !normalized.contains(stagingApiHost);
   }
 
+  static bool looksLikeForeignProductionApiUrl(String baseUrl) {
+    final normalized = baseUrl.toLowerCase();
+    if (normalized.contains(stagingApiHost)) return false;
+    if (normalized.contains(stagingAdminHost)) return false;
+    return normalized.contains(".theeye.com.ng") && !isLocalDevUrl(baseUrl);
+  }
+
   static bool isStagingApiUrl(String baseUrl) {
     return baseUrl.toLowerCase().contains(stagingApiHost);
   }
@@ -148,8 +155,9 @@ void assertMobileApiBaseUrlMatchesFlavor(
 
   final isProdApi = TheEyeApiConfig.isProductionApiUrl(baseUrl);
   final isStagingApi = TheEyeApiConfig.isStagingApiUrl(baseUrl);
+  final looksLikeProdApi = TheEyeApiConfig.looksLikeForeignProductionApiUrl(baseUrl);
 
-  if (flavor == AppFlavor.staging && isProdApi) {
+  if (flavor == AppFlavor.staging && (isProdApi || looksLikeProdApi)) {
     throw StateError(
       "Environment guard: staging build cannot call production API "
       "(`$baseUrl`). Use `https://${TheEyeApiConfig.stagingApiHost}/v1`.",

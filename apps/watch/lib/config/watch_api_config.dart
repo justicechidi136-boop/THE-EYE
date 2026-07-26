@@ -93,6 +93,13 @@ abstract final class WatchApiConfig {
         !normalized.contains(stagingApiHost);
   }
 
+  static bool looksLikeForeignProductionApiUrl(String baseUrl) {
+    final normalized = baseUrl.toLowerCase();
+    if (normalized.contains(stagingApiHost)) return false;
+    if (normalized.contains(stagingAdminHost)) return false;
+    return normalized.contains('.theeye.com.ng') && !isLocalDevUrl(baseUrl);
+  }
+
   static bool isStagingApiUrl(String baseUrl) {
     return baseUrl.toLowerCase().contains(stagingApiHost);
   }
@@ -137,7 +144,8 @@ void assertWatchApiBaseUrlMatchesFlavor(
   final isProdApi = WatchApiConfig.isProductionApiUrl(baseUrl);
   final isStagingApi = WatchApiConfig.isStagingApiUrl(baseUrl);
 
-  if (env == WatchFirebaseEnv.staging && isProdApi) {
+  if (env == WatchFirebaseEnv.staging &&
+      (isProdApi || WatchApiConfig.looksLikeForeignProductionApiUrl(baseUrl))) {
     throw StateError(
       'Environment guard: staging build cannot register against production API '
       '(`$baseUrl`). Use `https://${WatchApiConfig.stagingApiHost}/v1`.',
