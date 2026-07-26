@@ -12,7 +12,7 @@ async function main() {
 
   const community = await prisma.community.findFirst({
     where: { name: STAGING_COMMUNITY_NAME },
-    select: { id: true, name: true, memberCount: true },
+    select: { id: true, name: true },
   });
 
   const approvedMemberships = community
