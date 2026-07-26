@@ -1,8 +1,10 @@
 # THE EYE — Sprint 8 Authorization Report
 
-**Report date:** 2026-07-23 (cycle 2 — entry-gate operator session)  
+**Report date:** 2026-07-26 (cycle 3 — PR #28 DEP-005/006 + staging signing)  
 **Prepared by:** Principal Release Gatekeeper / QA Director  
 **Decision:** **SPRINT 8 NOT AUTHORIZED**
+
+**Latest blockers (2026-07-26):** PR #28 @ `3fb3da0` CI green (READY TO MERGE, await approval). Dedicated staging keystore **not yet generated** (OPS). Firebase fingerprints **not registered**. DEP-005/006 **RUNTIME VERIFIED pending** post-merge VPS. Certification APK **BLOCKED**. Physical device QA **PENDING**.
 
 ---
 

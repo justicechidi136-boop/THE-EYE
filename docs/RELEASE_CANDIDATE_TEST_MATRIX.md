@@ -1,9 +1,11 @@
 # THE EYE — Release Candidate Test Matrix
 
 **Environment:** staging  
-**Certified Git staging commit:** `703be04cb91c9db6080c74fe59e582a59cd9e146` (includes PR #19 `841d96a` lineage)  
-**Matrix version:** 2026-07-23  
+**Certified Git staging commit:** `38c5156ee8340f75bb255b52b9753431f94be386` (PR #27 merged; PR #28 @ `3fb3da0` pending merge)  
+**Matrix version:** 2026-07-26  
 **Evidence rule:** PASS only with live staging proof per `docs/SPRINT_8_ENTRY_GATE.md`
+
+**Signing gate (2026-07-26):** Prior staging APKs use **debug certificate** — not certification-ready. Rebuild required with dedicated staging keystore per [STAGING_ANDROID_SIGNING.md](./STAGING_ANDROID_SIGNING.md) after Firebase fingerprint registration.
 
 **Summary**
 
