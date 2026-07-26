@@ -94,12 +94,21 @@ void main() {
       expect(TheEyeApiConfig.resolveBaseUrl(), testBaseUrl);
     });
 
-    test("resolveBaseUrl uses unit-test fallback without flavor defines", () {
-      expect(TheEyeApiConfig.resolveBaseUrl(), isNotEmpty);
-      expect(
-        TheEyeApiConfig.resolveBaseUrl(),
-        TheEyeApiConfig.unitTestFallbackBaseUrl,
-      );
+    test("resolveBaseUrl returns non-empty URL for current compile profile", () {
+      const flavor = String.fromEnvironment("THE_EYE_FLAVOR");
+      const prodUrl = String.fromEnvironment("THE_EYE_PROD_API_URL");
+
+      final resolved = TheEyeApiConfig.resolveBaseUrl();
+      expect(resolved, isNotEmpty);
+
+      if (flavor == "production" && prodUrl.isNotEmpty) {
+        expect(resolved, prodUrl);
+        return;
+      }
+
+      if (flavor.isEmpty) {
+        expect(resolved, TheEyeApiConfig.unitTestFallbackBaseUrl);
+      }
     });
   });
 
