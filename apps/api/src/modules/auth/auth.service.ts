@@ -375,18 +375,30 @@ export class AuthService {
     const normalizedPhone = dto.phone ? normalizePhoneNumber(dto.phone) : undefined;
     if (dto.phone && !isValidPhoneNumber(normalizedPhone!)) throw new BadRequestException("Enter a valid phone number");
 
+    const normalizedEmail = dto.email ? this.normalizeEmail(dto.email) : undefined;
     const user = await this.prisma.user.findFirst({
-      where: { OR: [{ email: dto.email ?? undefined }, { phone: normalizedPhone ?? undefined }] },
+      where: {
+        OR: [
+          normalizedEmail
+            ? { email: { equals: normalizedEmail, mode: "insensitive" } }
+            : undefined,
+          normalizedPhone ? { phone: normalizedPhone } : undefined,
+        ].filter(Boolean) as Prisma.UserWhereInput[],
+      },
       include: { trustedReporter: true },
     });
 
-    if (!user || !verifyPassword(dto.password, user.passwordHash)) throw new UnauthorizedException("Invalid credentials");
+    if (!user || !verifyPassword(dto.password, user.passwordHash)) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+    this.assertUserCanSignIn(user);
     return this.issueUserSession(user);
   }
 
   private async loginAdmin(dto: LoginInput) {
+    const normalizedEmail = dto.email ? this.normalizeEmail(dto.email) : "";
     const admin = await this.prisma.adminUser.findUnique({
-      where: { email: dto.email ?? "" },
+      where: { email: normalizedEmail },
       include: { role: true },
     });
 
