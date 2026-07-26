@@ -17,6 +17,8 @@ const requiredServices = [
   "api-migrate:",
   "api-seed:",
   "api-create-admin:",
+  "api-tools:",
+  "api-seed-staging:",
   "certbot:",
   "prometheus:",
 ];
@@ -111,14 +113,16 @@ const nginxChecks = [
   ["include /etc/nginx/snippets/healthz.conf", httpTemplate, "healthz snippet on HTTP"],
   ["include /etc/nginx/snippets/healthz.conf", httpsTemplate, "healthz snippet on HTTPS"],
   ["location /v1/", apiLocations, "API /v1/ route"],
-  ["proxy_pass http://the_eye_api", apiLocations, "API upstream"],
-  ["proxy_pass http://the_eye_admin_web", adminLocations, "Admin upstream"],
-  ["proxy_pass http://the_eye_livekit", livekitLocations, "LiveKit upstream"],
+  ["set $the_eye_api_backend", apiLocations, "API variable upstream"],
+  ["proxy_pass $the_eye_api_backend", apiLocations, "API variable proxy_pass"],
+  ["set $the_eye_admin_backend", adminLocations, "Admin variable upstream"],
+  ["set $the_eye_livekit_backend", livekitLocations, "LiveKit variable upstream"],
   ["proxy_set_header Upgrade $http_upgrade", livekitLocations, "LiveKit WebSocket upgrade"],
   ["location = /healthz", healthzSnippet, "shared healthz snippet"],
   ["/.well-known/acme-challenge/", httpTemplate, "ACME challenge path"],
   ["upstream the_eye_api", upstreams, "API upstream block"],
-  ["upstream the_eye_livekit", upstreams, "LiveKit upstream block"],
+  [" resolve;", upstreams, "Docker DNS resolve on upstream"],
+  ["resolver 127.0.0.11", fs.readFileSync(path.join(root, "infra", "docker", "nginx", "nginx.conf"), "utf8"), "Docker embedded DNS resolver"],
 ];
 for (const [needle, content, label] of nginxChecks) {
   if (!content.includes(needle)) {

@@ -455,6 +455,12 @@ jobs:
       - name: Validate nginx config
         run: node scripts/validate-nginx-config.cjs
 
+      - name: Validate nginx deploy lifecycle
+        run: node scripts/ci/validate-nginx-deploy-lifecycle.cjs
+
+      - name: Validate api-tools compose service
+        run: node scripts/ci/validate-api-tools-compose.cjs
+
       - name: Build staging API Docker image
         run: |
           docker build \

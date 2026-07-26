@@ -155,3 +155,56 @@ If `wget` returns `SERVFAIL` or times out, Firebase token verification will fail
 Pushes to `staging` run `.github/workflows/validate-staging.yml` (API tests, mobile APK, Docker builds).
 
 Manual deploy: `.github/workflows/deploy.yml` with environment **staging**.
+
+## Staging deploy helper (VPS)
+
+After `.env` is configured, use the scripted deploy path so nginx upstreams refresh automatically after API/admin recreation (DEP-005):
+
+```bash
+export THE_EYE_IMAGE_TAG=<git-sha-or-tag>
+export RUN_MIGRATIONS=true
+bash scripts/deploy-staging.sh
+```
+
+This script:
+
+1. Waits for postgres/redis/minio/livekit health
+2. Runs `api-migrate` (unless `RUN_MIGRATIONS=false`)
+3. Force-recreates `api`, `notification-worker`, and `admin-web`
+4. Waits for API/admin/LiveKit health
+5. Runs `nginx -t` and `nginx -s reload` via `scripts/reload-nginx-upstreams.sh`
+6. Runs Host-aware smoke checks (`scripts/staging-smoke-check.sh`) including proxied `/v1/health/ready`
+
+GitHub **Deploy** workflow (staging) invokes the same reload + smoke steps after container recreation.
+
+## Staging certification seed (api-tools)
+
+The Compose profile `tools` includes a generic **`api-tools`** runner (image `the-eye-api-tools`, same schema/client as migrate/seed).
+
+**Canonical seed command:**
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools \
+  prisma/seed-staging-test-accounts.ts
+```
+
+Equivalent dedicated service (same script):
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-seed-staging
+```
+
+**Verify dataset (no credentials printed):**
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools \
+  scripts/verify-staging-certification-data.ts
+```
+
+Requirements:
+
+- `THE_EYE_APP_ENV=staging`
+- `STAGING_TEST_*_EMAIL` / `STAGING_TEST_*_PASSWORD` pairs in `.env` (see `apps/api/.env.staging.example`)
+- Seed is idempotent — safe to run twice
+
+See [staging-test-accounts.md](./staging-test-accounts.md) and [STAGING_CERTIFICATION.md](./STAGING_CERTIFICATION.md).

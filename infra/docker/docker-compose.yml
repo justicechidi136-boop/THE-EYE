@@ -447,6 +447,49 @@ services:
     networks:
       - the-eye-internal
 
+  # Generic one-shot tooling runner (same image/schema as api-migrate). Override
+  # command at invoke time, e.g. prisma/seed-staging-test-accounts.ts
+  api-tools:
+    image: the-eye-api-tools:${THE_EYE_IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      target: tools
+    profiles: ["tools"]
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      THE_EYE_APP_ENV: ${THE_EYE_APP_ENV:-staging}
+      DATABASE_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL:?DATABASE_URL is required}}
+      DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-${DATABASE_URL}}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-the-eye}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-the_eye_minio}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    depends_on:
+      postgres-postgis:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    working_dir: /app
+    entrypoint:
+      [
+        "node",
+        "--require",
+        "./src/preload-env.cjs",
+        "node_modules/tsx/dist/cli.mjs",
+      ]
+    command: ["--help"]
+    networks:
+      - the-eye-internal
+    restart: "no"
+
 networks:
   # Security isolation: data stores and app backends have no direct outbound internet.
   # Services that need egress (api for Firebase/Google OAuth cert verification, nginx for
