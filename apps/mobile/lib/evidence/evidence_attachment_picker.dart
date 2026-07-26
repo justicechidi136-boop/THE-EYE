@@ -7,6 +7,7 @@ import "evidence_media_source.dart";
 import "evidence_permission_service.dart";
 import "evidence_permission_state.dart";
 import "local_evidence_attachment.dart";
+import "../design_system/eye_semantic_colors.dart";
 import "../widgets/section_card.dart";
 
 class ManagedEvidenceSection extends StatefulWidget {
@@ -171,7 +172,7 @@ class EvidenceAttachmentPicker extends StatelessWidget {
           children: [
             if (figmaStyle) ...[
               Material(
-                color: const Color(0xFFE7F2EE),
+                color: EyeSemanticColors.of(context).elevatedSurface,
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
                   onTap: controller.busy || !controller.canAddMore
@@ -182,14 +183,19 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                     height: 94,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.upload_rounded,
-                            color: Color(0xFF0B7E5D), size: 24),
-                        SizedBox(height: 8),
+                      children: [
+                        Icon(
+                          Icons.upload_rounded,
+                          color: EyeSemanticColors.of(context).interactiveText,
+                          size: 24,
+                        ),
+                        const SizedBox(height: 8),
                         Text(
                           "Click here to upload",
-                          style:
-                              TextStyle(fontSize: 12, color: Color(0xFF032221)),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: EyeSemanticColors.of(context).bodyText,
+                          ),
                         ),
                       ],
                     ),
@@ -197,9 +203,12 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 "Uploaded files",
-                style: TextStyle(fontSize: 14, color: Color(0xFF032221)),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: EyeSemanticColors.of(context).bodyText,
+                ),
               ),
               const SizedBox(height: 8),
             ] else

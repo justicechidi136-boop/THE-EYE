@@ -2,6 +2,8 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 
+import "../design_system/components/eye_page_back_header.dart";
+import "../design_system/eye_semantic_colors.dart";
 import "active_emergency_service.dart";
 import "active_emergency_state.dart";
 import "active_emergency_store.dart";
@@ -93,6 +95,14 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
     }
   }
 
+  void _handleBack(BuildContext context) {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    Navigator.of(context).pushReplacementNamed("/home");
+  }
+
   @override
   Widget build(BuildContext context) {
     final snapshot = _snapshot;
@@ -101,61 +111,91 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen> {
         : mapIncidentStatusToPhase(snapshot.status);
     final discreet = widget.silent;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(discreet ? "Status" : "Active emergency"),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: snapshot == null
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                children: [
-                  if (_error != null)
-                    Text(_error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error)),
-                  Text(phaseLabel(phase),
-                      style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 8),
-                  Text("Incident ID: ${snapshot.incidentId}"),
-                  Text("Category: ${snapshot.type}"),
-                  if (snapshot.agencyName.isNotEmpty)
-                    Text("Assigned agency: ${snapshot.agencyName}")
-                  else if (phase.index >=
-                      ActiveEmergencyPhase.awaitingAssignment.index)
-                    const Text("Awaiting agency assignment"),
-                  if (snapshot.lastLocationAt != null)
-                    Text(
-                        "Last location update: ${snapshot.lastLocationAt!.toLocal()}"),
-                  const SizedBox(height: 16),
-                  Text(
-                    discreet
-                        ? "Updates are shown discreetly. Help is only indicated when assignment is confirmed."
-                        : _statusMessage(phase, snapshot),
-                  ),
-                  const SizedBox(height: 16),
-                  if (snapshot.timeline.isNotEmpty) ...[
-                    Text("Timeline",
-                        style: Theme.of(context).textTheme.titleMedium),
-                    ...snapshot.timeline.take(8).map(
-                          (entry) => ListTile(
-                            dense: true,
-                            title: Text(timelineEntryLabel(entry)),
-                          ),
-                        ),
-                  ],
-                  if (phaseAllowsCancellation(phase))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 24),
-                      child: OutlinedButton(
-                        onPressed: _cancelling ? null : _cancelEmergency,
-                        child: Text(
-                            _cancelling ? "Cancelling…" : "Cancel emergency"),
-                      ),
-                    ),
-                ],
+    return PopScope(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleBack(context);
+      },
+      child: Scaffold(
+        backgroundColor: EyeSemanticColors.of(context).background,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: Text(discreet ? "Status" : "Active emergency"),
+          actions: [
+            IconButton(
+              tooltip: "Home",
+              onPressed: () =>
+                  Navigator.of(context).pushReplacementNamed("/home"),
+              icon: const Icon(Icons.home_outlined),
+            ),
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              EyePageBackHeader(
+                title: discreet ? "Status" : "Cancel emergency",
+                onBack: () => _handleBack(context),
               ),
+              Expanded(
+                child: snapshot == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView(
+                        children: [
+                          if (_error != null)
+                            Text(_error!,
+                                style: TextStyle(
+                                    color:
+                                        Theme.of(context).colorScheme.error)),
+                          Text(phaseLabel(phase),
+                              style: Theme.of(context).textTheme.headlineSmall),
+                          const SizedBox(height: 8),
+                          Text("Incident ID: ${snapshot.incidentId}"),
+                          Text("Category: ${snapshot.type}"),
+                          if (snapshot.agencyName.isNotEmpty)
+                            Text("Assigned agency: ${snapshot.agencyName}")
+                          else if (phase.index >=
+                              ActiveEmergencyPhase.awaitingAssignment.index)
+                            const Text("Awaiting agency assignment"),
+                          if (snapshot.lastLocationAt != null)
+                            Text(
+                                "Last location update: ${snapshot.lastLocationAt!.toLocal()}"),
+                          const SizedBox(height: 16),
+                          Text(
+                            discreet
+                                ? "Updates are shown discreetly. Help is only indicated when assignment is confirmed."
+                                : _statusMessage(phase, snapshot),
+                          ),
+                          const SizedBox(height: 16),
+                          if (snapshot.timeline.isNotEmpty) ...[
+                            Text("Timeline",
+                                style: Theme.of(context).textTheme.titleMedium),
+                            ...snapshot.timeline.take(8).map(
+                                  (entry) => ListTile(
+                                    dense: true,
+                                    title: Text(timelineEntryLabel(entry)),
+                                  ),
+                                ),
+                          ],
+                          if (phaseAllowsCancellation(phase))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 24),
+                              child: OutlinedButton(
+                                onPressed:
+                                    _cancelling ? null : _cancelEmergency,
+                                child: Text(_cancelling
+                                    ? "Cancelling…"
+                                    : "Cancel emergency"),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

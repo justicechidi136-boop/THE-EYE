@@ -9,7 +9,7 @@ import "../typography.dart";
 /// Figma bottom navigation: Home, Services, Eye (SOS), Broadcast, Settings.
 abstract final class EyeNavRoutes {
   static const home = "/home";
-  static const services = "/police-stations";
+  static const services = "/services";
   static const broadcast = "/broadcasts";
   static const settings = "/settings";
 
@@ -19,9 +19,11 @@ abstract final class EyeNavRoutes {
     if (route == null) return 0;
     if (route == home) return 0;
     if (route == services ||
+        route == "/police-stations" ||
         route.startsWith("/neighborhood-watch") ||
         route == "/tracking" ||
         route == "/family" ||
+        route == "/profile" ||
         route == "/smartwatch" ||
         route.startsWith("/report/") ||
         route == "/live-video" ||
