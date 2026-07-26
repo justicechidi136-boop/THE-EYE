@@ -35,14 +35,42 @@ abstract final class TheEyeApiConfig {
   static const String stagingApiHost = "staging-api.theeye.com.ng";
   static const String stagingAdminHost = "staging-dashboard8jps.theeye.com.ng";
 
+  /// Stable HTTPS fallback for unflavored unit tests (CI/desktop `flutter test`).
+  static const String unitTestFallbackBaseUrl =
+      "https://test-api.theeye.local/v1";
+
+  static String? _testOverrideBaseUrl;
+
+  @visibleForTesting
+  static void setTestOverrideBaseUrl(String? baseUrl) {
+    if (baseUrl == null || baseUrl.trim().isEmpty) {
+      _testOverrideBaseUrl = null;
+      return;
+    }
+    _testOverrideBaseUrl = baseUrl.trim();
+  }
+
+  @visibleForTesting
+  static void resetTestOverrideBaseUrl() {
+    _testOverrideBaseUrl = null;
+  }
+
   static String resolveBaseUrl() {
+    if (_testOverrideBaseUrl != null && _testOverrideBaseUrl!.isNotEmpty) {
+      return _testOverrideBaseUrl!;
+    }
+
     const dartDefineFlavor = String.fromEnvironment("THE_EYE_FLAVOR");
     const flutterFlavor = String.fromEnvironment("FLUTTER_APP_FLAVOR");
     if (dartDefineFlavor.isEmpty && flutterFlavor.isEmpty) {
       if (TheEyeApiPaths.defaultBaseUrl.isNotEmpty) {
         return TheEyeApiPaths.defaultBaseUrl;
       }
-      return _resolveDevelopmentBaseUrl();
+      final devUrl = _resolveDevelopmentBaseUrl();
+      if (devUrl.isNotEmpty) {
+        return devUrl;
+      }
+      return unitTestFallbackBaseUrl;
     }
 
     final flavor = AppFlavorConfig.current;

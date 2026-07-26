@@ -39,6 +39,7 @@ import {
   validateCommunity,
   validateCommunityRequest,
   validatePost,
+  validateRegisterVolunteer,
   COMMUNITY_REPORT_REASONS,
 } from "./dto/neighborhood-watch.dto";
 
@@ -582,6 +583,7 @@ export class NeighborhoodWatchService {
 
   async registerVolunteer(dto: RegisterVolunteerDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can register as volunteers");
+    validateRegisterVolunteer(dto);
     const profile = await this.prisma.volunteerProfile.upsert({
       where: { userId: actor.sub },
       update: { communityId: dto.communityId, types: dto.types as never, latitude: dto.latitude, longitude: dto.longitude },

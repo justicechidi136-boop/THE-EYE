@@ -61,6 +61,8 @@ import "push/push_notification_service.dart";
 import "broadcasts/broadcast_feed_cache.dart";
 import "broadcasts/broadcast_feed_service.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
+import "neighborhood_watch/volunteer_categories.dart";
+import "incidents/live_video_incident_retry.dart";
 import "neighborhood_watch/community_media_upload_service.dart";
 import "neighborhood_watch/community_members_screen.dart";
 import "neighborhood_watch/community_post_detail_screen.dart";
@@ -667,6 +669,7 @@ class _TheEyeAppState extends State<TheEyeApp> {
                 return OtpVerificationScreen(args: args);
               },
               "/home": (_) => const HomeScreen(),
+              "/services": (_) => const ServicesHubScreen(),
               "/report/emergency": (context) =>
                   _reportRoute(context, ReportType.emergency),
               "/live-video": (context) {
@@ -941,6 +944,29 @@ ThemeData buildDarkTheme(bool highContrast) {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: const BorderSide(color: BrandColors.darkBorder))),
+    listTileTheme: ListTileThemeData(
+      iconColor: semantics.interactiveText,
+      textColor: semantics.bodyText,
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: semantics.elevatedSurface,
+      selectedColor: semantics.primaryAction.withValues(alpha: 0.24),
+      labelStyle: TextStyle(color: semantics.bodyText),
+      secondaryLabelStyle: TextStyle(color: semantics.bodyText),
+      side: BorderSide(color: semantics.border),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? semantics.primaryAction
+            : semantics.mutedText,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? semantics.primaryAction.withValues(alpha: 0.4)
+            : semantics.elevatedSurface,
+      ),
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: BrandColors.darkSurface,
       foregroundColor: BrandColors.darkText,
@@ -3272,6 +3298,64 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 }
 
+void navigateBackOrHome(BuildContext context) {
+  if (Navigator.of(context).canPop()) {
+    Navigator.of(context).pop();
+    return;
+  }
+  Navigator.of(context).pushReplacementNamed("/home");
+}
+
+class ServicesHubScreen extends StatelessWidget {
+  const ServicesHubScreen({super.key});
+
+  static const _destinations = [
+    (label: "Tracking", icon: Icons.route, route: "/tracking"),
+    (label: "Family", icon: Icons.family_restroom, route: "/family"),
+    (label: "Police", icon: Icons.local_police, route: "/police-stations"),
+    (label: "Profile", icon: Icons.person, route: "/profile"),
+    (label: "Home", icon: Icons.home, route: "/home"),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafetyScaffold(
+      title: "Services",
+      selectedIndex: 1,
+      useFigmaShell: true,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+        children: [
+          EyePageBackHeader(
+            title: "Services",
+            onBack: () => navigateBackOrHome(context),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Quick access to safety tools and account features.",
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          ..._destinations.map(
+            (destination) => ListTileCard(
+              leading: Icon(destination.icon),
+              title: destination.label,
+              subtitle: "Open ${destination.label.toLowerCase()}",
+              onTap: () {
+                if (destination.route == "/home") {
+                  Navigator.of(context).pushReplacementNamed(destination.route);
+                  return;
+                }
+                Navigator.of(context).pushNamed(destination.route);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -3651,7 +3735,7 @@ class _ReportScreenState extends State<ReportScreen> {
     final controller = appOf(context);
     final isEmergency = widget.type == ReportType.emergency;
     return Scaffold(
-      backgroundColor: EyeTokens.whiteBg,
+      backgroundColor: EyeSemanticColors.of(context).background,
       body: SafeArea(
         child: Column(
           children: [
@@ -3704,7 +3788,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     const SizedBox(height: 16),
                   ],
                   Text("Location of the incident",
-                      style: EyeTypography.fieldLabel),
+                      style: EyeInputTheme.labelStyle(context)),
                   const SizedBox(height: 8),
                   if (locationError != null) ...[
                     LocationDeniedBanner(
@@ -3740,43 +3824,24 @@ class _ReportScreenState extends State<ReportScreen> {
                     isEmergency
                         ? "Injuries or fatalities"
                         : "${widget.type.label} description",
-                    style: EyeTypography.fieldLabel,
+                    style: EyeInputTheme.labelStyle(context),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: descriptionController,
                     maxLines: isEmergency ? 5 : 4,
-                    style: EyeTypography.fieldHint
-                        .copyWith(color: EyeTokens.black1),
-                    decoration: InputDecoration(
+                    style: EyeInputTheme.textStyle(context),
+                    cursorColor: EyeInputTheme.focusBorderColor(context),
+                    decoration: EyeInputTheme.decoration(
+                      context,
                       hintText: isEmergency
                           ? "Enter information about the injuries"
                           : "Describe what happened",
-                      hintStyle: EyeTypography.fieldHint,
                       errorText: descriptionError,
-                      filled: true,
-                      fillColor: Colors.white,
+                      radius: EyeTokens.radiusSm,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 12,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-                        borderSide: const BorderSide(color: EyeTokens.stroke),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-                        borderSide: const BorderSide(
-                          color: EyeTokens.greenMain,
-                          width: 2,
-                        ),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-                        borderSide: const BorderSide(
-                          color: EyeTokens.danger,
-                          width: 2,
-                        ),
                       ),
                     ),
                     onChanged: (_) {
@@ -3821,10 +3886,16 @@ class _ReportScreenState extends State<ReportScreen> {
                         child: LinearProgressIndicator(),
                       )
                     else if (emergencyContacts.isEmpty)
-                      const ListTile(
+                      ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Text("No saved emergency contacts"),
-                        subtitle: Text("Add contacts from your profile"),
+                        title: Text(
+                          "No saved emergency contacts",
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        subtitle: Text(
+                          "Add contacts from your profile",
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       )
                     else
                       Wrap(
@@ -4394,6 +4465,17 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     setState(() {});
   }
 
+  Future<IncidentSubmissionResult> _submitLiveVideoIncident(
+    AppController appController,
+    IncidentDraft draft,
+  ) {
+    return submitLiveVideoIncidentWithRetry(
+      submit: () => appController
+          .submitIncident(draft)
+          .timeout(kLiveVideoStartTimeout),
+    );
+  }
+
   Future<void> _startStream(BuildContext context) async {
     if (_streamStartInFlight || streaming) return;
     _streamStartInFlight = true;
@@ -4467,9 +4549,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             );
 
       _setStartupPhase(LiveVideoStartupPhase.creatingIncident);
-      final submission = await appController
-          .submitIncident(draft)
-          .timeout(kLiveVideoStartTimeout);
+      final submission = await _submitLiveVideoIncident(appController, draft);
       if (!mounted || _disposed) return;
       if (!submission.isSuccess || submission.incidentId == null) {
         _setStartupPhase(LiveVideoStartupPhase.failed);
@@ -4874,9 +4954,20 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
       title: "Safety broadcasts",
       selectedIndex: 3,
       useFigmaShell: true,
-      body: RefreshIndicator(
-        onRefresh: () => controller.loadBroadcastsFromApi(refresh: true),
-        child: _buildBody(controller),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          EyePageBackHeader(
+            title: "Safety broadcasts",
+            onBack: () => navigateBackOrHome(context),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => controller.loadBroadcastsFromApi(refresh: true),
+              child: _buildBody(controller),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -6737,18 +6828,28 @@ class VolunteersScreen extends StatefulWidget {
 
 class _VolunteersScreenState extends State<VolunteersScreen> {
   bool _registering = false;
+  final VolunteerCategorySelection _selection = VolunteerCategorySelection();
+
+  void _toggleCategory(String apiType) {
+    setState(() => _selection.toggle(apiType));
+  }
 
   Future<void> _register() async {
     final controller = appOf(context);
     final community = controller.selectedCommunity;
     if (community == null || !controller.isAuthenticated) return;
+    final validationError = _selection.validationError();
+    if (validationError != null) {
+      showAppSnackBar(context, validationError, isError: true);
+      return;
+    }
     setState(() => _registering = true);
     try {
       final location = await captureLocationOutcome();
       await NeighborhoodWatchService().registerVolunteer(
         accessToken: controller.accessToken!,
         communityId: community.id,
-        types: const ["SecurityVolunteer"],
+        types: _selection.toPayload(),
         latitude: location.position?.latitude,
         longitude: location.position?.longitude,
       );
@@ -6768,16 +6869,6 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final types = [
-      "Doctor",
-      "Nurse",
-      "First Aid",
-      "Lawyer",
-      "Security Volunteer",
-      "Fire Volunteer",
-      "Search and Rescue",
-      "Blood Donor",
-    ];
     return SafetyScaffold(
       title: "Volunteers",
       selectedIndex: 3,
@@ -6791,11 +6882,18 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
                 Text(_registering ? "Registering..." : "Register as volunteer"),
           ),
           const SizedBox(height: 16),
-          ...types.map((type) => ListTileCard(
-                leading: const Icon(Icons.health_and_safety),
-                title: type,
-                subtitle: "Notify nearby volunteers during emergencies",
-              )),
+          ...canonicalVolunteerCategories.map(
+            (category) => ListTileCard(
+              leading: const Icon(Icons.health_and_safety),
+              title: category.label,
+              subtitle: "Notify nearby volunteers during emergencies",
+              trailing: _selection.isSelected(category.apiType)
+                  ? Icon(Icons.check_circle,
+                      color: EyeSemanticColors.of(context).primaryAction)
+                  : null,
+              onTap: () => _toggleCategory(category.apiType),
+            ),
+          ),
         ],
       ),
     );

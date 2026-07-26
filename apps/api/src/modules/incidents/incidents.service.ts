@@ -24,6 +24,7 @@ import { EmergencyClassificationService } from "../dispatch/emergency-classifica
 import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { canTransitionIncident } from "./incident-lifecycle";
 import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
+import { emptyOptionalString, runNonCriticalWrite } from "./incident-write-side-effects";
 import { incidentHasSubmissionCoordinates } from "./location-status";
 import {
   ConfirmIncidentMediaDto,
@@ -137,7 +138,10 @@ export class IncidentsService {
     const incidentType = String(dto.type);
     validateReportIncidentDto(dto);
 
-    const clientSubmissionId = dto.clientSubmissionId?.trim();
+    const clientSubmissionId = emptyOptionalString(dto.clientSubmissionId);
+    const incidentDescription = dto.description.trim();
+    const incidentAddress = emptyOptionalString(dto.address);
+    const incidentTitle = emptyOptionalString(dto.title) ?? this.defaultTitle(dto.type);
     if (clientSubmissionId) {
       const existing = await this.prisma.incident.findUnique({ where: { clientSubmissionId } });
       if (existing) {
@@ -162,10 +166,15 @@ export class IncidentsService {
       actor,
     });
     const now = new Date();
-    const incidentTitle = dto.title ?? this.defaultTitle(dto.type);
     const priority = dto.priority ?? this.defaultPriority(dto.type);
+    const sideEffectContext = {
+      incidentId: "",
+      intake,
+      clientSubmissionId,
+    } satisfies Parameters<typeof runNonCriticalWrite>[1];
+    const nonCriticalWarnings: string[] = [];
 
-    const incident = await (this.prisma as any).incident.create({
+    const incident = await this.prisma.incident.create({
       data: {
         reporterId: !isAnonymous && actor?.typ === "user" ? actor.sub : undefined,
         jurisdictionId: jurisdiction.id,
@@ -173,8 +182,8 @@ export class IncidentsService {
         status: IncidentStatus.Submitted as never,
         priority: priority as never,
         title: incidentTitle,
-        description: dto.description,
-        address: dto.address,
+        description: incidentDescription,
+        address: incidentAddress,
         country: jurisdiction.country,
         state: jurisdiction.state,
         lga: jurisdiction.lga,
@@ -207,27 +216,46 @@ export class IncidentsService {
             ? { jurisdictionDistanceMeters: jurisdiction.distanceMeters }
             : {}),
         },
-        timeline: {
-          create: {
+      } as never,
+    });
+    sideEffectContext.incidentId = incident.id;
+
+    await runNonCriticalWrite(
+      "incident.timeline.submitted",
+      sideEffectContext,
+      async () => {
+        await this.prisma.incidentTimeline.create({
+          data: {
+            incidentId: incident.id,
             actorId: !isAnonymous && actor?.typ === "user" ? actor.sub : undefined,
             actorType: isAnonymous ? "anonymous" : actor?.typ ?? "system",
             eventType: "incident.submitted",
-            message: emergencyFastPath ? "Emergency report submitted through fast path." : "Incident report submitted.",
+            message: emergencyFastPath
+              ? "Emergency report submitted through fast path."
+              : "Incident report submitted.",
             metadata: { reportingMode: isAnonymous ? "anonymous" : "identified" },
-          },
-        },
-      } as never,
-    });
+          } as never,
+        });
+      },
+      nonCriticalWarnings,
+    );
 
-    await this.audit.record({
-      actor,
-      actorType: isAnonymous ? "anonymous" : actor?.typ ?? "system",
-      action: "incident.created",
-      entityType: "incidents",
-      entityId: incident.id,
-      afterState: { status: IncidentStatus.Submitted, priority, type: dto.type },
-      metadata: { reportingMode: isAnonymous ? "anonymous" : "identified", emergencyFastPath },
-    });
+    await runNonCriticalWrite(
+      "incident.audit.created",
+      sideEffectContext,
+      async () => {
+        await this.audit.record({
+          actor,
+          actorType: isAnonymous ? "anonymous" : actor?.typ ?? "system",
+          action: "incident.created",
+          entityType: "incidents",
+          entityId: incident.id,
+          afterState: { status: IncidentStatus.Submitted, priority, type: dto.type },
+          metadata: { reportingMode: isAnonymous ? "anonymous" : "identified", emergencyFastPath },
+        });
+      },
+      nonCriticalWarnings,
+    );
 
     if (dto.media?.length) {
       if (emergencyFastPath) {
@@ -246,13 +274,25 @@ export class IncidentsService {
     }
 
     if (dto.notifyEmergencyContacts && !isAnonymous && actor?.typ === "user") {
-      void this.createEmergencyContactNotifications(actor.sub, incident.id, incidentTitle, dto.emergencyContactIds);
+      void runNonCriticalWrite(
+        "incident.notifications.emergency_contacts",
+        sideEffectContext,
+        async () => {
+          await this.createEmergencyContactNotifications(
+            actor.sub,
+            incident.id,
+            incidentTitle,
+            dto.emergencyContactIds,
+          );
+        },
+        nonCriticalWarnings,
+      );
     }
 
     void this.verification.verifyIncident(incident.id).catch(() => undefined);
     void this.dispatchService.runTriageForIncident(incident.id, actor).catch(() => undefined);
 
-    const result = this.buildReportResponse(incident, emergencyFastPath, false);
+    const result = this.buildReportResponse(incident, emergencyFastPath, false, nonCriticalWarnings);
     this.metrics.recordIncidentSubmission(
       incidentType,
       intake,
@@ -501,7 +541,12 @@ export class IncidentsService {
     return this.jurisdictionResolution.diagnose(latitude, longitude, actor);
   }
 
-  private buildReportResponse(incident: { id: string; status: unknown; priority: unknown; submittedAt: Date }, emergencyFastPath: boolean, duplicate: boolean) {
+  private buildReportResponse(
+    incident: { id: string; status: unknown; priority: unknown; submittedAt: Date },
+    emergencyFastPath: boolean,
+    duplicate: boolean,
+    nonCriticalWarnings: string[] = [],
+  ) {
     return {
       id: incident.id,
       status: incident.status,
@@ -510,6 +555,7 @@ export class IncidentsService {
       fastPath: emergencyFastPath,
       duplicate,
       targetProcessingTimeMs: emergencyFastPath ? 3000 : undefined,
+      ...(nonCriticalWarnings.length ? { nonCriticalWarnings } : {}),
     };
   }
 

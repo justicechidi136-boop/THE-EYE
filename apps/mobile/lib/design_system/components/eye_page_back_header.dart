@@ -34,7 +34,12 @@ class EyePageBackHeader extends StatelessWidget {
             const SizedBox(height: 2),
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: Text(title!, style: EyeTypography.authHeading),
+              child: Text(
+                title!,
+                style: EyeTypography.authHeading.copyWith(
+                  color: EyeSemanticColors.of(context).bodyText,
+                ),
+              ),
             ),
           ],
         ],
