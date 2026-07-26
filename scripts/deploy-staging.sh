@@ -9,7 +9,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
-IMAGE_TAG="${THE_EYE_IMAGE_TAG:-local}"
 
 if [[ ! -f ".env" ]]; then
   echo "Missing .env — configure staging secrets before deploy." >&2
@@ -17,11 +16,12 @@ if [[ ! -f ".env" ]]; then
 fi
 
 # shellcheck disable=SC1091
-set -a
-source .env
-set +a
+source "$REPO_ROOT/scripts/lib/safe-env.sh"
 
-if [[ "${THE_EYE_APP_ENV:-}" != "staging" && "${THE_EYE_APP_ENV:-}" != "stg" ]]; then
+THE_EYE_APP_ENV="$(read_env_var THE_EYE_APP_ENV "")"
+IMAGE_TAG="${THE_EYE_IMAGE_TAG:-$(read_env_var THE_EYE_IMAGE_TAG local)}"
+
+if [[ "${THE_EYE_APP_ENV}" != "staging" && "${THE_EYE_APP_ENV}" != "stg" ]]; then
   echo "THE_EYE_APP_ENV must be staging (got '${THE_EYE_APP_ENV:-unset}')." >&2
   exit 1
 fi

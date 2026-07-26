@@ -7,16 +7,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-if [[ -f ".env" ]]; then
-  # shellcheck disable=SC1091
-  set -a
-  source .env
-  set +a
-fi
+# shellcheck disable=SC1091
+source "$REPO_ROOT/scripts/lib/safe-env.sh"
 
-API_HOST="${THE_EYE_API_SERVER_NAME:-staging-api.theeye.com.ng}"
-ADMIN_HOST="${THE_EYE_ADMIN_SERVER_NAME:-staging-dashboard8jps.theeye.com.ng}"
-LIVEKIT_HOST="${THE_EYE_LIVEKIT_SERVER_NAME:-staging-livekit.theeye.com.ng}"
+API_HOST="$(read_env_var THE_EYE_API_SERVER_NAME staging-api.theeye.com.ng)"
+ADMIN_HOST="$(read_env_var THE_EYE_ADMIN_SERVER_NAME staging-dashboard8jps.theeye.com.ng)"
+LIVEKIT_HOST="$(read_env_var THE_EYE_LIVEKIT_SERVER_NAME staging-livekit.theeye.com.ng)"
 
 MAX_ATTEMPTS="${STAGING_SMOKE_ATTEMPTS:-12}"
 SLEEP_SECONDS="${STAGING_SMOKE_INTERVAL_SECONDS:-5}"
