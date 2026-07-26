@@ -211,11 +211,12 @@ const STAGING_POLICE_STATION = {
 } as const;
 
 async function ensureStagingPoliceStation(jurisdictionId: string, agencyId: string) {
-  const existing = await prisma.policeStation.findFirst({
+  const policeStationClient = (prisma as any).policeStation;
+  const existing = await policeStationClient.findFirst({
     where: { sourceReference: STAGING_POLICE_STATION.sourceReference },
   });
   if (existing) {
-    return prisma.policeStation.update({
+    return policeStationClient.update({
       where: { id: existing.id },
       data: {
         name: STAGING_POLICE_STATION.name,
@@ -234,7 +235,7 @@ async function ensureStagingPoliceStation(jurisdictionId: string, agencyId: stri
     });
   }
 
-  const created = await prisma.policeStation.create({
+  const created = await policeStationClient.create({
     data: {
       jurisdictionId,
       agencyId,
