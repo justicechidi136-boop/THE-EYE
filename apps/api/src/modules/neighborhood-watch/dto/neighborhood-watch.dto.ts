@@ -51,6 +51,17 @@ export type RegisterVolunteerDto = {
   longitude?: number;
 };
 
+const allowedVolunteerTypes = new Set<RegisterVolunteerDto["types"][number]>([
+  "Doctor",
+  "Nurse",
+  "FirstAid",
+  "Lawyer",
+  "SecurityVolunteer",
+  "FireVolunteer",
+  "SearchAndRescue",
+  "BloodDonor",
+]);
+
 export type CreatePatrolScheduleDto = {
   title: string;
   startsAt: string;
@@ -187,6 +198,17 @@ export function validateCommunity(dto: CreateCommunityDto) {
 export function validatePost(dto: CreateCommunityPostDto) {
   if (!dto.title || dto.title.trim().length < 4) throw new BadRequestException("Post title is required");
   if (!dto.body || dto.body.trim().length < 5) throw new BadRequestException("Post body is required");
+  if (dto.latitude !== undefined) assertCoordinate(dto.latitude, "latitude", -90, 90);
+  if (dto.longitude !== undefined) assertCoordinate(dto.longitude, "longitude", -180, 180);
+}
+
+export function validateRegisterVolunteer(dto: RegisterVolunteerDto) {
+  if (!dto.types?.length) throw new BadRequestException("At least one volunteer category is required");
+  for (const type of dto.types) {
+    if (!allowedVolunteerTypes.has(type)) {
+      throw new BadRequestException(`Unsupported volunteer type: ${type}`);
+    }
+  }
   if (dto.latitude !== undefined) assertCoordinate(dto.latitude, "latitude", -90, 90);
   if (dto.longitude !== undefined) assertCoordinate(dto.longitude, "longitude", -180, 180);
 }
