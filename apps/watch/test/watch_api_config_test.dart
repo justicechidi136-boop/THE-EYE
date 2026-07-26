@@ -13,10 +13,10 @@ void main() {
     });
 
     test('detects production and staging API hosts', () {
-      expect(
-        WatchApiConfig.isProductionApiUrl('https://api.theeye.com.ng/v1'),
-        isTrue,
-      );
+      const prodUrl = String.fromEnvironment('THE_EYE_PROD_API_URL');
+      if (prodUrl.isNotEmpty) {
+        expect(WatchApiConfig.isProductionApiUrl(prodUrl), isTrue);
+      }
       expect(
         WatchApiConfig.isStagingApiUrl(
           'https://staging-api.theeye.com.ng/v1',

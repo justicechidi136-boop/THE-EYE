@@ -63,7 +63,7 @@ abstract final class TheEyeApiConfig {
         if (_productionDefaultUrl.isEmpty) {
           throw StateError(
             "Production API URL is not configured. Rebuild with "
-            "--dart-define=THE_EYE_PROD_API_URL=https://api.theeye.com.ng/v1",
+            "--dart-define=THE_EYE_PROD_API_URL set to the production API base URL.",
           );
         }
         return _productionDefaultUrl;
@@ -159,7 +159,8 @@ void assertMobileApiBaseUrlMatchesFlavor(
   if (flavor == AppFlavor.production && isStagingApi) {
     throw StateError(
       "Environment guard: production build cannot use staging API "
-      "(`$baseUrl`). Use `https://api.theeye.com.ng/v1`.",
+      "(`$baseUrl`). Configure the production API base URL via "
+      "THE_EYE_PROD_API_URL.",
     );
   }
 }

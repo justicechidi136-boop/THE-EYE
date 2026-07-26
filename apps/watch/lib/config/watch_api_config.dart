@@ -27,10 +27,8 @@ abstract final class WatchApiConfig {
 
   static const String _productionDefaultUrl = String.fromEnvironment(
     'THE_EYE_PROD_API_URL',
-    defaultValue: 'https://api.theeye.com.ng/v1',
   );
 
-  static const String productionApiHost = 'api.theeye.com.ng';
   static const String stagingApiHost = 'staging-api.theeye.com.ng';
   static const String stagingAdminHost = 'staging-dashboard8jps.theeye.com.ng';
 
@@ -38,7 +36,6 @@ abstract final class WatchApiConfig {
     final env = WatchFlavor.firebaseEnv;
 
     if (_dartDefineUrl.isNotEmpty) {
-      // Ignore dev-machine overrides when building staging/production flavors.
       if (env == WatchFirebaseEnv.development ||
           !isLocalDevUrl(_dartDefineUrl)) {
         return _dartDefineUrl;
@@ -51,6 +48,12 @@ abstract final class WatchApiConfig {
       case WatchFirebaseEnv.staging:
         return _stagingDefaultUrl;
       case WatchFirebaseEnv.production:
+        if (_productionDefaultUrl.isEmpty) {
+          throw StateError(
+            'Production API URL is not configured. Rebuild with '
+            '--dart-define=THE_EYE_PROD_API_URL set to the production API base URL.',
+          );
+        }
         return _productionDefaultUrl;
     }
   }
@@ -82,8 +85,11 @@ abstract final class WatchApiConfig {
   }
 
   static bool isProductionApiUrl(String baseUrl) {
+    if (_productionDefaultUrl.isEmpty) return false;
     final normalized = baseUrl.toLowerCase();
-    return normalized.contains(productionApiHost) &&
+    final productionHost = Uri.tryParse(_productionDefaultUrl)?.host ?? '';
+    if (productionHost.isEmpty) return false;
+    return normalized.contains(productionHost) &&
         !normalized.contains(stagingApiHost);
   }
 
@@ -141,7 +147,7 @@ void assertWatchApiBaseUrlMatchesFlavor(
   if (env == WatchFirebaseEnv.production && isStagingApi) {
     throw StateError(
       'Environment guard: production build cannot use staging API '
-      '(`$baseUrl`). Use `https://${WatchApiConfig.productionApiHost}/v1`.',
+      '(`$baseUrl`). Configure THE_EYE_PROD_API_URL for production builds.',
     );
   }
 }
