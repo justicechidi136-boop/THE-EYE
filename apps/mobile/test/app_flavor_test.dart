@@ -143,10 +143,10 @@ void main() {
     });
 
     test("detects production, staging, and local dev API hosts", () {
-      expect(
-        TheEyeApiConfig.isProductionApiUrl("https://api.theeye.com.ng/v1"),
-        isTrue,
-      );
+      const prodUrl = String.fromEnvironment("THE_EYE_PROD_API_URL");
+      if (prodUrl.isNotEmpty) {
+        expect(TheEyeApiConfig.isProductionApiUrl(prodUrl), isTrue);
+      }
       expect(
         TheEyeApiConfig.isStagingApiUrl(
           "https://staging-api.theeye.com.ng/v1",

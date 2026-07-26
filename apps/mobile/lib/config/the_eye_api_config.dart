@@ -30,10 +30,8 @@ abstract final class TheEyeApiConfig {
 
   static const String _productionDefaultUrl = String.fromEnvironment(
     "THE_EYE_PROD_API_URL",
-    defaultValue: "https://api.theeye.com.ng/v1",
   );
 
-  static const String productionApiHost = "api.theeye.com.ng";
   static const String stagingApiHost = "staging-api.theeye.com.ng";
   static const String stagingAdminHost = "staging-dashboard8jps.theeye.com.ng";
 
@@ -41,8 +39,10 @@ abstract final class TheEyeApiConfig {
     const dartDefineFlavor = String.fromEnvironment("THE_EYE_FLAVOR");
     const flutterFlavor = String.fromEnvironment("FLUTTER_APP_FLAVOR");
     if (dartDefineFlavor.isEmpty && flutterFlavor.isEmpty) {
-      // Widget/unit tests and legacy harnesses without a build flavor.
-      return TheEyeApiPaths.defaultBaseUrl;
+      if (TheEyeApiPaths.defaultBaseUrl.isNotEmpty) {
+        return TheEyeApiPaths.defaultBaseUrl;
+      }
+      return _resolveDevelopmentBaseUrl();
     }
 
     final flavor = AppFlavorConfig.current;
@@ -60,6 +60,12 @@ abstract final class TheEyeApiConfig {
       case AppFlavor.staging:
         return _stagingDefaultUrl;
       case AppFlavor.production:
+        if (_productionDefaultUrl.isEmpty) {
+          throw StateError(
+            "Production API URL is not configured. Rebuild with "
+            "--dart-define=THE_EYE_PROD_API_URL=https://api.theeye.com.ng/v1",
+          );
+        }
         return _productionDefaultUrl;
     }
   }
@@ -91,8 +97,11 @@ abstract final class TheEyeApiConfig {
   }
 
   static bool isProductionApiUrl(String baseUrl) {
+    if (_productionDefaultUrl.isEmpty) return false;
     final normalized = baseUrl.toLowerCase();
-    return normalized.contains(productionApiHost) &&
+    final productionHost = Uri.tryParse(_productionDefaultUrl)?.host ?? "";
+    if (productionHost.isEmpty) return false;
+    return normalized.contains(productionHost) &&
         !normalized.contains(stagingApiHost);
   }
 
@@ -150,7 +159,7 @@ void assertMobileApiBaseUrlMatchesFlavor(
   if (flavor == AppFlavor.production && isStagingApi) {
     throw StateError(
       "Environment guard: production build cannot use staging API "
-      "(`$baseUrl`). Use `https://${TheEyeApiConfig.productionApiHost}/v1`.",
+      "(`$baseUrl`). Use `https://api.theeye.com.ng/v1`.",
     );
   }
 }

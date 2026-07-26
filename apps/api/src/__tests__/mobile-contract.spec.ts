@@ -59,7 +59,7 @@ describe("mobile contract sharing", () => {
     const enums = readRepo("apps/mobile/lib/contracts/the_eye_enums.dart");
     expect(mobile.includes("TheEyeApiClient")).toBe(true);
     expect(mobile.includes("TheEyeApiConfig.resolveBaseUrl()")).toBe(true);
-    expect(enums.includes("http://localhost:4000/v1")).toBe(true);
+    expect(enums.includes("THE_EYE_DEV_API_BASE_URL")).toBe(true);
     expect(mobile.includes("class IncidentTrackingItem")).toBe(true);
     expect(mobile.includes("class IncidentStatus ")).toBe(false);
   });

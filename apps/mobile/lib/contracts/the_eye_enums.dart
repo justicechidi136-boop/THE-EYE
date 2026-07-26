@@ -2,7 +2,9 @@
 /// Keep in sync with `packages/shared/dist/contracts.json`.
 abstract final class TheEyeEnums {
   static const apiVersionPrefix = "/v1";
-  static const defaultApiBaseUrl = "http://localhost:4000/v1";
+  static const defaultApiBaseUrl = String.fromEnvironment(
+    "THE_EYE_DEV_API_BASE_URL",
+  );
   static const descriptionMinLength = 5;
   static const mediaMaxCount = 10;
   static const sosLongPressMinMs = 3000;

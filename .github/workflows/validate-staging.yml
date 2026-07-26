@@ -317,7 +317,7 @@ jobs:
 
       - name: Build staging APK
         if: steps.mobile_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
-        run: pnpm --dir apps/mobile exec flutter build apk --flavor staging --dart-define=THE_EYE_FLAVOR=staging
+        run: pnpm --dir apps/mobile exec flutter build apk --release --flavor staging --dart-define=THE_EYE_FLAVOR=staging --dart-define=THE_EYE_DEV_API_BASE_URL=https://staging-api.theeye.com.ng/v1
 
       - name: Validate mobile staging artifact
         if: steps.mobile_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
@@ -336,6 +336,15 @@ jobs:
             ARGS+=(--expected-sha256 "${STAGING_ANDROID_EXPECTED_SHA256}")
           fi
           node scripts/validate-staging-apk-signing.cjs "${ARGS[@]}"
+
+      - name: Upload mobile staging certification APK
+        if: steps.mobile_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-staging-cert-apk
+          path: apps/mobile/build/app/outputs/flutter-apk/app-staging-release.apk
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Cleanup staging Android keystore
         if: always() && steps.staging_keystore.outputs.has_keystore == 'true'
@@ -363,6 +372,38 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Validate staging Android signing configuration
+        run: node scripts/ci/validate-staging-signing-config.cjs
+
+      - name: Materialize staging Android keystore
+        id: staging_keystore
+        env:
+          STAGING_ANDROID_KEYSTORE_BASE64: ${{ secrets.STAGING_ANDROID_KEYSTORE_BASE64 }}
+          STAGING_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.STAGING_ANDROID_KEYSTORE_PASSWORD }}
+          STAGING_ANDROID_KEY_ALIAS: ${{ secrets.STAGING_ANDROID_KEY_ALIAS }}
+          STAGING_ANDROID_KEY_PASSWORD: ${{ secrets.STAGING_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${STAGING_ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::warning::staging secret STAGING_ANDROID_KEYSTORE_BASE64 is not set — skipping watch staging release APK build"
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for name in STAGING_ANDROID_KEYSTORE_PASSWORD STAGING_ANDROID_KEY_ALIAS STAGING_ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::GitHub staging secret ${name} is required when STAGING_ANDROID_KEYSTORE_BASE64 is set"
+              exit 1
+            fi
+          done
+          KEYSTORE_PATH="${RUNNER_TEMP}/the-eye-staging-release.jks"
+          echo "${STAGING_ANDROID_KEYSTORE_BASE64}" | base64 -d > "${KEYSTORE_PATH}"
+          chmod 600 "${KEYSTORE_PATH}"
+          echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          echo "THE_EYE_STAGING_KEYSTORE_PATH=${KEYSTORE_PATH}" >> "$GITHUB_ENV"
+          echo "THE_EYE_STAGING_KEYSTORE_PASSWORD=${STAGING_ANDROID_KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+          echo "THE_EYE_STAGING_KEY_ALIAS=${STAGING_ANDROID_KEY_ALIAS}" >> "$GITHUB_ENV"
+          echo "THE_EYE_STAGING_KEY_PASSWORD=${STAGING_ANDROID_KEY_PASSWORD}" >> "$GITHUB_ENV"
 
       - name: Materialize watch google-services.json files
         id: watch_gs_json
@@ -420,13 +461,44 @@ jobs:
             echo "::warning::Partial flavor secrets — skipped test:watch:firebase (auth-provider manifest validation passed)"
           fi
 
-      - name: Build staging debug APK
-        if: steps.watch_gs_json.outputs.has_secret == 'true'
-        run: pnpm --dir apps/watch exec flutter build apk --flavor staging --debug
+      - name: Build staging release APK
+        if: steps.watch_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
+        run: pnpm --dir apps/watch exec flutter build apk --release --flavor staging
 
       - name: Validate watch staging artifact
-        if: steps.watch_gs_json.outputs.has_secret == 'true'
-        run: node scripts/validate-staging-artifacts.cjs --watch-apk apps/watch/build/app/outputs/flutter-apk/app-staging-debug.apk
+        if: steps.watch_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
+        env:
+          STAGING_ANDROID_EXPECTED_SHA1: ${{ vars.STAGING_ANDROID_EXPECTED_SHA1 }}
+          STAGING_ANDROID_EXPECTED_SHA256: ${{ vars.STAGING_ANDROID_EXPECTED_SHA256 }}
+        run: |
+          set -euo pipefail
+          APK="apps/watch/build/app/outputs/flutter-apk/app-staging-release.apk"
+          node scripts/validate-staging-artifacts.cjs --watch-apk "$APK"
+          ARGS=(--apk "$APK" --reject-debug)
+          if [ -n "${STAGING_ANDROID_EXPECTED_SHA1:-}" ]; then
+            ARGS+=(--expected-sha1 "${STAGING_ANDROID_EXPECTED_SHA1}")
+          fi
+          if [ -n "${STAGING_ANDROID_EXPECTED_SHA256:-}" ]; then
+            ARGS+=(--expected-sha256 "${STAGING_ANDROID_EXPECTED_SHA256}")
+          fi
+          node scripts/validate-staging-apk-signing.cjs "${ARGS[@]}"
+
+      - name: Upload watch staging certification APK
+        if: steps.watch_gs_json.outputs.has_secret == 'true' && steps.staging_keystore.outputs.has_keystore == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: watch-staging-cert-apk
+          path: apps/watch/build/app/outputs/flutter-apk/app-staging-release.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Cleanup staging Android keystore
+        if: always() && steps.staging_keystore.outputs.has_keystore == 'true'
+        run: |
+          set -euo pipefail
+          if [ -n "${THE_EYE_STAGING_KEYSTORE_PATH:-}" ] && [ -f "${THE_EYE_STAGING_KEYSTORE_PATH}" ]; then
+            rm -f "${THE_EYE_STAGING_KEYSTORE_PATH}"
+          fi
 
   firebase:
     name: Firebase staging guards
