@@ -25,4 +25,8 @@ docker compose -f "$COMPOSE_FILE" --env-file .env exec -T nginx nginx -t
 echo "Reloading nginx (graceful) ..."
 docker compose -f "$COMPOSE_FILE" --env-file .env exec -T nginx nginx -s reload
 
+echo "Recreating nginx container to apply http-level resolver/upstream config ..."
+docker compose -f "$COMPOSE_FILE" --env-file .env up -d --force-recreate nginx
+docker compose -f "$COMPOSE_FILE" --env-file .env up -d --wait nginx
+
 echo "nginx upstream reload complete."

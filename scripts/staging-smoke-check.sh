@@ -37,30 +37,30 @@ curl_retry() {
 }
 
 check_local_api_ready() {
-  curl -fsS --max-time 10 \
-    -H "Host: ${API_HOST}" \
-    "http://127.0.0.1/v1/health/ready" >/dev/null 2>&1 || \
   curl -fsSk --max-time 10 \
     -H "Host: ${API_HOST}" \
-    "https://127.0.0.1/v1/health/ready" >/dev/null
+    "https://127.0.0.1/v1/health/ready" >/dev/null 2>&1 || \
+  curl -fsS --max-time 10 \
+    -H "Host: ${API_HOST}" \
+    "http://127.0.0.1/v1/health/ready" >/dev/null
 }
 
 check_local_admin() {
-  curl -fsS --max-time 10 \
-    -H "Host: ${ADMIN_HOST}" \
-    "http://127.0.0.1/" >/dev/null 2>&1 || \
   curl -fsSk --max-time 10 \
     -H "Host: ${ADMIN_HOST}" \
-    "https://127.0.0.1/" >/dev/null
+    "https://127.0.0.1/" >/dev/null 2>&1 || \
+  curl -fsS --max-time 10 \
+    -H "Host: ${ADMIN_HOST}" \
+    "http://127.0.0.1/" >/dev/null
 }
 
 check_local_livekit() {
-  curl -fsS --max-time 10 \
-    -H "Host: ${LIVEKIT_HOST}" \
-    "http://127.0.0.1/" >/dev/null 2>&1 || \
   curl -fsSk --max-time 10 \
     -H "Host: ${LIVEKIT_HOST}" \
-    "https://127.0.0.1/" >/dev/null
+    "https://127.0.0.1/" >/dev/null 2>&1 || \
+  curl -fsS --max-time 10 \
+    -H "Host: ${LIVEKIT_HOST}" \
+    "http://127.0.0.1/" >/dev/null
 }
 
 echo "=== Staging smoke checks (Host-aware via nginx) ==="
