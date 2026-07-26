@@ -211,58 +211,67 @@ const STAGING_POLICE_STATION = {
 } as const;
 
 async function ensureStagingPoliceStation(jurisdictionId: string, agencyId: string) {
-  const policeStationClient = (prisma as any).policeStation;
-  const existing = await policeStationClient.findFirst({
-    where: { sourceReference: STAGING_POLICE_STATION.sourceReference },
-  });
-  if (existing) {
-    return policeStationClient.update({
-      where: { id: existing.id },
-      data: {
-        name: STAGING_POLICE_STATION.name,
-        address: STAGING_POLICE_STATION.address,
-        jurisdictionId,
-        agencyId,
-        verificationStatus: "VerifiedOfficial",
-        isActive: true,
-        source: "staging-certification",
-        country: PROFILE_LOCATION.country,
-        state: PROFILE_LOCATION.state,
-        lga: PROFILE_LOCATION.lga,
-        latitude: STAGING_POLICE_STATION.latitude,
-        longitude: STAGING_POLICE_STATION.longitude,
-      },
-    });
+  const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id::text AS id FROM police_stations
+    WHERE source_reference = ${STAGING_POLICE_STATION.sourceReference}
+    LIMIT 1
+  `;
+
+  if (existing.length > 0) {
+    await prisma.$executeRaw`
+      UPDATE police_stations SET
+        name = ${STAGING_POLICE_STATION.name},
+        address = ${STAGING_POLICE_STATION.address},
+        jurisdiction_id = ${jurisdictionId}::uuid,
+        agency_id = ${agencyId}::uuid,
+        verification_status = 'VerifiedOfficial',
+        is_active = true,
+        source = 'staging-certification',
+        country = ${PROFILE_LOCATION.country},
+        state = ${PROFILE_LOCATION.state},
+        lga = ${PROFILE_LOCATION.lga},
+        latitude = ${STAGING_POLICE_STATION.latitude},
+        longitude = ${STAGING_POLICE_STATION.longitude},
+        updated_at = NOW()
+      WHERE id = ${existing[0].id}::uuid
+    `;
+    return prisma.policeStation.findFirst({ where: { id: existing[0].id } });
   }
 
-  const created = await policeStationClient.create({
-    data: {
-      jurisdictionId,
-      agencyId,
-      name: STAGING_POLICE_STATION.name,
-      address: STAGING_POLICE_STATION.address,
-      phone: "+2348001002002",
-      officialPhone: "+2348001002002",
-      source: "staging-certification",
-      sourceReference: STAGING_POLICE_STATION.sourceReference,
-      verificationStatus: "VerifiedOfficial",
-      verifiedAt: new Date(),
-      isActive: true,
-      country: PROFILE_LOCATION.country,
-      state: PROFILE_LOCATION.state,
-      lga: PROFILE_LOCATION.lga,
-      latitude: STAGING_POLICE_STATION.latitude,
-      longitude: STAGING_POLICE_STATION.longitude,
-    },
-  });
+  const inserted = await prisma.$queryRaw<Array<{ id: string }>>`
+    INSERT INTO police_stations (
+      id, jurisdiction_id, agency_id, name, phone, address,
+      source, source_reference, verification_status, verified_at, is_active,
+      country, state, lga, latitude, longitude, created_at, updated_at
+    ) VALUES (
+      gen_random_uuid(),
+      ${jurisdictionId}::uuid,
+      ${agencyId}::uuid,
+      ${STAGING_POLICE_STATION.name},
+      '+2348001002002',
+      ${STAGING_POLICE_STATION.address},
+      'staging-certification',
+      ${STAGING_POLICE_STATION.sourceReference},
+      'VerifiedOfficial',
+      NOW(),
+      true,
+      ${PROFILE_LOCATION.country},
+      ${PROFILE_LOCATION.state},
+      ${PROFILE_LOCATION.lga},
+      ${STAGING_POLICE_STATION.latitude},
+      ${STAGING_POLICE_STATION.longitude},
+      NOW(),
+      NOW()
+    )
+    RETURNING id::text AS id
+  `;
 
-  await prisma.$executeRawUnsafe(`
-    UPDATE police_stations
-    SET gps_location = ST_SetSRID(ST_MakePoint(${STAGING_POLICE_STATION.longitude}, ${STAGING_POLICE_STATION.latitude}), 4326)::geography
-    WHERE id = '${created.id}'
-  `);
+  const stationId = inserted[0]?.id;
+  if (!stationId) {
+    throw new Error("Failed to insert staging certification police station");
+  }
 
-  return created;
+  return prisma.policeStation.findFirst({ where: { id: stationId } });
 }
 
 async function upsertAdminAccount(spec: StagingTestAccountSpec) {

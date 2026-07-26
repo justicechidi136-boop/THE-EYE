@@ -203,7 +203,7 @@ jobs:
             git status --short
             docker compose -f infra/docker/docker-compose.yml --env-file .env ps
             docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web notification-worker || true
-            docker compose -f infra/docker/docker-compose.yml --env-file .env build api admin-web api-tools
+            docker compose -f infra/docker/docker-compose.yml --env-file .env build api admin-web api-tools --no-cache api-tools
             docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate
             docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate api notification-worker admin-web
             docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --wait api admin-web livekit
