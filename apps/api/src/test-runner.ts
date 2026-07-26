@@ -87,10 +87,33 @@ function expectValue(actual: any, negated = false) {
           }
           throw new Error("Expected promise to reject");
         },
+        async toThrow(expected?: string | RegExp | (new (...args: any[]) => unknown)) {
+          try {
+            await actual;
+          } catch (error) {
+            if (typeof expected === "string") {
+              assert(String((error as Error)?.message ?? error).includes(expected), `Expected rejection message to include ${expected}`);
+              return;
+            }
+            if (expected instanceof RegExp) {
+              assert(expected.test(String((error as Error)?.message ?? error)), `Expected rejection message to match ${expected}`);
+              return;
+            }
+            if (typeof expected === "function") {
+              assert(error instanceof expected, `Expected rejection to be instance of ${expected.name}`);
+              return;
+            }
+            return;
+          }
+          throw new Error("Expected promise to reject");
+        },
       };
     },
     toBe(expected: unknown) {
       assert(Object.is(actual, expected), `Expected ${actual} to be ${expected}`);
+    },
+    toBeUndefined() {
+      assert(actual === undefined, `Expected value to be undefined, got ${actual}`);
     },
     toEqual(expected: unknown) {
       assert(matches(actual, expected), `Expected values to be deeply equal`);
