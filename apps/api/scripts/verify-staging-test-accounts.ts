@@ -29,6 +29,13 @@ function normalizeApiBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function resolveProbeBaseUrl(): { canonicalUrl: string; probeUrl: string } {
+  const canonicalUrl = normalizeApiBaseUrl(String(process.env.STAGING_API_BASE_URL ?? "").trim());
+  const probeOverride = String(process.env.STAGING_LOGIN_PROBE_BASE_URL ?? "").trim();
+  const probeUrl = probeOverride ? normalizeApiBaseUrl(probeOverride) : canonicalUrl;
+  return { canonicalUrl, probeUrl };
+}
+
 async function assertCitizenAccountShape(email: string) {
   const normalizedEmail = normalizeStagingCredentialEmail(email);
   const matches = await prisma.user.findMany({
@@ -175,36 +182,28 @@ async function main() {
     return;
   }
 
-  const normalizedBaseUrl = normalizeApiBaseUrl(baseUrl);
-  console.log(`Probing ${credentials.length} staging account(s) against ${normalizedBaseUrl} ...`);
+  const { canonicalUrl, probeUrl } = resolveProbeBaseUrl();
+  console.log(
+    `Probing controlled citizen login (canonical=${canonicalUrl}, probe=${probeUrl}) ...`,
+  );
 
-  const results: LoginResult[] = [];
-  for (const entry of credentials) {
-    results.push(await probeLogin(normalizedBaseUrl, toAccountSpec(entry)));
-  }
-
-  let failures = 0;
-  for (const result of results) {
-    if (result.status === "success") {
-      console.log(
-        `PASS ${result.label} email=${result.email} http=${result.httpStatus ?? 200}` +
-          `${result.userRef ? ` userRef=${result.userRef}` : ""}` +
-          `${result.requestId ? ` requestId=${result.requestId}` : ""}`,
-      );
-      continue;
-    }
-    failures += 1;
-    console.error(
-      `FAIL ${result.label} email=${result.email}` +
-        `${result.httpStatus ? ` http=${result.httpStatus}` : ""}` +
-        `${result.requestId ? ` requestId=${result.requestId}` : ""}` +
-        `${result.detail ? ` — ${result.detail}` : ""}`,
+  const citizenResult = await probeLogin(probeUrl, toAccountSpec(citizen));
+  if (citizenResult.status === "success") {
+    console.log(
+      `PASS ${citizenResult.label} email=${citizenResult.email} http=${citizenResult.httpStatus ?? 200}` +
+        `${citizenResult.userRef ? ` userRef=${citizenResult.userRef}` : ""}` +
+        `${citizenResult.requestId ? ` requestId=${citizenResult.requestId}` : ""}`,
     );
+    return;
   }
 
-  if (failures > 0) {
-    process.exitCode = 1;
-  }
+  console.error(
+    `FAIL ${citizenResult.label} email=${citizenResult.email}` +
+      `${citizenResult.httpStatus ? ` http=${citizenResult.httpStatus}` : ""}` +
+      `${citizenResult.requestId ? ` requestId=${citizenResult.requestId}` : ""}` +
+      `${citizenResult.detail ? ` — ${citizenResult.detail}` : ""}`,
+  );
+  process.exitCode = 1;
 }
 
 main()
