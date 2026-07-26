@@ -114,7 +114,9 @@ export function toAccountSpec(
   };
 
   const spec: StagingTestAccountSpec = {
-    ...credentials,
+    key: credentials.key,
+    email: credentials.email,
+    password: credentials.password,
     label: labels[credentials.key],
     isAdmin: adminKeys.has(credentials.key),
   };

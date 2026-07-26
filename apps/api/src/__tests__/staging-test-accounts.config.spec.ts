@@ -2,6 +2,7 @@ import {
   normalizeStagingCredentialEmail,
   normalizeStagingCredentialPassword,
   readStagingTestCredentials,
+  toAccountSpec,
 } from "../../prisma/staging-test-accounts.config";
 
 describe("staging test account credentials", () => {
@@ -34,5 +35,14 @@ describe("staging test account credentials", () => {
     const serialized = JSON.stringify(accounts);
     expect(serialized).toContain("staging.citizen@theeye.local");
     expect(serialized).not.toContain("secret-value");
+  });
+
+  it("preserves password when building account specs", () => {
+    const [entry] = readStagingTestCredentials({
+      STAGING_TEST_CITIZEN_EMAIL: "staging.citizen@theeye.local",
+      STAGING_TEST_CITIZEN_PASSWORD: "secret-value",
+    });
+    const spec = toAccountSpec(entry!);
+    expect(spec.password).toBe("secret-value");
   });
 });
