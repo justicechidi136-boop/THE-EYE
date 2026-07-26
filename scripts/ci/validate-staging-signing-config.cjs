@@ -12,12 +12,17 @@ const required = [
   "stagingRelease {",
   "THE_EYE_STAGING_KEYSTORE_PATH",
   "THE_EYE_ALLOW_DEBUG_STAGING_RELEASE",
-  "variant.flavorName == \"staging\"",
+  "androidComponents {",
+  "onVariants(selector().withBuildType(\"release\"))",
+  "envFlavor == \"staging\"",
   "Staging release signing is not configured",
+  "variant.signingConfig?.setConfig(android.signingConfigs.stagingRelease)",
 ];
 
 const forbidden = [
   "productFlavors {\n        staging {\n            dimension = \"environment\"\n            applicationIdSuffix = \".staging\"\n            resValue \"string\", \"app_name\", \"THE EYE Staging\"\n            signingConfig = signingConfigs.debug",
+  "afterEvaluate {\n    android.applicationVariants.configureEach",
+  "variant.signingConfig = android.signingConfigs.stagingRelease",
 ];
 
 const missing = required.filter((needle) => !buildGradle.includes(needle));
