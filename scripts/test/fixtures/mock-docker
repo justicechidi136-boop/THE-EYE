@@ -24,6 +24,10 @@ case "$cmd" in
           sub="$arg"
           break
           ;;
+        cp)
+          sub="$arg"
+          break
+          ;;
       esac
     done
     log "docker compose ${args[*]}"
@@ -57,6 +61,19 @@ case "$cmd" in
         fi
         echo "mock-container-id"
         ;;
+      cp)
+        first="${args[0]}"
+        last="${args[-1]}"
+        if [[ "$first" == *":"* ]]; then
+          printf 'PGDMP' >"$last"
+        elif [[ "$last" == *":"* ]]; then
+          :
+        elif [[ -f "$first" ]]; then
+          cp -f "$first" "$last"
+        else
+          printf 'PGDMP' >"$last"
+        fi
+        ;;
       exec)
         if [[ "${MOCK_PG_DUMP_FAIL:-}" == "1" && "${args[*]}" == *"pg_dump"* ]]; then
           exit 1
@@ -73,7 +90,7 @@ case "$cmd" in
           echo "postgres (PostgreSQL) 16.3"
           exit 0
         fi
-        if [[ "${args[*]}" == *"pg_restore --list"* ]]; then
+        if [[ "${args[*]}" == *"pg_restore --list"* || ( "${args[*]}" == *"pg_restore"* && "${args[*]}" == *"/tmp/"* ) ]]; then
           if [[ "${MOCK_ARCHIVE_INVALID:-}" == "1" ]]; then
             exit 1
           fi
@@ -92,7 +109,13 @@ LIST
           exit 0
         fi
         if [[ "${args[*]}" == *"pg_dump"* ]]; then
+          if [[ "${args[*]}" == *"-f"* ]]; then
+            exit 0
+          fi
           printf 'PGDMP'
+          exit 0
+        fi
+        if [[ "${args[*]}" == *" rm "* || "${args[*]}" == rm\ * ]]; then
           exit 0
         fi
         exit 0

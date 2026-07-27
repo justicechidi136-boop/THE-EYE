@@ -22,11 +22,16 @@ SKIP_RETENTION="${SKIP_RETENTION:-false}"
 TEMP_BACKUP_PATH=""
 FINAL_BACKUP_PATH=""
 METADATA_PATH=""
+CONTAINER_BACKUP_PATH=""
 COMPOSE_CMD=()
 DOCKER_BIN=(docker)
 
 cleanup() {
   local exit_code=$?
+  if [[ -n "$CONTAINER_BACKUP_PATH" ]]; then
+    "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" rm -f "$CONTAINER_BACKUP_PATH" >/dev/null 2>&1 || true
+    CONTAINER_BACKUP_PATH=""
+  fi
   if [[ -n "$TEMP_BACKUP_PATH" && -f "$TEMP_BACKUP_PATH" ]]; then
     rm -f "$TEMP_BACKUP_PATH"
   fi
@@ -232,16 +237,26 @@ sha256_file() {
 
 validate_backup_archive() {
   local backup_path="$1"
-  local list_output
+  local list_output container_path="/tmp/the-eye-validate-$$.dump"
   if [[ ! -s "$backup_path" ]]; then
     die "BACKUP-010: Backup file is empty: $backup_path" 1
   fi
 
+  if ! head -c 5 "$backup_path" | grep -q "PGDMP"; then
+    die "BACKUP-010: Backup file is not a PostgreSQL custom-format archive." 1
+  fi
+
+  if ! "${COMPOSE_CMD[@]}" cp "$backup_path" "${DB_SERVICE}:${container_path}" >/dev/null 2>&1; then
+    die "BACKUP-010: Unable to copy backup into database container for validation." 1
+  fi
+
   if ! list_output="$(
-    cat "$backup_path" | "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" pg_restore --list - 2>&1
+    "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" pg_restore --list "$container_path" 2>&1
   )"; then
+    "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" rm -f "$container_path" >/dev/null 2>&1 || true
     die "BACKUP-010: pg_restore --list failed for backup archive." 1
   fi
+  "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" rm -f "$container_path" >/dev/null 2>&1 || true
 
   local -a required_tables=(
     "TABLE DATA public users"
@@ -352,10 +367,17 @@ create_backup() {
   echo "Environment file: $ENV_FILE"
   echo "Temporary backup: $TEMP_BACKUP_PATH"
 
+  CONTAINER_BACKUP_PATH="/tmp/${backup_basename}.dump"
   if ! "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" \
-    pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" >"$TEMP_BACKUP_PATH"; then
+    pg_dump -U "$POSTGRES_USER" -Fc -f "$CONTAINER_BACKUP_PATH" "$POSTGRES_DB"; then
     die "BACKUP-008: pg_dump failed." 1
   fi
+
+  if ! "${COMPOSE_CMD[@]}" cp "${DB_SERVICE}:${CONTAINER_BACKUP_PATH}" "$TEMP_BACKUP_PATH"; then
+    die "BACKUP-009: Backup copy from container failed." 1
+  fi
+  "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" rm -f "$CONTAINER_BACKUP_PATH" >/dev/null 2>&1 || true
+  CONTAINER_BACKUP_PATH=""
 
   if [[ ! -s "$TEMP_BACKUP_PATH" ]]; then
     die "BACKUP-008: pg_dump produced an empty backup file." 1
