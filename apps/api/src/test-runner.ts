@@ -107,6 +107,29 @@ function expectValue(actual: any, negated = false) {
           }
           throw new Error("Expected promise to reject");
         },
+        async toMatchObject(expected: Record<string, unknown>) {
+          try {
+            await actual;
+          } catch (error) {
+            for (const [key, value] of Object.entries(expected)) {
+              if (key === "response" && value && typeof value === "object" && (value as any).__objectContaining) {
+                const sample = (value as any).sample as Record<string, unknown>;
+                const response =
+                  typeof (error as any)?.getResponse === "function"
+                    ? (error as any).getResponse()
+                    : (error as any)?.response;
+                assert(
+                  Object.entries(sample).every(([responseKey, responseValue]) => matches(response?.[responseKey], responseValue)),
+                  "Expected rejection response to match object",
+                );
+                continue;
+              }
+              assert(matches((error as any)?.[key], value), `Expected rejection property ${key} to match`);
+            }
+            return;
+          }
+          throw new Error("Expected promise to reject");
+        },
       };
     },
     toBe(expected: unknown) {

@@ -24,7 +24,10 @@ function buildLocationService(overrides: Partial<Record<string, any>> = {}) {
     },
     ...(overrides.prisma ?? {}),
   };
-  return { service: new LocationTrackingService(prisma as any), prisma };
+  return {
+    service: new LocationTrackingService(prisma as any, { evaluateImprovedLocation: jest.fn() } as any),
+    prisma,
+  };
 }
 
 describe("LocationTrackingService", () => {
