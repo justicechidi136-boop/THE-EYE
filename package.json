@@ -36,6 +36,7 @@
     "test:brand:theme": "node scripts/brand-theme-smoke.cjs",
     "dev:bootstrap": "node scripts/local-dev-bootstrap.cjs",
     "test:docker:smoke": "node scripts/docker-compose-smoke.cjs",
+    "test:backup": "bash scripts/test/backup-the-eye.test.sh",
     "test:docker:livekit": "node scripts/validate-livekit-keys.cjs",
     "test:deploy:env": "node scripts/validate-production-env.cjs",
     "test:firebase:guard": "node scripts/firebase-guard-production.test.cjs",

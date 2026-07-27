@@ -208,3 +208,54 @@ Requirements:
 - Seed is idempotent — safe to run twice
 
 See [staging-test-accounts.md](./staging-test-accounts.md) and [STAGING_CERTIFICATION.md](./STAGING_CERTIFICATION.md).
+
+## PostgreSQL backup (staging)
+
+The backup script must use the **same Compose file and env-file** as the running stack. Staging containers are started with `--env-file .env`; omitting it makes `docker compose ps` look at the wrong project and report `postgres-postgis` as stopped.
+
+From the repository root on the VPS (`DEPLOY_PATH`, typically `/opt/the-eye`):
+
+```bash
+bash scripts/backup-the-eye.sh \
+  --compose-file infra/docker/docker-compose.yml \
+  --env-file .env \
+  --output-dir backups \
+  --environment staging
+```
+
+Equivalent environment variables:
+
+```bash
+export COMPOSE_FILE=/opt/the-eye/infra/docker/docker-compose.yml
+export ENV_FILE=/opt/the-eye/.env
+export BACKUP_DIR=/opt/the-eye/backups
+bash scripts/backup-the-eye.sh
+```
+
+Outputs (no secrets logged):
+
+- `backups/the-eye-staging-YYYYMMDDTHHMMSSZ.dump` — PostgreSQL custom-format archive
+- `backups/the-eye-staging-YYYYMMDDTHHMMSSZ.json` — metadata (SHA-256, size, git SHA, validation result)
+- `backups/the-eye-staging-latest.dump` — rolling latest copy
+- `backups/the_eye_latest.dump` — legacy alias for older runbooks
+
+Optional isolated restore drill (never touches the live staging database):
+
+```bash
+bash scripts/backup-the-eye.sh --with-restore-drill
+# or validate an existing dump:
+bash scripts/backup-restore-drill.sh --backup-file backups/the-eye-staging-latest.dump
+```
+
+Scheduled backup: GitHub Actions workflow [`.github/workflows/backup.yml`](../.github/workflows/backup.yml) (daily 03:00 UTC, manual `workflow_dispatch`).
+
+Troubleshooting:
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `BACKUP-004` | Missing `.env` on VPS | Create `.env` from secret manager; never commit |
+| `BACKUP-006` | Compose project mismatch | Pass `--env-file .env` and run from `DEPLOY_PATH` |
+| `BACKUP-008` | `pg_dump` failed | Check DB health: `docker compose -f infra/docker/docker-compose.yml --env-file .env ps postgres-postgis` |
+| `BACKUP-010` | Archive validation failed | Re-run backup; inspect disk space and DB connectivity |
+
+See also [disaster-recovery.md](./disaster-recovery.md) and [maintenance-guide.md](./maintenance-guide.md).

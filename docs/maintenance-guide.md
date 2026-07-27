@@ -59,21 +59,26 @@ Alert if waiting depth > 100 for 10 minutes.
 ### PostgreSQL
 
 ```bash
-# Linux
-bash scripts/backup-the-eye.sh
+# Linux / VPS (always pass the same compose file and env-file as the running stack)
+bash scripts/backup-the-eye.sh \
+  --compose-file infra/docker/docker-compose.yml \
+  --env-file .env \
+  --output-dir backups
 
-# Windows
-powershell -File scripts/backup-the-eye.ps1
+# Windows (archive validation limited on Windows; prefer bash on the VPS)
+powershell -File scripts/backup-the-eye.ps1 -ComposeFile infra/docker/docker-compose.yml -EnvFile .env
 ```
 
 Output:
-- `backups/the_eye_<timestamp>.dump`
-- `backups/the_eye_latest.dump`
+- `backups/the-eye-<environment>-YYYYMMDDTHHMMSSZ.dump`
+- `backups/the-eye-<environment>-YYYYMMDDTHHMMSSZ.json` (metadata, no secrets)
+- `backups/the-eye-<environment>-latest.dump`
+- `backups/the_eye_latest.dump` (legacy alias)
 
 ### Automated schedule (cron)
 
 ```cron
-0 3 * * * cd /opt/the-eye && bash scripts/backup-the-eye.sh >> /var/log/the-eye-backup.log 2>&1
+0 3 * * * cd /opt/the-eye && bash scripts/backup-the-eye.sh --compose-file infra/docker/docker-compose.yml --env-file .env --output-dir backups >> /var/log/the-eye-backup.log 2>&1
 0 4 * * * rsync -a /opt/the-eye/backups/ user@backup-host:/backups/the-eye/
 ```
 
