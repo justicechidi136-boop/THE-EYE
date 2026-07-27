@@ -347,18 +347,18 @@ create_isolated_stack() {
     -e POSTGRES_USER="$DRILL_USER" \
     -e POSTGRES_PASSWORD="$DRILL_PASSWORD" \
     -e POSTGRES_DB="$MAINT_DB" \
-    --health-cmd="pg_isready -U ${DRILL_USER} -d template_postgis && psql -U ${DRILL_USER} -d template_postgis -Atqc 'SELECT PostGIS_Version()' | grep -q ." \
+    --health-cmd="pg_isready -U ${DRILL_USER} -d ${MAINT_DB} || exit 1" \
     --health-interval=5s \
     --health-retries=12 \
-    --health-start-period=60s \
+    --health-start-period=45s \
     --health-timeout=5s \
     "$DRILL_IMAGE" >/dev/null
 
   if ! wait_for_container_healthy; then
     die "BACKUP-010: Restore drill container did not become healthy." 1
   fi
-  if ! wait_for_template_postgis; then
-    die "BACKUP-010: Restore drill template_postgis did not finish PostGIS initialization." 1
+  if ! wait_for_pg_ready "$MAINT_DB" 15; then
+    die "BACKUP-010: Restore drill PostgreSQL did not accept connections on $MAINT_DB." 1
   fi
   log_state "ACCEPTING CONNECTIONS"
 
@@ -369,21 +369,21 @@ create_isolated_stack() {
 create_drill_database() {
   log_state "DATABASE CREATED"
   docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$MAINT_DB" -v ON_ERROR_STOP=1 -c \
-    "CREATE DATABASE \"${DRILL_DB}\" OWNER \"${DRILL_USER}\" TEMPLATE template_postgis;" >/dev/null
+    "CREATE DATABASE \"${DRILL_DB}\" OWNER \"${DRILL_USER}\";" >/dev/null
   if ! wait_for_pg_ready "$DRILL_DB" 15; then
     die "BACKUP-010: Restore drill database $DRILL_DB is not accepting connections." 1
   fi
-  docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -c \
-    "CREATE EXTENSION IF NOT EXISTS postgis CASCADE; CREATE EXTENSION IF NOT EXISTS postgis_topology;" >/dev/null
 }
 
 prepare_extensions() {
   log_state "EXTENSIONS READY"
   local ext
+  docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -c \
+    "CREATE EXTENSION IF NOT EXISTS postgis CASCADE; CREATE EXTENSION IF NOT EXISTS postgis_topology;" >/dev/null
   while IFS= read -r ext; do
     [[ -z "$ext" ]] && continue
     case "$ext" in
-      postgis | postgis_topology)
+      postgis | postgis_topology | postgis_tiger_geocoder)
         continue
         ;;
     esac

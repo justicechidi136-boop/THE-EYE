@@ -251,8 +251,6 @@ test_restore_drill_script_hardened() {
     "pg_isready" \
     "capture_diagnostics" \
     "CREATE EXTENSION IF NOT EXISTS" \
-    "TEMPLATE template_postgis" \
-    "wait_for_template_postgis" \
     "wait_for_container_healthy"; do
     if grep -Fq "$needle" "$drill"; then
       echo "PASS: restore drill contains $needle"
@@ -262,6 +260,13 @@ test_restore_drill_script_hardened() {
       fail=$((fail + 1))
     fi
   done
+  if grep -Fq 'CREATE DATABASE' "$drill" && grep -Fq 'DRILL_DB' "$drill" && grep -Fq 'DRILL_USER' "$drill"; then
+    echo "PASS: restore drill creates dedicated drill database"
+    pass=$((pass + 1))
+  else
+    echo "FAIL: restore drill missing dedicated drill database create" >&2
+    fail=$((fail + 1))
+  fi
   if grep -F -- '--exit-on-error' "$drill" >/dev/null; then
     echo "PASS: restore drill contains --exit-on-error"
     pass=$((pass + 1))
