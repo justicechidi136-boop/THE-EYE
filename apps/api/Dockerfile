@@ -22,6 +22,8 @@ RUN pnpm --filter @the-eye/api exec nest build
 FROM builder AS deploy-prod
 RUN pnpm --filter @the-eye/api deploy --prod /app/deploy
 WORKDIR /app/deploy
+# pnpm deploy may copy stale generated engines; regenerate exactly once against runtime schema.
+RUN find node_modules -type d -name '.prisma' -print0 | xargs -0 rm -rf 2>/dev/null || true
 RUN npx --yes prisma@6.19.3 generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 
@@ -29,6 +31,7 @@ RUN node ./scripts/diagnose-prisma-location-model.cjs
 FROM builder AS deploy-tools
 RUN pnpm --filter @the-eye/api deploy /app/deploy
 WORKDIR /app/deploy
+RUN find node_modules -type d -name '.prisma' -print0 | xargs -0 rm -rf 2>/dev/null || true
 RUN npx --yes prisma@6.19.3 generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 

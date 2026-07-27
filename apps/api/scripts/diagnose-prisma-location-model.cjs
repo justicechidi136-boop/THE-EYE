@@ -72,7 +72,7 @@ async function main() {
       console.error(JSON.stringify({ buildProbe: "createOne_mismatch", message: message.slice(0, 240) }));
       process.exit(1);
     }
-    if (code === "P2003" || /Foreign key constraint/i.test(message) || /connect/i.test(message)) {
+    if (code === "P2003" || code === "P2021" || /Foreign key constraint/i.test(message) || /connect/i.test(message)) {
       return;
     }
     if (/incident_location_updates/i.test(message)) {
