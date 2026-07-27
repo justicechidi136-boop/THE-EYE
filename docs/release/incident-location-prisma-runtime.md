@@ -1,8 +1,44 @@
 # Incident location Prisma runtime failure (staging)
 
 **Date:** 2026-07-27  
-**Status:** CODE FIXED — STAGING QA PENDING  
-**Related:** SRB-026 (Live Emergency Video), Live GPS persistence
+**Status:** CODE COMPLETE — STAGING QA PENDING  
+**Related:** SRB-039 (Live Emergency Video), Live GPS persistence, LOCATION-RETRY-001
+
+## LOCATION-RETRY-001
+
+The previous API returned HTTP 503 with `retrying: true` even when `scheduleRetry()` failed or BullMQ was unavailable. That false server-retry claim is fixed.
+
+## Response contract
+
+| Case | HTTP | Fields |
+|------|------|--------|
+| Persisted immediately | 200 | `persisted=true`, `retryQueued=false`, `data` |
+| Server retry accepted | 202 | `persisted=false`, `retryQueued=true`, `retryId` |
+| No server retry | 503 | `persisted=false`, `retryQueued=false`, `errorCode=LOCATION-RETRY-001` |
+
+## Retry job identity
+
+- Business job ID: `incident-location:{incidentId}:{sequenceNumber}`
+- BullMQ `attempts` / `backoff` handle transport retries; attempt counter is **not** part of the job ID
+- Repeated enqueue for the same sequence returns the existing job (`duplicate=true`)
+
+## Retry payload privacy
+
+- Redis must be private, authenticated, and TLS-enabled in production
+- Job retention: `removeOnComplete=100`, `removeOnFail=50`
+- Application logs emit incident ID, sequence, idempotency key — **not** raw coordinates
+- Payload excludes JWT, refresh tokens, device secrets, and LiveKit tokens
+- Operational job inspection requires privileged Redis access
+
+## Readiness
+
+`/v1/health/ready` exposes:
+
+- `incidentLocationCreateCapability` (`ok` / `degraded` / `error`)
+- `locationRetryQueue`
+- `locationRetryWorker` (shared `notification-worker` process)
+
+Create capability probe uses a rolled-back insert against a **closed** incident only; no durable probe rows are left behind.
 
 ## Observed staging failure
 
