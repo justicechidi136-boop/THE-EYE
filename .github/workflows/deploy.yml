@@ -203,24 +203,32 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           command_timeout: 30m
+          debug: true
           script_stop: true
           script: |
+            /bin/bash -s <<'DEPLOY_SCRIPT'
             set +e
             set -o pipefail
             DEPLOY_ROOT='${{ secrets.DEPLOY_PATH }}'
-            cd "$DEPLOY_ROOT" || { echo "ERROR: cd failed to $DEPLOY_ROOT"; exit 1; }
+            cd "$DEPLOY_ROOT" || { echo "STEP cd-fail"; exit 1; }
             export THE_EYE_IMAGE_TAG=${{ steps.meta.outputs.tag }}
             export ADMIN_WEB_APP_ENV=staging
             export NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
-            git fetch --tags origin || { echo "ERROR: git fetch failed"; exit 1; }
-            git checkout ${{ github.sha }} || { echo "ERROR: git checkout failed"; exit 1; }
+            git fetch --tags origin || { echo "STEP git-fetch-fail"; exit 1; }
+            git checkout ${{ github.sha }} || { echo "STEP git-checkout-fail"; exit 1; }
             echo "VPS HEAD: $(git rev-parse HEAD)"
-            echo "DEBUG: deploy cwd=$(pwd) proof_only=${{ github.event.inputs.proof_only || 'false' }}"
+            echo "STEP env-check-start"
             if [ ! -f .env ]; then
-              echo "ERROR: missing .env at $(pwd)/.env"
-              ls -la
-              exit 1
+              if [ -f ../.env ]; then
+                echo "STEP env-using-parent"
+                ln -sf ../.env .env
+              else
+                echo "STEP env-check-fail"
+                exit 1
+              fi
             fi
+            echo "STEP env-check-ok"
+            echo "STEP deploy-start proof_only=${{ github.event.inputs.proof_only || 'false' }}"
             if [ "${{ github.event.inputs.proof_only || 'false' }}" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env build api-tools --no-cache api-tools
@@ -258,8 +266,7 @@ jobs:
                 api-tools scripts/staging-location-persistence-proof.ts || { echo "ERROR: location persistence proof failed"; exit 1; }
             fi
             docker compose -f infra/docker/docker-compose.yml --env-file .env ps
-
-  deploy:
+            DEPLOY_SCRIPT
     needs: build
     if: ${{ false }}
     runs-on: ubuntu-latest
