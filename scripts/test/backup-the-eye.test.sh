@@ -250,7 +250,7 @@ test_restore_drill_script_hardened() {
     'POSTGRES_DB="$MAINT_DB"' \
     "pg_isready" \
     "capture_diagnostics" \
-    "CREATE EXTENSION IF NOT EXISTS" \
+    "extension creation deferred to pg_restore" \
     "wait_for_container_healthy"; do
     if grep -Fq "$needle" "$drill"; then
       echo "PASS: restore drill contains $needle"
