@@ -285,7 +285,7 @@ archive_list_extensions() {
     -v "$BACKUP_FILE:$RESTORE_MOUNT:ro" \
     "$DRILL_IMAGE" \
     pg_restore --list "$RESTORE_MOUNT" 2>/dev/null \
-    | awk '/^[^;]/ && $1 == "EXTENSION" { print $3 }' \
+    | awk '$4 == "EXTENSION" && $5 == "-" { print $6 }' \
     | sort -u
 }
 
@@ -294,7 +294,7 @@ create_isolated_stack() {
   docker network create "$DRILL_NETWORK" >/dev/null
   docker volume create "$DRILL_VOLUME" >/dev/null
 
-  local image_digest pg_version postgis_version
+  local image_digest pg_version
   image_digest="$(docker image inspect --format='{{index .RepoDigests 0}}' "$DRILL_IMAGE" 2>/dev/null || echo "unknown")"
   echo "Restore drill image: $DRILL_IMAGE ($image_digest)"
 
@@ -323,14 +323,12 @@ create_isolated_stack() {
 
   pg_version="$(docker exec "$DRILL_CONTAINER" postgres --version 2>/dev/null | tr -d '\r' || echo "unknown")"
   echo "Restore drill PostgreSQL: $pg_version"
-  postgis_version="$(docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$MAINT_DB" -Atqc "SELECT PostGIS_Version();" 2>/dev/null | tr -d '\r' || echo "unknown")"
-  echo "Restore drill PostGIS (template): $postgis_version"
 }
 
 create_drill_database() {
   log_state "DATABASE CREATED"
   docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$MAINT_DB" -v ON_ERROR_STOP=1 -c \
-    "CREATE DATABASE \"${DRILL_DB}\" OWNER \"${DRILL_USER}\";" >/dev/null
+    "CREATE DATABASE \"${DRILL_DB}\" OWNER \"${DRILL_USER}\" TEMPLATE template_postgis;" >/dev/null
   if ! wait_for_pg_ready "$DRILL_DB" 15; then
     die "BACKUP-010: Restore drill database $DRILL_DB is not accepting connections." 1
   fi
@@ -341,6 +339,11 @@ prepare_extensions() {
   local ext
   while IFS= read -r ext; do
     [[ -z "$ext" ]] && continue
+    case "$ext" in
+      postgis | postgis_topology)
+        continue
+        ;;
+    esac
     echo "Restore drill: ensuring extension $ext"
     docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -c \
       "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
@@ -348,7 +351,10 @@ prepare_extensions() {
 
   local postgis_check
   postgis_check="$(docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -Atqc "SELECT PostGIS_Version();" 2>/dev/null | tr -d '\r' || true)"
-  echo "Restore drill PostGIS (target db): ${postgis_check:-not installed}"
+  if [[ -z "$postgis_check" ]]; then
+    die "BACKUP-010: PostGIS is not available in drill database after template_postgis creation." 1
+  fi
+  echo "Restore drill PostGIS (target db): $postgis_check"
 }
 
 verify_archive_in_container() {
@@ -367,7 +373,7 @@ build_filtered_restore_list() {
   local filtered_file="$2"
   docker exec "$DRILL_CONTAINER" pg_restore --list "$RESTORE_MOUNT" >"$list_file"
   # Extensions are pre-created; skip EXTENSION entries to avoid duplicate CREATE EXTENSION failures.
-  grep -Ev '^;|^$| EXTENSION | COMMENT - EXTENSION ' "$list_file" >"$filtered_file" || true
+  grep -Ev '^;|^$|( EXTENSION - )|(COMMENT - EXTENSION )' "$list_file" >"$filtered_file" || true
   docker cp "$filtered_file" "$DRILL_CONTAINER:/tmp/restore.list" >/dev/null
 }
 
