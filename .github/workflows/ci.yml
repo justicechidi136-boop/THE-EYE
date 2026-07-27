@@ -223,3 +223,11 @@ jobs:
 
       - name: Load-test structure validation
         run: pnpm run test:load:validate
+
+      - name: Backup script tests (mocked)
+        run: pnpm run test:backup
+
+      - name: Backup shellcheck
+        run: |
+          set -euo pipefail
+          shellcheck scripts/backup-the-eye.sh scripts/backup-restore-drill.sh scripts/run-staging-backup.sh

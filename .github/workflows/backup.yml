@@ -35,25 +35,8 @@ jobs:
             git checkout staging
             git pull --ff-only origin staging
             echo "VPS HEAD: $(git rev-parse HEAD)"
-            COMPOSE_FILE="${COMPOSE_FILE:-${{ secrets.DEPLOY_PATH }}/infra/docker/docker-compose.yml}"
-            ENV_FILE="${ENV_FILE:-${{ secrets.DEPLOY_PATH }}/.env}"
-            BACKUP_DIR="${BACKUP_DIR:-${{ secrets.DEPLOY_PATH }}/backups}"
-            RESTORE_DRILL="${{ github.event.inputs.with_restore_drill || 'false' }}"
-            if [ "$RESTORE_DRILL" = "true" ]; then
-              bash scripts/backup-the-eye.sh \
-                --compose-file "$COMPOSE_FILE" \
-                --env-file "$ENV_FILE" \
-                --output-dir "$BACKUP_DIR" \
-                --environment staging \
-                --with-restore-drill
-            else
-              bash scripts/backup-the-eye.sh \
-                --compose-file "$COMPOSE_FILE" \
-                --env-file "$ENV_FILE" \
-                --output-dir "$BACKUP_DIR" \
-                --environment staging
-            fi
-            ls -lh "$BACKUP_DIR"/the-eye-staging-latest.dump "$BACKUP_DIR"/the_eye_latest.dump
+            RESTORE_DRILL='${{ github.event_name == 'workflow_dispatch' && github.event.inputs.with_restore_drill || 'false' }}'
+            bash scripts/run-staging-backup.sh "${{ secrets.DEPLOY_PATH }}" "$RESTORE_DRILL"
             EOS
 
       - name: Upload latest backup artifact (optional)

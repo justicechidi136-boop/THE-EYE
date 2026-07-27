@@ -241,6 +241,73 @@ test_partial_cleanup_on_failure() {
   fi
 }
 
+test_restore_drill_script_hardened() {
+  local drill="$ROOT/scripts/backup-restore-drill.sh"
+  local needle
+  for needle in \
+    "assert_restore_target_isolated" \
+    "Restore drill refused" \
+    'POSTGRES_DB="$MAINT_DB"' \
+    "pg_isready" \
+    "capture_diagnostics" \
+    "CREATE EXTENSION IF NOT EXISTS"; do
+    if grep -Fq "$needle" "$drill"; then
+      echo "PASS: restore drill contains $needle"
+      pass=$((pass + 1))
+    else
+      echo "FAIL: restore drill missing $needle" >&2
+      fail=$((fail + 1))
+    fi
+  done
+  if grep -F -- '--exit-on-error' "$drill" >/dev/null; then
+    echo "PASS: restore drill contains --exit-on-error"
+    pass=$((pass + 1))
+  else
+    echo "FAIL: restore drill missing --exit-on-error" >&2
+    fail=$((fail + 1))
+  fi
+}
+
+test_staging_runner_modes() {
+  local runner="$ROOT/scripts/run-staging-backup.sh"
+  if grep -Fq 'WITH_RESTORE_DRILL="${2:-false}"' "$runner"; then
+    echo "PASS: staging runner parses restore drill boolean"
+    pass=$((pass + 1))
+  else
+    echo "FAIL: staging runner missing restore drill argument parsing" >&2
+    fail=$((fail + 1))
+  fi
+  if grep -Fq 'if [[ "$WITH_RESTORE_DRILL" == "true" ]]; then' "$runner"; then
+    echo "PASS: staging runner gates restore drill flag"
+    pass=$((pass + 1))
+  else
+    echo "FAIL: staging runner missing restore drill gate" >&2
+    fail=$((fail + 1))
+  fi
+  if grep -Fq 'args+=(--with-restore-drill)' "$runner"; then
+    echo "PASS: staging runner adds restore drill flag only in true branch"
+    pass=$((pass + 1))
+  else
+    echo "FAIL: staging runner missing conditional restore drill flag" >&2
+    fail=$((fail + 1))
+  fi
+  if grep -Fq 'restore_drill=$WITH_RESTORE_DRILL' "$runner"; then
+    echo "PASS: staging runner logs restore drill mode"
+    pass=$((pass + 1))
+  else
+    echo "FAIL: staging runner missing restore drill mode logging" >&2
+    fail=$((fail + 1))
+  fi
+}
+
+test_with_restore_drill_flag() {
+  setup_base
+  export THE_EYE_BACKUP_SKIP_DRILL_INVOKE=1
+  local rc=0
+  run_backup --with-restore-drill || rc=$?
+  assert_exit_code 0 "$rc" "with-restore-drill flag accepted by backup script"
+}
+
 test_compose_file_missing
 test_env_file_missing
 test_db_service_missing
@@ -253,6 +320,9 @@ test_no_secret_output
 test_checksum_and_metadata
 test_retention_after_success
 test_partial_cleanup_on_failure
+test_restore_drill_script_hardened
+test_staging_runner_modes
+test_with_restore_drill_flag
 
 echo "Tests passed: $pass"
 echo "Tests failed: $fail"

@@ -35,7 +35,47 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env exec -T postgr
 Recommended production schedule:
 - Full logical backup daily
 - WAL archiving or managed point-in-time recovery enabled
-- Off-site copy in a separate region/account
+- Off-site copy in a separate region/account (planned — not yet activated; see Off-site copy plan below)
+
+### Isolated restore drill (staging)
+
+The restore drill validates a backup in a **temporary PostGIS container** with its own network and volume. It never modifies the live staging or production database.
+
+```bash
+bash scripts/backup-the-eye.sh \
+  --compose-file infra/docker/docker-compose.yml \
+  --env-file .env \
+  --output-dir backups \
+  --with-restore-drill
+```
+
+Or run the drill against an existing archive:
+
+```bash
+bash scripts/backup-restore-drill.sh \
+  --backup-file backups/the-eye-staging-latest.dump \
+  --metadata-path backups/the-eye-staging-latest.json \
+  --compose-file infra/docker/docker-compose.yml \
+  --env-file .env
+```
+
+The drill creates `the_eye_drill`, pre-creates PostGIS extensions from the archive, runs `pg_restore` via `docker exec` (PostgreSQL remains PID 1), compares representative table counts against the live database (read-only), and captures diagnostics on failure.
+
+## Off-site copy plan (not yet activated)
+
+When approved credentials and bucket policy are available:
+
+| Control | Requirement |
+|---------|-------------|
+| Destination | Private DigitalOcean Spaces (or approved object storage) in a separate account/region |
+| Transfer | Encrypted upload (`s3cmd`/`rclone` with SSE); checksum verified after upload |
+| Identity | Restricted service account; no production DB credentials in object metadata |
+| Retention | Bucket lifecycle aligned with on-host retention; versioning enabled |
+| Immutability | Object lock / WORM where available for daily full backups |
+| Monitoring | Alert on upload failure; monthly restore-from-off-site drill |
+| Gate | Pre-deploy backup gate remains disabled until on-host backup, archive validation, isolated restore drill, and first off-site upload all pass repeatedly |
+
+Database backup readiness is **not complete** while all copies remain on a single VPS.
 
 ### Object storage (MinIO / S3)
 

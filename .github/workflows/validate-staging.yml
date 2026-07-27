@@ -575,6 +575,9 @@ jobs:
       - name: Docker compose smoke
         run: node scripts/docker-compose-smoke.cjs
 
+      - name: Backup script tests (mocked)
+        run: bash scripts/test/backup-the-eye.test.sh
+
       - name: Validate LiveKit keys
         run: node scripts/validate-livekit-keys.cjs
 
