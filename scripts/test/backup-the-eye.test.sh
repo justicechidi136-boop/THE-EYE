@@ -251,7 +251,8 @@ test_restore_drill_script_hardened() {
     "pg_isready" \
     "capture_diagnostics" \
     "CREATE EXTENSION IF NOT EXISTS" \
-    "TEMPLATE template_postgis"; do
+    "TEMPLATE template_postgis" \
+    "wait_for_template_postgis"; do
     if grep -Fq "$needle" "$drill"; then
       echo "PASS: restore drill contains $needle"
       pass=$((pass + 1))

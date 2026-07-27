@@ -280,6 +280,25 @@ wait_for_pg_ready() {
   return 1
 }
 
+wait_for_template_postgis() {
+  local i postgis_ready
+  for ((i = 1; i <= 60; i++)); do
+    if ! container_running; then
+      return 1
+    fi
+    postgis_ready="$(
+      docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d template_postgis -Atqc \
+        "SELECT PostGIS_Version();" 2>/dev/null | tr -d '\r' || true
+    )"
+    if [[ -n "$postgis_ready" ]]; then
+      echo "Restore drill template_postgis ready: $postgis_ready"
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 archive_list_extensions() {
   docker run --rm \
     -v "$BACKUP_FILE:$RESTORE_MOUNT:ro" \
@@ -318,6 +337,9 @@ create_isolated_stack() {
 
   if ! wait_for_pg_ready "$MAINT_DB" $((STARTUP_TIMEOUT_SEC / 2)); then
     die "BACKUP-010: Restore drill PostgreSQL did not accept connections on $MAINT_DB." 1
+  fi
+  if ! wait_for_template_postgis; then
+    die "BACKUP-010: Restore drill template_postgis did not finish PostGIS initialization." 1
   fi
   log_state "ACCEPTING CONNECTIONS"
 
