@@ -379,7 +379,7 @@ prepare_extensions() {
   log_state "EXTENSIONS READY"
   local ext
   docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -c \
-    "CREATE EXTENSION IF NOT EXISTS postgis CASCADE; CREATE EXTENSION IF NOT EXISTS postgis_topology;" >/dev/null
+    "CREATE EXTENSION IF NOT EXISTS postgis CASCADE;" >/dev/null
   while IFS= read -r ext; do
     [[ -z "$ext" ]] && continue
     case "$ext" in
