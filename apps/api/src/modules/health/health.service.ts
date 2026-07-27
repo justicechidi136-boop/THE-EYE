@@ -15,6 +15,7 @@ import { NOTIFICATIONS_QUEUE_NAME } from "../../common/queue/queue-names";
 import { resolveFcmRuntime } from "../notifications/providers/fcm.config";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { verifyPrismaSchemaCompatibility, type PrismaSchemaCompatResult } from "../prisma/prisma-schema-compat";
 
 export type DependencyCheck = "ok" | "error" | "skipped" | "unavailable";
 
@@ -56,6 +57,18 @@ export class HealthService implements OnModuleDestroy {
       this.metrics.recordDbQuery("Health", "ping", (Date.now() - startedAt) / 1000, "error");
       return "error";
     }
+  }
+
+  async checkPrismaSchemaCompatibility(): Promise<PrismaSchemaCompatResult> {
+    if (process.env.THE_EYE_SKIP_DB_CONNECT === "1") {
+      return {
+        prismaClient: "ok",
+        incidentLocationModel: "ok",
+        schemaCompatibility: "ok",
+      };
+    }
+
+    return verifyPrismaSchemaCompatibility(this.prisma);
   }
 
   async checkRedis(): Promise<DependencyCheck> {

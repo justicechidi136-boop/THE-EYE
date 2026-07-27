@@ -40,7 +40,7 @@ export class HealthController {
 
   async ready() {
 
-    const [database, redis, notificationQueue, notificationWorker] = await Promise.all([
+    const [database, redis, notificationQueue, notificationWorker, prismaSchema] = await Promise.all([
 
       this.health.checkDatabase(),
 
@@ -49,6 +49,8 @@ export class HealthController {
       this.health.getNotificationQueueStatus(),
 
       this.health.getNotificationWorkerStatus(),
+
+      this.health.checkPrismaSchemaCompatibility(),
 
     ]);
 
@@ -88,6 +90,12 @@ export class HealthController {
 
       firebaseAuth: firebaseAuth.projectId ? "ok" : "error",
 
+      prismaClient: prismaSchema.prismaClient,
+
+      incidentLocationModel: prismaSchema.incidentLocationModel,
+
+      schemaCompatibility: prismaSchema.schemaCompatibility,
+
     };
 
 
@@ -97,6 +105,8 @@ export class HealthController {
     const healthy =
 
       (database === "ok" || database === "skipped") &&
+
+      prismaSchema.schemaCompatibility === "ok" &&
 
       (!productionLike || redis === "ok") &&
 
@@ -113,6 +123,8 @@ export class HealthController {
         status: "degraded",
 
         checks,
+
+        prismaSchema,
 
         notificationQueue,
 
@@ -137,6 +149,8 @@ export class HealthController {
       status: "ok",
 
       checks,
+
+      prismaSchema,
 
       notificationQueue,
 
