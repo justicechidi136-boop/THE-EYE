@@ -27,6 +27,16 @@ on:
         required: true
         default: false
         type: boolean
+      proof_only:
+        description: Staging only — sync repo and run location persistence proof (skip image redeploy)
+        required: false
+        default: false
+        type: boolean
+      run_location_proof:
+        description: Staging only — run SRB-039 location persistence proof after deploy
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-${{ github.event.inputs.environment }}
@@ -201,25 +211,38 @@ jobs:
             git checkout ${{ github.sha }}
             echo "VPS HEAD: $(git rev-parse HEAD)"
             git status --short
-            docker compose -f infra/docker/docker-compose.yml --env-file .env ps
-            docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web notification-worker || true
-            docker compose -f infra/docker/docker-compose.yml --env-file .env build api admin-web api-tools --no-cache api-tools
-            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate
-            docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate api notification-worker admin-web
-            docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --wait api admin-web livekit
-            bash scripts/reload-nginx-upstreams.sh
-            bash scripts/staging-smoke-check.sh
-            echo "=== Staging seed (first run) ==="
-            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
-            echo "=== Staging certification data verify ==="
-            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
-            echo "=== Staging seed (idempotency second run) ==="
-            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
-            echo "=== Staging login verification ==="
-            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
-              -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
-              -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
-              api-tools scripts/verify-staging-test-accounts.ts
+            if [ "${{ github.event.inputs.proof_only }}" = "true" ]; then
+              echo "=== Proof-only mode (skip redeploy) ==="
+            else
+              docker compose -f infra/docker/docker-compose.yml --env-file .env ps
+              docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web notification-worker || true
+              docker compose -f infra/docker/docker-compose.yml --env-file .env build api admin-web api-tools --no-cache api-tools
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate
+              docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate api notification-worker admin-web
+              docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --wait api admin-web livekit
+              bash scripts/reload-nginx-upstreams.sh
+              bash scripts/staging-smoke-check.sh
+              echo "=== Staging seed (first run) ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
+              echo "=== Staging certification data verify ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
+              echo "=== Staging seed (idempotency second run) ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
+              echo "=== Staging login verification ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+                -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
+                -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
+                api-tools scripts/verify-staging-test-accounts.ts
+            fi
+            if [ "${{ github.event.inputs.proof_only }}" = "true" ] || [ "${{ github.event.inputs.run_location_proof }}" = "true" ]; then
+              echo "=== SRB-039 location persistence proof ==="
+              curl -fsS "${NEXT_PUBLIC_API_BASE_URL}/health/ready" | head -c 4000 || true
+              echo ""
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+                -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
+                -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
+                api-tools scripts/staging-location-persistence-proof.ts
+            fi
             docker compose -f infra/docker/docker-compose.yml --env-file .env ps
 
   deploy:
