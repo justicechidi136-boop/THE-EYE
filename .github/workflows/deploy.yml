@@ -204,7 +204,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
           script: |
-            set -euo pipefail
+            set -eo pipefail
             cd ${{ secrets.DEPLOY_PATH }}
             export THE_EYE_IMAGE_TAG=${{ steps.meta.outputs.tag }}
             export ADMIN_WEB_APP_ENV=staging
@@ -212,11 +212,11 @@ jobs:
             git fetch --tags origin
             git checkout ${{ github.sha }}
             echo "VPS HEAD: $(git rev-parse HEAD)"
-            if [ "${{ github.event.inputs.proof_only }}" = "true" ]; then
+            if [ "${{ github.event.inputs.proof_only || 'false' }}" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env build api-tools --no-cache api-tools
             else
-              docker compose -f infra/docker/docker-compose.yml --env-file .env ps
+              docker compose -f infra/docker/docker-compose.yml --env-file .env ps || true
               docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web notification-worker || true
               docker compose -f infra/docker/docker-compose.yml --env-file .env build api admin-web api-tools --no-cache api-tools
               docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate
@@ -236,7 +236,7 @@ jobs:
                 -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
                 api-tools scripts/verify-staging-test-accounts.ts
             fi
-            if [ "${{ github.event.inputs.proof_only }}" = "true" ] || [ "${{ github.event.inputs.run_location_proof }}" = "true" ]; then
+            if [ "${{ github.event.inputs.proof_only || 'false' }}" = "true" ] || [ "${{ github.event.inputs.run_location_proof || 'false' }}" = "true" ]; then
               echo "=== SRB-039 location persistence proof ==="
               curl -fsS "${NEXT_PUBLIC_API_BASE_URL}/health/ready" | head -c 4000 || true
               echo ""
