@@ -77,13 +77,24 @@ if ! docker exec "$DRILL_CONTAINER" pg_restore \
   -d "$DRILL_DB" \
   --no-owner \
   --no-privileges \
-  /tmp/the-eye-restore.dump >/dev/null 2>&1; then
+  /tmp/the-eye-restore.dump 2>/tmp/the-eye-restore-drill.log; then
   echo "Restore drill: pg_restore returned non-zero (continuing with table checks)." >&2
 fi
 
 if ! docker exec "$DRILL_CONTAINER" pg_isready -U "$DRILL_USER" -d "$DRILL_DB" >/dev/null 2>&1; then
-  echo "BACKUP-010: Restore drill database is not running after restore." >&2
-  exit 1
+  docker restart "$DRILL_CONTAINER" >/dev/null 2>&1 || true
+  ready=0
+  for _ in $(seq 1 15); do
+    if docker exec "$DRILL_CONTAINER" pg_isready -U "$DRILL_USER" -d "$DRILL_DB" >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    sleep 2
+  done
+  if [[ $ready -ne 1 ]]; then
+    echo "BACKUP-010: Restore drill database is not running after restore." >&2
+    exit 1
+  fi
 fi
 
 docker exec "$DRILL_CONTAINER" rm -f /tmp/the-eye-restore.dump >/dev/null 2>&1 || true

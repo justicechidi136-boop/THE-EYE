@@ -779,7 +779,7 @@
 | INF-010 | Infra | Docker runtime dependencies | Ops | Infra | compose | N/A | N/A | — | Y | N/A | Y | Y | Y | Y | N | Y | N | **PASS** | P0 | N | test:docker:smoke | — | N | — |
 | INF-011 | Infra | Firebase project isolation | Ops | Infra | per flavor | N/A | N/A | — | Y | N/A | Y | Y | Y | Y | N | Y | N | **PASS** | P0 | N | Guards in CI + mobile | — | N | — |
 | INF-012 | Infra | GitHub Actions | Ops | Infra | workflows | N/A | N/A | — | Y | N/A | Y | Y | Y | Y | N | Y | N | **PASS** | P1 | N | validate-staging.yml | — | N | — |
-| INF-013 | Infra | Backups | Ops | Infra | — | N/A | N/A | — | NOT IMPLEMENTED | N/A | N/A | N | N | N | N | N | N | **NOT IMPLEMENTED** | P0 | Y | No automated backup evidenced | — | Y | — |
+| INF-013 | Infra | Backups | Ops | Infra | — | N/A | N/A | — | PARTIAL | N/A | N/A | Y | Y | N | N | N | N | **STAGING QA PENDING** | P0 | Y | Staging backup verified 2026-07-27 (restore drill pending) | [30256309131](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30256309131) | Y | Restore drill |
 | INF-014 | Infra | Restore test | Ops | Infra | — | N/A | N/A | — | NOT IMPLEMENTED | N/A | N/A | N | N | N | N | N | N | **NOT IMPLEMENTED** | P0 | Y | — | — | Y | — |
 | INF-015 | Infra | Logs | Ops | Infra | Docker | N/A | N/A | — | PARTIAL | N/A | N/A | Y | Y | N | N | PARTIAL | N | **PARTIAL** | P1 | N | Container logs only | — | Y | — |
 | INF-016 | Infra | Monitoring | Ops | Infra | metrics | N/A | N/A | `/metrics` | PARTIAL | N/A | Y | Y | Y | Y | N | N | N | **PARTIAL** | P1 | N | Prometheus endpoint exists | — | Y | — |

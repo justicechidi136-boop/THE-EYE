@@ -259,3 +259,18 @@ Troubleshooting:
 | `BACKUP-010` | Archive validation failed | Re-run backup; inspect disk space and DB connectivity |
 
 See also [disaster-recovery.md](./disaster-recovery.md) and [maintenance-guide.md](./maintenance-guide.md).
+
+### Staging backup proof (2026-07-27)
+
+Verified on VPS via GitHub Actions [Backup workflow run 30256309131](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30256309131) after merge of PR #36 (`106b29b` → script fixes through `16a754e`):
+
+| Field | Value |
+|-------|-------|
+| Backup file | `backups/the-eye-staging-20260727T100050Z.dump` |
+| Metadata | `backups/the-eye-staging-20260727T100050Z.json` |
+| Size | 602,581 bytes |
+| SHA-256 | `c00db4d63973790f582eb0aaafae4ce75d514c99c0e863893d3a4afac016b5d4` |
+| Archive validation | `pg_restore --list` passed (no false BACKUP-006) |
+| Restore drill | **Pending** — isolated drill container exits during `pg_restore` (follow-up `9757c2d+`) |
+
+Latest rolling copies: `backups/the-eye-staging-latest.dump`, `backups/the_eye_latest.dump`.

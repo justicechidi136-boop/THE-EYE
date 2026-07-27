@@ -152,7 +152,7 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | GD-INF-015 | No crash loops | Y | P0 | `docker compose ps` | All healthy | Not inspected | — | DevOps | **NOT TESTED** | VPS access |
 | GD-INF-016 | Graceful provider degradation | Y | P0 | SOS with SMS/FCM down | Incident still created | Code intent; not runtime tested | — | API | **NOT TESTED** | Fault injection |
 | GD-INF-017 | Request IDs / error codes | Y | P1 | Failed API call | x-request-id + code | Not sampled live | — | API | **NOT TESTED** | Pending |
-| GD-INF-018 | Backups/rollback docs | Y | P1 | Review runbook | Documented procedure | STAGING_DEPLOYMENT.md exists | docs only | — | DevOps | **NOT TESTED** | Execute backup |
+| GD-INF-018 | Backups/rollback docs | Y | P1 | Review runbook | Documented procedure | STAGING_DEPLOYMENT.md + backup run 30256309131 | docs + VPS | 2026-07-27 | DevOps | **PARTIAL PASS** | Restore drill pending |
 
 ---
 
