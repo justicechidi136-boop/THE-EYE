@@ -115,6 +115,9 @@ function validateDockerfileStatic() {
   const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
   const requiredMarkers = [
     "pnpm --filter @the-eye/api deploy --prod /app/deploy",
+    "WORKDIR /app/deploy",
+    "/app/node_modules/.bin/prisma generate --schema=./prisma/schema.prisma",
+    "node ./scripts/diagnose-prisma-location-model.cjs",
     'CMD ["node", "--require", "./src/preload-env.cjs", "dist/main.js"]',
     "USER nestjs",
     "COPY --from=deploy-prod",
@@ -157,9 +160,9 @@ function validateDockerImage(imageRef) {
 
   assertInsideContainer(
     imageRef,
-    "test -d /app/node_modules/.prisma/client || test -f /app/node_modules/@prisma/client/index.js || test -f /app/node_modules/@prisma/client/default.js || { echo 'missing generated Prisma client'; exit 1; }",
+    "node ./scripts/diagnose-prisma-location-model.cjs",
   );
-  console.log("Prisma client present in runtime image.");
+  console.log("Generated Prisma client exposes IncidentLocationUpdate in runtime image.");
 }
 
 const { image, source } = resolveImageRef();
