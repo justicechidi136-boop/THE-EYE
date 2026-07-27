@@ -280,6 +280,25 @@ wait_for_pg_ready() {
   return 1
 }
 
+wait_for_container_healthy() {
+  local i status
+  for ((i = 1; i <= 60; i++)); do
+    status="$(
+      docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+        "$DRILL_CONTAINER" 2>/dev/null || echo "unknown"
+    )"
+    if [[ "$status" == "healthy" ]]; then
+      echo "Restore drill container health: healthy"
+      return 0
+    fi
+    if ! container_running; then
+      return 1
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 wait_for_template_postgis() {
   local i postgis_ready
   for ((i = 1; i <= 60; i++)); do
@@ -328,15 +347,15 @@ create_isolated_stack() {
     -e POSTGRES_USER="$DRILL_USER" \
     -e POSTGRES_PASSWORD="$DRILL_PASSWORD" \
     -e POSTGRES_DB="$MAINT_DB" \
-    --health-cmd="pg_isready -U ${DRILL_USER} -d ${MAINT_DB} || exit 1" \
+    --health-cmd="pg_isready -U ${DRILL_USER} -d template_postgis && psql -U ${DRILL_USER} -d template_postgis -Atqc 'SELECT PostGIS_Version()' | grep -q ." \
     --health-interval=5s \
-    --health-retries=10 \
-    --health-start-period=30s \
+    --health-retries=12 \
+    --health-start-period=60s \
     --health-timeout=5s \
     "$DRILL_IMAGE" >/dev/null
 
-  if ! wait_for_pg_ready "$MAINT_DB" $((STARTUP_TIMEOUT_SEC / 2)); then
-    die "BACKUP-010: Restore drill PostgreSQL did not accept connections on $MAINT_DB." 1
+  if ! wait_for_container_healthy; then
+    die "BACKUP-010: Restore drill container did not become healthy." 1
   fi
   if ! wait_for_template_postgis; then
     die "BACKUP-010: Restore drill template_postgis did not finish PostGIS initialization." 1
@@ -354,6 +373,8 @@ create_drill_database() {
   if ! wait_for_pg_ready "$DRILL_DB" 15; then
     die "BACKUP-010: Restore drill database $DRILL_DB is not accepting connections." 1
   fi
+  docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -c \
+    "CREATE EXTENSION IF NOT EXISTS postgis CASCADE; CREATE EXTENSION IF NOT EXISTS postgis_topology;" >/dev/null
 }
 
 prepare_extensions() {
@@ -371,12 +392,20 @@ prepare_extensions() {
       "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
   done < <(archive_list_extensions)
 
-  local postgis_check
-  postgis_check="$(docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -Atqc "SELECT PostGIS_Version();" 2>/dev/null | tr -d '\r' || true)"
-  if [[ -z "$postgis_check" ]]; then
+  local postgis_check extension_check
+  extension_check="$(
+    docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -Atqc \
+      "SELECT count(*) FROM pg_extension WHERE extname IN ('postgis', 'postgis_topology');" 2>/dev/null \
+      | tr -d '\r' || echo "0"
+  )"
+  postgis_check="$(
+    docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -Atqc \
+      "SELECT PostGIS_Version();" 2>/dev/null | tr -d '\r' || true
+  )"
+  if [[ "$extension_check" -lt 1 && -z "$postgis_check" ]]; then
     die "BACKUP-010: PostGIS is not available in drill database after template_postgis creation." 1
   fi
-  echo "Restore drill PostGIS (target db): $postgis_check"
+  echo "Restore drill PostGIS (target db): ${postgis_check:-extensions=$extension_check}"
 }
 
 verify_archive_in_container() {
