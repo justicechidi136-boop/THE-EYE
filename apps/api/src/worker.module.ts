@@ -7,6 +7,7 @@ import { resolveBullMqRootOptions, shouldRegisterBullMq } from "./common/queue/q
 import { validateEnvironment } from "./config/validate-env";
 import { NotificationsWorkerModule } from "./modules/notifications/notifications-worker.module";
 import { BroadcastsWorkerModule } from "./modules/broadcasts/broadcasts-worker.module";
+import { LocationRetryWorkerModule } from "./modules/dispatch/location-retry-worker.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 
 @Module({
@@ -41,6 +42,7 @@ import { PrismaModule } from "./modules/prisma/prisma.module";
       : []),
     NotificationsWorkerModule,
     BroadcastsWorkerModule,
+    LocationRetryWorkerModule,
   ],
 })
 export class WorkerModule {}

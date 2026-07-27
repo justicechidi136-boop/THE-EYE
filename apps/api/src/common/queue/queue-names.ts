@@ -8,6 +8,10 @@ export function resolveBroadcastsQueueName(appEnvironment: AppEnvironment): stri
   return `the-eye-${appEnvironment}-broadcasts`;
 }
 
+export function resolveIncidentLocationRetryQueueName(appEnvironment: AppEnvironment): string {
+  return `the-eye-${appEnvironment}-incident-location-retry`;
+}
+
 export function resolveNotificationsQueueNameFromConfig(config: Record<string, unknown>): string {
   return resolveNotificationsQueueName(resolveAppEnvironment(config));
 }
@@ -16,5 +20,12 @@ export function resolveBroadcastsQueueNameFromConfig(config: Record<string, unkn
   return resolveBroadcastsQueueName(resolveAppEnvironment(config));
 }
 
+export function resolveIncidentLocationRetryQueueNameFromConfig(config: Record<string, unknown>): string {
+  return resolveIncidentLocationRetryQueueName(resolveAppEnvironment(config));
+}
+
 export const NOTIFICATIONS_QUEUE_NAME = resolveNotificationsQueueNameFromConfig(process.env as Record<string, unknown>);
 export const BROADCASTS_QUEUE_NAME = resolveBroadcastsQueueNameFromConfig(process.env as Record<string, unknown>);
+export const INCIDENT_LOCATION_RETRY_QUEUE_NAME = resolveIncidentLocationRetryQueueNameFromConfig(
+  process.env as Record<string, unknown>,
+);
