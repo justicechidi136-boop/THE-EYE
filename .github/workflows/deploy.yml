@@ -202,6 +202,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 30m
           script_stop: true
           script: |
             set -o pipefail
@@ -212,8 +213,12 @@ jobs:
             git fetch --tags origin
             git checkout ${{ github.sha }}
             echo "VPS HEAD: $(git rev-parse HEAD)"
-            echo "DEBUG: deploy branch starting (proof_only=${{ github.event.inputs.proof_only || 'false' }})"
-            test -f .env || { echo "ERROR: missing .env in deploy path"; exit 1; }
+            echo "DEBUG: deploy cwd=$(pwd) proof_only=${{ github.event.inputs.proof_only || 'false' }}"
+            if [ ! -f .env ]; then
+              echo "ERROR: missing .env at $(pwd)/.env"
+              ls -la
+              exit 1
+            fi
             if [ "${{ github.event.inputs.proof_only || 'false' }}" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env build api-tools --no-cache api-tools
@@ -226,6 +231,8 @@ jobs:
               docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --wait api admin-web livekit
               bash scripts/reload-nginx-upstreams.sh
               bash scripts/staging-smoke-check.sh
+              echo "=== Prisma runtime forensics (API container) ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env exec -T api node scripts/prisma-runtime-forensics.cjs
               echo "=== Staging seed (first run) ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
               echo "=== Staging certification data verify ==="
@@ -242,6 +249,7 @@ jobs:
               echo "=== SRB-039 location persistence proof ==="
               curl -fsS "${NEXT_PUBLIC_API_BASE_URL}/health/ready" | head -c 4000 || true
               echo ""
+              docker compose -f infra/docker/docker-compose.yml --env-file .env exec -T api node scripts/diagnose-prisma-location-model.cjs
               docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
                 -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
                 -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
