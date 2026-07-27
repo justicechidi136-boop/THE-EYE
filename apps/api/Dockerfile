@@ -9,13 +9,10 @@ COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
 RUN pnpm install --frozen-lockfile
 
-FROM deps AS development
-ENV NODE_ENV=development
-COPY . .
-EXPOSE 4000
-CMD ["pnpm", "--filter", "@the-eye/api", "run", "start:dev"]
-
 FROM deps AS builder
+COPY apps/api/prisma/schema.prisma apps/api/prisma/schema.prisma
+COPY apps/api/prisma/migrations apps/api/prisma/migrations
+RUN pnpm --filter @the-eye/api run prisma:generate
 COPY . .
 RUN pnpm --filter @the-eye/shared run build
 RUN pnpm --filter @the-eye/api run prisma:generate
@@ -23,13 +20,17 @@ RUN pnpm --filter @the-eye/api exec nest build
 
 # pnpm deploy materializes prod deps (no workspace symlinks) for a portable runtime tree.
 FROM builder AS deploy-prod
-RUN pnpm --filter @the-eye/api deploy --prod /app/deploy && \
-    pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma
+RUN pnpm --filter @the-eye/api deploy --prod /app/deploy
+WORKDIR /app/deploy
+RUN /app/node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
+RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 # Full deploy retains prisma/tsx for compose tools profile (migrate, seed, admin bootstrap).
 FROM builder AS deploy-tools
-RUN pnpm --filter @the-eye/api deploy /app/deploy && \
-    pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma
+RUN pnpm --filter @the-eye/api deploy /app/deploy
+WORKDIR /app/deploy
+RUN /app/node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
+RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 FROM base AS production
 ENV NODE_ENV=production

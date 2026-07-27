@@ -593,6 +593,26 @@ Note: Nationwide verified official police dataset remains incomplete. Google sup
 
 ---
 
+## SRB-039 — Live Emergency location POST fails (Prisma createOne mismatch) (P0)
+
+| Field | Value |
+|---|---|
+| **Platform** | API / Mobile / Live Emergency Video |
+| **User flow** | Start Live Emergency Video → incident created → first GPS `POST /v1/incidents/:id/location` |
+| **Severity** | P0 |
+| **Reproduction** | Staging incident `0d688594-f2cf-4c67-af25-e5794568adc4`; POST location after successful incident create |
+| **Expected** | HTTP 200/201; `IncidentLocationUpdate` row; live-location/history update; LiveKit remains active |
+| **Actual** | HTTP 500; Prisma `createOne` mismatch on `IncidentLocationUpdate`; mobile may surface ERR-INC-502 |
+| **Root cause** | **STALE_GENERATED_PRISMA_CLIENT** — `prisma generate` ran outside `/app/deploy` in API Dockerfile; runtime image shipped misaligned client/engine |
+| **Fix** | Generate inside `/app/deploy`; build-time delegate diagnostic; PrismaService factory refactor; readiness schema-compat gate; controlled 503 + BullMQ retry queue |
+| **Automated test** | API **379/379** incl. `prisma-schema-compat`, `location-persistence`, `incidents.record-location` |
+| **Runtime evidence** | **NOT VERIFIED** — staging still on pre-fix image; rebuild/recreate required |
+| **Status** | **CODE FIXED — STAGING QA PENDING** |
+
+See [incident-location-prisma-runtime.md](./release/incident-location-prisma-runtime.md).
+
+---
+
 ## SRB-032 — Google Sign-In remains broken
 
 | Field | Value |

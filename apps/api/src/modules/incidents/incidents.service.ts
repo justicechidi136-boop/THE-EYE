@@ -1,4 +1,4 @@
-﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
 import { hashPassword, randomToken } from "../../common/auth/crypto";
 import { createS3PresignedPutUrl, createS3PresignedGetUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
@@ -17,6 +17,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { VerificationService } from "../verification/verification.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { LocationTrackingService } from "../dispatch/location-tracking.service";
+import { LocationRetryService } from "../dispatch/location-retry.service";
+import { isIncidentLocationPersistenceError } from "../dispatch/location-persistence.error";
 import { IncidentTimelineService } from "../dispatch/incident-timeline.service";
 import { EtaService } from "../dispatch/eta.service";
 import { DispatchService } from "../dispatch/dispatch.service";
@@ -47,6 +49,7 @@ export class IncidentsService {
     private readonly dispatchService: DispatchService,
     private readonly emergencyClassification: EmergencyClassificationService,
     private readonly locationTracking: LocationTrackingService,
+    private readonly locationRetry: LocationRetryService,
     private readonly incidentTimeline: IncidentTimelineService,
     private readonly etaService: EtaService,
     private readonly jurisdictionResolution: JurisdictionResolutionService,
@@ -470,7 +473,51 @@ export class IncidentsService {
   }
 
   async recordLocation(id: string, dto: UpdateIncidentLocationDto, actor?: JwtPayload) {
-    return this.locationTracking.recordCitizenLocation(id, dto, actor);
+    validateIncidentLocationDto(dto);
+    try {
+      return await this.locationTracking.recordCitizenLocation(id, dto, actor);
+    } catch (error) {
+      if (!isIncidentLocationPersistenceError(error)) {
+        throw error;
+      }
+
+      const incident = await this.prisma.incident.findUnique({ where: { id } });
+      await this.locationRetry.scheduleRetry({
+        incidentId: id,
+        dto,
+        reporterId: actor?.typ === "user" ? actor.sub : incident?.reporterId ?? undefined,
+      });
+
+      void runNonCriticalWrite(
+        "incident.location.retry_scheduled",
+        { incidentId: id, intake: "standard" },
+        async () => {
+          await this.prisma.incidentTimeline.create({
+            data: {
+              incidentId: id,
+              actorId: actor?.typ === "user" ? actor.sub : undefined,
+              actorType: actor?.typ ?? "system",
+              eventType: "incident.location.retry_scheduled",
+              message: "Citizen location update failed and was queued for retry.",
+              metadata: {
+                sequenceNumber: dto.sequenceNumber ?? 0,
+                source: dto.source,
+                quality: dto.quality,
+              },
+            } as never,
+          });
+        },
+        [],
+      );
+
+      throw new ServiceUnavailableException({
+        code: "ERR-INC-LOCATION-RETRY",
+        message: "Your emergency and video are active. We are retrying your location update.",
+        incidentId: id,
+        retrying: true,
+        locationStatus: "retrying",
+      });
+    }
   }
 
   async getLiveLocation(id: string, actor?: JwtPayload) {

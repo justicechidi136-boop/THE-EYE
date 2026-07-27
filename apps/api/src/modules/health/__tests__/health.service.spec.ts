@@ -16,6 +16,17 @@ describe("HealthService", () => {
     expect(await service.checkDatabase()).toBe("error");
   });
 
+  it("reports prisma schema compatibility ok when count succeeds", async () => {
+    const prisma = {
+      $queryRaw: async () => [{ "?column?": 1 }],
+      incidentLocationUpdate: { count: async () => 0 },
+    };
+    const config = { get: () => undefined };
+    const service = new HealthService(prisma as never, config as never, createMetricsMock());
+    const result = await service.checkPrismaSchemaCompatibility();
+    expect(result.schemaCompatibility).toBe("ok");
+  });
+
   it("skips redis when disabled", async () => {
     const previous = process.env.THE_EYE_DISABLE_REDIS;
     const previousAppEnv = process.env.THE_EYE_APP_ENV;

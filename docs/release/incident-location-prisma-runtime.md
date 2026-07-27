@@ -1,0 +1,57 @@
+# Incident location Prisma runtime failure (staging)
+
+**Date:** 2026-07-27  
+**Status:** CODE FIXED — STAGING QA PENDING  
+**Related:** SRB-026 (Live Emergency Video), Live GPS persistence
+
+## Observed staging failure
+
+| Item | Value |
+|------|-------|
+| Incident ID | `0d688594-f2cf-4c67-af25-e5794568adc4` |
+| Endpoint | `POST /v1/incidents/:id/location` |
+| HTTP | 500 |
+| Prisma error | `Invalid prisma.incidentLocationUpdate.create() invocation: Operation 'createOne' for model 'IncidentLocationUpdate' does not match any query` |
+| Working endpoints | `GET /incidents/:id`, `GET /timeline`, `GET /live-location` → 200 |
+
+Incident creation succeeds. Failure is isolated to persisting `IncidentLocationUpdate` rows.
+
+## Root cause
+
+**Classification:** `STALE_GENERATED_PRISMA_CLIENT` / Docker build-order defect.
+
+The API production image copied `/app/deploy` from `pnpm deploy --prod`, but `prisma generate` ran via `pnpm --filter @the-eye/api exec` from the monorepo builder context instead of `/app/deploy`. The runtime image could ship a generated client and query engine that do not match the deployed schema, causing `createOne` to be rejected for `IncidentLocationUpdate`.
+
+Secondary risk: `PrismaService` used `Object.assign(this, extended)` after `$extends`, which can leave delegate routing inconsistent under metrics extensions.
+
+## Fix summary
+
+1. **Dockerfile:** `WORKDIR /app/deploy` then `/app/node_modules/.bin/prisma generate --schema=./prisma/schema.prisma`; build-time `diagnose-prisma-location-model.cjs` fails the image build when the delegate is missing.
+2. **PrismaService:** factory-created extended client (no `Object.assign` on `$extends` result).
+3. **Readiness:** `/v1/health/ready` exposes `prismaClient`, `incidentLocationModel`, `schemaCompatibility`; readiness fails when incompatible (`PRISMA-SCHEMA-001`…`004`).
+4. **Location isolation:** persistence failures return controlled `503` with `ERR-INC-LOCATION-RETRY`, enqueue BullMQ retry on `the-eye-{env}-incident-location-retry`, record timeline warning without destroying the incident or LiveKit session.
+
+## Deploy requirements
+
+Do **not** `docker compose restart api` alone. Rebuild and recreate:
+
+```bash
+docker compose --env-file .env build api notification-worker
+docker compose --env-file .env up -d --force-recreate api notification-worker
+```
+
+Use `--no-cache` for the first diagnostic deploy if the stale client layer persists.
+
+## Verification checklist (staging)
+
+- [ ] Readiness: `schemaCompatibility=ok`
+- [ ] `node scripts/diagnose-prisma-location-model.cjs` inside API container → exit 0
+- [ ] `POST /v1/incidents/:id/location` → 200/201 (or controlled 503 retry path)
+- [ ] Row in `incident_location_updates`
+- [ ] `GET /live-location`, `GET /location-history` reflect update
+- [ ] Retry worker consumes `the-eye-staging-incident-location-retry`
+- [ ] No raw Prisma 500; no ERR-INC-502 on primary path after fix
+
+## Sprint 8
+
+Not authorized until staging runtime proof completes (Phases 8–11).
