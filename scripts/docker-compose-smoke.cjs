@@ -206,6 +206,22 @@ if (
   console.error("Docker Compose smoke failed. Bash backup/restore scripts validation failed.");
   process.exit(1);
 }
+const restoreDrillSh = fs.readFileSync(path.join(root, "scripts", "backup-restore-drill.sh"), "utf8");
+if (
+  !restoreDrillSh.includes("assert_restore_target_isolated") ||
+  !restoreDrillSh.includes("Restore drill refused") ||
+  !restoreDrillSh.includes("--no-owner") ||
+  !restoreDrillSh.includes("pg_isready") ||
+  !restoreDrillSh.includes('POSTGRES_DB="$MAINT_DB"')
+) {
+  console.error("Docker Compose smoke failed. Restore drill script safety/lifecycle validation failed.");
+  process.exit(1);
+}
+const stagingBackupRunner = fs.readFileSync(path.join(root, "scripts", "run-staging-backup.sh"), "utf8");
+if (!stagingBackupRunner.includes('WITH_RESTORE_DRILL="${2:-false}"') || !stagingBackupRunner.includes("--with-restore-drill")) {
+  console.error("Docker Compose smoke failed. Staging backup runner validation failed.");
+  process.exit(1);
+}
 if (!restoreSh.includes("pg_restore") || !restoreSh.includes("--env-file")) {
   console.error("Docker Compose smoke failed. Bash restore script validation failed.");
   process.exit(1);
