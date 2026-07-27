@@ -67,11 +67,26 @@ if [[ $ready -ne 1 ]]; then
 fi
 
 echo "Restoring backup into isolated database $DRILL_DB"
-if ! cat "$BACKUP_FILE" | docker exec -i "$DRILL_CONTAINER" \
-  pg_restore -U "$DRILL_USER" -d "$DRILL_DB" --no-owner --no-privileges --clean --if-exists 2>/dev/null; then
-  # pg_restore may exit non-zero for benign warnings; verify tables exist.
-  :
+if ! docker cp "$BACKUP_FILE" "$DRILL_CONTAINER:/tmp/the-eye-restore.dump" >/dev/null 2>&1; then
+  echo "BACKUP-010: Restore drill could not copy backup into temporary container." >&2
+  exit 1
 fi
+
+if ! docker exec "$DRILL_CONTAINER" pg_restore \
+  -U "$DRILL_USER" \
+  -d "$DRILL_DB" \
+  --no-owner \
+  --no-privileges \
+  /tmp/the-eye-restore.dump >/dev/null 2>&1; then
+  echo "Restore drill: pg_restore returned non-zero (continuing with table checks)." >&2
+fi
+
+if ! docker exec "$DRILL_CONTAINER" pg_isready -U "$DRILL_USER" -d "$DRILL_DB" >/dev/null 2>&1; then
+  echo "BACKUP-010: Restore drill database is not running after restore." >&2
+  exit 1
+fi
+
+docker exec "$DRILL_CONTAINER" rm -f /tmp/the-eye-restore.dump >/dev/null 2>&1 || true
 
 check_table_count() {
   local table="$1"
