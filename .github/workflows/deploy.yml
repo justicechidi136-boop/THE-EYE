@@ -206,7 +206,6 @@ jobs:
           debug: true
           script_stop: true
           script: |
-            /bin/bash -s <<'DEPLOY_SCRIPT'
             set +e
             set -o pipefail
             DEPLOY_ROOT='${{ secrets.DEPLOY_PATH }}'
@@ -228,45 +227,51 @@ jobs:
               fi
             fi
             echo "STEP env-check-ok"
-            echo "STEP deploy-start proof_only=${{ github.event.inputs.proof_only || 'false' }}"
-            if [ "${{ github.event.inputs.proof_only || 'false' }}" = "true" ]; then
+            PROOF_ONLY="${{ github.event.inputs.proof_only }}"
+            RUN_LOCATION_PROOF="${{ github.event.inputs.run_location_proof }}"
+            if [ -z "$PROOF_ONLY" ]; then PROOF_ONLY=false; fi
+            if [ -z "$RUN_LOCATION_PROOF" ]; then RUN_LOCATION_PROOF=false; fi
+            echo "STEP deploy-start proof_only=${PROOF_ONLY}"
+            COMPOSE=(docker compose -f infra/docker/docker-compose.yml --env-file .env)
+            if [ "$PROOF_ONLY" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
-              docker compose -f infra/docker/docker-compose.yml --env-file .env build api-tools --no-cache api-tools
+              "${COMPOSE[@]}" build api-tools --no-cache api-tools || { echo "ERROR: api-tools build failed"; exit 1; }
             else
-              docker compose -f infra/docker/docker-compose.yml --env-file .env ps || true
-              docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web notification-worker || true
-              docker compose -f infra/docker/docker-compose.yml --env-file .env build api admin-web api-tools --no-cache api-tools || { echo "ERROR: docker compose build failed"; exit 1; }
-              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-migrate || { echo "ERROR: api-migrate failed"; exit 1; }
-              docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate api notification-worker admin-web || { echo "ERROR: compose up failed"; exit 1; }
-              docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --wait api admin-web livekit || { echo "ERROR: compose wait failed"; exit 1; }
+              echo "STEP compose-ps-start"
+              "${COMPOSE[@]}" ps || true
+              "${COMPOSE[@]}" pull api admin-web notification-worker || true
+              echo "STEP compose-build-start"
+              "${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools || { echo "ERROR: docker compose build failed"; exit 1; }
+              "${COMPOSE[@]}" --profile tools run --rm api-migrate || { echo "ERROR: api-migrate failed"; exit 1; }
+              "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web || { echo "ERROR: compose up failed"; exit 1; }
+              "${COMPOSE[@]}" up -d --wait api admin-web livekit || { echo "ERROR: compose wait failed"; exit 1; }
               bash scripts/reload-nginx-upstreams.sh || { echo "ERROR: nginx reload failed"; exit 1; }
               bash scripts/staging-smoke-check.sh || { echo "ERROR: staging smoke failed"; exit 1; }
               echo "=== Prisma runtime forensics (API container) ==="
-              docker compose -f infra/docker/docker-compose.yml --env-file .env exec -T api node scripts/prisma-runtime-forensics.cjs || { echo "ERROR: prisma runtime forensics failed"; exit 1; }
+              "${COMPOSE[@]}" exec -T api node scripts/prisma-runtime-forensics.cjs || { echo "ERROR: prisma runtime forensics failed"; exit 1; }
               echo "=== Staging seed (first run) ==="
-              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
+              "${COMPOSE[@]}" --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
               echo "=== Staging certification data verify ==="
-              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
+              "${COMPOSE[@]}" --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
               echo "=== Staging seed (idempotency second run) ==="
-              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
+              "${COMPOSE[@]}" --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
               echo "=== Staging login verification ==="
-              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+              "${COMPOSE[@]}" --profile tools run --rm \
                 -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
                 -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
                 api-tools scripts/verify-staging-test-accounts.ts
             fi
-            if [ "${{ github.event.inputs.proof_only || 'false' }}" = "true" ] || [ "${{ github.event.inputs.run_location_proof || 'false' }}" = "true" ]; then
+            if [ "$PROOF_ONLY" = "true" ] || [ "$RUN_LOCATION_PROOF" = "true" ]; then
               echo "=== SRB-039 location persistence proof ==="
               curl -fsS "${NEXT_PUBLIC_API_BASE_URL}/health/ready" | head -c 4000 || true
               echo ""
-              docker compose -f infra/docker/docker-compose.yml --env-file .env exec -T api node scripts/diagnose-prisma-location-model.cjs || { echo "ERROR: diagnose prisma failed"; exit 1; }
-              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+              "${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs || { echo "ERROR: diagnose prisma failed"; exit 1; }
+              "${COMPOSE[@]}" --profile tools run --rm \
                 -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
                 -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
                 api-tools scripts/staging-location-persistence-proof.ts || { echo "ERROR: location persistence proof failed"; exit 1; }
             fi
-            docker compose -f infra/docker/docker-compose.yml --env-file .env ps
-            DEPLOY_SCRIPT
+            "${COMPOSE[@]}" ps
 
   deploy:
     needs: build
