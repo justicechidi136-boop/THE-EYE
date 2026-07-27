@@ -600,14 +600,16 @@ Note: Nationwide verified official police dataset remains incomplete. Google sup
 | **Platform** | API / Mobile / Live Emergency Video |
 | **User flow** | Start Live Emergency Video → incident created → first GPS `POST /v1/incidents/:id/location` |
 | **Severity** | P0 |
-| **Reproduction** | Staging incident `0d688594-f2cf-4c67-af25-e5794568adc4`; POST location after successful incident create |
-| **Expected** | HTTP 200/201; `IncidentLocationUpdate` row; live-location/history update; LiveKit remains active |
-| **Actual** | HTTP 500; Prisma `createOne` mismatch on `IncidentLocationUpdate`; mobile may surface ERR-INC-502 |
-| **Root cause** | **STALE_GENERATED_PRISMA_CLIENT** — `prisma generate` ran outside `/app/deploy` in API Dockerfile; runtime image shipped misaligned client/engine |
-| **Fix** | Generate inside `/app/deploy`; build-time delegate diagnostic; PrismaService factory refactor; readiness schema-compat gate; controlled 503 + BullMQ retry queue |
-| **Automated test** | API **379/379** incl. `prisma-schema-compat`, `location-persistence`, `incidents.record-location` |
-| **Runtime evidence** | **NOT VERIFIED** — staging still on pre-fix image; rebuild/recreate required |
-| **Status** | **CODE FIXED — STAGING QA PENDING** |
+| **Reproduction** | Fresh staging incidents (e.g. `31401006-d1e2-4539-a051-5746f074947a`); POST location after authenticated emergency create |
+| **Expected** | HTTP 200/201; `persisted=true`; `IncidentLocationUpdate` row; live-location/history update; LiveKit remains active |
+| **Actual** | HTTP **202** (retry queued) or Prisma `createOne` mismatch; `GET live-location` null/stale until/unless worker succeeds |
+| **Root cause** | **STALE_GENERATED_PRISMA_CLIENT** — `pnpm deploy` tree still resolves `@prisma/client` via nested `.pnpm` output; runtime `createOne` rejected for `IncidentLocationUpdate` |
+| **Fix** | PR #44 merged @ `f345a55`; follow-up Dockerfile `npx prisma generate` in `/app/deploy` @ `5505e33` (CI image builds); **VPS runtime createOne still failing** as of deploy run [30286025761](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30286025761) |
+| **Automated test** | API **396/396** incl. `prisma-schema-compat`, `location-persistence`, `incidents.record-location` |
+| **Runtime evidence** | Merge [30276459627](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30276459627); deploy [30277437563](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30277437563) @ `f345a55`; authenticated proof script direct Prisma create **FAIL** `createOne` mismatch; seq1 POST **202** on prior run |
+| **Status** | **DEPLOYED — STAGING PERSISTENCE NOT VERIFIED** |
+
+Progression: CODE FIXED → CI VERIFIED → DEPLOYED → **STAGING PERSISTENCE BLOCKED** (Prisma client alignment incomplete on VPS).
 
 See [incident-location-prisma-runtime.md](./release/incident-location-prisma-runtime.md).
 

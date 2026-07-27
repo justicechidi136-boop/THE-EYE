@@ -1,7 +1,7 @@
 # Incident location Prisma runtime failure (staging)
 
 **Date:** 2026-07-27  
-**Status:** CODE COMPLETE — STAGING QA PENDING  
+**Status:** DEPLOYED — STAGING PERSISTENCE NOT VERIFIED  
 **Related:** SRB-039 (Live Emergency Video), Live GPS persistence, LOCATION-RETRY-001
 
 ## LOCATION-RETRY-001
@@ -72,22 +72,24 @@ Secondary risk: `PrismaService` used `Object.assign(this, extended)` after `$ext
 Do **not** `docker compose restart api` alone. Rebuild and recreate:
 
 ```bash
-docker compose --env-file .env build api notification-worker
+docker compose --env-file .env build api notification-worker api-tools --no-cache api-tools
 docker compose --env-file .env up -d --force-recreate api notification-worker
 ```
 
 Use `--no-cache` for the first diagnostic deploy if the stale client layer persists.
 
+**2026-07-27 staging note:** PR #44 merged and VPS redeployed @ `f345a55`, but authenticated proof (deploy run 30286025761) still hits `createOne` mismatch in direct Prisma create and HTTP 202 on location POST. Follow-up Dockerfile commits (`5505e33`+) generate via `npx prisma@6.19.3` inside `/app/deploy`; CI GHCR image builds green — **VPS API must be force-recreated on the fixed SHA once Prisma client path is confirmed.**
+
 ## Verification checklist (staging)
 
-- [ ] Readiness: `schemaCompatibility=ok`
-- [ ] `node scripts/diagnose-prisma-location-model.cjs` inside API container → exit 0
-- [ ] `POST /v1/incidents/:id/location` → 200/201 (or controlled 503 retry path)
+- [x] Readiness: `schemaCompatibility=ok` (create capability probe **degraded** — no closed incident)
+- [ ] `node scripts/diagnose-prisma-location-model.cjs` inside API container → runtime createOne passes
+- [ ] `POST /v1/incidents/:id/location` → 200/201 with `persisted=true`
 - [ ] Row in `incident_location_updates`
 - [ ] `GET /live-location`, `GET /location-history` reflect update
-- [ ] Retry worker consumes `the-eye-staging-incident-location-retry`
+- [ ] Retry worker consumes `the-eye-staging-incident-location-retry` (controlled 202 proof pending)
 - [ ] No raw Prisma 500; no ERR-INC-502 on primary path after fix
 
 ## Sprint 8
 
-Not authorized until staging runtime proof completes (Phases 8–11).
+**NOT AUTHORIZED** until staging runtime persistence proof completes (Phases 7–11).
