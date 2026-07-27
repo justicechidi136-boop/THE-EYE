@@ -204,7 +204,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
           script: |
-            set -eo pipefail
+            set -o pipefail
             cd ${{ secrets.DEPLOY_PATH }}
             export THE_EYE_IMAGE_TAG=${{ steps.meta.outputs.tag }}
             export ADMIN_WEB_APP_ENV=staging
@@ -212,6 +212,8 @@ jobs:
             git fetch --tags origin
             git checkout ${{ github.sha }}
             echo "VPS HEAD: $(git rev-parse HEAD)"
+            echo "DEBUG: deploy branch starting (proof_only=${{ github.event.inputs.proof_only || 'false' }})"
+            test -f .env || { echo "ERROR: missing .env in deploy path"; exit 1; }
             if [ "${{ github.event.inputs.proof_only || 'false' }}" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env build api-tools --no-cache api-tools
