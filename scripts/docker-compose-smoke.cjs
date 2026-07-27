@@ -162,6 +162,32 @@ if (
   );
   process.exit(1);
 }
+if (apiDockerfile.includes("/app/node_modules/.bin/prisma")) {
+  console.error("Docker Compose smoke failed. API Dockerfile must not assume /app/node_modules/.bin/prisma.");
+  process.exit(1);
+}
+if (
+  !apiDockerfile.includes(
+    "pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma",
+  )
+) {
+  console.error(
+    "Docker Compose smoke failed. API Dockerfile must generate Prisma from the builder workspace against /app/deploy schema.",
+  );
+  process.exit(1);
+}
+if (!apiDockerfile.includes("node ./scripts/diagnose-prisma-location-model.cjs")) {
+  console.error("Docker Compose smoke failed. API Dockerfile must run the Prisma runtime diagnostic after generate.");
+  process.exit(1);
+}
+const schemaCopyIndex = apiDockerfile.indexOf("COPY apps/api/prisma/schema.prisma");
+const builderGenerateIndex = apiDockerfile.indexOf("RUN pnpm --filter @the-eye/api run prisma:generate");
+if (schemaCopyIndex === -1 || builderGenerateIndex === -1 || schemaCopyIndex > builderGenerateIndex) {
+  console.error(
+    "Docker Compose smoke failed. Prisma schema must be copied before the builder-stage prisma:generate layer.",
+  );
+  process.exit(1);
+}
 
 const backupScript = fs.readFileSync(path.join(root, "scripts", "backup-the-eye.ps1"), "utf8");
 const backupSh = fs.readFileSync(path.join(root, "scripts", "backup-the-eye.sh"), "utf8");

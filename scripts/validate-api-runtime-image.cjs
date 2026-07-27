@@ -113,18 +113,40 @@ function assertInsideContainer(imageRef, assertionScript) {
 
 function validateDockerfileStatic() {
   const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
+  const compose = fs.existsSync(composeFile) ? fs.readFileSync(composeFile, "utf8") : "";
   const requiredMarkers = [
+    "COPY apps/api/prisma/schema.prisma apps/api/prisma/schema.prisma",
+    "COPY apps/api/prisma/migrations apps/api/prisma/migrations",
+    "RUN pnpm --filter @the-eye/api run prisma:generate",
     "pnpm --filter @the-eye/api deploy --prod /app/deploy",
+    "WORKDIR /app",
+    "pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma",
     "WORKDIR /app/deploy",
-    "/app/node_modules/.bin/prisma generate --schema=./prisma/schema.prisma",
     "node ./scripts/diagnose-prisma-location-model.cjs",
     'CMD ["node", "--require", "./src/preload-env.cjs", "dist/main.js"]',
     "USER nestjs",
     "COPY --from=deploy-prod",
   ];
+  const forbiddenMarkers = [
+    "/app/node_modules/.bin/prisma",
+    "npm install -g prisma",
+    "npx prisma generate",
+    "curl ",
+  ];
   const missing = requiredMarkers.filter((marker) => !dockerfile.includes(marker));
   if (missing.length) {
     throw new Error(`API Dockerfile missing required markers: ${missing.join(", ")}`);
+  }
+  const forbidden = forbiddenMarkers.filter((marker) => dockerfile.includes(marker));
+  if (forbidden.length) {
+    throw new Error(`API Dockerfile contains forbidden markers: ${forbidden.join(", ")}`);
+  }
+  if (
+    compose &&
+    (!compose.includes("notification-worker:") ||
+      !compose.includes("image: the-eye-api:${THE_EYE_IMAGE_TAG:-local}"))
+  ) {
+    throw new Error("Compose must keep api and notification-worker on the same the-eye-api image.");
   }
   console.log("Dockerfile static checks passed (pnpm deploy production layout).");
 }
