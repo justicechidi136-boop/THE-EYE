@@ -1,0 +1,60 @@
+name: Staging Location Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_ref:
+        description: Git ref to run proof scripts from on VPS (defaults to origin/staging)
+        required: false
+        default: origin/staging
+
+concurrency:
+  group: staging-location-proof
+  cancel-in-progress: false
+
+jobs:
+  proof:
+    name: SRB-039 staging location persistence proof
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Require VPS deploy secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing staging secret ${name}"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Run location persistence proof on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.DEPLOY_PATH }}
+            git fetch origin staging
+            git checkout ${{ github.event.inputs.staging_ref || 'origin/staging' }}
+            echo "VPS HEAD: $(git rev-parse HEAD)"
+            echo "=== Readiness ==="
+            curl -fsS "${{ vars.NEXT_PUBLIC_API_BASE_URL }}/health/ready" | head -c 4000
+            echo ""
+            echo "=== Location persistence proof ==="
+            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+              -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
+              -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
+              api-tools scripts/staging-location-persistence-proof.ts
