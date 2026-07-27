@@ -17,6 +17,7 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    environment: staging
     steps:
       - name: Backup PostgreSQL on deployment host
         uses: appleboy/ssh-action@v1.2.0
@@ -25,23 +26,35 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
+          command_timeout: 30m
           script: |
+            /bin/bash -s <<'EOS'
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
+            git fetch origin staging
+            git checkout staging
+            git pull --ff-only origin staging
+            echo "VPS HEAD: $(git rev-parse HEAD)"
             COMPOSE_FILE="${COMPOSE_FILE:-${{ secrets.DEPLOY_PATH }}/infra/docker/docker-compose.yml}"
             ENV_FILE="${ENV_FILE:-${{ secrets.DEPLOY_PATH }}/.env}"
             BACKUP_DIR="${BACKUP_DIR:-${{ secrets.DEPLOY_PATH }}/backups}"
-            BACKUP_ARGS=(
-              --compose-file "$COMPOSE_FILE"
-              --env-file "$ENV_FILE"
-              --output-dir "$BACKUP_DIR"
-              --environment staging
-            )
-            if [[ "${{ github.event.inputs.with_restore_drill || 'false' }}" == "true" ]]; then
-              BACKUP_ARGS+=(--with-restore-drill)
+            RESTORE_DRILL="${{ github.event.inputs.with_restore_drill || 'false' }}"
+            if [ "$RESTORE_DRILL" = "true" ]; then
+              bash scripts/backup-the-eye.sh \
+                --compose-file "$COMPOSE_FILE" \
+                --env-file "$ENV_FILE" \
+                --output-dir "$BACKUP_DIR" \
+                --environment staging \
+                --with-restore-drill
+            else
+              bash scripts/backup-the-eye.sh \
+                --compose-file "$COMPOSE_FILE" \
+                --env-file "$ENV_FILE" \
+                --output-dir "$BACKUP_DIR" \
+                --environment staging
             fi
-            bash scripts/backup-the-eye.sh "${BACKUP_ARGS[@]}"
             ls -lh "$BACKUP_DIR"/the-eye-staging-latest.dump "$BACKUP_DIR"/the_eye_latest.dump
+            EOS
 
       - name: Upload latest backup artifact (optional)
         if: false
