@@ -119,6 +119,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push API image
+        if: github.event.inputs.proof_only != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -157,6 +158,7 @@ jobs:
           esac
 
       - name: Build and push admin-web image
+        if: github.event.inputs.proof_only != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -213,6 +215,7 @@ jobs:
             git status --short
             if [ "${{ github.event.inputs.proof_only }}" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env build api-tools --no-cache api-tools
             else
               docker compose -f infra/docker/docker-compose.yml --env-file .env ps
               docker compose -f infra/docker/docker-compose.yml --env-file .env pull api admin-web notification-worker || true
