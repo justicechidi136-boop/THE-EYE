@@ -238,7 +238,7 @@ validate_backup_archive() {
   fi
 
   if ! list_output="$(
-    "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" pg_restore --list - <"$backup_path" 2>&1
+    cat "$backup_path" | "${COMPOSE_CMD[@]}" exec -T "$DB_SERVICE" pg_restore --list - 2>&1
   )"; then
     die "BACKUP-010: pg_restore --list failed for backup archive." 1
   fi
