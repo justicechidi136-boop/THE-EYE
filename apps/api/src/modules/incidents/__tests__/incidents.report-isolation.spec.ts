@@ -31,6 +31,7 @@ function buildIncidentsService(overrides: Record<string, unknown> = {}) {
   const dispatchService = { runTriageForIncident: jest.fn().mockResolvedValue(undefined) } as any;
   const emergencyClassification = {} as any;
   const locationTracking = {} as any;
+  const locationRetry = { scheduleRetry: jest.fn() } as any;
   const incidentTimeline = { buildTimeline: jest.fn() } as any;
   const etaService = {} as any;
   const jurisdictionResolution = {
@@ -53,6 +54,7 @@ function buildIncidentsService(overrides: Record<string, unknown> = {}) {
     dispatchService,
     emergencyClassification,
     locationTracking,
+    locationRetry,
     incidentTimeline,
     etaService,
     jurisdictionResolution,
