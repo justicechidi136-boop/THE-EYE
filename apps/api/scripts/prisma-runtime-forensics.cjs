@@ -139,7 +139,7 @@ async function probeCreate() {
       console.error(JSON.stringify({ probe: "createOne_mismatch", message: message.slice(0, 400) }));
       process.exit(1);
     }
-    if (code === "P2003" || code === "P2021" || /Foreign key constraint/i.test(message) || /connect/i.test(message)) {
+    if (code === "P2003" || code === "P2021" || /Foreign key constraint/i.test(message) || /connect/i.test(message) || /Can't reach database server/i.test(message)) {
       console.log(JSON.stringify({ probe: "create_accepted", detail: message.slice(0, 200) }));
       return;
     }

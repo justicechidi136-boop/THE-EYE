@@ -21,18 +21,17 @@ RUN pnpm --filter @the-eye/api exec nest build
 # pnpm deploy materializes prod deps (no workspace symlinks) for a portable runtime tree.
 FROM builder AS deploy-prod
 RUN pnpm --filter @the-eye/api deploy --prod /app/deploy
+RUN find /app/deploy/node_modules -type d -name '.prisma' -print0 | xargs -0 rm -rf 2>/dev/null || true
+RUN pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma
 WORKDIR /app/deploy
-# pnpm deploy may copy stale generated engines; regenerate exactly once against runtime schema.
-RUN find node_modules -type d -name '.prisma' -print0 | xargs -0 rm -rf 2>/dev/null || true
-RUN npx --yes prisma@6.19.3 generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 # Full deploy retains prisma/tsx for compose tools profile (migrate, seed, admin bootstrap).
 FROM builder AS deploy-tools
 RUN pnpm --filter @the-eye/api deploy /app/deploy
+RUN find /app/deploy/node_modules -type d -name '.prisma' -print0 | xargs -0 rm -rf 2>/dev/null || true
+RUN pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma
 WORKDIR /app/deploy
-RUN find node_modules -type d -name '.prisma' -print0 | xargs -0 rm -rf 2>/dev/null || true
-RUN npx --yes prisma@6.19.3 generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 FROM base AS production
