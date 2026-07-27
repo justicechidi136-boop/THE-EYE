@@ -212,7 +212,6 @@ jobs:
             git fetch --tags origin
             git checkout ${{ github.sha }}
             echo "VPS HEAD: $(git rev-parse HEAD)"
-            git status --short
             if [ "${{ github.event.inputs.proof_only }}" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env build api-tools --no-cache api-tools
