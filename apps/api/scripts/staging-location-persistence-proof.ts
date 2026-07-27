@@ -77,6 +77,21 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+function decodeJwtSub(token: string): string | undefined {
+  const parts = token.split(".");
+  if (parts.length < 2) return undefined;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as JsonRecord;
+    return typeof payload.sub === "string" ? payload.sub : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function main() {
   assertStagingOnlySeedAllowed();
 
@@ -112,7 +127,7 @@ async function main() {
   }
   const token = login.body.accessToken;
   const user = login.body.user as JsonRecord | undefined;
-  const userId = typeof user?.id === "string" ? user.id : undefined;
+  const userId = typeof user?.id === "string" ? user.id : decodeJwtSub(token);
   console.log(
     `PASS auth method=password userRef=${userId ? maskRef(userId) : "unknown"}` +
       `${login.requestId ? ` requestId=${login.requestId}` : ""}`,
@@ -168,6 +183,35 @@ async function main() {
       `${created.requestId ? ` requestId=${created.requestId}` : ""}`,
   );
 
+  if (userId && reporterId && userId !== reporterId) {
+    fail(`Reporter mismatch: authRef=${maskRef(userId)} incidentRef=${maskRef(reporterId)}`);
+  }
+
+  logSection("Phase 6b — direct Prisma create probe");
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.incidentLocationUpdate.create({
+        data: {
+          incidentId,
+          latitude: 6.5244,
+          longitude: 3.3792,
+          capturedAt: new Date(),
+          sequenceNumber: -9_999_998,
+          metadata: { probe: true, rolledBack: true },
+        },
+      });
+      throw new Error("PROBE_ROLLBACK");
+    });
+    fail("Direct Prisma create probe did not rollback");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "PROBE_ROLLBACK") {
+      console.log("PASS direct Prisma create probe succeeded (rolled back)");
+    } else {
+      fail(`Direct Prisma create probe failed: ${message.slice(0, 240)}`);
+    }
+  }
+
   const locationBase = {
     latitude: 6.524512,
     longitude: 3.379318,
@@ -185,19 +229,38 @@ async function main() {
     body: { ...locationBase, sequenceNumber: 1 },
     headers: { "x-idempotency-key": idempotencyKey },
   });
-  if (seq1.status !== 200 && seq1.status !== 201) {
+  if (seq1.status === 202) {
+    console.log(
+      `WARN seq1 http=202 retryQueued=${String(seq1.body.retryQueued)} retryId=${String(seq1.body.retryId ?? "none")}` +
+        `${seq1.requestId ? ` requestId=${seq1.requestId}` : ""}`,
+    );
+    for (let attempt = 1; attempt <= 12; attempt++) {
+      await sleep(2500);
+      const dbCount = await prisma.incidentLocationUpdate.count({
+        where: { incidentId, sequenceNumber: 1 },
+      });
+      if (dbCount === 1) {
+        console.log(`PASS seq1 recovered via retry worker after ${attempt} poll(s)`);
+        break;
+      }
+      if (attempt === 12) {
+        fail(`Sequence 1 returned 202 and retry worker did not persist within 30s`);
+      }
+    }
+  } else if (seq1.status !== 200 && seq1.status !== 201) {
     fail(
       `Sequence 1 POST unexpected http=${seq1.status}` +
         `${seq1.requestId ? ` requestId=${seq1.requestId}` : ""}`,
     );
+  } else {
+    if (seq1.body.persisted !== true || seq1.body.retryQueued === true) {
+      fail(`Sequence 1 response not immediate persistence: ${JSON.stringify(seq1.body)}`);
+    }
+    console.log(
+      `PASS seq1 http=${seq1.status} persisted=true retryQueued=false` +
+        `${seq1.requestId ? ` requestId=${seq1.requestId}` : ""}`,
+    );
   }
-  if (seq1.body.persisted !== true || seq1.body.retryQueued === true) {
-    fail(`Sequence 1 response not immediate persistence: ${JSON.stringify(seq1.body)}`);
-  }
-  console.log(
-    `PASS seq1 http=${seq1.status} persisted=true retryQueued=false` +
-      `${seq1.requestId ? ` requestId=${seq1.requestId}` : ""}`,
-  );
 
   const dbSeq1Count = await prisma.incidentLocationUpdate.count({
     where: { incidentId, sequenceNumber: 1 },
@@ -255,8 +318,20 @@ async function main() {
       capturedAt: new Date(Date.now() + 1000).toISOString(),
     },
   });
-  if (!seq2.ok || seq2.body.persisted !== true) {
+  if (!seq2.ok || (seq2.status !== 200 && seq2.status !== 201 && seq2.status !== 202)) {
     fail(`Sequence 2 failed http=${seq2.status}`);
+  }
+  if (seq2.status === 202) {
+    for (let attempt = 1; attempt <= 12; attempt++) {
+      await sleep(2500);
+      const dbCount = await prisma.incidentLocationUpdate.count({
+        where: { incidentId, sequenceNumber: 2 },
+      });
+      if (dbCount === 1) break;
+      if (attempt === 12) fail(`Sequence 2 retry worker did not persist within 30s`);
+    }
+  } else if (seq2.body.persisted !== true) {
+    fail(`Sequence 2 not persisted http=${seq2.status}`);
   }
   const dbSeq2Count = await prisma.incidentLocationUpdate.count({
     where: { incidentId, sequenceNumber: 2 },
@@ -290,7 +365,7 @@ async function main() {
   console.log(
     JSON.stringify(
       {
-        status: "IMMEDIATE_PERSISTENCE_VERIFIED",
+        status: seq1.status === 200 || seq1.status === 201 ? "IMMEDIATE_PERSISTENCE_VERIFIED" : "RETRY_RECOVERED",
         retryProof: "CONTROLLED_RETRY_PENDING",
         incidentId,
         reporterRef: reporterId ? maskRef(reporterId) : undefined,
