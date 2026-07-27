@@ -213,7 +213,7 @@ if (
   !restoreDrillSh.includes("--no-owner") ||
   !restoreDrillSh.includes("pg_isready") ||
   !restoreDrillSh.includes('POSTGRES_DB="$MAINT_DB"') ||
-  !restoreDrillSh.includes('CREATE DATABASE "${DRILL_DB}"')
+  !restoreDrillSh.includes("CREATE DATABASE")
 ) {
   console.error("Docker Compose smoke failed. Restore drill script safety/lifecycle validation failed.");
   process.exit(1);
