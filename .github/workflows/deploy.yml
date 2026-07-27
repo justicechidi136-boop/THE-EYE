@@ -267,6 +267,8 @@ jobs:
             fi
             docker compose -f infra/docker/docker-compose.yml --env-file .env ps
             DEPLOY_SCRIPT
+
+  deploy:
     needs: build
     if: ${{ false }}
     runs-on: ubuntu-latest
