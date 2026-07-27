@@ -22,14 +22,14 @@ RUN pnpm --filter @the-eye/api exec nest build
 FROM builder AS deploy-prod
 RUN pnpm --filter @the-eye/api deploy --prod /app/deploy
 WORKDIR /app/deploy
-RUN node /app/node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
+RUN npx --yes prisma@6.19.3 generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 # Full deploy retains prisma/tsx for compose tools profile (migrate, seed, admin bootstrap).
 FROM builder AS deploy-tools
 RUN pnpm --filter @the-eye/api deploy /app/deploy
 WORKDIR /app/deploy
-RUN node /app/node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
+RUN npx --yes prisma@6.19.3 generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 FROM base AS production
