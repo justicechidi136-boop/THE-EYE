@@ -349,7 +349,17 @@ apply_retention() {
 run_restore_drill() {
   local backup_path="$1"
   echo "Restore drill: validating backup in isolated temporary container (live database untouched)."
-  if ! bash "$SCRIPT_DIR/backup-restore-drill.sh" --backup-file "$backup_path"; then
+  if [[ "${THE_EYE_BACKUP_SKIP_DRILL_INVOKE:-}" == "1" ]]; then
+    echo "Restore drill: skipped (THE_EYE_BACKUP_SKIP_DRILL_INVOKE=1)."
+    return 0
+  fi
+  if ! bash "$SCRIPT_DIR/backup-restore-drill.sh" \
+    --backup-file "$backup_path" \
+    --metadata-path "$METADATA_PATH" \
+    --compose-file "$COMPOSE_FILE" \
+    --env-file "$ENV_FILE" \
+    --staging-container-id "$STAGING_CONTAINER_ID" \
+    --staging-db-name "$POSTGRES_DB"; then
     die "BACKUP-010: Isolated restore drill failed." 1
   fi
 }
@@ -417,7 +427,7 @@ main() {
   cd "$PROJECT_ROOT"
   resolve_compose_cmd
   validate_prerequisites
-  check_db_running_and_healthy >/dev/null
+  STAGING_CONTAINER_ID="$(check_db_running_and_healthy)"
   resolve_db_identity
   create_backup
 }
