@@ -193,16 +193,25 @@ const backupScript = fs.readFileSync(path.join(root, "scripts", "backup-the-eye.
 const backupSh = fs.readFileSync(path.join(root, "scripts", "backup-the-eye.sh"), "utf8");
 const restoreScript = fs.readFileSync(path.join(root, "scripts", "restore-the-eye.ps1"), "utf8");
 const restoreSh = fs.readFileSync(path.join(root, "scripts", "restore-the-eye.sh"), "utf8");
-if (!backupScript.includes("pg_dump") || !backupScript.includes("postgres-postgis is not running")) {
+if (!backupScript.includes("pg_dump") || !backupScript.includes("--env-file")) {
   console.error("Docker Compose smoke failed. Backup script validation failed.");
   process.exit(1);
 }
-if (!backupSh.includes("pg_dump") || !restoreSh.includes("pg_restore")) {
+if (
+  !backupSh.includes("pg_dump") ||
+  !backupSh.includes("--env-file") ||
+  !backupSh.includes("COMPOSE_CMD") ||
+  !backupSh.includes("BACKUP-006")
+) {
   console.error("Docker Compose smoke failed. Bash backup/restore scripts validation failed.");
   process.exit(1);
 }
+if (!restoreSh.includes("pg_restore") || !restoreSh.includes("--env-file")) {
+  console.error("Docker Compose smoke failed. Bash restore script validation failed.");
+  process.exit(1);
+}
 if (!restoreScript.includes("pg_restore") || !restoreScript.includes("-Confirm")) {
-  console.error("Docker Compose smoke failed. Restore script validation failed.");
+  console.error("Docker Compose smoke failed. PowerShell restore script validation failed.");
   process.exit(1);
 }
 

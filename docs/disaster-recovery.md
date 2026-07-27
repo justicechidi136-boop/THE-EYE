@@ -17,13 +17,18 @@ This runbook covers recovery for the Docker Compose deployment in `infra/docker/
 From the repository root:
 
 ```bash
-bash scripts/backup-the-eye.sh
+bash scripts/backup-the-eye.sh \
+  --compose-file infra/docker/docker-compose.yml \
+  --env-file .env \
+  --output-dir backups
 ```
 
-Manual one-liner:
+The script streams `pg_dump --format=custom` to the host, validates the archive with `pg_restore --list`, writes a SHA-256 metadata manifest, and applies retention only after a successful validated backup. It never prints environment secrets.
+
+Manual one-liner (must include `--env-file` when the stack was started with it):
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml exec -T postgres-postgis \
+docker compose -f infra/docker/docker-compose.yml --env-file .env exec -T postgres-postgis \
   pg_dump -U the_eye -Fc the_eye > backups/the_eye_$(date +%Y%m%d_%H%M%S).dump
 ```
 

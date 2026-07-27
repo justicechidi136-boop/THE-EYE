@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Mock docker CLI for backup-the-eye.sh tests.
+set -euo pipefail
+
+LOG_FILE="${MOCK_DOCKER_LOG:-/tmp/mock-docker.log}"
+if [[ ! -f "$LOG_FILE" ]]; then
+  : >"$LOG_FILE"
+fi
+
+log() {
+  printf '%s\n' "$*" >>"$LOG_FILE"
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  compose)
+    args=("$@")
+    sub=""
+    for arg in "${args[@]}"; do
+      case "$arg" in
+        config | ps | exec | version)
+          sub="$arg"
+          break
+          ;;
+      esac
+    done
+    log "docker compose ${args[*]}"
+    case "$sub" in
+      version)
+        echo "Docker Compose version v2.29.0"
+        ;;
+      config)
+        if [[ "${args[*]}" == *"--services"* ]]; then
+          if [[ "${MOCK_COMPOSE_MISSING_DB:-}" == "1" ]]; then
+            echo "redis"
+          else
+            echo "postgres-postgis"
+            echo "redis"
+          fi
+        else
+          echo "name: the-eye"
+        fi
+        ;;
+      ps)
+        if [[ "${MOCK_DB_STOPPED:-}" == "1" ]]; then
+          exit 0
+        fi
+        if [[ "${args[*]}" == *"running"* && "${args[*]}" == *"postgres-postgis"* && "${args[*]}" == *"-q"* ]]; then
+          echo "mock-container-id"
+          exit 0
+        fi
+        if [[ "${args[*]}" == *"postgres-postgis"* && "${args[*]}" == *"json"* ]]; then
+          echo '{"Health":"healthy"}'
+          exit 0
+        fi
+        echo "mock-container-id"
+        ;;
+      exec)
+        if [[ "${MOCK_PG_DUMP_FAIL:-}" == "1" && "${args[*]}" == *"pg_dump"* ]]; then
+          exit 1
+        fi
+        if [[ "${args[*]}" == *"printenv POSTGRES_USER"* ]]; then
+          echo "the_eye"
+          exit 0
+        fi
+        if [[ "${args[*]}" == *"printenv POSTGRES_DB"* ]]; then
+          echo "the_eye"
+          exit 0
+        fi
+        if [[ "${args[*]}" == *"postgres --version"* ]]; then
+          echo "postgres (PostgreSQL) 16.3"
+          exit 0
+        fi
+        if [[ "${args[*]}" == *"pg_restore --list"* ]]; then
+          if [[ "${MOCK_ARCHIVE_INVALID:-}" == "1" ]]; then
+            exit 1
+          fi
+          cat <<'LIST'
+;
+; Archive created by pg_dump
+;
+TABLE DATA public users
+TABLE DATA public incidents
+TABLE DATA public incident_location_updates
+TABLE DATA public notifications
+TABLE DATA public broadcasts
+TABLE DATA public audit_logs
+TABLE DATA public police_stations
+LIST
+          exit 0
+        fi
+        if [[ "${args[*]}" == *"pg_dump"* ]]; then
+          printf 'PGDMP'
+          exit 0
+        fi
+        exit 0
+        ;;
+      *)
+        exit 0
+        ;;
+    esac
+    ;;
+  inspect)
+    if [[ "${MOCK_DB_UNHEALTHY:-}" == "1" ]]; then
+      echo "unhealthy"
+    else
+      echo "healthy"
+    fi
+    ;;
+  rm)
+    exit 0
+    ;;
+  run)
+    exit 0
+    ;;
+  *)
+    log "unknown docker command: $cmd $*"
+    exit 0
+    ;;
+esac
