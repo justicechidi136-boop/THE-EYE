@@ -50,6 +50,38 @@ async function main() {
   if (!ok) {
     process.exit(1);
   }
+
+  // Runtime createOne must match generated DMMF (delegate-only checks miss stale query engines).
+  const probe = new PrismaClient();
+  try {
+    await probe.incidentLocationUpdate.create({
+      data: {
+        incidentId: "00000000-0000-4000-8000-000000000001",
+        latitude: 1,
+        longitude: 1,
+        capturedAt: new Date(),
+        sequenceNumber: -9999999,
+        metadata: { buildProbe: true },
+      },
+    });
+    process.exit(1);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const code = typeof error?.code === "string" ? error.code : "";
+    if (/does not match any query/i.test(message) || /createOne.*IncidentLocationUpdate/i.test(message)) {
+      console.error(JSON.stringify({ buildProbe: "createOne_mismatch", message: message.slice(0, 240) }));
+      process.exit(1);
+    }
+    if (code === "P2003" || /Foreign key constraint/i.test(message) || /connect/i.test(message)) {
+      return;
+    }
+    if (/incident_location_updates/i.test(message)) {
+      console.error(JSON.stringify({ buildProbe: "table_error", message: message.slice(0, 240) }));
+      process.exit(1);
+    }
+  } finally {
+    await probe.$disconnect().catch(() => undefined);
+  }
 }
 
 main().catch((error) => {

@@ -21,17 +21,15 @@ RUN pnpm --filter @the-eye/api exec nest build
 # pnpm deploy materializes prod deps (no workspace symlinks) for a portable runtime tree.
 FROM builder AS deploy-prod
 RUN pnpm --filter @the-eye/api deploy --prod /app/deploy
-WORKDIR /app
-RUN pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma
 WORKDIR /app/deploy
+RUN ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 # Full deploy retains prisma/tsx for compose tools profile (migrate, seed, admin bootstrap).
 FROM builder AS deploy-tools
 RUN pnpm --filter @the-eye/api deploy /app/deploy
-WORKDIR /app
-RUN pnpm --filter @the-eye/api exec prisma generate --schema=/app/deploy/prisma/schema.prisma
 WORKDIR /app/deploy
+RUN ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
 RUN node ./scripts/diagnose-prisma-location-model.cjs
 
 FROM base AS production
