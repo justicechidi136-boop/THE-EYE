@@ -299,34 +299,6 @@ wait_for_container_healthy() {
   return 1
 }
 
-wait_for_template_postgis() {
-  local i postgis_ready
-  for ((i = 1; i <= 60; i++)); do
-    if ! container_running; then
-      return 1
-    fi
-    postgis_ready="$(
-      docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d template_postgis -Atqc \
-        "SELECT PostGIS_Version();" 2>/dev/null | tr -d '\r' || true
-    )"
-    if [[ -n "$postgis_ready" ]]; then
-      echo "Restore drill template_postgis ready: $postgis_ready"
-      return 0
-    fi
-    sleep 2
-  done
-  return 1
-}
-
-archive_list_extensions() {
-  docker run --rm \
-    -v "$BACKUP_FILE:$RESTORE_MOUNT:ro" \
-    "$DRILL_IMAGE" \
-    pg_restore --list "$RESTORE_MOUNT" 2>/dev/null \
-    | awk '$4 == "EXTENSION" && $5 == "-" { print $6 }' \
-    | sort -u
-}
-
 create_isolated_stack() {
   log_state "CREATED"
   docker network create "$DRILL_NETWORK" >/dev/null
@@ -377,35 +349,7 @@ create_drill_database() {
 
 prepare_extensions() {
   log_state "EXTENSIONS READY"
-  local ext
-  docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -c \
-    "CREATE EXTENSION IF NOT EXISTS postgis CASCADE;" >/dev/null
-  while IFS= read -r ext; do
-    [[ -z "$ext" ]] && continue
-    case "$ext" in
-      postgis | postgis_topology | postgis_tiger_geocoder)
-        continue
-        ;;
-    esac
-    echo "Restore drill: ensuring extension $ext"
-    docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -c \
-      "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
-  done < <(archive_list_extensions)
-
-  local postgis_check extension_check
-  extension_check="$(
-    docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -Atqc \
-      "SELECT count(*) FROM pg_extension WHERE extname IN ('postgis', 'postgis_topology');" 2>/dev/null \
-      | tr -d '\r' || echo "0"
-  )"
-  postgis_check="$(
-    docker exec "$DRILL_CONTAINER" psql -U "$DRILL_USER" -d "$DRILL_DB" -Atqc \
-      "SELECT PostGIS_Version();" 2>/dev/null | tr -d '\r' || true
-  )"
-  if [[ "$extension_check" -lt 1 && -z "$postgis_check" ]]; then
-    die "BACKUP-010: PostGIS is not available in drill database after template_postgis creation." 1
-  fi
-  echo "Restore drill PostGIS (target db): ${postgis_check:-extensions=$extension_check}"
+  echo "Restore drill: extension creation deferred to pg_restore archive order."
 }
 
 verify_archive_in_container() {
@@ -419,22 +363,8 @@ verify_archive_in_container() {
   echo "Restore drill: archive mounted read-only ($size_host bytes)."
 }
 
-build_filtered_restore_list() {
-  local list_file="$1"
-  local filtered_file="$2"
-  docker exec "$DRILL_CONTAINER" pg_restore --list "$RESTORE_MOUNT" >"$list_file"
-  # Extensions are pre-created; skip EXTENSION entries to avoid duplicate CREATE EXTENSION failures.
-  grep -Ev '^;|^$|( EXTENSION - )|(COMMENT - EXTENSION )' "$list_file" >"$filtered_file" || true
-  docker cp "$filtered_file" "$DRILL_CONTAINER:/tmp/restore.list" >/dev/null
-}
-
 run_pg_restore() {
   log_state "RESTORING"
-  local list_file filtered_file
-  list_file="$(mktemp "${TMPDIR:-/tmp}/the-eye-restore-list.XXXXXX")"
-  filtered_file="$(mktemp "${TMPDIR:-/tmp}/the-eye-restore-filtered.XXXXXX")"
-  build_filtered_restore_list "$list_file" "$filtered_file"
-
   RESTORE_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   set +e
   timeout "$RESTORE_TIMEOUT_SEC" docker exec "$DRILL_CONTAINER" \
@@ -445,15 +375,12 @@ run_pg_restore() {
     --no-privileges \
     --exit-on-error \
     --verbose \
-    --use-list=/tmp/restore.list \
     "$RESTORE_MOUNT" \
     > /tmp/the-eye-restore-drill.log 2>&1
   RESTORE_EXIT_CODE=$?
   set -e
   RESTORE_FINISHED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   echo "Restore drill pg_restore exit=$RESTORE_EXIT_CODE started=$RESTORE_STARTED_AT finished=$RESTORE_FINISHED_AT"
-
-  rm -f "$list_file" "$filtered_file"
 
   if ! container_running; then
     die "BACKUP-010: Restore drill container stopped during pg_restore (exit=$RESTORE_EXIT_CODE)." 1
