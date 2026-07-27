@@ -32,7 +32,12 @@ export class LocationTrackingService {
     private readonly jurisdictionCorrection: JurisdictionCorrectionService,
   ) {}
 
-  async recordCitizenLocation(incidentId: string, dto: LocationUpdateInput, actor?: JwtPayload) {
+  async persistIncidentLocation(
+    incidentId: string,
+    dto: LocationUpdateInput,
+    actor?: JwtPayload,
+    options?: { idempotencyKey?: string; requestId?: string },
+  ) {
     this.validateCoordinates(dto);
     const incident = await this.prisma.incident.findUnique({ where: { id: incidentId } });
     if (!incident) throw new NotFoundException("Incident not found");
@@ -57,6 +62,19 @@ export class LocationTrackingService {
       }
     }
 
+    const metadata = {
+      speedMps: dto.speedMps,
+      headingDegrees: dto.headingDegrees,
+      batteryLevel: dto.batteryLevel,
+      networkType: dto.networkType,
+      source: dto.source,
+      quality: dto.quality,
+      isCached: dto.isCached,
+      ageSeconds: dto.ageSeconds,
+      ...(options?.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
+      ...(options?.requestId ? { requestId: options.requestId } : {}),
+    };
+
     const update = await (this.prisma as any).incidentLocationUpdate.create({
       data: {
         incidentId,
@@ -66,16 +84,7 @@ export class LocationTrackingService {
         capturedAt,
         sourceDeviceId: dto.sourceDeviceId,
         sequenceNumber: dto.sequenceNumber ?? 0,
-        metadata: {
-          speedMps: dto.speedMps,
-          headingDegrees: dto.headingDegrees,
-          batteryLevel: dto.batteryLevel,
-          networkType: dto.networkType,
-          source: dto.source,
-          quality: dto.quality,
-          isCached: dto.isCached,
-          ageSeconds: dto.ageSeconds,
-        },
+        metadata,
       },
     });
 
@@ -103,6 +112,10 @@ export class LocationTrackingService {
     );
 
     return this.toCitizenLiveLocation(update, incident, capturedAt);
+  }
+
+  async recordCitizenLocation(incidentId: string, dto: LocationUpdateInput, actor?: JwtPayload) {
+    return this.persistIncidentLocation(incidentId, dto, actor);
   }
 
   async recordResponderLocation(assignmentId: string, dto: LocationUpdateInput, actor: JwtPayload) {
