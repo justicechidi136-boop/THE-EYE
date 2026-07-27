@@ -1,14 +1,15 @@
-import { BadRequestException, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, HttpException, ServiceUnavailableException } from "@nestjs/common";
 import { IncidentStatus } from "@the-eye/shared";
 import { IncidentsService } from "../incidents.service";
 
 function buildIncidentsService(overrides: Record<string, unknown> = {}) {
   const locationTracking = {
+    persistIncidentLocation: jest.fn(),
     recordCitizenLocation: jest.fn(),
     ...(overrides.locationTracking as object),
   };
   const locationRetry = {
-    scheduleRetry: jest.fn().mockResolvedValue(true),
+    scheduleRetry: jest.fn().mockResolvedValue({ accepted: true, retryId: "incident-location:inc-1:1", duplicate: false }),
     ...(overrides.locationRetry as object),
   };
   const prisma = {
@@ -44,9 +45,33 @@ function buildIncidentsService(overrides: Record<string, unknown> = {}) {
 }
 
 describe("IncidentsService.recordLocation persistence isolation", () => {
-  it("queues retry and returns ERR-INC-LOCATION-RETRY on createOne mismatch", async () => {
+  it("returns persisted payload on immediate success", async () => {
+    const { service, locationTracking } = buildIncidentsService();
+    locationTracking.persistIncidentLocation.mockResolvedValue({
+      incidentId: "inc-1",
+      latitude: 6.5,
+      longitude: 3.3,
+      sequenceNumber: 1,
+    });
+
+    const result = await service.recordLocation(
+      "inc-1",
+      { latitude: 6.5, longitude: 3.3, sequenceNumber: 1 },
+      { sub: "user-1", typ: "user" },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        persisted: true,
+        retryQueued: false,
+        data: expect.objectContaining({ sequenceNumber: 1 }),
+      }),
+    );
+  });
+
+  it("returns 202 when retry queue accepts the update", async () => {
     const { service, locationTracking, locationRetry } = buildIncidentsService();
-    locationTracking.recordCitizenLocation.mockRejectedValue(
+    locationTracking.persistIncidentLocation.mockRejectedValue(
       new Error(
         "Invalid `prisma.incidentLocationUpdate.create()` invocation: Operation 'createOne' for model 'IncidentLocationUpdate' does not match any query.",
       ),
@@ -58,16 +83,58 @@ describe("IncidentsService.recordLocation persistence isolation", () => {
         { latitude: 6.5, longitude: 3.3, sequenceNumber: 1 },
         { sub: "user-1", typ: "user" },
       ),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    ).rejects.toMatchObject({
+      status: 202,
+      response: expect.objectContaining({
+        retryQueued: true,
+        retryId: "incident-location:inc-1:1",
+        persisted: false,
+      }),
+    });
 
     expect(locationRetry.scheduleRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ incidentId: "inc-1", reporterId: "user-1" }),
+      expect.objectContaining({
+        incidentId: "inc-1",
+        reporterId: "user-1",
+        idempotencyKey: "inc-1:1",
+      }),
     );
+  });
+
+  it("returns factual 503 when enqueue is not accepted", async () => {
+    const { service, locationTracking } = buildIncidentsService({
+      locationRetry: {
+        scheduleRetry: jest.fn().mockResolvedValue({ accepted: false, reason: "queue_unavailable" }),
+      },
+    });
+    locationTracking.persistIncidentLocation.mockRejectedValue(
+      new Error(
+        "Invalid `prisma.incidentLocationUpdate.create()` invocation: Operation 'createOne' for model 'IncidentLocationUpdate' does not match any query.",
+      ),
+    );
+
+    try {
+      await service.recordLocation(
+        "inc-1",
+        { latitude: 6.5, longitude: 3.3, sequenceNumber: 1 },
+        { sub: "user-1", typ: "user" },
+      );
+      throw new Error("expected ServiceUnavailableException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ServiceUnavailableException);
+      expect((error as ServiceUnavailableException).getResponse()).toEqual(
+        expect.objectContaining({
+          retryQueued: false,
+          persisted: false,
+          errorCode: "LOCATION-RETRY-001",
+        }),
+      );
+    }
   });
 
   it("rethrows non-persistence validation failures", async () => {
     const { service, locationTracking, locationRetry } = buildIncidentsService();
-    locationTracking.recordCitizenLocation.mockRejectedValue(new BadRequestException("bad coords"));
+    locationTracking.persistIncidentLocation.mockRejectedValue(new BadRequestException("bad coords"));
 
     await expect(
       service.recordLocation("inc-1", { latitude: 6.5, longitude: 3.3 }, { sub: "user-1", typ: "user" }),

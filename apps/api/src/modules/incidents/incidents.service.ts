@@ -1,4 +1,12 @@
-﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+﻿import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
 import { hashPassword, randomToken } from "../../common/auth/crypto";
 import { createS3PresignedPutUrl, createS3PresignedGetUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
@@ -475,47 +483,70 @@ export class IncidentsService {
   async recordLocation(id: string, dto: UpdateIncidentLocationDto, actor?: JwtPayload) {
     validateIncidentLocationDto(dto);
     try {
-      return await this.locationTracking.recordCitizenLocation(id, dto, actor);
+      const data = await this.locationTracking.persistIncidentLocation(id, dto, actor);
+      return { data, persisted: true, retryQueued: false };
     } catch (error) {
       if (!isIncidentLocationPersistenceError(error)) {
         throw error;
       }
 
       const incident = await this.prisma.incident.findUnique({ where: { id } });
-      await this.locationRetry.scheduleRetry({
+      const idempotencyKey = `${id}:${dto.sequenceNumber ?? 0}`;
+      const retry = await this.locationRetry.scheduleRetry({
         incidentId: id,
         dto,
         reporterId: actor?.typ === "user" ? actor.sub : incident?.reporterId ?? undefined,
+        idempotencyKey,
       });
 
-      void runNonCriticalWrite(
-        "incident.location.retry_scheduled",
-        { incidentId: id, intake: "standard" },
-        async () => {
-          await this.prisma.incidentTimeline.create({
-            data: {
-              incidentId: id,
-              actorId: actor?.typ === "user" ? actor.sub : undefined,
-              actorType: actor?.typ ?? "system",
-              eventType: "incident.location.retry_scheduled",
-              message: "Citizen location update failed and was queued for retry.",
-              metadata: {
-                sequenceNumber: dto.sequenceNumber ?? 0,
-                source: dto.source,
-                quality: dto.quality,
-              },
-            } as never,
-          });
-        },
-        [],
-      );
+      if (retry.accepted) {
+        void runNonCriticalWrite(
+          "incident.location.retry_scheduled",
+          { incidentId: id, intake: "standard" },
+          async () => {
+            await this.prisma.incidentTimeline.create({
+              data: {
+                incidentId: id,
+                actorId: actor?.typ === "user" ? actor.sub : undefined,
+                actorType: actor?.typ ?? "system",
+                eventType: "incident.location.retry_scheduled",
+                message: "Citizen location update failed and was queued for retry.",
+                metadata: {
+                  sequenceNumber: dto.sequenceNumber ?? 0,
+                  source: dto.source,
+                  quality: dto.quality,
+                  retryId: retry.retryId,
+                },
+              } as never,
+            });
+          },
+          [],
+        );
+
+        throw new HttpException(
+          {
+            persisted: false,
+            retryQueued: true,
+            retryId: retry.retryId,
+            code: "ERR-INC-LOCATION-RETRY",
+            message:
+              "Your emergency and video are active. The server accepted this location for retry.",
+            incidentId: id,
+            locationStatus: "retrying",
+          },
+          HttpStatus.ACCEPTED,
+        );
+      }
 
       throw new ServiceUnavailableException({
-        code: "ERR-INC-LOCATION-RETRY",
-        message: "Your emergency and video are active. We are retrying your location update.",
+        persisted: false,
+        retryQueued: false,
+        errorCode: "LOCATION-RETRY-001",
+        code: "LOCATION-PERSIST-001",
+        message:
+          "Your emergency and video are active. The server could not save this location. Your device will try again.",
         incidentId: id,
-        retrying: true,
-        locationStatus: "retrying",
+        locationStatus: "device_retry",
       });
     }
   }

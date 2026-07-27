@@ -42,15 +42,25 @@ class EmergencyLocationCoordinator {
   Timer? _streamTimer;
   Timer? _retryTimer;
   int _retryAttempt = 0;
+  int _deviceRetryCount = 0;
   int _sequence = 0;
   String? _activeIncidentId;
   String? _accessToken;
   String? _liveVideoSessionId;
+  String? _lastLocationRequestId;
+  String? _lastRetryResponseCode;
+  DateTime? _nextRetryAt;
+  bool _serverRetryQueued = false;
   TheEyeApiClient? _apiClient;
   bool _tracking = false;
 
   EmergencyLocationFix? get lastFix => _lastFix;
   bool get isTracking => _tracking;
+  int get deviceRetryCount => _deviceRetryCount;
+  String? get lastRetryResponseCode => _lastRetryResponseCode;
+  String? get lastLocationRequestId => _lastLocationRequestId;
+  DateTime? get nextRetryAt => _nextRetryAt;
+  bool get serverRetryQueued => _serverRetryQueued;
 
   void addListener(EmergencyLocationListener listener) {
     _listeners.add(listener);
@@ -298,6 +308,11 @@ class EmergencyLocationCoordinator {
     _liveVideoSessionId = liveVideoSessionId;
     _tracking = true;
     _retryAttempt = 0;
+    _deviceRetryCount = 0;
+    _lastLocationRequestId = null;
+    _lastRetryResponseCode = null;
+    _nextRetryAt = null;
+    _serverRetryQueued = false;
     unawaited(EmergencyForegroundService.start(incidentId: incidentId));
     unawaited(_sendTrackingUpdate(force: true));
     _scheduleRetry(delay: EmergencyLocationPolicy.retryDelays.first);
@@ -323,7 +338,12 @@ class EmergencyLocationCoordinator {
     _liveVideoSessionId = null;
     _apiClient = null;
     _retryAttempt = 0;
+    _deviceRetryCount = 0;
     _sequence = 0;
+    _lastLocationRequestId = null;
+    _lastRetryResponseCode = null;
+    _nextRetryAt = null;
+    _serverRetryQueued = false;
     unawaited(EmergencyForegroundService.stop());
   }
 
@@ -507,7 +527,7 @@ class EmergencyLocationCoordinator {
     _publishFix(enriched);
 
     try {
-      await api.postIncidentLocation(
+      final result = await api.postIncidentLocation(
         incidentId: incidentId,
         payload: TheEyePayloads.incidentLocationUpdate(
           position: enriched.toPosition(),
@@ -519,6 +539,9 @@ class EmergencyLocationCoordinator {
         ),
         accessToken: token,
       );
+      _lastLocationRequestId = enriched.requestId;
+      _lastRetryResponseCode = "${result.statusCode}";
+      _serverRetryQueued = result.serverRetryQueued;
       final liveSessionId = _liveVideoSessionId;
       if (liveSessionId != null && liveSessionId.isNotEmpty) {
         await api.postLiveVideoLocation(
@@ -531,12 +554,16 @@ class EmergencyLocationCoordinator {
       }
       _retryAttempt = 0;
     } catch (_) {
+      _deviceRetryCount++;
+      _serverRetryQueued = false;
+      _lastRetryResponseCode = "503";
       _scheduleNextRetry();
     }
   }
 
   void _scheduleRetry({required Duration delay}) {
     _retryTimer?.cancel();
+    _nextRetryAt = DateTime.now().add(delay);
     _retryTimer = Timer(delay, () {
       unawaited(_sendTrackingUpdate());
     });

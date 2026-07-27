@@ -11,7 +11,7 @@ import {
   isRedisExplicitlyDisabled,
   resolveWorkerHeartbeatKey,
 } from "../../common/queue/queue-config";
-import { NOTIFICATIONS_QUEUE_NAME } from "../../common/queue/queue-names";
+import { NOTIFICATIONS_QUEUE_NAME, INCIDENT_LOCATION_RETRY_QUEUE_NAME } from "../../common/queue/queue-names";
 import { resolveFcmRuntime } from "../notifications/providers/fcm.config";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -28,6 +28,7 @@ export class HealthService implements OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly metrics: MetricsService,
     @Optional() @InjectQueue(NOTIFICATIONS_QUEUE_NAME) private readonly notificationsQueue?: Queue,
+    @Optional() @InjectQueue(INCIDENT_LOCATION_RETRY_QUEUE_NAME) private readonly locationRetryQueue?: Queue,
   ) {
     if (isRedisExplicitlyDisabled()) return;
 
@@ -64,11 +65,24 @@ export class HealthService implements OnModuleDestroy {
       return {
         prismaClient: "ok",
         incidentLocationModel: "ok",
+        incidentLocationCreateCapability: "degraded",
         schemaCompatibility: "ok",
       };
     }
 
     return verifyPrismaSchemaCompatibility(this.prisma);
+  }
+
+  async getLocationRetryWorkerStatus() {
+    const notificationWorker = await this.getNotificationWorkerStatus();
+    return {
+      status: notificationWorker.status,
+      active: notificationWorker.active,
+      lastHeartbeatAt: notificationWorker.lastHeartbeatAt,
+      lastHeartbeatAgeMs: notificationWorker.lastHeartbeatAgeMs,
+      processedJobs: notificationWorker.processedJobs,
+      sharedProcess: "notification-worker",
+    };
   }
 
   async checkRedis(): Promise<DependencyCheck> {
@@ -146,6 +160,53 @@ export class HealthService implements OnModuleDestroy {
       if (waitingJobs[0]?.timestamp) {
         base.oldestWaitingJobAgeMs = Math.max(0, Date.now() - waitingJobs[0].timestamp);
       }
+    } catch {
+      base.status = "degraded";
+    }
+
+    return base;
+  }
+
+  async getLocationRetryQueueStatus() {
+    if (isRedisExplicitlyDisabled()) {
+      return {
+        status: isProductionLikeAppEnvironment() ? "unavailable" : "skipped",
+        connected: false,
+        available: false,
+        queueName: INCIDENT_LOCATION_RETRY_QUEUE_NAME,
+        waiting: 0,
+        active: 0,
+        delayed: 0,
+        failed: 0,
+        completed: 0,
+      };
+    }
+
+    const base = {
+      status: "error" as "ok" | "error" | "degraded",
+      connected: false,
+      available: false,
+      queueName: INCIDENT_LOCATION_RETRY_QUEUE_NAME,
+      waiting: 0,
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      completed: 0,
+    };
+
+    const redisStatus = await this.checkRedis();
+    base.connected = redisStatus === "ok";
+    if (!this.locationRetryQueue || redisStatus !== "ok") return base;
+
+    try {
+      const counts = await this.locationRetryQueue.getJobCounts("waiting", "active", "delayed", "failed", "completed");
+      base.available = true;
+      base.status = "ok";
+      base.waiting = counts.waiting ?? 0;
+      base.active = counts.active ?? 0;
+      base.delayed = counts.delayed ?? 0;
+      base.failed = counts.failed ?? 0;
+      base.completed = counts.completed ?? 0;
     } catch {
       base.status = "degraded";
     }

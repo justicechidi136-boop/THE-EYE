@@ -16,6 +16,20 @@ export "../auth/auth_service.dart" show AuthApiException;
 export "../incidents/incident_submission_service.dart"
     show IncidentReportResponse, IncidentApiException;
 
+class IncidentLocationPostResult {
+  const IncidentLocationPostResult({
+    required this.statusCode,
+    required this.persisted,
+    required this.serverRetryQueued,
+    this.retryId,
+  });
+
+  final int statusCode;
+  final bool persisted;
+  final bool serverRetryQueued;
+  final String? retryId;
+}
+
 class CitizenProfileDetails {
   const CitizenProfileDetails({
     this.firstName,
@@ -1011,7 +1025,7 @@ class TheEyeApiClient {
     );
   }
 
-  Future<void> postIncidentLocation({
+  Future<IncidentLocationPostResult> postIncidentLocation({
     required String incidentId,
     required Map<String, Object?> payload,
     String? accessToken,
@@ -1021,9 +1035,25 @@ class TheEyeApiClient {
       payload,
       accessToken: accessToken,
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw IncidentApiException.fromResponse(response);
+    if (response.statusCode == 202) {
+      final decoded = response.body.isEmpty
+          ? null
+          : jsonDecode(response.body);
+      return IncidentLocationPostResult(
+        statusCode: 202,
+        persisted: false,
+        serverRetryQueued: true,
+        retryId: decoded is Map ? decoded["retryId"] as String? : null,
+      );
     }
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return IncidentLocationPostResult(
+        statusCode: response.statusCode,
+        persisted: true,
+        serverRetryQueued: false,
+      );
+    }
+    throw IncidentApiException.fromResponse(response);
   }
 
   Future<List<SmartwatchDeviceRecord>> listSmartwatchDevices({
