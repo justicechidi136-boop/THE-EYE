@@ -35,9 +35,9 @@ class _NoOpApiClient extends TheEyeApiClient {
   _NoOpApiClient() : super(baseUrl: "http://localhost:4000/v1");
 
   @override
-  Future<void> postIncidentLocation({
+  Future<IncidentLocationPostResult> postIncidentLocation({
     required String incidentId,
-    required Map<String, dynamic> payload,
+    required Map<String, Object?> payload,
     String? accessToken,
   }) async {
     fail("postIncidentLocation should not run without permission");
