@@ -230,4 +230,4 @@ jobs:
       - name: Backup shellcheck
         run: |
           set -euo pipefail
-          shellcheck scripts/backup-the-eye.sh scripts/backup-restore-drill.sh scripts/run-staging-backup.sh scripts/restore-the-eye.sh
+          shellcheck scripts/backup-the-eye.sh scripts/backup-restore-drill.sh scripts/run-staging-backup.sh

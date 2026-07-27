@@ -2,8 +2,6 @@
 # Isolated restore drill — never modifies the live staging/production database.
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-
 BACKUP_FILE=""
 METADATA_PATH=""
 COMPOSE_FILE=""
