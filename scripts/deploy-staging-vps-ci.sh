@@ -56,20 +56,12 @@ echo "=== Staging live video public proof (mobile parity) ==="
 curl -fsS "${NEXT_PUBLIC_API_BASE_URL:?}/health/ready" | head -c 4000 || true
 echo ""
 "${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs
-PROOF_EXPORT_FILE="${TMPDIR:-/tmp}/the-eye-live-video-proof.env"
-rm -rf "${PROOF_EXPORT_FILE}"
-touch "${PROOF_EXPORT_FILE}"
-chmod 600 "${PROOF_EXPORT_FILE}"
-"${COMPOSE[@]}" --profile tools run --rm \
+PROOF_EXPORT_LINES="$("${COMPOSE[@]}" --profile tools run --rm \
   -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
   -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
-  -e STAGING_LIVE_VIDEO_PROOF_EXPORT=/tmp/the-eye-live-video-proof.env \
-  -v "${PROOF_EXPORT_FILE}:/tmp/the-eye-live-video-proof.env" \
-  api-tools scripts/staging-live-video-public-proof.ts
-set -a
-# shellcheck disable=SC1090
-source "${PROOF_EXPORT_FILE}"
-set +a
+  -e STAGING_LIVE_VIDEO_PROOF_EXPORT=stdout \
+  api-tools scripts/staging-live-video-public-proof.ts | awk '/^PROOF_/')"
+eval "${PROOF_EXPORT_LINES}"
 EXPECTED_LIVEKIT_URL="wss://staging-livekit.theeye.com.ng"
 PUBLIC_OK=0
 for attempt in 1 2 3 4 5; do
