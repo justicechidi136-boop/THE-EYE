@@ -220,11 +220,14 @@ Mandatory next actions (strict order):
 
 | Item | Status |
 |------|--------|
-| SRB-040 Test Current Location | **CODE FIXED — DEVICE QA PENDING** |
-| SRB-041 Ikeja vs device GPS | **CODE FIXED — DEVICE QA PENDING** |
-| Code commit | `6d1469b` on `staging` |
-| CI VERIFIED | **YES** — Validate Staging [30326243110](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30326243110) @ `3556fe0` |
-| Port Harcourt physical QA | **MANDATORY** before any PASS promotion |
+| SRB-040 Test Current Location | **CODE FIXED — CI VERIFIED — DEPLOYED — DEVICE QA PENDING** |
+| SRB-041 Ikeja vs device GPS | **CODE FIXED — CI VERIFIED — DEPLOYED — DEVICE QA PENDING** |
+| Code commit | `6d1469b` (geolocation) + `5d4d112` (LOC-TEST) on `staging` |
+| CI VERIFIED | **YES** — Validate Staging [30328765579](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30328765579) @ `db8636d` |
+| Deploy | **PASS** — [30329263022](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30329263022) @ `db8636d` (login, live-video, SRB-039 location persistence proofs) |
+| VPS / origin SHA | `db8636d` |
+| Installed APK | SHA-256 `B8E6D334…` @ `c581126` — **valid** (deploy fix is script-only; no APK rebuild) |
+| Port Harcourt physical QA | **MANDATORY** before DEVICE VERIFIED |
 | Sprint 8 impact | **No change** — Sprint 8 remains **NOT AUTHORIZED** |
 
 ---

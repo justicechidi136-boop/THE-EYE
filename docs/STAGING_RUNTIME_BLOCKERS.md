@@ -625,16 +625,17 @@ See [incident-location-prisma-runtime.md](./release/incident-location-prisma-run
 | **Expected** | Fresh GPS probe, bounded timeout, reverse geocode, source/accuracy/age shown; loading terminates; no emergency side effects |
 | **Actual (pre-fix)** | Button reused emergency refresh with cached fallback; entire section hidden behind spinner; no factual fresh-location test |
 | **Root cause** | Settings action called the same `_refresh()` / emergency location path with `allowCachedFallback: true`; no duplicate-tap guard; no dedicated probe service |
-| **Code fix** | `DeviceLocationService.probeCurrentLocation()` with duplicate suppression, `DeviceLocationState`, separate Device Location card, `LOC-TEST-*` stable error codes @ `6d1469b` + follow-ups |
+| **Code fix** | `DeviceLocationService.probeCurrentLocation()` with duplicate suppression, `DeviceLocationState`, separate Device Location card, `LOC-TEST-*` stable error codes @ `6d1469b` + `5d4d112` |
 | **Automated test** | Mobile **210/210 PASS** locally; `device_location_service_test.dart` (8 cases); API **397/397 PASS** locally |
-| **Deployed SHA** | `6d1469b` (VPS redeploy 2026-07-28; seed verified) |
-| **Installed APK** | `com.theeye.app.staging` v0.1.0 — SHA-256 `B8E6D334330E7D1EDFE8B3924DAD763854C5E4D932C13CB4BFAF1A7C1CBE4E30` @ `c581126` (LOC-TEST codes; reinstall after each app-source change) |
-| **Validate Staging** | PASS [30326243110](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30326243110) @ `3556fe0` (API 397/397, mobile 210/210) |
-| **Physical QA** | **PENDING** — Port Harcourt device worksheet required |
+| **Deployed SHA** | Application logic @ `6d1469b` + `5d4d112`; VPS / origin target `db8636d` (deploy-script retry fix only — no app artifact change) |
+| **Installed APK** | `com.theeye.app.staging` v0.1.0 — SHA-256 `B8E6D334330E7D1EDFE8B3924DAD763854C5E4D932C13CB4BFAF1A7C1CBE4E30` @ `c581126` lineage (valid for runtime QA; test-only commits do not invalidate) |
+| **Validate Staging** | PASS [30328765579](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30328765579) @ `db8636d` (API 397/397, mobile 210/210) |
+| **Deploy workflow** | PASS [30329263022](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30329263022) @ `db8636d` (login, live-video, SRB-039 location persistence proofs) |
+| **Physical QA** | **PENDING** — Port Harcourt device worksheet required (`docs/PORT_HARCOURT_GEOLOCATION_QA_WORKSHEET.md`) |
 | **SOS / Live Video** | **PENDING** — no PASS without device proof |
-| **Status** | **CODE FIXED — DEVICE QA PENDING** |
+| **Status** | **CODE FIXED — CI VERIFIED — DEPLOYED — DEVICE QA PENDING** |
 
-Progression: CODE FIXED → CI VERIFIED (pending) → DEPLOYED → DEVICE VERIFIED.
+Progression: CODE FIXED → CI VERIFIED → DEPLOYED → DEVICE VERIFIED (pending Port Harcourt worksheet).
 
 ---
 
@@ -649,14 +650,14 @@ Progression: CODE FIXED → CI VERIFIED (pending) → DEPLOYED → DEVICE VERIFI
 | **Actual (pre-fix)** | Profile row labelled **Location** showed staging citizen jurisdiction **Ikeja, Lagos**; backend applied profile/default Ikeja even when valid GPS existed outside Lagos polygon |
 | **Root cause** | Ambiguous UI label conflated profile jurisdiction with device GPS; `JurisdictionResolutionService` profile/default fallback on valid coordinates; staging lacked Rivers polygon |
 | **Code fix** | Separate Device Location / Profile Jurisdiction cards; `profileJurisdiction` API field; remove runtime Ikeja default routing for valid GPS; Rivers/Obio-Akpor staging test polygon @ `6d1469b` |
-| **Staging seed note** | Obio-Akpor polygon is **approximate staging QA coverage only** — not production boundary data |
+| **Staging seed note** | Obio-Akpor polygon `(6.90 4.70)–(7.20 4.95)` SRID 4326 is **approximate staging QA coverage only** — not production boundary data. Test coordinate **4.8156, 7.0498** (Port Harcourt) expected inside polygon. Seed idempotent (second run logged on VPS). |
 | **Automated test** | `jurisdiction-resolution.service.spec.ts` (11 cases); `device_location_service_test.dart` Port Harcourt separation |
-| **Validate Staging** | PASS [30326243110](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30326243110) @ `3556fe0` |
-| **Installed APK** | SHA-256 `B8E6D334330E7D1EDFE8B3924DAD763854C5E4D932C13CB4BFAF1A7C1CBE4E30` @ `c581126` |
+| **Validate Staging** | PASS [30328765579](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30328765579) @ `db8636d` |
+| **Installed APK** | SHA-256 `B8E6D334330E7D1EDFE8B3924DAD763854C5E4D932C13CB4BFAF1A7C1CBE4E30` @ `c581126` lineage |
 | **Physical QA** | **PENDING** — Port Harcourt worksheet |
-| **Status** | **CODE FIXED — DEVICE QA PENDING** |
+| **Status** | **CODE FIXED — CI VERIFIED — DEPLOYED — DEVICE QA PENDING** |
 
-Progression: CODE FIXED → CI VERIFIED (pending) → DEPLOYED → DEVICE VERIFIED.
+Progression: CODE FIXED → CI VERIFIED → DEPLOYED → DEVICE VERIFIED (pending Port Harcourt worksheet).
 
 ---
 

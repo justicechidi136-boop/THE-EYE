@@ -15,8 +15,8 @@
 | APK package | `com.theeye.app.staging` |
 | APK version | 0.1.0 (versionCode 1) |
 | APK SHA-256 | `B8E6D334330E7D1EDFE8B3924DAD763854C5E4D932C13CB4BFAF1A7C1CBE4E30` |
-| Application source SHA | `6d1469b` (geolocation) + `5d4d112` (LOC-TEST); branch HEAD `4439aaa` |
-| Deployed VPS / origin SHA | `4439aaa` (target) |
+| Application source SHA | `6d1469b` (geolocation) + `5d4d112` (LOC-TEST); branch HEAD `db8636d` |
+| Deployed VPS / origin SHA | `db8636d` |
 | API base URL | `https://staging-api.theeye.com.ng/v1` |
 | Test account | `staging.citizen@theeye.local` (staging seed) |
 | Test timestamp | ____________________ (UTC+1) |
