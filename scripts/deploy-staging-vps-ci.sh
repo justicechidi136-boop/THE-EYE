@@ -65,6 +65,7 @@ if [[ "$PROOF_ONLY" == "true" || "$RUN_LOCATION_PROOF" == "true" ]]; then
   echo "=== SRB-039 location persistence proof ==="
   "${COMPOSE[@]}" --profile tools run --rm \
     -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
+    -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
     -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
     api-tools scripts/staging-location-persistence-proof.ts
 fi

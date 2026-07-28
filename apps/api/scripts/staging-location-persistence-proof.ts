@@ -27,7 +27,9 @@ function normalizeApiBaseUrl(value: string): string {
 
 function resolveApiBaseUrl(): string {
   const canonical = normalizeApiBaseUrl(String(process.env.STAGING_API_BASE_URL ?? "").trim());
-  const probeOverride = String(process.env.STAGING_LOGIN_PROBE_BASE_URL ?? "").trim();
+  const probeOverride =
+    String(process.env.STAGING_API_PROBE_BASE_URL ?? "").trim() ||
+    String(process.env.STAGING_LOGIN_PROBE_BASE_URL ?? "").trim();
   if (probeOverride) return normalizeApiBaseUrl(probeOverride);
   return canonical;
 }
@@ -42,31 +44,44 @@ async function apiRequest(
     headers?: Record<string, string>;
   } = {},
 ): Promise<ApiResult> {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: options.method ?? "GET",
-    headers: {
-      ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
-      ...(options.body ? { "content-type": "application/json" } : {}),
-      ...(options.headers ?? {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    signal: AbortSignal.timeout(15000),
-  });
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: options.method ?? "GET",
+        headers: {
+          ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+          ...(options.body ? { "content-type": "application/json" } : {}),
+          ...(options.headers ?? {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: AbortSignal.timeout(20000),
+      });
 
-  const text = await response.text().catch(() => "");
-  let body: JsonRecord = {};
-  try {
-    body = text ? (JSON.parse(text) as JsonRecord) : {};
-  } catch {
-    body = { raw: text.slice(0, 240) };
+      const text = await response.text().catch(() => "");
+      let body: JsonRecord = {};
+      try {
+        body = text ? (JSON.parse(text) as JsonRecord) : {};
+      } catch {
+        body = { raw: text.slice(0, 240) };
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        requestId: typeof body.requestId === "string" ? body.requestId : undefined,
+        body,
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await sleep(1500 * attempt);
+      }
+    }
   }
 
-  return {
-    ok: response.ok,
-    status: response.status,
-    requestId: typeof body.requestId === "string" ? body.requestId : undefined,
-    body,
-  };
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  fail(`fetch failed for ${path}: ${message}`);
 }
 
 function logSection(title: string) {
