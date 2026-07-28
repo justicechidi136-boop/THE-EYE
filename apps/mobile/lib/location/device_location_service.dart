@@ -28,7 +28,13 @@ class DeviceLocationService {
     final probe = _runProbe(
       timeout: timeout,
       requestIfDenied: requestIfDenied,
-    );
+    ).catchError((Object _, StackTrace __) {
+      return DeviceLocationState(
+        status: DeviceLocationStatus.failed,
+        errorCode: LocationTestErrorCode.unexpectedFailure,
+        message: "Current device location test failed unexpectedly.",
+      );
+    });
     _activeProbe = probe;
     return probe.whenComplete(() {
       if (_activeProbe == probe) {
@@ -41,8 +47,7 @@ class DeviceLocationService {
     required Duration timeout,
     required bool requestIfDenied,
   }) async {
-    final requestId =
-        "loc-test-${DateTime.now().microsecondsSinceEpoch}";
+    final requestId = "loc-test-${DateTime.now().microsecondsSinceEpoch}";
 
     var state = DeviceLocationState(
       status: DeviceLocationStatus.checkingPermission,
@@ -60,7 +65,7 @@ class DeviceLocationService {
         status: DeviceLocationStatus.serviceDisabled,
         serviceEnabled: false,
         message: permissionStateMessage(permissionState),
-        errorCode: LocationErrorCode.serviceDisabled,
+        errorCode: LocationTestErrorCode.serviceDisabled,
       );
     }
 
@@ -68,7 +73,7 @@ class DeviceLocationService {
       return state.copyWith(
         status: DeviceLocationStatus.denied,
         message: permissionStateMessage(permissionState),
-        errorCode: LocationErrorCode.permissionDenied,
+        errorCode: LocationTestErrorCode.permissionDenied,
       );
     }
 
@@ -77,7 +82,7 @@ class DeviceLocationService {
       return state.copyWith(
         status: DeviceLocationStatus.permanentlyDenied,
         message: permissionStateMessage(permissionState),
-        errorCode: LocationErrorCode.permanentlyDenied,
+        errorCode: LocationTestErrorCode.permanentlyDenied,
       );
     }
 
@@ -89,7 +94,7 @@ class DeviceLocationService {
         message: permissionStateMessage(
           LocationPermissionState.serviceDisabled,
         ),
-        errorCode: LocationErrorCode.serviceDisabled,
+        errorCode: LocationTestErrorCode.serviceDisabled,
       );
     }
 
@@ -131,6 +136,7 @@ class DeviceLocationService {
       return state.copyWith(
         status: DeviceLocationStatus.unavailable,
         message: "Current device location is unavailable.",
+        errorCode: LocationTestErrorCode.invalidFix,
       );
     }
 
@@ -138,6 +144,7 @@ class DeviceLocationService {
       latitude: position.latitude,
       longitude: position.longitude,
     );
+    final reverseGeocodeFailed = !geocode.hasAnyLabel;
 
     return DeviceLocationState(
       status: isCached
@@ -162,6 +169,11 @@ class DeviceLocationService {
       requestId: requestId,
       message: isCached
           ? "Still trying to obtain a fresh GPS position."
+          : reverseGeocodeFailed
+              ? "Location acquired — address unavailable."
+              : null,
+      errorCode: reverseGeocodeFailed
+          ? LocationTestErrorCode.reverseGeocodeFailed
           : null,
     );
   }
@@ -184,15 +196,15 @@ class DeviceLocationService {
   String? _errorCodeForCaptureResult(LocationCaptureResult result) {
     switch (result) {
       case LocationCaptureResult.denied:
-        return LocationErrorCode.permissionDenied;
+        return LocationTestErrorCode.permissionDenied;
       case LocationCaptureResult.deniedForever:
-        return LocationErrorCode.permanentlyDenied;
+        return LocationTestErrorCode.permanentlyDenied;
       case LocationCaptureResult.serviceDisabled:
-        return LocationErrorCode.serviceDisabled;
+        return LocationTestErrorCode.serviceDisabled;
       case LocationCaptureResult.timeout:
-        return LocationErrorCode.acquisitionTimeout;
+        return LocationTestErrorCode.acquisitionTimeout;
       case LocationCaptureResult.granted:
-        return LocationErrorCode.acquisitionTimeout;
+        return LocationTestErrorCode.acquisitionTimeout;
     }
   }
 }

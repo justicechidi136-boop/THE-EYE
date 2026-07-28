@@ -57,9 +57,8 @@ class _LocationPermissionSettingsSectionState
       setState(() => _profileJurisdiction = null);
       return;
     }
-    final profile =
-        controller.cachedCitizenProfile ??
-            await controller.loadCitizenProfile();
+    final profile = controller.cachedCitizenProfile ??
+        await controller.loadCitizenProfile();
     if (!mounted) return;
     setState(() {
       _profileJurisdiction = profile == null

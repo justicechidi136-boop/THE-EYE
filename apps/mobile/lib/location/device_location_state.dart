@@ -181,7 +181,8 @@ class DeviceLocationState {
       country: country ?? this.country,
       isCached: isCached ?? this.isCached,
       isProfileFallback: isProfileFallback ?? this.isProfileFallback,
-      isJurisdictionFallback: isJurisdictionFallback ?? this.isJurisdictionFallback,
+      isJurisdictionFallback:
+          isJurisdictionFallback ?? this.isJurisdictionFallback,
       permissionState: permissionState ?? this.permissionState,
       serviceEnabled: serviceEnabled ?? this.serviceEnabled,
       errorCode: errorCode ?? this.errorCode,

@@ -48,6 +48,7 @@ else
   echo "=== Staging login verification ==="
   "${COMPOSE[@]}" --profile tools run --rm \
     -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
+    -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
     api-tools scripts/verify-staging-test-accounts.ts
 fi
 

@@ -4,7 +4,6 @@ import "package:the_eye_mobile/location/device_location_service.dart";
 import "package:the_eye_mobile/location/device_location_state.dart";
 import "package:the_eye_mobile/location/location_permission_service.dart";
 import "package:the_eye_mobile/location/location_reverse_geocode.dart";
-import "package:the_eye_mobile/location/location_types.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -125,6 +124,7 @@ void main() {
 
       expect(result.hasCoordinates, isTrue);
       expect(result.displayLocality, "Location acquired (address unavailable)");
+      expect(result.errorCode, LocationTestErrorCode.reverseGeocodeFailed);
     });
   });
 }

@@ -14,6 +14,17 @@ abstract final class LocationErrorCode {
   static const backgroundServiceBlocked = "LOC-008";
 }
 
+/// Stable error codes for Settings → Test current location (no coordinates in logs).
+abstract final class LocationTestErrorCode {
+  static const permissionDenied = "LOC-TEST-001";
+  static const permanentlyDenied = "LOC-TEST-002";
+  static const serviceDisabled = "LOC-TEST-003";
+  static const acquisitionTimeout = "LOC-TEST-004";
+  static const invalidFix = "LOC-TEST-005";
+  static const reverseGeocodeFailed = "LOC-TEST-006";
+  static const unexpectedFailure = "LOC-TEST-007";
+}
+
 enum EmergencyLocationSource {
   freshGps,
   networkLocation,
