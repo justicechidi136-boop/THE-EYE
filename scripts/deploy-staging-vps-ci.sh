@@ -48,18 +48,21 @@ else
   echo "=== Staging login verification ==="
   "${COMPOSE[@]}" --profile tools run --rm \
     -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
-    -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
     api-tools scripts/verify-staging-test-accounts.ts
 fi
 
+echo "=== Staging live video public proof (mobile parity) ==="
+curl -fsS "${NEXT_PUBLIC_API_BASE_URL:?}/health/ready" | head -c 4000 || true
+echo ""
+"${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs
+"${COMPOSE[@]}" --profile tools run --rm \
+  -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
+  api-tools scripts/staging-live-video-public-proof.ts
+
 if [[ "$PROOF_ONLY" == "true" || "$RUN_LOCATION_PROOF" == "true" ]]; then
   echo "=== SRB-039 location persistence proof ==="
-  curl -fsS "${NEXT_PUBLIC_API_BASE_URL:?}/health/ready" | head -c 4000 || true
-  echo ""
-  "${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs
   "${COMPOSE[@]}" --profile tools run --rm \
     -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
-    -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
     api-tools scripts/staging-location-persistence-proof.ts
 fi
 

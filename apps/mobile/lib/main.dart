@@ -4555,8 +4555,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         _setStartupPhase(LiveVideoStartupPhase.failed);
         showAppSnackBar(
             context,
-            submission.userMessage ??
-                "Unable to create incident for live video.",
+            "${_startupPhase.label}: ${submission.userMessage ?? "Unable to create incident for live video."}",
             isError: true);
         return;
       }
@@ -4651,7 +4650,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
-      showAppSnackBar(context, message, isError: true);
+      showAppSnackBar(context, "${_startupPhase.label}: $message", isError: true);
     } catch (_) {
       if (!mounted || _disposed) return;
       _setStartupPhase(activeIncidentId == null

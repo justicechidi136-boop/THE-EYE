@@ -76,6 +76,40 @@ export async function verifyIncidentLocationCreateOperation(
   }
 }
 
+export async function verifyLiveVideoLocationCreateOperation(
+  prisma: Pick<PrismaClient, "liveVideoLocationUpdate" | "liveVideoSession" | "incident" | "$transaction">,
+): Promise<{ createOperation: "ok" | "degraded" | "error"; detail?: string }> {
+  const probeSession = await (prisma as any).liveVideoSession?.findFirst?.({
+    orderBy: { createdAt: "desc" },
+    select: { id: true, incidentId: true },
+  });
+  if (!probeSession?.id || !probeSession?.incidentId) {
+    return { createOperation: "degraded", detail: "skipped_no_live_video_session_for_create_probe" };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await (tx as any).liveVideoLocationUpdate.create({
+        data: {
+          liveVideoSessionId: probeSession.id,
+          incidentId: probeSession.incidentId,
+          latitude: 1,
+          longitude: 1,
+          capturedAt: new Date(),
+        },
+      });
+      throw new PrismaSchemaProbeRollback();
+    });
+    return { createOperation: "ok" };
+  } catch (error) {
+    if (error instanceof PrismaSchemaProbeRollback) {
+      return { createOperation: "ok" };
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return { createOperation: "error", detail: message };
+  }
+}
+
 export async function verifyPrismaSchemaCompatibility(
   prisma: Pick<PrismaClient, "incidentLocationUpdate" | "incident" | "$queryRaw" | "$transaction">,
 ): Promise<PrismaSchemaCompatResult> {

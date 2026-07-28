@@ -27,6 +27,7 @@ function normalizeApiBaseUrl(value: string): string {
 
 function resolveApiBaseUrl(): string {
   const canonical = normalizeApiBaseUrl(String(process.env.STAGING_API_BASE_URL ?? "").trim());
+  if (canonical) return canonical;
   const probeOverride = String(process.env.STAGING_LOGIN_PROBE_BASE_URL ?? "").trim();
   return probeOverride ? normalizeApiBaseUrl(probeOverride) : canonical;
 }
