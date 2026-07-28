@@ -615,6 +615,49 @@ See [incident-location-prisma-runtime.md](./release/incident-location-prisma-run
 
 ---
 
+## SRB-040 — Test Current Location action malfunction (P0)
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile — Settings → Location & Permissions |
+| **Severity** | P0 |
+| **Reproduction** | Tap **Test current location** on staging citizen account |
+| **Expected** | Fresh GPS probe, bounded timeout, reverse geocode, source/accuracy/age shown; loading terminates; no emergency side effects |
+| **Actual (pre-fix)** | Button reused emergency refresh with cached fallback; entire section hidden behind spinner; no factual fresh-location test |
+| **Root cause** | Settings action called the same `_refresh()` / emergency location path with `allowCachedFallback: true`; no duplicate-tap guard; no dedicated probe service |
+| **Code fix** | `DeviceLocationService.probeCurrentLocation()` with duplicate suppression, `DeviceLocationState`, separate Device Location card, `LOC-TEST-*` stable error codes @ `6d1469b` + follow-ups |
+| **Automated test** | Mobile **210/210 PASS** locally; `device_location_service_test.dart` (8 cases); API **397/397 PASS** locally |
+| **Deployed SHA** | `6d1469b` (VPS redeploy 2026-07-28; seed verified) |
+| **Installed APK** | `com.theeye.app.staging` v0.1.0 — SHA-256 `C6695945298BAD9E55B8D3E8638A145951AA5003EDA44C54C3F50FCFA7C27421` (built from `6d1469b` lineage; rebuild required after LOC-TEST commit lands) |
+| **Physical QA** | **PENDING** — Port Harcourt device worksheet required |
+| **SOS / Live Video** | **PENDING** — no PASS without device proof |
+| **Status** | **CODE FIXED — DEVICE QA PENDING** |
+
+Progression: CODE FIXED → CI VERIFIED (pending) → DEPLOYED → DEVICE VERIFIED.
+
+---
+
+## SRB-041 — Profile/default Ikeja displayed as current location (P0)
+
+| Field | Value |
+|---|---|
+| **Platform** | Mobile UI + API jurisdiction routing |
+| **Severity** | P0 |
+| **Reproduction** | Physical device in Port Harcourt, Rivers State; open Profile or Location settings |
+| **Expected** | Device Location shows factual GPS/reverse-geocode locality; Profile jurisdiction shows saved Ikeja separately with disclaimer; incidents with valid unmapped GPS → `AwaitingManualResolution`, not Ikeja |
+| **Actual (pre-fix)** | Profile row labelled **Location** showed staging citizen jurisdiction **Ikeja, Lagos**; backend applied profile/default Ikeja even when valid GPS existed outside Lagos polygon |
+| **Root cause** | Ambiguous UI label conflated profile jurisdiction with device GPS; `JurisdictionResolutionService` profile/default fallback on valid coordinates; staging lacked Rivers polygon |
+| **Code fix** | Separate Device Location / Profile Jurisdiction cards; `profileJurisdiction` API field; remove runtime Ikeja default routing for valid GPS; Rivers/Obio-Akpor staging test polygon @ `6d1469b` |
+| **Staging seed note** | Obio-Akpor polygon is **approximate staging QA coverage only** — not production boundary data |
+| **Automated test** | `jurisdiction-resolution.service.spec.ts` (11 cases); `device_location_service_test.dart` Port Harcourt separation |
+| **Deployed SHA** | `6d1469b` |
+| **Physical QA** | **PENDING** — Port Harcourt worksheet |
+| **Status** | **CODE FIXED — DEVICE QA PENDING** |
+
+Progression: CODE FIXED → CI VERIFIED (pending) → DEPLOYED → DEVICE VERIFIED.
+
+---
+
 ## SRB-032 — Google Sign-In remains broken
 
 | Field | Value |

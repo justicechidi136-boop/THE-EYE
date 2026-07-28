@@ -216,6 +216,17 @@ Mandatory next actions (strict order):
 
 **Do not** create Sprint 8 branch. **Do not** begin production-readiness implementation.
 
+### SRB-040 / SRB-041 geolocation integrity (2026-07-28)
+
+| Item | Status |
+|------|--------|
+| SRB-040 Test Current Location | **CODE FIXED — DEVICE QA PENDING** |
+| SRB-041 Ikeja vs device GPS | **CODE FIXED — DEVICE QA PENDING** |
+| Code commit | `6d1469b` on `staging` |
+| CI VERIFIED | **NOT YET** — Validate Staging must pass after test-runner + deploy fixes |
+| Port Harcourt physical QA | **MANDATORY** before any PASS promotion |
+| Sprint 8 impact | **No change** — Sprint 8 remains **NOT AUTHORIZED** |
+
 ---
 
 ## Authorization signature block
