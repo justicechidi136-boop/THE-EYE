@@ -84,6 +84,12 @@ describe("LiveKitTokenService", () => {
       get: jest.fn((key: string, fallback: string) => values[key] ?? fallback),
     } as unknown as ConfigService;
     const service = new LiveKitTokenService(config);
-    expect(() => service.clientLivekitUrl()).toThrow(/CLIENT_LIVEKIT_URL_INVALID|wss:\/\//);
+    try {
+      service.clientLivekitUrl();
+      throw new Error("Expected clientLivekitUrl to reject internal docker URL");
+    } catch (error) {
+      if (error instanceof Error && error.message === "Expected clientLivekitUrl to reject internal docker URL") throw error;
+      expect(String(error)).toMatch(/CLIENT_LIVEKIT_URL_INVALID|wss:\/\//);
+    }
   });
 });

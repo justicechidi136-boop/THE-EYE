@@ -84,6 +84,7 @@ describe("authentication security", () => {
       NODE_ENV: "development",
       FIREBASE_PROJECT_ID: "the-eye-2stg",
       FCM_PROJECT_ID: "the-eye-2stg",
+      NEXT_PUBLIC_LIVEKIT_URL: "wss://staging-livekit.theeye.com.ng",
     };
     expect(validateEnvironment(config)).toBe(config);
   });
