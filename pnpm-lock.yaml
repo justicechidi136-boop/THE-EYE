@@ -120,6 +120,9 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.20.0)
+      livekit-client:
+        specifier: ^2.9.9
+        version: 2.20.1(@types/dom-mediacapture-record@1.0.22)
       prisma:
         specifier: ^6.1.0
         version: 6.19.3(typescript@5.9.3)

@@ -23,6 +23,28 @@ pnpm run test:docker:livekit
 docker logs the-eye-livekit 2>&1 | tail -20
 ```
 
+## Mobile LIVE-VIDEO-015 (unable to join live video room)
+
+**Symptom:** Emergency video start succeeds (API 201) but app shows *"Unable to join the live video room… LIVE-VIDEO-015"*.
+
+**Cause:** LiveKit room `connect()` failed — usually wrong ICE/advertised IP (`use_external_ip: false` in Docker) or firewall blocking RTC ports.
+
+**Fix on VPS:**
+
+```bash
+# Recreate LiveKit after pulling livekit.yaml fix (use_external_ip: true)
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate livekit
+docker logs the-eye-livekit --tail 30
+
+# Open RTC ports if ufw is enabled
+sudo ufw allow 7881/tcp
+sudo ufw allow 7882/udp
+```
+
+Optional: set `LIVEKIT_NODE_IP=<vps-public-ipv4>` in `.env` if STUN discovery advertises the wrong address.
+
+**Verify:** run stage-5 room join proof from deploy script or `api-tools scripts/staging-live-video-room-join-proof.ts`.
+
 ## nginx exits on first deploy
 
 **Symptom:** `ERROR: TLS certificates missing`

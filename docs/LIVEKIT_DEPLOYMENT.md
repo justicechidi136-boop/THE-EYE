@@ -21,9 +21,27 @@ LIVEKIT_API_KEY=<staging-key>
 LIVEKIT_API_SECRET=<staging-secret-min-24-chars>
 LIVEKIT_URL=ws://livekit:7880
 NEXT_PUBLIC_LIVEKIT_URL=wss://staging-livekit.theeye.com.ng
+# Optional: pin RTC candidate IP when STUN discovery is wrong on the VPS
+# LIVEKIT_NODE_IP=<vps-public-ipv4>
 ```
 
 Use staging-only keys. Never reuse production LiveKit credentials on staging.
+
+## Firewall (required for mobile room join)
+
+WebRTC media uses **direct** TCP/UDP to the VPS — not through nginx on 443:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 7881 | TCP | LiveKit RTC fallback |
+| 7882 | UDP | LiveKit RTC primary |
+
+```bash
+sudo ufw allow 7881/tcp
+sudo ufw allow 7882/udp
+```
+
+`rtc.use_external_ip` is **true** in `livekit.yaml` so mobile clients receive the VPS public IP in ICE candidates (not Docker-internal `172.x` addresses).
 
 ## Validation
 
@@ -43,3 +61,5 @@ WebSocket endpoint: `wss://staging-livekit.theeye.com.ng` → `livekit:7880` (se
 | `could not parse keys` | Ensure `LIVEKIT_KEYS` format is `key: secret` with space |
 | Duplicate key config | Remove any `keys:` block from `livekit.yaml` |
 | Client cannot connect | Verify `NEXT_PUBLIC_LIVEKIT_URL` uses `wss://staging-livekit.theeye.com.ng` (dedicated hostname, not dashboard path) |
+| Mobile **LIVE-VIDEO-015** (room join) | Stage 4 OK but LiveKit connect fails — ensure `use_external_ip: true`, UDP **7882** and TCP **7881** open on VPS; optionally set `LIVEKIT_NODE_IP` |
+| Mobile **LIVEKIT-RTC-001** (after join) | ICE/NAT on mobile data — consider TURN for production |

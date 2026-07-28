@@ -33,7 +33,7 @@ else
   echo "STEP compose-build-start"
   "${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools
   "${COMPOSE[@]}" --profile tools run --rm api-migrate
-  "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web
+  "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web livekit
   "${COMPOSE[@]}" up -d --wait api admin-web livekit
   bash scripts/reload-nginx-upstreams.sh
   bash scripts/staging-smoke-check.sh
@@ -102,6 +102,14 @@ for attempt in 1 2 3 4 5; do
   rm -f "${RESPONSE_FILE}"
 done
 echo "PASS public stage4 ${PUBLIC_OK}/5 livekitUrl=${EXPECTED_LIVEKIT_URL}"
+
+echo "=== Staging live video room join proof (stage 5) ==="
+"${COMPOSE[@]}" --profile tools run --rm \
+  -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
+  -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
+  -e PROOF_TOKEN="${PROOF_TOKEN}" \
+  -e PROOF_INCIDENT_ID="${PROOF_INCIDENT_ID}" \
+  api-tools scripts/staging-live-video-room-join-proof.ts
 
 if [[ "$PROOF_ONLY" == "true" || "$RUN_LOCATION_PROOF" == "true" ]]; then
   echo "=== SRB-039 location persistence proof ==="
