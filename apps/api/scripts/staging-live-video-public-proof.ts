@@ -93,7 +93,7 @@ async function apiRequest(
     }
   }
 
-  const message = lastError instanceof Error ? last.message : String(lastError);
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
   fail(`fetch failed for ${path}: ${message}`);
 }
 
