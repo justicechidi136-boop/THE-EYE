@@ -4,8 +4,7 @@ bind_addresses:
 rtc:
   tcp_port: 7881
   udp_port: 7882
-  # Required for mobile/WebRTC clients outside Docker: advertise VPS public IP (via STUN).
-  # Optional override: set node_ip in this file to the VPS public IPv4 if STUN discovery fails.
-  use_external_ip: true
+  # Stable in Docker; deploy script sets node_ip to the VPS public IPv4 for mobile RTC.
+  use_external_ip: false
 logging:
   level: info

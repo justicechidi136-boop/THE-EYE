@@ -32,7 +32,7 @@ docker logs the-eye-livekit 2>&1 | tail -20
 **Fix on VPS:**
 
 ```bash
-# Recreate LiveKit after pulling livekit.yaml fix (use_external_ip: true)
+# Recreate LiveKit after pulling deploy fix (node_ip patched at deploy)
 docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate livekit
 docker logs the-eye-livekit --tail 30
 
@@ -41,7 +41,7 @@ sudo ufw allow 7881/tcp
 sudo ufw allow 7882/udp
 ```
 
-Optional: set `node_ip` in `infra/docker/livekit/livekit.yaml` to the VPS public IPv4 if STUN advertises the wrong address.
+Optional: set `LIVEKIT_NODE_IP=<vps-public-ipv4>` in `.env` if auto-detect picks the wrong address.
 
 **Verify:** run stage-5 room join proof from deploy script or `api-tools scripts/staging-live-video-room-join-proof.ts`.
 

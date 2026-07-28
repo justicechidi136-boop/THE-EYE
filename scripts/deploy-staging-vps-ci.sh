@@ -7,6 +7,24 @@ cd "$REPO_ROOT"
 
 COMPOSE=(docker compose -f infra/docker/docker-compose.yml --env-file .env)
 
+patch_livekit_node_ip() {
+  local cfg="${REPO_ROOT}/infra/docker/livekit/livekit.yaml"
+  local ip="${LIVEKIT_NODE_IP:-}"
+  if [[ -z "$ip" ]]; then
+    ip="$(curl -sf --max-time 8 https://api.ipify.org 2>/dev/null || curl -sf --max-time 8 https://ifconfig.me/ip 2>/dev/null || true)"
+  fi
+  if [[ -z "$ip" ]]; then
+    echo "WARN: could not resolve LiveKit node_ip — set LIVEKIT_NODE_IP in .env or mobile RTC may fail (LIVE-VIDEO-015)"
+    return 0
+  fi
+  if grep -q '^  node_ip:' "$cfg"; then
+    sed -i "s/^  node_ip:.*/  node_ip: ${ip}/" "$cfg"
+  else
+    sed -i "/^  use_external_ip:/a\\  node_ip: ${ip}" "$cfg"
+  fi
+  echo "LiveKit rtc.node_ip=${ip}"
+}
+
 echo "STEP env-check-start"
 if [[ ! -f .env ]]; then
   if [[ -f ../.env ]]; then
@@ -33,6 +51,7 @@ else
   echo "STEP compose-build-start"
   "${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools
   "${COMPOSE[@]}" --profile tools run --rm api-migrate
+  patch_livekit_node_ip
   "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web livekit
   "${COMPOSE[@]}" up -d --wait api admin-web livekit
   bash scripts/reload-nginx-upstreams.sh
