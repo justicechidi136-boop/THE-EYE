@@ -159,10 +159,10 @@ async function main() {
   }
 
   console.log(`=== Staging live video room join proof (stage 5) ===`);
-  console.log(`apiBase=${canonicalUrl} incidentId=${incidentId}`);
+  console.log(`apiBase=${canonicalUrl} startBase=${requestUrl} incidentId=${incidentId}`);
 
   const liveStart = await apiRequest(
-    canonicalUrl,
+    requestUrl,
     `/live-video/incidents/${incidentId}/start`,
     {
       method: "POST",
