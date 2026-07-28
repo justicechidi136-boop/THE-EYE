@@ -123,11 +123,13 @@ done
 echo "PASS public stage4 ${PUBLIC_OK}/5 livekitUrl=${EXPECTED_LIVEKIT_URL}"
 
 echo "=== Staging live video room join proof (stage 5) ==="
-"${COMPOSE[@]}" --profile tools run --rm --network host \
+API_TOOLS_IMAGE="the-eye-api-tools:${THE_EYE_IMAGE_TAG:-local}"
+docker run --rm --network host --env-file .env \
   -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
   -e PROOF_TOKEN="${PROOF_TOKEN}" \
   -e PROOF_INCIDENT_ID="${PROOF_INCIDENT_ID}" \
-  api-tools scripts/staging-live-video-room-join-proof.ts
+  "${API_TOOLS_IMAGE}" \
+  npx tsx scripts/staging-live-video-room-join-proof.ts
 
 if [[ "$PROOF_ONLY" == "true" || "$RUN_LOCATION_PROOF" == "true" ]]; then
   echo "=== SRB-039 location persistence proof ==="
