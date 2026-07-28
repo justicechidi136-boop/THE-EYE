@@ -7,6 +7,7 @@ import "../evidence/evidence_permission_service.dart";
 import "../evidence/evidence_permission_state.dart";
 import "live_video_api_models.dart";
 import "live_video_connection_state.dart";
+import "live_video_error_codes.dart";
 import "live_video_safe_log.dart";
 
 class LiveVideoPermissionOutcome {
@@ -65,12 +66,31 @@ class LiveVideoSessionController extends ChangeNotifier {
         microphone == EvidencePermissionState.granted) {
       return const LiveVideoPermissionOutcome(granted: true);
     }
-    if (camera == EvidencePermissionState.permanentlyDenied ||
-        microphone == EvidencePermissionState.permanentlyDenied) {
-      return const LiveVideoPermissionOutcome(
+    if (camera != EvidencePermissionState.granted &&
+        microphone == EvidencePermissionState.granted) {
+      return LiveVideoPermissionOutcome(
         granted: false,
         message:
-            "Enable camera and microphone in device settings to start live emergency video.",
+            "Camera permission is required for live emergency video. "
+            "Reference: ${LiveVideoErrorCodes.cameraPermissionDenied}.",
+      );
+    }
+    if (camera == EvidencePermissionState.granted &&
+        microphone != EvidencePermissionState.granted) {
+      return LiveVideoPermissionOutcome(
+        granted: false,
+        message:
+            "Microphone permission is required for live emergency video. "
+            "Reference: ${LiveVideoErrorCodes.microphonePermissionDenied}.",
+      );
+    }
+    if (camera == EvidencePermissionState.permanentlyDenied ||
+        microphone == EvidencePermissionState.permanentlyDenied) {
+      return LiveVideoPermissionOutcome(
+        granted: false,
+        message:
+            "Enable camera and microphone in device settings to start live emergency video. "
+            "Reference: ${LiveVideoErrorCodes.cameraPermissionDenied}.",
       );
     }
     if (camera == EvidencePermissionState.restricted ||
@@ -117,7 +137,8 @@ class LiveVideoSessionController extends ChangeNotifier {
   Future<bool> connectPublisher(LiveVideoStartResult startResult) async {
     if (!startResult.livekit.isValid) {
       _setState(LiveVideoConnectionState.failed,
-          message: "Live video access token was not returned by the server.");
+          message:
+              "Live video access token was not returned by the server. Reference: ${LiveVideoErrorCodes.clientLivekitUrlInvalid}.");
       return false;
     }
 
@@ -177,11 +198,14 @@ class LiveVideoSessionController extends ChangeNotifier {
       return true;
     } catch (error) {
       logLiveVideoEvent("Live video publisher connection failed");
+      final code = error is TimeoutException
+          ? LiveVideoErrorCodes.connectLivekitFailed
+          : LiveVideoErrorCodes.connectLivekitFailed;
       _setState(
         LiveVideoConnectionState.failed,
         message: error is TimeoutException
-            ? "Live video connection timed out. Check network and try again."
-            : "Unable to join the live video room. Try again.",
+            ? "Live video connection timed out. Check network and try again. Reference: $code."
+            : "Unable to join the live video room. Try again. Reference: $code.",
       );
       return false;
     }

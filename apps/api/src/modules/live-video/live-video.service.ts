@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHmac, timingSafeEqual } from "crypto";
 import type { JwtPayload } from "../../common/auth/jwt";
@@ -6,6 +6,7 @@ import { MetricsService } from "../../common/metrics/metrics.service";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { LinkLiveVideoEvidenceDto, LiveVideoLocationUpdateDto, StartLiveVideoDto, validateEvidenceLink, validateLocationUpdate } from "./dto/live-video.dto";
+import { LiveVideoErrorCode, liveVideoErrorBody } from "./live-video.errors";
 import { LiveKitTokenService } from "./livekit-token.service";
 
 @Injectable()
@@ -18,54 +19,197 @@ export class LiveVideoService {
     private readonly metrics: MetricsService,
   ) {}
 
-  async startIncidentLiveVideo(incidentId: string, dto: StartLiveVideoDto, actor: JwtPayload) {
+  async startIncidentLiveVideo(
+    incidentId: string,
+    dto: StartLiveVideoDto,
+    actor: JwtPayload,
+    trace: { requestId?: string; clientTraceId?: string } = {},
+  ) {
     const startedAt = Date.now();
-    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can start emergency live video");
+    const logContext = {
+      scope: "live_video.start",
+      incidentId,
+      requestId: trace.requestId,
+      clientTraceId: trace.clientTraceId,
+    };
+    if (actor.typ !== "user") {
+      throw new ForbiddenException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.NOT_AUTHORIZED,
+          "Only citizens can start emergency live video",
+          trace.requestId,
+        ),
+      );
+    }
     validateLocationUpdate(dto);
     const incident = await this.prisma.incident.findUnique({ where: { id: incidentId } });
-    if (!incident) throw new NotFoundException("Incident not found");
-    if (incident.reporterId && incident.reporterId !== actor.sub) throw new ForbiddenException("Only the reporting user can start live video for this incident");
+    if (!incident) {
+      throw new NotFoundException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.INCIDENT_UNAVAILABLE,
+          "Incident not found",
+          trace.requestId,
+        ),
+      );
+    }
+    if (incident.reporterId && incident.reporterId !== actor.sub) {
+      throw new ForbiddenException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.NOT_AUTHORIZED,
+          "Only the reporting user can start live video for this incident",
+          trace.requestId,
+        ),
+      );
+    }
+
+    try {
+      this.livekitTokens.assertLiveKitConfigured({ requireWss: true });
+    } catch (error) {
+      const mapped = this.livekitTokens.mapConfigurationError(error);
+      throw new InternalServerErrorException(
+        liveVideoErrorBody(
+          mapped.code as (typeof LiveVideoErrorCode)[keyof typeof LiveVideoErrorCode],
+          mapped.message,
+          trace.requestId,
+        ),
+      );
+    }
 
     const roomName = `eye-incident-${incidentId}`;
     const identity = `user-${actor.sub}`;
-    const session = await this.prisma.liveVideoSession.upsert({
-      where: { roomName },
-      update: {
-        status: "Active",
-        endedAt: null,
-        startedAt: new Date(),
-        createdById: actor.sub,
-        lowBandwidthMode: dto.lowBandwidthMode ?? false,
-        participantIdentity: identity,
-        metadata: { lowBandwidthMode: dto.lowBandwidthMode ?? false, role: "publisher" },
-      } as never,
-      create: {
-        incidentId,
-        roomName,
-        livekitRoomId: roomName,
-        createdById: actor.sub,
-        status: "Active",
-        lowBandwidthMode: dto.lowBandwidthMode ?? false,
-        participantIdentity: identity,
-        startedAt: new Date(),
-        metadata: { lowBandwidthMode: dto.lowBandwidthMode ?? false, role: "publisher" },
-      } as never,
-    });
+    let session;
+    try {
+      session = await this.prisma.liveVideoSession.upsert({
+        where: { roomName },
+        update: {
+          status: "Active",
+          endedAt: null,
+          startedAt: new Date(),
+          createdById: actor.sub,
+          lowBandwidthMode: dto.lowBandwidthMode ?? false,
+          participantIdentity: identity,
+          metadata: { lowBandwidthMode: dto.lowBandwidthMode ?? false, role: "publisher" },
+        } as never,
+        create: {
+          incidentId,
+          roomName,
+          livekitRoomId: roomName,
+          createdById: actor.sub,
+          status: "Active",
+          lowBandwidthMode: dto.lowBandwidthMode ?? false,
+          participantIdentity: identity,
+          startedAt: new Date(),
+          metadata: { lowBandwidthMode: dto.lowBandwidthMode ?? false, role: "publisher" },
+        } as never,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.SESSION_PERSIST_FAILED,
+          "Live video session could not be saved",
+          trace.requestId,
+          { cause: message.slice(0, 240) },
+        ),
+      );
+    }
 
     await this.timeline(incidentId, actor, "live_video.started", dto.lowBandwidthMode ? "Emergency live video started in low-bandwidth mode." : "Emergency live video started.", { sessionId: session.id, roomName });
-    const location =
-      dto.latitude != null && dto.longitude != null
-        ? await this.createLocationUpdate(session.id, incidentId, dto as LiveVideoLocationUpdateDto)
-        : null;
-    await this.audit(actor, "live_video.started", session.id, { incidentId, roomName, lowBandwidthMode: dto.lowBandwidthMode ?? false });
-    this.metrics.recordLiveVideoOperation("start", (Date.now() - startedAt) / 1000, "success");
+
+    let location: Awaited<ReturnType<LiveVideoService["createLocationUpdate"]>> | null = null;
+    let locationPersistDegraded = false;
+    if (dto.latitude != null && dto.longitude != null) {
+      try {
+        location = await this.createLocationUpdate(session.id, incidentId, dto as LiveVideoLocationUpdateDto);
+      } catch (error) {
+        locationPersistDegraded = true;
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          JSON.stringify({
+            level: "warn",
+            ...logContext,
+            code: LiveVideoErrorCode.LOCATION_PERSIST_DEGRADED,
+            sessionId: session.id,
+            message: message.slice(0, 240),
+          }),
+        );
+      }
+    }
+
+    await this.audit(actor, "live_video.started", session.id, {
+      incidentId,
+      roomName,
+      lowBandwidthMode: dto.lowBandwidthMode ?? false,
+      locationPersistDegraded,
+    });
+
+    let token: string;
+    let clientUrl: string;
+    try {
+      clientUrl = this.livekitTokens.clientLivekitUrl({ requireWss: true });
+    } catch (error) {
+      const mapped = this.livekitTokens.mapConfigurationError(error);
+      throw new InternalServerErrorException(
+        liveVideoErrorBody(
+          mapped.code as (typeof LiveVideoErrorCode)[keyof typeof LiveVideoErrorCode],
+          mapped.message,
+          trace.requestId,
+        ),
+      );
+    }
+    try {
+      token = this.livekitTokens.createToken({
+        identity,
+        name: "Citizen emergency video",
+        roomName,
+        canPublish: true,
+        canSubscribe: false,
+        lowBandwidthMode: dto.lowBandwidthMode,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InternalServerErrorException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.TOKEN_GENERATION_FAILED,
+          "LiveKit access token could not be issued",
+          trace.requestId,
+          { cause: message.slice(0, 240) },
+        ),
+      );
+    }
+
+    const durationMs = Date.now() - startedAt;
+    this.metrics.recordLiveVideoOperation("start", durationMs / 1000, "success");
+    console.log(
+      JSON.stringify({
+        level: "info",
+        ...logContext,
+        sessionId: session.id,
+        roomName,
+        durationMs,
+        locationPersistDegraded,
+        warningCodes: locationPersistDegraded
+          ? [LiveVideoErrorCode.LOCATION_PERSIST_DEGRADED]
+          : [],
+      }),
+    );
 
     return {
-      data: { ...session, latestLocation: location, evidenceOverlay: this.evidenceOverlay(incident, session, location) },
+      data: {
+        ...session,
+        latestLocation: location,
+        evidenceOverlay: this.evidenceOverlay(incident, session, location),
+        ...(locationPersistDegraded
+          ? { locationPersistWarning: LiveVideoErrorCode.LOCATION_PERSIST_DEGRADED }
+          : {}),
+        startupTimingMs: durationMs,
+        requestId: trace.requestId,
+        clientTraceId: trace.clientTraceId,
+      },
       livekit: {
-        url: this.livekitTokens.livekitUrl(),
+        url: clientUrl,
         roomName,
-        token: this.livekitTokens.createToken({ identity, name: "Citizen emergency video", roomName, canPublish: true, canSubscribe: false, lowBandwidthMode: dto.lowBandwidthMode }),
+        token,
       },
     };
   }
@@ -94,7 +238,7 @@ export class LiveVideoService {
     return {
       data: { ...session, evidenceOverlay: this.evidenceOverlay(session.incident, session, session.locationUpdates[0]) },
       livekit: {
-        url: this.livekitTokens.livekitUrl(),
+        url: this.livekitTokens.clientLivekitUrl(),
         roomName: session.roomName,
         token: this.livekitTokens.createToken({ identity, name: actor.email ?? "THE EYE admin", roomName: session.roomName, canPublish: false, canSubscribe: true }),
       },

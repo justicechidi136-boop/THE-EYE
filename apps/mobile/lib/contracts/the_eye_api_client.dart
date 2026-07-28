@@ -318,6 +318,7 @@ class TheEyeApiClient {
     Map<String, Object?> payload, {
     String? accessToken,
     String? clientSubmissionId,
+    String? clientTraceId,
     Duration timeout = const Duration(seconds: 30),
   }) {
     final headers = <String, String>{
@@ -329,6 +330,9 @@ class TheEyeApiClient {
     }
     if (clientSubmissionId != null && clientSubmissionId.isNotEmpty) {
       headers["x-client-submission-id"] = clientSubmissionId;
+    }
+    if (clientTraceId != null && clientTraceId.isNotEmpty) {
+      headers["x-client-trace-id"] = clientTraceId;
     }
 
     return _http
@@ -987,11 +991,13 @@ class TheEyeApiClient {
     required String incidentId,
     required Map<String, Object?> payload,
     String? accessToken,
+    String? clientTraceId,
   }) async {
     final response = await postJson(
       TheEyeApiPaths.liveVideoStart(incidentId),
       payload,
       accessToken: accessToken,
+      clientTraceId: clientTraceId,
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return _decodeEnvelope(response.body) ?? const <String, dynamic>{};

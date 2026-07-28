@@ -24,7 +24,10 @@ export class LiveVideoController {
   @RateLimit("liveStreamCreate")
   @RequirePermissions("incident:create")
   start(@Param("incidentId") incidentId: string, @Body() dto: StartLiveVideoDto, @Req() request: any) {
-    return this.liveVideo.startIncidentLiveVideo(incidentId, dto, request.user);
+    return this.liveVideo.startIncidentLiveVideo(incidentId, dto, request.user, {
+      requestId: String(request.headers["x-request-id"] ?? ""),
+      clientTraceId: String(request.headers["x-client-trace-id"] ?? ""),
+    });
   }
 
   @Patch("sessions/:sessionId/stop")

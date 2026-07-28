@@ -41,6 +41,10 @@ export function validateEnvironment(config: Record<string, unknown>) {
   const appEnvironment = resolveAppEnvironment(config);
   if (appEnvironment === "staging") {
     assertStagingFirebaseGuard(config);
+    const clientLivekitUrl = String(config.NEXT_PUBLIC_LIVEKIT_URL ?? "").trim();
+    if (!clientLivekitUrl.startsWith("wss://")) {
+      throw new Error("NEXT_PUBLIC_LIVEKIT_URL must be a public wss:// URL in staging");
+    }
   }
   if (appEnvironment === "production") {
     assertProductionFirebaseGuard(config);

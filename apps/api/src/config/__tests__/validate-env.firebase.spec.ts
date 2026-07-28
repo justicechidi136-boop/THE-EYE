@@ -106,7 +106,20 @@ describe("validateEnvironment firebase isolation", () => {
       THE_EYE_APP_ENV: "staging",
       FCM_PROJECT_ID: STAGING_FIREBASE_PROJECT_ID,
       FIREBASE_PROJECT_ID: STAGING_FIREBASE_PROJECT_ID,
+      NEXT_PUBLIC_LIVEKIT_URL: "wss://staging-livekit.theeye.com.ng",
     };
     expect(validateEnvironment(config)).toBe(config);
+  });
+
+  it("rejects staging without public LiveKit WSS URL", () => {
+    expectValidationFailure(
+      {
+        NODE_ENV: "development",
+        THE_EYE_APP_ENV: "staging",
+        FCM_PROJECT_ID: STAGING_FIREBASE_PROJECT_ID,
+        FIREBASE_PROJECT_ID: STAGING_FIREBASE_PROJECT_ID,
+      },
+      "NEXT_PUBLIC_LIVEKIT_URL must be a public wss:// URL in staging",
+    );
   });
 });
