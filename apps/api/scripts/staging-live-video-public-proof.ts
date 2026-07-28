@@ -192,6 +192,18 @@ async function main() {
       ` durationMs=${created.durationMs}`,
   );
 
+  const exportPath = String(process.env.STAGING_LIVE_VIDEO_PROOF_EXPORT ?? "").trim();
+  if (exportPath) {
+    const payload = [
+      `PROOF_TOKEN=${token}`,
+      `PROOF_INCIDENT_ID=${incidentId}`,
+      `PROOF_PUBLIC_BASE=${canonicalUrl}`,
+    ].join("\n");
+    await import("node:fs/promises").then((fs) => fs.writeFile(exportPath, payload, "utf8"));
+    console.log(`PASS live-video proof setup exported incidentId=${incidentId}`);
+    return;
+  }
+
   let successCount = 0;
   for (let attempt = 1; attempt <= PUBLIC_START_ATTEMPTS; attempt++) {
     const clientTraceId = `live-video-proof-${attempt}-${randomUUID()}`;

@@ -56,9 +56,58 @@ echo "=== Staging live video public proof (mobile parity) ==="
 curl -fsS "${NEXT_PUBLIC_API_BASE_URL:?}/health/ready" | head -c 4000 || true
 echo ""
 "${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs
-"${COMPOSE[@]}" --profile tools run --rm --network host \
+PROOF_EXPORT_FILE="${TMPDIR:-/tmp}/the-eye-live-video-proof.env"
+rm -f "${PROOF_EXPORT_FILE}"
+"${COMPOSE[@]}" --profile tools run --rm \
   -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
+  -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
+  -e STAGING_LIVE_VIDEO_PROOF_EXPORT=/tmp/the-eye-live-video-proof.env \
+  -v "${PROOF_EXPORT_FILE}:/tmp/the-eye-live-video-proof.env" \
   api-tools scripts/staging-live-video-public-proof.ts
+set -a
+# shellcheck disable=SC1090
+source "${PROOF_EXPORT_FILE}"
+set +a
+EXPECTED_LIVEKIT_URL="wss://staging-livekit.theeye.com.ng"
+PUBLIC_OK=0
+for attempt in 1 2 3 4 5; do
+  TRACE_ID="live-video-proof-${attempt}-$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)"
+  STARTED_AT="$(date +%s%3N)"
+  RESPONSE_FILE="$(mktemp)"
+  HTTP_CODE="$(
+    curl -sS -o "${RESPONSE_FILE}" -w '%{http_code}' \
+      -X POST "${PROOF_PUBLIC_BASE}/live-video/incidents/${PROOF_INCIDENT_ID}/start" \
+      -H "Authorization: Bearer ${PROOF_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -H "X-Client-Trace-ID: ${TRACE_ID}" \
+      -H "X-Request-ID: $(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)" \
+      --data '{"latitude":6.5244,"longitude":3.3792,"accuracy":12,"lowBandwidthMode":true,"sourceDeviceId":"mobile-primary"}'
+  )"
+  ENDED_AT="$(date +%s%3N)"
+  DURATION_MS="$((ENDED_AT - STARTED_AT))"
+  if [[ "${HTTP_CODE}" == "502" || "${HTTP_CODE}" == "503" ]]; then
+    echo "FAIL public live-video start ${attempt}/5 gateway http=${HTTP_CODE} clientTraceId=${TRACE_ID}"
+    cat "${RESPONSE_FILE}"
+    rm -f "${RESPONSE_FILE}"
+    exit 1
+  fi
+  if [[ "${HTTP_CODE}" != "201" ]]; then
+    echo "FAIL public live-video start ${attempt}/5 http=${HTTP_CODE} clientTraceId=${TRACE_ID}"
+    cat "${RESPONSE_FILE}"
+    rm -f "${RESPONSE_FILE}"
+    exit 1
+  fi
+  LIVEKIT_URL="$(node -e "const b=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(String((b.livekit&&b.livekit.url)||''));" "${RESPONSE_FILE}")"
+  if [[ "${LIVEKIT_URL}" != "${EXPECTED_LIVEKIT_URL}" ]]; then
+    echo "FAIL public live-video start ${attempt}/5 livekit.url=${LIVEKIT_URL} expected ${EXPECTED_LIVEKIT_URL}"
+    rm -f "${RESPONSE_FILE}"
+    exit 1
+  fi
+  echo "PASS public live-video start ${attempt}/5 http=${HTTP_CODE} livekitUrl=${LIVEKIT_URL} clientTraceId=${TRACE_ID} durationMs=${DURATION_MS}"
+  PUBLIC_OK=$((PUBLIC_OK + 1))
+  rm -f "${RESPONSE_FILE}"
+done
+echo "PASS public stage4 ${PUBLIC_OK}/5 livekitUrl=${EXPECTED_LIVEKIT_URL}"
 
 if [[ "$PROOF_ONLY" == "true" || "$RUN_LOCATION_PROOF" == "true" ]]; then
   echo "=== SRB-039 location persistence proof ==="
