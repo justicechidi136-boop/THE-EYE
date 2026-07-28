@@ -21,8 +21,7 @@ LIVEKIT_API_KEY=<staging-key>
 LIVEKIT_API_SECRET=<staging-secret-min-24-chars>
 LIVEKIT_URL=ws://livekit:7880
 NEXT_PUBLIC_LIVEKIT_URL=wss://staging-livekit.theeye.com.ng
-# Optional: pin RTC candidate IP when STUN discovery is wrong on the VPS
-# LIVEKIT_NODE_IP=<vps-public-ipv4>
+# Optional: if STUN advertises the wrong IP, set node_ip in livekit.yaml to the VPS public IPv4.
 ```
 
 Use staging-only keys. Never reuse production LiveKit credentials on staging.
