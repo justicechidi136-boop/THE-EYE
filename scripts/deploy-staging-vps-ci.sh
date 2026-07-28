@@ -123,9 +123,8 @@ done
 echo "PASS public stage4 ${PUBLIC_OK}/5 livekitUrl=${EXPECTED_LIVEKIT_URL}"
 
 echo "=== Staging live video room join proof (stage 5) ==="
-"${COMPOSE[@]}" --profile tools run --rm \
+"${COMPOSE[@]}" --profile tools run --rm --network host \
   -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
-  -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
   -e PROOF_TOKEN="${PROOF_TOKEN}" \
   -e PROOF_INCIDENT_ID="${PROOF_INCIDENT_ID}" \
   api-tools scripts/staging-live-video-room-join-proof.ts
