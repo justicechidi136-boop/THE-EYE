@@ -354,13 +354,22 @@ String _mapIncidentValidationMessage(String message) {
 }
 
 class IncidentApiException implements Exception {
-  IncidentApiException(this.statusCode, this.userMessage);
+  IncidentApiException(
+    this.statusCode,
+    this.userMessage, {
+    this.apiCode,
+    this.requestId,
+  });
 
   final int statusCode;
   final String userMessage;
+  final String? apiCode;
+  final String? requestId;
 
   static IncidentApiException fromResponse(http.Response response) {
     String message = "Unable to submit report right now. Please try again.";
+    String? apiCode;
+    String? requestId;
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map) {
@@ -370,6 +379,10 @@ class IncidentApiException implements Exception {
         } else if (raw is List && raw.isNotEmpty) {
           message = raw.map((item) => item.toString()).join(" ");
         }
+        final code = decoded["code"];
+        if (code is String && code.isNotEmpty) apiCode = code;
+        final rid = decoded["requestId"];
+        if (rid is String && rid.isNotEmpty) requestId = rid;
       }
     } catch (_) {
       // Keep generic user-facing message.
@@ -381,10 +394,16 @@ class IncidentApiException implements Exception {
       message =
           "Too many reports were sent recently. Please wait and try again.";
     } else if (response.statusCode >= 500) {
-      message =
-          "THE EYE servers could not process your report (ERR-INC-${response.statusCode}). Please try again shortly.";
+      message = apiCode != null
+          ? message
+          : "THE EYE servers could not process your report (ERR-INC-${response.statusCode}). Please try again shortly.";
     }
 
-    return IncidentApiException(response.statusCode, message);
+    return IncidentApiException(
+      response.statusCode,
+      message,
+      apiCode: apiCode,
+      requestId: requestId,
+    );
   }
 }

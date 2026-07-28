@@ -43,6 +43,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           typeof body === "object" && body !== null && "error" in body
             ? (body as { error?: string }).error
             : HttpStatus[status] ?? "Error",
+        ...(typeof body === "object" && body !== null && "code" in body
+          ? { code: (body as { code?: string }).code }
+          : {}),
         requestId,
         timestamp,
         path: request.url,

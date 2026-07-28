@@ -49,7 +49,9 @@ import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
 import "live_video/live_video_evidence_overlay.dart";
 import "live_video/live_video_preview_pane.dart";
+import "live_video/live_video_safe_log.dart";
 import "live_video/live_video_session_controller.dart";
+import "live_video/live_video_startup_trace.dart";
 import "brand.dart";
 import "config/app_flavor.dart";
 import "config/firebase_bootstrap.dart";
@@ -4226,6 +4228,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   bool stoppingStream = false;
   bool _streamStartInFlight = false;
   LiveVideoStartupPhase _startupPhase = LiveVideoStartupPhase.idle;
+  final LiveVideoStartupTrace _startupTrace = LiveVideoStartupTrace();
   bool permissionDenied = false;
   String? permissionError;
   String? locationStatusMessage;
@@ -4429,7 +4432,10 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                             ? "Stopping stream..."
                             : streaming
                                 ? "Stop live video"
-                                : "Start live video",
+                                : liveVideoRetryUserMessage(
+                                    incidentActive: activeIncidentId != null &&
+                                        activeIncidentId!.isNotEmpty,
+                                  ),
                   ),
                 ),
               ],
@@ -4466,6 +4472,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   void _setStartupPhase(LiveVideoStartupPhase phase) {
     if (_disposed || !mounted) return;
     _startupPhase = phase;
+    _startupTrace.begin(phase);
     locationStatusMessage = phase.label;
     setState(() {});
   }
@@ -4492,6 +4499,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     _setStartupPhase(LiveVideoStartupPhase.checkingPermissions);
 
     final appController = appOf(context);
+    final resumeVideoOnly =
+        activeIncidentId != null && activeIncidentId!.isNotEmpty;
     try {
       _setStartupPhase(LiveVideoStartupPhase.validatingSession);
       final accessToken = appController.accessToken;
@@ -4534,49 +4543,53 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       final access = await accessFuture;
       if (!mounted || _disposed) return;
 
-      final draft = access.hasFix
-          ? buildIncidentDraft(
-              type: IncidentType.emergency,
-              description: "Live emergency video started with GPS.",
-              position: access.position!,
-              anonymous: false,
-              notifyEmergencyContacts: true,
-              title: "Live emergency video",
-            )
-          : buildEmergencyIncidentDraft(
-              access: access,
-              type: IncidentType.emergency,
-              description:
-                  "Live emergency video started while location is pending.",
-              anonymous: false,
-              notifyEmergencyContacts: true,
-              title: "Live emergency video",
-            );
+      if (!resumeVideoOnly) {
+        final draft = access.hasFix
+            ? buildIncidentDraft(
+                type: IncidentType.emergency,
+                description: "Live emergency video started with GPS.",
+                position: access.position!,
+                anonymous: false,
+                notifyEmergencyContacts: true,
+                title: "Live emergency video",
+              )
+            : buildEmergencyIncidentDraft(
+                access: access,
+                type: IncidentType.emergency,
+                description:
+                    "Live emergency video started while location is pending.",
+                anonymous: false,
+                notifyEmergencyContacts: true,
+                title: "Live emergency video",
+              );
 
-      _setStartupPhase(LiveVideoStartupPhase.creatingIncident);
-      final submission = await _submitLiveVideoIncident(appController, draft);
-      if (!mounted || _disposed) return;
-      if (!submission.isSuccess || submission.incidentId == null) {
-        _setStartupPhase(LiveVideoStartupPhase.failed);
-        showAppSnackBar(
-            context,
-            "${_startupPhase.label}: ${submission.userMessage ?? "Unable to create incident for live video."}",
-            isError: true);
-        return;
-      }
+        _setStartupPhase(LiveVideoStartupPhase.creatingIncident);
+        final submission = await _submitLiveVideoIncident(appController, draft);
+        if (!mounted || _disposed) return;
+        if (!submission.isSuccess || submission.incidentId == null) {
+          _setStartupPhase(LiveVideoStartupPhase.failed);
+          showAppSnackBar(
+              context,
+              "${_startupPhase.label}: ${submission.userMessage ?? "Unable to create incident for live video."}",
+              isError: true);
+          return;
+        }
 
-      activeIncidentId = submission.incidentId;
-      await appController.activateActiveEmergency(activeIncidentId!);
-      if (!mounted || _disposed) return;
-      if (access.hasFix) {
-        latestPosition = access.position;
-        lastCapturedAt = access.position!.timestamp;
-      }
-      setState(() {
-        roomName = "eye-incident-$activeIncidentId";
-      });
-      if (!access.hasFix) {
-        showAppSnackBar(context, emergencyLocationRetryMessage(access));
+        activeIncidentId = submission.incidentId;
+        await appController.activateActiveEmergency(activeIncidentId!);
+        if (!mounted || _disposed) return;
+        if (access.hasFix) {
+          latestPosition = access.position;
+          lastCapturedAt = access.position!.timestamp;
+        }
+        setState(() {
+          roomName = "eye-incident-$activeIncidentId";
+        });
+        if (!access.hasFix) {
+          showAppSnackBar(context, emergencyLocationRetryMessage(access));
+        }
+      } else {
+        _setStartupPhase(LiveVideoStartupPhase.recovering);
       }
 
       _setStartupPhase(LiveVideoStartupPhase.requestingLiveKitToken);
@@ -4588,8 +4601,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
               lowBandwidthMode: lowBandwidth,
             ),
             accessToken: accessToken,
+            clientTraceId: _startupTrace.clientTraceId,
           )
           .timeout(kLiveVideoStartTimeout);
+      _startupTrace.recordRequestId(
+        envelope["requestId"] as String? ??
+            (envelope["data"] as Map?)?["requestId"] as String?,
+      );
       final startResult = LiveVideoStartResult.fromResponse(envelope);
       liveSessionId = startResult.sessionId;
       roomName = startResult.roomName;
@@ -4643,15 +4661,22 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       );
     } on TimeoutException {
       if (!mounted || _disposed) return;
-      _setStartupPhase(LiveVideoStartupPhase.failed);
+      _setStartupPhase(activeIncidentId == null
+          ? LiveVideoStartupPhase.failed
+          : LiveVideoStartupPhase.recovering);
       showAppSnackBar(context,
-          "Live video start timed out. Check your connection and try again.",
+          "Live video start timed out. Your emergency was still submitted. Retry live video when ready.",
           isError: true);
     } on IncidentApiException catch (error) {
       if (!mounted || _disposed) return;
+      _startupTrace.recordRequestId(error.requestId);
       final message = error.statusCode == 503
           ? "Live video is temporarily unavailable. Your emergency may still have been submitted."
-          : mapLiveVideoApiError(error.statusCode, error.userMessage);
+          : mapLiveVideoApiError(
+              error.statusCode,
+              error.userMessage,
+              apiCode: error.apiCode,
+            );
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
@@ -4667,6 +4692,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     } finally {
       _streamStartInFlight = false;
       if (mounted && !_disposed) setState(() => startingStream = false);
+      logLiveVideoEvent(
+          "Live video startup trace ${_startupTrace.toDiagnosticMap()}");
     }
   }
 

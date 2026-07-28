@@ -24,6 +24,12 @@ export class RequestContextMiddleware implements NestMiddleware {
     req.headers["x-request-id"] = requestId;
     res.setHeader("X-Request-ID", requestId);
 
+    const clientTraceId = String(req.headers["x-client-trace-id"] ?? "").trim();
+    if (clientTraceId) {
+      req.headers["x-client-trace-id"] = clientTraceId;
+      res.setHeader("X-Client-Trace-ID", clientTraceId);
+    }
+
     const startedAt = process.hrtime.bigint();
     res.on("finish", () => {
       const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
@@ -32,6 +38,7 @@ export class RequestContextMiddleware implements NestMiddleware {
         JSON.stringify({
           level: "info",
           requestId,
+          ...(clientTraceId ? { clientTraceId } : {}),
           method: req.method,
           path: req.originalUrl,
           statusCode: res.statusCode,
