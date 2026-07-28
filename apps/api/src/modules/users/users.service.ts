@@ -675,6 +675,19 @@ export class UsersService {
             address: user.profile.address,
           }
         : null,
+      profileJurisdiction: user.profile
+        ? {
+            country: user.profile.country || null,
+            state: user.profile.state || null,
+            lga: user.profile.lga || null,
+            source: "user_profile",
+            isProfileFallback: true,
+          }
+        : null,
+      deviceLocation: {
+        status: "unavailable",
+        source: "unavailable",
+      },
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
     };

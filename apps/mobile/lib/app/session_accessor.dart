@@ -16,4 +16,7 @@ abstract class SessionAccessor extends ChangeNotifier {
   Future<CitizenProfile> updateCitizenProfile(
     Map<String, Object?> payload,
   );
+
+  /// True while an active emergency is streaming location to the server.
+  bool get isEmergencyLocationTracking;
 }

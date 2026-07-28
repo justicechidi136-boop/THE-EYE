@@ -34,37 +34,44 @@ async function apiRequest(
     headers?: Record<string, string>;
   } = {},
 ): Promise<ApiResult> {
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}${path}`, {
-      method: options.method ?? "GET",
-      headers: {
-        ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
-        ...(options.body ? { "content-type": "application/json" } : {}),
-        ...(options.headers ?? {}),
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-      signal: AbortSignal.timeout(20000),
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    fail(`fetch failed for ${path}: ${message}`);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: options.method ?? "GET",
+        headers: {
+          ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+          ...(options.body ? { "content-type": "application/json" } : {}),
+          ...(options.headers ?? {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: AbortSignal.timeout(20000),
+      });
+
+      const text = await response.text().catch(() => "");
+      let body: JsonRecord = {};
+      try {
+        body = text ? (JSON.parse(text) as JsonRecord) : {};
+      } catch {
+        body = { raw: text.slice(0, 400) };
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        requestId: typeof body.requestId === "string" ? body.requestId : undefined,
+        body,
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+      }
+    }
   }
 
-  const text = await response.text().catch(() => "");
-  let body: JsonRecord = {};
-  try {
-    body = text ? (JSON.parse(text) as JsonRecord) : {};
-  } catch {
-    body = { raw: text.slice(0, 400) };
-  }
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    requestId: typeof body.requestId === "string" ? body.requestId : undefined,
-    body,
-  };
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  fail(`fetch failed for ${path}: ${message}`);
 }
 
 async function main() {

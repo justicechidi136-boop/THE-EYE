@@ -432,7 +432,16 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
             ProfileRow("Email", profile.email!),
           if (profile.phone != null && profile.phone!.isNotEmpty)
             ProfileRow("Phone", profile.phone!),
-          if (location.isNotEmpty) ProfileRow("Location", location),
+          if (location.isNotEmpty) ...[
+            ProfileRow("Profile jurisdiction", location),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                "Saved profile jurisdiction — not your current GPS location.",
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
           ProfileRow("KYC status", profile.kycStatus),
           ProfileRow(
             "Trust score",

@@ -37,8 +37,6 @@ export type JurisdictionDiagnosticResult = {
 };
 
 const DEFAULT_COUNTRY = "Nigeria";
-const DEFAULT_STATE = "Lagos";
-const DEFAULT_LGA = "Ikeja";
 const NEAREST_TOLERANCE_METERS = 100_000;
 
 @Injectable()
@@ -85,6 +83,13 @@ export class JurisdictionResolutionService {
           resolutionSource: "postgis_nearest_boundary",
         };
       }
+
+      return this.awaitingManualResolution(
+        JurisdictionResolutionStatus.AwaitingManualResolution,
+        hasValidCoords
+          ? "coordinates_unmapped"
+          : "location_unavailable",
+      );
     }
 
     const profileFallback = await this.matchProfileFallback(actor);
@@ -96,31 +101,9 @@ export class JurisdictionResolutionService {
       };
     }
 
-    const defaultFallback = await this.matchDefaultHierarchy();
-    if (defaultFallback) {
-      return {
-        ...defaultFallback,
-        resolutionStatus: hasValidCoords
-          ? JurisdictionResolutionStatus.OutsideSupportedJurisdiction
-          : JurisdictionResolutionStatus.LocationUnavailable,
-        resolutionSource: "default_hierarchy",
-      };
-    }
-
-    const anyJurisdiction = await this.prisma.jurisdiction.findFirst({
-      orderBy: { createdAt: "asc" },
-      select: { id: true, country: true, state: true, lga: true },
-    });
-    if (anyJurisdiction) {
-      return {
-        ...anyJurisdiction,
-        resolutionStatus: JurisdictionResolutionStatus.AwaitingManualResolution,
-        resolutionSource: "global_unassigned_queue",
-      };
-    }
-
-    throw new BadRequestException(
-      "Jurisdiction data is not configured. Your report could not be routed. Contact support.",
+    return this.awaitingManualResolution(
+      JurisdictionResolutionStatus.LocationUnavailable,
+      "location_unavailable",
     );
   }
 
@@ -214,10 +197,32 @@ export class JurisdictionResolutionService {
     return jurisdiction;
   }
 
+  private async awaitingManualResolution(
+    resolutionStatus: JurisdictionResolutionStatusValue,
+    resolutionSource: string,
+  ): Promise<ResolvedJurisdiction> {
+    const anyJurisdiction = await this.prisma.jurisdiction.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, country: true, state: true, lga: true },
+    });
+    if (anyJurisdiction) {
+      return {
+        ...anyJurisdiction,
+        resolutionStatus,
+        resolutionSource,
+      };
+    }
+
+    throw new BadRequestException(
+      "Jurisdiction data is not configured. Your report could not be routed. Contact support.",
+    );
+  }
+
+  /** Staging/dev diagnostic only — not used for runtime incident routing. */
   private async matchDefaultHierarchy() {
     const candidates = [
-      { country: DEFAULT_COUNTRY, state: DEFAULT_STATE, lga: DEFAULT_LGA },
-      { country: DEFAULT_COUNTRY, state: DEFAULT_STATE, lga: "All" },
+      { country: DEFAULT_COUNTRY, state: "Lagos", lga: "Ikeja" },
+      { country: DEFAULT_COUNTRY, state: "Lagos", lga: "All" },
       { country: DEFAULT_COUNTRY, state: "All", lga: "All" },
     ];
 

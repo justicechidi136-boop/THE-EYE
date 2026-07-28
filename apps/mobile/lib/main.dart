@@ -43,6 +43,7 @@ import "emergency/live_video_startup_phase.dart";
 import "emergency/active_emergency_service.dart";
 import "emergency/active_emergency_store.dart";
 import "incidents/pending_submission_store.dart";
+import "location/location_permission_settings_section.dart";
 import "location/location_permission_service.dart";
 import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
@@ -1329,6 +1330,10 @@ class AppController extends SessionAccessor {
     _ensureLocationCoordinator();
     return _locationCoordinator!;
   }
+
+  @override
+  bool get isEmergencyLocationTracking =>
+      _locationCoordinator?.isTracking ?? false;
 
   Future<void> startIncidentLocationTracking(
     String incidentId, {
@@ -7418,134 +7423,6 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
     if (!context.mounted) return;
     showAppSnackBar(context, "Unable to process deletion request.",
         isError: true);
-  }
-}
-
-class LocationPermissionSettingsSection extends StatefulWidget {
-  const LocationPermissionSettingsSection({super.key});
-
-  @override
-  State<LocationPermissionSettingsSection> createState() =>
-      _LocationPermissionSettingsSectionState();
-}
-
-class _LocationPermissionSettingsSectionState
-    extends State<LocationPermissionSettingsSection> {
-  LocationPermissionState? _permission;
-  LocationAccessResult? _access;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_refresh(requestIfDenied: false));
-  }
-
-  Future<void> _refresh({bool requestIfDenied = false}) async {
-    setState(() => _loading = true);
-    final permission = await resolveLocationPermissionState(
-      requestIfDenied: requestIfDenied,
-    );
-    final access = await resolveLocationAccess(
-      requestIfDenied: requestIfDenied,
-      allowCachedFallback: true,
-      timeout: const Duration(seconds: 8),
-    );
-    if (!mounted) return;
-    setState(() {
-      _permission = permission;
-      _access = access;
-      _loading = false;
-    });
-  }
-
-  String _permissionLabel(LocationPermissionState? state) {
-    switch (state) {
-      case LocationPermissionState.grantedPrecise:
-        return "Precise location allowed";
-      case LocationPermissionState.grantedApproximate:
-        return "Approximate location allowed";
-      case LocationPermissionState.denied:
-        return "Permission denied";
-      case LocationPermissionState.deniedPermanently:
-        return "Permission blocked in Settings";
-      case LocationPermissionState.serviceDisabled:
-        return "Location services off";
-      case LocationPermissionState.restricted:
-        return "Restricted";
-      case LocationPermissionState.timedOut:
-        return "GPS timed out";
-      case LocationPermissionState.unavailable:
-        return "GPS unavailable";
-      case LocationPermissionState.notRequested:
-      case null:
-        return "Not requested yet";
-      case LocationPermissionState.acquiring:
-        return "Acquiring GPS";
-      case LocationPermissionState.error:
-        return "Location error";
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final access = _access;
-    return SectionCard(
-      title: "Location & permissions",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else ...[
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.location_on_outlined),
-              title: Text(_permissionLabel(_permission)),
-              subtitle: Text(
-                access?.hasFix == true
-                    ? "Last fix ±${access!.position!.accuracy.toStringAsFixed(0)} m"
-                    : access?.message.isNotEmpty == true
-                        ? access!.message
-                        : "Location is required for SOS, broadcasts, and nearby police.",
-              ),
-            ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => _refresh(requestIfDenied: true),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text("Retry permission"),
-                ),
-                if (_permission == LocationPermissionState.serviceDisabled)
-                  OutlinedButton.icon(
-                    onPressed: openLocationSettings,
-                    icon: const Icon(Icons.settings),
-                    label: const Text("Open location settings"),
-                  ),
-                if (_permission == LocationPermissionState.deniedPermanently ||
-                    _permission == LocationPermissionState.restricted)
-                  OutlinedButton.icon(
-                    onPressed: openAppSettings,
-                    icon: const Icon(Icons.settings),
-                    label: const Text("Open app settings"),
-                  ),
-                OutlinedButton.icon(
-                  onPressed: () => _refresh(requestIfDenied: true),
-                  icon: const Icon(Icons.my_location),
-                  label: const Text("Test current location"),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }
 

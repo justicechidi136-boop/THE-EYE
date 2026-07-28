@@ -521,6 +521,31 @@ async function main() {
     WHERE country = 'Nigeria' AND state = 'Lagos' AND lga = 'Ikeja'
   `);
 
+  await prisma.jurisdiction.upsert({
+    where: {
+      country_state_lga: {
+        country: "Nigeria",
+        state: "Rivers",
+        lga: "Obio-Akpor",
+      },
+    },
+    update: {
+      name: "Obio-Akpor LGA (Staging)",
+    },
+    create: {
+      country: "Nigeria",
+      state: "Rivers",
+      lga: "Obio-Akpor",
+      name: "Obio-Akpor LGA (Staging)",
+    },
+  });
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE jurisdictions
+    SET boundary = ST_GeogFromText('SRID=4326;MULTIPOLYGON(((6.90 4.70,7.20 4.70,7.20 4.95,6.90 4.95,6.90 4.70)))')
+    WHERE country = 'Nigeria' AND state = 'Rivers' AND lga = 'Obio-Akpor'
+  `);
+
   console.log("Staging test accounts upserted:");
   for (const result of results) {
     const extras = [

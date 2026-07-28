@@ -13,6 +13,10 @@ describe("JurisdictionResolutionService", () => {
 
   const service = new JurisdictionResolutionService(prisma as never);
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("rejects invalid coordinates as not valid", () => {
     expect(service.isValidCoordinate(0, 0)).toBe(false);
     expect(service.isValidCoordinate(91, 0)).toBe(false);
@@ -47,8 +51,33 @@ describe("JurisdictionResolutionService", () => {
     expect(result.distanceMeters).toBe(1200);
   });
 
-  it("uses profile fallback when polygon lookup misses", async () => {
+  it("does not use profile fallback when valid GPS is outside mapped polygons", async () => {
     prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    prisma.profile.findUnique.mockResolvedValue({
+      country: "Nigeria",
+      state: "Lagos",
+      lga: "Ikeja",
+    });
+    prisma.jurisdiction.findFirst.mockResolvedValue({
+      id: "j-global",
+      country: "Nigeria",
+      state: "All",
+      lga: "All",
+    });
+
+    const result = await service.resolve({
+      latitude: 4.8156,
+      longitude: 7.0498,
+      actor: { sub: "user-1", typ: "user", role: "Citizen", permissions: [] },
+    });
+    expect(result.resolutionStatus).toBe(
+      JurisdictionResolutionStatus.AwaitingManualResolution,
+    );
+    expect(result.resolutionSource).toBe("coordinates_unmapped");
+    expect(result.lga).not.toBe("Ikeja");
+  });
+
+  it("uses profile fallback only when coordinates are unavailable", async () => {
     prisma.profile.findUnique.mockResolvedValue({
       country: "Nigeria",
       state: "Lagos",
@@ -62,61 +91,62 @@ describe("JurisdictionResolutionService", () => {
     });
 
     const result = await service.resolve({
-      latitude: 6.6018,
-      longitude: 3.3515,
+      latitude: 0,
+      longitude: 0,
       actor: { sub: "user-1", typ: "user", role: "Citizen", permissions: [] },
     });
-    expect(result.resolutionStatus).toBe(JurisdictionResolutionStatus.ResolvedByProfileFallback);
+    expect(result.resolutionStatus).toBe(
+      JurisdictionResolutionStatus.ResolvedByProfileFallback,
+    );
+    expect(result.resolutionSource).toBe("user_profile");
   });
 
-  it("uses default hierarchy when coordinates are unavailable", async () => {
+  it("routes unavailable GPS without profile to manual queue", async () => {
     prisma.profile.findUnique.mockResolvedValue(null);
     prisma.jurisdiction.findFirst.mockResolvedValue({
-      id: "j4",
+      id: "j-global",
       country: "Nigeria",
-      state: "Lagos",
-      lga: "Ikeja",
+      state: "All",
+      lga: "All",
     });
 
     const result = await service.resolve({ latitude: 0, longitude: 0 });
     expect(result.resolutionStatus).toBe(JurisdictionResolutionStatus.LocationUnavailable);
-    expect(result.resolutionSource).toBe("default_hierarchy");
+    expect(result.resolutionSource).toBe("location_unavailable");
   });
 
-  it("routes to manual resolution queue when only generic jurisdiction exists", async () => {
+  it("routes Port Harcourt coordinates to manual queue when Rivers polygon is missing", async () => {
     prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-    prisma.profile.findUnique.mockResolvedValue(null);
-    prisma.jurisdiction.findFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: "j-global",
-        country: "Nigeria",
-        state: "All",
-        lga: "All",
-      });
+    prisma.jurisdiction.findFirst.mockResolvedValue({
+      id: "j-global",
+      country: "Nigeria",
+      state: "All",
+      lga: "All",
+    });
 
-    const result = await service.resolve({ latitude: 40.7, longitude: -74.0 });
-    expect(result.resolutionStatus).toBe(JurisdictionResolutionStatus.AwaitingManualResolution);
-    expect(result.resolutionSource).toBe("global_unassigned_queue");
+    const result = await service.resolve({ latitude: 4.8156, longitude: 7.0498 });
+    expect(result.resolutionStatus).toBe(
+      JurisdictionResolutionStatus.AwaitingManualResolution,
+    );
+    expect(result.resolutionSource).toBe("coordinates_unmapped");
   });
 
-  it("falls back when PostGIS polygon lookup fails", async () => {
+  it("falls back to manual queue when PostGIS polygon lookup fails", async () => {
     prisma.$queryRaw
       .mockRejectedValueOnce(new Error("function st_covers(geography, geography) does not exist"))
       .mockRejectedValueOnce(new Error("function st_distance(geography, geography) does not exist"));
-    prisma.profile.findUnique.mockResolvedValue(null);
     prisma.jurisdiction.findFirst.mockResolvedValue({
-      id: "j4",
+      id: "j-global",
       country: "Nigeria",
-      state: "Lagos",
-      lga: "Ikeja",
+      state: "All",
+      lga: "All",
     });
 
     const result = await service.resolve({ latitude: 6.6018, longitude: 3.3515 });
-    expect(result.resolutionStatus).toBe(JurisdictionResolutionStatus.OutsideSupportedJurisdiction);
-    expect(result.resolutionSource).toBe("default_hierarchy");
+    expect(result.resolutionStatus).toBe(
+      JurisdictionResolutionStatus.AwaitingManualResolution,
+    );
+    expect(result.resolutionSource).toBe("coordinates_unmapped");
   });
 
   it("throws only when jurisdiction table is empty", async () => {
@@ -141,27 +171,28 @@ describe("JurisdictionResolutionService", () => {
           distance_meters: 150_000,
         },
       ]);
-    prisma.profile.findUnique.mockResolvedValue(null);
     prisma.jurisdiction.findFirst.mockResolvedValue({
-      id: "j4",
+      id: "j-global",
       country: "Nigeria",
-      state: "Lagos",
-      lga: "Ikeja",
+      state: "All",
+      lga: "All",
     });
 
     const result = await service.resolve({ latitude: 40.7, longitude: -74.0 });
-    expect(result.resolutionStatus).toBe(JurisdictionResolutionStatus.OutsideSupportedJurisdiction);
-    expect(result.resolutionSource).toBe("default_hierarchy");
+    expect(result.resolutionStatus).toBe(
+      JurisdictionResolutionStatus.AwaitingManualResolution,
+    );
+    expect(result.resolutionSource).toBe("coordinates_unmapped");
   });
 
   it("skips profile fallback when profile jurisdiction is incomplete", async () => {
     prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     prisma.profile.findUnique.mockResolvedValue({ country: "Nigeria", state: "", lga: "" });
     prisma.jurisdiction.findFirst.mockResolvedValue({
-      id: "j4",
+      id: "j-global",
       country: "Nigeria",
-      state: "Lagos",
-      lga: "Ikeja",
+      state: "All",
+      lga: "All",
     });
 
     const result = await service.resolve({
@@ -169,6 +200,8 @@ describe("JurisdictionResolutionService", () => {
       longitude: 3.3515,
       actor: { sub: "user-1", typ: "user", role: "Citizen", permissions: [] },
     });
-    expect(result.resolutionStatus).toBe(JurisdictionResolutionStatus.OutsideSupportedJurisdiction);
+    expect(result.resolutionStatus).toBe(
+      JurisdictionResolutionStatus.AwaitingManualResolution,
+    );
   });
 });
