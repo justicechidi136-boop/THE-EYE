@@ -1,5 +1,5 @@
-import { Room } from "livekit-client";
 import { randomUUID } from "node:crypto";
+import WebSocket from "ws";
 import { IncidentType } from "@the-eye/shared";
 import { assertStagingOnlySeedAllowed } from "../prisma/staging-guard";
 import {
@@ -80,26 +80,42 @@ function extractLivekit(body: JsonRecord): { url?: string; token?: string; roomN
   };
 }
 
-async function connectRoom(url: string, token: string): Promise<void> {
-  const room = new Room();
+function livekitWsUrl(baseUrl: string, token: string): string {
+  const normalized = baseUrl.replace(/\/$/, "");
+  const params = new URLSearchParams({
+    access_token: token,
+    auto_subscribe: "0",
+    sdk: "node",
+    protocol: "12",
+  });
+  return `${normalized}/rtc?${params.toString()}`;
+}
+
+async function connectLivekitSignaling(url: string, token: string): Promise<void> {
+  const wsUrl = livekitWsUrl(url, token);
   const startedAt = Date.now();
-  try {
-    await Promise.race([
-      room.connect(url, token, { autoSubscribe: false }),
-      new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error(`LiveKit connect timed out after ${CONNECT_TIMEOUT_MS}ms`)),
-          CONNECT_TIMEOUT_MS,
-        );
-      }),
-    ]);
-    const durationMs = Date.now() - startedAt;
-    console.log(
-      `PASS livekit room join room=${room.name || "unknown"} durationMs=${durationMs}`,
-    );
-  } finally {
-    await room.disconnect().catch(() => undefined);
-  }
+  await new Promise<void>((resolve, reject) => {
+    const ws = new WebSocket(wsUrl, { handshakeTimeout: CONNECT_TIMEOUT_MS });
+    const timer = setTimeout(() => {
+      ws.terminate();
+      reject(new Error(`LiveKit WSS timed out after ${CONNECT_TIMEOUT_MS}ms`));
+    }, CONNECT_TIMEOUT_MS);
+    ws.once("open", () => {
+      clearTimeout(timer);
+      ws.close();
+      const durationMs = Date.now() - startedAt;
+      console.log(`PASS livekit WSS signaling join durationMs=${durationMs}`);
+      resolve();
+    });
+    ws.once("unexpected-response", (_req, res) => {
+      clearTimeout(timer);
+      reject(new Error(`LiveKit WSS unexpected HTTP ${res.statusCode}`));
+    });
+    ws.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 async function main() {
@@ -194,7 +210,7 @@ async function main() {
   }
   if (!livekit.token) fail("live-video start response missing livekit.token");
 
-  await connectRoom(livekit.url, livekit.token);
+  await connectLivekitSignaling(livekit.url, livekit.token);
   console.log("=== Staging live video room join proof complete ===");
 }
 
