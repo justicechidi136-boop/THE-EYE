@@ -57,7 +57,6 @@ curl -fsS "${NEXT_PUBLIC_API_BASE_URL:?}/health/ready" | head -c 4000 || true
 echo ""
 "${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs
 "${COMPOSE[@]}" --profile tools run --rm \
-  --env-file .env \
   -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
   -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
   api-tools scripts/staging-live-video-public-proof.ts
