@@ -19,6 +19,13 @@ function normalizeApiBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function resolveRequestBaseUrl(): { canonicalUrl: string; requestUrl: string } {
+  const canonicalUrl = normalizeApiBaseUrl(String(process.env.STAGING_API_BASE_URL ?? "").trim());
+  const probeOverride = String(process.env.STAGING_API_PROBE_BASE_URL ?? "").trim();
+  const requestUrl = probeOverride ? normalizeApiBaseUrl(probeOverride) : canonicalUrl;
+  return { canonicalUrl, requestUrl };
+}
+
 function fail(message: string): never {
   console.error(`FAIL: ${message}`);
   process.exit(1);
@@ -77,8 +84,8 @@ async function apiRequest(
 async function main() {
   assertStagingOnlySeedAllowed();
 
-  const baseUrl = normalizeApiBaseUrl(String(process.env.STAGING_API_BASE_URL ?? "").trim());
-  if (!baseUrl.startsWith("https://")) {
+  const { canonicalUrl, requestUrl } = resolveRequestBaseUrl();
+  if (!canonicalUrl.startsWith("https://")) {
     fail("STAGING_API_BASE_URL must be the public HTTPS API base URL.");
   }
 
@@ -92,9 +99,9 @@ async function main() {
   const clientSubmissionId = `live-video-proof-${randomUUID()}`;
 
   console.log(`=== Staging live video public proof ===`);
-  console.log(`apiBase=${baseUrl}`);
+  console.log(`apiBase=${canonicalUrl} requestBase=${requestUrl}`);
 
-  const login = await apiRequest(baseUrl, "/v1/auth/login", {
+  const login = await apiRequest(requestUrl, "/v1/auth/login", {
     method: "POST",
     body: { email: spec.email, password: spec.password },
   });
@@ -119,7 +126,7 @@ async function main() {
     clientSubmissionId,
   };
 
-  const created = await apiRequest(baseUrl, "/v1/incidents/emergency", {
+  const created = await apiRequest(requestUrl, "/v1/incidents/emergency", {
     method: "POST",
     token,
     body: emergencyPayload,
@@ -147,7 +154,7 @@ async function main() {
       `${created.requestId ? ` requestId=${created.requestId}` : ""}`,
   );
 
-  const liveStart = await apiRequest(baseUrl, `/v1/live-video/incidents/${incidentId}/start`, {
+  const liveStart = await apiRequest(requestUrl, `/v1/live-video/incidents/${incidentId}/start`, {
     method: "POST",
     token,
     body: {

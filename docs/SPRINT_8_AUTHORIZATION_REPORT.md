@@ -223,7 +223,7 @@ Mandatory next actions (strict order):
 | SRB-040 Test Current Location | **CODE FIXED — DEVICE QA PENDING** |
 | SRB-041 Ikeja vs device GPS | **CODE FIXED — DEVICE QA PENDING** |
 | Code commit | `6d1469b` on `staging` |
-| CI VERIFIED | **NOT YET** — Validate Staging must pass after test-runner + deploy fixes |
+| CI VERIFIED | **YES** — Validate Staging [30326243110](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30326243110) @ `3556fe0` |
 | Port Harcourt physical QA | **MANDATORY** before any PASS promotion |
 | Sprint 8 impact | **No change** — Sprint 8 remains **NOT AUTHORIZED** |
 

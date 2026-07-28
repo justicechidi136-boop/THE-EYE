@@ -628,7 +628,8 @@ See [incident-location-prisma-runtime.md](./release/incident-location-prisma-run
 | **Code fix** | `DeviceLocationService.probeCurrentLocation()` with duplicate suppression, `DeviceLocationState`, separate Device Location card, `LOC-TEST-*` stable error codes @ `6d1469b` + follow-ups |
 | **Automated test** | Mobile **210/210 PASS** locally; `device_location_service_test.dart` (8 cases); API **397/397 PASS** locally |
 | **Deployed SHA** | `6d1469b` (VPS redeploy 2026-07-28; seed verified) |
-| **Installed APK** | `com.theeye.app.staging` v0.1.0 — SHA-256 `C6695945298BAD9E55B8D3E8638A145951AA5003EDA44C54C3F50FCFA7C27421` (built from `6d1469b` lineage; rebuild required after LOC-TEST commit lands) |
+| **Installed APK** | `com.theeye.app.staging` v0.1.0 — SHA-256 `B8E6D334330E7D1EDFE8B3924DAD763854C5E4D932C13CB4BFAF1A7C1CBE4E30` @ `c581126` (LOC-TEST codes; reinstall after each app-source change) |
+| **Validate Staging** | PASS [30326243110](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30326243110) @ `3556fe0` (API 397/397, mobile 210/210) |
 | **Physical QA** | **PENDING** — Port Harcourt device worksheet required |
 | **SOS / Live Video** | **PENDING** — no PASS without device proof |
 | **Status** | **CODE FIXED — DEVICE QA PENDING** |
@@ -650,7 +651,8 @@ Progression: CODE FIXED → CI VERIFIED (pending) → DEPLOYED → DEVICE VERIFI
 | **Code fix** | Separate Device Location / Profile Jurisdiction cards; `profileJurisdiction` API field; remove runtime Ikeja default routing for valid GPS; Rivers/Obio-Akpor staging test polygon @ `6d1469b` |
 | **Staging seed note** | Obio-Akpor polygon is **approximate staging QA coverage only** — not production boundary data |
 | **Automated test** | `jurisdiction-resolution.service.spec.ts` (11 cases); `device_location_service_test.dart` Port Harcourt separation |
-| **Deployed SHA** | `6d1469b` |
+| **Validate Staging** | PASS [30326243110](https://github.com/justicechidi136-boop/THE-EYE/actions/runs/30326243110) @ `3556fe0` |
+| **Installed APK** | SHA-256 `B8E6D334330E7D1EDFE8B3924DAD763854C5E4D932C13CB4BFAF1A7C1CBE4E30` @ `c581126` |
 | **Physical QA** | **PENDING** — Port Harcourt worksheet |
 | **Status** | **CODE FIXED — DEVICE QA PENDING** |
 
