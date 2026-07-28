@@ -206,6 +206,7 @@ jobs:
           debug: true
           script_stop: true
           script: |
+            /bin/bash <<'DEPLOY_SCRIPT'
             set +e
             set -o pipefail
             DEPLOY_ROOT='${{ secrets.DEPLOY_PATH }}'
@@ -232,33 +233,32 @@ jobs:
             if [ -z "$PROOF_ONLY" ]; then PROOF_ONLY=false; fi
             if [ -z "$RUN_LOCATION_PROOF" ]; then RUN_LOCATION_PROOF=false; fi
             echo "STEP deploy-start proof_only=${PROOF_ONLY}"
-            compose_cmd() {
-              docker compose -f infra/docker/docker-compose.yml --env-file .env "$@"
-            }
+            COMPOSE="docker compose -f infra/docker/docker-compose.yml --env-file .env"
+            echo "STEP compose-var-ok"
             if [ "$PROOF_ONLY" = "true" ]; then
               echo "=== Proof-only mode (skip redeploy) ==="
-              compose_cmd build api-tools --no-cache api-tools || { echo "ERROR: api-tools build failed"; exit 1; }
+              $COMPOSE build api-tools --no-cache api-tools || { echo "ERROR: api-tools build failed"; exit 1; }
             else
               echo "STEP compose-ps-start"
-              compose_cmd ps || true
-              compose_cmd pull api admin-web notification-worker || true
+              $COMPOSE ps || true
+              $COMPOSE pull api admin-web notification-worker || true
               echo "STEP compose-build-start"
-              compose_cmd build api admin-web api-tools --no-cache api-tools || { echo "ERROR: docker compose build failed"; exit 1; }
-              compose_cmd --profile tools run --rm api-migrate || { echo "ERROR: api-migrate failed"; exit 1; }
-              compose_cmd up -d --force-recreate api notification-worker admin-web || { echo "ERROR: compose up failed"; exit 1; }
-              compose_cmd up -d --wait api admin-web livekit || { echo "ERROR: compose wait failed"; exit 1; }
+              $COMPOSE build api admin-web api-tools --no-cache api-tools || { echo "ERROR: docker compose build failed"; exit 1; }
+              $COMPOSE --profile tools run --rm api-migrate || { echo "ERROR: api-migrate failed"; exit 1; }
+              $COMPOSE up -d --force-recreate api notification-worker admin-web || { echo "ERROR: compose up failed"; exit 1; }
+              $COMPOSE up -d --wait api admin-web livekit || { echo "ERROR: compose wait failed"; exit 1; }
               bash scripts/reload-nginx-upstreams.sh || { echo "ERROR: nginx reload failed"; exit 1; }
               bash scripts/staging-smoke-check.sh || { echo "ERROR: staging smoke failed"; exit 1; }
               echo "=== Prisma runtime forensics (API container) ==="
-              compose_cmd exec -T api node scripts/prisma-runtime-forensics.cjs || { echo "ERROR: prisma runtime forensics failed"; exit 1; }
+              $COMPOSE exec -T api node scripts/prisma-runtime-forensics.cjs || { echo "ERROR: prisma runtime forensics failed"; exit 1; }
               echo "=== Staging seed (first run) ==="
-              compose_cmd --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
+              $COMPOSE --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
               echo "=== Staging certification data verify ==="
-              compose_cmd --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
+              $COMPOSE --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
               echo "=== Staging seed (idempotency second run) ==="
-              compose_cmd --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
+              $COMPOSE --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
               echo "=== Staging login verification ==="
-              compose_cmd --profile tools run --rm \
+              $COMPOSE --profile tools run --rm \
                 -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
                 -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
                 api-tools scripts/verify-staging-test-accounts.ts
@@ -267,13 +267,14 @@ jobs:
               echo "=== SRB-039 location persistence proof ==="
               curl -fsS "${NEXT_PUBLIC_API_BASE_URL}/health/ready" | head -c 4000 || true
               echo ""
-              compose_cmd exec -T api node scripts/diagnose-prisma-location-model.cjs || { echo "ERROR: diagnose prisma failed"; exit 1; }
-              compose_cmd --profile tools run --rm \
+              $COMPOSE exec -T api node scripts/diagnose-prisma-location-model.cjs || { echo "ERROR: diagnose prisma failed"; exit 1; }
+              $COMPOSE --profile tools run --rm \
                 -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
                 -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
                 api-tools scripts/staging-location-persistence-proof.ts || { echo "ERROR: location persistence proof failed"; exit 1; }
             fi
-            compose_cmd ps
+            $COMPOSE ps
+            DEPLOY_SCRIPT
 
   deploy:
     needs: build
