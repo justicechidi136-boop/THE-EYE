@@ -1296,7 +1296,7 @@ model LiveVideoLocationUpdate {
   speed              Decimal?         @db.Decimal(8, 2)
   heading            Decimal?         @db.Decimal(8, 2)
   altitude           Decimal?         @db.Decimal(8, 2)
-  gpsLocation        Unsupported("geography(Point,4326)") @map("gps_location")
+  gpsLocation        Unsupported("geography(Point,4326)")? @map("gps_location")
   capturedAt         DateTime         @map("captured_at") @db.Timestamptz(6)
   receivedAt         DateTime         @default(now()) @map("received_at") @db.Timestamptz(6)
   sourceDeviceId     String?          @map("source_device_id")

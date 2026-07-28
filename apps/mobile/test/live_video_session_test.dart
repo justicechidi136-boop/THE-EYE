@@ -63,6 +63,14 @@ void main() {
       expect(message, isNot(contains("abc-secret")));
     });
 
+    test("maps server failures without ERR-INC prefix", () {
+      final message = mapLiveVideoApiError(
+          502, "THE EYE servers could not process your report (ERR-INC-502).");
+      expect(message, contains("LIVE-VIDEO-502"));
+      expect(message, contains("emergency may still have been submitted"));
+      expect(message, isNot(contains("ERR-INC-502")));
+    });
+
     test("maps permission denial and connection loss labels", () {
       expect(liveVideoConnectionLabel(LiveVideoConnectionState.failed),
           "Connection failed");

@@ -64,6 +64,10 @@ String mapLiveVideoApiError(int statusCode, String message) {
   if (statusCode == 404) return "Live video session is no longer available.";
   if (statusCode == 429)
     return "Too many live stream requests. Wait a minute and try again.";
+  if (statusCode >= 500) {
+    return "Live video could not start (LIVE-VIDEO-$statusCode). "
+        "Your emergency may still have been submitted.";
+  }
   if (message.toLowerCase().contains("token"))
     return "Live video access expired. Start a new stream.";
   return message.isNotEmpty ? message : "Unable to start live video right now.";

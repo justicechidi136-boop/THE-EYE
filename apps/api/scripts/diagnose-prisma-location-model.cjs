@@ -7,6 +7,7 @@ const { Prisma, PrismaClient } = require("@prisma/client");
 
 const models = Prisma.dmmf.datamodel.models.map((m) => m.name);
 const hasModel = models.includes("IncidentLocationUpdate");
+const hasLiveVideoLocationModel = models.includes("LiveVideoLocationUpdate");
 const pkg = require("@prisma/client/package.json");
 const clientVersion = pkg.version;
 
@@ -31,11 +32,22 @@ async function main() {
     },
   });
 
+  function probeLiveVideoClient(label, client) {
+    const delegate = client.liveVideoLocationUpdate;
+    return {
+      label,
+      hasDelegate: Boolean(delegate),
+      hasCreate: typeof delegate?.create === "function",
+    };
+  }
+
   const report = {
     clientVersion,
     hasIncidentLocationUpdateModel: hasModel,
+    hasLiveVideoLocationUpdateModel: hasLiveVideoLocationModel,
     baseClient: probeClient("base", new PrismaClient()),
     extendedOnly: probeClient("extended", extended),
+    liveVideoLocationClient: probeLiveVideoClient("base", new PrismaClient()),
   };
 
   console.log(JSON.stringify(report, null, 2));
@@ -47,8 +59,26 @@ async function main() {
     report.baseClient.hasFindFirst &&
     report.baseClient.hasCount;
 
-  if (!ok) {
+  if (!ok || !hasLiveVideoLocationModel || !report.liveVideoLocationClient.hasCreate) {
     process.exit(1);
+  }
+
+  async function assertCreateOneWorks(label, attempt) {
+    try {
+      await attempt();
+      console.error(JSON.stringify({ buildProbe: `${label}_unexpected_success` }));
+      process.exit(1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = typeof error?.code === "string" ? error.code : "";
+      if (/does not match any query/i.test(message) || /createOne/i.test(message)) {
+        console.error(JSON.stringify({ buildProbe: `${label}_createOne_mismatch`, message: message.slice(0, 240) }));
+        process.exit(1);
+      }
+      if (code === "P2003" || code === "P2021" || /Foreign key constraint/i.test(message) || /connect/i.test(message)) {
+        return;
+      }
+    }
   }
 
   // Runtime createOne must match generated DMMF (delegate-only checks miss stale query engines).
@@ -69,10 +99,21 @@ async function main() {
     const message = error instanceof Error ? error.message : String(error);
     const code = typeof error?.code === "string" ? error.code : "";
     if (/does not match any query/i.test(message) || /createOne.*IncidentLocationUpdate/i.test(message)) {
-      console.error(JSON.stringify({ buildProbe: "createOne_mismatch", message: message.slice(0, 240) }));
+      console.error(JSON.stringify({ buildProbe: "incidentLocation_createOne_mismatch", message: message.slice(0, 240) }));
       process.exit(1);
     }
     if (code === "P2003" || code === "P2021" || /Foreign key constraint/i.test(message) || /connect/i.test(message)) {
+      await assertCreateOneWorks("liveVideoLocation", () =>
+        probe.liveVideoLocationUpdate.create({
+          data: {
+            liveVideoSessionId: "00000000-0000-4000-8000-000000000001",
+            incidentId: "00000000-0000-4000-8000-000000000002",
+            latitude: 1,
+            longitude: 1,
+            capturedAt: new Date(),
+          },
+        }),
+      );
       return;
     }
     if (/incident_location_updates/i.test(message)) {
