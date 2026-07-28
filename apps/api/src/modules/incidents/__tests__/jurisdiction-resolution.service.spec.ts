@@ -13,10 +13,6 @@ describe("JurisdictionResolutionService", () => {
 
   const service = new JurisdictionResolutionService(prisma as never);
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it("rejects invalid coordinates as not valid", () => {
     expect(service.isValidCoordinate(0, 0)).toBe(false);
     expect(service.isValidCoordinate(91, 0)).toBe(false);
