@@ -206,75 +206,18 @@ jobs:
           debug: true
           script_stop: true
           script: |
-            /bin/bash <<'DEPLOY_SCRIPT'
-            set +e
-            set -o pipefail
+            set -euo pipefail
             DEPLOY_ROOT='${{ secrets.DEPLOY_PATH }}'
-            cd "$DEPLOY_ROOT" || { echo "STEP cd-fail"; exit 1; }
+            cd "$DEPLOY_ROOT"
             export THE_EYE_IMAGE_TAG=${{ steps.meta.outputs.tag }}
             export ADMIN_WEB_APP_ENV=staging
             export NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
-            git fetch --tags origin || { echo "STEP git-fetch-fail"; exit 1; }
-            git checkout ${{ github.sha }} || { echo "STEP git-checkout-fail"; exit 1; }
+            export PROOF_ONLY=${{ github.event.inputs.proof_only }}
+            export RUN_LOCATION_PROOF=${{ github.event.inputs.run_location_proof }}
+            git fetch --tags origin
+            git checkout ${{ github.sha }}
             echo "VPS HEAD: $(git rev-parse HEAD)"
-            echo "STEP env-check-start"
-            if [ ! -f .env ]; then
-              if [ -f ../.env ]; then
-                echo "STEP env-using-parent"
-                ln -sf ../.env .env
-              else
-                echo "STEP env-check-fail"
-                exit 1
-              fi
-            fi
-            echo "STEP env-check-ok"
-            PROOF_ONLY="${{ github.event.inputs.proof_only }}"
-            RUN_LOCATION_PROOF="${{ github.event.inputs.run_location_proof }}"
-            if [ -z "$PROOF_ONLY" ]; then PROOF_ONLY=false; fi
-            if [ -z "$RUN_LOCATION_PROOF" ]; then RUN_LOCATION_PROOF=false; fi
-            echo "STEP deploy-start proof_only=${PROOF_ONLY}"
-            COMPOSE="docker compose -f infra/docker/docker-compose.yml --env-file .env"
-            echo "STEP compose-var-ok"
-            if [ "$PROOF_ONLY" = "true" ]; then
-              echo "=== Proof-only mode (skip redeploy) ==="
-              $COMPOSE build api-tools --no-cache api-tools || { echo "ERROR: api-tools build failed"; exit 1; }
-            else
-              echo "STEP compose-ps-start"
-              $COMPOSE ps || true
-              $COMPOSE pull api admin-web notification-worker || true
-              echo "STEP compose-build-start"
-              $COMPOSE build api admin-web api-tools --no-cache api-tools || { echo "ERROR: docker compose build failed"; exit 1; }
-              $COMPOSE --profile tools run --rm api-migrate || { echo "ERROR: api-migrate failed"; exit 1; }
-              $COMPOSE up -d --force-recreate api notification-worker admin-web || { echo "ERROR: compose up failed"; exit 1; }
-              $COMPOSE up -d --wait api admin-web livekit || { echo "ERROR: compose wait failed"; exit 1; }
-              bash scripts/reload-nginx-upstreams.sh || { echo "ERROR: nginx reload failed"; exit 1; }
-              bash scripts/staging-smoke-check.sh || { echo "ERROR: staging smoke failed"; exit 1; }
-              echo "=== Prisma runtime forensics (API container) ==="
-              $COMPOSE exec -T api node scripts/prisma-runtime-forensics.cjs || { echo "ERROR: prisma runtime forensics failed"; exit 1; }
-              echo "=== Staging seed (first run) ==="
-              $COMPOSE --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
-              echo "=== Staging certification data verify ==="
-              $COMPOSE --profile tools run --rm api-tools scripts/verify-staging-certification-data.ts
-              echo "=== Staging seed (idempotency second run) ==="
-              $COMPOSE --profile tools run --rm api-tools prisma/seed-staging-test-accounts.ts
-              echo "=== Staging login verification ==="
-              $COMPOSE --profile tools run --rm \
-                -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
-                -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
-                api-tools scripts/verify-staging-test-accounts.ts
-            fi
-            if [ "$PROOF_ONLY" = "true" ] || [ "$RUN_LOCATION_PROOF" = "true" ]; then
-              echo "=== SRB-039 location persistence proof ==="
-              curl -fsS "${NEXT_PUBLIC_API_BASE_URL}/health/ready" | head -c 4000 || true
-              echo ""
-              $COMPOSE exec -T api node scripts/diagnose-prisma-location-model.cjs || { echo "ERROR: diagnose prisma failed"; exit 1; }
-              $COMPOSE --profile tools run --rm \
-                -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
-                -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
-                api-tools scripts/staging-location-persistence-proof.ts || { echo "ERROR: location persistence proof failed"; exit 1; }
-            fi
-            $COMPOSE ps
-            DEPLOY_SCRIPT
+            bash scripts/deploy-staging-vps-ci.sh
 
   deploy:
     needs: build
