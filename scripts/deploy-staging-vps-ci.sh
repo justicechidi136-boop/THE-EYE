@@ -57,7 +57,9 @@ curl -fsS "${NEXT_PUBLIC_API_BASE_URL:?}/health/ready" | head -c 4000 || true
 echo ""
 "${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs
 PROOF_EXPORT_FILE="${TMPDIR:-/tmp}/the-eye-live-video-proof.env"
-rm -f "${PROOF_EXPORT_FILE}"
+rm -rf "${PROOF_EXPORT_FILE}"
+touch "${PROOF_EXPORT_FILE}"
+chmod 600 "${PROOF_EXPORT_FILE}"
 "${COMPOSE[@]}" --profile tools run --rm \
   -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
   -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
