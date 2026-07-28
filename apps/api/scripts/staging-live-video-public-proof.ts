@@ -13,7 +13,11 @@ type ApiResult = {
   status: number;
   requestId?: string;
   body: JsonRecord;
+  durationMs: number;
 };
+
+const EXPECTED_CLIENT_LIVEKIT_URL = "wss://staging-livekit.theeye.com.ng";
+const PUBLIC_START_ATTEMPTS = 5;
 
 function normalizeApiBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -26,6 +30,15 @@ function resolveRequestBaseUrl(): { canonicalUrl: string; requestUrl: string } {
   return { canonicalUrl, requestUrl };
 }
 
+function apiPath(baseUrl: string, suffix: string): string {
+  const normalized = normalizeApiBaseUrl(baseUrl);
+  const path = suffix.startsWith("/") ? suffix : `/${suffix}`;
+  if (normalized.endsWith("/v1")) {
+    return path.startsWith("/v1/") ? path.replace(/^\/v1/, "") : path;
+  }
+  return path.startsWith("/v1/") ? path : `/v1${path}`;
+}
+
 function fail(message: string): never {
   console.error(`FAIL: ${message}`);
   process.exit(1);
@@ -33,7 +46,7 @@ function fail(message: string): never {
 
 async function apiRequest(
   baseUrl: string,
-  path: string,
+  pathSuffix: string,
   options: {
     method?: string;
     token?: string;
@@ -41,10 +54,12 @@ async function apiRequest(
     headers?: Record<string, string>;
   } = {},
 ): Promise<ApiResult> {
+  const path = apiPath(baseUrl, pathSuffix);
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
+    const startedAt = Date.now();
     try {
-      const response = await fetch(`${baseUrl}${path}`, {
+      const response = await fetch(`${normalizeApiBaseUrl(baseUrl)}${path}`, {
         method: options.method ?? "GET",
         headers: {
           ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
@@ -68,6 +83,7 @@ async function apiRequest(
         status: response.status,
         requestId: typeof body.requestId === "string" ? body.requestId : undefined,
         body,
+        durationMs: Date.now() - startedAt,
       };
     } catch (error) {
       lastError = error;
@@ -77,8 +93,29 @@ async function apiRequest(
     }
   }
 
-  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  const message = lastError instanceof Error ? last.message : String(lastError);
   fail(`fetch failed for ${path}: ${message}`);
+}
+
+function extractLivekitUrl(body: JsonRecord): string | undefined {
+  const livekit = body.livekit as JsonRecord | undefined;
+  if (livekit && typeof livekit.url === "string") return livekit.url;
+  const data = body.data as JsonRecord | undefined;
+  const nested = data?.livekit as JsonRecord | undefined;
+  if (nested && typeof nested.url === "string") return nested.url;
+  return undefined;
+}
+
+function assertPublicLivekitUrl(url: string | undefined, context: string) {
+  if (!url) fail(`${context}: response missing livekit.url`);
+  if (url !== EXPECTED_CLIENT_LIVEKIT_URL) {
+    fail(`${context}: livekit.url=${url} expected ${EXPECTED_CLIENT_LIVEKIT_URL}`);
+  }
+  for (const forbidden of ["ws://livekit", "localhost", "127.0.0.1", "production"]) {
+    if (url.includes(forbidden)) {
+      fail(`${context}: forbidden LiveKit URL fragment in ${url}`);
+    }
+  }
 }
 
 async function main() {
@@ -99,9 +136,9 @@ async function main() {
   const clientSubmissionId = `live-video-proof-${randomUUID()}`;
 
   console.log(`=== Staging live video public proof ===`);
-  console.log(`apiBase=${canonicalUrl} requestBase=${requestUrl}`);
+  console.log(`apiBase=${canonicalUrl} authBase=${requestUrl} publicStartBase=${canonicalUrl}`);
 
-  const login = await apiRequest(requestUrl, "/v1/auth/login", {
+  const login = await apiRequest(requestUrl, "/auth/login", {
     method: "POST",
     body: { email: spec.email, password: spec.password },
   });
@@ -112,7 +149,7 @@ async function main() {
     );
   }
   const token = login.body.accessToken;
-  console.log(`PASS login http=${login.status}`);
+  console.log(`PASS login http=${login.status} durationMs=${login.durationMs}`);
 
   const emergencyPayload = {
     type: IncidentType.Emergency,
@@ -126,7 +163,7 @@ async function main() {
     clientSubmissionId,
   };
 
-  const created = await apiRequest(requestUrl, "/v1/incidents/emergency", {
+  const created = await apiRequest(requestUrl, "/incidents/emergency", {
     method: "POST",
     token,
     body: emergencyPayload,
@@ -151,37 +188,79 @@ async function main() {
   }
   console.log(
     `PASS emergency http=${created.status} incidentId=${incidentId}` +
-      `${created.requestId ? ` requestId=${created.requestId}` : ""}`,
+      `${created.requestId ? ` requestId=${created.requestId}` : ""}` +
+      ` durationMs=${created.durationMs}`,
   );
 
-  const liveStart = await apiRequest(requestUrl, `/v1/live-video/incidents/${incidentId}/start`, {
-    method: "POST",
-    token,
-    body: {
-      latitude: 6.5244,
-      longitude: 3.3792,
-      accuracy: 12,
-      capturedAt: new Date().toISOString(),
-      lowBandwidthMode: true,
-      sourceDeviceId: "mobile-primary",
-    },
-  });
-  if (!liveStart.ok) {
-    fail(
-      `live-video start failed http=${liveStart.status}` +
-        `${liveStart.requestId ? ` requestId=${liveStart.requestId}` : ""}` +
-        ` body=${JSON.stringify(liveStart.body).slice(0, 400)}`,
+  let successCount = 0;
+  for (let attempt = 1; attempt <= PUBLIC_START_ATTEMPTS; attempt++) {
+    const clientTraceId = `live-video-proof-${attempt}-${randomUUID()}`;
+    const liveStart = await apiRequest(
+      canonicalUrl,
+      `/live-video/incidents/${incidentId}/start`,
+      {
+        method: "POST",
+        token,
+        body: {
+          latitude: 6.5244,
+          longitude: 3.3792,
+          accuracy: 12,
+          capturedAt: new Date().toISOString(),
+          lowBandwidthMode: true,
+          sourceDeviceId: "mobile-primary",
+        },
+        headers: {
+          "X-Client-Trace-ID": clientTraceId,
+          "X-Request-ID": randomUUID(),
+        },
+      },
     );
+
+    if (liveStart.status === 502 || liveStart.status === 503) {
+      fail(
+        `live-video start attempt ${attempt}/${PUBLIC_START_ATTEMPTS} gateway http=${liveStart.status}` +
+          `${liveStart.requestId ? ` requestId=${liveStart.requestId}` : ""}`,
+      );
+    }
+    if (!liveStart.ok) {
+      fail(
+        `live-video start attempt ${attempt}/${PUBLIC_START_ATTEMPTS} http=${liveStart.status}` +
+          `${liveStart.requestId ? ` requestId=${liveStart.requestId}` : ""}` +
+          ` body=${JSON.stringify(liveStart.body).slice(0, 400)}`,
+      );
+    }
+
+    const livekitUrl = extractLivekitUrl(liveStart.body);
+    assertPublicLivekitUrl(livekitUrl, `attempt ${attempt}`);
+
+    const sessionId =
+      typeof (liveStart.body.data as JsonRecord | undefined)?.id === "string"
+        ? ((liveStart.body.data as JsonRecord).id as string)
+        : undefined;
+    const roomName =
+      typeof liveStart.body.livekit === "object" &&
+      liveStart.body.livekit &&
+      typeof (liveStart.body.livekit as JsonRecord).roomName === "string"
+        ? ((liveStart.body.livekit as JsonRecord).roomName as string)
+        : undefined;
+    const hasToken =
+      typeof liveStart.body.livekit === "object" &&
+      liveStart.body.livekit &&
+      typeof (liveStart.body.livekit as JsonRecord).token === "string";
+
+    console.log(
+      `PASS public live-video start ${attempt}/${PUBLIC_START_ATTEMPTS} http=${liveStart.status}` +
+        ` sessionId=${sessionId ?? "unknown"} room=${roomName ?? "unknown"}` +
+        ` livekitUrl=${livekitUrl}` +
+        ` tokenPresent=${hasToken ? "yes" : "no"}` +
+        `${liveStart.requestId ? ` requestId=${liveStart.requestId}` : ""}` +
+        ` clientTraceId=${clientTraceId}` +
+        ` durationMs=${liveStart.durationMs}`,
+    );
+    successCount++;
   }
 
-  const sessionId =
-    typeof (liveStart.body.data as JsonRecord | undefined)?.id === "string"
-      ? ((liveStart.body.data as JsonRecord).id as string)
-      : undefined;
-  console.log(
-    `PASS live-video start http=${liveStart.status} sessionId=${sessionId ?? "unknown"}` +
-      `${liveStart.requestId ? ` requestId=${liveStart.requestId}` : ""}`,
-  );
+  console.log(`PASS public stage4 ${successCount}/${PUBLIC_START_ATTEMPTS} livekitUrl=${EXPECTED_CLIENT_LIVEKIT_URL}`);
   console.log("=== Staging live video public proof complete ===");
 }
 
