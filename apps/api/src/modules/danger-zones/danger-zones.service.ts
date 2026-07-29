@@ -52,7 +52,7 @@ export class DangerZonesService {
       incidentType: String(incident.type),
       priority: String(incident.priority),
       status: String(incident.status),
-      confidenceScore: latestVerification?.confidence ?? 0,
+      confidenceScore: Number(latestVerification?.confidence ?? 0),
       adminVerified: latestVerification?.method === "admin_manual_review" && latestVerification.result === "confirmed",
       agencyVerified: latestVerification?.method?.includes("agency") ?? false,
       emergencyOverride: dto.emergencyOverride === true,

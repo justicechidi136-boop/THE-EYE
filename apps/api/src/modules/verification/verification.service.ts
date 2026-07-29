@@ -1,4 +1,10 @@
-﻿import { Injectable, NotFoundException, Optional } from "@nestjs/common";
+﻿import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
 import { IncidentPriority, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
