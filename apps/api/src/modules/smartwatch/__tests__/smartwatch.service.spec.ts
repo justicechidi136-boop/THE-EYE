@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { AdminRoleName } from "@the-eye/shared";
 import { hashToken } from "../../../common/auth/crypto";
 import { SmartwatchConnectivityMode, SmartwatchPairingMethod } from "@the-eye/shared";
 import { SmartwatchService } from "../smartwatch.service";
@@ -261,6 +262,55 @@ describe("SmartwatchService", () => {
     );
     expect(prisma.smartwatchOfflineEvent.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "Processed" }),
+    }));
+  });
+
+  it("issues activation secret and records audit log", async () => {
+    const { service, prisma, auditService } = buildService();
+    prisma.smartwatchPairingSession.upsert = jest.fn().mockResolvedValue({ id: "session-1", deviceId: "EYE-WATCH-NEW" });
+    const actor = { typ: "admin", sub: "admin-1", role: AdminRoleName.SuperAdmin } as any;
+
+    const result = await service.adminIssueActivation({ deviceId: "EYE-WATCH-NEW", ttlMinutes: 10 }, actor);
+
+    expect(result.data.deviceId).toBe("EYE-WATCH-NEW");
+    expect(result.data.pairingCode).toMatch(/^\d{6}$/);
+    expect(result.data.qrPayload).toContain("the-eye-smartwatch-activation");
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "smartwatch.activation_secret_issued",
+    }));
+  });
+
+  it("revokes pairing session and records audit log", async () => {
+    const { service, prisma, auditService } = buildService();
+    prisma.smartwatchPairingSession.findUnique = jest.fn().mockResolvedValue({ id: "session-1", deviceId: "EYE-WATCH-001" });
+    prisma.smartwatchPairingSession.delete = jest.fn().mockResolvedValue({ id: "session-1" });
+    const actor = { typ: "admin", sub: "admin-1", role: AdminRoleName.SuperAdmin } as any;
+
+    const result = await service.adminRevokePairingSession("EYE-WATCH-001", actor);
+
+    expect(result).toEqual({ revoked: true, deviceId: "EYE-WATCH-001" });
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "smartwatch.activation_secret_revoked",
+    }));
+  });
+
+  it("returns device detail for admin lookup by public device id", async () => {
+    const { service, prisma } = buildService();
+    prisma.smartwatchDevice.findFirst = jest.fn().mockResolvedValue({
+      id: "device-uuid",
+      deviceId: "EYE-WATCH-001",
+      user: { profile: { country: "NG", state: "LA", lga: "Ikeja" } },
+      sosEvents: [],
+      gpsTracks: [],
+      firmwareUpdates: [],
+    });
+    const actor = { typ: "admin", sub: "admin-1", role: AdminRoleName.SuperAdmin } as any;
+
+    const result = await service.adminGetDevice("EYE-WATCH-001", actor);
+
+    expect(result.data.deviceId).toBe("EYE-WATCH-001");
+    expect(prisma.smartwatchDevice.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: [{ id: "EYE-WATCH-001" }, { deviceId: "EYE-WATCH-001" }] },
     }));
   });
 });

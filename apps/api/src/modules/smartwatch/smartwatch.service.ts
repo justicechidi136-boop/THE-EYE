@@ -20,6 +20,8 @@ import {
   SmartwatchStandaloneLoginDto,
   UpdateSmartwatchStatusDto,
   IssueSmartwatchPairingCodeDto,
+  AdminIssueSmartwatchActivationDto,
+  validateAdminIssueActivationDto,
   validateCriticalAlertDto,
   validateFirmwareReleaseDto,
   validateHeartbeatDto,
@@ -559,6 +561,141 @@ export class SmartwatchService {
     return {
       data: devices.filter((device) => this.adminCanAccessUserProfile(device.user?.profile, actor)),
     };
+  }
+
+  async adminGetDevice(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view smartwatch devices");
+    const device = await this.prisma.smartwatchDevice.findFirst({
+      where: { OR: [{ id }, { deviceId: id }] },
+      include: {
+        user: { include: { profile: true } },
+        sosEvents: { orderBy: { triggeredAt: "desc" }, take: 20, include: { incident: true } },
+        gpsTracks: { orderBy: { capturedAt: "desc" }, take: 50 },
+        firmwareUpdates: { orderBy: { startedAt: "desc" }, take: 10, include: { release: true } },
+      },
+    });
+    if (!device) throw new NotFoundException("Smartwatch device not found");
+    if (!this.adminCanAccessUserProfile(device.user?.profile, actor)) throw new ForbiddenException("Device is outside your scope");
+    return { data: device };
+  }
+
+  async adminListFirmware(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list firmware releases");
+    const releases = await (this.prisma as any).smartwatchFirmwareRelease.findMany({
+      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+      take: 100,
+      include: { _count: { select: { updates: true } } },
+    });
+    return { data: releases };
+  }
+
+  async adminListPairingSessions(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view pairing sessions");
+    const sessions = await (this.prisma as any).smartwatchPairingSession.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    const deviceIds = sessions.map((session: { deviceId: string }) => session.deviceId);
+    const devices = deviceIds.length
+      ? await this.prisma.smartwatchDevice.findMany({ where: { deviceId: { in: deviceIds } }, include: { user: { include: { profile: true } } } })
+      : [];
+    const deviceByPublicId = new Map(devices.map((device) => [device.deviceId, device]));
+    return {
+      data: sessions.map((session: Record<string, unknown>) => {
+        const device = deviceByPublicId.get(String(session.deviceId));
+        return {
+          ...session,
+          status: this.pairingSessionStatus(session),
+          device: device ?? null,
+        };
+      }),
+    };
+  }
+
+  async adminIssueActivation(dto: AdminIssueSmartwatchActivationDto, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can issue activation secrets");
+    validateAdminIssueActivationDto(dto);
+    const firebaseEnv = this.defaultFirebaseEnv();
+    const ttlMinutes = dto.ttlMinutes ?? 10;
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+    const pairingCode = String(Math.floor(100000 + Math.random() * 900000));
+    const session = await (this.prisma as any).smartwatchPairingSession.upsert({
+      where: { deviceId: dto.deviceId },
+      update: {
+        pairingCodeHash: hashToken(pairingCode),
+        firebaseEnv,
+        expiresAt,
+        usedAt: null,
+        deviceSecretPlain: null,
+      },
+      create: {
+        deviceId: dto.deviceId,
+        pairingCodeHash: hashToken(pairingCode),
+        firebaseEnv,
+        expiresAt,
+      },
+    });
+    const qrPayload = JSON.stringify({
+      type: "the-eye-smartwatch-activation",
+      deviceId: dto.deviceId,
+      pairingCode,
+      firebaseEnv,
+      connectivityMode: dto.connectivityMode ?? "StandaloneCellular",
+      expiresAt: expiresAt.toISOString(),
+    });
+    await this.audit(actor, "smartwatch.activation_secret_issued", "smartwatch_pairing_sessions", session.id, {
+      deviceId: dto.deviceId,
+      firebaseEnv,
+      expiresAt: expiresAt.toISOString(),
+      connectivityMode: dto.connectivityMode ?? "StandaloneCellular",
+    });
+    return {
+      data: {
+        deviceId: dto.deviceId,
+        pairingCode,
+        expiresAt: expiresAt.toISOString(),
+        qrPayload,
+        firebaseEnv,
+        connectivityMode: dto.connectivityMode ?? "StandaloneCellular",
+      },
+    };
+  }
+
+  async adminRevokePairingSession(deviceId: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can revoke activation secrets");
+    const session = await (this.prisma as any).smartwatchPairingSession.findUnique({ where: { deviceId } });
+    if (!session) throw new NotFoundException("Pairing session not found");
+    await (this.prisma as any).smartwatchPairingSession.delete({ where: { deviceId } });
+    await this.audit(actor, "smartwatch.activation_secret_revoked", "smartwatch_pairing_sessions", session.id, { deviceId });
+    return { revoked: true, deviceId };
+  }
+
+  async adminActivationHistory(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view activation history");
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        action: {
+          in: [
+            "smartwatch.activation_secret_issued",
+            "smartwatch.activation_secret_revoked",
+            "smartwatch.pairing_code_issued",
+            "smartwatch.device_paired",
+            "smartwatch.device_activated",
+            "smartwatch.device_deactivated",
+            "smartwatch.remote_wipe_queued",
+          ],
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    return { data: logs };
+  }
+
+  private pairingSessionStatus(session: Record<string, unknown>) {
+    if (session.usedAt) return "used";
+    if (new Date(String(session.expiresAt)).getTime() < Date.now()) return "expired";
+    return "pending";
   }
 
   private adminCanAccessUserProfile(

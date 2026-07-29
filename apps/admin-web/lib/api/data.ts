@@ -17,6 +17,9 @@ import {
   toResidentView,
   toPoliceStationView,
   toSmartwatchDeviceView,
+  toSmartwatchDeviceDetailView,
+  toPairingSessionView,
+  toActivationHistoryView,
   toSosEventView,
   toUserDirectoryEntry,
   toVolunteerView,
@@ -38,6 +41,9 @@ import type {
   ResidentView,
   PoliceStationView,
   SmartwatchDeviceView,
+  SmartwatchDeviceDetailView,
+  PairingSessionView,
+  ActivationHistoryView,
   SosEventView,
   UserDirectoryEntry,
   VolunteerView,
@@ -293,8 +299,86 @@ export async function fetchSmartwatchDevices(): Promise<SmartwatchDeviceView[]> 
 }
 
 export async function fetchSmartwatchDevice(id: string): Promise<SmartwatchDeviceView | null> {
-  const devices = await fetchSmartwatchDevices();
-  return devices.find((device) => device.id === id || device.deviceId === id) ?? null;
+  const detail = await fetchSmartwatchDeviceDetail(id);
+  return detail;
+}
+
+export async function fetchSmartwatchDeviceDetail(id: string): Promise<SmartwatchDeviceDetailView | null> {
+  return withToken(async (token) => {
+    try {
+      const response = await apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/admin/devices/${encodeURIComponent(id)}`, { token });
+      return toSmartwatchDeviceDetailView(response.data);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  }, null);
+}
+
+export async function fetchPairingSessions(): Promise<PairingSessionView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/smartwatch/admin/pairing-sessions", { token });
+    return response.data.map(toPairingSessionView);
+  }, []);
+}
+
+export async function fetchActivationHistory(): Promise<ActivationHistoryView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/smartwatch/admin/activation-history", { token });
+    return response.data.map(toActivationHistoryView);
+  }, []);
+}
+
+export async function fetchSosTracking(sosEventId: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/sos/${encodeURIComponent(sosEventId)}/tracking`, { token });
+}
+
+export async function issueSmartwatchActivation(input: { deviceId: string; ttlMinutes?: number; connectivityMode?: string }) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ data: Record<string, unknown> }>("/smartwatch/admin/activation-secrets", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function revokeSmartwatchPairingSession(deviceId: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ revoked: boolean; deviceId: string }>(`/smartwatch/admin/pairing-sessions/${encodeURIComponent(deviceId)}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function smartwatchDeviceAction(id: string, action: "activate" | "deactivate" | "remote-wipe") {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/devices/${encodeURIComponent(id)}/${action}`, {
+    method: "PATCH",
+    token,
+  });
+}
+
+export async function publishSmartwatchFirmware(input: {
+  version: string;
+  title: string;
+  releaseNotes?: string;
+  downloadUrl: string;
+  fileHash: string;
+  signature: string;
+  status?: string;
+}) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ data: Record<string, unknown> }>("/smartwatch/admin/firmware", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
 }
 
 export async function fetchSosEvents(): Promise<SosEventView[]> {
