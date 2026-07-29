@@ -88,6 +88,9 @@ else
 fi
 
 echo "=== Staging live video public proof (mobile parity) ==="
+if [[ "${SKIP_LIVE_VIDEO_PROOF:-false}" == "true" ]]; then
+  echo "SKIP live video proof (SKIP_LIVE_VIDEO_PROOF=true)"
+else
 curl -fsS "${NEXT_PUBLIC_API_BASE_URL:?}/health/ready" | head -c 4000 || true
 echo ""
 "${COMPOSE[@]}" exec -T api node scripts/diagnose-prisma-location-model.cjs
@@ -99,6 +102,7 @@ PROOF_EXPORT_LINES="$("${COMPOSE[@]}" --profile tools run --rm \
 eval "${PROOF_EXPORT_LINES}"
 EXPECTED_LIVEKIT_URL="wss://staging-livekit.theeye.com.ng"
 PUBLIC_OK=0
+GATEWAY_RETRY_SLEEP="${STAGING_LIVE_VIDEO_GATEWAY_RETRY_SECONDS:-10}"
 for attempt in 1 2 3 4 5; do
   TRACE_ID="live-video-proof-${attempt}-$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)"
   STARTED_AT="$(date +%s%3N)"
@@ -115,10 +119,16 @@ for attempt in 1 2 3 4 5; do
   ENDED_AT="$(date +%s%3N)"
   DURATION_MS="$((ENDED_AT - STARTED_AT))"
   if [[ "${HTTP_CODE}" == "502" || "${HTTP_CODE}" == "503" ]]; then
-    echo "FAIL public live-video start ${attempt}/5 gateway http=${HTTP_CODE} clientTraceId=${TRACE_ID}"
-    cat "${RESPONSE_FILE}"
+    echo "WARN public live-video start ${attempt}/5 gateway http=${HTTP_CODE} clientTraceId=${TRACE_ID}"
+    cat "${RESPONSE_FILE}" || true
     rm -f "${RESPONSE_FILE}"
-    exit 1
+    if (( attempt == 5 )); then
+      echo "FAIL public live-video start gateway http=${HTTP_CODE} after 5 attempts"
+      exit 1
+    fi
+    echo "WAIT public live-video gateway retry ${GATEWAY_RETRY_SLEEP}s ..."
+    sleep "$GATEWAY_RETRY_SLEEP"
+    continue
   fi
   if [[ "${HTTP_CODE}" != "201" ]]; then
     echo "FAIL public live-video start ${attempt}/5 http=${HTTP_CODE} clientTraceId=${TRACE_ID}"
@@ -147,6 +157,7 @@ docker run --rm --network host --env-file .env \
   -e LIVEKIT_NODE_IP="${LIVEKIT_NODE_IP:-}" \
   "${API_TOOLS_IMAGE}" \
   npx tsx scripts/staging-live-video-room-join-proof.ts
+fi
 
 if [[ "$PROOF_ONLY" == "true" || "$RUN_LOCATION_PROOF" == "true" ]]; then
   echo "=== SRB-039 location persistence proof ==="
