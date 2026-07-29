@@ -257,6 +257,7 @@ services:
     environment:
       NODE_ENV: production
       API_ORIGIN: ${API_ORIGIN:-http://api:4000}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-wss://localhost}
     depends_on:
       api:

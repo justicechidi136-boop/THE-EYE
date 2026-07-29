@@ -45,6 +45,12 @@ if [[ "$PROOF_ONLY" == "true" ]]; then
   echo "=== Proof-only mode (skip redeploy) ==="
   "${COMPOSE[@]}" build api-tools --no-cache api-tools
   bash scripts/staging-livekit-network-guard.sh
+  echo "=== Admin container logs (proof-only SSR forensics) ==="
+  docker ps --filter "name=the-eye-admin-web" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
+  docker exec the-eye-admin-web sh -c 'printenv | sort | grep -E "^(NODE_ENV|API_ORIGIN|NEXT_PUBLIC_|JWT_ACCESS_SECRET=)" | sed "s/JWT_ACCESS_SECRET=.*/JWT_ACCESS_SECRET=<set>/"' || true
+  curl -fsS --max-time 10 -H "Host: ${THE_EYE_ADMIN_SERVER_NAME:-staging-dashboard8jps.theeye.com.ng}" "http://127.0.0.1/api/auth/login" || true
+  echo ""
+  docker logs the-eye-admin-web --tail 500 2>&1 || true
 else
   echo "STEP compose-ps-start"
   "${COMPOSE[@]}" ps || true
@@ -64,6 +70,8 @@ else
   "${COMPOSE[@]}" up -d --wait api admin-web livekit
   bash scripts/reload-nginx-upstreams.sh
   bash scripts/staging-smoke-check.sh
+  echo "=== Admin container logs (SSR forensics) ==="
+  docker logs the-eye-admin-web --tail 300 2>&1 || true
   echo "=== Prisma runtime forensics (API container) ==="
   "${COMPOSE[@]}" exec -T api node scripts/prisma-runtime-forensics.cjs
   echo "=== Staging seed (first run) ==="
