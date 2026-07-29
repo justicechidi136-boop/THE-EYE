@@ -18,12 +18,6 @@ export type DateIdCursor = {
   id: string;
 };
 
-export type IncidentListCursor = {
-  priority: string;
-  createdAt: string;
-  id: string;
-};
-
 export type SequenceCursor = {
   sequence: string;
 };
@@ -39,11 +33,13 @@ export function encodeDateIdCursor(createdAt: Date | string, id: string) {
 }
 
 export function decodeDateIdCursor(cursor?: string): DateIdCursor | null {
-  if (!cursor) return null;
+  if (!cursor?.trim()) return null;
   try {
     const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as DateIdCursor;
     if (!parsed?.createdAt || !parsed?.id) return null;
-    return parsed;
+    const createdAt = new Date(parsed.createdAt);
+    if (Number.isNaN(createdAt.getTime())) return null;
+    return { createdAt: createdAt.toISOString(), id: String(parsed.id) };
   } catch {
     return null;
   }
@@ -54,36 +50,6 @@ export function dateIdCursorWhere(cursor: DateIdCursor | null) {
   const createdAt = new Date(cursor.createdAt);
   return {
     OR: [{ createdAt: { lt: createdAt } }, { createdAt, id: { lt: cursor.id } }],
-  };
-}
-
-export function encodeIncidentCursor(priority: string, createdAt: Date | string, id: string) {
-  return Buffer.from(
-    JSON.stringify({ priority, createdAt: new Date(createdAt).toISOString(), id }),
-    "utf8",
-  ).toString("base64url");
-}
-
-export function decodeIncidentCursor(cursor?: string): IncidentListCursor | null {
-  if (!cursor) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as IncidentListCursor;
-    if (!parsed?.priority || !parsed?.createdAt || !parsed?.id) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export function incidentCursorWhere(cursor: IncidentListCursor | null) {
-  if (!cursor) return {};
-  const createdAt = new Date(cursor.createdAt);
-  return {
-    OR: [
-      { priority: { gt: cursor.priority as never } },
-      { priority: cursor.priority as never, createdAt: { lt: createdAt } },
-      { priority: cursor.priority as never, createdAt, id: { lt: cursor.id } },
-    ],
   };
 }
 
