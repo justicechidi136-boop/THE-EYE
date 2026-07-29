@@ -23,6 +23,7 @@ describe("database migrations", () => {
     expect(sql).toContain("prevent_audit_log_mutation");
     expect(sql).toContain("notification_delivery_logs");
     expect(sql).toContain("smartwatch_gps_tracks");
+    expect(sql).toContain("danger_zones");
     expect(sql).toContain("live_video_location_updates");
     expect(sql).toContain("idx_incidents_reporter_created_at");
     expect(sql).toContain("idx_notifications_user_unread_created_at");

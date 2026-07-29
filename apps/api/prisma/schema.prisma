@@ -264,6 +264,43 @@ enum IncidentAssignmentStatus {
   Completed
   Cancelled
 }
+
+enum DangerZoneStatus {
+  PendingVerification
+  ActiveCritical
+  ActiveHigh
+  ActiveModerate
+  Contained
+  Monitoring
+  AllClear
+  Expired
+  CancelledFalseReport
+}
+
+enum SafetyAlertLevel {
+  P1Immediate
+  P2Serious
+  P3Awareness
+  P4AllClear
+}
+
+enum SafetyAlertState {
+  Awareness
+  Approaching
+  Critical
+  InsideDangerZone
+  MovingAway
+  Clear
+}
+
+enum SafetyAlertDeliveryStatus {
+  Queued
+  Sent
+  Delivered
+  Failed
+  Suppressed
+  Expired
+}
 model User {
   id                    String                 @id @default(uuid()) @db.Uuid
   email                 String?                @unique
@@ -315,6 +352,8 @@ model User {
   patrolReports         PatrolReport[]
   authAccounts          AuthAccount[]
   responderProfile      Responder?
+  deviceGeoStates       DeviceGeoState[]
+  safetyAlertRecipients SafetyAlertRecipient[]
 
   @@map("users")
 }
@@ -402,6 +441,7 @@ model Jurisdiction {
   incidents       Incident[]
   neighborhoodGroups NeighborhoodGroup[]
   communities     Community[]
+  dangerZones     DangerZone[]
 
   @@unique([country, state, lga])
   @@index([country, state, lga])
@@ -473,6 +513,9 @@ model AdminUser {
   responderProfile Responder?
   dispatchAssignmentsCreated IncidentAssignment[] @relation("AssignmentAssignedBy")
   dispatchEvents DispatchEvent[] @relation("DispatchEventActor")
+  dangerZonesCreated DangerZone[] @relation("DangerZoneCreator")
+  dangerZonesReviewed DangerZone[] @relation("DangerZoneReviewer")
+  allClearEvents AllClearEvent[] @relation("AllClearIssuer")
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -532,6 +575,7 @@ model Incident {
   communityPosts      CommunityPost[]
   assignments         IncidentAssignment[]
   dispatchEvents      DispatchEvent[]
+  dangerZones         DangerZone[]
 
   @@index([country, state, lga])
   @@index([status, priority, createdAt])
@@ -858,6 +902,7 @@ model Notification {
   communityId String? @map("community_id") @db.Uuid
   community   Community? @relation(fields: [communityId], references: [id])
   deliveryLogs NotificationDeliveryLog[]
+  safetyAlertDeliveries SafetyAlertDelivery[]
 
   @@index([userId, status, createdAt])
   @@index([adminUserId, status, createdAt])
@@ -1353,6 +1398,8 @@ model SmartwatchDevice {
   gpsTracks             SmartwatchGpsTrack[]
   offlineEvents         SmartwatchOfflineEvent[]
   firmwareUpdates       SmartwatchFirmwareUpdate[]
+  deviceGeoStates       DeviceGeoState[]
+  safetyAlertRecipients SafetyAlertRecipient[]
 
   @@index([userId])
   @@index([connectivityMode, isActive])
@@ -1783,6 +1830,234 @@ model ResponderLocationUpdate {
   @@index([responderId, capturedAt])
   @@index([assignmentId, capturedAt])
   @@map("responder_location_updates")
+}
+
+model DangerZone {
+  id                        String            @id @default(uuid()) @db.Uuid
+  incidentId                String            @map("incident_id") @db.Uuid
+  jurisdictionId            String?           @map("jurisdiction_id") @db.Uuid
+  createdByAdminId          String            @map("created_by_admin_id") @db.Uuid
+  reviewedByAdminId         String?           @map("reviewed_by_admin_id") @db.Uuid
+  status                    DangerZoneStatus  @default(PendingVerification)
+  severity                  SafetyAlertLevel  @default(P2Serious)
+  centerLatitude            Decimal           @map("center_latitude") @db.Decimal(9, 6)
+  centerLongitude           Decimal           @map("center_longitude") @db.Decimal(9, 6)
+  centerLocation            Unsupported("geography(Point,4326)")? @map("center_location")
+  innerRadiusMeters         Int               @default(200) @map("inner_radius_meters")
+  warningRadiusMeters       Int               @default(1000) @map("warning_radius_meters")
+  outerAwarenessRadiusMeters Int              @default(2000) @map("outer_awareness_radius_meters")
+  zoneArea                  Unsupported("geography(MultiPolygon,4326)")? @map("zone_area")
+  warningArea               Unsupported("geography(MultiPolygon,4326)")? @map("warning_area")
+  awarenessArea             Unsupported("geography(MultiPolygon,4326)")? @map("awareness_area")
+  activationTime            DateTime?         @map("activation_time") @db.Timestamptz(6)
+  expiryTime                DateTime?         @map("expiry_time") @db.Timestamptz(6)
+  lastReviewedAt            DateTime?         @map("last_reviewed_at") @db.Timestamptz(6)
+  publicMessage             String            @map("public_message")
+  avoidanceInstruction      String            @map("avoidance_instruction")
+  safeRouteMetadata         Json              @default("{}") @map("safe_route_metadata")
+  confidence                Int               @default(0)
+  verificationMethod        String?           @map("verification_method")
+  verifiedAt                DateTime?         @map("verified_at") @db.Timestamptz(6)
+  sourceCount               Int               @default(1) @map("source_count")
+  trustedSourceConfirmed    Boolean           @default(false) @map("trusted_source_confirmed")
+  country                   String
+  state                     String
+  lga                       String
+  version                   Int               @default(1)
+  metadata                  Json              @default("{}")
+  createdAt                 DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  incident                  Incident          @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  jurisdiction              Jurisdiction?     @relation(fields: [jurisdictionId], references: [id])
+  createdByAdmin            AdminUser         @relation("DangerZoneCreator", fields: [createdByAdminId], references: [id])
+  reviewedByAdmin           AdminUser?        @relation("DangerZoneReviewer", fields: [reviewedByAdminId], references: [id])
+  versions                  DangerZoneVersion[]
+  safetyAlerts              SafetyAlert[]
+  allClearEvents            AllClearEvent[]
+
+  @@index([incidentId])
+  @@index([status, severity, expiryTime])
+  @@index([country, state, lga])
+  @@index([activationTime])
+  @@map("danger_zones")
+}
+
+model DangerZoneVersion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  dangerZoneId        String   @map("danger_zone_id") @db.Uuid
+  version             Int
+  changeReason        String?  @map("change_reason")
+  innerRadiusMeters   Int      @map("inner_radius_meters")
+  warningRadiusMeters Int      @map("warning_radius_meters")
+  outerAwarenessRadiusMeters Int @map("outer_awareness_radius_meters")
+  metadata            Json     @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  dangerZone          DangerZone @relation(fields: [dangerZoneId], references: [id], onDelete: Cascade)
+
+  @@unique([dangerZoneId, version])
+  @@map("danger_zone_versions")
+}
+
+model SafetyAlert {
+  id              String           @id @default(uuid()) @db.Uuid
+  dangerZoneId    String           @map("danger_zone_id") @db.Uuid
+  incidentId      String           @map("incident_id") @db.Uuid
+  level           SafetyAlertLevel
+  title           String
+  body            String
+  publicMessage   String           @map("public_message")
+  avoidanceInstruction String       @map("avoidance_instruction")
+  dedupeKey       String           @unique @map("dedupe_key")
+  activatedAt     DateTime         @default(now()) @map("activated_at") @db.Timestamptz(6)
+  expiresAt       DateTime?        @map("expires_at") @db.Timestamptz(6)
+  metadata        Json             @default("{}")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  dangerZone      DangerZone       @relation(fields: [dangerZoneId], references: [id], onDelete: Cascade)
+  recipients      SafetyAlertRecipient[]
+  deliveries      SafetyAlertDelivery[]
+  acknowledgements SafetyAlertAcknowledgement[]
+
+  @@index([dangerZoneId, activatedAt])
+  @@index([incidentId])
+  @@map("safety_alerts")
+}
+
+model SafetyAlertRecipient {
+  id              String           @id @default(uuid()) @db.Uuid
+  safetyAlertId   String           @map("safety_alert_id") @db.Uuid
+  userId          String?          @map("user_id") @db.Uuid
+  deviceId        String?          @map("device_id") @db.Uuid
+  alertState      SafetyAlertState @default(Awareness) @map("alert_state")
+  distanceMeters  Decimal?         @map("distance_meters") @db.Decimal(10, 2)
+  bearingDegrees  Decimal?         @map("bearing_degrees") @db.Decimal(6, 2)
+  cooldownUntil   DateTime?        @map("cooldown_until") @db.Timestamptz(6)
+  lastNotifiedAt  DateTime?        @map("last_notified_at") @db.Timestamptz(6)
+  acknowledgedAt  DateTime?        @map("acknowledged_at") @db.Timestamptz(6)
+  metadata        Json             @default("{}")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  safetyAlert     SafetyAlert      @relation(fields: [safetyAlertId], references: [id], onDelete: Cascade)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device          SmartwatchDevice? @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deliveries      SafetyAlertDelivery[]
+  acknowledgements SafetyAlertAcknowledgement[]
+
+  @@unique([safetyAlertId, userId, deviceId])
+  @@index([userId, alertState])
+  @@index([deviceId, alertState])
+  @@map("safety_alert_recipients")
+}
+
+model SafetyAlertDelivery {
+  id              String                    @id @default(uuid()) @db.Uuid
+  safetyAlertId   String                    @map("safety_alert_id") @db.Uuid
+  recipientId     String                    @map("recipient_id") @db.Uuid
+  notificationId  String?                   @map("notification_id") @db.Uuid
+  channel         String                    @default("watch_push")
+  status          SafetyAlertDeliveryStatus @default(Queued)
+  attemptCount    Int                       @default(0) @map("attempt_count")
+  lastError       String?                   @map("last_error")
+  sentAt          DateTime?                 @map("sent_at") @db.Timestamptz(6)
+  deliveredAt     DateTime?                 @map("delivered_at") @db.Timestamptz(6)
+  metadata        Json                      @default("{}")
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  safetyAlert     SafetyAlert               @relation(fields: [safetyAlertId], references: [id], onDelete: Cascade)
+  recipient       SafetyAlertRecipient      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  notification    Notification?             @relation(fields: [notificationId], references: [id])
+
+  @@index([safetyAlertId, status])
+  @@index([recipientId, status])
+  @@map("safety_alert_deliveries")
+}
+
+model SafetyAlertAcknowledgement {
+  id            String   @id @default(uuid()) @db.Uuid
+  safetyAlertId String   @map("safety_alert_id") @db.Uuid
+  recipientId   String   @map("recipient_id") @db.Uuid
+  userId        String?  @map("user_id") @db.Uuid
+  deviceId      String?  @map("device_id") @db.Uuid
+  acknowledgedAt DateTime @default(now()) @map("acknowledged_at") @db.Timestamptz(6)
+  metadata      Json     @default("{}")
+  safetyAlert   SafetyAlert @relation(fields: [safetyAlertId], references: [id], onDelete: Cascade)
+  recipient     SafetyAlertRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([safetyAlertId, recipientId])
+  @@map("safety_alert_acknowledgements")
+}
+
+model DeviceGeoState {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  deviceId          String?  @map("device_id") @db.Uuid
+  latitude          Decimal  @db.Decimal(9, 6)
+  longitude         Decimal  @db.Decimal(9, 6)
+  gpsLocation       Unsupported("geography(Point,4326)")? @map("gps_location")
+  accuracyMeters    Decimal? @map("accuracy_meters") @db.Decimal(8, 2)
+  speedMps          Decimal? @map("speed_mps") @db.Decimal(8, 2)
+  headingDegrees    Decimal? @map("heading_degrees") @db.Decimal(6, 2)
+  alertState        SafetyAlertState @default(Clear) @map("alert_state")
+  activeDangerZoneId String? @map("active_danger_zone_id") @db.Uuid
+  lastDistanceMeters Decimal? @map("last_distance_meters") @db.Decimal(10, 2)
+  lastEvaluatedAt   DateTime @default(now()) @map("last_evaluated_at") @db.Timestamptz(6)
+  lastHeartbeatAt   DateTime? @map("last_heartbeat_at") @db.Timestamptz(6)
+  trackingIntervalMs Int     @default(300000) @map("tracking_interval_ms")
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device            SmartwatchDevice? @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([activeDangerZoneId])
+  @@index([lastEvaluatedAt])
+  @@map("device_geo_states")
+}
+
+model ZoneEntryEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  dangerZoneId String   @map("danger_zone_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  deviceId     String?  @map("device_id") @db.Uuid
+  alertState   SafetyAlertState @map("alert_state")
+  distanceMeters Decimal? @map("distance_meters") @db.Decimal(10, 2)
+  occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  metadata     Json     @default("{}")
+
+  @@index([dangerZoneId, occurredAt])
+  @@index([userId, occurredAt])
+  @@map("zone_entry_events")
+}
+
+model ZoneExitEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  dangerZoneId String   @map("danger_zone_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  deviceId     String?  @map("device_id") @db.Uuid
+  alertState   SafetyAlertState @map("alert_state")
+  distanceMeters Decimal? @map("distance_meters") @db.Decimal(10, 2)
+  occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  metadata     Json     @default("{}")
+
+  @@index([dangerZoneId, occurredAt])
+  @@index([userId, occurredAt])
+  @@map("zone_exit_events")
+}
+
+model AllClearEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  dangerZoneId    String   @map("danger_zone_id") @db.Uuid
+  issuedByAdminId String   @map("issued_by_admin_id") @db.Uuid
+  status          String
+  reason          String
+  recipientCount  Int      @default(0) @map("recipient_count")
+  deliveredCount  Int      @default(0) @map("delivered_count")
+  issuedAt        DateTime @default(now()) @map("issued_at") @db.Timestamptz(6)
+  metadata        Json     @default("{}")
+  dangerZone      DangerZone @relation(fields: [dangerZoneId], references: [id], onDelete: Cascade)
+  issuedByAdmin   AdminUser @relation("AllClearIssuer", fields: [issuedByAdminId], references: [id])
+
+  @@index([dangerZoneId, issuedAt])
+  @@map("all_clear_events")
 }
 
 

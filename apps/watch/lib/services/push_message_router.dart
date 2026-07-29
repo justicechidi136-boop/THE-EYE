@@ -9,6 +9,7 @@ abstract final class WatchPushCategories {
   static const broadcastAlert = 'BroadcastAlert';
   static const missingPerson = 'MissingPersonAlert';
   static const stolenVehicle = 'StolenVehicleAlert';
+  static const nearbyDangerWarning = 'NearbyDangerWarning';
 
   static const allowed = <String>{
     sosAck,
@@ -18,6 +19,7 @@ abstract final class WatchPushCategories {
     broadcastAlert,
     missingPerson,
     stolenVehicle,
+    nearbyDangerWarning,
   };
 }
 

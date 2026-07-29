@@ -6,6 +6,7 @@ import type {
   DuplicateReportView,
   EvidenceAccessEntry,
   FirmwareReleaseView,
+  DangerZoneView,
   Incident,
   LiveVideoSessionView,
   NotificationOperationView,
@@ -372,6 +373,25 @@ export function toFirmwareReleaseView(record: Record<string, unknown>): Firmware
     signature: record.signature ? "Valid" : "Pending",
     devices: typeof count === "number" ? count : 0,
     rollback: record.status === "Published" ? "Available" : "-",
+  };
+}
+
+export function toDangerZoneView(record: Record<string, unknown>): DangerZoneView {
+  const incident = record.incident as { title?: string } | undefined;
+  return {
+    id: String(record.id),
+    incidentId: String(record.incidentId ?? record.incident_id ?? "-"),
+    incidentTitle: incident?.title ?? String(record.publicMessage ?? "Incident"),
+    status: String(record.status ?? "PendingVerification"),
+    severity: String(record.severity ?? "P2Serious"),
+    innerRadiusMeters: Number(record.innerRadiusMeters ?? record.inner_radius_meters ?? 0),
+    warningRadiusMeters: Number(record.warningRadiusMeters ?? record.warning_radius_meters ?? 0),
+    outerAwarenessRadiusMeters: Number(record.outerAwarenessRadiusMeters ?? record.outer_awareness_radius_meters ?? 0),
+    confidence: Number(record.confidence ?? 0),
+    publicMessage: String(record.publicMessage ?? record.public_message ?? "-"),
+    avoidanceInstruction: String(record.avoidanceInstruction ?? record.avoidance_instruction ?? "-"),
+    expiryTime: record.expiryTime ? String(record.expiryTime) : record.expiry_time ? String(record.expiry_time) : null,
+    affectedCount: typeof record.affectedCount === "number" ? record.affectedCount : undefined,
   };
 }
 

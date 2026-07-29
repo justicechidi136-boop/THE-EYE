@@ -1,8 +1,15 @@
-﻿import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+﻿import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
 import { IncidentPriority, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { BroadcastsService } from "../broadcasts/broadcasts.service";
+import { DangerZonesService } from "../danger-zones/danger-zones.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConfidenceScorerService } from "./confidence-scorer.service";
@@ -34,6 +41,7 @@ export class VerificationService {
     private readonly broadcasts: BroadcastsService,
     private readonly metrics: MetricsService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly dangerZones?: DangerZonesService,
   ) {}
 
   async verifyIncident(incidentId: string, dto: VerifyIncidentDto = {}, actor?: JwtPayload) {
@@ -518,5 +526,8 @@ export class VerificationService {
     });
 
     void this.broadcasts.autoBroadcastVerifiedIncident(incidentId, decision.confidenceScore).catch(() => undefined);
+    if (this.dangerZones) {
+      void this.dangerZones.evaluateIncidentForZone(incidentId, decision.confidenceScore, "system_ai_initial").catch(() => undefined);
+    }
   }
 }
