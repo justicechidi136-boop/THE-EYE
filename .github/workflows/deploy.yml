@@ -37,6 +37,11 @@ on:
         required: false
         default: false
         type: boolean
+      skip_live_video_proof:
+        description: Staging only — skip LiveKit stage 4/5 public proof (unblocks API/admin deploys when LiveKit gateway is degraded)
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: deploy-${{ github.event.inputs.environment }}
@@ -214,6 +219,7 @@ jobs:
             export NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
             export PROOF_ONLY=${{ github.event.inputs.proof_only }}
             export RUN_LOCATION_PROOF=${{ github.event.inputs.run_location_proof }}
+            export SKIP_LIVE_VIDEO_PROOF=${{ github.event.inputs.skip_live_video_proof }}
             git fetch --tags origin
             git checkout -- infra/docker/livekit/livekit.yaml 2>/dev/null || true
             git checkout ${{ github.sha }}
