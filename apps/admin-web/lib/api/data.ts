@@ -9,6 +9,7 @@ import {
   toDuplicateReportView,
   toWitnessConfirmationView,
   toFirmwareReleaseView,
+  toDangerZoneView,
   toIncidentView,
   toLiveVideoSessionView,
   toNotificationOperationView,
@@ -29,6 +30,7 @@ import type {
   EvidenceAccessEntry,
   WitnessConfirmationView,
   FirmwareReleaseView,
+  DangerZoneView,
   Incident,
   LiveVideoSessionView,
   NotificationOperationView,
@@ -311,6 +313,13 @@ export async function fetchFirmwareReleases(): Promise<FirmwareReleaseView[]> {
       if (error instanceof ApiError && error.status === 404) return [];
       throw error;
     }
+  }, []);
+}
+
+export async function fetchDangerZones(): Promise<DangerZoneView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/danger-zones", { token });
+    return response.data.map(toDangerZoneView);
   }, []);
 }
 

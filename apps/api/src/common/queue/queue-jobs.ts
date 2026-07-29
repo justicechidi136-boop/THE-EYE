@@ -2,6 +2,7 @@ import type { NotificationDispatchPayload } from "../../modules/notifications/no
 
 export const NOTIFICATION_DISPATCH_JOB_NAME = "dispatch";
 export const BROADCAST_AUTO_DISPATCH_JOB_NAME = "auto-dispatch";
+export const DANGER_ZONE_TARGET_JOB_NAME = "danger-zone-target";
 
 export function buildNotificationDispatchJobId(
   payload: Pick<NotificationDispatchPayload, "notificationId" | "channel" | "userId" | "adminUserId">,

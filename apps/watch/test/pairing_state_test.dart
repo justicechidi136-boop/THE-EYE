@@ -93,6 +93,6 @@ void main() {
 
   test('watch push router accepts only watch categories', () {
     expect(PushMessageRouter.isWatchCategory('FamilySosAlert'), isTrue);
-    expect(PushMessageRouter.isWatchCategory('NearbyDangerWarning'), isFalse);
+    expect(PushMessageRouter.isWatchCategory('NearbyDangerWarning'), isTrue);
   });
 }

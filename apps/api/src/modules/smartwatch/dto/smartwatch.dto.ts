@@ -95,6 +95,11 @@ export type SmartwatchHeartbeatDto = {
   signalStrength?: number;
   firmwareVersion?: string;
   firmwareSignatureStatus?: FirmwareSignatureStatus;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+  speed?: number;
+  heading?: number;
 };
 
 export type SmartwatchOfflineSyncDto = {

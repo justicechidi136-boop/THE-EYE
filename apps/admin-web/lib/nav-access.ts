@@ -5,8 +5,8 @@ const unrestricted: AdminRole[] = [AdminRoleName.SuperAdmin, AdminRoleName.Count
 
 const roleAllowedPrefixes: Partial<Record<AdminRole, string[]>> = {
   [AdminRoleName.LgaAdmin]: ["/", "/incidents", "/verification", "/emergency", "/broadcasts", "/notifications", "/neighborhood-watch", "/users", "/settings", "/login", "/audit"],
-  [AdminRoleName.AgencyAdmin]: ["/", "/incidents", "/verification", "/emergency", "/live-video", "/sos-monitor", "/smartwatch", "/settings"],
-  [AdminRoleName.PoliceSecurityOfficer]: ["/", "/incidents", "/emergency", "/live-video", "/sos-monitor", "/smartwatch", "/settings"],
+  [AdminRoleName.AgencyAdmin]: ["/", "/incidents", "/verification", "/emergency", "/live-video", "/sos-monitor", "/smartwatch", "/safety-alerts", "/settings"],
+  [AdminRoleName.PoliceSecurityOfficer]: ["/", "/incidents", "/emergency", "/live-video", "/sos-monitor", "/smartwatch", "/safety-alerts", "/settings"],
   [AdminRoleName.CallCenterAgent]: ["/", "/incidents", "/verification", "/emergency", "/live-video", "/notifications", "/settings"],
   [AdminRoleName.CommunityModerator]: ["/neighborhood-watch", "/settings"],
   [AdminRoleName.OversightAuditor]: ["/", "/incidents", "/audit", "/settings"],

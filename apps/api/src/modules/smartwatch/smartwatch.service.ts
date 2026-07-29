@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
 import { randomToken, hashToken } from "../../common/auth/crypto";
@@ -31,6 +31,8 @@ import {
   validateSmartwatchSosDto,
   validateSmartwatchStatusDto,
 } from "./dto/smartwatch.dto";
+import { DangerZoneTargetingService } from "../danger-zones/danger-zone-targeting.service";
+import { DangerZonesService } from "../danger-zones/danger-zones.service";
 
 const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
 
@@ -42,6 +44,8 @@ export class SmartwatchService {
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
     private readonly auditService: AuditService,
+    @Optional() private readonly dangerZoneTargeting?: DangerZoneTargetingService,
+    @Optional() private readonly dangerZones?: DangerZonesService,
   ) {}
 
   async registerDevice(dto: RegisterSmartwatchDeviceDto, actor: JwtPayload) {
@@ -283,7 +287,28 @@ export class SmartwatchService {
         },
       } as never,
     });
-    return { data: updated, mode: nextMode, trackingIntervalMs: 5000, commands: this.pendingDeviceCommands(updated as any) };
+
+    let threatEvaluation: Record<string, unknown> | null = null;
+    if (this.dangerZoneTargeting && dto.latitude != null && dto.longitude != null) {
+      threatEvaluation = await this.dangerZoneTargeting.evaluateLocation({
+        userId: device.userId,
+        deviceId: device.id,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        accuracyMeters: dto.accuracy,
+        speedMps: dto.speed,
+        headingDegrees: dto.heading,
+      });
+    }
+
+    const trackingIntervalMs = threatEvaluation?.trackingIntervalMs ?? 300000;
+    return {
+      data: updated,
+      mode: nextMode,
+      trackingIntervalMs,
+      threat: threatEvaluation,
+      commands: this.pendingDeviceCommands(updated as any),
+    };
   }
 
   async recordGps(deviceIdOrPublicId: string, dto: SmartwatchGpsDto, actor?: JwtPayload) {
@@ -326,7 +351,34 @@ export class SmartwatchService {
       } as never,
     });
 
-    return { data: track, realtime: { event: "smartwatch.gps.updated", deviceId: device.id, pollIntervalMs: 5000 } };
+    let threatEvaluation: Record<string, unknown> | null = null;
+    if (this.dangerZoneTargeting) {
+      threatEvaluation = await this.dangerZoneTargeting.evaluateLocation({
+        userId: device.userId,
+        deviceId: device.id,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        accuracyMeters: dto.accuracy,
+        speedMps: dto.speed,
+        headingDegrees: dto.heading,
+      });
+    }
+
+    return {
+      data: track,
+      realtime: {
+        event: "smartwatch.gps.updated",
+        deviceId: device.id,
+        pollIntervalMs: threatEvaluation?.trackingIntervalMs ?? 5000,
+        threat: threatEvaluation,
+      },
+    };
+  }
+
+  async acknowledgeSafetyAlert(alertId: string, deviceLookup: string, dto: { deviceSecret?: string }, actor?: JwtPayload) {
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
+    if (!this.dangerZones) throw new BadRequestException("Danger zone service unavailable");
+    return this.dangerZones.acknowledgeAlert(alertId, device.userId, device.id);
   }
 
   async triggerSos(dto: SmartwatchSosDto, actor?: JwtPayload) {

@@ -222,6 +222,22 @@ export type FirmwareReleaseView = {
   rollback: string;
 };
 
+export type DangerZoneView = {
+  id: string;
+  incidentId: string;
+  incidentTitle: string;
+  status: string;
+  severity: string;
+  innerRadiusMeters: number;
+  warningRadiusMeters: number;
+  outerAwarenessRadiusMeters: number;
+  confidence: number;
+  publicMessage: string;
+  avoidanceInstruction: string;
+  expiryTime: string | null;
+  affectedCount?: number;
+};
+
 export type SosEventView = {
   id: string;
   incidentId: string;

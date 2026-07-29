@@ -120,6 +120,34 @@ export enum FirmwareSignatureStatus {
   Revoked = "Revoked",
 }
 
+export enum DangerZoneStatus {
+  PendingVerification = "PendingVerification",
+  ActiveCritical = "ActiveCritical",
+  ActiveHigh = "ActiveHigh",
+  ActiveModerate = "ActiveModerate",
+  Contained = "Contained",
+  Monitoring = "Monitoring",
+  AllClear = "AllClear",
+  Expired = "Expired",
+  CancelledFalseReport = "CancelledFalseReport",
+}
+
+export enum SafetyAlertLevel {
+  P1Immediate = "P1Immediate",
+  P2Serious = "P2Serious",
+  P3Awareness = "P3Awareness",
+  P4AllClear = "P4AllClear",
+}
+
+export enum SafetyAlertState {
+  Awareness = "Awareness",
+  Approaching = "Approaching",
+  Critical = "Critical",
+  InsideDangerZone = "InsideDangerZone",
+  MovingAway = "MovingAway",
+  Clear = "Clear",
+}
+
 export enum IncidentMediaType {
   Image = "Image",
   Video = "Video",

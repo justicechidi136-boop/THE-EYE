@@ -12,6 +12,10 @@ export function resolveIncidentLocationRetryQueueName(appEnvironment: AppEnviron
   return `the-eye-${appEnvironment}-incident-location-retry`;
 }
 
+export function resolveDangerZonesQueueName(appEnvironment: AppEnvironment): string {
+  return `the-eye-${appEnvironment}-danger-zones`;
+}
+
 export function resolveNotificationsQueueNameFromConfig(config: Record<string, unknown>): string {
   return resolveNotificationsQueueName(resolveAppEnvironment(config));
 }
@@ -29,3 +33,8 @@ export const BROADCASTS_QUEUE_NAME = resolveBroadcastsQueueNameFromConfig(proces
 export const INCIDENT_LOCATION_RETRY_QUEUE_NAME = resolveIncidentLocationRetryQueueNameFromConfig(
   process.env as Record<string, unknown>,
 );
+export const DANGER_ZONES_QUEUE_NAME = resolveDangerZonesQueueNameFromConfig(process.env as Record<string, unknown>);
+
+export function resolveDangerZonesQueueNameFromConfig(config: Record<string, unknown>): string {
+  return resolveDangerZonesQueueName(resolveAppEnvironment(config));
+}
