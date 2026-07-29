@@ -215,6 +215,7 @@ jobs:
             export PROOF_ONLY=${{ github.event.inputs.proof_only }}
             export RUN_LOCATION_PROOF=${{ github.event.inputs.run_location_proof }}
             git fetch --tags origin
+            git checkout -- infra/docker/livekit/livekit.yaml 2>/dev/null || true
             git checkout ${{ github.sha }}
             echo "VPS HEAD: $(git rev-parse HEAD)"
             bash scripts/deploy-staging-vps-ci.sh
