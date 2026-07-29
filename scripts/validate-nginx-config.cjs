@@ -376,6 +376,7 @@ const VALIDATION_UPSTREAM_HOSTS = [
   "api:127.0.0.1",
   "admin-web:127.0.0.1",
   "livekit:127.0.0.1",
+  "host.docker.internal:127.0.0.1",
 ];
 
 function nginxTestWithDocker(label, fixtureRoot) {
