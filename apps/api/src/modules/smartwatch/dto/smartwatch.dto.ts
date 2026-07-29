@@ -123,6 +123,12 @@ export type IssueSmartwatchPairingCodeDto = {
   firebaseEnv?: string;
 };
 
+export type AdminIssueSmartwatchActivationDto = {
+  deviceId: string;
+  ttlMinutes?: number;
+  connectivityMode?: SmartwatchConnectivityMode;
+};
+
 const modes = new Set<string>(Object.values(SmartwatchConnectivityMode));
 const pairingMethods = new Set<string>(Object.values(SmartwatchPairingMethod));
 const emergencyModes = new Set<string>(Object.values(SmartwatchEmergencyMode));
@@ -209,5 +215,15 @@ export function validateIssuePairingCodeDto(dto: IssueSmartwatchPairingCodeDto) 
   }
   if (dto.firebaseEnv && !firebaseEnvs.has(dto.firebaseEnv)) {
     throw new BadRequestException("Unsupported firebaseEnv");
+  }
+}
+
+export function validateAdminIssueActivationDto(dto: AdminIssueSmartwatchActivationDto) {
+  assertText(dto.deviceId, "deviceId");
+  if (dto.ttlMinutes !== undefined && (dto.ttlMinutes < 5 || dto.ttlMinutes > 1440)) {
+    throw new BadRequestException("ttlMinutes must be between 5 and 1440");
+  }
+  if (dto.connectivityMode && !modes.has(dto.connectivityMode)) {
+    throw new BadRequestException("Unsupported connectivity mode");
   }
 }

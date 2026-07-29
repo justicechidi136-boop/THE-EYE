@@ -207,10 +207,41 @@ export type SmartwatchDeviceView = {
   battery: number;
   signal: number;
   firmware: string;
+  firmwareSignatureStatus: string;
   security: string;
   alerts: string;
+  isActive: boolean;
   lastSeen: string;
   lastGps: { lat: number; lng: number; accuracy: string };
+  lastGpsAt?: string;
+};
+
+export type SmartwatchDeviceDetailView = SmartwatchDeviceView & {
+  sosEvents: SosEventView[];
+  gpsTracks: Array<{ lat: number; lng: number; accuracy: string; capturedAt: string }>;
+  firmwareUpdates: Array<{ version: string; status: string; startedAt: string }>;
+};
+
+export type PairingSessionView = {
+  id: string;
+  deviceId: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  owner: string;
+  connectivityMode: string;
+  deviceInternalId: string | null;
+  isDeviceRegistered: boolean;
+  isDeviceActive: boolean;
+};
+
+export type ActivationHistoryView = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+  metadata: string;
 };
 
 export type FirmwareReleaseView = {
