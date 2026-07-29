@@ -14,9 +14,9 @@ import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import {
   buildCursorPage,
-  decodeIncidentCursor,
-  encodeIncidentCursor,
-  incidentCursorWhere,
+  dateIdCursorWhere,
+  decodeDateIdCursor,
+  encodeDateIdCursor,
   resolvePageLimit,
   type CursorPageQuery,
 } from "../../common/pagination/cursor-pagination";
@@ -69,23 +69,26 @@ export class IncidentsService {
     query: CursorPageQuery = {},
   ) {
     const limit = resolvePageLimit(query.limit);
-    const cursor = decodeIncidentCursor(query.cursor);
+    if (query.cursor?.trim() && !decodeDateIdCursor(query.cursor)) {
+      throw new BadRequestException("cursor is invalid");
+    }
+    const cursor = decodeDateIdCursor(query.cursor);
     const filterWhere: Record<string, unknown> = {};
     if (filters.status?.trim()) filterWhere.status = filters.status.trim();
     if (filters.priority?.trim()) filterWhere.priority = filters.priority.trim();
     if (filters.type?.trim()) filterWhere.type = filters.type.trim();
     const rows = await this.prisma.incident.findMany({
-      where: { ...this.incidentScopeWhere(actor), ...incidentCursorWhere(cursor), ...filterWhere } as never,
+      where: { ...this.incidentScopeWhere(actor), ...dateIdCursorWhere(cursor), ...filterWhere } as never,
       include: {
         media: true,
         timeline: { orderBy: { createdAt: "desc" }, take: 10 },
         statusHistory: { orderBy: { createdAt: "desc" }, take: 5 },
         locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 },
       },
-      orderBy: [{ priority: "asc" }, { createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
-    return buildCursorPage(rows, limit, (item) => encodeIncidentCursor(String(item.priority), item.createdAt, item.id));
+    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
   }
 
   async reportEmergency(dto: ReportIncidentDto, actor?: JwtPayload) {
