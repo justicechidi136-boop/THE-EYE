@@ -12,6 +12,9 @@ import type {
   PatrolScheduleView,
   PoliceStationView,
   SmartwatchDeviceView,
+  SmartwatchDeviceDetailView,
+  PairingSessionView,
+  ActivationHistoryView,
   SosEventView,
   UserDirectoryEntry,
   VolunteerView,
@@ -270,10 +273,11 @@ export function toResidentView(
 export function toSmartwatchDeviceView(record: Record<string, unknown>): SmartwatchDeviceView {
   const profile = (record.user as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile;
   const owner = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Unknown owner";
-  const battery = toNumber(record.batteryPercent, 0);
+  const battery = toNumber(record.batteryLevel ?? record.batteryPercent, 0);
   const signal = toNumber(record.signalStrength, 0);
   const online = Boolean(record.isOnline);
   const needsAttention = battery < 20 || signal < 25;
+  const signatureStatus = String(record.firmwareSignatureStatus ?? "Unknown");
 
   return {
     id: String(record.id),
@@ -288,24 +292,85 @@ export function toSmartwatchDeviceView(record: Record<string, unknown>): Smartwa
     battery,
     signal,
     firmware: String(record.firmwareVersion ?? "unknown"),
-    security: record.certificateValid === false ? "Certificate invalid" : "Certificate valid",
+    firmwareSignatureStatus: signatureStatus,
+    security: signatureStatus === "Invalid" ? "Certificate invalid" : "Certificate valid",
     alerts: record.criticalAlertsEnabled === false ? "Disabled" : "Enabled",
+    isActive: record.isActive !== false,
     lastSeen: formatTime(record.lastSeenAt as string),
+    lastGpsAt: record.lastGpsAt ? String(record.lastGpsAt) : undefined,
     lastGps: {
       lat: toNumber(record.lastLatitude),
       lng: toNumber(record.lastLongitude),
-      accuracy: record.lastAccuracyMeters ? `${toNumber(record.lastAccuracyMeters)}m` : "-",
+      accuracy: record.lastGpsAccuracy ? `${toNumber(record.lastGpsAccuracy)}m` : "-",
     },
   };
 }
 
+export function toSmartwatchDeviceDetailView(record: Record<string, unknown>): SmartwatchDeviceDetailView {
+  const base = toSmartwatchDeviceView(record);
+  const sosEvents = Array.isArray(record.sosEvents) ? record.sosEvents.map((entry) => toSosEventView(entry as Record<string, unknown>)) : [];
+  const gpsTracks = Array.isArray(record.gpsTracks)
+    ? record.gpsTracks.map((entry) => {
+        const row = entry as Record<string, unknown>;
+        return {
+          lat: toNumber(row.latitude),
+          lng: toNumber(row.longitude),
+          accuracy: row.accuracy ? `${toNumber(row.accuracy)}m` : "-",
+          capturedAt: row.capturedAt ? String(row.capturedAt) : "-",
+        };
+      })
+    : [];
+  const firmwareUpdates = Array.isArray(record.firmwareUpdates)
+    ? record.firmwareUpdates.map((entry) => {
+        const row = entry as Record<string, unknown>;
+        const release = row.release as { version?: string } | undefined;
+        return {
+          version: String(release?.version ?? "unknown"),
+          status: String(row.status ?? "Scheduled"),
+          startedAt: row.startedAt ? String(row.startedAt) : "-",
+        };
+      })
+    : [];
+  return { ...base, sosEvents, gpsTracks, firmwareUpdates };
+}
+
+export function toPairingSessionView(record: Record<string, unknown>): PairingSessionView {
+  const device = record.device as Record<string, unknown> | null | undefined;
+  const profile = (device?.user as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile;
+  const owner = device ? [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Registered device" : "Awaiting registration";
+  return {
+    id: String(record.id),
+    deviceId: String(record.deviceId),
+    status: String(record.status ?? "pending"),
+    expiresAt: record.expiresAt ? String(record.expiresAt) : "-",
+    createdAt: record.createdAt ? String(record.createdAt) : "-",
+    owner,
+    connectivityMode: String((device?.connectivityMode as string | undefined) ?? "StandaloneCellular"),
+    deviceInternalId: device ? String(device.id) : null,
+    isDeviceRegistered: Boolean(device),
+    isDeviceActive: Boolean(device?.isActive),
+  };
+}
+
+export function toActivationHistoryView(record: Record<string, unknown>): ActivationHistoryView {
+  return {
+    id: String(record.id),
+    action: String(record.action ?? "-"),
+    entityType: String(record.entityType ?? "-"),
+    entityId: String(record.entityId ?? "-"),
+    createdAt: record.createdAt ? String(record.createdAt) : "-",
+    metadata: record.metadata ? JSON.stringify(record.metadata) : "-",
+  };
+}
+
 export function toFirmwareReleaseView(record: Record<string, unknown>): FirmwareReleaseView {
+  const count = (record._count as { updates?: number } | undefined)?.updates;
   return {
     version: String(record.version ?? "0.0.0"),
     title: String(record.title ?? "Firmware release"),
     status: String(record.status ?? "Draft"),
     signature: record.signature ? "Valid" : "Pending",
-    devices: 0,
+    devices: typeof count === "number" ? count : 0,
     rollback: record.status === "Published" ? "Available" : "-",
   };
 }
@@ -322,12 +387,12 @@ export function toSosEventView(record: Record<string, unknown>): SosEventView {
     sourceMode: String(record.sourceMode ?? record.connectivityMode ?? "Unknown"),
     priority: "P1",
     triggeredAt: formatTime(record.triggeredAt as string),
-    familyAlerted: record.familyContactsNotified ? "Yes" : "No",
+    familyAlerted: record.familyNotifiedAt || record.familyContactsNotified ? "Yes" : "No",
     response: String((record.incident as { assignedAgencyId?: string } | undefined)?.assignedAgencyId ?? "Pending assignment"),
     gps: {
       lat: toNumber(record.latitude),
       lng: toNumber(record.longitude),
-      accuracy: record.accuracyMeters ? `${toNumber(record.accuracyMeters)}m` : "-",
+      accuracy: record.accuracy || record.accuracyMeters ? `${toNumber(record.accuracy ?? record.accuracyMeters)}m` : "-",
     },
   };
 }

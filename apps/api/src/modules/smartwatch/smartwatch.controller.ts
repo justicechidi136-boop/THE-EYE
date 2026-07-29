@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../../common/auth/optional-jwt-auth.guard";
@@ -16,6 +16,7 @@ import {
   SmartwatchStandaloneLoginDto,
   UpdateSmartwatchStatusDto,
   IssueSmartwatchPairingCodeDto,
+  AdminIssueSmartwatchActivationDto,
 } from "./dto/smartwatch.dto";
 import { SmartwatchService } from "./smartwatch.service";
 
@@ -144,6 +145,54 @@ export class SmartwatchController {
   @RequirePermissions("user:manage")
   adminDevices(@Req() request: any) {
     return this.smartwatch.adminDevices(request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/devices/:id")
+  @RequirePermissions("user:manage")
+  adminDevice(@Param("id") id: string, @Req() request: any) {
+    return this.smartwatch.adminGetDevice(id, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/firmware")
+  @RequirePermissions("user:manage")
+  adminListFirmware(@Req() request: any) {
+    return this.smartwatch.adminListFirmware(request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/pairing-sessions")
+  @RequirePermissions("user:manage")
+  adminPairingSessions(@Req() request: any) {
+    return this.smartwatch.adminListPairingSessions(request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Get("admin/activation-history")
+  @RequirePermissions("user:manage")
+  adminActivationHistory(@Req() request: any) {
+    return this.smartwatch.adminActivationHistory(request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Post("admin/activation-secrets")
+  @RequirePermissions("user:manage")
+  adminIssueActivation(@Body() dto: AdminIssueSmartwatchActivationDto, @Req() request: any) {
+    return this.smartwatch.adminIssueActivation(dto, request.user);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Delete("admin/pairing-sessions/:deviceId")
+  @RequirePermissions("user:manage")
+  adminRevokePairingSession(@Param("deviceId") deviceId: string, @Req() request: any) {
+    return this.smartwatch.adminRevokePairingSession(deviceId, request.user);
   }
 
   @ApiBearerAuth()

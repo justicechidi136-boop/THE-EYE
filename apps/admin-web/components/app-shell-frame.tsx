@@ -53,14 +53,8 @@ const navGroups = [
     ] as [string, string][],
   },
   {
-    label: "Smartwatch",
-    items: [
-      ["All Watches", "/smartwatch"],
-      ["SOS History", "/smartwatch/sos-history"],
-      ["Live Tracking", "/smartwatch/live-tracking"],
-      ["Firmware", "/smartwatch/firmware"],
-      ["Device Health", "/smartwatch/health"],
-    ] as [string, string][],
+    label: "Devices",
+    items: [["Smart Watches", "/devices/smart-watches"]] as [string, string][],
   },
   {
     label: "Administration",
