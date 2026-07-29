@@ -44,6 +44,7 @@ echo "STEP deploy-start proof_only=${PROOF_ONLY}"
 if [[ "$PROOF_ONLY" == "true" ]]; then
   echo "=== Proof-only mode (skip redeploy) ==="
   "${COMPOSE[@]}" build api-tools --no-cache api-tools
+  bash scripts/staging-livekit-network-guard.sh
 else
   echo "STEP compose-ps-start"
   "${COMPOSE[@]}" ps || true
@@ -52,7 +53,14 @@ else
   "${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools
   "${COMPOSE[@]}" --profile tools run --rm api-migrate
   patch_livekit_node_ip
-  "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web livekit
+  echo "=== Rendered LiveKit service (compose config) ==="
+  "${COMPOSE[@]}" config 2>/dev/null | grep -A 20 '^  livekit:' || true
+  echo "=== Recreate LiveKit (host network — restart insufficient) ==="
+  "${COMPOSE[@]}" rm -sf livekit
+  "${COMPOSE[@]}" up -d --force-recreate livekit
+  "${COMPOSE[@]}" up -d --wait livekit
+  bash scripts/staging-livekit-network-guard.sh
+  "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web nginx
   "${COMPOSE[@]}" up -d --wait api admin-web livekit
   bash scripts/reload-nginx-upstreams.sh
   bash scripts/staging-smoke-check.sh
@@ -128,6 +136,7 @@ docker run --rm --network host --env-file .env \
   -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
   -e PROOF_TOKEN="${PROOF_TOKEN}" \
   -e PROOF_INCIDENT_ID="${PROOF_INCIDENT_ID}" \
+  -e LIVEKIT_NODE_IP="${LIVEKIT_NODE_IP:-}" \
   "${API_TOOLS_IMAGE}" \
   npx tsx scripts/staging-live-video-room-join-proof.ts
 

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import net from "node:net";
 import WebSocket from "ws";
 import { IncidentType } from "@the-eye/shared";
 import { assertStagingOnlySeedAllowed } from "../prisma/staging-guard";
@@ -89,6 +90,22 @@ function livekitWsUrl(baseUrl: string, token: string): string {
     protocol: "12",
   });
   return `${normalized}/rtc?${params.toString()}`;
+}
+
+async function probeRtcTcp(host: string, port = 7881): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const socket = net.connect({ host, port, timeout: 5000 });
+    socket.once("connect", () => {
+      socket.end();
+      console.log(`PASS livekit RTC TCP ${host}:${port} reachable`);
+      resolve();
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      reject(new Error(`RTC TCP ${host}:${port} timed out`));
+    });
+    socket.once("error", reject);
+  });
 }
 
 async function connectLivekitSignaling(url: string, token: string): Promise<void> {
@@ -209,6 +226,13 @@ async function main() {
     fail(`livekit.url=${livekit.url ?? "missing"} expected ${EXPECTED_CLIENT_LIVEKIT_URL}`);
   }
   if (!livekit.token) fail("live-video start response missing livekit.token");
+
+  const rtcHost = String(process.env.LIVEKIT_NODE_IP ?? "").trim();
+  if (rtcHost) {
+    await probeRtcTcp(rtcHost, 7881);
+  } else {
+    console.log("WARN LIVEKIT_NODE_IP unset — skipping public RTC TCP probe");
+  }
 
   await connectLivekitSignaling(livekit.url, livekit.token);
   console.log("=== Staging live video room join proof complete ===");
