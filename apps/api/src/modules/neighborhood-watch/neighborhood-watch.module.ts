@@ -8,11 +8,12 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { NeighborhoodWatchController } from "./neighborhood-watch.controller";
 import { NeighborhoodWatchService } from "./neighborhood-watch.service";
+import { AiIntelligenceService } from "./ai-intelligence.service";
 
 @Module({
   imports: [PrismaModule, AuditModule, IncidentsModule, BroadcastsModule, NotificationsModule],
   controllers: [NeighborhoodWatchController],
-  providers: [NeighborhoodWatchService, JwtAuthGuard, PermissionsGuard],
-  exports: [NeighborhoodWatchService],
+  providers: [NeighborhoodWatchService, AiIntelligenceService, JwtAuthGuard, PermissionsGuard],
+  exports: [NeighborhoodWatchService, AiIntelligenceService],
 })
 export class NeighborhoodWatchModule {}

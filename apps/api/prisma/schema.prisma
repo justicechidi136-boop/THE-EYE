@@ -516,6 +516,8 @@ model AdminUser {
   dangerZonesCreated DangerZone[] @relation("DangerZoneCreator")
   dangerZonesReviewed DangerZone[] @relation("DangerZoneReviewer")
   allClearEvents AllClearEvent[] @relation("AllClearIssuer")
+  policyConfigurations PolicyConfiguration[] @relation("PolicyUpdatedBy")
+  preferences AdminUserPreference?
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -1010,6 +1012,7 @@ model Community {
   notifications  Notification[]
   requests       CommunityRequest[]
   contentReports CommunityContentReport[]
+  policyConfigurations PolicyConfiguration[]
 
   @@index([parentId])
   @@index([country, state, lga, ward])
@@ -2058,6 +2061,47 @@ model AllClearEvent {
 
   @@index([dangerZoneId, issuedAt])
   @@map("all_clear_events")
+}
+
+enum PolicySectionKey {
+  community
+  permissions
+  notifications
+  broadcasts
+  verification
+  patrols
+  volunteers
+  smartwatch
+  integrations
+}
+
+model PolicyConfiguration {
+  id               String           @id @default(uuid()) @db.Uuid
+  section          PolicySectionKey
+  scopeKey         String           @map("scope_key")
+  version          Int              @default(1)
+  isActive         Boolean          @default(true) @map("is_active")
+  config           Json             @default("{}")
+  communityId      String?          @map("community_id") @db.Uuid
+  updatedByAdminId String?          @map("updated_by_admin_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  community        Community?       @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  updatedByAdmin   AdminUser?       @relation("PolicyUpdatedBy", fields: [updatedByAdminId], references: [id])
+
+  @@unique([section, scopeKey])
+  @@index([section, isActive])
+  @@map("policy_configurations")
+}
+
+model AdminUserPreference {
+  adminUserId       String    @id @map("admin_user_id") @db.Uuid
+  theme             String    @default("system")
+  notificationPrefs Json      @default("{}") @map("notification_prefs")
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  adminUser         AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@map("admin_user_preferences")
 }
 
 

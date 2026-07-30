@@ -25,6 +25,7 @@ export default async function ApprovalsPage() {
             `${r.trustScore}%`,
             <div key={`a-${r.membershipId}`} className="flex gap-2">
               <MembershipActionButton communityId={r.communityId} membershipId={r.membershipId} action="approve" />
+              <MembershipActionButton communityId={r.communityId} membershipId={r.membershipId} action="reject" />
             </div>,
           ])}
           emptyMessage="No pending resident applications."

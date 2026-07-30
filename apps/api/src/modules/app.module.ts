@@ -27,6 +27,7 @@ import { StorageModule } from "./storage/storage.module";
 import { UsersModule } from "./users/users.module";
 import { VerificationModule } from "./verification/verification.module";
 import { DangerZonesModule } from "./danger-zones/danger-zones.module";
+import { AdminSettingsModule } from "./admin-settings/admin-settings.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -77,6 +78,7 @@ const redisDisabled = !shouldRegisterBullMq();
     LiveVideoModule,
     SmartwatchModule,
     DangerZonesModule,
+    AdminSettingsModule,
   ],
   controllers: [HealthController],
   providers: [

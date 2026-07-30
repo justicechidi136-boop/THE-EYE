@@ -27,6 +27,7 @@ const CSOC_RESTRICTED_PATHS: Partial<Record<AdminRole, string[]>> = {
     "/neighborhood-watch/incidents",
     "/neighborhood-watch/verification",
     "/neighborhood-watch/posts",
+    "/neighborhood-watch/approvals",
   ],
   [AdminRoleName.CallCenterAgent]: [
     "/neighborhood-watch",
@@ -37,6 +38,8 @@ const CSOC_RESTRICTED_PATHS: Partial<Record<AdminRole, string[]>> = {
     "/neighborhood-watch/missing-persons",
     "/neighborhood-watch/smartwatch",
     "/neighborhood-watch/map",
+    "/neighborhood-watch/chat",
+    "/dispatch",
   ],
   [AdminRoleName.PoliceSecurityOfficer]: [
     "/neighborhood-watch",
@@ -46,6 +49,8 @@ const CSOC_RESTRICTED_PATHS: Partial<Record<AdminRole, string[]>> = {
     "/neighborhood-watch/smartwatch",
     "/neighborhood-watch/patrols",
     "/neighborhood-watch/verification",
+    "/neighborhood-watch/chat",
+    "/dispatch",
   ],
   [AdminRoleName.AgencyAdmin]: [
     "/neighborhood-watch",
@@ -53,6 +58,8 @@ const CSOC_RESTRICTED_PATHS: Partial<Record<AdminRole, string[]>> = {
     "/neighborhood-watch/incidents",
     "/neighborhood-watch/verification",
     "/neighborhood-watch/live-monitoring",
+    "/neighborhood-watch/chat",
+    "/dispatch",
   ],
 };
 
