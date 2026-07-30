@@ -6,6 +6,7 @@ import "../location/location_permission_service.dart";
 import "../contracts/the_eye_enums.dart";
 import "../evidence/local_evidence_attachment.dart";
 import "incident_draft.dart";
+import "../voice/voice_report_validation.dart";
 
 final _random = Random();
 
@@ -13,9 +14,16 @@ String createClientSubmissionId() {
   return "submit-${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 20)}";
 }
 
-String normalizeIncidentDescription(String raw, {required String fallback}) {
+String normalizeIncidentDescription(
+  String raw, {
+  required String fallback,
+  bool hasVoiceAttachment = false,
+}) {
   final trimmed = raw.trim();
   if (trimmed.length >= TheEyeEnums.descriptionMinLength) return trimmed;
+  if (hasVoiceAttachment) {
+    return normalizeVoiceOnlyDescription(fallback.trim().isEmpty ? "report" : fallback.trim());
+  }
   final candidate = fallback.trim();
   if (candidate.length >= TheEyeEnums.descriptionMinLength) return candidate;
   return "$candidate submitted via THE EYE mobile.";
@@ -38,11 +46,15 @@ IncidentDraft buildIncidentDraft({
   String? clientSubmissionId,
   String? emergencyCategory,
 }) {
+  final hasVoice = draftHasVoiceAttachment(localMedia: localMedia);
   return IncidentDraft(
     clientSubmissionId: clientSubmissionId ?? createClientSubmissionId(),
     type: type,
-    description:
-        normalizeIncidentDescription(description, fallback: title ?? type),
+    description: normalizeIncidentDescription(
+      description,
+      fallback: title ?? type,
+      hasVoiceAttachment: hasVoice,
+    ),
     latitude: position.latitude,
     longitude: position.longitude,
     locationAccuracyMeters: position.accuracy,
@@ -74,12 +86,14 @@ IncidentDraft buildEmergencyIncidentDraft({
   List<LocalEvidenceAttachment> localMedia = const [],
 }) {
   final position = access.position;
+  final hasVoice = draftHasVoiceAttachment(localMedia: localMedia);
   return IncidentDraft(
     clientSubmissionId: clientSubmissionId ?? createClientSubmissionId(),
     type: type,
     description: normalizeIncidentDescription(
       description,
       fallback: title ?? type,
+      hasVoiceAttachment: hasVoice,
     ),
     latitude: position?.latitude,
     longitude: position?.longitude,

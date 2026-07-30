@@ -28,6 +28,7 @@ import { UsersModule } from "./users/users.module";
 import { VerificationModule } from "./verification/verification.module";
 import { DangerZonesModule } from "./danger-zones/danger-zones.module";
 import { AdminSettingsModule } from "./admin-settings/admin-settings.module";
+import { VoiceAttachmentsModule } from "./voice-attachments/voice-attachments.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -79,6 +80,7 @@ const redisDisabled = !shouldRegisterBullMq();
     SmartwatchModule,
     DangerZonesModule,
     AdminSettingsModule,
+    VoiceAttachmentsModule,
   ],
   controllers: [HealthController],
   providers: [

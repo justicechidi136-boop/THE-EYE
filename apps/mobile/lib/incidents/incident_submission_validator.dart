@@ -1,8 +1,8 @@
 import "dart:io";
 
 import "../evidence/evidence_constants.dart";
-import "../evidence/local_evidence_attachment.dart";
 import "../contracts/the_eye_enums.dart";
+import "../voice/voice_report_validation.dart";
 import "incident_draft.dart";
 import "incident_submission_result.dart";
 
@@ -18,9 +18,10 @@ class IncidentSubmissionValidator {
     }
 
     final description = draft.description.trim();
-    if (description.length < TheEyeEnums.descriptionMinLength) {
+    final localMedia = draft.localMedia;
+    if (!hasValidReportNarrative(description: description, localMedia: localMedia)) {
       errors["description"] =
-          "Description must be at least ${TheEyeEnums.descriptionMinLength} characters.";
+          "Add a description, voice recording, or photo/video evidence.";
     }
 
     if (draft.latitude != null &&

@@ -77,6 +77,13 @@ class EvidenceCaptureController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addVoiceAttachment(LocalEvidenceAttachment attachment) {
+    if (!canAddMore) return;
+    attachments.add(attachment);
+    lastError = null;
+    notifyListeners();
+  }
+
   Future<void> retake(
       String localId, Future<void> Function() captureAction) async {
     remove(localId);

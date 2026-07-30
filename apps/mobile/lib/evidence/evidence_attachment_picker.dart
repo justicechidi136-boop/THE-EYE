@@ -5,9 +5,10 @@ import "evidence_capture_controller.dart";
 import "evidence_capture_service.dart";
 import "evidence_media_source.dart";
 import "evidence_permission_service.dart";
-import "evidence_permission_state.dart";
 import "local_evidence_attachment.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "../voice/voice_consent_banner.dart";
+import "../voice/voice_recorder.dart";
 import "../widgets/section_card.dart";
 
 class ManagedEvidenceSection extends StatefulWidget {
@@ -170,6 +171,14 @@ class EvidenceAttachmentPicker extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const VoiceConsentBanner(),
+            const SizedBox(height: 12),
+            VoiceRecorder(
+              enabled: !controller.busy && controller.canAddMore,
+              onRecordingReady: (result) => controller.addVoiceAttachment(result.attachment),
+              onRecordingRemoved: () {},
+            ),
+            const SizedBox(height: 12),
             if (figmaStyle) ...[
               Material(
                 color: EyeSemanticColors.of(context).elevatedSurface,

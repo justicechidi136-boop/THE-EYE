@@ -63,6 +63,22 @@ enum MediaType {
   LiveVideoRecording
 }
 
+enum VoiceTranscriptionStatus {
+  Uploaded
+  Queued
+  Processing
+  Completed
+  LowConfidence
+  Failed
+}
+
+enum VoiceModerationStatus {
+  Pending
+  Approved
+  Flagged
+  Rejected
+}
+
 enum BroadcastStatus {
   Draft
   PendingApproval
@@ -586,28 +602,44 @@ model Incident {
 }
 
 model IncidentMedia {
-  id           String       @id @default(uuid()) @db.Uuid
-  incidentId   String       @map("incident_id") @db.Uuid
-  uploaderId   String       @map("uploader_id") @db.Uuid
-  mediaType    MediaType    @map("media_type")
-  bucket       String
-  objectKey    String       @map("object_key")
-  contentType  String       @map("content_type")
-  sizeBytes    BigInt?      @map("size_bytes")
-  fileHash     String       @map("file_hash")
-  capturedAt   DateTime     @map("captured_at") @db.Timestamptz(6)
-  uploadedAt   DateTime     @default(now()) @map("uploaded_at") @db.Timestamptz(6)
-  latitude     Decimal      @db.Decimal(9, 6)
-  longitude    Decimal      @db.Decimal(9, 6)
-  gpsLocation  Unsupported("geography(Point,4326)") @map("gps_location")
-  metadata     Json         @default("{}")
-  incident     Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
-  uploader     User         @relation("MediaUploader", fields: [uploaderId], references: [id])
-  accessLogs   IncidentMediaAccessLog[]
+  id                          String                    @id @default(uuid()) @db.Uuid
+  incidentId                  String                    @map("incident_id") @db.Uuid
+  uploaderId                  String                    @map("uploader_id") @db.Uuid
+  mediaType                   MediaType                 @map("media_type")
+  bucket                      String
+  objectKey                   String                    @map("object_key")
+  contentType                 String                    @map("content_type")
+  sizeBytes                   BigInt?                   @map("size_bytes")
+  fileHash                    String                    @map("file_hash")
+  capturedAt                  DateTime                  @map("captured_at") @db.Timestamptz(6)
+  uploadedAt                  DateTime                  @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  latitude                    Decimal                   @db.Decimal(9, 6)
+  longitude                   Decimal                   @db.Decimal(9, 6)
+  gpsLocation                 Unsupported("geography(Point,4326)") @map("gps_location")
+  metadata                    Json                      @default("{}")
+  durationSeconds             Int?                      @map("duration_seconds")
+  clientAttachmentId          String?                   @map("client_attachment_id")
+  selectedLanguage            String?                   @map("selected_language")
+  detectedLanguage            String?                   @map("detected_language")
+  languageDetectionConfidence Decimal?                  @map("language_detection_confidence") @db.Decimal(5, 4)
+  transcriptionStatus         VoiceTranscriptionStatus? @map("transcription_status")
+  transcript                  String?
+  translatedTranscript        String?                   @map("translated_transcript")
+  transcriptionConfidence     Decimal?                  @map("transcription_confidence") @db.Decimal(5, 4)
+  transcriptionProvider       String?                   @map("transcription_provider")
+  transcriptionErrorCode        String?                   @map("transcription_error_code")
+  transcriptionProcessedAt    DateTime?                 @map("transcription_processed_at") @db.Timestamptz(6)
+  moderationStatus            VoiceModerationStatus?    @map("moderation_status")
+  deletedAt                   DateTime?                 @map("deleted_at") @db.Timestamptz(6)
+  incident                    Incident                  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  uploader                    User                      @relation("MediaUploader", fields: [uploaderId], references: [id])
+  accessLogs                  IncidentMediaAccessLog[]
 
   @@unique([fileHash])
   @@index([incidentId])
   @@index([uploaderId])
+  @@index([transcriptionStatus])
+  @@index([clientAttachmentId])
   @@map("incident_media")
 }
 
@@ -1092,21 +1124,37 @@ model CommunityPost {
 }
 
 model CommunityPostMedia {
-  id          String        @id @default(uuid()) @db.Uuid
-  postId      String        @map("post_id") @db.Uuid
-  uploaderId  String        @map("uploader_id") @db.Uuid
-  mediaType   MediaType     @map("media_type")
-  bucket      String
-  objectKey   String        @map("object_key")
-  contentType String        @map("content_type")
-  fileHash    String        @map("file_hash")
-  capturedAt  DateTime?     @map("captured_at") @db.Timestamptz(6)
-  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  post        CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  uploader    User          @relation(fields: [uploaderId], references: [id])
+  id                          String                    @id @default(uuid()) @db.Uuid
+  postId                      String                    @map("post_id") @db.Uuid
+  uploaderId                  String                    @map("uploader_id") @db.Uuid
+  mediaType                   MediaType                 @map("media_type")
+  bucket                      String
+  objectKey                   String                    @map("object_key")
+  contentType                 String                    @map("content_type")
+  fileHash                    String                    @map("file_hash")
+  capturedAt                  DateTime?                 @map("captured_at") @db.Timestamptz(6)
+  createdAt                   DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  durationSeconds             Int?                      @map("duration_seconds")
+  clientAttachmentId          String?                   @map("client_attachment_id")
+  selectedLanguage            String?                   @map("selected_language")
+  detectedLanguage            String?                   @map("detected_language")
+  languageDetectionConfidence Decimal?                  @map("language_detection_confidence") @db.Decimal(5, 4)
+  transcriptionStatus         VoiceTranscriptionStatus? @map("transcription_status")
+  transcript                  String?
+  translatedTranscript        String?                   @map("translated_transcript")
+  transcriptionConfidence     Decimal?                  @map("transcription_confidence") @db.Decimal(5, 4)
+  transcriptionProvider       String?                   @map("transcription_provider")
+  transcriptionErrorCode        String?                   @map("transcription_error_code")
+  transcriptionProcessedAt    DateTime?                 @map("transcription_processed_at") @db.Timestamptz(6)
+  moderationStatus            VoiceModerationStatus?    @map("moderation_status")
+  deletedAt                   DateTime?                 @map("deleted_at") @db.Timestamptz(6)
+  post                        CommunityPost             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  uploader                    User                      @relation(fields: [uploaderId], references: [id])
 
   @@unique([fileHash])
   @@index([postId])
+  @@index([transcriptionStatus])
+  @@index([clientAttachmentId])
   @@map("community_post_media")
 }
 

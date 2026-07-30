@@ -6,6 +6,7 @@ import { EvidenceAccessLog, VerificationStatusBadge } from "./verification-ui";
 import { LocationTrailMap } from "./location-trail-map";
 import { IncidentAdminActions } from "./incident-admin-actions";
 import { EvidenceViewButton } from "./evidence-view-button";
+import { AudioEvidencePlayer } from "./audio-evidence-player";
 import { Panel, StatusBadge } from "./ui";
 
 function gpsToMarker(lat: number, lng: number, label: string) {
@@ -138,7 +139,9 @@ export function IncidentDetail({
             <div key={item.id || item.hash} className="rounded-lg border border-line bg-surfaceMuted p-3">
               <p className="font-semibold">{item.type}: {item.name}</p>
               <p className="mt-1 break-all text-xs text-muted">{item.hash}</p>
-              {item.id ? (
+              {item.type === "Audio" || item.contentType?.startsWith("audio/") ? (
+                <AudioEvidencePlayer incidentId={incident.id} media={item} />
+              ) : item.id ? (
                 <EvidenceViewButton incidentId={incident.id} mediaId={item.id} label="View evidence" />
               ) : null}
             </div>
