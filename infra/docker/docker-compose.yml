@@ -167,6 +167,8 @@ services:
       ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
       ALLOW_DEV_AUTH_CODES: ${ALLOW_DEV_AUTH_CODES:-false}
       METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:?METRICS_BEARER_TOKEN is required}
+      DANGER_ALERT_SIGNING_PRIVATE_KEY: ${DANGER_ALERT_SIGNING_PRIVATE_KEY:-}
+      DANGER_ALERT_SIGNING_KEY_ID: ${DANGER_ALERT_SIGNING_KEY_ID:-staging-v1}
     depends_on:
       postgres-postgis:
         condition: service_healthy
@@ -219,6 +221,8 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      DANGER_ALERT_SIGNING_PRIVATE_KEY: ${DANGER_ALERT_SIGNING_PRIVATE_KEY:-}
+      DANGER_ALERT_SIGNING_KEY_ID: ${DANGER_ALERT_SIGNING_KEY_ID:-staging-v1}
     depends_on:
       postgres-postgis:
         condition: service_healthy
