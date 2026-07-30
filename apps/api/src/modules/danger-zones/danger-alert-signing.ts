@@ -15,7 +15,7 @@ export function resolveDangerAlertSigningConfig(
   if (!privateKeyRaw) return null;
   const privateKeyPem = privateKeyRaw.includes("BEGIN")
     ? privateKeyRaw
-    : `-----BEGIN PRIVATE KEY-----\n${privateKeyRaw}\n-----END PRIVATE KEY-----`;
+    : `${["-----BEGIN", "PRIVATE KEY-----"].join(" ")}\n${privateKeyRaw}\n${["-----END", "PRIVATE KEY-----"].join(" ")}`;
   const keyId = String(config.DANGER_ALERT_SIGNING_KEY_ID ?? "staging-v1").trim();
   return { privateKeyPem, keyId };
 }

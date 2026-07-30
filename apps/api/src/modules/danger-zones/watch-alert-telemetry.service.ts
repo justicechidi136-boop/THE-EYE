@@ -102,11 +102,11 @@ export class WatchAlertTelemetryService {
       return telemetry;
     });
 
-    const counts = events.reduce<Record<string, number>>((acc, entry) => {
-      const key = String(entry.event ?? "unknown");
-      acc[key] = (acc[key] ?? 0) + 1;
-      return acc;
-    }, {});
+    const counts: Record<string, number> = {};
+    for (const entry of events) {
+      const key = String((entry as { event?: string }).event ?? "unknown");
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
 
     return {
       totals: {

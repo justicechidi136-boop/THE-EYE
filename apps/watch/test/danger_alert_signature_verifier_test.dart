@@ -1,15 +1,15 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_eye_watch/alerts/danger_alert_models.dart';
 import 'package:the_eye_watch/services/danger_alert_signature_verifier.dart';
 
-/// Deterministic test vector — private key is CI-only; public key embedded in DangerAlertPublicKeys.
-const _testPrivateKeyPem = '''
------BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIPUJRR6gwejwp8VJDCmq7Nxgpre7bcu7hHgOSl2At7Uo
------END PRIVATE KEY-----''';
+/// Deterministic Ed25519 seed matching staging-v1 / test-v1 public key in DangerAlertPublicKeys.
+final Uint8List _testSigningSeed = base64.decode(
+  '9QlFHqDB6PCnxUkMKars3GCmt7tty7uEeA5KXYC3tSg=',
+);
 
 void main() {
   group('DangerAlertSignatureVerifier', () {
@@ -31,7 +31,7 @@ void main() {
       });
 
       final ed25519 = Ed25519();
-      final privateKey = await _loadPrivateKey(_testPrivateKeyPem);
+      final privateKey = await _loadPrivateKey(_testSigningSeed);
       final signature = await ed25519.sign(utf8.encode(message), keyPair: privateKey);
 
       final payload = DangerAlertPayload(
@@ -81,14 +81,10 @@ void main() {
   });
 }
 
-Future<SimpleKeyPair> _loadPrivateKey(String pem) async {
-  final lines = pem
-      .replaceAll('-----BEGIN PRIVATE KEY-----', '')
-      .replaceAll('-----END PRIVATE KEY-----', '')
-      .replaceAll('\r', '')
-      .replaceAll('\n', '')
-      .trim();
-  final der = base64.decode(lines);
-  final seed = der.sublist(der.length - 32);
-  return SimpleKeyPairData(seed, publicKey: SimplePublicKey([], type: KeyPairType.ed25519), type: KeyPairType.ed25519);
+Future<SimpleKeyPair> _loadPrivateKey(Uint8List seed) async {
+  return SimpleKeyPairData(
+    seed,
+    publicKey: SimplePublicKey([], type: KeyPairType.ed25519),
+    type: KeyPairType.ed25519,
+  );
 }

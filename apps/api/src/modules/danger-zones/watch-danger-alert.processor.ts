@@ -33,7 +33,7 @@ export class WatchDangerAlertProcessor extends WorkerHost {
     } catch (error) {
       const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
       this.metrics.recordQueueJob(WATCH_DANGER_ALERTS_QUEUE_NAME, "failed");
-      this.metrics.recordNotificationDelivery("watch-danger-alert", durationSeconds, "error");
+      this.metrics.recordNotificationDelivery("watch-danger-alert", durationSeconds, "failed");
       throw error;
     }
   }

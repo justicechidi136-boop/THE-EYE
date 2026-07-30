@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { ApiError } from "../../../../lib/api/client";
-import { sendStagingWatchTestAlert } from "../../../../lib/api/data";
+import { ApiError } from "../../../../../../lib/api/client";
+import { sendStagingWatchTestAlert } from "../../../../../../lib/api/data";
 
 export async function POST(request: Request) {
   try {

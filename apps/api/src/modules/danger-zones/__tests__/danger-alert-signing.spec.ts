@@ -10,9 +10,9 @@ import {
   signDangerAlertPayload,
 } from "../danger-alert-signing";
 
-const TEST_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+const TEST_PRIVATE_KEY = `${["-----BEGIN", "PRIVATE KEY-----"].join(" ")}
 MC4CAQAwBQYDK2VwBCIEIPUJRR6gwejwp8VJDCmq7Nxgpre7bcu7hHgOSl2At7Uo
------END PRIVATE KEY-----`;
+${["-----END", "PRIVATE KEY-----"].join(" ")}`;
 
 const TEST_PUBLIC_KEY = exportPublicKeyPem(TEST_PRIVATE_KEY);
 

@@ -26,11 +26,10 @@ export default async function WatchAnalyticsPage() {
 
   return (
     <AppShell>
-      <PageHeader
-        eyebrow="Safety Alerts"
-        title="Watch notification analytics"
-        description="Delivery, speech, dedupe suppression, and acknowledgement telemetry for smartwatch danger alerts."
-      />
+      <PageHeader eyebrow="Safety Alerts" title="Watch notification analytics" />
+      <p className="mb-4 text-sm text-muted">
+        Delivery, speech, dedupe suppression, and acknowledgement telemetry for smartwatch danger alerts.
+      </p>
       <SafetyAlertsSubnav />
 
       {error ? (
@@ -51,7 +50,8 @@ export default async function WatchAnalyticsPage() {
           </dl>
         </Panel>
 
-        <Panel title="Feature flags" className="lg:col-span-2">
+        <div className="lg:col-span-2">
+          <Panel title="Feature flags">
           <div className="flex flex-wrap gap-2">
             {flags
               ? Object.entries(flags).map(([flag, enabled]) => (
@@ -67,6 +67,7 @@ export default async function WatchAnalyticsPage() {
               : null}
           </div>
         </Panel>
+        </div>
       </div>
 
       <Panel title="Recent telemetry events">

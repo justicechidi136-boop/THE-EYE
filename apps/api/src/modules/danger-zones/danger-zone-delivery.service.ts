@@ -250,7 +250,11 @@ export class DangerZoneDeliveryService {
         actorAdminId: input.actorAdminId,
       });
 
-      return { alertId: alert.id, queued: queueResult.queued ?? false, jobId: (queueResult as any).jobId };
+      return {
+        alertId: alert.id,
+        queued: "queued" in queueResult ? Boolean(queueResult.queued) : false,
+        jobId: "jobId" in queueResult ? queueResult.jobId : undefined,
+      };
     }
 
     const notificationDto: CreateNotificationDto = {
