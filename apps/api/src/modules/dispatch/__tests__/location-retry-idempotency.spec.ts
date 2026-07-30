@@ -10,7 +10,7 @@ describe("location retry idempotency keys", () => {
   });
 
   it("builds deterministic business job id without attempt counter", () => {
-    expect(buildIncidentLocationRetryJobId("inc-1:3")).toBe("incident-location:inc-1:3");
+    expect(buildIncidentLocationRetryJobId("inc-1:3")).toBe("incident-location-inc-1-3");
   });
 
   it("prefers explicit idempotency key in payload", () => {

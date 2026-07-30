@@ -117,7 +117,7 @@ describe("BroadcastsService scheduler", () => {
 
   it("records dispatch queued audit with system actor", async () => {
     const { service, auditService } = buildService({});
-    await service.recordDispatchQueued("b1", "broadcast:auto-dispatch:b1", false);
+    await service.recordDispatchQueued("b1", "broadcast-auto-dispatch-b1", false);
     expect(auditService.record.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
         action: "broadcast.dispatch_queued",
@@ -161,6 +161,6 @@ describe("BroadcastsService citizen feed", () => {
 describe("BroadcastQueueService enqueue", () => {
   it("uses deterministic broadcast auto-dispatch job ids", async () => {
     const { buildBroadcastAutoDispatchJobId } = await import("../../../common/queue/queue-jobs");
-    expect(buildBroadcastAutoDispatchJobId("broadcast-1")).toBe("broadcast:auto-dispatch:broadcast-1");
+    expect(buildBroadcastAutoDispatchJobId("broadcast-1")).toBe("broadcast-auto-dispatch-broadcast-1");
   });
 });

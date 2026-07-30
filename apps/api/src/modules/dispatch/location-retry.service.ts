@@ -2,6 +2,8 @@ import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import type { Queue } from "bullmq";
 import { INCIDENT_LOCATION_RETRY_QUEUE_NAME } from "../../common/queue/queue-names";
+import { BullQueueEnqueueError } from "../../common/queue/bull-job-id";
+import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import type { LocationUpdateInput } from "./location-tracking.service";
 import {
   buildIncidentLocationRetryJobId,
@@ -72,18 +74,39 @@ export class LocationRetryService {
       }
     }
 
-    await this.queue.add(
-      "incident.location.retry",
-      { ...payload, idempotencyKey },
-      {
-        jobId: retryId,
-        delay: 0,
-        attempts: 5,
-        backoff: { type: "exponential", delay: 5_000 },
-        removeOnComplete: 100,
-        removeOnFail: 50,
-      },
-    );
+    try {
+      await safeQueueAdd(
+        this.queue,
+        "incident.location.retry",
+        { ...payload, idempotencyKey },
+        {
+          jobId: retryId,
+          delay: 0,
+          attempts: 5,
+          backoff: { type: "exponential", delay: 5_000 },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+        {
+          incidentId: payload.incidentId,
+          requestId: payload.requestId ?? null,
+          idempotencyKey,
+        },
+      );
+    } catch (error) {
+      const message = error instanceof BullQueueEnqueueError ? error.message : error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        JSON.stringify({
+          event: "incident.location.retry_enqueue_failed",
+          incidentId: payload.incidentId,
+          retryId,
+          idempotencyKey,
+          requestId: payload.requestId ?? null,
+          message,
+        }),
+      );
+      return { accepted: false, reason: "queue_unavailable" };
+    }
     this.logger.log(
       JSON.stringify({
         event: "incident.location.retry_enqueued",

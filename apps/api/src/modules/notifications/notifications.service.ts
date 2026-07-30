@@ -14,6 +14,8 @@ import {
   buildNotificationIdempotencyKey,
   NOTIFICATION_DISPATCH_JOB_NAME,
 } from "../../common/queue/queue-jobs";
+import { BullQueueEnqueueError } from "../../common/queue/bull-job-id";
+import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import { NOTIFICATIONS_QUEUE_NAME } from "../../common/queue/queue-names";
 import {
   buildCursorPage,
@@ -300,18 +302,37 @@ export class NotificationsService {
     const attempts = bullJobAttempts(payload.priority);
     const startedAt = Date.now();
     try {
-      const job = await this.queue.add(NOTIFICATION_DISPATCH_JOB_NAME, jobPayload, {
-        jobId,
-        priority,
-        attempts,
-        backoff: { type: "exponential", delay: isEmergencyPriority(payload.priority) ? 2000 : 5000 },
-        removeOnComplete: true,
-        removeOnFail: false,
-      });
+      const job = await safeQueueAdd(
+        this.queue,
+        NOTIFICATION_DISPATCH_JOB_NAME,
+        jobPayload,
+        {
+          jobId,
+          priority,
+          attempts,
+          backoff: { type: "exponential", delay: isEmergencyPriority(payload.priority) ? 2000 : 5000 },
+          removeOnComplete: true,
+          removeOnFail: false,
+        },
+        {
+          notificationId: payload.notificationId ?? null,
+          incidentId: payload.incidentId ?? null,
+          channel: payload.channel ?? "push",
+        },
+      );
       this.metrics.recordRedisOperation("bullmq_enqueue", (Date.now() - startedAt) / 1000, "success");
       return { jobId: job.id, queued: true, status: "Queued" as const, duplicate: false, priority, attempts };
     } catch (error) {
       this.metrics.recordRedisOperation("bullmq_enqueue", (Date.now() - startedAt) / 1000, "error");
+      if (error instanceof BullQueueEnqueueError) {
+        throw new ServiceUnavailableException({
+          status: "unavailable",
+          code: "NOTIFICATION_QUEUE_ENQUEUE_FAILED",
+          message: "Notification queue rejected the dispatch job",
+          jobId,
+          incidentId: payload.incidentId ?? null,
+        });
+      }
       throw error;
     }
   }
