@@ -23,13 +23,17 @@ import {
   VerifyCommunityPostDto,
 } from "./dto/neighborhood-watch.dto";
 import { NeighborhoodWatchService } from "./neighborhood-watch.service";
+import { AiIntelligenceService } from "./ai-intelligence.service";
 
 @ApiTags("neighborhood-watch")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("neighborhood-watch")
 export class NeighborhoodWatchController {
-  constructor(private readonly neighborhoodWatch: NeighborhoodWatchService) {}
+  constructor(
+    private readonly neighborhoodWatch: NeighborhoodWatchService,
+    private readonly aiIntelligenceService: AiIntelligenceService,
+  ) {}
 
   @Get("communities")
   @RequirePermissions("community:read")
@@ -294,5 +298,14 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:post")
   sendMessage(@Param("channelId") channelId: string, @Body() dto: SendCommunityMessageDto, @Req() request: any) {
     return this.neighborhoodWatch.sendMessage(channelId, dto, request.user);
+  }
+
+  @Get("admin/ai-intelligence")
+  @RequirePermissions("community:read")
+  aiIntelligence(@Req() request: any, @Query() query: Record<string, string | undefined>) {
+    return this.aiIntelligenceService.getDashboard(request.user, {
+      windowDays: query.windowDays ? Number(query.windowDays) : undefined,
+      communityId: query.communityId,
+    });
   }
 }

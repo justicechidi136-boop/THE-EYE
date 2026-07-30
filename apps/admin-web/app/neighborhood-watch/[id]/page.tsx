@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchCommunityDetail } from "../../../lib/api/data";
-
+import { fetchCommunityDetail, fetchCommunityChannels } from "../../../lib/api/data";
 export const dynamic = "force-dynamic";
 
 export default async function CommunityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const detail = await fetchCommunityDetail(id);
+  const [detail, channels] = await Promise.all([fetchCommunityDetail(id), fetchCommunityChannels(50)]);
+  const communityChannels = channels.filter((channel) => channel.communityId === id);
 
-  if (!detail) {
-    return (
+  if (!detail) {    return (
       <PageHeader eyebrow="Community" title="Community not found" action={<StatusBadge tone="warning">Missing</StatusBadge>} />
     );
   }
@@ -42,6 +41,19 @@ export default async function CommunityDetailPage({ params }: { params: Promise<
             {["Community Moderator", "Estate Admin", "Security Coordinator", "Police Liaison", "Volunteer Coordinator", "Verified Volunteer", "Resident"].map((role) => (
               <span key={role} className="rounded-md bg-surfaceMuted px-3 py-2">{role}</span>
             ))}
+          </div>
+        </Panel>
+        <Panel title="Community channels">
+          <div className="grid gap-2">
+            {communityChannels.length ? communityChannels.map((channel) => (
+              <Link
+                key={channel.id}
+                href={`/neighborhood-watch/chat/${channel.id}`}
+                className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye"
+              >
+                {channel.name} · {channel.type}
+              </Link>
+            )) : <p className="text-sm text-muted">No channels returned for this community.</p>}
           </div>
         </Panel>
         <Panel title="Recent posts">

@@ -1,5 +1,4 @@
 import type { DashboardChartPoint, Incident, LiveVideoSessionView } from "./types/admin-views";
-import { PLACEHOLDER_DEPENDENCIES } from "./placeholder-dependencies";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -56,7 +55,7 @@ export function buildDashboardChart(
 
   return {
     points,
-    footnote: `Live incident and session counts by month. ${PLACEHOLDER_DEPENDENCIES.dashboardUserTrends.note}`,
+    footnote: "Live incident, user directory, and live video session counts by month.",
   };
 }
 

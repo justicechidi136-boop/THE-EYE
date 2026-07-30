@@ -551,3 +551,40 @@ export function evidenceAccessEntriesForIncident(incidentId: string, logs: Recor
     })
     .map((log) => toEvidenceAccessEntry(log));
 }
+
+export function toCommunityChannelView(
+  record: Record<string, unknown>,
+  communityId: string,
+  communityName: string,
+) {
+  return {
+    id: String(record.id),
+    communityId,
+    communityName,
+    type: String(record.type ?? "General"),
+    name: String(record.name ?? record.type ?? "Channel"),
+  };
+}
+
+export function toChannelMessageView(record: Record<string, unknown>) {
+  return {
+    id: String(record.id),
+    body: String(record.body ?? ""),
+    senderId: String(record.senderId ?? "unknown"),
+    createdAt: String(record.createdAt ?? ""),
+  };
+}
+
+export function toContentReportView(record: Record<string, unknown>, communityName = "Community") {
+  return {
+    id: String(record.id),
+    communityId: String(record.communityId),
+    communityName,
+    targetType: String(record.targetType ?? "Post"),
+    targetId: String(record.targetId),
+    reasonCode: String(record.reasonCode ?? "other"),
+    note: String(record.note ?? ""),
+    status: String(record.status ?? "Pending"),
+    createdAt: String(record.createdAt ?? ""),
+  };
+}

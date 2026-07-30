@@ -23,7 +23,11 @@ import {
   toSosEventView,
   toUserDirectoryEntry,
   toVolunteerView,
+  toCommunityChannelView,
+  toChannelMessageView,
+  toContentReportView,
 } from "../mappers";
+import { buildJurisdictionRows } from "../jurisdiction-tree";
 import type {
   AuditLogView,
   BroadcastView,
@@ -47,6 +51,11 @@ import type {
   SosEventView,
   UserDirectoryEntry,
   VolunteerView,
+  VerificationDashboardView,
+  CommunityChannelView,
+  ChannelMessageView,
+  ContentReportView,
+  JurisdictionRowView,
 } from "../types/admin-views";
 
 export type PaginatedResponse<T> = {
@@ -186,8 +195,100 @@ export async function fetchAuditLogs(filters?: {
 
 export async function fetchCommunities(): Promise<CommunityView[]> {
   return withToken(async (token) => {
-    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/neighborhood-watch/communities", { token });
-    return response.data.map(toCommunityView);
+    const rows = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token);
+    return rows.map(toCommunityView);
+  }, []);
+}
+
+export async function fetchRawCommunities(): Promise<Record<string, unknown>[]> {
+  return withToken(async (token) => fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token), []);
+}
+
+export async function fetchVerificationDashboard(): Promise<VerificationDashboardView> {
+  return withToken(async (token) => {
+    const dashboard = await apiRequest<VerificationDashboardView & { recent?: unknown[] }>("/verification/dashboard", { token });
+    return {
+      pending: dashboard.pending ?? 0,
+      highConfidenceLast24h: dashboard.highConfidenceLast24h ?? 0,
+      lowConfidenceLast24h: dashboard.lowConfidenceLast24h ?? 0,
+    };
+  }, { pending: 0, highConfidenceLast24h: 0, lowConfidenceLast24h: 0 });
+}
+
+export async function fetchCommunityChannels(limit = 20): Promise<CommunityChannelView[]> {
+  return withToken(async (token) => {
+    const communities = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token);
+    const channelGroups = await Promise.all(
+      communities.slice(0, limit).map(async (community) => {
+        const communityId = String(community.id);
+        const communityName = String(community.name ?? "Community");
+        try {
+          const detail = await apiRequest<{ data: Record<string, unknown> }>(
+            `/neighborhood-watch/communities/${communityId}`,
+            { token },
+          );
+          const channels = Array.isArray(detail.data?.channels) ? detail.data.channels : [];
+          return channels.map((channel) =>
+            toCommunityChannelView(channel as Record<string, unknown>, communityId, communityName),
+          );
+        } catch {
+          return [];
+        }
+      }),
+    );
+    return channelGroups.flat();
+  }, []);
+}
+
+export async function fetchChannelMessages(channelId: string): Promise<ChannelMessageView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>(
+      `/neighborhood-watch/channels/${encodeURIComponent(channelId)}/messages`,
+      { token },
+    );
+    return response.data.map(toChannelMessageView);
+  }, []);
+}
+
+export async function fetchContentReports(): Promise<ContentReportView[]> {
+  return withToken(async (token) => {
+    const [reportsResponse, communities] = await Promise.all([
+      apiRequest<{ data: Record<string, unknown>[] }>("/neighborhood-watch/reports", { token }),
+      fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token),
+    ]);
+    const communityNames = new Map(communities.map((community) => [String(community.id), String(community.name ?? "Community")]));
+    return reportsResponse.data.map((report) =>
+      toContentReportView(report, communityNames.get(String(report.communityId)) ?? "Community"),
+    );
+  }, []);
+}
+
+export async function fetchJurisdictionRows(): Promise<JurisdictionRowView[]> {
+  return withToken(async (token) => {
+    const [communities, users] = await Promise.all([
+      fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token),
+      fetchAllPages<Record<string, unknown>>("/users/directory", token),
+    ]);
+    const stations = await fetchPoliceStations();
+    const parsedUsers = users.map((user) => {
+      const scope = String(user.scope ?? "");
+      const parts = scope.split("/").map((part) => part.trim()).filter(Boolean);
+      return {
+        country: parts[0] ?? "—",
+        state: parts[1] ?? "—",
+        lga: parts[2] ?? "—",
+      };
+    });
+    return buildJurisdictionRows(
+      communities.map((community) => ({
+        country: community.country as string | null | undefined,
+        state: community.state as string | null | undefined,
+        lga: community.lga as string | null | undefined,
+        ward: community.ward as string | null | undefined,
+      })),
+      parsedUsers,
+      stations,
+    );
   }, []);
 }
 
@@ -241,9 +342,9 @@ export async function fetchVolunteers(): Promise<VolunteerView[]> {
 
 export async function fetchCommunityResidents(): Promise<ResidentView[]> {
   return withToken(async (token) => {
-    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/neighborhood-watch/communities", { token });
+    const communities = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token);
     const residents: ResidentView[] = [];
-    for (const community of response.data) {
+    for (const community of communities) {
       const communityInfo = { id: String(community.id), name: String(community.name ?? "Community") };
       const memberships = Array.isArray(community.memberships) ? community.memberships : [];
       for (const membership of memberships) {
@@ -279,13 +380,21 @@ export async function fetchPatrols(): Promise<PatrolScheduleView[]> {
   const token = await getAccessToken();
   if (!token || !communities.length) return [];
   const results = await Promise.all(
-    communities.slice(0, 10).map(async (community) => {
-      const map = await apiRequest<{ data: Record<string, unknown> }>(
-        `/neighborhood-watch/communities/${community.id}/map`,
-        { token },
-      );
-      const patrols = Array.isArray(map.data.patrols) ? map.data.patrols : [];
-      return patrols.map(toPatrolScheduleView);
+    communities.slice(0, 20).map(async (community) => {
+      try {
+        const response = await apiRequest<{ data: Record<string, unknown>[] }>(
+          `/neighborhood-watch/communities/${community.id}/patrols`,
+          { token },
+        );
+        return response.data.map((patrol) => toPatrolScheduleView({ ...patrol, communityId: community.id, community: { name: community.name } }));
+      } catch {
+        const map = await apiRequest<{ data: Record<string, unknown> }>(
+          `/neighborhood-watch/communities/${community.id}/map`,
+          { token },
+        );
+        const patrols = Array.isArray(map.data.patrols) ? map.data.patrols : [];
+        return patrols.map(toPatrolScheduleView);
+      }
     }),
   );
   return results.flat();

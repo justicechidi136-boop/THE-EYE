@@ -315,6 +315,49 @@ export type LiveVideoSessionView = {
   connectionStatus: string;
 };
 
+export type VerificationDashboardView = {
+  pending: number;
+  highConfidenceLast24h: number;
+  lowConfidenceLast24h: number;
+};
+
+export type CommunityChannelView = {
+  id: string;
+  communityId: string;
+  communityName: string;
+  type: string;
+  name: string;
+};
+
+export type ChannelMessageView = {
+  id: string;
+  body: string;
+  senderId: string;
+  createdAt: string;
+};
+
+export type ContentReportView = {
+  id: string;
+  communityId: string;
+  communityName: string;
+  targetType: string;
+  targetId: string;
+  reasonCode: string;
+  note: string;
+  status: string;
+  createdAt: string;
+};
+
+export type JurisdictionRowView = {
+  country: string;
+  state: string;
+  lga: string;
+  ward: string;
+  communities: number;
+  users: number;
+  policeStations: number;
+};
+
 export type AdminSession = {
   sub: string;
   email?: string;

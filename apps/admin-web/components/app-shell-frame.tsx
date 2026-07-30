@@ -6,6 +6,7 @@ import { filterNavItems } from "../lib/nav-access";
 import type { AdminRole, AdminSession } from "../lib/types/admin-views";
 import { roleScope } from "../lib/types/admin-views";
 import { EnvironmentBadge } from "./environment-badge";
+import { NavSection } from "./nav-section";
 import { ShellNavLink } from "./shell-nav-link";
 
 const navGroups = [
@@ -106,17 +107,12 @@ export function AppShellFrame({
           {session?.email ? <p className="mt-2 text-xs text-white/50">{session.email}</p> : null}
         </div>
         <nav className="grid gap-2" aria-label="Primary">
-          {visibleGroups.map((group, index) => (
-            <details key={group.label} className="group border-t border-white/10 pt-2" open={index < 3}>
-              <summary className="cursor-pointer list-none rounded-md px-3 py-2 text-xs font-bold uppercase text-white/50 hover:bg-white/5 hover:text-white [&::-webkit-details-marker]:hidden">
-                {group.label}
-              </summary>
-              <div className="mt-1 grid gap-1">
-                {group.items.map(([label, href]) => (
-                  <ShellNavLink key={`${group.label}-${label}`} href={href} label={label} />
-                ))}
-              </div>
-            </details>
+          {visibleGroups.map((group) => (
+            <NavSection key={group.label} label={group.label}>
+              {group.items.map(([label, href]) => (
+                <ShellNavLink key={`${group.label}-${label}`} href={href} label={label} />
+              ))}
+            </NavSection>
           ))}
           <div className="border-t border-white/10 pt-2">
             {filterNavItems(activeRole, [["Settings", "/settings"]]).length ? <ShellNavLink href="/settings" label="Settings" /> : null}

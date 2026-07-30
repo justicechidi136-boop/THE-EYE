@@ -1,50 +1,39 @@
-import { CsocApiNotice } from "../../../components/csoc/csoc-data-table";
+import Link from "next/link";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchCommunities } from "../../../lib/api/data";
+import { fetchCommunityChannels } from "../../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
-const CHANNELS = [
-  "General", "Emergency", "Security", "Volunteers", "Parents",
-  "Women Safety", "Business Owners", "Estate Committee",
-];
-
 export default async function CommunityChatPage() {
-  const communities = await fetchCommunities();
+  const channels = await fetchCommunityChannels();
 
   return (
     <>
       <PageHeader
         eyebrow="Community channels"
         title="Community Chat"
-        action={<StatusBadge tone="info">{communities.length} communities</StatusBadge>}
+        action={<StatusBadge tone="info">{channels.length} channels</StatusBadge>}
       />
-      <Panel title="Channel types">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {CHANNELS.map((ch) => (
-            <span key={ch} className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold">{ch}</span>
-          ))}
+      <Panel title="Live community channels">
+        <p className="mb-4 text-sm text-muted">
+          Channels are loaded from <code className="text-xs">GET /v1/neighborhood-watch/communities/:id</code> and messages from{" "}
+          <code className="text-xs">GET /v1/neighborhood-watch/channels/:channelId/messages</code>.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {channels.length ? channels.map((channel) => (
+            <Link
+              key={channel.id}
+              href={`/neighborhood-watch/chat/${channel.id}`}
+              className="rounded-lg border border-line bg-surfaceMuted px-4 py-3 transition-colors hover:border-eye"
+            >
+              <p className="text-sm font-semibold">{channel.name}</p>
+              <p className="mt-1 text-xs text-muted">{channel.communityName} · {channel.type}</p>
+              <p className="mt-2 text-xs font-semibold text-eye">Open channel →</p>
+            </Link>
+          )) : (
+            <p className="text-sm text-muted">No community channels found in the current scope.</p>
+          )}
         </div>
-      </Panel>
-      <Panel title="Moderator tools">
-        <p className="mb-3 text-sm text-muted">Mute, delete, pin, and announcements connect to community channel message APIs.</p>
-        <CsocApiNotice
-          notice={{
-            title: "Channel message moderation",
-            endpoint: "GET/POST /v1/neighborhood-watch/channels/:channelId/messages",
-            note: "Select a community to view its channels. Messages load per channel ID from community detail.",
-          }}
-        />
-      </Panel>
-      <Panel title="Communities with channels">
-        <ul className="grid gap-2">
-          {communities.map((c) => (
-            <li key={c.id} className="rounded-lg border border-line bg-surfaceMuted px-4 py-3 text-sm">
-              <span className="font-semibold">{c.name}</span>
-              <span className="text-muted"> — {c.members} members</span>
-            </li>
-          ))}
-        </ul>
       </Panel>
     </>
   );

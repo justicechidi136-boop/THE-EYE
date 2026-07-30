@@ -3,8 +3,8 @@ import { AppShell } from "../../components/app-shell";
 import { Button } from "../../components/form-primitives";
 import { IncidentReviewButton } from "../../components/incident-review-button";
 import { DuplicateReportPanel, VerificationStatusBadge, WitnessConfirmationPanel } from "../../components/verification-ui";
-import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { fetchVerificationQueue } from "../../lib/api/data";
+import { MetricCard, PageHeader, Panel, StatusBadge } from "../../components/ui";
+import { fetchVerificationDashboard, fetchVerificationQueue } from "../../lib/api/data";
 
 const signals = ["GPS accuracy", "Reporter trust", "Media evidence", "Nearby duplicates", "Crowd confirmations", "False-report history"];
 
@@ -15,11 +15,25 @@ function mapsUrl(lat: number, lng: number) {
 }
 
 export default async function VerificationPage() {
-  const incidents = await fetchVerificationQueue();
+  const [incidents, verification] = await Promise.all([fetchVerificationQueue(), fetchVerificationDashboard()]);
 
   return (
     <AppShell>
-      <PageHeader eyebrow="Confidence scoring" title="Incident verification queue" action={<StatusBadge tone="warning">1-5s target</StatusBadge>} />
+      <PageHeader
+        eyebrow="Confidence scoring"
+        title="Incident verification queue"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/dispatch" className="text-sm font-semibold text-eye hover:underline">Command center →</Link>
+            <StatusBadge tone="warning">1-5s target</StatusBadge>
+          </div>
+        }
+      />
+      <section className="mb-5 grid gap-4 md:grid-cols-3">
+        <MetricCard label="Queue size" value={String(verification.pending || incidents.length)} detail="From verification dashboard" accent="eyeOrange" />
+        <MetricCard label="High confidence (24h)" value={String(verification.highConfidenceLast24h)} accent="eye" />
+        <MetricCard label="Low confidence (24h)" value={String(verification.lowConfidenceLast24h)} accent="ink" />
+      </section>
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         <Panel title="Queue">
           <div className="grid gap-3">
