@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { formatVoiceLanguageLabel } from "../lib/voice-language-labels";
 import { Button } from "./form-primitives";
 
 type VoiceEvidence = {
@@ -86,6 +87,13 @@ export function CommunityAudioEvidencePlayer({ postId, media }: Props) {
         <div className="mt-3">
           <p className="text-xs uppercase text-muted">Transcript</p>
           <p className="mt-1 whitespace-pre-wrap text-sm">{media.transcript}</p>
+          <p className="mt-2 text-xs text-muted">
+            Language: {formatVoiceLanguageLabel(media.selectedLanguage)} · Detected:{" "}
+            {formatVoiceLanguageLabel(media.detectedLanguage)}
+            {media.transcriptionConfidence != null
+              ? ` · Confidence ${Math.round(Number(media.transcriptionConfidence) * 100)}%`
+              : ""}
+          </p>
         </div>
       ) : (
         <p className="mt-3 text-sm text-muted">

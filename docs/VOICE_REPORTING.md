@@ -113,8 +113,8 @@ Fields: `selectedLanguage`, `detectedLanguage`, `languageDetectionConfidence`, `
 |---|---|
 | 1 | Emergency + general incident voice attachments (**PR #51**) |
 | 2 | Neighborhood Watch voice posts, comments, and replies (**feat/voice-neighborhood-watch**) |
-| 3 | Transcription EN + Nigerian Pidgin (**feat/voice-transcription-en-pidgin**) |
-| 4 | Hausa, Yoruba, Igbo, French, Swahili |
+| 3 | Transcription EN + Nigerian Pidgin (**#53**) |
+| 4 | Hausa, Yoruba, Igbo, French, Swahili (**feat/voice-transcription-stage4**) |
 | 5 | Translation, moderation, analytics, TTS guidance |
 
 ---
@@ -133,11 +133,24 @@ Fields: `selectedLanguage`, `detectedLanguage`, `languageDetectionConfidence`, `
 - `selectedLanguage` always reflects the user's choice; `detectedLanguage` comes from Whisper and is never upgraded to `pcm` automatically.
 - Original audio is always retained; transcription failures only update media status.
 
+## Stage 4 — Additional Whisper languages
+
+Whisper ISO hints and detection normalization for:
+
+| Code | Language |
+|---|---|
+| `ha` | Hausa |
+| `yo` | Yoruba |
+| `ig` | Igbo |
+| `fr` | French |
+| `sw` | Swahili |
+
+No new env vars beyond Stage 3. Mobile language picker already exposes all codes; admin transcript panels now show human-readable language labels.
+
 ---
 
 ## Remaining risks
 
-- Hausa, Yoruba, Igbo, French, Swahili real transcription deferred to Stage 4
 - Audio moderation async pipeline Stage 5
 - iOS/Android microphone background/phone-call edge cases need device QA
 - `record` / `just_audio` native deps require `flutter pub get` + platform permission strings

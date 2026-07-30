@@ -1,8 +1,12 @@
 import {
   computeSegmentTranscriptionConfidence,
   evaluateTranscriptionQuality,
+  formatVoiceLanguageLabel,
+  isStage4TranscriptionLanguage,
+  isWhisperTranscriptionLanguage,
   normalizeWhisperDetectedLanguage,
   resolveWhisperLanguageHint,
+  STAGE4_TRANSCRIPTION_LANGUAGE_CODES,
 } from "../voice-language";
 import { TranscriptionProviderFactory } from "../transcription-provider.factory";
 import { StubTranscriptionProvider } from "../stub-transcription.provider";
@@ -16,9 +20,27 @@ describe("voice language mapping", () => {
     expect(resolveWhisperLanguageHint(null)).toBeUndefined();
   });
 
+  it("passes Stage 4 language hints to Whisper", () => {
+    for (const code of STAGE4_TRANSCRIPTION_LANGUAGE_CODES) {
+      expect(resolveWhisperLanguageHint(code)).toBe(code);
+      expect(isStage4TranscriptionLanguage(code)).toBe(true);
+      expect(isWhisperTranscriptionLanguage(code)).toBe(true);
+    }
+  });
+
+  it("formats human-readable language labels", () => {
+    expect(formatVoiceLanguageLabel("ha")).toBe("Hausa");
+    expect(formatVoiceLanguageLabel("yo")).toBe("Yoruba");
+    expect(formatVoiceLanguageLabel("unknown")).toBe("unknown");
+  });
+
   it("normalizes Whisper language labels without inventing Pidgin", () => {
     expect(normalizeWhisperDetectedLanguage("english")).toBe("en");
     expect(normalizeWhisperDetectedLanguage("hausa")).toBe("ha");
+    expect(normalizeWhisperDetectedLanguage("yoruba")).toBe("yo");
+    expect(normalizeWhisperDetectedLanguage("igbo")).toBe("ig");
+    expect(normalizeWhisperDetectedLanguage("french")).toBe("fr");
+    expect(normalizeWhisperDetectedLanguage("swahili")).toBe("sw");
     expect(normalizeWhisperDetectedLanguage("pidgin")).toBeUndefined();
   });
 
@@ -49,6 +71,17 @@ describe("voice language mapping", () => {
       threshold: 0.55,
     });
     expect(result.lowConfidence).toBe(true);
+  });
+
+  it("accepts matching Stage 4 language detection for Hausa", () => {
+    const result = evaluateTranscriptionQuality({
+      selectedLanguage: "ha",
+      detectedLanguage: "ha",
+      transcriptionConfidence: 0.82,
+      transcript: "An sami gaggawa a nan.",
+      threshold: 0.55,
+    });
+    expect(result.lowConfidence).toBe(false);
   });
 });
 
