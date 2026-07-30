@@ -19,9 +19,30 @@ export function isSupportedVoiceLanguage(code: string | undefined | null): code 
 export const VOICE_MAX_DURATION_SECONDS = 300;
 export const VOICE_MAX_BYTES = 25 * 1024 * 1024;
 
-/** Languages with real transcription wired in Stage 3 (OpenAI Whisper). */
+export const VOICE_LANGUAGE_LABELS: Record<VoiceLanguageCode, string> = {
+  auto: "Automatic detection",
+  en: "English",
+  pcm: "Nigerian Pidgin",
+  ha: "Hausa",
+  yo: "Yoruba",
+  ig: "Igbo",
+  fr: "French",
+  sw: "Swahili",
+};
+
+/** Languages with real Whisper transcription in Stage 3. */
 export const STAGE3_TRANSCRIPTION_LANGUAGE_CODES = ["auto", "en", "pcm"] as const;
 export type Stage3TranscriptionLanguageCode = (typeof STAGE3_TRANSCRIPTION_LANGUAGE_CODES)[number];
+
+/** Languages added in Stage 4 (Whisper ISO hints + detection normalization). */
+export const STAGE4_TRANSCRIPTION_LANGUAGE_CODES = ["ha", "yo", "ig", "fr", "sw"] as const;
+export type Stage4TranscriptionLanguageCode = (typeof STAGE4_TRANSCRIPTION_LANGUAGE_CODES)[number];
+
+export const WHISPER_TRANSCRIPTION_LANGUAGE_CODES = [
+  ...STAGE3_TRANSCRIPTION_LANGUAGE_CODES,
+  ...STAGE4_TRANSCRIPTION_LANGUAGE_CODES,
+] as const;
+export type WhisperTranscriptionLanguageCode = (typeof WHISPER_TRANSCRIPTION_LANGUAGE_CODES)[number];
 
 const WHISPER_ISO_HINTS: Partial<Record<VoiceLanguageCode, string>> = {
   en: "en",
@@ -50,6 +71,22 @@ const WHISPER_DETECTED_LANGUAGE_MAP: Record<string, VoiceLanguageCode> = {
 export function isStage3TranscriptionLanguage(code: string | undefined | null): code is Stage3TranscriptionLanguageCode {
   if (!code) return true;
   return STAGE3_TRANSCRIPTION_LANGUAGE_CODES.includes(code as Stage3TranscriptionLanguageCode);
+}
+
+export function isStage4TranscriptionLanguage(code: string | undefined | null): code is Stage4TranscriptionLanguageCode {
+  if (!code) return false;
+  return STAGE4_TRANSCRIPTION_LANGUAGE_CODES.includes(code as Stage4TranscriptionLanguageCode);
+}
+
+export function isWhisperTranscriptionLanguage(code: string | undefined | null): code is WhisperTranscriptionLanguageCode {
+  if (!code) return true;
+  return WHISPER_TRANSCRIPTION_LANGUAGE_CODES.includes(code as WhisperTranscriptionLanguageCode);
+}
+
+export function formatVoiceLanguageLabel(code: string | undefined | null): string {
+  if (!code) return "—";
+  if (isSupportedVoiceLanguage(code)) return VOICE_LANGUAGE_LABELS[code];
+  return code;
 }
 
 /** Maps app language codes to Whisper ISO hints. Pidgin and auto-detect omit the hint. */
