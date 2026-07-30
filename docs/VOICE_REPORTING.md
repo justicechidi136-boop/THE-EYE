@@ -34,7 +34,7 @@
 2. Existing presign → PUT → confirm flow for incident media.
 3. API creates incident **before** transcription; audio attached asynchronously.
 4. BullMQ queue `the-eye-{env}-voice-transcription` with job ID `voice-transcription-{attachmentId}`.
-5. Stub transcription provider (swap for Whisper/Deepgram in Stage 3).
+5. **Stage 3:** OpenAI Whisper provider for English + Nigerian Pidgin (`TRANSCRIPTION_PROVIDER=openai`, `OPENAI_API_KEY`). Stub remains default for local dev.
 6. Original audio retained permanently; transcript is additive.
 7. Admin inline `<audio>` player + transcript panel with verification warning.
 
@@ -113,16 +113,31 @@ Fields: `selectedLanguage`, `detectedLanguage`, `languageDetectionConfidence`, `
 |---|---|
 | 1 | Emergency + general incident voice attachments (**PR #51**) |
 | 2 | Neighborhood Watch voice posts, comments, and replies (**feat/voice-neighborhood-watch**) |
-| 3 | Transcription EN + Nigerian Pidgin |
+| 3 | Transcription EN + Nigerian Pidgin (**feat/voice-transcription-en-pidgin**) |
 | 4 | Hausa, Yoruba, Igbo, French, Swahili |
 | 5 | Translation, moderation, analytics, TTS guidance |
 
 ---
 
+## Stage 3 — OpenAI Whisper transcription
+
+| Variable | Purpose |
+|---|---|
+| `TRANSCRIPTION_PROVIDER` | `stub` (default) or `openai` |
+| `OPENAI_API_KEY` | Required when provider is OpenAI |
+| `OPENAI_TRANSCRIPTION_MODEL` | Defaults to `whisper-1` |
+| `TRANSCRIPTION_CONFIDENCE_THRESHOLD` | Marks `LowConfidence` below this score (default `0.55`) |
+
+- English (`en`) sends a Whisper language hint.
+- Nigerian Pidgin (`pcm`) and auto-detect omit the hint because Whisper has no Pidgin ISO code.
+- `selectedLanguage` always reflects the user's choice; `detectedLanguage` comes from Whisper and is never upgraded to `pcm` automatically.
+- Original audio is always retained; transcription failures only update media status.
+
+---
+
 ## Remaining risks
 
-- Real transcription provider not wired (stub only)
-- NW comment/reply voice not yet implemented
+- Hausa, Yoruba, Igbo, French, Swahili real transcription deferred to Stage 4
 - Audio moderation async pipeline Stage 5
 - iOS/Android microphone background/phone-call edge cases need device QA
 - `record` / `just_audio` native deps require `flutter pub get` + platform permission strings

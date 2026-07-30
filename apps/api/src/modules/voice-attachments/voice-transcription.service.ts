@@ -6,7 +6,7 @@ import { buildVoiceTranscriptionJobId, VOICE_TRANSCRIPTION_JOB_NAME } from "../.
 import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import { VOICE_TRANSCRIPTION_QUEUE_NAME } from "../../common/queue/queue-names";
 import { PrismaService } from "../prisma/prisma.service";
-import { StubTranscriptionProvider } from "./stub-transcription.provider";
+import { TranscriptionProviderFactory } from "./transcription-provider.factory";
 import type { VoiceTranscriptionProvider } from "./transcription-provider.interface";
 
 export type VoiceTranscriptionJobPayload = {
@@ -22,10 +22,10 @@ export class VoiceTranscriptionService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly stubProvider: StubTranscriptionProvider,
+    private readonly providerFactory: TranscriptionProviderFactory,
     @Optional() @InjectQueue(VOICE_TRANSCRIPTION_QUEUE_NAME) private readonly queue?: Queue,
   ) {
-    this.provider = this.stubProvider;
+    this.provider = this.providerFactory.getProvider();
   }
 
   async enqueueIncidentMediaTranscription(attachmentId: string) {

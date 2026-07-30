@@ -5,6 +5,8 @@ import { VOICE_TRANSCRIPTION_QUEUE_NAME } from "../../common/queue/queue-names";
 import { MetricsModule } from "../../common/metrics/metrics.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { StubTranscriptionProvider } from "./stub-transcription.provider";
+import { OpenAiWhisperTranscriptionProvider } from "./openai-whisper-transcription.provider";
+import { TranscriptionProviderFactory } from "./transcription-provider.factory";
 import { VoiceTranscriptionProcessor } from "./voice-transcription.processor";
 import { VoiceTranscriptionService } from "./voice-transcription.service";
 
@@ -16,6 +18,12 @@ import { VoiceTranscriptionService } from "./voice-transcription.service";
       ? [BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE_NAME })]
       : []),
   ],
-  providers: [VoiceTranscriptionService, VoiceTranscriptionProcessor, StubTranscriptionProvider],
+  providers: [
+    VoiceTranscriptionService,
+    VoiceTranscriptionProcessor,
+    StubTranscriptionProvider,
+    OpenAiWhisperTranscriptionProvider,
+    TranscriptionProviderFactory,
+  ],
 })
 export class VoiceTranscriptionWorkerModule {}
