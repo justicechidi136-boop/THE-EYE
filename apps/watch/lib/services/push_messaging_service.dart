@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import '../alerts/danger_alert_models.dart';
 import '../storage/secure_credential_store.dart';
 import 'alert_service.dart';
+import 'danger_alert_service.dart';
 import 'push_background_handler.dart';
 import 'push_message_router.dart';
 
@@ -12,19 +14,27 @@ typedef WatchActiveEmergencyRefreshHandler = Future<void> Function({
   required String category,
 });
 
+typedef WatchDangerAlertNavigateHandler = Future<void> Function(
+  DangerAlertPayload payload,
+);
+
 class PushMessagingService {
   PushMessagingService({
     required AlertService alerts,
     required SecureCredentialStore credentials,
+    required DangerAlertService dangerAlerts,
     FirebaseMessaging? messaging,
   })  : _alerts = alerts,
         _credentials = credentials,
+        _dangerAlerts = dangerAlerts,
         _messagingOverride = messaging;
 
   WatchActiveEmergencyRefreshHandler? onActiveEmergencyRefresh;
+  WatchDangerAlertNavigateHandler? onDangerAlert;
 
   final AlertService _alerts;
   final SecureCredentialStore _credentials;
+  final DangerAlertService _dangerAlerts;
   final FirebaseMessaging? _messagingOverride;
   FirebaseMessaging? _messagingLazy;
 
@@ -34,6 +44,7 @@ class PushMessagingService {
   StreamSubscription<String>? _refreshSubscription;
   bool _started = false;
   String? _lastIncidentPushKey;
+  String? _lastDangerAlertKey;
 
   Future<void> start() async {
     if (_started) return;
@@ -95,6 +106,8 @@ class PushMessagingService {
     String? notificationId,
     String priority = 'High',
     String category = WatchPushCategories.emergencyAlert,
+    Map<String, dynamic> data = const {},
+    DangerAlertPayload? dangerAlert,
   }) async {
     await _alerts.recordIncoming(
       title: title,
@@ -103,6 +116,37 @@ class PushMessagingService {
       notificationId: notificationId,
       priority: priority,
     );
+
+    if (category == WatchPushCategories.nearbyDangerWarning &&
+        dangerAlert != null) {
+      if (_lastDangerAlertKey == dangerAlert.dedupeKey) return;
+      _lastDangerAlertKey = dangerAlert.dedupeKey;
+
+      final enriched = DangerAlertPayload(
+        alertCode: dangerAlert.alertCode,
+        priority: dangerAlert.priority,
+        incidentId: dangerAlert.incidentId,
+        zoneId: dangerAlert.zoneId,
+        safetyAlertId: dangerAlert.safetyAlertId,
+        issuedAt: dangerAlert.issuedAt,
+        distanceMeters: dangerAlert.distanceMeters,
+        areaName: dangerAlert.areaName,
+        languageHint: dangerAlert.languageHint,
+        expiresAt: dangerAlert.expiresAt,
+        acknowledgementRequired: dangerAlert.acknowledgementRequired,
+        repeatCount: dangerAlert.repeatCount,
+        alertState: dangerAlert.alertState,
+        allClear: dangerAlert.allClear,
+        deepLink: dangerAlert.deepLink,
+        notificationId: notificationId,
+        displayTitle: title,
+        displayBody: body,
+      );
+
+      await _dangerAlerts.handleIncoming(enriched);
+      await onDangerAlert?.call(enriched);
+      return;
+    }
 
     if (category == WatchPushCategories.incidentStatus ||
         category == WatchPushCategories.emergencyAlert) {

@@ -18,6 +18,7 @@ import {
   SmartwatchOfflineSyncDto,
   SmartwatchSosDto,
   SmartwatchStandaloneLoginDto,
+  WatchAccessibilityPreferencesDto,
   UpdateSmartwatchStatusDto,
   IssueSmartwatchPairingCodeDto,
   AdminIssueSmartwatchActivationDto,
@@ -35,6 +36,11 @@ import {
 } from "./dto/smartwatch.dto";
 import { DangerZoneTargetingService } from "../danger-zones/danger-zone-targeting.service";
 import { DangerZonesService } from "../danger-zones/danger-zones.service";
+import {
+  mergeWatchAccessibilityPreferences,
+  readAccessibilityPreferencesFromMetadata,
+  writeAccessibilityPreferencesToMetadata,
+} from "./watch-accessibility-preferences";
 
 const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
 
@@ -381,6 +387,33 @@ export class SmartwatchService {
     const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
     if (!this.dangerZones) throw new BadRequestException("Danger zone service unavailable");
     return this.dangerZones.acknowledgeAlert(alertId, device.userId, device.id);
+  }
+
+  async getAccessibilityPreferences(deviceLookup: string, deviceSecret?: string, actor?: JwtPayload) {
+    const device = await this.findAuthorizedDevice(deviceLookup, deviceSecret, actor);
+    return {
+      deviceId: device.deviceId,
+      preferences: readAccessibilityPreferencesFromMetadata((device as any).metadata),
+    };
+  }
+
+  async updateAccessibilityPreferences(
+    deviceLookup: string,
+    dto: WatchAccessibilityPreferencesDto,
+    deviceSecret?: string,
+    actor?: JwtPayload,
+  ) {
+    const device = await this.findAuthorizedDevice(deviceLookup, deviceSecret, actor);
+    const preferences = mergeWatchAccessibilityPreferences(
+      (device as any).metadata,
+      dto as Partial<import("@the-eye/shared").WatchAccessibilityPreferences>,
+    );
+    const metadata = writeAccessibilityPreferencesToMetadata((device as any).metadata, preferences);
+    await (this.prisma as any).smartwatchDevice.update({
+      where: { id: device.id },
+      data: { metadata },
+    });
+    return { deviceId: device.deviceId, preferences };
   }
 
   async triggerSos(dto: SmartwatchSosDto, actor?: JwtPayload) {

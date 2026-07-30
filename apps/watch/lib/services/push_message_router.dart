@@ -1,5 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import '../alerts/danger_alert_models.dart';
+
 /// Watch-specific FCM categories. Only these are surfaced as watch alerts.
 abstract final class WatchPushCategories {
   static const sosAck = 'SosAck';
@@ -30,6 +32,8 @@ typedef WatchAlertHandler = Future<void> Function({
   String? notificationId,
   String priority,
   String category,
+  Map<String, dynamic> data,
+  DangerAlertPayload? dangerAlert,
 });
 
 class PushMessageRouter {
@@ -49,12 +53,17 @@ class PushMessageRouter {
   }
 
   static Future<void> _dispatch(RemoteMessage message) async {
-    final data = message.data;
+    final data = Map<String, dynamic>.from(message.data);
     final type = data['type']?.toString();
     if (!isWatchCategory(type)) return;
 
     final handler = onAlert;
     if (handler == null) return;
+
+    DangerAlertPayload? dangerAlert;
+    if (type == WatchPushCategories.nearbyDangerWarning) {
+      dangerAlert = parseDangerAlertPayload(data);
+    }
 
     await handler(
       title: message.notification?.title ??
@@ -65,6 +74,8 @@ class PushMessageRouter {
       notificationId: data['notificationId']?.toString(),
       priority: data['priority']?.toString() ?? 'High',
       category: type ?? WatchPushCategories.emergencyAlert,
+      data: data,
+      dangerAlert: dangerAlert,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../alerts/danger_alert_models.dart';
 import '../models/alert.dart';
 import '../models/offline_event.dart';
 
@@ -101,6 +102,8 @@ class PreferencesStore {
   static const _locationOnboardingDismissedKey =
       'watch.location_onboarding_dismissed';
   static const _activeEmergencyTrackingKey = 'watch.active_emergency_tracking';
+  static const _accessibilityPrefsKey = 'watch.accessibility_preferences';
+  static const _dangerAckQueueKey = 'watch.danger_alert_ack_queue';
 
   Future<void> saveActiveEmergencyTracking({
     required bool active,
@@ -209,5 +212,45 @@ class PreferencesStore {
   Future<void> setLauncherOnboardingDismissed(bool value) async {
     final store = await prefs;
     await store.setBool(_launcherOnboardingDismissedKey, value);
+  }
+
+  Future<WatchAccessibilityPreferences> loadAccessibilityPreferences() async {
+    final store = await prefs;
+    final raw = store.getString(_accessibilityPrefsKey);
+    if (raw == null || raw.isEmpty) {
+      return const WatchAccessibilityPreferences();
+    }
+    return WatchAccessibilityPreferences.fromJson(
+      Map<String, dynamic>.from(jsonDecode(raw) as Map),
+    );
+  }
+
+  Future<void> saveAccessibilityPreferences(
+    WatchAccessibilityPreferences preferences,
+  ) async {
+    final store = await prefs;
+    await store.setString(
+      _accessibilityPrefsKey,
+      jsonEncode(preferences.toJson()),
+    );
+  }
+
+  Future<List<String>> loadQueuedDangerAlertAcks() async {
+    final store = await prefs;
+    final raw = store.getString(_dangerAckQueueKey);
+    if (raw == null || raw.isEmpty) return [];
+    return (jsonDecode(raw) as List<dynamic>).map((e) => e.toString()).toList();
+  }
+
+  Future<void> queueDangerAlertAck(String alertId) async {
+    final queued = await loadQueuedDangerAlertAcks();
+    if (queued.contains(alertId)) return;
+    queued.add(alertId);
+    await saveQueuedDangerAlertAcks(queued);
+  }
+
+  Future<void> saveQueuedDangerAlertAcks(List<String> alertIds) async {
+    final store = await prefs;
+    await store.setString(_dangerAckQueueKey, jsonEncode(alertIds));
   }
 }
