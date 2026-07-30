@@ -10,11 +10,12 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { SmartwatchController } from "./smartwatch.controller";
 import { DevicesWatchController } from "./devices-watch.controller";
+import { AdminWatchNotificationsController } from "./admin-watch-notifications.controller";
 import { SmartwatchService } from "./smartwatch.service";
 
 @Module({
   imports: [ConfigModule, PrismaModule, AuditModule, IncidentsModule, NotificationsModule, DangerZonesModule],
-  controllers: [SmartwatchController, DevicesWatchController],
+  controllers: [SmartwatchController, DevicesWatchController, AdminWatchNotificationsController],
   providers: [SmartwatchService, JwtAuthGuard, OptionalJwtAuthGuard, PermissionsGuard],
 })
 export class SmartwatchModule {}

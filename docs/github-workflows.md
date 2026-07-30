@@ -104,6 +104,8 @@ Create two environments under **Settings → Environments**.
 |------|---------|
 | `MOBILE_GOOGLE_SERVICES_JSON` | Staging flavor `google-services.json` for mobile |
 | `WATCH_GOOGLE_SERVICES_JSON` | Staging flavor `google-services.json` for watch |
+| `DANGER_ALERT_SIGNING_PRIVATE_KEY` | Ed25519 private key PEM for danger-alert payload signing (pairs with watch `staging-v1` public key) |
+| `DANGER_ALERT_SIGNING_KEY_ID` | *(optional var)* Key id label — default `staging-v1` |
 | `MOBILE_GOOGLE_SERVICES_JSON_DEVELOPMENT` | *(optional)* Full cross-flavor mobile validation |
 | `MOBILE_GOOGLE_SERVICES_JSON_PRODUCTION` | *(optional)* Full cross-flavor mobile validation |
 | `WATCH_GOOGLE_SERVICES_JSON_DEVELOPMENT` | *(optional)* Full cross-flavor watch validation |

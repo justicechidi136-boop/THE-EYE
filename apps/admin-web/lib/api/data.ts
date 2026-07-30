@@ -809,3 +809,45 @@ export async function sendNotification(input: SendNotificationInput) {
     body: JSON.stringify(input),
   });
 }
+
+export type WatchNotificationAnalytics = {
+  totals: Record<string, number>;
+  events: Array<Record<string, unknown>>;
+};
+
+export async function fetchWatchNotificationAnalytics(query?: {
+  from?: string;
+  to?: string;
+  language?: string;
+}) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<WatchNotificationAnalytics>("/admin/watch-notifications/analytics", {
+    token,
+    query,
+  });
+}
+
+export async function fetchWatchFeatureFlags() {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, boolean>>("/admin/watch-notifications/feature-flags", {
+    token,
+  });
+}
+
+export async function sendStagingWatchTestAlert(input: {
+  userId: string;
+  deviceId?: string;
+  alertCode?: string;
+  languageHint?: string;
+  priority?: "CRITICAL" | "HIGH" | "MEDIUM";
+}) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>("/admin/watch-notifications/staging/test-alert", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+}

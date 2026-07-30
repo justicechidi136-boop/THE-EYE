@@ -18,6 +18,7 @@ import "push_deep_link_router.dart";
 import "push_navigation.dart";
 import "push_notification_channels.dart";
 import "push_safe_log.dart";
+import "watch_danger_alert_relay.dart";
 
 typedef AccessTokenProvider = String? Function();
 typedef RouteNavigator = Future<void> Function(String route);
@@ -29,6 +30,7 @@ class PushNotificationService {
     FirebaseMessaging? messaging,
     FlutterLocalNotificationsPlugin? localNotifications,
     PushDeliveryAckService? deliveryAck,
+    WatchDangerAlertRelay? watchRelay,
   })  : _apiClient = apiClient,
         _accessTokenProvider = accessTokenProvider,
         _messagingOverride = messaging,
@@ -38,7 +40,8 @@ class PushNotificationService {
             PushDeliveryAckService(
               apiClient: apiClient,
               accessTokenProvider: accessTokenProvider,
-            );
+            ),
+        _watchRelay = watchRelay ?? WatchDangerAlertRelay();
 
   final TheEyeApiClient _apiClient;
   final AccessTokenProvider _accessTokenProvider;
@@ -46,6 +49,7 @@ class PushNotificationService {
   FirebaseMessaging? _messaging;
   final FlutterLocalNotificationsPlugin _localNotifications;
   final PushDeliveryAckService _deliveryAck;
+  final WatchDangerAlertRelay _watchRelay;
   final StreamController<PushNavigationRequest> _navigationController =
       StreamController<PushNavigationRequest>.broadcast();
 
@@ -56,6 +60,7 @@ class PushNotificationService {
   void Function(RemoteMessage message)? onForegroundMessage;
   bool _initialized = false;
   String? _lastRegisteredTokenSuffix;
+  final Set<String> _relayedAlertIds = <String>{};
 
   FirebaseMessaging get _messagingClient {
     final messaging = _messaging;
@@ -253,9 +258,30 @@ class PushNotificationService {
     onForegroundMessage?.call(message);
     final notification = message.notification;
     final data = message.data;
+
+    if (DangerAlertPhoneHandler.shouldRelayToWatch(data) &&
+        DangerAlertPhoneHandler.hasTrustedAlertCode(data)) {
+      final version = data["alertVersion"]?.toString() ?? "1";
+      final alertId = data["alertId"]?.toString() ??
+          data["safetyAlertId"]?.toString() ??
+          "";
+      final dedupeKey = alertId.isNotEmpty ? "$alertId-v$version" : "";
+      if (dedupeKey.isNotEmpty && !_relayedAlertIds.contains(dedupeKey)) {
+        _relayedAlertIds.add(dedupeKey);
+        final relayed = await _watchRelay.relayDangerAlert(data);
+        logPushEvent(
+          relayed
+              ? "Danger alert relayed to paired watch."
+              : "Danger alert relay to watch failed or watch unreachable.",
+        );
+      }
+    }
+
     final navigation = PushNavigationRequest.fromMessageData(data);
     final route = navigation?.route ?? "/notifications";
-    final silent = navigation?.silent ?? false;
+    final relayedDangerAlert = DangerAlertPhoneHandler.shouldRelayToWatch(data) &&
+        DangerAlertPhoneHandler.hasTrustedAlertCode(data);
+    final silent = (navigation?.silent ?? false) || relayedDangerAlert;
     final notificationId = data["notificationId"]?.toString() ?? "";
     if (notificationId.isNotEmpty) {
       unawaited(_deliveryAck.acknowledge(

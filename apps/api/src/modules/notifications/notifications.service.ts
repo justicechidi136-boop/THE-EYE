@@ -104,6 +104,12 @@ export class NotificationsService {
           incidentId: dto.incidentId,
           communityId: dto.communityId,
           provider: this.providerForChannel(channel),
+          deviceId:
+            typeof (dto.metadata as Record<string, unknown> | undefined)?.deviceId === "string"
+              ? String((dto.metadata as Record<string, unknown>).deviceId)
+              : typeof (dto.metadata as Record<string, unknown> | undefined)?.pairedWatchDeviceId === "string"
+                ? String((dto.metadata as Record<string, unknown>).pairedWatchDeviceId)
+                : undefined,
         });
       }
     }

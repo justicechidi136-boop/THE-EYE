@@ -3,11 +3,19 @@ import {
   DangerAlertCode,
   DangerAlertPriority,
   IncidentType,
+  buildCanonicalAlertId,
+  mapProximityToLifecycleState,
   type DangerAlertCodeValue,
+  type DangerAlertLifecycleStateValue,
   type DangerAlertPriorityValue,
   type DangerZoneAlertPayloadV1,
   type SpokenLanguageCodeValue,
 } from "@the-eye/shared";
+import {
+  resolveDangerAlertSigningConfig,
+  signDangerAlertPayload,
+  verifyDangerAlertPayload,
+} from "./danger-alert-signing";
 
 const INCIDENT_TYPE_TO_ALERT_CODE: Partial<Record<IncidentType, DangerAlertCodeValue>> = {
   [IncidentType.Kidnapping]: DangerAlertCode.KIDNAPPING_NEARBY,
@@ -78,6 +86,12 @@ export function buildDangerZoneAlertPayload(input: {
   zoneId: string;
   incidentId: string;
   safetyAlertId: string;
+  userId?: string;
+  deviceId?: string | null;
+  alertId?: string;
+  version?: number;
+  sequence?: number;
+  state?: DangerAlertLifecycleStateValue;
   incidentType?: string | null;
   alertState?: string;
   distanceMeters?: number;
@@ -91,15 +105,34 @@ export function buildDangerZoneAlertPayload(input: {
   expiresAt?: Date | null;
   deepLink?: string;
   metadata?: Record<string, unknown>;
+  config?: Record<string, unknown>;
 }): DangerZoneAlertPayloadV1 {
   const priority = resolveDangerAlertPriority(input);
   const alertCode = resolveDangerAlertCode(input);
   const issuedAt = new Date();
   const repeatCount = input.repeatCount ?? PRIORITY_REPEAT[priority];
+  const alertId =
+    input.alertId ??
+    (input.userId
+      ? buildCanonicalAlertId(input.zoneId, input.userId, input.deviceId)
+      : buildCanonicalAlertId(input.zoneId, input.safetyAlertId, input.deviceId));
+  const version = input.version ?? 1;
+  const sequence = input.sequence ?? version;
+  const state =
+    input.state ??
+    mapProximityToLifecycleState({
+      allClear: input.allClear,
+      alertState: input.alertState,
+      version,
+    });
 
-  return {
+  const unsigned: DangerZoneAlertPayloadV1 = {
     schemaVersion: DANGER_ALERT_SCHEMA_VERSION,
     type: "DANGER_ZONE_ALERT",
+    alertId,
+    version,
+    sequence,
+    state,
     alertCode,
     priority,
     incidentId: input.incidentId,
@@ -116,12 +149,22 @@ export function buildDangerZoneAlertPayload(input: {
     allClear: input.allClear ?? false,
     deepLink: input.deepLink,
   };
+
+  const signing = input.config ? resolveDangerAlertSigningConfig(input.config) : null;
+  if (signing) {
+    return signDangerAlertPayload(unsigned, signing);
+  }
+  return unsigned;
 }
 
 export function dangerAlertPayloadToFcmData(payload: DangerZoneAlertPayloadV1): Record<string, string> {
   return {
     dangerAlertSchemaVersion: String(payload.schemaVersion),
     dangerAlertType: payload.type,
+    alertId: payload.alertId,
+    alertVersion: String(payload.version),
+    alertSequence: String(payload.sequence),
+    alertLifecycleState: payload.state,
     dangerAlertCode: payload.alertCode,
     dangerAlertPriority: payload.priority,
     zoneId: payload.zoneId,
@@ -137,6 +180,13 @@ export function dangerAlertPayloadToFcmData(payload: DangerZoneAlertPayloadV1): 
     ...(payload.alertState ? { alertState: payload.alertState } : {}),
     ...(payload.allClear ? { allClear: "true" } : {}),
     ...(payload.deepLink ? { deepLink: payload.deepLink } : {}),
+    ...(payload.signature
+      ? {
+          signatureKeyId: payload.signature.keyId,
+          signature: payload.signature.signature,
+          signedAt: payload.signature.signedAt,
+        }
+      : {}),
   };
 }
 
@@ -168,14 +218,25 @@ export function validateDangerAlertPayload(raw: Record<string, unknown>): Danger
   const priority = String(raw.priority ?? raw.dangerAlertPriority ?? DangerAlertPriority.MEDIUM);
   const normalizedPriority = isDangerAlertPriority(priority) ? priority : DangerAlertPriority.MEDIUM;
 
-  return {
+  const alertId = String(raw.alertId ?? raw.safetyAlertId ?? "");
+  if (!alertId) return null;
+
+  const version = Number(raw.version ?? raw.alertVersion ?? 1);
+  const sequence = Number(raw.sequence ?? raw.alertSequence ?? version);
+  const state = String(raw.state ?? raw.alertLifecycleState ?? "ACTIVE");
+
+  const payload: DangerZoneAlertPayloadV1 = {
     schemaVersion: DANGER_ALERT_SCHEMA_VERSION,
     type: "DANGER_ZONE_ALERT",
+    alertId,
+    version,
+    sequence,
+    state,
     alertCode,
     priority: normalizedPriority,
     incidentId: String(raw.incidentId ?? ""),
     zoneId: String(raw.zoneId ?? ""),
-    safetyAlertId: String(raw.safetyAlertId ?? ""),
+    safetyAlertId: String(raw.safetyAlertId ?? alertId),
     distanceMeters: raw.distanceMeters != null ? Number(raw.distanceMeters) : undefined,
     areaName: raw.areaName ? sanitizeAreaName(String(raw.areaName)) : undefined,
     languageHint: raw.languageHint as SpokenLanguageCodeValue | undefined,
@@ -186,8 +247,20 @@ export function validateDangerAlertPayload(raw: Record<string, unknown>): Danger
     alertState: raw.alertState ? String(raw.alertState) : undefined,
     allClear: raw.allClear === true || raw.allClear === "true",
     deepLink: raw.deepLink ? String(raw.deepLink) : undefined,
+    signature:
+      raw.signatureKeyId && raw.signature
+        ? {
+            keyId: String(raw.signatureKeyId),
+            signature: String(raw.signature),
+            signedAt: String(raw.signedAt ?? raw.signatureSignedAt ?? ""),
+          }
+        : undefined,
   };
+
+  return payload;
 }
+
+export { verifyDangerAlertPayload, buildCanonicalAlertId, mapProximityToLifecycleState };
 
 function sanitizeAreaName(value?: string | null): string | undefined {
   if (!value) return undefined;

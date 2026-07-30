@@ -2,6 +2,10 @@ import 'dart:async';
 
 import '../alerts/danger_alert_models.dart';
 import '../alerts/danger_alert_templates.dart';
+import '../services/alert_version_tracker.dart';
+import '../services/audio_output_service.dart';
+import '../services/danger_alert_signature_verifier.dart';
+import '../services/quiet_hours_service.dart';
 import 'danger_alert_tts_service.dart';
 import 'vibration_service.dart';
 
@@ -18,6 +22,7 @@ enum DangerAlertTelemetryEvent {
   muted,
   expired,
   duplicateSuppressed,
+  signatureRejected,
 }
 
 typedef DangerAlertTelemetryHandler = void Function(
@@ -29,18 +34,33 @@ typedef DangerAlertTelemetryHandler = void Function(
 class DangerAlertCoordinator {
   DangerAlertCoordinator({
     required VibrationService vibration,
+    AlertVersionTracker? versionTracker,
+    QuietHoursService? quietHours,
+    AudioOutputService? audioOutput,
     DangerAlertTtsService? tts,
+    DangerAlertSignatureVerifier? signatureVerifier,
     DangerAlertNavigateHandler? onNavigate,
     DangerAlertTelemetryHandler? onTelemetry,
+    bool requireSignature = true,
   })  : _vibration = vibration,
+        _versionTracker = versionTracker,
+        _quietHours = quietHours ?? QuietHoursService(),
+        _audioOutput = audioOutput ?? AudioOutputService(),
         _tts = tts ?? DangerAlertTtsService(),
+        _signatureVerifier = signatureVerifier ?? DangerAlertSignatureVerifier(),
         _onNavigate = onNavigate,
-        _onTelemetry = onTelemetry;
+        _onTelemetry = onTelemetry,
+        _requireSignature = requireSignature;
 
   final VibrationService _vibration;
+  final AlertVersionTracker? _versionTracker;
+  final QuietHoursService _quietHours;
+  final AudioOutputService _audioOutput;
   final DangerAlertTtsService _tts;
+  final DangerAlertSignatureVerifier _signatureVerifier;
   DangerAlertNavigateHandler? _onNavigate;
   final DangerAlertTelemetryHandler? _onTelemetry;
+  final bool _requireSignature;
 
   WatchAccessibilityPreferences _preferences =
       const WatchAccessibilityPreferences();
@@ -48,7 +68,6 @@ class DangerAlertCoordinator {
   DangerAlertPayload? _activePayload;
   Timer? _repeatTimer;
   int _repeatIndex = 0;
-  final Set<String> _handledKeys = <String>{};
   bool _muted = false;
 
   WatchAccessibilityPreferences get preferences => _preferences;
@@ -62,57 +81,91 @@ class DangerAlertCoordinator {
 
   Future<void> dispose() async {
     _repeatTimer?.cancel();
-    await _tts.dispose();
+    await _tts.stop();
   }
 
   Future<void> handleIncoming(DangerAlertPayload payload) async {
-    _emit(DangerAlertTelemetryEvent.received, alertId: payload.safetyAlertId);
+    _emit(DangerAlertTelemetryEvent.received, alertId: payload.alertId);
 
     if (payload.isExpired) {
-      _emit(DangerAlertTelemetryEvent.expired, alertId: payload.safetyAlertId);
+      _emit(DangerAlertTelemetryEvent.expired, alertId: payload.alertId);
       return;
     }
 
-    if (_handledKeys.contains(payload.dedupeKey)) {
-      _emit(
-        DangerAlertTelemetryEvent.duplicateSuppressed,
-        alertId: payload.safetyAlertId,
-      );
+    if (_requireSignature) {
+      final verifyResult = await _signatureVerifier.verify(payload);
+      if (!verifyResult.valid) {
+        _emit(
+          DangerAlertTelemetryEvent.signatureRejected,
+          alertId: payload.alertId,
+          reason: verifyResult.reason,
+        );
+        return;
+      }
+    }
+
+    final decision = _versionTracker == null
+        ? AlertVersionDecision.acceptFull
+        : await _versionTracker.evaluate(payload);
+
+    switch (decision) {
+      case AlertVersionDecision.suppressDuplicate:
+      case AlertVersionDecision.suppressOldVersion:
+      case AlertVersionDecision.suppressAfterCleared:
+      case AlertVersionDecision.suppressAcknowledged:
+        _emit(
+          DangerAlertTelemetryEvent.duplicateSuppressed,
+          alertId: payload.alertId,
+          reason: decision.name,
+        );
+        return;
+      case AlertVersionDecision.acceptUpdateOnly:
+        await _applyUpdate(payload);
+        return;
+      case AlertVersionDecision.acceptFull:
+        break;
+    }
+
+    if (payload.isCleared) {
+      await clearActive(cleared: true);
+      await _versionTracker?.record(payload);
+      await _onNavigate?.call(payload);
       return;
     }
 
-    if (_activePayload != null &&
-        _severityRank(payload.priority) <=
-            _severityRank(_activePayload!.priority)) {
-      _emit(
-        DangerAlertTelemetryEvent.duplicateSuppressed,
-        alertId: payload.safetyAlertId,
-        reason: 'lower_priority',
-      );
-      return;
-    }
-
-    _handledKeys.add(payload.dedupeKey);
     _activePayload = payload;
     _repeatIndex = 0;
     _muted = false;
+    await _versionTracker?.record(payload);
+    await _present(payload, vibrate: true, speak: true);
+    await _onNavigate?.call(payload);
+  }
 
-    await _present(payload);
+  Future<void> _applyUpdate(DangerAlertPayload payload) async {
+    _activePayload = payload;
+    _repeatIndex = 0;
+    await _versionTracker?.record(payload);
+    final vibrate = payload.isEscalation;
+    await _present(payload, vibrate: vibrate, speak: true);
     await _onNavigate?.call(payload);
   }
 
   Future<void> acknowledgeActive() async {
     _repeatTimer?.cancel();
     await _tts.stop();
+    final payload = _activePayload;
+    if (payload != null) {
+      await _versionTracker?.markAcknowledged(payload);
+    }
     _activePayload = null;
-    _emit(DangerAlertTelemetryEvent.acknowledged);
+    _emit(DangerAlertTelemetryEvent.acknowledged, alertId: payload?.alertId);
   }
 
   Future<void> muteActive() async {
     _muted = true;
     _repeatTimer?.cancel();
     await _tts.stop();
-    _emit(DangerAlertTelemetryEvent.muted);
+    _emit(DangerAlertTelemetryEvent.muted, alertId: _activePayload?.alertId);
   }
 
   Future<void> replayActive() async {
@@ -130,12 +183,26 @@ class DangerAlertCoordinator {
     _activePayload = null;
   }
 
-  Future<void> _present(DangerAlertPayload payload) async {
-    _emit(DangerAlertTelemetryEvent.displayed, alertId: payload.safetyAlertId);
-    await _vibrate(payload);
-    if (!_muted) {
-      await _speak(payload);
-      _scheduleRepeats(payload);
+  Future<void> _present(
+    DangerAlertPayload payload, {
+    required bool vibrate,
+    required bool speak,
+  }) async {
+    _emit(DangerAlertTelemetryEvent.displayed, alertId: payload.alertId);
+    final quiet = _quietHours.evaluate(
+      preferences: _preferences,
+      priority: payload.priority,
+    );
+    if (vibrate) {
+      if (quiet.inQuietHours && !quiet.allowStrongVibration) {
+        await _vibration.playPattern(VibrationPattern.medium);
+      } else {
+        await _vibrate(payload);
+      }
+    }
+    if (speak && !_muted) {
+      await _speak(payload, quietHours: quiet);
+      _scheduleRepeats(payload, quietHours: quiet);
     }
   }
 
@@ -156,8 +223,16 @@ class DangerAlertCoordinator {
     await _vibration.playPattern(pattern);
   }
 
-  Future<void> _speak(DangerAlertPayload payload, {bool force = false}) async {
+  Future<void> _speak(
+    DangerAlertPayload payload, {
+    bool force = false,
+    QuietHoursEvaluation? quietHours,
+  }) async {
     if (_muted) return;
+
+    final quiet = quietHours ??
+        _quietHours.evaluate(preferences: _preferences, priority: payload.priority);
+    if (!force && !quiet.allowSpeech) return;
 
     final language = payload.languageHint ?? _preferences.preferredSpokenLanguage;
     final speechText = DangerAlertTemplates.resolve(
@@ -166,9 +241,9 @@ class DangerAlertCoordinator {
       params: (areaName: payload.areaName, distanceMeters: payload.distanceMeters),
     );
 
-    if (!force && !_shouldSpeak(payload)) return;
+    if (!force && !await _shouldSpeak(payload)) return;
 
-    _emit(DangerAlertTelemetryEvent.speechStarted, alertId: payload.safetyAlertId);
+    _emit(DangerAlertTelemetryEvent.speechStarted, alertId: payload.alertId);
     final outcome = await _tts.speak(
       text: speechText,
       preferences: _preferences,
@@ -178,26 +253,36 @@ class DangerAlertCoordinator {
 
     switch (outcome) {
       case DangerAlertTtsOutcome.unavailable:
-        _emit(DangerAlertTelemetryEvent.ttsUnavailable, alertId: payload.safetyAlertId);
+        _emit(DangerAlertTelemetryEvent.ttsUnavailable, alertId: payload.alertId);
       case DangerAlertTtsOutcome.fallbackLanguage:
-        _emit(DangerAlertTelemetryEvent.fallbackLanguage, alertId: payload.safetyAlertId);
+        _emit(DangerAlertTelemetryEvent.fallbackLanguage, alertId: payload.alertId);
       case DangerAlertTtsOutcome.completed:
       case DangerAlertTtsOutcome.started:
-        _emit(DangerAlertTelemetryEvent.speechCompleted, alertId: payload.safetyAlertId);
+        _emit(DangerAlertTelemetryEvent.speechCompleted, alertId: payload.alertId);
       case DangerAlertTtsOutcome.skipped:
         break;
     }
   }
 
-  bool _shouldSpeak(DangerAlertPayload payload) {
-    if (! _preferences.spokenDangerAlertsEnabled) return false;
-    if (!_preferences.speakSensitiveAlertsAloud && payload.priority == DangerAlertPriority.critical) {
+  Future<bool> _shouldSpeak(DangerAlertPayload payload) async {
+    if (!_preferences.spokenDangerAlertsEnabled) return false;
+
+    final headphones = await _audioOutput.isHeadphoneConnected();
+    if (!_preferences.speakSensitiveAlertsAloud) {
+      if (headphones && _preferences.speakOverHeadphones) return true;
+      if (payload.priority == DangerAlertPriority.critical &&
+          _preferences.allowCriticalAlertDuringQuietHours) {
+        return headphones;
+      }
       return false;
     }
     return true;
   }
 
-  void _scheduleRepeats(DangerAlertPayload payload) {
+  void _scheduleRepeats(
+    DangerAlertPayload payload, {
+    QuietHoursEvaluation? quietHours,
+  }) {
     _repeatTimer?.cancel();
     final maxRepeats = payload.allClear
         ? 1
@@ -210,7 +295,7 @@ class DangerAlertCoordinator {
     _repeatTimer = Timer.periodic(
       Duration(seconds: _preferences.repeatIntervalSeconds),
       (timer) async {
-        if (_activePayload?.safetyAlertId != payload.safetyAlertId || _muted) {
+        if (_activePayload?.alertId != payload.alertId || _muted) {
           timer.cancel();
           return;
         }
@@ -219,18 +304,13 @@ class DangerAlertCoordinator {
           timer.cancel();
           return;
         }
-        await _speak(payload, force: true);
-        await _vibrate(payload);
+        await _speak(payload, force: true, quietHours: quietHours);
+        if (quietHours?.allowStrongVibration ?? true) {
+          await _vibrate(payload);
+        }
       },
     );
   }
-
-  int _severityRank(DangerAlertPriority priority) => switch (priority) {
-        DangerAlertPriority.critical => 4,
-        DangerAlertPriority.high => 3,
-        DangerAlertPriority.medium => 2,
-        DangerAlertPriority.low => 1,
-      };
 
   void _emit(DangerAlertTelemetryEvent event, {String? alertId, String? reason}) {
     _onTelemetry?.call(event, alertId: alertId, reason: reason);
