@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
-import { Permissions } from "../../common/auth/permissions.decorator";
+import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { VoiceAttachmentsService } from "./voice-attachments.service";
 
@@ -10,14 +10,14 @@ export class CommunityVoiceAttachmentsController {
 
   @Get(":postId/media/:mediaId/voice/playback")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions("community:read")
+  @RequirePermissions("community:read")
   playback(@Param("postId") postId: string, @Param("mediaId") mediaId: string, @Req() request: any) {
     return this.voice.getCommunityPostPlaybackUrl(postId, mediaId, request.user);
   }
 
   @Post(":postId/media/:mediaId/voice/retry-transcription")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions("community:moderate")
+  @RequirePermissions("community:moderate")
   retry(@Param("postId") postId: string, @Param("mediaId") mediaId: string, @Req() request: any) {
     return this.voice.retryCommunityPostTranscription(postId, mediaId, request.user);
   }
