@@ -34,6 +34,9 @@ describe("metrics service", () => {
     metrics.recordBroadcastDispatch(2.5, "success");
     metrics.recordLiveVideoOperation("location_update", 0.05, "success");
     metrics.recordRedisOperation("bullmq_enqueue", 0.01, "success");
+    metrics.recordVoiceTranscription("incident_media", "Completed", "en");
+    metrics.recordVoiceTranslation("success", "ha");
+    metrics.recordVoiceModeration("Approved", "incident_media");
     metrics.setDependencyUp("postgres", true);
 
     const rendered = await metrics.renderMetrics();
@@ -47,6 +50,9 @@ describe("metrics service", () => {
     expect(rendered).toContain("the_eye_broadcast_dispatch_duration_seconds");
     expect(rendered).toContain("the_eye_live_video_operation_duration_seconds");
     expect(rendered).toContain("the_eye_redis_operation_duration_seconds");
+    expect(rendered).toContain("the_eye_voice_transcriptions_total");
+    expect(rendered).toContain("the_eye_voice_translations_total");
+    expect(rendered).toContain("the_eye_voice_moderations_total");
     expect(rendered).toContain("the_eye_dependency_up");
   });
 });

@@ -812,6 +812,28 @@ export type SendNotificationInput = {
   adminUserId?: string;
 };
 
+export type VoiceAnalyticsSummary = {
+  totalVoiceAttachments: number;
+  translatedCount: number;
+  lowConfidenceCount: number;
+  averageTranscriptionConfidence: number | null;
+  transcriptionStatusCounts: Record<string, number>;
+  moderationStatusCounts: Record<string, number>;
+  selectedLanguageCounts: Record<string, number>;
+  resourceTypeCounts: Record<string, number>;
+};
+
+export async function fetchVoiceAnalytics(): Promise<VoiceAnalyticsSummary | null> {
+  return withToken(async (token) => {
+    try {
+      return await apiRequest<VoiceAnalyticsSummary>("/admin/voice-analytics", { token });
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 403 || error.status === 404)) return null;
+      throw error;
+    }
+  }, null);
+}
+
 export async function createBroadcast(input: CreateBroadcastInput) {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
@@ -20,5 +20,17 @@ export class CommunityVoiceAttachmentsController {
   @RequirePermissions("community:moderate")
   retry(@Param("postId") postId: string, @Param("mediaId") mediaId: string, @Req() request: any) {
     return this.voice.retryCommunityPostTranscription(postId, mediaId, request.user);
+  }
+
+  @Put(":postId/media/:mediaId/voice/moderation")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions("community:moderate")
+  updateModeration(
+    @Param("postId") postId: string,
+    @Param("mediaId") mediaId: string,
+    @Body() body: { moderationStatus: "Approved" | "Flagged" | "Rejected" },
+    @Req() request: any,
+  ) {
+    return this.voice.updateCommunityPostModeration(postId, mediaId, body.moderationStatus, request.user);
   }
 }

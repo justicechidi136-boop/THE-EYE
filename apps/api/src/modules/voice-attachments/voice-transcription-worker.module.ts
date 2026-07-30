@@ -7,6 +7,9 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { StubTranscriptionProvider } from "./stub-transcription.provider";
 import { OpenAiWhisperTranscriptionProvider } from "./openai-whisper-transcription.provider";
 import { TranscriptionProviderFactory } from "./transcription-provider.factory";
+import { VoiceTranslationProvider } from "./voice-translation.provider";
+import { VoiceModerationProvider } from "./voice-moderation.provider";
+import { VoicePostProcessingService } from "./voice-post-processing.service";
 import { VoiceTranscriptionProcessor } from "./voice-transcription.processor";
 import { VoiceTranscriptionService } from "./voice-transcription.service";
 
@@ -24,6 +27,9 @@ import { VoiceTranscriptionService } from "./voice-transcription.service";
     StubTranscriptionProvider,
     OpenAiWhisperTranscriptionProvider,
     TranscriptionProviderFactory,
+    VoiceTranslationProvider,
+    VoiceModerationProvider,
+    VoicePostProcessingService,
   ],
 })
 export class VoiceTranscriptionWorkerModule {}

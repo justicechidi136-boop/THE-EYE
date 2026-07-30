@@ -7,17 +7,20 @@ import {
   fetchIncidents,
   fetchUsersDirectory,
   fetchVerificationDashboard,
+  fetchVoiceAnalytics,
 } from "../../lib/api/data";
+import { formatVoiceLanguageLabel } from "../../lib/voice-language-labels";
 
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
-  const [incidents, users, broadcasts, audit, verification] = await Promise.all([
+  const [incidents, users, broadcasts, audit, verification, voiceAnalytics] = await Promise.all([
     fetchIncidents(),
     fetchUsersDirectory(),
     fetchBroadcasts(),
     fetchAuditLogs(),
     fetchVerificationDashboard(),
+    fetchVoiceAnalytics(),
   ]);
 
   const averageConfidence = incidents.length
@@ -41,7 +44,42 @@ export default async function AnalyticsPage() {
         <MetricCard label="Evidence files" value={String(incidents.reduce((sum, incident) => sum + incident.evidence.length, 0))} />
         <MetricCard label="Broadcasts" value={String(broadcasts.length)} />
         <MetricCard label="Audit events" value={String(audit.logs.length)} detail={audit.chainVerified ? "Chain verified" : "Chain unverified"} />
+        <MetricCard
+          label="Voice attachments"
+          value={voiceAnalytics ? String(voiceAnalytics.totalVoiceAttachments) : "—"}
+          detail={voiceAnalytics ? `${voiceAnalytics.translatedCount} translated · ${voiceAnalytics.lowConfidenceCount} low confidence` : "Voice analytics unavailable"}
+        />
       </section>
+      {voiceAnalytics ? (
+        <section className="mb-5 grid gap-5 xl:grid-cols-2">
+          <Panel title="Voice transcription status">
+            <div className="grid gap-2">
+              {Object.entries(voiceAnalytics.transcriptionStatusCounts).map(([status, count]) => (
+                <div key={status} className="flex items-center justify-between rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm">
+                  <span>{status}</span>
+                  <StatusBadge tone="info">{count}</StatusBadge>
+                </div>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="Voice moderation & languages">
+            <div className="grid gap-2">
+              {Object.entries(voiceAnalytics.moderationStatusCounts).map(([status, count]) => (
+                <div key={status} className="flex items-center justify-between rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm">
+                  <span>Moderation: {status}</span>
+                  <StatusBadge tone={status === "Rejected" ? "danger" : status === "Flagged" ? "warning" : "success"}>{count}</StatusBadge>
+                </div>
+              ))}
+              {Object.entries(voiceAnalytics.selectedLanguageCounts).map(([language, count]) => (
+                <div key={language} className="flex items-center justify-between rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm">
+                  <span>{formatVoiceLanguageLabel(language)}</span>
+                  <StatusBadge tone="info">{count}</StatusBadge>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </section>
+      ) : null}
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Incident mix by type">
           <div className="grid gap-3">

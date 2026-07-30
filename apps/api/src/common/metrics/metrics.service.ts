@@ -40,6 +40,9 @@ export class MetricsService {
   private readonly liveVideoOperationsTotal: Counter<"operation" | "outcome">;
   private readonly redisOperationDuration: Histogram<"operation" | "outcome">;
   private readonly redisOperationsTotal: Counter<"operation" | "outcome">;
+  private readonly voiceTranscriptionsTotal: Counter<"resource_type" | "status" | "language">;
+  private readonly voiceTranslationsTotal: Counter<"outcome" | "source_language">;
+  private readonly voiceModerationsTotal: Counter<"status" | "resource_type">;
   private readonly dependencyUp: Gauge<"dependency">;
 
   constructor(@Optional() @Inject(PROMETHEUS_REGISTRY) registry?: Registry) {
@@ -186,6 +189,27 @@ export class MetricsService {
       registers: [this.registry],
     });
 
+    this.voiceTranscriptionsTotal = new Counter({
+      name: "the_eye_voice_transcriptions_total",
+      help: "Voice attachment transcription outcomes",
+      labelNames: ["resource_type", "status", "language"],
+      registers: [this.registry],
+    });
+
+    this.voiceTranslationsTotal = new Counter({
+      name: "the_eye_voice_translations_total",
+      help: "Voice transcript translation outcomes",
+      labelNames: ["outcome", "source_language"],
+      registers: [this.registry],
+    });
+
+    this.voiceModerationsTotal = new Counter({
+      name: "the_eye_voice_moderations_total",
+      help: "Voice transcript moderation outcomes",
+      labelNames: ["status", "resource_type"],
+      registers: [this.registry],
+    });
+
     this.dependencyUp = new Gauge({
       name: "the_eye_dependency_up",
       help: "Dependency health (1 = up, 0 = down or skipped)",
@@ -246,6 +270,18 @@ export class MetricsService {
   recordRedisOperation(operation: string, durationSeconds: number, outcome: "success" | "error") {
     this.redisOperationDuration.labels(operation, outcome).observe(durationSeconds);
     this.redisOperationsTotal.labels(operation, outcome).inc();
+  }
+
+  recordVoiceTranscription(resourceType: string, status: string, language: string) {
+    this.voiceTranscriptionsTotal.labels(resourceType, status, language).inc();
+  }
+
+  recordVoiceTranslation(outcome: "success" | "failed" | "skipped", sourceLanguage: string) {
+    this.voiceTranslationsTotal.labels(outcome, sourceLanguage).inc();
+  }
+
+  recordVoiceModeration(status: string, resourceType: string) {
+    this.voiceModerationsTotal.labels(status, resourceType).inc();
   }
 
   setDependencyUp(dependency: string, up: boolean) {
