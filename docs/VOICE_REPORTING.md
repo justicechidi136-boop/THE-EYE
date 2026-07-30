@@ -12,9 +12,9 @@
 | Incident follow-up updates | Mobile timeline | Yes | Partial | Partial | Stage 2 | Yes | Partial |
 | Sightings | API/mobile partial | Yes | Partial | No | Stage 2 | Yes | Partial |
 | Admin/police messages | Admin + API | Yes | No | No | Stage 2 | N/A | N/A |
-| NW posts | Mobile `CommunityReportScreen` | Yes | Yes | No | Stage 2 | Optional | No |
-| NW comments | Mobile/API | Yes only | No | No | Stage 2 | No | No |
-| NW replies | Not implemented | — | — | — | Stage 2 | — | — |
+| NW posts | Mobile `CreateCommunityPostScreen` | Optional with voice/media | Yes | No | **VoiceRecorder** | Optional | No |
+| NW comments | Mobile `CommunityPostDetailScreen` | Optional with voice | No | No | **VoiceRecorder** | No | No |
+| NW replies | Mobile comment reply | Optional with voice | No | No | **VoiceRecorder** | No | No |
 | NW alerts | Broadcast system | Yes | No | No | Stage 2 | Geo | No |
 | Evidence submissions | Shared `ManagedEvidenceSection` | N/A | Yes | Yes | **Yes** | Optional | N/A |
 
@@ -111,8 +111,8 @@ Fields: `selectedLanguage`, `detectedLanguage`, `languageDetectionConfidence`, `
 
 | Stage | Scope |
 |---|---|
-| 1 | Emergency + general incident voice attachments (**this branch**) |
-| 2 | Neighborhood Watch posts, comments, replies |
+| 1 | Emergency + general incident voice attachments (**PR #51**) |
+| 2 | Neighborhood Watch voice posts, comments, and replies (**feat/voice-neighborhood-watch**) |
 | 3 | Transcription EN + Nigerian Pidgin |
 | 4 | Hausa, Yoruba, Igbo, French, Swahili |
 | 5 | Translation, moderation, analytics, TTS guidance |

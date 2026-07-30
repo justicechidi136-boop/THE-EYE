@@ -212,17 +212,32 @@ export function toCommunityView(record: Record<string, unknown>): CommunityView 
 }
 
 export function toCommunityPostView(record: Record<string, unknown>): CommunityPostView {
+  const media = Array.isArray(record.media) ? record.media : [];
   return {
     id: String(record.id),
     community: String((record.community as { name?: string } | undefined)?.name ?? record.communityId ?? "Community"),
     communityId: record.communityId ? String(record.communityId) : undefined,
     type: String(record.type ?? "Post"),
     title: String(record.title ?? record.body ?? "Community post"),
+    body: record.body ? String(record.body) : undefined,
     status: String(record.verificationStatus ?? "Pending Verification"),
     confidence: Math.round(toNumber(record.confidenceScore)),
     linkedIncident: String(record.incidentId ?? "-"),
     author: String(record.authorId ?? "Resident"),
     location: `${toNumber(record.latitude)}, ${toNumber(record.longitude)}`,
+    media: media.map((item) => {
+      const mediaItem = item as Record<string, unknown>;
+      return {
+        id: String(mediaItem.id ?? ""),
+        type: String(mediaItem.mediaType ?? "Media"),
+        name: String(mediaItem.objectKey ?? "attachment"),
+        contentType: mediaItem.contentType ? String(mediaItem.contentType) : undefined,
+        durationSeconds: mediaItem.durationSeconds != null ? Number(mediaItem.durationSeconds) : null,
+        transcriptionStatus: mediaItem.transcriptionStatus ? String(mediaItem.transcriptionStatus) : null,
+        transcript: mediaItem.transcript ? String(mediaItem.transcript) : null,
+        uploadedAt: mediaItem.createdAt ? String(mediaItem.createdAt) : null,
+      };
+    }),
   };
 }
 

@@ -166,6 +166,8 @@ class CommunityCommentItem {
     this.createdAt,
     this.pending = false,
     this.failed = false,
+    this.parentCommentId,
+    this.media = const [],
   });
 
   final String id;
@@ -175,6 +177,10 @@ class CommunityCommentItem {
   final DateTime? createdAt;
   final bool pending;
   final bool failed;
+  final String? parentCommentId;
+  final List<CommunityCommentMediaItem> media;
+
+  bool get hasVoice => media.any((item) => item.mediaType == "Audio");
 
   CommunityCommentItem copyWith({
     String? id,
@@ -183,6 +189,8 @@ class CommunityCommentItem {
     String? authorName,
     bool? pending,
     bool? failed,
+    String? parentCommentId,
+    List<CommunityCommentMediaItem>? media,
   }) {
     return CommunityCommentItem(
       id: id ?? this.id,
@@ -192,17 +200,57 @@ class CommunityCommentItem {
       createdAt: createdAt,
       pending: pending ?? this.pending,
       failed: failed ?? this.failed,
+      parentCommentId: parentCommentId ?? this.parentCommentId,
+      media: media ?? this.media,
     );
   }
 
   factory CommunityCommentItem.fromJson(Map<String, dynamic> json) {
     final author = json["author"] as Map<String, dynamic>?;
+    final mediaRaw = json["media"];
     return CommunityCommentItem(
       id: (json["id"] as String?) ?? "",
       body: (json["body"] as String?) ?? "",
       authorId: (author?["id"] as String?) ?? "",
       authorName: (author?["displayName"] as String?) ?? "Member",
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      parentCommentId: json["parentCommentId"] as String?,
+      media: mediaRaw is List
+          ? mediaRaw
+              .whereType<Map>()
+              .map((item) => CommunityCommentMediaItem.fromJson(
+                  Map<String, dynamic>.from(item)))
+              .toList()
+          : const [],
+    );
+  }
+}
+
+class CommunityCommentMediaItem {
+  const CommunityCommentMediaItem({
+    required this.id,
+    required this.mediaType,
+    this.contentType,
+    this.durationSeconds,
+    this.transcriptionStatus,
+    this.transcript,
+  });
+
+  final String id;
+  final String mediaType;
+  final String? contentType;
+  final int? durationSeconds;
+  final String? transcriptionStatus;
+  final String? transcript;
+
+  factory CommunityCommentMediaItem.fromJson(Map<String, dynamic> json) {
+    return CommunityCommentMediaItem(
+      id: (json["id"] as String?) ?? "",
+      mediaType: (json["mediaType"] as String?) ?? "",
+      contentType: json["contentType"] as String?,
+      durationSeconds: (json["durationSeconds"] as num?)?.toInt(),
+      transcriptionStatus: json["transcriptionStatus"] as String?,
+      transcript: json["transcript"] as String?,
     );
   }
 }
@@ -250,6 +298,9 @@ class CommunityPostMediaItem {
     required this.objectKey,
     required this.contentType,
     required this.fileHash,
+    this.durationSeconds,
+    this.selectedLanguage,
+    this.clientAttachmentId,
   });
 
   final String mediaType;
@@ -257,6 +308,9 @@ class CommunityPostMediaItem {
   final String objectKey;
   final String contentType;
   final String fileHash;
+  final int? durationSeconds;
+  final String? selectedLanguage;
+  final String? clientAttachmentId;
 
   Map<String, dynamic> toJson() => {
         "mediaType": mediaType,
@@ -264,6 +318,9 @@ class CommunityPostMediaItem {
         "objectKey": objectKey,
         "contentType": contentType,
         "fileHash": fileHash,
+        if (durationSeconds != null) "durationSeconds": durationSeconds,
+        if (selectedLanguage != null) "selectedLanguage": selectedLanguage,
+        if (clientAttachmentId != null) "clientAttachmentId": clientAttachmentId,
       };
 }
 
@@ -493,25 +550,24 @@ class NeighborhoodWatchService {
   Future<CommunityCommentItem> createComment({
     required String accessToken,
     required String postId,
-    required String body,
+    String? body,
+    String? parentCommentId,
+    List<CommunityPostMediaItem> media = const [],
   }) async {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.neighborhoodWatchPostComments(postId),
-      {"body": body},
+      {
+        if (body != null && body.trim().isNotEmpty) "body": body.trim(),
+        if (parentCommentId != null) "parentCommentId": parentCommentId,
+        if (media.isNotEmpty) "media": media.map((item) => item.toJson()).toList(),
+      },
       accessToken: accessToken,
     );
     _ensureSuccess(response);
     final decoded = jsonDecode(response.body);
     final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
     final map = Map<String, dynamic>.from(data as Map);
-    return CommunityCommentItem(
-      id: (map["id"] as String?) ?? "",
-      body: (map["body"] as String?) ?? body,
-      authorId: (map["authorId"] as String?) ?? "",
-      authorName: "You",
-      createdAt: DateTime.tryParse((map["createdAt"] as String?) ?? "") ??
-          DateTime.now(),
-    );
+    return CommunityCommentItem.fromJson(map).copyWith(authorName: "You");
   }
 
   Future<CommunityCommentItem> updateComment({

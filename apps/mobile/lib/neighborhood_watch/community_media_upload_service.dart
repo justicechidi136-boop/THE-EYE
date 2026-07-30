@@ -83,6 +83,9 @@ class CommunityMediaUploadService {
             objectKey: presign["objectKey"] as String,
             contentType: attachment.contentType,
             fileHash: attachment.fileHash,
+            durationSeconds: attachment.durationSeconds,
+            selectedLanguage: attachment.metadata["selectedLanguage"] as String?,
+            clientAttachmentId: attachment.localId,
           ),
         );
       } on IncidentApiException catch (error) {

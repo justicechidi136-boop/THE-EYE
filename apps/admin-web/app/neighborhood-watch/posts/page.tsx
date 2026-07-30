@@ -20,7 +20,7 @@ export default async function CommunityFeedPage() {
         <CsocDataTable
           columns={["Post", "Community", "Type", "Status", "Confidence", "Incident", "Actions"]}
           rows={posts.map((post) => [
-            <div key={`t-${post.id}`}><p className="font-semibold">{post.title}</p><p className="text-xs text-muted">{post.author}</p></div>,
+            <div key={`t-${post.id}`}><Link href={`/neighborhood-watch/posts/${post.id}`} className="font-semibold text-eye hover:underline">{post.title}</Link><p className="text-xs text-muted">{post.author}</p></div>,
             post.community,
             post.type,
             <StatusBadge key={`s-${post.id}`} tone={post.status === "Verified" ? "success" : post.status === "False" ? "danger" : "warning"}>{post.status}</StatusBadge>,

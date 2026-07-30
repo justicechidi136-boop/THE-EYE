@@ -39,9 +39,12 @@ import {
   validateCommunity,
   validateCommunityRequest,
   validatePost,
+  validateCommunityComment,
   validateRegisterVolunteer,
   COMMUNITY_REPORT_REASONS,
+  type CommunityPostMediaDraft,
 } from "./dto/neighborhood-watch.dto";
+import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
 
 @Injectable()
 export class NeighborhoodWatchService {
@@ -51,6 +54,7 @@ export class NeighborhoodWatchService {
     private readonly broadcasts: BroadcastsService,
     private readonly notifications: NotificationsService,
     private readonly auditService: AuditService,
+    private readonly voiceTranscription: VoiceTranscriptionService,
   ) {}
 
   async listCommunities(actor: JwtPayload, query: ListCommunitiesQuery = {}) {
@@ -453,23 +457,22 @@ export class NeighborhoodWatchService {
         authorId: actor.sub,
         type: dto.type as never,
         title: dto.title,
-        body: dto.body,
+        body: dto.body?.trim() || null,
         latitude: dto.latitude,
         longitude: dto.longitude,
         media: dto.media?.length
           ? {
-              create: dto.media.map((media) => ({
-                uploaderId: actor.sub,
-                mediaType: media.mediaType as never,
-                bucket: media.bucket,
-                objectKey: media.objectKey,
-                contentType: media.contentType,
-                fileHash: media.fileHash,
-              })),
+              create: dto.media.map((media) => this.buildCommunityPostMediaCreate(media, actor.sub)),
             }
           : undefined,
       } as never,
+      include: { media: true },
     });
+    for (const media of post.media) {
+      if (media.mediaType === "Audio") {
+        void this.voiceTranscription.enqueueCommunityPostMediaTranscription(media.id).catch(() => undefined);
+      }
+    }
     if (dto.latitude !== undefined && dto.longitude !== undefined) await this.writePostLocation(post.id, dto.latitude, dto.longitude);
     const scored = await this.scorePost(post.id, actor.sub, false);
     await this.notifyCommunity(communityId, post.id, scored.title, this.notificationBody(scored.type as string));
@@ -724,7 +727,10 @@ export class NeighborhoodWatchService {
     const cursor = decodeDateIdCursor(query.cursor);
     const rows = await this.prisma.communityPostComment.findMany({
       where: { postId, ...dateIdCursorWhere(cursor) },
-      include: { author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } },
+      include: {
+        author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        media: true,
+      },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: limit + 1,
     });
@@ -734,7 +740,16 @@ export class NeighborhoodWatchService {
       data: page.data.map((comment) => ({
         id: comment.id,
         body: comment.body,
+        parentCommentId: comment.parentCommentId,
         createdAt: comment.createdAt,
+        media: comment.media.map((media) => ({
+          id: media.id,
+          mediaType: media.mediaType,
+          contentType: media.contentType,
+          durationSeconds: media.durationSeconds,
+          transcriptionStatus: media.transcriptionStatus,
+          transcript: media.transcript,
+        })),
         author: {
           id: comment.author.id,
           displayName: [comment.author.profile?.firstName, comment.author.profile?.lastName].filter(Boolean).join(" ") || "Member",
@@ -745,16 +760,42 @@ export class NeighborhoodWatchService {
 
   async createPostComment(postId: string, dto: CreateCommunityCommentDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can comment");
-    if (!dto.body?.trim()) throw new BadRequestException("Comment body is required");
+    validateCommunityComment(dto);
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
     await this.assertApprovedMember(post.communityId, actor.sub);
+    if (dto.parentCommentId) {
+      const parent = await this.prisma.communityPostComment.findFirst({
+        where: { id: dto.parentCommentId, postId },
+      });
+      if (!parent) throw new BadRequestException("Reply target comment was not found on this post");
+    }
+    if (dto.media?.length) {
+      for (const media of dto.media) {
+        assertEvidenceObjectKey(`community-${post.communityId}`, media.objectKey, media.bucket, media.contentType);
+      }
+    }
     const comment = await this.prisma.communityPostComment.create({
-      data: { postId, authorId: actor.sub, body: dto.body.trim() },
+      data: {
+        postId,
+        authorId: actor.sub,
+        body: dto.body?.trim() || null,
+        parentCommentId: dto.parentCommentId,
+        media: dto.media?.length
+          ? { create: dto.media.map((media) => this.buildCommunityCommentMediaCreate(media, actor.sub)) }
+          : undefined,
+      } as never,
+      include: { media: true },
     });
+    for (const media of comment.media) {
+      if (media.mediaType === "Audio") {
+        void this.voiceTranscription.enqueueCommunityCommentMediaTranscription(media.id).catch(() => undefined);
+      }
+    }
     await this.audit(actor, "community.comment_created", "community_post_comments", comment.id, { postId });
+    const preview = dto.body?.trim() || (dto.media?.some((item) => item.mediaType === "Audio") ? "Voice comment attached" : "Comment posted");
     if (post.authorId !== actor.sub) {
-      await this.notifyUser(post.authorId, "New comment on your post", dto.body.trim().slice(0, 120), { postId, communityId: post.communityId });
+      await this.notifyUser(post.authorId, "New comment on your post", preview.slice(0, 120), { postId, communityId: post.communityId });
     }
     return { data: comment };
   }
@@ -763,7 +804,9 @@ export class NeighborhoodWatchService {
     const comment = await this.prisma.communityPostComment.findUnique({ where: { id: commentId }, include: { post: true } });
     if (!comment) throw new NotFoundException("Comment not found");
     if (comment.authorId !== actor.sub) throw new ForbiddenException("Only the author can edit this comment");
-    const updated = await this.prisma.communityPostComment.update({ where: { id: commentId }, data: { body: dto.body.trim() } });
+    const trimmed = dto.body?.trim() ?? "";
+    if (!trimmed) throw new BadRequestException("Comment body is required");
+    const updated = await this.prisma.communityPostComment.update({ where: { id: commentId }, data: { body: trimmed } });
     await this.audit(actor, "community.comment_updated", "community_post_comments", commentId, { postId: comment.postId });
     return { data: updated };
   }
@@ -1102,5 +1145,25 @@ export class NeighborhoodWatchService {
       entityId,
       metadata,
     });
+  }
+
+  private buildCommunityPostMediaCreate(media: CommunityPostMediaDraft, uploaderId: string) {
+    return {
+      uploaderId,
+      mediaType: media.mediaType as never,
+      bucket: media.bucket,
+      objectKey: media.objectKey,
+      contentType: media.contentType,
+      fileHash: media.fileHash,
+      durationSeconds: media.durationSeconds,
+      selectedLanguage: media.selectedLanguage,
+      clientAttachmentId: media.clientAttachmentId,
+      transcriptionStatus: media.mediaType === "Audio" ? "Uploaded" : undefined,
+      moderationStatus: media.mediaType === "Audio" ? "Pending" : undefined,
+    };
+  }
+
+  private buildCommunityCommentMediaCreate(media: CommunityPostMediaDraft, uploaderId: string) {
+    return this.buildCommunityPostMediaCreate(media, uploaderId);
   }
 }

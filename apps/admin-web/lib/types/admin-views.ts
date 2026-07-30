@@ -164,11 +164,22 @@ export type CommunityPostView = {
   communityId?: string;
   type: string;
   title: string;
+  body?: string;
   status: string;
   confidence: number;
   linkedIncident: string;
   author: string;
   location: string;
+  media: Array<{
+    id: string;
+    type: string;
+    name: string;
+    contentType?: string;
+    durationSeconds?: number | null;
+    transcriptionStatus?: string | null;
+    transcript?: string | null;
+    uploadedAt?: string | null;
+  }>;
 };
 
 export type ResidentView = {

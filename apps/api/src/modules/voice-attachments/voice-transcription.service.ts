@@ -11,7 +11,7 @@ import type { VoiceTranscriptionProvider } from "./transcription-provider.interf
 
 export type VoiceTranscriptionJobPayload = {
   attachmentId: string;
-  resourceType: "incident_media" | "community_post_media";
+  resourceType: "incident_media" | "community_post_media" | "community_comment_media";
   idempotencyKey: string;
 };
 
@@ -48,6 +48,44 @@ export class VoiceTranscriptionService {
     });
   }
 
+  async enqueueCommunityPostMediaTranscription(attachmentId: string) {
+    const media = await this.prisma.communityPostMedia.findUnique({ where: { id: attachmentId } });
+    if (!media || media.mediaType !== "Audio" || media.deletedAt) return;
+
+    await this.prisma.communityPostMedia.update({
+      where: { id: attachmentId },
+      data: {
+        transcriptionStatus: "Queued",
+        moderationStatus: media.moderationStatus ?? "Pending",
+      },
+    });
+
+    await this.enqueue({
+      attachmentId,
+      resourceType: "community_post_media",
+      idempotencyKey: buildVoiceTranscriptionJobId(`post-${attachmentId}`),
+    });
+  }
+
+  async enqueueCommunityCommentMediaTranscription(attachmentId: string) {
+    const media = await this.prisma.communityCommentMedia.findUnique({ where: { id: attachmentId } });
+    if (!media || media.mediaType !== "Audio" || media.deletedAt) return;
+
+    await this.prisma.communityCommentMedia.update({
+      where: { id: attachmentId },
+      data: {
+        transcriptionStatus: "Queued",
+        moderationStatus: media.moderationStatus ?? "Pending",
+      },
+    });
+
+    await this.enqueue({
+      attachmentId,
+      resourceType: "community_comment_media",
+      idempotencyKey: buildVoiceTranscriptionJobId(`comment-${attachmentId}`),
+    });
+  }
+
   async enqueue(payload: VoiceTranscriptionJobPayload) {
     if (!shouldRegisterBullMq() || !this.queue) {
       this.logger.warn(`Transcription queue unavailable; leaving ${payload.attachmentId} queued for retry`);
@@ -78,7 +116,109 @@ export class VoiceTranscriptionService {
     if (payload.resourceType === "incident_media") {
       return this.processIncidentMedia(payload.attachmentId);
     }
+    if (payload.resourceType === "community_post_media") {
+      return this.processCommunityPostMedia(payload.attachmentId);
+    }
+    if (payload.resourceType === "community_comment_media") {
+      return this.processCommunityCommentMedia(payload.attachmentId);
+    }
     return { status: "unsupported_resource" as const };
+  }
+
+  private async processCommunityPostMedia(attachmentId: string) {
+    const media = await this.prisma.communityPostMedia.findUnique({ where: { id: attachmentId } });
+    if (!media || media.mediaType !== "Audio" || media.deletedAt) {
+      return { status: "skipped" as const };
+    }
+
+    await this.prisma.communityPostMedia.update({
+      where: { id: attachmentId },
+      data: { transcriptionStatus: "Processing" },
+    });
+
+    try {
+      const result = await this.provider.transcribe({
+        attachmentId,
+        storageKey: media.objectKey,
+        contentType: media.contentType,
+        selectedLanguage: media.selectedLanguage,
+        durationSeconds: media.durationSeconds,
+      });
+      const status = result.lowConfidence ? "LowConfidence" : "Completed";
+      await this.prisma.communityPostMedia.update({
+        where: { id: attachmentId },
+        data: {
+          transcriptionStatus: status,
+          transcript: result.transcript,
+          detectedLanguage: result.detectedLanguage,
+          languageDetectionConfidence: result.languageDetectionConfidence,
+          transcriptionConfidence: result.transcriptionConfidence,
+          transcriptionProvider: this.provider.name,
+          transcriptionProcessedAt: new Date(),
+          transcriptionErrorCode: null,
+        },
+      });
+      return { status, attachmentId };
+    } catch (error) {
+      const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
+      await this.prisma.communityPostMedia.update({
+        where: { id: attachmentId },
+        data: {
+          transcriptionStatus: "Failed",
+          transcriptionErrorCode: code,
+          transcriptionProcessedAt: new Date(),
+        },
+      });
+      throw error;
+    }
+  }
+
+  private async processCommunityCommentMedia(attachmentId: string) {
+    const media = await this.prisma.communityCommentMedia.findUnique({ where: { id: attachmentId } });
+    if (!media || media.mediaType !== "Audio" || media.deletedAt) {
+      return { status: "skipped" as const };
+    }
+
+    await this.prisma.communityCommentMedia.update({
+      where: { id: attachmentId },
+      data: { transcriptionStatus: "Processing" },
+    });
+
+    try {
+      const result = await this.provider.transcribe({
+        attachmentId,
+        storageKey: media.objectKey,
+        contentType: media.contentType,
+        selectedLanguage: media.selectedLanguage,
+        durationSeconds: media.durationSeconds,
+      });
+      const status = result.lowConfidence ? "LowConfidence" : "Completed";
+      await this.prisma.communityCommentMedia.update({
+        where: { id: attachmentId },
+        data: {
+          transcriptionStatus: status,
+          transcript: result.transcript,
+          detectedLanguage: result.detectedLanguage,
+          languageDetectionConfidence: result.languageDetectionConfidence,
+          transcriptionConfidence: result.transcriptionConfidence,
+          transcriptionProvider: this.provider.name,
+          transcriptionProcessedAt: new Date(),
+          transcriptionErrorCode: null,
+        },
+      });
+      return { status, attachmentId };
+    } catch (error) {
+      const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
+      await this.prisma.communityCommentMedia.update({
+        where: { id: attachmentId },
+        data: {
+          transcriptionStatus: "Failed",
+          transcriptionErrorCode: code,
+          transcriptionProcessedAt: new Date(),
+        },
+      });
+      throw error;
+    }
   }
 
   private async processIncidentMedia(attachmentId: string) {

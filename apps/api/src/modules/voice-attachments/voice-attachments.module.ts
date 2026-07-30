@@ -6,6 +6,7 @@ import { AuditModule } from "../audit/audit.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { StubTranscriptionProvider } from "./stub-transcription.provider";
 import { VoiceAttachmentsController } from "./voice-attachments.controller";
+import { CommunityVoiceAttachmentsController } from "./community-voice-attachments.controller";
 import { VoiceAttachmentsService } from "./voice-attachments.service";
 import { VoiceTranscriptionService } from "./voice-transcription.service";
 
@@ -17,7 +18,7 @@ import { VoiceTranscriptionService } from "./voice-transcription.service";
       ? [BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE_NAME })]
       : []),
   ],
-  controllers: [VoiceAttachmentsController],
+  controllers: [VoiceAttachmentsController, CommunityVoiceAttachmentsController],
   providers: [VoiceAttachmentsService, VoiceTranscriptionService, StubTranscriptionProvider],
   exports: [VoiceAttachmentsService, VoiceTranscriptionService],
 })

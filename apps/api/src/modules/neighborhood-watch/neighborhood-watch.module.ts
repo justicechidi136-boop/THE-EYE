@@ -6,12 +6,13 @@ import { BroadcastsModule } from "../broadcasts/broadcasts.module";
 import { IncidentsModule } from "../incidents/incidents.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
+import { VoiceAttachmentsModule } from "../voice-attachments/voice-attachments.module";
 import { NeighborhoodWatchController } from "./neighborhood-watch.controller";
 import { NeighborhoodWatchService } from "./neighborhood-watch.service";
 import { AiIntelligenceService } from "./ai-intelligence.service";
 
 @Module({
-  imports: [PrismaModule, AuditModule, IncidentsModule, BroadcastsModule, NotificationsModule],
+  imports: [PrismaModule, AuditModule, IncidentsModule, BroadcastsModule, NotificationsModule, VoiceAttachmentsModule],
   controllers: [NeighborhoodWatchController],
   providers: [NeighborhoodWatchService, AiIntelligenceService, JwtAuthGuard, PermissionsGuard],
   exports: [NeighborhoodWatchService, AiIntelligenceService],

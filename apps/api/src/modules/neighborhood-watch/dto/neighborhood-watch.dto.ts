@@ -19,6 +19,18 @@ export type CreateCommunityDto = {
   boundaryWkt?: string;
 };
 
+export type CommunityPostMediaDraft = {
+  mediaType: "Image" | "Video" | "Audio" | "Document";
+  bucket: string;
+  objectKey: string;
+  contentType: string;
+  fileHash: string;
+  durationSeconds?: number;
+  selectedLanguage?: string;
+  clientAttachmentId?: string;
+  sizeBytes?: number;
+};
+
 export type CreateCommunityPostDto = {
   type:
     | "SuspiciousActivity"
@@ -32,11 +44,27 @@ export type CreateCommunityPostDto = {
     | "SecurityMeeting"
     | "PatrolUpdate";
   title: string;
-  body: string;
+  body?: string;
   latitude?: number;
   longitude?: number;
-  media?: Array<{ mediaType: "Image" | "Video" | "Audio" | "Document"; bucket: string; objectKey: string; contentType: string; fileHash: string }>;
+  media?: CommunityPostMediaDraft[];
 };
+
+export function hasVoiceCommunityMedia(media?: CommunityPostMediaDraft[]) {
+  return (media ?? []).some((item) => item.mediaType === "Audio");
+}
+
+export function hasImageOrVideoCommunityMedia(media?: CommunityPostMediaDraft[]) {
+  return (media ?? []).some((item) => item.mediaType === "Image" || item.mediaType === "Video");
+}
+
+export function hasValidCommunityPostNarrative(dto: Pick<CreateCommunityPostDto, "body" | "media">) {
+  const body = dto.body?.trim() ?? "";
+  if (body.length >= 5) return true;
+  if (hasVoiceCommunityMedia(dto.media)) return true;
+  if (hasImageOrVideoCommunityMedia(dto.media)) return true;
+  return false;
+}
 
 export type VerifyCommunityPostDto = {
   status: "PendingVerification" | "Verified" | "Disputed" | "FalseInformation";
@@ -110,11 +138,13 @@ export type ReviewCommunityRequestDto = {
 };
 
 export type CreateCommunityCommentDto = {
-  body: string;
+  body?: string;
+  parentCommentId?: string;
+  media?: CommunityPostMediaDraft[];
 };
 
 export type UpdateCommunityCommentDto = {
-  body: string;
+  body?: string;
 };
 
 export type CreateCommunityReactionDto = {
@@ -197,9 +227,29 @@ export function validateCommunity(dto: CreateCommunityDto) {
 
 export function validatePost(dto: CreateCommunityPostDto) {
   if (!dto.title || dto.title.trim().length < 4) throw new BadRequestException("Post title is required");
-  if (!dto.body || dto.body.trim().length < 5) throw new BadRequestException("Post body is required");
+  if (!hasValidCommunityPostNarrative(dto)) {
+    throw new BadRequestException("Provide post details, a voice recording, or photo/video evidence");
+  }
   if (dto.latitude !== undefined) assertCoordinate(dto.latitude, "latitude", -90, 90);
   if (dto.longitude !== undefined) assertCoordinate(dto.longitude, "longitude", -180, 180);
+  if (dto.media?.length) {
+    for (const media of dto.media) {
+      if (media.mediaType === "Audio" && media.durationSeconds !== undefined) {
+        if (!Number.isInteger(media.durationSeconds) || media.durationSeconds <= 0 || media.durationSeconds > 300) {
+          throw new BadRequestException("Voice duration must be between 1 and 300 seconds");
+        }
+      }
+    }
+  }
+}
+
+export function validateCommunityComment(dto: CreateCommunityCommentDto) {
+  const body = dto.body?.trim() ?? "";
+  const hasVoice = hasVoiceCommunityMedia(dto.media);
+  const hasVisual = hasImageOrVideoCommunityMedia(dto.media);
+  if (body.length >= 1) return;
+  if (hasVoice || hasVisual) return;
+  throw new BadRequestException("Provide a comment, voice recording, or photo/video evidence");
 }
 
 export function validateRegisterVolunteer(dto: RegisterVolunteerDto) {
