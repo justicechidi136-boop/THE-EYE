@@ -122,25 +122,11 @@ class PushMessagingService {
       if (_lastDangerAlertKey == dangerAlert.dedupeKey) return;
       _lastDangerAlertKey = dangerAlert.dedupeKey;
 
-      final enriched = DangerAlertPayload(
-        alertCode: dangerAlert.alertCode,
-        priority: dangerAlert.priority,
-        incidentId: dangerAlert.incidentId,
-        zoneId: dangerAlert.zoneId,
-        safetyAlertId: dangerAlert.safetyAlertId,
-        issuedAt: dangerAlert.issuedAt,
-        distanceMeters: dangerAlert.distanceMeters,
-        areaName: dangerAlert.areaName,
-        languageHint: dangerAlert.languageHint,
-        expiresAt: dangerAlert.expiresAt,
-        acknowledgementRequired: dangerAlert.acknowledgementRequired,
-        repeatCount: dangerAlert.repeatCount,
-        alertState: dangerAlert.alertState,
-        allClear: dangerAlert.allClear,
-        deepLink: dangerAlert.deepLink,
+      final enriched = dangerAlert.copyWith(
         notificationId: notificationId,
         displayTitle: title,
         displayBody: body,
+        deliverySource: DangerAlertDeliverySource.fcm,
       );
 
       await _dangerAlerts.handleIncoming(enriched);

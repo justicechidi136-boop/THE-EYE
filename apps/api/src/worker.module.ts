@@ -8,6 +8,7 @@ import { validateEnvironment } from "./config/validate-env";
 import { NotificationsWorkerModule } from "./modules/notifications/notifications-worker.module";
 import { BroadcastsWorkerModule } from "./modules/broadcasts/broadcasts-worker.module";
 import { LocationRetryWorkerModule } from "./modules/dispatch/location-retry-worker.module";
+import { WatchDangerAlertWorkerModule } from "./modules/danger-zones/watch-danger-alert-worker.module";
 import { VoiceTranscriptionWorkerModule } from "./modules/voice-attachments/voice-transcription-worker.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 
@@ -45,6 +46,7 @@ import { PrismaModule } from "./modules/prisma/prisma.module";
     BroadcastsWorkerModule,
     LocationRetryWorkerModule,
     VoiceTranscriptionWorkerModule,
+    WatchDangerAlertWorkerModule,
   ],
 })
 export class WorkerModule {}

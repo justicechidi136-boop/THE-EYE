@@ -137,6 +137,7 @@ export function dangerAlertPayloadToFcmData(payload: DangerZoneAlertPayloadV1): 
     ...(payload.alertState ? { alertState: payload.alertState } : {}),
     ...(payload.allClear ? { allClear: "true" } : {}),
     ...(payload.deepLink ? { deepLink: payload.deepLink } : {}),
+    deterministicAlertId: buildDeterministicAlertId(payload.safetyAlertId, payload.alertState, payload.alertCode),
   };
 }
 
@@ -187,6 +188,10 @@ export function validateDangerAlertPayload(raw: Record<string, unknown>): Danger
     allClear: raw.allClear === true || raw.allClear === "true",
     deepLink: raw.deepLink ? String(raw.deepLink) : undefined,
   };
+}
+
+export function buildDeterministicAlertId(safetyAlertId: string, alertState?: string, alertCode?: string): string {
+  return `${safetyAlertId}:${alertState ?? alertCode ?? "general"}`;
 }
 
 function sanitizeAreaName(value?: string | null): string | undefined {

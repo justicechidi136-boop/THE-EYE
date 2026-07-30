@@ -39,6 +39,18 @@ export function resolveDangerZonesQueueNameFromConfig(config: Record<string, unk
   return resolveDangerZonesQueueName(resolveAppEnvironment(config));
 }
 
+export function resolveWatchDangerAlertsQueueName(appEnvironment: AppEnvironment): string {
+  return `the-eye-${appEnvironment}-watch-danger-alerts`;
+}
+
+export function resolveWatchDangerAlertsQueueNameFromConfig(config: Record<string, unknown>): string {
+  return resolveWatchDangerAlertsQueueName(resolveAppEnvironment(config));
+}
+
+export const WATCH_DANGER_ALERTS_QUEUE_NAME = resolveWatchDangerAlertsQueueNameFromConfig(
+  process.env as Record<string, unknown>,
+);
+
 export function resolveVoiceTranscriptionQueueName(appEnvironment: AppEnvironment): string {
   return `the-eye-${appEnvironment}-voice-transcription`;
 }

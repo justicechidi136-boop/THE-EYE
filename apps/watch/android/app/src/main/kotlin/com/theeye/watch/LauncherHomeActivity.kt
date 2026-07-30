@@ -14,6 +14,10 @@ open class LauncherHomeActivity : FlutterActivity() {
 
     private val vibrationChannel = "com.theeye.watch/vibration"
     private val launcherChannel = "com.theeye.watch/launcher"
+    private val companionRelayChannel = "com.theeye.watch/companion_relay"
+    private val audioOutputChannel = "com.theeye.watch/audio_output"
+
+    private var companionRelayBridge: CompanionRelayBridge? = null
 
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
         return FlutterEngineCache.getInstance().get(FLUTTER_ENGINE_ID)
@@ -51,6 +55,45 @@ open class LauncherHomeActivity : FlutterActivity() {
             .setMethodCallHandler(
                 LauncherChannelHandler(this, packageName),
             )
+
+        val relayChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            companionRelayChannel,
+        )
+        companionRelayBridge = CompanionRelayBridge(this, relayChannel).also { bridge ->
+            relayChannel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startListening" -> {
+                        bridge.startListening()
+                        result.success(null)
+                    }
+                    "stopListening" -> {
+                        bridge.stopListening()
+                        result.success(null)
+                    }
+                    "sendAcknowledgement" -> {
+                        val alertId = call.arguments?.toString() ?: ""
+                        bridge.sendAcknowledgement(alertId)
+                        result.success(null)
+                    }
+                    "isPhoneReachable" -> {
+                        bridge.isPhoneReachable { reachable ->
+                            result.success(reachable)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+
+        val audioBridge = AudioOutputBridge(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, audioOutputChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isHeadphoneConnected" -> result.success(audioBridge.isHeadphoneConnected())
+                    else -> result.notImplemented()
+                }
+            }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

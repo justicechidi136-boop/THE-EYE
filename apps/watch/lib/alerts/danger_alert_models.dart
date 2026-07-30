@@ -90,6 +90,8 @@ enum DangerAlertPriority { critical, high, medium, low }
 
 enum VibrationStrength { strong, normal, reduced }
 
+enum DangerAlertDeliverySource { fcm, phoneRelay }
+
 class WatchAccessibilityPreferences {
   const WatchAccessibilityPreferences({
     this.spokenDangerAlertsEnabled = true,
@@ -107,6 +109,9 @@ class WatchAccessibilityPreferences {
     this.allowCriticalAlertDuringQuietHours = true,
     this.acknowledgeRequired = true,
     this.autoLanguageFallback = true,
+    this.quietHoursStart,
+    this.quietHoursEnd,
+    this.timeZoneId = 'Africa/Lagos',
   });
 
   final bool spokenDangerAlertsEnabled;
@@ -124,6 +129,9 @@ class WatchAccessibilityPreferences {
   final bool allowCriticalAlertDuringQuietHours;
   final bool acknowledgeRequired;
   final bool autoLanguageFallback;
+  final String? quietHoursStart;
+  final String? quietHoursEnd;
+  final String timeZoneId;
 
   WatchAccessibilityPreferences copyWith({
     bool? spokenDangerAlertsEnabled,
@@ -141,6 +149,9 @@ class WatchAccessibilityPreferences {
     bool? allowCriticalAlertDuringQuietHours,
     bool? acknowledgeRequired,
     bool? autoLanguageFallback,
+    String? quietHoursStart,
+    String? quietHoursEnd,
+    String? timeZoneId,
   }) {
     return WatchAccessibilityPreferences(
       spokenDangerAlertsEnabled:
@@ -165,6 +176,9 @@ class WatchAccessibilityPreferences {
           this.allowCriticalAlertDuringQuietHours,
       acknowledgeRequired: acknowledgeRequired ?? this.acknowledgeRequired,
       autoLanguageFallback: autoLanguageFallback ?? this.autoLanguageFallback,
+      quietHoursStart: quietHoursStart ?? this.quietHoursStart,
+      quietHoursEnd: quietHoursEnd ?? this.quietHoursEnd,
+      timeZoneId: timeZoneId ?? this.timeZoneId,
     );
   }
 
@@ -192,6 +206,9 @@ class WatchAccessibilityPreferences {
           json['allowCriticalAlertDuringQuietHours'] as bool? ?? true,
       acknowledgeRequired: json['acknowledgeRequired'] as bool? ?? true,
       autoLanguageFallback: json['autoLanguageFallback'] as bool? ?? true,
+      quietHoursStart: json['quietHoursStart'] as String?,
+      quietHoursEnd: json['quietHoursEnd'] as String?,
+      timeZoneId: json['timeZoneId'] as String? ?? 'Africa/Lagos',
     );
   }
 
@@ -212,6 +229,9 @@ class WatchAccessibilityPreferences {
             allowCriticalAlertDuringQuietHours,
         'acknowledgeRequired': acknowledgeRequired,
         'autoLanguageFallback': autoLanguageFallback,
+        'quietHoursStart': quietHoursStart,
+        'quietHoursEnd': quietHoursEnd,
+        'timeZoneId': timeZoneId,
       };
 
   static VibrationStrength _parseVibrationStrength(Object? value) {
@@ -243,6 +263,8 @@ class DangerAlertPayload {
     this.notificationId,
     this.displayTitle,
     this.displayBody,
+    this.deliverySource = DangerAlertDeliverySource.fcm,
+    this.deterministicAlertIdOverride,
   });
 
   final String alertCode;
@@ -263,11 +285,49 @@ class DangerAlertPayload {
   final String? notificationId;
   final String? displayTitle;
   final String? displayBody;
+  final DangerAlertDeliverySource deliverySource;
+  final String? deterministicAlertIdOverride;
 
-  String get dedupeKey => '$safetyAlertId:${alertState ?? alertCode}';
+  String get deterministicAlertId =>
+      deterministicAlertIdOverride ??
+      '$safetyAlertId:${alertState ?? alertCode}';
+
+  String get dedupeKey => deterministicAlertId;
 
   bool get isExpired =>
       expiresAt != null && DateTime.now().isAfter(expiresAt!);
+
+  DangerAlertPayload copyWith({
+    DangerAlertDeliverySource? deliverySource,
+    String? notificationId,
+    String? displayTitle,
+    String? displayBody,
+    String? deterministicAlertIdOverride,
+  }) {
+    return DangerAlertPayload(
+      alertCode: alertCode,
+      priority: priority,
+      incidentId: incidentId,
+      zoneId: zoneId,
+      safetyAlertId: safetyAlertId,
+      issuedAt: issuedAt,
+      distanceMeters: distanceMeters,
+      areaName: areaName,
+      languageHint: languageHint,
+      expiresAt: expiresAt,
+      acknowledgementRequired: acknowledgementRequired,
+      repeatCount: repeatCount,
+      alertState: alertState,
+      allClear: allClear,
+      deepLink: deepLink,
+      notificationId: notificationId ?? this.notificationId,
+      displayTitle: displayTitle ?? this.displayTitle,
+      displayBody: displayBody ?? this.displayBody,
+      deliverySource: deliverySource ?? this.deliverySource,
+      deterministicAlertIdOverride:
+          deterministicAlertIdOverride ?? this.deterministicAlertIdOverride,
+    );
+  }
 
   factory DangerAlertPayload.fromFcmData(Map<String, dynamic> data) {
     final alertCode = data['dangerAlertCode']?.toString() ?? '';
@@ -312,16 +372,20 @@ class DangerAlertPayload {
       notificationId: data['notificationId']?.toString(),
       displayTitle: data['title']?.toString(),
       displayBody: data['body']?.toString(),
+      deterministicAlertIdOverride: data['deterministicAlertId']?.toString(),
     );
   }
 }
 
 
-DangerAlertPayload? parseDangerAlertPayload(Map<String, dynamic> data) {
+DangerAlertPayload? parseDangerAlertPayload(
+  Map<String, dynamic> data, {
+  DangerAlertDeliverySource deliverySource = DangerAlertDeliverySource.fcm,
+}) {
   try {
     final payload = DangerAlertPayload.fromFcmData(data);
     if (payload.isExpired) return null;
-    return payload;
+    return payload.copyWith(deliverySource: deliverySource);
   } catch (_) {
     return null;
   }

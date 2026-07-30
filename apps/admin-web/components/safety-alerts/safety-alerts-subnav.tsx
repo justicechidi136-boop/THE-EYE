@@ -10,6 +10,7 @@ const items: [string, string][] = [
   ["Alert History", "/safety-alerts/history"],
   ["All-Clear Queue", "/safety-alerts/all-clear"],
   ["Delivery Monitoring", "/safety-alerts/delivery"],
+  ["Watch Analytics", "/safety-alerts/watch-analytics"],
 ];
 
 export function SafetyAlertsSubnav() {

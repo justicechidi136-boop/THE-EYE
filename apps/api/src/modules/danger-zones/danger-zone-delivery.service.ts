@@ -13,6 +13,8 @@ import { BullQueueEnqueueError } from "../../common/queue/bull-job-id";
 import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import { buildDangerZoneAlertPayload } from "./danger-alert-payload";
 import { readAccessibilityPreferencesFromMetadata } from "../smartwatch/watch-accessibility-preferences";
+import { WatchDangerAlertDeliveryService } from "./watch-danger-alert-delivery.service";
+import { buildWatchDangerAlertJobId } from "../../common/queue/queue-jobs";
 
 const STATE_TO_LEVEL: Record<string, string> = {
   InsideDangerZone: "P1Immediate",
@@ -35,6 +37,7 @@ export class DangerZoneDeliveryService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
+    private readonly watchDangerAlerts: WatchDangerAlertDeliveryService,
     @Optional() @InjectQueue(DANGER_ZONES_QUEUE_NAME) private readonly queue?: Queue,
   ) {}
 
@@ -181,11 +184,38 @@ export class DangerZoneDeliveryService {
       },
     });
 
+    if (input.deviceId) {
+      await (this.prisma as any).safetyAlertDelivery.create({
+        data: {
+          safetyAlertId: alert.id,
+          recipientId: recipient.id,
+          channel: "watch_push",
+          status: "Queued",
+        },
+      });
+
+      const queueResult = await this.watchDangerAlerts.enqueueDelivery({
+        safetyAlertId: alert.id,
+        userId: input.userId,
+        deviceId: input.deviceId,
+        dangerZoneId: input.dangerZoneId,
+        incidentId: input.incidentId,
+        alertState: input.alertState,
+        idempotencyKey: buildWatchDangerAlertJobId(alert.id, input.userId),
+        dangerAlert,
+        title,
+        body,
+        actorAdminId: input.actorAdminId,
+      });
+
+      return { alertId: alert.id, queued: queueResult.queued ?? false, jobId: (queueResult as any).jobId };
+    }
+
     const notificationDto: CreateNotificationDto = {
       userId: input.userId,
       type: "NearbyDangerWarning",
       priority: level === "P1Immediate" ? "Critical" : level === "P2Serious" ? "High" : "Normal",
-      channels: [input.deviceId ? "watch_push" : "push", "in_app"],
+      channels: ["push", "in_app"],
       title,
       body,
       incidentId: input.incidentId,
@@ -208,7 +238,7 @@ export class DangerZoneDeliveryService {
         safetyAlertId: alert.id,
         recipientId: recipient.id,
         notificationId,
-        channel: input.deviceId ? "watch_push" : "push",
+        channel: "push",
         status: "Queued",
       },
     });
