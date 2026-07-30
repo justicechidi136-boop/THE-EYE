@@ -2,6 +2,8 @@ abstract final class EvidenceLimits {
   static const maxAttachments = 10;
   static const maxFileBytes = 100 * 1024 * 1024;
   static const maxVideoDurationSeconds = 120;
+  static const maxVoiceDurationSeconds = 300;
+  static const maxVoiceFileBytes = 25 * 1024 * 1024;
   static const imageQualityNormal = 85;
   static const imageQualityLowData = 60;
   static const maxImageEdgePx = 4096;
@@ -17,6 +19,8 @@ abstract final class EvidenceMimeTypes {
     "audio/mpeg",
     "audio/mp4",
     "audio/webm",
+    "audio/aac",
+    "audio/x-m4a",
   };
 
   static const image = <String>{"image/jpeg", "image/png", "image/webp"};

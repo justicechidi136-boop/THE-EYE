@@ -45,6 +45,7 @@ import {
   validateMediaDraft,
   validateReportIncidentDto,
 } from "./dto/report-incident.dto";
+import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
 
 @Injectable()
 export class IncidentsService {
@@ -61,6 +62,7 @@ export class IncidentsService {
     private readonly incidentTimeline: IncidentTimelineService,
     private readonly etaService: EtaService,
     private readonly jurisdictionResolution: JurisdictionResolutionService,
+    private readonly voiceTranscription: VoiceTranscriptionService,
   ) {}
 
   async list(
@@ -153,7 +155,7 @@ export class IncidentsService {
     validateReportIncidentDto(dto);
 
     const clientSubmissionId = emptyOptionalString(dto.clientSubmissionId);
-    const incidentDescription = dto.description.trim();
+    const incidentDescription = dto.description?.trim() || null;
     const incidentAddress = emptyOptionalString(dto.address);
     const incidentTitle = emptyOptionalString(dto.title) ?? this.defaultTitle(dto.type);
     if (clientSubmissionId) {
@@ -337,21 +339,12 @@ export class IncidentsService {
     await this.get(id, actor);
 
     const media = await (this.prisma as any).incidentMedia.create({
-      data: {
-        incidentId: id,
-        uploaderId: actor?.typ === "user" ? actor.sub : await this.systemUserId(),
-        mediaType: dto.mediaType as never,
-        bucket: dto.bucket,
-        objectKey: dto.objectKey,
-        contentType: dto.contentType,
-        sizeBytes: dto.sizeBytes,
-        fileHash: dto.fileHash,
-        capturedAt: dto.capturedAt ? new Date(dto.capturedAt) : new Date(),
-        latitude: dto.latitude ?? 0,
-        longitude: dto.longitude ?? 0,
-        metadata: dto.metadata ?? {},
-      } as never,
+      data: await this.buildIncidentMediaCreateData(id, dto, actor),
     });
+
+    if (dto.mediaType === "Audio") {
+      void this.voiceTranscription.enqueueIncidentMediaTranscription(media.id).catch(() => undefined);
+    }
 
     await this.prisma.incidentTimeline.create({
       data: {
@@ -646,7 +639,7 @@ export class IncidentsService {
     for (const media of mediaItems) {
       validateMediaDraft(media);
       assertEvidenceObjectKey(incidentId, media.objectKey, media.bucket, media.contentType);
-      await (this.prisma as any).incidentMedia.create({
+      const created = await (this.prisma as any).incidentMedia.create({
         data: {
           incidentId,
           uploaderId,
@@ -660,8 +653,16 @@ export class IncidentsService {
           latitude: media.latitude ?? fallbackLatitude,
           longitude: media.longitude ?? fallbackLongitude,
           metadata: media.metadata ?? {},
+          durationSeconds: media.durationSeconds,
+          selectedLanguage: media.selectedLanguage,
+          clientAttachmentId: media.clientAttachmentId,
+          transcriptionStatus: media.mediaType === "Audio" ? "Uploaded" : undefined,
+          moderationStatus: media.mediaType === "Audio" ? "Pending" : undefined,
         } as never,
       });
+      if (media.mediaType === "Audio") {
+        void this.voiceTranscription.enqueueIncidentMediaTranscription(created.id).catch(() => undefined);
+      }
     }
 
     await this.prisma.incidentTimeline.create({
@@ -740,6 +741,33 @@ export class IncidentsService {
         }),
       ),
     );
+  }
+
+  private async buildIncidentMediaCreateData(
+    incidentId: string,
+    dto: ConfirmIncidentMediaDto,
+    actor?: JwtPayload,
+  ) {
+    const uploaderId = actor?.typ === "user" ? actor.sub : await this.systemUserId();
+    return {
+      incidentId,
+      uploaderId,
+      mediaType: dto.mediaType as never,
+      bucket: dto.bucket,
+      objectKey: dto.objectKey,
+      contentType: dto.contentType,
+      sizeBytes: dto.sizeBytes,
+      fileHash: dto.fileHash,
+      capturedAt: dto.capturedAt ? new Date(dto.capturedAt) : new Date(),
+      latitude: dto.latitude ?? 0,
+      longitude: dto.longitude ?? 0,
+      metadata: dto.metadata ?? {},
+      durationSeconds: dto.durationSeconds,
+      selectedLanguage: dto.selectedLanguage,
+      clientAttachmentId: dto.clientAttachmentId,
+      transcriptionStatus: dto.mediaType === "Audio" ? "Uploaded" : undefined,
+      moderationStatus: dto.mediaType === "Audio" ? "Pending" : undefined,
+    } as never;
   }
 
   private async systemUserId() {

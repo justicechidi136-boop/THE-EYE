@@ -10,6 +10,9 @@ class IncidentMediaReference {
     this.latitude,
     this.longitude,
     this.metadata,
+    this.durationSeconds,
+    this.selectedLanguage,
+    this.clientAttachmentId,
   });
 
   final String mediaType;
@@ -22,6 +25,9 @@ class IncidentMediaReference {
   final double? latitude;
   final double? longitude;
   final Map<String, Object?>? metadata;
+  final int? durationSeconds;
+  final String? selectedLanguage;
+  final String? clientAttachmentId;
 
   Map<String, Object?> toJson() => {
         "mediaType": mediaType,
@@ -34,6 +40,9 @@ class IncidentMediaReference {
         if (latitude != null) "latitude": latitude,
         if (longitude != null) "longitude": longitude,
         if (metadata != null) "metadata": metadata,
+        if (durationSeconds != null) "durationSeconds": durationSeconds,
+        if (selectedLanguage != null) "selectedLanguage": selectedLanguage,
+        if (clientAttachmentId != null) "clientAttachmentId": clientAttachmentId,
       };
 
   factory IncidentMediaReference.fromJson(Map<String, dynamic> json) {

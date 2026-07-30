@@ -38,3 +38,15 @@ export const DANGER_ZONES_QUEUE_NAME = resolveDangerZonesQueueNameFromConfig(pro
 export function resolveDangerZonesQueueNameFromConfig(config: Record<string, unknown>): string {
   return resolveDangerZonesQueueName(resolveAppEnvironment(config));
 }
+
+export function resolveVoiceTranscriptionQueueName(appEnvironment: AppEnvironment): string {
+  return `the-eye-${appEnvironment}-voice-transcription`;
+}
+
+export function resolveVoiceTranscriptionQueueNameFromConfig(config: Record<string, unknown>): string {
+  return resolveVoiceTranscriptionQueueName(resolveAppEnvironment(config));
+}
+
+export const VOICE_TRANSCRIPTION_QUEUE_NAME = resolveVoiceTranscriptionQueueNameFromConfig(
+  process.env as Record<string, unknown>,
+);

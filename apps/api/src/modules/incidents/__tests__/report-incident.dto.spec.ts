@@ -14,8 +14,26 @@ describe("validateReportIncidentDto", () => {
     expect(() => validateReportIncidentDto(base)).not.toThrow();
   });
 
-  it("rejects descriptions shorter than five characters", () => {
+  it("rejects descriptions shorter than five characters when no voice or media", () => {
     expect(() => validateReportIncidentDto({ ...base, description: "bad" })).toThrow(BadRequestException);
+  });
+
+  it("accepts voice-only incident reports", () => {
+    expect(() =>
+      validateReportIncidentDto({
+        ...base,
+        media: [
+          {
+            mediaType: "Audio",
+            bucket: "the-eye",
+            objectKey: "evidence/inc-1/file.m4a",
+            contentType: "audio/mp4",
+            fileHash: "sha256:abc",
+            durationSeconds: 8,
+          },
+        ],
+      }),
+    ).not.toThrow();
   });
 
   it("requires missing person full name", () => {

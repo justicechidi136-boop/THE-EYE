@@ -8,13 +8,14 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { VerificationModule } from "../verification/verification.module";
 import { DispatchModule } from "../dispatch/dispatch.module";
+import { VoiceAttachmentsModule } from "../voice-attachments/voice-attachments.module";
 import { IncidentsController } from "./incidents.controller";
 import { IncidentsService } from "./incidents.service";
 import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
 import { JurisdictionCorrectionService } from "./jurisdiction-correction.service";
 
 @Module({
-  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, forwardRef(() => DispatchModule)],
+  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, VoiceAttachmentsModule, forwardRef(() => DispatchModule)],
   controllers: [IncidentsController],
   providers: [
     IncidentsService,

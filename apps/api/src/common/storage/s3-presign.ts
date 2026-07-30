@@ -4,7 +4,7 @@ import { BadRequestException, InternalServerErrorException } from "@nestjs/commo
 const allowedContentTypes = new Set([
   "image/jpeg", "image/png", "image/webp",
   "video/mp4", "video/webm",
-  "audio/mpeg", "audio/mp4", "audio/webm",
+  "audio/mpeg", "audio/mp4", "audio/webm", "audio/aac", "audio/x-m4a",
   "application/pdf",
 ]);
 

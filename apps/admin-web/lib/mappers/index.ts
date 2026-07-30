@@ -97,6 +97,15 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
         name: String(mediaItem.objectKey ?? "evidence"),
         hash: String(mediaItem.fileHash ?? "pending"),
         contentType: mediaItem.contentType ? String(mediaItem.contentType) : undefined,
+        durationSeconds: mediaItem.durationSeconds != null ? Number(mediaItem.durationSeconds) : null,
+        transcriptionStatus: mediaItem.transcriptionStatus ? String(mediaItem.transcriptionStatus) : null,
+        transcript: mediaItem.transcript ? String(mediaItem.transcript) : null,
+        translatedTranscript: mediaItem.translatedTranscript ? String(mediaItem.translatedTranscript) : null,
+        selectedLanguage: mediaItem.selectedLanguage ? String(mediaItem.selectedLanguage) : null,
+        detectedLanguage: mediaItem.detectedLanguage ? String(mediaItem.detectedLanguage) : null,
+        transcriptionConfidence:
+          mediaItem.transcriptionConfidence != null ? Number(mediaItem.transcriptionConfidence) : null,
+        uploadedAt: mediaItem.uploadedAt ? String(mediaItem.uploadedAt) : null,
       };
     }),
   };

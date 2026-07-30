@@ -22,6 +22,7 @@ import "contracts/the_eye_api_client.dart";
 import "contracts/the_eye_api_paths.dart";
 import "contracts/the_eye_enums.dart";
 import "contracts/the_eye_payloads.dart";
+import "voice/voice_report_validation.dart";
 import "evidence/evidence_attachment_picker.dart";
 import "evidence/local_evidence_attachment.dart";
 import "evidence/evidence_capture_service.dart";
@@ -3956,11 +3957,13 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Future<void> _submit(BuildContext context, {bool urgent = false}) async {
     final trimmed = descriptionController.text.trim();
-    if (widget.type != ReportType.emergency && trimmed.isEmpty) {
+    final localMedia = _evidenceSectionKey.currentState?.attachments ?? const [];
+    if (widget.type != ReportType.emergency &&
+        !hasValidReportNarrative(description: trimmed, localMedia: localMedia)) {
       setState(
-          () => descriptionError = "Add a short description before submitting");
+          () => descriptionError = "Add a description, voice recording, or photo/video evidence");
       showAppSnackBar(
-          context, "Please describe the incident before submitting.",
+          context, "Add a description, voice recording, or photo/video evidence.",
           isError: true);
       return;
     }
@@ -3992,9 +3995,11 @@ class _ReportScreenState extends State<ReportScreen> {
 
     final draft = buildIncidentDraft(
       type: widget.type.incidentType,
-      description: trimmed.isEmpty
-          ? "Emergency report submitted via THE EYE mobile."
-          : trimmed,
+      description: trimmed.isEmpty && draftHasVoiceAttachment(localMedia: localMedia)
+          ? normalizeVoiceOnlyDescription(widget.type.label)
+          : trimmed.isEmpty
+              ? "Emergency report submitted via THE EYE mobile."
+              : trimmed,
       position: outcome.position!,
       anonymous: anonymous,
       notifyEmergencyContacts: notifyEmergencyContact,

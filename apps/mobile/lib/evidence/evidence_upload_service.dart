@@ -75,6 +75,9 @@ class EvidenceUploadService {
             capturedAt: attachment.capturedAt.toUtc().toIso8601String(),
             latitude: attachment.latitude ?? fallbackLatitude,
             longitude: attachment.longitude ?? fallbackLongitude,
+            durationSeconds: attachment.durationSeconds,
+            selectedLanguage: attachment.metadata["selectedLanguage"] as String?,
+            clientAttachmentId: attachment.localId,
             metadata: {
               ...attachment.metadata,
               "localEvidenceId": attachment.localId,

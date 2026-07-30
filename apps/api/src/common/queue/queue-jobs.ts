@@ -34,6 +34,12 @@ export function buildDangerZoneActivateJobId(dangerZoneId: string): string {
   return buildBullJobId("danger-zone-activate", dangerZoneId);
 }
 
+export const VOICE_TRANSCRIPTION_JOB_NAME = "transcribe";
+
+export function buildVoiceTranscriptionJobId(attachmentId: string): string {
+  return buildBullJobId("voice-transcription", attachmentId);
+}
+
 export type BroadcastAutoDispatchJobPayload = {
   broadcastId: string;
   idempotencyKey: string;

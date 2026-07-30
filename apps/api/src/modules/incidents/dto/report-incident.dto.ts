@@ -22,11 +22,30 @@ export type IncidentMediaDraft = {
   latitude?: number;
   longitude?: number;
   metadata?: Record<string, unknown>;
+  durationSeconds?: number;
+  selectedLanguage?: string;
+  clientAttachmentId?: string;
 };
+
+export function hasVoiceMedia(media?: IncidentMediaDraft[]) {
+  return (media ?? []).some((item) => item.mediaType === "Audio");
+}
+
+export function hasImageOrVideoMedia(media?: IncidentMediaDraft[]) {
+  return (media ?? []).some((item) => item.mediaType === "Image" || item.mediaType === "Video");
+}
+
+export function hasValidReportNarrative(dto: Pick<ReportIncidentDto, "description" | "media">) {
+  const description = dto.description?.trim() ?? "";
+  if (description.length >= 5) return true;
+  if (hasVoiceMedia(dto.media)) return true;
+  if (hasImageOrVideoMedia(dto.media)) return true;
+  return false;
+}
 
 export type ReportIncidentDto = {
   type: IncidentType;
-  description: string;
+  description?: string;
   latitude?: number | null;
   longitude?: number | null;
   manualLatitude?: number;
@@ -103,7 +122,9 @@ function assertCoordinate(value: unknown, label: string, min: number, max: numbe
 
 export function validateReportIncidentDto(dto: ReportIncidentDto) {
   if (!allowedIncidentTypes.has(dto.type)) throw new BadRequestException("Unsupported incident type");
-  if (!dto.description || dto.description.trim().length < 5) throw new BadRequestException("Description is required");
+  if (!hasValidReportNarrative(dto)) {
+    throw new BadRequestException("Provide a description, voice recording, or photo/video evidence");
+  }
 
   assertLocationMetadataConsistency({
     latitude: dto.latitude,
@@ -138,6 +159,11 @@ export function validateReportIncidentDto(dto: ReportIncidentDto) {
 export function validateMediaDraft(dto: IncidentMediaDraft) {
   if (!dto.bucket || !dto.objectKey || !dto.contentType || !dto.fileHash) throw new BadRequestException("Media bucket, objectKey, contentType, and fileHash are required");
   if (!dto.mediaType || !["Image", "Video", "Audio", "Document", "LiveVideoRecording"].includes(dto.mediaType)) throw new BadRequestException("Unsupported media type");
+  if (dto.mediaType === "Audio" && dto.durationSeconds !== undefined) {
+    if (!Number.isInteger(dto.durationSeconds) || dto.durationSeconds <= 0 || dto.durationSeconds > 300) {
+      throw new BadRequestException("Voice duration must be between 1 and 300 seconds");
+    }
+  }
   if (dto.latitude !== undefined || dto.longitude !== undefined) {
     assertCoordinate(dto.latitude, "latitude", -90, 90);
     assertCoordinate(dto.longitude, "longitude", -180, 180);

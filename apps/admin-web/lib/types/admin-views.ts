@@ -21,7 +21,21 @@ export type Incident = {
   responseStatus: string;
   location: string;
   timeline: Array<{ time: string; event: string; actor: string }>;
-  evidence: Array<{ id: string; type: string; name: string; hash: string; contentType?: string }>;
+  evidence: Array<{
+    id: string;
+    type: string;
+    name: string;
+    hash: string;
+    contentType?: string;
+    durationSeconds?: number | null;
+    transcriptionStatus?: string | null;
+    transcript?: string | null;
+    translatedTranscript?: string | null;
+    selectedLanguage?: string | null;
+    detectedLanguage?: string | null;
+    transcriptionConfidence?: number | null;
+    uploadedAt?: string | null;
+  }>;
 };
 
 export type PoliceStationView = {
