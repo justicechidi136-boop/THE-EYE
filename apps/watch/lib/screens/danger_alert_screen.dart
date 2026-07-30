@@ -29,7 +29,11 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
   void initState() {
     super.initState();
     _languageFallback = widget.services.dangerAlerts.tts.languageUnavailable;
-    SemanticsService.announce('Danger alert received', TextDirection.ltr);
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Danger alert received',
+      TextDirection.ltr,
+    );
   }
 
   @override
@@ -95,8 +99,10 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
             WatchOutlineButton(
               label: 'Mute alert',
               onPressed: () async {
+                final navigator = Navigator.of(context);
                 await widget.services.dangerAlerts.muteActive();
-                if (mounted) Navigator.pop(context);
+                if (!context.mounted) return;
+                navigator.pop();
               },
             ),
             const SizedBox(height: 8),
@@ -108,8 +114,15 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
 
   Future<void> _acknowledge() async {
     setState(() => _acknowledged = true);
+    final navigator = Navigator.of(context);
+    final view = View.of(context);
     await widget.services.dangerAlerts.acknowledgeActive(widget.payload);
-    SemanticsService.announce('Alert acknowledged', TextDirection.ltr);
-    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      view,
+      'Alert acknowledged',
+      TextDirection.ltr,
+    );
+    navigator.pop();
   }
 }

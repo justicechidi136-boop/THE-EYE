@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import '../alerts/danger_alert_models.dart';
 import '../storage/secure_credential_store.dart';
 import 'alert_service.dart';
 import 'danger_alert_service.dart';
@@ -159,6 +160,3 @@ class PushMessagingService {
     }
   }
 }
-
-// Re-export for push handler convenience.
-export '../alerts/danger_alert_models.dart' show DangerAlertPayload;

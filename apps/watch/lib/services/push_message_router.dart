@@ -1,7 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../alerts/danger_alert_models.dart';
-import 'push_message_router.dart';
 
 /// Watch-specific FCM categories. Only these are surfaced as watch alerts.
 abstract final class WatchPushCategories {

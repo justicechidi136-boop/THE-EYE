@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'alerts/danger_alert_models.dart';
 import 'models/alert.dart';
 import 'models/emergency_mode.dart';
-import 'services/push_messaging_service.dart';
 import 'screens/active_emergency_screen.dart';
 import 'screens/alert_history_screen.dart';
 import 'screens/app_drawer_screen.dart';
@@ -55,13 +55,11 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
   void initState() {
     super.initState();
     _services.push.onActiveEmergencyRefresh = ({required String? incidentId, required String category}) async {
-      await _services.sos.syncEmergencyTracking();
       final nav = _navKey.currentState;
       if (nav == null) return;
-      if (ModalRoute.of(nav.context)?.settings.name ==
-          WatchRoutes.activeEmergency) {
-        return;
-      }
+      final currentRoute = ModalRoute.of(nav.context)?.settings.name;
+      await _services.sos.syncEmergencyTracking();
+      if (currentRoute == WatchRoutes.activeEmergency) return;
       nav.pushNamed(
         WatchRoutes.activeEmergency,
         arguments: incidentId,
