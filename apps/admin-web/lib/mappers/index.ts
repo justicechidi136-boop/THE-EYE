@@ -105,6 +105,7 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
         detectedLanguage: mediaItem.detectedLanguage ? String(mediaItem.detectedLanguage) : null,
         transcriptionConfidence:
           mediaItem.transcriptionConfidence != null ? Number(mediaItem.transcriptionConfidence) : null,
+        moderationStatus: mediaItem.moderationStatus ? String(mediaItem.moderationStatus) : null,
         uploadedAt: mediaItem.uploadedAt ? String(mediaItem.uploadedAt) : null,
       };
     }),

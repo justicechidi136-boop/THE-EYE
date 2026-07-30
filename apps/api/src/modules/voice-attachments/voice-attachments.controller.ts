@@ -35,4 +35,16 @@ export class VoiceAttachmentsController {
   ) {
     return this.voice.correctTranscript(id, mediaId, body.transcript, request.user);
   }
+
+  @Put(":id/media/:mediaId/voice/moderation")
+  @UseGuards(JwtAuthGuard, IncidentScopeGuard, PermissionsGuard)
+  @RequirePermissions("incident:update")
+  updateModeration(
+    @Param("id") id: string,
+    @Param("mediaId") mediaId: string,
+    @Body() body: { moderationStatus: "Approved" | "Flagged" | "Rejected" },
+    @Req() request: any,
+  ) {
+    return this.voice.updateIncidentModeration(id, mediaId, body.moderationStatus, request.user);
+  }
 }

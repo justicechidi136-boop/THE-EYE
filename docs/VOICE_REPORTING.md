@@ -115,7 +115,7 @@ Fields: `selectedLanguage`, `detectedLanguage`, `languageDetectionConfidence`, `
 | 2 | Neighborhood Watch voice posts, comments, and replies (**feat/voice-neighborhood-watch**) |
 | 3 | Transcription EN + Nigerian Pidgin (**#53**) |
 | 4 | Hausa, Yoruba, Igbo, French, Swahili (**feat/voice-transcription-stage4**) |
-| 5 | Translation, moderation, analytics, TTS guidance |
+| 5 | Translation, moderation, analytics, TTS guidance (**feat/voice-stage5**) |
 
 ---
 
@@ -147,10 +147,27 @@ Whisper ISO hints and detection normalization for:
 
 No new env vars beyond Stage 3. Mobile language picker already exposes all codes; admin transcript panels now show human-readable language labels.
 
+## Stage 5 — Translation, moderation, analytics, TTS guidance
+
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | Enables translation + OpenAI moderation (same as Stage 3) |
+| `OPENAI_TRANSLATION_MODEL` | Defaults to `gpt-4o-mini` |
+| `OPENAI_MODERATION_MODEL` | Defaults to `omni-moderation-latest` |
+| `VOICE_TRANSLATION_TARGET_LANGUAGE` | Defaults to `en` |
+
+After transcription completes, the worker:
+
+1. Translates non-English transcripts into English (`translatedTranscript`).
+2. Moderates transcript text (`moderationStatus`: Pending → Approved/Flagged/Rejected).
+3. Records Prometheus voice metrics for transcriptions, translations, and moderations.
+4. Exposes `GET /v1/admin/voice-analytics` for the admin dashboard.
+
+Mobile `VoiceRecorder` uses `flutter_tts` for spoken accessibility guidance when `accessibilityVoiceGuidance` is enabled.
+
 ---
 
 ## Remaining risks
 
-- Audio moderation async pipeline Stage 5
 - iOS/Android microphone background/phone-call edge cases need device QA
 - `record` / `just_audio` native deps require `flutter pub get` + platform permission strings

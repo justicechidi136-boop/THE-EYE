@@ -16,6 +16,7 @@ import "../design_system/eye_semantic_colors.dart";
 import "../evidence/evidence_hash.dart";
 import "../evidence/local_evidence_attachment.dart";
 import "voice_constants.dart";
+import "voice_accessibility_guide.dart";
 import "voice_report_validation.dart";
 
 typedef VoiceRecorderAccessibilityAnnouncer = void Function(String message);
@@ -62,7 +63,7 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
     if (!mounted) return;
     SemanticsService.sendAnnouncement(View.of(context), message, TextDirection.ltr);
     if (widget.accessibilityVoiceGuidance) {
-      // Spoken guidance hook for future TTS integration.
+      await speakVoiceAccessibilityGuidance(message);
     }
   }
 

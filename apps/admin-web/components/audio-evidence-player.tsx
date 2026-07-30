@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatVoiceLanguageLabel } from "../lib/voice-language-labels";
 import { Button } from "./form-primitives";
+import { VoiceModerationActions } from "./voice-moderation-actions";
 
 type VoiceEvidence = {
   id: string;
@@ -13,6 +14,7 @@ type VoiceEvidence = {
   selectedLanguage?: string | null;
   detectedLanguage?: string | null;
   transcriptionConfidence?: number | null;
+  moderationStatus?: string | null;
   uploadedAt?: string | null;
 };
 
@@ -100,10 +102,14 @@ export function AudioEvidencePlayer({ incidentId, media }: Props) {
       )}
       {media.translatedTranscript ? (
         <div className="mt-3">
-          <p className="text-xs uppercase text-muted">Translation</p>
+          <p className="text-xs uppercase text-muted">English translation</p>
           <p className="mt-1 whitespace-pre-wrap text-sm">{media.translatedTranscript}</p>
         </div>
       ) : null}
+      <VoiceModerationActions
+        endpoint={`/api/admin/incidents/${incidentId}/media/${media.id}/voice/moderation`}
+        currentStatus={media.moderationStatus}
+      />
     </div>
   );
 }

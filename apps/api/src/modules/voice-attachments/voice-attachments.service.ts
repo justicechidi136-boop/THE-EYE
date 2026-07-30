@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import type { VoiceModerationStatus } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { createS3PresignedGetUrl } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
@@ -44,6 +45,7 @@ export class VoiceAttachmentsService {
       selectedLanguage: media.selectedLanguage,
       detectedLanguage: media.detectedLanguage,
       transcriptionConfidence: media.transcriptionConfidence,
+      moderationStatus: media.moderationStatus,
       uploadedAt: media.uploadedAt,
     };
   }
@@ -113,6 +115,7 @@ export class VoiceAttachmentsService {
       selectedLanguage: media.selectedLanguage,
       detectedLanguage: media.detectedLanguage,
       transcriptionConfidence: media.transcriptionConfidence,
+      moderationStatus: media.moderationStatus,
       uploadedAt: media.createdAt,
     };
   }
@@ -122,6 +125,60 @@ export class VoiceAttachmentsService {
     await this.getCommunityPostPlaybackUrl(postId, mediaId, actor);
     await this.transcription.enqueueCommunityPostMediaTranscription(mediaId);
     return { status: "queued", mediaId };
+  }
+
+  async updateIncidentModeration(
+    incidentId: string,
+    mediaId: string,
+    moderationStatus: VoiceModerationStatus,
+    actor?: JwtPayload,
+  ) {
+    if (actor?.typ !== "admin") throw new ForbiddenException("Admin access required");
+    const media = await this.getIncidentVoiceAttachment(incidentId, mediaId, actor);
+    const updated = await this.prisma.incidentMedia.update({
+      where: { id: media.id },
+      data: { moderationStatus },
+    });
+
+    await this.audit.record({
+      actor,
+      action: "voice.moderation_updated",
+      entityType: "incident_media",
+      entityId: mediaId,
+      reason: `Manual moderation set to ${moderationStatus}`,
+      metadata: { incidentId, moderationStatus },
+    });
+
+    return updated;
+  }
+
+  async updateCommunityPostModeration(
+    postId: string,
+    mediaId: string,
+    moderationStatus: VoiceModerationStatus,
+    actor?: JwtPayload,
+  ) {
+    if (actor?.typ !== "admin") throw new ForbiddenException("Admin access required");
+    const media = await this.prisma.communityPostMedia.findFirst({
+      where: { id: mediaId, postId, deletedAt: null, mediaType: "Audio" },
+    });
+    if (!media) throw new NotFoundException("Community voice attachment not found");
+
+    const updated = await this.prisma.communityPostMedia.update({
+      where: { id: media.id },
+      data: { moderationStatus },
+    });
+
+    await this.audit.record({
+      actor,
+      action: "voice.moderation_updated",
+      entityType: "community_post_media",
+      entityId: mediaId,
+      reason: `Manual moderation set to ${moderationStatus}`,
+      metadata: { postId, moderationStatus },
+    });
+
+    return updated;
   }
 
   validateVoiceMetadata(input: {

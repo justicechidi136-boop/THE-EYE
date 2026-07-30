@@ -34,6 +34,7 @@ export type Incident = {
     selectedLanguage?: string | null;
     detectedLanguage?: string | null;
     transcriptionConfidence?: number | null;
+    moderationStatus?: string | null;
     uploadedAt?: string | null;
   }>;
 };

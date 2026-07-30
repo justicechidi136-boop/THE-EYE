@@ -1,18 +1,27 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
+import { MetricsService } from "../../common/metrics/metrics.service";
 import { shouldRegisterBullMq } from "../../common/queue/queue-config";
 import { buildVoiceTranscriptionJobId, VOICE_TRANSCRIPTION_JOB_NAME } from "../../common/queue/queue-jobs";
 import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import { VOICE_TRANSCRIPTION_QUEUE_NAME } from "../../common/queue/queue-names";
 import { PrismaService } from "../prisma/prisma.service";
 import { TranscriptionProviderFactory } from "./transcription-provider.factory";
-import type { VoiceTranscriptionProvider } from "./transcription-provider.interface";
+import type { TranscriptionResult, VoiceTranscriptionProvider } from "./transcription-provider.interface";
+import { VoicePostProcessingService } from "./voice-post-processing.service";
 
 export type VoiceTranscriptionJobPayload = {
   attachmentId: string;
   resourceType: "incident_media" | "community_post_media" | "community_comment_media";
   idempotencyKey: string;
+};
+
+type VoiceMediaRecord = {
+  objectKey: string;
+  contentType: string;
+  selectedLanguage: string | null;
+  durationSeconds: number | null;
 };
 
 @Injectable()
@@ -23,6 +32,8 @@ export class VoiceTranscriptionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly providerFactory: TranscriptionProviderFactory,
+    private readonly postProcessing: VoicePostProcessingService,
+    private readonly metrics: MetricsService,
     @Optional() @InjectQueue(VOICE_TRANSCRIPTION_QUEUE_NAME) private readonly queue?: Queue,
   ) {
     this.provider = this.providerFactory.getProvider();
@@ -131,46 +142,41 @@ export class VoiceTranscriptionService {
       return { status: "skipped" as const };
     }
 
-    await this.prisma.communityPostMedia.update({
-      where: { id: attachmentId },
-      data: { transcriptionStatus: "Processing" },
+    return this.processMedia({
+      attachmentId,
+      resourceType: "community_post_media",
+      media,
+      markProcessing: () =>
+        this.prisma.communityPostMedia.update({
+          where: { id: attachmentId },
+          data: { transcriptionStatus: "Processing" },
+        }),
+      persistSuccess: (status, result, postProcessing) =>
+        this.prisma.communityPostMedia.update({
+          where: { id: attachmentId },
+          data: {
+            transcriptionStatus: status,
+            transcript: result.transcript,
+            detectedLanguage: result.detectedLanguage,
+            languageDetectionConfidence: result.languageDetectionConfidence,
+            transcriptionConfidence: result.transcriptionConfidence,
+            transcriptionProvider: this.provider.name,
+            transcriptionProcessedAt: new Date(),
+            transcriptionErrorCode: null,
+            translatedTranscript: postProcessing.translatedTranscript,
+            moderationStatus: postProcessing.moderationStatus,
+          },
+        }),
+      persistFailure: (code) =>
+        this.prisma.communityPostMedia.update({
+          where: { id: attachmentId },
+          data: {
+            transcriptionStatus: "Failed",
+            transcriptionErrorCode: code,
+            transcriptionProcessedAt: new Date(),
+          },
+        }),
     });
-
-    try {
-      const result = await this.provider.transcribe({
-        attachmentId,
-        storageKey: media.objectKey,
-        contentType: media.contentType,
-        selectedLanguage: media.selectedLanguage,
-        durationSeconds: media.durationSeconds,
-      });
-      const status = result.lowConfidence ? "LowConfidence" : "Completed";
-      await this.prisma.communityPostMedia.update({
-        where: { id: attachmentId },
-        data: {
-          transcriptionStatus: status,
-          transcript: result.transcript,
-          detectedLanguage: result.detectedLanguage,
-          languageDetectionConfidence: result.languageDetectionConfidence,
-          transcriptionConfidence: result.transcriptionConfidence,
-          transcriptionProvider: this.provider.name,
-          transcriptionProcessedAt: new Date(),
-          transcriptionErrorCode: null,
-        },
-      });
-      return { status, attachmentId };
-    } catch (error) {
-      const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
-      await this.prisma.communityPostMedia.update({
-        where: { id: attachmentId },
-        data: {
-          transcriptionStatus: "Failed",
-          transcriptionErrorCode: code,
-          transcriptionProcessedAt: new Date(),
-        },
-      });
-      throw error;
-    }
   }
 
   private async processCommunityCommentMedia(attachmentId: string) {
@@ -179,46 +185,41 @@ export class VoiceTranscriptionService {
       return { status: "skipped" as const };
     }
 
-    await this.prisma.communityCommentMedia.update({
-      where: { id: attachmentId },
-      data: { transcriptionStatus: "Processing" },
+    return this.processMedia({
+      attachmentId,
+      resourceType: "community_comment_media",
+      media,
+      markProcessing: () =>
+        this.prisma.communityCommentMedia.update({
+          where: { id: attachmentId },
+          data: { transcriptionStatus: "Processing" },
+        }),
+      persistSuccess: (status, result, postProcessing) =>
+        this.prisma.communityCommentMedia.update({
+          where: { id: attachmentId },
+          data: {
+            transcriptionStatus: status,
+            transcript: result.transcript,
+            detectedLanguage: result.detectedLanguage,
+            languageDetectionConfidence: result.languageDetectionConfidence,
+            transcriptionConfidence: result.transcriptionConfidence,
+            transcriptionProvider: this.provider.name,
+            transcriptionProcessedAt: new Date(),
+            transcriptionErrorCode: null,
+            translatedTranscript: postProcessing.translatedTranscript,
+            moderationStatus: postProcessing.moderationStatus,
+          },
+        }),
+      persistFailure: (code) =>
+        this.prisma.communityCommentMedia.update({
+          where: { id: attachmentId },
+          data: {
+            transcriptionStatus: "Failed",
+            transcriptionErrorCode: code,
+            transcriptionProcessedAt: new Date(),
+          },
+        }),
     });
-
-    try {
-      const result = await this.provider.transcribe({
-        attachmentId,
-        storageKey: media.objectKey,
-        contentType: media.contentType,
-        selectedLanguage: media.selectedLanguage,
-        durationSeconds: media.durationSeconds,
-      });
-      const status = result.lowConfidence ? "LowConfidence" : "Completed";
-      await this.prisma.communityCommentMedia.update({
-        where: { id: attachmentId },
-        data: {
-          transcriptionStatus: status,
-          transcript: result.transcript,
-          detectedLanguage: result.detectedLanguage,
-          languageDetectionConfidence: result.languageDetectionConfidence,
-          transcriptionConfidence: result.transcriptionConfidence,
-          transcriptionProvider: this.provider.name,
-          transcriptionProcessedAt: new Date(),
-          transcriptionErrorCode: null,
-        },
-      });
-      return { status, attachmentId };
-    } catch (error) {
-      const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
-      await this.prisma.communityCommentMedia.update({
-        where: { id: attachmentId },
-        data: {
-          transcriptionStatus: "Failed",
-          transcriptionErrorCode: code,
-          transcriptionProcessedAt: new Date(),
-        },
-      });
-      throw error;
-    }
   }
 
   private async processIncidentMedia(attachmentId: string) {
@@ -227,46 +228,87 @@ export class VoiceTranscriptionService {
       return { status: "skipped" as const };
     }
 
-    await this.prisma.incidentMedia.update({
-      where: { id: attachmentId },
-      data: { transcriptionStatus: "Processing" },
+    return this.processMedia({
+      attachmentId,
+      resourceType: "incident_media",
+      media,
+      markProcessing: () =>
+        this.prisma.incidentMedia.update({
+          where: { id: attachmentId },
+          data: { transcriptionStatus: "Processing" },
+        }),
+      persistSuccess: (status, result, postProcessing) =>
+        this.prisma.incidentMedia.update({
+          where: { id: attachmentId },
+          data: {
+            transcriptionStatus: status,
+            transcript: result.transcript,
+            detectedLanguage: result.detectedLanguage,
+            languageDetectionConfidence: result.languageDetectionConfidence,
+            transcriptionConfidence: result.transcriptionConfidence,
+            transcriptionProvider: this.provider.name,
+            transcriptionProcessedAt: new Date(),
+            transcriptionErrorCode: null,
+            translatedTranscript: postProcessing.translatedTranscript,
+            moderationStatus: postProcessing.moderationStatus,
+          },
+        }),
+      persistFailure: (code) =>
+        this.prisma.incidentMedia.update({
+          where: { id: attachmentId },
+          data: {
+            transcriptionStatus: "Failed",
+            transcriptionErrorCode: code,
+            transcriptionProcessedAt: new Date(),
+          },
+        }),
     });
+  }
+
+  private async processMedia(params: {
+    attachmentId: string;
+    resourceType: VoiceTranscriptionJobPayload["resourceType"];
+    media: VoiceMediaRecord;
+    markProcessing: () => Promise<unknown>;
+    persistSuccess: (
+      status: "Completed" | "LowConfidence",
+      result: TranscriptionResult,
+      postProcessing: Awaited<ReturnType<VoicePostProcessingService["process"]>>,
+    ) => Promise<unknown>;
+    persistFailure: (code: string) => Promise<unknown>;
+  }) {
+    await params.markProcessing();
 
     try {
       const result = await this.provider.transcribe({
-        attachmentId,
-        storageKey: media.objectKey,
-        contentType: media.contentType,
-        selectedLanguage: media.selectedLanguage,
-        durationSeconds: media.durationSeconds,
+        attachmentId: params.attachmentId,
+        storageKey: params.media.objectKey,
+        contentType: params.media.contentType,
+        selectedLanguage: params.media.selectedLanguage,
+        durationSeconds: params.media.durationSeconds,
       });
 
       const status = result.lowConfidence ? "LowConfidence" : "Completed";
-      await this.prisma.incidentMedia.update({
-        where: { id: attachmentId },
-        data: {
-          transcriptionStatus: status,
-          transcript: result.transcript,
-          detectedLanguage: result.detectedLanguage,
-          languageDetectionConfidence: result.languageDetectionConfidence,
-          transcriptionConfidence: result.transcriptionConfidence,
-          transcriptionProvider: this.provider.name,
-          transcriptionProcessedAt: new Date(),
-          transcriptionErrorCode: null,
-        },
+      const postProcessing = await this.postProcessing.process({
+        attachmentId: params.attachmentId,
+        resourceType: params.resourceType,
+        transcript: result.transcript,
+        selectedLanguage: params.media.selectedLanguage,
+        detectedLanguage: result.detectedLanguage,
       });
 
-      return { status, attachmentId };
+      await params.persistSuccess(status, result, postProcessing);
+      this.metrics.recordVoiceTranscription(
+        params.resourceType,
+        status,
+        result.detectedLanguage ?? params.media.selectedLanguage ?? "auto",
+      );
+
+      return { status, attachmentId: params.attachmentId };
     } catch (error) {
       const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
-      await this.prisma.incidentMedia.update({
-        where: { id: attachmentId },
-        data: {
-          transcriptionStatus: "Failed",
-          transcriptionErrorCode: code,
-          transcriptionProcessedAt: new Date(),
-        },
-      });
+      await params.persistFailure(code);
+      this.metrics.recordVoiceTranscription(params.resourceType, "Failed", params.media.selectedLanguage ?? "auto");
       throw error;
     }
   }
