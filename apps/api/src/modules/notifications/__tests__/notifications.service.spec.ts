@@ -46,8 +46,8 @@ describe("NotificationsService", () => {
     expect(queue.add).toHaveBeenCalledTimes(2);
     expect(queue.add).toHaveBeenCalledWith(
       NOTIFICATION_DISPATCH_JOB_NAME,
-      expect.objectContaining({ priority: "Critical", idempotencyKey: "notify:notification-1:push:user-1" }),
-      expect.objectContaining({ priority: 1, attempts: 8, jobId: "notify:notification-1:push:user-1" }),
+      expect.objectContaining({ priority: "Critical", idempotencyKey: "notify-notification-1-push-user-1" }),
+      expect.objectContaining({ priority: 1, attempts: 8, jobId: "notify-notification-1-push-user-1" }),
     );
     expect(prisma.notificationDeliveryLog.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "Queued", attempt: 0 }),

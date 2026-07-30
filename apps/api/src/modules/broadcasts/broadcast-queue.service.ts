@@ -7,6 +7,8 @@ import {
   buildBroadcastAutoDispatchJobId,
   type BroadcastAutoDispatchJobPayload,
 } from "../../common/queue/queue-jobs";
+import { BullQueueEnqueueError } from "../../common/queue/bull-job-id";
+import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import { isProductionLikeAppEnvironment, isRedisExplicitlyDisabled } from "../../common/queue/queue-config";
 import { BROADCASTS_QUEUE_NAME } from "../../common/queue/queue-names";
 
@@ -43,13 +45,32 @@ export class BroadcastQueueService {
       return { jobId, queued: false, duplicate: true };
     }
 
-    await this.queue.add(BROADCAST_AUTO_DISPATCH_JOB_NAME, payload, {
-      jobId,
-      attempts: 5,
-      backoff: { type: "exponential", delay: 5_000 },
-      removeOnComplete: true,
-      removeOnFail: false,
-    });
+    try {
+      await safeQueueAdd(
+        this.queue,
+        BROADCAST_AUTO_DISPATCH_JOB_NAME,
+        payload,
+        {
+          jobId,
+          attempts: 5,
+          backoff: { type: "exponential", delay: 5_000 },
+          removeOnComplete: true,
+          removeOnFail: false,
+        },
+        { broadcastId },
+      );
+    } catch (error) {
+      if (error instanceof BullQueueEnqueueError) {
+        throw new ServiceUnavailableException({
+          status: "unavailable",
+          code: "BROADCAST_QUEUE_ENQUEUE_FAILED",
+          message: "Broadcast dispatch queue rejected the job",
+          broadcastId,
+          jobId,
+        });
+      }
+      throw error;
+    }
 
     return { jobId, queued: true, duplicate: false };
   }

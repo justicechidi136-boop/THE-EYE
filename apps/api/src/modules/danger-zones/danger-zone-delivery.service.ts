@@ -8,7 +8,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import type { CreateNotificationDto } from "../notifications/dto/notification.dto";
 import { DANGER_ZONES_QUEUE_NAME } from "../../common/queue/queue-names";
-import { DANGER_ZONE_TARGET_JOB_NAME } from "../../common/queue/queue-jobs";
+import { DANGER_ZONE_TARGET_JOB_NAME, buildDangerZoneActivateJobId } from "../../common/queue/queue-jobs";
+import { BullQueueEnqueueError } from "../../common/queue/bull-job-id";
+import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 
 const STATE_TO_LEVEL: Record<string, string> = {
   InsideDangerZone: "P1Immediate",
@@ -42,11 +44,21 @@ export class DangerZoneDeliveryService {
     if (!this.queue) {
       return this.dispatchZoneActivation(dangerZoneId);
     }
-    await this.queue.add(
-      DANGER_ZONE_TARGET_JOB_NAME,
-      { dangerZoneId, idempotencyKey: `danger-zone-activate:${dangerZoneId}` },
-      { jobId: `danger-zone-activate:${dangerZoneId}`, removeOnComplete: 100, attempts: 5 },
-    );
+    const jobId = buildDangerZoneActivateJobId(dangerZoneId);
+    try {
+      await safeQueueAdd(
+        this.queue,
+        DANGER_ZONE_TARGET_JOB_NAME,
+        { dangerZoneId, idempotencyKey: jobId },
+        { jobId, removeOnComplete: 100, attempts: 5 },
+        { dangerZoneId },
+      );
+    } catch (error) {
+      if (error instanceof BullQueueEnqueueError) {
+        return this.dispatchZoneActivation(dangerZoneId);
+      }
+      throw error;
+    }
   }
 
   async dispatchZoneActivation(dangerZoneId: string) {

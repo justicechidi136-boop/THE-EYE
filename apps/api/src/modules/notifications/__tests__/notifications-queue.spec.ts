@@ -93,7 +93,7 @@ describe("NotificationsService queue enqueue", () => {
     process.env.THE_EYE_APP_ENV = "development";
     try {
       const queue = {
-        add: jest.fn().mockResolvedValue({ id: "notify:notification-1:push:user-1" }),
+        add: jest.fn().mockResolvedValue({ id: "notify-notification-1-push-user-1" }),
         getJob: jest.fn().mockResolvedValue(undefined),
       };
       const { service, queue: queueMock } = buildService({ queue });
@@ -110,13 +110,13 @@ describe("NotificationsService queue enqueue", () => {
       expect(queueMock.add).toHaveBeenCalledWith(
         NOTIFICATION_DISPATCH_JOB_NAME,
         expect.objectContaining({
-          idempotencyKey: "notify:notification-1:push:user-1",
+          idempotencyKey: "notify-notification-1-push-user-1",
           recipientUserId: "user-1",
         }),
-        expect.objectContaining({ jobId: "notify:notification-1:push:user-1", attempts: 8 }),
+        expect.objectContaining({ jobId: "notify-notification-1-push-user-1", attempts: 8 }),
       );
 
-      queueMock.getJob.mockResolvedValue({ id: "notify:notification-1:push:user-1", opts: { priority: 1, attempts: 8 } });
+      queueMock.getJob.mockResolvedValue({ id: "notify-notification-1-push-user-1", opts: { priority: 1, attempts: 8 } });
       const second = await service.enqueue({
         notificationId: "notification-1",
         userId: "user-1",

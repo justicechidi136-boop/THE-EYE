@@ -58,7 +58,7 @@ export class BroadcastSchedulerService implements OnModuleInit, OnModuleDestroy 
    * Claim mechanism: PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED` inside an UPDATE
    * that atomically transitions eligible rows to `DispatchQueued`. This prevents two
    * worker instances from claiming the same broadcast. BullMQ job IDs
-   * `broadcast:auto-dispatch:{id}` provide enqueue idempotency after the DB claim.
+   * `broadcast-auto-dispatch-{id}` provide enqueue idempotency after the DB claim.
    */
   async runCycle(reason: string) {
     if (!this.redis || this.running) return;

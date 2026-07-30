@@ -2,6 +2,7 @@
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
@@ -35,6 +36,8 @@ const MAX_VERIFICATION_HISTORY = 20;
 
 @Injectable()
 export class VerificationService {
+  private readonly logger = new Logger(VerificationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scorer: ConfidenceScorerService,
@@ -95,7 +98,19 @@ export class VerificationService {
       await Promise.all(writes);
 
       if (decision.shouldRequestCrowdConfirmation) {
-        void this.requestCrowdConfirmation(incidentId, { radiusMeters: DEFAULT_DUPLICATE_RADIUS_METERS, limit: DEFAULT_WITNESS_LIMIT }, actor);
+        void this.requestCrowdConfirmation(
+          incidentId,
+          { radiusMeters: DEFAULT_DUPLICATE_RADIUS_METERS, limit: DEFAULT_WITNESS_LIMIT },
+          actor,
+        ).catch((error) => {
+          this.logger.error(
+            JSON.stringify({
+              event: "verification.crowd_confirmation_enqueue_failed",
+              incidentId,
+              message: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        });
       }
 
       if (decision.shouldAutoEscalate) {

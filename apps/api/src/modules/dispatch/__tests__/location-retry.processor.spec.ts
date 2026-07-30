@@ -22,7 +22,7 @@ describe("LocationRetryProcessor", () => {
   it("calls persistIncidentLocation with reporter actor and idempotency key", async () => {
     const { processor, locationTracking } = buildProcessor();
     const job = {
-      id: "incident-location:inc-1:1",
+      id: "incident-location-inc-1-1",
       data: {
         incidentId: "inc-1",
         dto: { latitude: 6.5, longitude: 3.3, sequenceNumber: 1 },
@@ -49,7 +49,7 @@ describe("LocationRetryProcessor", () => {
       },
     });
     const job = {
-      id: "incident-location:inc-1:1",
+      id: "incident-location-inc-1-1",
       data: {
         incidentId: "inc-1",
         dto: { latitude: 6.5, longitude: 3.3, sequenceNumber: 1 },
@@ -68,7 +68,7 @@ describe("LocationRetryProcessor", () => {
       },
     });
     const job = {
-      id: "incident-location:inc-1:1",
+      id: "incident-location-inc-1-1",
       data: {
         incidentId: "inc-1",
         dto: { latitude: 6.5, longitude: 3.3, sequenceNumber: 1, source: "mobile_gps" },
@@ -112,7 +112,7 @@ describe("LocationRetryProcessor idempotent persistence integration", () => {
       },
     });
     const job = {
-      id: "incident-location:inc-1:1",
+      id: "incident-location-inc-1-1",
       data: {
         incidentId: "inc-1",
         dto: { latitude: 6.5, longitude: 3.3, sequenceNumber: 1 },
@@ -135,7 +135,7 @@ describe("LocationRetryProcessor idempotent persistence integration", () => {
       },
     });
     const job = {
-      id: "incident-location:inc-closed:1",
+      id: "incident-location-inc-closed-1",
       data: {
         incidentId: "inc-closed",
         dto: { latitude: 6.5, longitude: 3.3, sequenceNumber: 1 },

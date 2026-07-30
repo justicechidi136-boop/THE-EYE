@@ -9,7 +9,7 @@ function buildIncidentsService(overrides: Record<string, unknown> = {}) {
     ...(overrides.locationTracking as object),
   };
   const locationRetry = {
-    scheduleRetry: jest.fn().mockResolvedValue({ accepted: true, retryId: "incident-location:inc-1:1", duplicate: false }),
+    scheduleRetry: jest.fn().mockResolvedValue({ accepted: true, retryId: "incident-location-inc-1-1", duplicate: false }),
     ...(overrides.locationRetry as object),
   };
   const prisma = {
@@ -87,7 +87,7 @@ describe("IncidentsService.recordLocation persistence isolation", () => {
       status: 202,
       response: expect.objectContaining({
         retryQueued: true,
-        retryId: "incident-location:inc-1:1",
+        retryId: "incident-location-inc-1-1",
         persisted: false,
       }),
     });
