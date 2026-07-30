@@ -7,6 +7,7 @@ abstract final class WatchRoutes {
   static const activeEmergency = '/sos/active';
   static const tracking = '/sos/tracking';
   static const incomingAlert = '/alerts/incoming';
+  static const dangerAlert = '/alerts/danger';
   static const alertSummary = '/alerts/summary';
   static const alertHistory = '/alerts/history';
   static const pairing = '/pairing';

@@ -8,6 +8,10 @@ import { NotificationDispatchError } from "../notification-dispatch.error";
 import type { NotificationDispatchPayload, NotificationDispatchResult } from "../notification.types";
 import { isEmergencyPriority } from "../notification.types";
 import {
+  dangerAlertPayloadToFcmData,
+  parseDangerAlertPayloadFromMetadata,
+} from "../../danger-zones/danger-alert-payload";
+import {
   assertFcmRuntimeAllowed,
   isProductionLikeFcmRuntime,
   normalizeFcmPrivateKey,
@@ -116,6 +120,8 @@ export class FcmProvider implements OnModuleInit {
       broadcastId: payload.broadcastId,
       metadata: storedMetadata,
     });
+    const dangerAlert = parseDangerAlertPayloadFromMetadata(storedMetadata);
+    const dangerAlertData = dangerAlert ? dangerAlertPayloadToFcmData(dangerAlert) : {};
 
     for (const entry of tokens) {
       const tokenSuffix = maskToken(entry.token);
@@ -147,8 +153,14 @@ export class FcmProvider implements OnModuleInit {
                 route: deepLink,
                 deepLink,
                 silent: silent ? "true" : "false",
+                ...dangerAlertData,
               },
-              android: { priority: emergency && !silent ? "high" : "normal" },
+              android: {
+                priority: emergency && !silent ? "high" : "normal",
+                notification: payload.channel === "watch_push" && emergency
+                  ? { channelId: "theeye_watch_critical_alerts" }
+                  : undefined,
+              },
               apns: {
                 headers: { "apns-priority": emergency && !silent ? "10" : "5" },
                 payload: { aps: { sound: emergency && !silent ? "emergency.caf" : undefined } },

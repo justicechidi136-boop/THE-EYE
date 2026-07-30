@@ -20,6 +20,8 @@ void main() {
         String? notificationId,
         String priority = 'High',
         String category = WatchPushCategories.emergencyAlert,
+        Map<String, dynamic> data = const {},
+        dangerAlert,
       }) async {
         handled = true;
       };

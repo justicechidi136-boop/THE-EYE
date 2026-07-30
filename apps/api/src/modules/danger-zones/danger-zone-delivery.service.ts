@@ -11,6 +11,8 @@ import { DANGER_ZONES_QUEUE_NAME } from "../../common/queue/queue-names";
 import { DANGER_ZONE_TARGET_JOB_NAME, buildDangerZoneActivateJobId } from "../../common/queue/queue-jobs";
 import { BullQueueEnqueueError } from "../../common/queue/bull-job-id";
 import { safeQueueAdd } from "../../common/queue/safe-queue-add";
+import { buildDangerZoneAlertPayload } from "./danger-alert-payload";
+import { readAccessibilityPreferencesFromMetadata } from "../smartwatch/watch-accessibility-preferences";
 
 const STATE_TO_LEVEL: Record<string, string> = {
   InsideDangerZone: "P1Immediate",
@@ -138,6 +140,36 @@ export class DangerZoneDeliveryService {
       },
     });
 
+    const incident = await (this.prisma as any).incident.findUnique({
+      where: { id: input.incidentId },
+      select: { type: true },
+    });
+
+    let languageHint: string | undefined;
+    if (input.deviceId) {
+      const watchDevice = await (this.prisma as any).smartwatchDevice.findUnique({
+        where: { id: input.deviceId },
+        select: { metadata: true },
+      });
+      if (watchDevice) {
+        languageHint = readAccessibilityPreferencesFromMetadata(watchDevice.metadata).preferredSpokenLanguage;
+      }
+    }
+
+    const dangerAlert = buildDangerZoneAlertPayload({
+      zoneId: input.dangerZoneId,
+      incidentId: input.incidentId,
+      safetyAlertId: alert.id,
+      incidentType: incident?.type,
+      alertState: input.alertState,
+      distanceMeters: input.distanceMeters,
+      areaName: await this.resolveAreaName(input.dangerZoneId),
+      languageHint: languageHint as never,
+      notificationPriority: level === "P1Immediate" ? "Critical" : level === "P2Serious" ? "High" : "Normal",
+      severity: level,
+      deepLink: `theeye://danger-zone/${input.dangerZoneId}`,
+    });
+
     const recipient = await (this.prisma as any).safetyAlertRecipient.create({
       data: {
         safetyAlertId: alert.id,
@@ -164,6 +196,7 @@ export class DangerZoneDeliveryService {
         distanceMeters: input.distanceMeters,
         avoidanceInstruction: input.avoidanceInstruction,
         deviceId: input.deviceId,
+        dangerAlert,
       },
     };
 
@@ -183,6 +216,16 @@ export class DangerZoneDeliveryService {
     return { alertId: alert.id, notificationId };
   }
 
+  private async resolveAreaName(dangerZoneId: string): Promise<string | undefined> {
+    const zone = await (this.prisma as any).dangerZone.findUnique({
+      where: { id: dangerZoneId },
+      select: { lga: true, state: true },
+    });
+    if (!zone) return undefined;
+    const parts = [zone.lga, zone.state].filter(Boolean);
+    return parts.length ? parts.join(", ") : undefined;
+  }
+
   async deliverAllClear(dangerZoneId: string, actorAdminId: string, status: string, reason: string) {
     const recipients = await (this.prisma as any).safetyAlertRecipient.findMany({
       where: { safetyAlert: { dangerZoneId } },
@@ -194,6 +237,17 @@ export class DangerZoneDeliveryService {
       if (!recipient.userId) continue;
       const title = "AREA STATUS UPDATED";
       const body = `The reported danger in your area has been reviewed. Status: ${status}. ${reason}`;
+      const dangerAlert = buildDangerZoneAlertPayload({
+        zoneId: dangerZoneId,
+        incidentId: recipient.safetyAlert.incidentId,
+        safetyAlertId: recipient.safetyAlertId,
+        allClear: true,
+        alertState: "AllClear",
+        areaName: await this.resolveAreaName(dangerZoneId),
+        notificationPriority: "Normal",
+        acknowledgementRequired: false,
+        repeatCount: 1,
+      });
 
       await this.notifications.create(
         {
@@ -204,7 +258,7 @@ export class DangerZoneDeliveryService {
           title,
           body,
           incidentId: recipient.safetyAlert.incidentId,
-          metadata: { dangerZoneId, allClear: true, status, safetyLevel: "P4AllClear" },
+          metadata: { dangerZoneId, allClear: true, status, safetyLevel: "P4AllClear", dangerAlert },
         },
         this.systemActor(actorAdminId),
       );

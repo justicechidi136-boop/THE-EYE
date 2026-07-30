@@ -2,6 +2,7 @@ import '../api/watch_api_client.dart';
 import '../pairing/pairing_service.dart';
 import '../services/alert_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/danger_alert_service.dart';
 import '../services/device_telemetry_service.dart';
 import '../services/heartbeat_service.dart';
 import '../services/location_service.dart';
@@ -56,7 +57,17 @@ class WatchAppServices {
       credentials: creds,
       preferences: this.preferences,
     );
-    push = PushMessagingService(alerts: alerts, credentials: creds);
+    dangerAlerts = DangerAlertService(
+      api: api,
+      credentials: creds,
+      preferences: this.preferences,
+      vibration: this.vibration,
+    );
+    push = PushMessagingService(
+      alerts: alerts,
+      credentials: creds,
+      dangerAlerts: dangerAlerts,
+    );
   }
 
   final WatchApiClient api;
@@ -72,12 +83,14 @@ class WatchAppServices {
   late final SosService sos;
   late final HeartbeatService heartbeat;
   late final AlertService alerts;
+  late final DangerAlertService dangerAlerts;
   late final PushMessagingService push;
   DeviceTelemetryService? _telemetry;
 
   Future<void> initialize({bool firebaseReady = false}) async {
     await standaloneAuth.hydrateApiAuth();
     await pairing.initialize();
+    await dangerAlerts.initialize();
     _telemetry = DeviceTelemetryService(
       connectivity: connectivity,
       onBackOnline: watchOfflineReplay(sos),
@@ -109,6 +122,7 @@ class WatchAppServices {
     location.stopTracking();
     sos.dispose();
     pairing.dispose();
+    dangerAlerts.dispose();
     push.dispose();
     api.dispose();
   }

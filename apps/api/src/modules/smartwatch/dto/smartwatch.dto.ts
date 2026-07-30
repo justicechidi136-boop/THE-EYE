@@ -79,6 +79,27 @@ export type SendCriticalAlertDto = {
   priority?: "P1LifeThreatening" | "P2ActiveCrimeAccident" | "P3SuspiciousActivity" | "P4GeneralSafety";
 };
 
+export type WatchAccessibilityPreferencesDto = {
+  spokenDangerAlertsEnabled?: boolean;
+  preferredSpokenLanguage?: string;
+  voiceGenderPreference?: "female" | "male" | "neutral";
+  speechRate?: number;
+  speechPitch?: number;
+  repeatCount?: number;
+  repeatIntervalSeconds?: number;
+  vibrationStrength?: "normal" | "reduced" | "strong";
+  criticalAlertsOverrideSilentMode?: boolean;
+  speakWhenPhoneConnected?: boolean;
+  speakWhenStandalone?: boolean;
+  speakOverHeadphones?: boolean;
+  speakSensitiveAlertsAloud?: boolean;
+  quietHoursStart?: string | null;
+  quietHoursEnd?: string | null;
+  allowCriticalAlertDuringQuietHours?: boolean;
+  acknowledgeRequired?: boolean;
+  autoLanguageFallback?: boolean;
+};
+
 export type SmartwatchStandaloneLoginDto = {
   deviceId: string;
   deviceSecret: string;

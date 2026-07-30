@@ -34,6 +34,11 @@ open class LauncherHomeActivity : FlutterActivity() {
                         vibrate(300)
                         result.success(null)
                     }
+                    "pattern" -> {
+                        val pattern = call.argument<String>("pattern") ?: "medium"
+                        playPattern(pattern)
+                        result.success(null)
+                    }
                     "cancel" -> {
                         cancelVibration()
                         result.success(null)
@@ -86,6 +91,22 @@ open class LauncherHomeActivity : FlutterActivity() {
         } else {
             @Suppress("DEPRECATION")
             vibrator.vibrate(durationMs)
+        }
+    }
+
+    private fun playPattern(name: String) {
+        val vibrator = vibrator() ?: return
+        val timings = when (name) {
+            "critical" -> longArrayOf(0, 400, 150, 120, 150, 120, 150, 400)
+            "high" -> longArrayOf(0, 350, 200, 350)
+            "clear" -> longArrayOf(0, 120)
+            else -> longArrayOf(0, 120, 80, 120, 200, 120)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createWaveform(timings, -1))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(timings, -1)
         }
     }
 

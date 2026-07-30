@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'models/alert.dart';
 import 'models/emergency_mode.dart';
+import 'services/push_messaging_service.dart';
 import 'screens/active_emergency_screen.dart';
 import 'screens/alert_history_screen.dart';
 import 'screens/app_drawer_screen.dart';
@@ -10,6 +11,7 @@ import 'screens/default_home_onboarding_screen.dart';
 import 'screens/device_status_screen.dart';
 import 'screens/emergency_type_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/danger_alert_screen.dart';
 import 'screens/incoming_alert_screen.dart';
 import 'screens/location_settings_screen.dart';
 import 'screens/location_onboarding_screen.dart';
@@ -63,6 +65,25 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
       nav.pushNamed(
         WatchRoutes.activeEmergency,
         arguments: incidentId,
+      );
+    };
+    _services.push.onDangerAlert = (payload) async {
+      final nav = _navKey.currentState;
+      if (nav == null) return;
+      nav.pushNamed(
+        WatchRoutes.dangerAlert,
+        arguments: payload,
+      );
+    };
+    _services.dangerAlerts.onNavigate = (payload) async {
+      final nav = _navKey.currentState;
+      if (nav == null) return;
+      if (ModalRoute.of(nav.context)?.settings.name == WatchRoutes.dangerAlert) {
+        return;
+      }
+      nav.pushNamed(
+        WatchRoutes.dangerAlert,
+        arguments: payload,
       );
     };
   }
@@ -160,6 +181,18 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
               IncomingAlertScreen(services: _services),
               settings,
             );
+          case WatchRoutes.dangerAlert:
+            final payload = settings.arguments;
+            if (payload is DangerAlertPayload) {
+              return _darkPage(
+                DangerAlertScreen(
+                  services: _services,
+                  payload: payload,
+                ),
+                settings,
+              );
+            }
+            return _darkPage(HomeScreen(services: _services, launcher: _launcher), settings);
           case WatchRoutes.alertHistory:
             return _darkPage(
               AlertHistoryScreen(services: _services),

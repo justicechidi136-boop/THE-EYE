@@ -34,6 +34,12 @@ export function buildDangerZoneActivateJobId(dangerZoneId: string): string {
   return buildBullJobId("danger-zone-activate", dangerZoneId);
 }
 
+export const WATCH_DANGER_ALERT_JOB_NAME = "watch-danger-alert";
+
+export function buildWatchDangerAlertJobId(alertId: string, userId: string): string {
+  return buildBullJobId("watch-danger-alert", alertId, userId);
+}
+
 export const VOICE_TRANSCRIPTION_JOB_NAME = "transcribe";
 
 export function buildVoiceTranscriptionJobId(attachmentId: string): string {

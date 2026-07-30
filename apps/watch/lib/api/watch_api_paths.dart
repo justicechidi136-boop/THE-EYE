@@ -33,6 +33,12 @@ abstract final class WatchApiPaths {
       '/notifications/$notificationId/device-received';
   static const issuePairingCode = '/smartwatch/devices/pairing-codes';
 
+  static String accessibilityPreferences(String deviceId) =>
+      '/devices/watch/accessibility-preferences?deviceId=$deviceId';
+
+  static String safetyAlertAcknowledge(String alertId) =>
+      '/devices/watch/alerts/$alertId/acknowledge';
+
   static String pairingStatus(String deviceId) =>
       '/smartwatch/devices/$deviceId/pairing-status';
 }
