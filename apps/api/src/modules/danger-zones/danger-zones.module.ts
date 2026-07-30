@@ -40,6 +40,12 @@ import { WatchDangerAlertDeliveryService } from "./watch-danger-alert-delivery.s
     JwtAuthGuard,
     PermissionsGuard,
   ],
-  exports: [DangerZonesService, DangerZoneTargetingService, DangerZoneGeoService, WatchAlertTelemetryService],
+  exports: [
+    DangerZonesService,
+    DangerZoneTargetingService,
+    DangerZoneGeoService,
+    WatchAlertTelemetryService,
+    WatchDangerAlertDeliveryService,
+  ],
 })
 export class DangerZonesModule {}
