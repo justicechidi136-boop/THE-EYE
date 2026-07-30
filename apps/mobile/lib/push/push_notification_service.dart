@@ -261,10 +261,13 @@ class PushNotificationService {
 
     if (DangerAlertPhoneHandler.shouldRelayToWatch(data) &&
         DangerAlertPhoneHandler.hasTrustedAlertCode(data)) {
-      final alertId = data["deterministicAlertId"]?.toString() ??
-          "${data["safetyAlertId"]}:${data["alertState"] ?? data["dangerAlertCode"]}";
-      if (!_relayedAlertIds.contains(alertId)) {
-        _relayedAlertIds.add(alertId);
+      final version = data["alertVersion"]?.toString() ?? "1";
+      final alertId = data["alertId"]?.toString() ??
+          data["safetyAlertId"]?.toString() ??
+          "";
+      final dedupeKey = alertId.isNotEmpty ? "$alertId-v$version" : "";
+      if (dedupeKey.isNotEmpty && !_relayedAlertIds.contains(dedupeKey)) {
+        _relayedAlertIds.add(dedupeKey);
         final relayed = await _watchRelay.relayDangerAlert(data);
         logPushEvent(
           relayed

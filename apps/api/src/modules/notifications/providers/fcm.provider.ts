@@ -123,10 +123,7 @@ export class FcmProvider implements OnModuleInit {
     const dangerAlert = parseDangerAlertPayloadFromMetadata(storedMetadata);
     const dangerAlertData = dangerAlert ? dangerAlertPayloadToFcmData(dangerAlert) : {};
     const relayToWatch = storedMetadata.relayToWatch === true ? "true" : "false";
-    const deterministicAlertId =
-      typeof storedMetadata.deterministicAlertId === "string"
-        ? storedMetadata.deterministicAlertId
-        : dangerAlertData.deterministicAlertId ?? "";
+    const alertId = dangerAlert?.alertId ?? dangerAlertData.alertId ?? "";
 
     for (const entry of tokens) {
       const tokenSuffix = maskToken(entry.token);
@@ -159,7 +156,7 @@ export class FcmProvider implements OnModuleInit {
                 deepLink,
                 silent: silent ? "true" : "false",
                 relayToWatch,
-                ...(deterministicAlertId ? { deterministicAlertId } : {}),
+                ...(alertId ? { alertId } : {}),
                 ...dangerAlertData,
               },
               android: {

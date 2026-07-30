@@ -3,7 +3,7 @@ import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
 import '../pairing/companion_relay_service.dart';
 import '../storage/secure_credential_store.dart';
-import 'alert_dedupe_cache.dart';
+import 'alert_version_tracker.dart';
 import 'audio_output_service.dart';
 import 'danger_alert_coordinator.dart';
 import 'danger_alert_tts_service.dart';
@@ -12,28 +12,54 @@ import 'vibration_service.dart';
 import 'watch_feature_flags_service.dart';
 
 class DangerAlertService {
-  DangerAlertService({
+  factory DangerAlertService({
     required WatchApiClient api,
     required SecureCredentialStore credentials,
     required PreferencesStore preferences,
     required VibrationService vibration,
     DangerAlertTtsService? tts,
-    AlertDedupeCache? dedupeCache,
+    AlertVersionTracker? versionTracker,
     CompanionRelayService? companionRelay,
     WatchFeatureFlagsService? featureFlags,
     QuietHoursService? quietHours,
     AudioOutputService? audioOutput,
+  }) {
+    final resolvedTracker =
+        versionTracker ?? AlertVersionTracker(preferences: preferences);
+    return DangerAlertService._(
+      api: api,
+      credentials: credentials,
+      preferences: preferences,
+      vibration: vibration,
+      versionTracker: resolvedTracker,
+      companionRelay: companionRelay,
+      featureFlags: featureFlags,
+      quietHours: quietHours,
+      audioOutput: audioOutput,
+      tts: tts,
+    );
+  }
+
+  DangerAlertService._({
+    required WatchApiClient api,
+    required SecureCredentialStore credentials,
+    required PreferencesStore preferences,
+    required VibrationService vibration,
+    required AlertVersionTracker versionTracker,
+    CompanionRelayService? companionRelay,
+    WatchFeatureFlagsService? featureFlags,
+    QuietHoursService? quietHours,
+    AudioOutputService? audioOutput,
+    DangerAlertTtsService? tts,
   })  : _api = api,
         _credentials = credentials,
         _preferences = preferences,
         _featureFlags = featureFlags ??
             WatchFeatureFlagsService(api: api, credentials: credentials),
         _companionRelay = companionRelay ?? CompanionRelayService(),
-        _dedupeCache =
-            dedupeCache ?? AlertDedupeCache(preferences: preferences),
         _coordinator = DangerAlertCoordinator(
           vibration: vibration,
-          dedupeCache: dedupeCache ?? _dedupeCache,
+          versionTracker: versionTracker,
           quietHours: quietHours,
           audioOutput: audioOutput,
           tts: tts,
@@ -46,7 +72,6 @@ class DangerAlertService {
   final PreferencesStore _preferences;
   final WatchFeatureFlagsService _featureFlags;
   final CompanionRelayService _companionRelay;
-  final AlertDedupeCache _dedupeCache;
   final DangerAlertCoordinator _coordinator;
 
   set onNavigate(DangerAlertNavigateHandler? handler) {
@@ -68,7 +93,18 @@ class DangerAlertService {
       );
     };
     _companionRelay.onAckFromPhone = (alertId) async {
-      await _dedupeCache.markAcknowledged(alertId);
+      final entries = await _preferences.loadAlertVersionEntries();
+      final entry = entries[alertId];
+      if (entry == null) return;
+      entries[alertId] = AlertVersionEntry(
+        alertId: alertId,
+        highestVersionSeen: entry.highestVersionSeen,
+        highestAckVersion: entry.highestVersionSeen,
+        lifecycleState: DangerAlertLifecycleState.acknowledged.name,
+        updatedAt: DateTime.now(),
+        lastSource: entry.lastSource,
+      );
+      await _preferences.saveAlertVersionEntries(entries);
     };
     await _companionRelay.startListening();
     await flushQueuedAcknowledgements();

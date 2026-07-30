@@ -73,11 +73,17 @@ export class AdminWatchNotificationsController {
       zoneId: "staging-test-zone",
       incidentId: "staging-test-incident",
       safetyAlertId,
+      userId: dto.userId,
+      deviceId: dto.deviceId ?? null,
+      alertId: `staging-test-alert-${dto.userId}`.replace(/:/g, "-"),
+      version: 1,
+      sequence: 1,
       alertState: "Critical",
       metadata: { dangerAlertCode: dto.alertCode ?? DangerAlertCode.GENERAL_ENTRY },
       languageHint: dto.languageHint as any,
       notificationPriority: dto.priority ?? "CRITICAL",
       acknowledgementRequired: true,
+      config: this.config as unknown as Record<string, unknown>,
     });
 
     return this.delivery.enqueueDelivery({

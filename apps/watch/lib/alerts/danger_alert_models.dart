@@ -92,6 +92,203 @@ enum VibrationStrength { strong, normal, reduced }
 
 enum DangerAlertDeliverySource { fcm, phoneRelay }
 
+enum DangerAlertLifecycleState {
+  active,
+  updated,
+  escalated,
+  acknowledged,
+  cleared,
+  expired;
+
+  static DangerAlertLifecycleState? parse(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final normalized = raw.trim().toUpperCase();
+    for (final value in DangerAlertLifecycleState.values) {
+      if (value.name.toUpperCase() == normalized) return value;
+    }
+    return null;
+  }
+
+  String get wireValue => name.toUpperCase();
+}
+
+class DangerAlertPayload {
+  const DangerAlertPayload({
+    required this.schemaVersion,
+    required this.alertId,
+    required this.version,
+    required this.sequence,
+    required this.lifecycleState,
+    required this.alertCode,
+    required this.priority,
+    required this.incidentId,
+    required this.zoneId,
+    required this.safetyAlertId,
+    required this.issuedAt,
+    this.distanceMeters,
+    this.areaName,
+    this.languageHint,
+    this.expiresAt,
+    this.acknowledgementRequired = true,
+    this.repeatCount = 3,
+    this.alertState,
+    this.allClear = false,
+    this.deepLink,
+    this.notificationId,
+    this.displayTitle,
+    this.displayBody,
+    this.deliverySource = DangerAlertDeliverySource.fcm,
+    this.signature,
+    this.signatureKeyId,
+    this.signedAt,
+    required this.issuedAtWire,
+  });
+
+  final int schemaVersion;
+  final String alertId;
+  final int version;
+  final int sequence;
+  final DangerAlertLifecycleState lifecycleState;
+  final String alertCode;
+  final DangerAlertPriority priority;
+  final String incidentId;
+  final String zoneId;
+  final String safetyAlertId;
+  final DateTime issuedAt;
+  final int? distanceMeters;
+  final String? areaName;
+  final String? languageHint;
+  final DateTime? expiresAt;
+  final bool acknowledgementRequired;
+  final int repeatCount;
+  final String? alertState;
+  final bool allClear;
+  final String? deepLink;
+  final String? notificationId;
+  final String? displayTitle;
+  final String? displayBody;
+  final DangerAlertDeliverySource deliverySource;
+  final String? signature;
+  final String? signatureKeyId;
+  final String? signedAt;
+  final String issuedAtWire;
+
+  String get dedupeKey => '$alertId-v$version';
+
+  bool get isExpired =>
+      expiresAt != null && DateTime.now().isAfter(expiresAt!);
+
+  bool get isCleared =>
+      lifecycleState == DangerAlertLifecycleState.cleared || allClear;
+
+  bool get isEscalation =>
+      lifecycleState == DangerAlertLifecycleState.escalated;
+
+  DangerAlertPayload copyWith({
+    DangerAlertDeliverySource? deliverySource,
+    String? notificationId,
+    String? displayTitle,
+    String? displayBody,
+  }) {
+    return DangerAlertPayload(
+      schemaVersion: schemaVersion,
+      alertId: alertId,
+      version: version,
+      sequence: sequence,
+      lifecycleState: lifecycleState,
+      alertCode: alertCode,
+      priority: priority,
+      incidentId: incidentId,
+      zoneId: zoneId,
+      safetyAlertId: safetyAlertId,
+      issuedAt: issuedAt,
+      distanceMeters: distanceMeters,
+      areaName: areaName,
+      languageHint: languageHint,
+      expiresAt: expiresAt,
+      acknowledgementRequired: acknowledgementRequired,
+      repeatCount: repeatCount,
+      alertState: alertState,
+      allClear: allClear,
+      deepLink: deepLink,
+      notificationId: notificationId ?? this.notificationId,
+      displayTitle: displayTitle ?? this.displayTitle,
+      displayBody: displayBody ?? this.displayBody,
+      deliverySource: deliverySource ?? this.deliverySource,
+      signature: signature,
+      signatureKeyId: signatureKeyId,
+      signedAt: signedAt,
+      issuedAtWire: issuedAtWire,
+    );
+  }
+
+  factory DangerAlertPayload.fromFcmData(Map<String, dynamic> data) {
+    final alertCode = data['dangerAlertCode']?.toString() ?? '';
+    if (!DangerAlertCodes.isTrusted(alertCode)) {
+      throw FormatException('Untrusted alert code');
+    }
+
+    final priorityRaw =
+        data['dangerAlertPriority']?.toString().toUpperCase() ?? 'MEDIUM';
+    final priority = switch (priorityRaw) {
+      'CRITICAL' => DangerAlertPriority.critical,
+      'HIGH' => DangerAlertPriority.high,
+      'LOW' => DangerAlertPriority.low,
+      _ => DangerAlertPriority.medium,
+    };
+
+    DateTime? parseDate(String? raw) {
+      if (raw == null || raw.isEmpty) return null;
+      final parsed = DateTime.tryParse(raw);
+      return parsed?.toUtc();
+    }
+
+    final issuedAtRaw = data['issuedAt']?.toString() ?? '';
+    final issuedAt = parseDate(issuedAtRaw) ?? DateTime.now();
+    final expiresAt = parseDate(data['expiresAt']?.toString());
+    final lifecycle = DangerAlertLifecycleState.parse(
+          data['alertLifecycleState']?.toString(),
+        ) ??
+        (data['allClear'] == 'true'
+            ? DangerAlertLifecycleState.cleared
+            : DangerAlertLifecycleState.active);
+
+    return DangerAlertPayload(
+      schemaVersion:
+          int.tryParse(data['dangerAlertSchemaVersion']?.toString() ?? '') ?? 1,
+      alertId: data['alertId']?.toString() ??
+          data['safetyAlertId']?.toString() ??
+          '',
+      version: int.tryParse(data['alertVersion']?.toString() ?? '') ?? 1,
+      sequence: int.tryParse(data['alertSequence']?.toString() ?? '') ?? 1,
+      lifecycleState: lifecycle,
+      alertCode: alertCode,
+      priority: priority,
+      incidentId: data['incidentId']?.toString() ?? '',
+      zoneId: data['zoneId']?.toString() ?? '',
+      safetyAlertId: data['safetyAlertId']?.toString() ?? '',
+      distanceMeters: int.tryParse(data['distanceMeters']?.toString() ?? ''),
+      areaName: data['areaName']?.toString(),
+      languageHint: data['languageHint']?.toString(),
+      issuedAt: issuedAt,
+      issuedAtWire:
+          issuedAtRaw.isNotEmpty ? issuedAtRaw : issuedAt.toUtc().toIso8601String(),
+      expiresAt: expiresAt,
+      acknowledgementRequired: data['acknowledgementRequired'] == 'true',
+      repeatCount: int.tryParse(data['repeatCount']?.toString() ?? '') ?? 3,
+      alertState: data['alertState']?.toString(),
+      allClear: data['allClear'] == 'true',
+      deepLink: data['deepLink']?.toString(),
+      notificationId: data['notificationId']?.toString(),
+      displayTitle: data['title']?.toString(),
+      displayBody: data['body']?.toString(),
+      signature: data['signature']?.toString(),
+      signatureKeyId: data['signatureKeyId']?.toString(),
+      signedAt: data['signedAt']?.toString(),
+    );
+  }
+}
+
 class WatchAccessibilityPreferences {
   const WatchAccessibilityPreferences({
     this.spokenDangerAlertsEnabled = true,
@@ -242,141 +439,6 @@ class WatchAccessibilityPreferences {
     );
   }
 }
-
-class DangerAlertPayload {
-  const DangerAlertPayload({
-    required this.alertCode,
-    required this.priority,
-    required this.incidentId,
-    required this.zoneId,
-    required this.safetyAlertId,
-    required this.issuedAt,
-    this.distanceMeters,
-    this.areaName,
-    this.languageHint,
-    this.expiresAt,
-    this.acknowledgementRequired = true,
-    this.repeatCount = 3,
-    this.alertState,
-    this.allClear = false,
-    this.deepLink,
-    this.notificationId,
-    this.displayTitle,
-    this.displayBody,
-    this.deliverySource = DangerAlertDeliverySource.fcm,
-    this.deterministicAlertIdOverride,
-  });
-
-  final String alertCode;
-  final DangerAlertPriority priority;
-  final String incidentId;
-  final String zoneId;
-  final String safetyAlertId;
-  final DateTime issuedAt;
-  final int? distanceMeters;
-  final String? areaName;
-  final String? languageHint;
-  final DateTime? expiresAt;
-  final bool acknowledgementRequired;
-  final int repeatCount;
-  final String? alertState;
-  final bool allClear;
-  final String? deepLink;
-  final String? notificationId;
-  final String? displayTitle;
-  final String? displayBody;
-  final DangerAlertDeliverySource deliverySource;
-  final String? deterministicAlertIdOverride;
-
-  String get deterministicAlertId =>
-      deterministicAlertIdOverride ??
-      '$safetyAlertId:${alertState ?? alertCode}';
-
-  String get dedupeKey => deterministicAlertId;
-
-  bool get isExpired =>
-      expiresAt != null && DateTime.now().isAfter(expiresAt!);
-
-  DangerAlertPayload copyWith({
-    DangerAlertDeliverySource? deliverySource,
-    String? notificationId,
-    String? displayTitle,
-    String? displayBody,
-    String? deterministicAlertIdOverride,
-  }) {
-    return DangerAlertPayload(
-      alertCode: alertCode,
-      priority: priority,
-      incidentId: incidentId,
-      zoneId: zoneId,
-      safetyAlertId: safetyAlertId,
-      issuedAt: issuedAt,
-      distanceMeters: distanceMeters,
-      areaName: areaName,
-      languageHint: languageHint,
-      expiresAt: expiresAt,
-      acknowledgementRequired: acknowledgementRequired,
-      repeatCount: repeatCount,
-      alertState: alertState,
-      allClear: allClear,
-      deepLink: deepLink,
-      notificationId: notificationId ?? this.notificationId,
-      displayTitle: displayTitle ?? this.displayTitle,
-      displayBody: displayBody ?? this.displayBody,
-      deliverySource: deliverySource ?? this.deliverySource,
-      deterministicAlertIdOverride:
-          deterministicAlertIdOverride ?? this.deterministicAlertIdOverride,
-    );
-  }
-
-  factory DangerAlertPayload.fromFcmData(Map<String, dynamic> data) {
-    final alertCode = data['dangerAlertCode']?.toString() ?? '';
-    if (!DangerAlertCodes.isTrusted(alertCode)) {
-      throw FormatException('Untrusted alert code');
-    }
-
-    final priorityRaw =
-        data['dangerAlertPriority']?.toString().toUpperCase() ?? 'MEDIUM';
-    final priority = switch (priorityRaw) {
-      'CRITICAL' => DangerAlertPriority.critical,
-      'HIGH' => DangerAlertPriority.high,
-      'LOW' => DangerAlertPriority.low,
-      _ => DangerAlertPriority.medium,
-    };
-
-    DateTime? parseDate(String? raw) {
-      if (raw == null || raw.isEmpty) return null;
-      final parsed = DateTime.tryParse(raw);
-      return parsed?.toUtc();
-    }
-
-    final issuedAt = parseDate(data['issuedAt']?.toString()) ?? DateTime.now();
-    final expiresAt = parseDate(data['expiresAt']?.toString());
-
-    return DangerAlertPayload(
-      alertCode: alertCode,
-      priority: priority,
-      incidentId: data['incidentId']?.toString() ?? '',
-      zoneId: data['zoneId']?.toString() ?? '',
-      safetyAlertId: data['safetyAlertId']?.toString() ?? '',
-      distanceMeters: int.tryParse(data['distanceMeters']?.toString() ?? ''),
-      areaName: data['areaName']?.toString(),
-      languageHint: data['languageHint']?.toString(),
-      issuedAt: issuedAt,
-      expiresAt: expiresAt,
-      acknowledgementRequired: data['acknowledgementRequired'] == 'true',
-      repeatCount: int.tryParse(data['repeatCount']?.toString() ?? '') ?? 3,
-      alertState: data['alertState']?.toString(),
-      allClear: data['allClear'] == 'true',
-      deepLink: data['deepLink']?.toString(),
-      notificationId: data['notificationId']?.toString(),
-      displayTitle: data['title']?.toString(),
-      displayBody: data['body']?.toString(),
-      deterministicAlertIdOverride: data['deterministicAlertId']?.toString(),
-    );
-  }
-}
-
 
 DangerAlertPayload? parseDangerAlertPayload(
   Map<String, dynamic> data, {

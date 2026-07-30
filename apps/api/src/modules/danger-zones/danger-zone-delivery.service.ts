@@ -11,7 +11,7 @@ import { DANGER_ZONES_QUEUE_NAME } from "../../common/queue/queue-names";
 import { DANGER_ZONE_TARGET_JOB_NAME, buildDangerZoneActivateJobId } from "../../common/queue/queue-jobs";
 import { BullQueueEnqueueError } from "../../common/queue/bull-job-id";
 import { safeQueueAdd } from "../../common/queue/safe-queue-add";
-import { buildDangerZoneAlertPayload } from "./danger-alert-payload";
+import { buildDangerZoneAlertPayload, buildCanonicalAlertId } from "./danger-alert-payload";
 import { readAccessibilityPreferencesFromMetadata } from "../smartwatch/watch-accessibility-preferences";
 import { WatchDangerAlertDeliveryService } from "./watch-danger-alert-delivery.service";
 import { buildWatchDangerAlertJobId } from "../../common/queue/queue-jobs";
@@ -129,6 +129,24 @@ export class DangerZoneDeliveryService {
         ? `${input.publicMessage} Approximately ${distanceLabel} metres away. ${input.avoidanceInstruction}`
         : `${input.publicMessage} ${distanceLabel} metres from affected area. ${input.avoidanceInstruction}`;
 
+    const canonicalAlertId = buildCanonicalAlertId(
+      input.dangerZoneId,
+      input.userId,
+      input.deviceId,
+    );
+    const priorAlert = await (this.prisma as any).safetyAlert.findFirst({
+      where: {
+        metadata: { path: ["canonicalAlertId"], equals: canonicalAlertId },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const priorMeta = (priorAlert?.metadata ?? {}) as Record<string, unknown>;
+    const priorLifecycle = String(priorMeta.lifecycleState ?? "");
+    let alertVersion = 1;
+    if (priorAlert && priorLifecycle !== "CLEARED") {
+      alertVersion = Number(priorMeta.version ?? 0) + 1;
+    }
+
     const alert = await (this.prisma as any).safetyAlert.create({
       data: {
         dangerZoneId: input.dangerZoneId,
@@ -139,7 +157,12 @@ export class DangerZoneDeliveryService {
         publicMessage: input.publicMessage,
         avoidanceInstruction: input.avoidanceInstruction,
         dedupeKey,
-        metadata: { alertState: input.alertState, distanceMeters: input.distanceMeters },
+        metadata: {
+          alertState: input.alertState,
+          distanceMeters: input.distanceMeters,
+          canonicalAlertId,
+          version: alertVersion,
+        },
       },
     });
 
@@ -163,6 +186,11 @@ export class DangerZoneDeliveryService {
       zoneId: input.dangerZoneId,
       incidentId: input.incidentId,
       safetyAlertId: alert.id,
+      userId: input.userId,
+      deviceId: input.deviceId,
+      alertId: canonicalAlertId,
+      version: alertVersion,
+      sequence: alertVersion,
       incidentType: incident?.type,
       alertState: input.alertState,
       distanceMeters: input.distanceMeters,
@@ -171,6 +199,20 @@ export class DangerZoneDeliveryService {
       notificationPriority: level === "P1Immediate" ? "Critical" : level === "P2Serious" ? "High" : "Normal",
       severity: level,
       deepLink: `theeye://danger-zone/${input.dangerZoneId}`,
+      config: this.config as unknown as Record<string, unknown>,
+    });
+
+    await (this.prisma as any).safetyAlert.update({
+      where: { id: alert.id },
+      data: {
+        metadata: {
+          alertState: input.alertState,
+          distanceMeters: input.distanceMeters,
+          canonicalAlertId,
+          version: alertVersion,
+          lifecycleState: dangerAlert.state,
+        },
+      },
     });
 
     const recipient = await (this.prisma as any).safetyAlertRecipient.create({
@@ -201,7 +243,7 @@ export class DangerZoneDeliveryService {
         dangerZoneId: input.dangerZoneId,
         incidentId: input.incidentId,
         alertState: input.alertState,
-        idempotencyKey: buildWatchDangerAlertJobId(alert.id, input.userId),
+        idempotencyKey: buildWatchDangerAlertJobId(canonicalAlertId, input.userId),
         dangerAlert,
         title,
         body,
@@ -271,12 +313,15 @@ export class DangerZoneDeliveryService {
         zoneId: dangerZoneId,
         incidentId: recipient.safetyAlert.incidentId,
         safetyAlertId: recipient.safetyAlertId,
+        userId: recipient.userId,
+        deviceId: recipient.deviceId,
         allClear: true,
         alertState: "AllClear",
         areaName: await this.resolveAreaName(dangerZoneId),
         notificationPriority: "Normal",
         acknowledgementRequired: false,
         repeatCount: 1,
+        config: this.config as unknown as Record<string, unknown>,
       });
 
       await this.notifications.create(

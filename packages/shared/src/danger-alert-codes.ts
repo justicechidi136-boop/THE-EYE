@@ -88,9 +88,20 @@ export const DEFAULT_WATCH_ACCESSIBILITY_PREFERENCES: WatchAccessibilityPreferen
   autoLanguageFallback: true,
 };
 
+export type DangerAlertSignature = {
+  keyId: string;
+  signature: string;
+  signedAt: string;
+};
+
 export type DangerZoneAlertPayloadV1 = {
   schemaVersion: typeof DANGER_ALERT_SCHEMA_VERSION;
   type: "DANGER_ZONE_ALERT";
+  /** Stable identity for the alert lifecycle — never changes across versions. */
+  alertId: string;
+  version: number;
+  sequence: number;
+  state: string;
   alertCode: DangerAlertCodeValue;
   priority: DangerAlertPriorityValue;
   incidentId: string;
@@ -103,7 +114,9 @@ export type DangerZoneAlertPayloadV1 = {
   expiresAt?: string;
   acknowledgementRequired: boolean;
   repeatCount: number;
+  /** Legacy proximity label — retained for analytics only. */
   alertState?: string;
   allClear?: boolean;
   deepLink?: string;
+  signature?: DangerAlertSignature;
 };
