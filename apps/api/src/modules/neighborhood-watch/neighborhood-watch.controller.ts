@@ -32,7 +32,7 @@ import { AiIntelligenceService } from "./ai-intelligence.service";
 export class NeighborhoodWatchController {
   constructor(
     private readonly neighborhoodWatch: NeighborhoodWatchService,
-    private readonly aiIntelligence: AiIntelligenceService,
+    private readonly aiIntelligenceService: AiIntelligenceService,
   ) {}
 
   @Get("communities")
@@ -303,7 +303,7 @@ export class NeighborhoodWatchController {
   @Get("admin/ai-intelligence")
   @RequirePermissions("community:read")
   aiIntelligence(@Req() request: any, @Query() query: Record<string, string | undefined>) {
-    return this.aiIntelligence.getDashboard(request.user, {
+    return this.aiIntelligenceService.getDashboard(request.user, {
       windowDays: query.windowDays ? Number(query.windowDays) : undefined,
       communityId: query.communityId,
     });
