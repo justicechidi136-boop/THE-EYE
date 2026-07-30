@@ -64,6 +64,7 @@ import "push/push_navigation.dart";
 import "push/push_notification_service.dart";
 import "broadcasts/broadcast_feed_cache.dart";
 import "broadcasts/broadcast_feed_service.dart";
+import "neighborhood_watch/community_post_validation.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
 import "neighborhood_watch/volunteer_categories.dart";
 import "incidents/live_video_incident_retry.dart";
@@ -1687,7 +1688,9 @@ class AppController extends SessionAccessor {
         communityId: community.id,
         type: type,
         title: title,
-        body: body,
+        body: body.trim().isNotEmpty
+            ? body.trim()
+            : normalizeVoiceOnlyCommunityPostBody(title),
         latitude: location.position?.latitude,
         longitude: location.position?.longitude,
         media: media,
@@ -6649,13 +6652,28 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
   }
 
   Future<void> _submit() async {
-    setState(() => _submitting = true);
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
     final attachments =
         _evidenceSectionKey.currentState?.attachments ?? const [];
+    if (title.length < 4) {
+      showAppSnackBar(context, "Post title must be at least 4 characters.",
+          isError: true);
+      return;
+    }
+    if (!hasValidCommunityPostNarrative(body: body, attachments: attachments)) {
+      showAppSnackBar(
+        context,
+        "Add details, a voice recording, or photo/video evidence.",
+        isError: true,
+      );
+      return;
+    }
+    setState(() => _submitting = true);
     final error = await appOf(context).createCommunityPost(
       type: _typeMap[_selectedType] ?? "SuspiciousActivity",
-      title: _titleController.text.trim(),
-      body: _bodyController.text.trim(),
+      title: title,
+      body: body,
       attachments: attachments,
       onMediaProgress: (localId, progress) =>
           _evidenceSectionKey.currentState?.markUploading(localId, progress),
@@ -6697,7 +6715,9 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
           TextField(
             controller: _bodyController,
             maxLines: 4,
-            decoration: const InputDecoration(labelText: "Details"),
+            decoration: const InputDecoration(
+              labelText: "Details (optional with voice or media)",
+            ),
           ),
           const SizedBox(height: 12),
           ManagedEvidenceSection(

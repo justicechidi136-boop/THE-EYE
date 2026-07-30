@@ -87,6 +87,43 @@ export class VoiceAttachmentsService {
     return updated;
   }
 
+  async getCommunityPostPlaybackUrl(postId: string, mediaId: string, actor?: JwtPayload) {
+    const media = await this.prisma.communityPostMedia.findFirst({
+      where: { id: mediaId, postId, deletedAt: null, mediaType: "Audio" },
+    });
+    if (!media) throw new NotFoundException("Community voice attachment not found");
+
+    await this.audit.record({
+      actor,
+      action: "voice.playback_requested",
+      entityType: "community_post_media",
+      entityId: mediaId,
+      reason: "Community post voice playback URL issued",
+      metadata: { postId, fileHash: media.fileHash },
+    });
+
+    return {
+      mediaId: media.id,
+      signedUrl: createS3PresignedGetUrl(media.objectKey, 300),
+      expiresInSeconds: 300,
+      durationSeconds: media.durationSeconds,
+      transcriptionStatus: media.transcriptionStatus,
+      transcript: media.transcript,
+      translatedTranscript: media.translatedTranscript,
+      selectedLanguage: media.selectedLanguage,
+      detectedLanguage: media.detectedLanguage,
+      transcriptionConfidence: media.transcriptionConfidence,
+      uploadedAt: media.createdAt,
+    };
+  }
+
+  async retryCommunityPostTranscription(postId: string, mediaId: string, actor?: JwtPayload) {
+    if (actor?.typ !== "admin") throw new ForbiddenException("Admin access required");
+    await this.getCommunityPostPlaybackUrl(postId, mediaId, actor);
+    await this.transcription.enqueueCommunityPostMediaTranscription(mediaId);
+    return { status: "queued", mediaId };
+  }
+
   validateVoiceMetadata(input: {
     durationSeconds?: number;
     selectedLanguage?: string;

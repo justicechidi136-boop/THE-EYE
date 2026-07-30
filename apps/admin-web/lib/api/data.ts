@@ -302,6 +302,28 @@ export async function fetchCommunityPosts(communityId?: string): Promise<Communi
   }, []);
 }
 
+export async function fetchCommunityPostDetail(postId: string): Promise<CommunityPostView> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(
+      `/neighborhood-watch/posts/${postId}`,
+      { token },
+    );
+    const record = (response.data ?? response) as Record<string, unknown>;
+    return toCommunityPostView(record);
+  }, {
+    id: postId,
+    community: "Unavailable",
+    type: "Post",
+    title: "Community post unavailable",
+    status: "Unknown",
+    confidence: 0,
+    linkedIncident: "-",
+    author: "-",
+    location: "-",
+    media: [],
+  });
+}
+
 export async function fetchCommunityDetail(communityId: string) {
   return withToken(async (token) => {
     const [communityResponse, posts, map, statisticsResponse] = await Promise.all([

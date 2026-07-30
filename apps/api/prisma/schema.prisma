@@ -356,6 +356,7 @@ model User {
   communityMemberships  CommunityMembership[]
   communityPosts        CommunityPost[]
   communityPostMedia    CommunityPostMedia[]
+  communityCommentMedia CommunityCommentMedia[] @relation("CommunityCommentMediaUploader")
   communityComments     CommunityPostComment[]
   communityReactions    CommunityPostReaction[]
   communityVerifications CommunityVerification[]
@@ -1098,7 +1099,7 @@ model CommunityPost {
   broadcastId     String?                     @map("broadcast_id") @db.Uuid
   type            CommunityPostType
   title           String
-  body            String
+  body            String?
   verificationStatus CommunityVerificationStatus @default(PendingVerification) @map("verification_status")
   confidenceScore Decimal                     @default(0.00) @map("confidence_score") @db.Decimal(5, 2)
   latitude        Decimal?                    @db.Decimal(9, 6)
@@ -1159,16 +1160,56 @@ model CommunityPostMedia {
 }
 
 model CommunityPostComment {
-  id        String        @id @default(uuid()) @db.Uuid
-  postId    String        @map("post_id") @db.Uuid
-  authorId  String        @map("author_id") @db.Uuid
-  body      String
-  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author    User          @relation(fields: [authorId], references: [id])
+  id              String                   @id @default(uuid()) @db.Uuid
+  postId          String                   @map("post_id") @db.Uuid
+  authorId        String                   @map("author_id") @db.Uuid
+  parentCommentId String?                  @map("parent_comment_id") @db.Uuid
+  body            String?
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  post            CommunityPost            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author          User                     @relation(fields: [authorId], references: [id])
+  parentComment   CommunityPostComment?    @relation("CommunityCommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         CommunityPostComment[]   @relation("CommunityCommentReplies")
+  media           CommunityCommentMedia[]
 
   @@index([postId, createdAt])
+  @@index([parentCommentId])
   @@map("community_post_comments")
+}
+
+model CommunityCommentMedia {
+  id                          String                    @id @default(uuid()) @db.Uuid
+  commentId                   String                    @map("comment_id") @db.Uuid
+  uploaderId                  String                    @map("uploader_id") @db.Uuid
+  mediaType                   MediaType                 @map("media_type")
+  bucket                      String
+  objectKey                   String                    @map("object_key")
+  contentType                 String                    @map("content_type")
+  fileHash                    String                    @map("file_hash")
+  capturedAt                  DateTime?                 @map("captured_at") @db.Timestamptz(6)
+  createdAt                   DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  durationSeconds             Int?                      @map("duration_seconds")
+  clientAttachmentId          String?                   @map("client_attachment_id")
+  selectedLanguage            String?                   @map("selected_language")
+  detectedLanguage            String?                   @map("detected_language")
+  languageDetectionConfidence Decimal?                  @map("language_detection_confidence") @db.Decimal(5, 4)
+  transcriptionStatus         VoiceTranscriptionStatus? @map("transcription_status")
+  transcript                  String?
+  translatedTranscript        String?                   @map("translated_transcript")
+  transcriptionConfidence     Decimal?                  @map("transcription_confidence") @db.Decimal(5, 4)
+  transcriptionProvider       String?                   @map("transcription_provider")
+  transcriptionErrorCode        String?                   @map("transcription_error_code")
+  transcriptionProcessedAt    DateTime?                 @map("transcription_processed_at") @db.Timestamptz(6)
+  moderationStatus            VoiceModerationStatus?    @map("moderation_status")
+  deletedAt                   DateTime?                 @map("deleted_at") @db.Timestamptz(6)
+  comment                     CommunityPostComment      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  uploader                    User                      @relation("CommunityCommentMediaUploader", fields: [uploaderId], references: [id])
+
+  @@unique([fileHash])
+  @@index([commentId])
+  @@index([transcriptionStatus])
+  @@index([clientAttachmentId])
+  @@map("community_comment_media")
 }
 
 model CommunityPostReaction {
