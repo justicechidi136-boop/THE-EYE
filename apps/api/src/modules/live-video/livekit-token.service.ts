@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHmac, randomUUID } from "crypto";
+import { resolveAppEnvironment } from "../../common/auth/firebase-environment";
 import { LiveVideoErrorCode } from "./live-video.errors";
 import { assertClientLivekitUrl, LiveKitClientUrlError } from "./livekit-client-url";
 
@@ -53,18 +54,35 @@ export class LiveKitTokenService {
   }
 
   /** Internal Docker/network URL — never returned to mobile clients. */
-  livekitUrl() {
+  internalLivekitUrl() {
+    const internal = String(this.config.get<string>("LIVEKIT_INTERNAL_URL", "") ?? "").trim();
+    if (internal) return internal;
     return this.config.get<string>("LIVEKIT_URL", "wss://livekit.local");
+  }
+
+  /** @deprecated Use internalLivekitUrl(). */
+  livekitUrl() {
+    return this.internalLivekitUrl();
   }
 
   /** Public WSS URL returned to mobile/watch/admin clients. */
   clientLivekitUrl(options: { requireWss?: boolean } = {}) {
-    const publicUrl = String(this.config.get<string>("NEXT_PUBLIC_LIVEKIT_URL", "") ?? "").trim();
+    const publicUrl = String(
+      this.config.get<string>("LIVEKIT_PUBLIC_URL") ??
+        this.config.get<string>("NEXT_PUBLIC_LIVEKIT_URL") ??
+        "",
+    ).trim();
     if (publicUrl) {
       return assertClientLivekitUrl(publicUrl, options);
     }
-    const fallback = this.livekitUrl();
-    return assertClientLivekitUrl(fallback, options);
+    const appEnv = resolveAppEnvironment(this.config as unknown as Record<string, unknown>);
+    if (appEnv === "staging" || appEnv === "production") {
+      throw new LiveKitClientUrlError(
+        LiveVideoErrorCode.CLIENT_LIVEKIT_URL_INVALID,
+        "LIVEKIT_PUBLIC_URL (or NEXT_PUBLIC_LIVEKIT_URL) must be configured for client live video",
+      );
+    }
+    return assertClientLivekitUrl(this.internalLivekitUrl(), options);
   }
 
   assertLiveKitConfigured(options: { requireWss?: boolean } = {}) {
@@ -77,6 +95,10 @@ export class LiveKitTokenService {
       );
     }
     this.clientLivekitUrl(options);
+  }
+
+  livekitApiKey() {
+    return this.config.get<string>("LIVEKIT_API_KEY", "dev-livekit-key");
   }
 
   mapConfigurationError(error: unknown): { code: string; message: string } {

@@ -8,6 +8,7 @@ export const LiveVideoErrorCode = {
   UPSTREAM_GATEWAY: "LIVE-VIDEO-009",
   CLIENT_LIVEKIT_URL_INVALID: "LIVE-VIDEO-010",
   UNEXPECTED: "LIVE-VIDEO-011",
+  TOKEN_CONNECTION_INCOMPLETE: "LIVE-VIDEO-TOKEN-001",
 } as const;
 
 export type LiveVideoErrorCodeValue =

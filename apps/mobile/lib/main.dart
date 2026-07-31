@@ -52,7 +52,7 @@ import "live_video/live_video_evidence_overlay.dart";
 import "live_video/live_video_preview_pane.dart";
 import "live_video/live_video_safe_log.dart";
 import "live_video/live_video_session_controller.dart";
-import "live_video/live_video_startup_trace.dart";
+import "live_video/live_video_start_validation.dart";
 import "brand.dart";
 import "config/app_flavor.dart";
 import "config/firebase_bootstrap.dart";
@@ -4614,6 +4614,16 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             (envelope["data"] as Map?)?["requestId"] as String?,
       );
       final startResult = LiveVideoStartResult.fromResponse(envelope);
+      logLiveVideoDiagnostic(
+        checkpoint: "start_response_decoded",
+        correlationId: startResult.correlationId,
+        incidentId: activeIncidentId,
+        sessionId: startResult.sessionId,
+        roomName: startResult.roomName,
+        urlScheme: liveVideoUrlHost(startResult.livekit.url)?.scheme,
+        urlHost: liveVideoUrlHost(startResult.livekit.url)?.host,
+        tokenFingerprint: liveVideoTokenFingerprint(startResult.livekit.token),
+      );
       liveSessionId = startResult.sessionId;
       roomName = startResult.roomName;
 
@@ -4664,6 +4674,21 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             ? "Live stream started. Location updates continue automatically."
             : emergencyLocationRetryMessage(access),
       );
+    } on LiveVideoStartValidationException catch (error) {
+      if (!mounted || _disposed) return;
+      _setStartupPhase(activeIncidentId == null
+          ? LiveVideoStartupPhase.failed
+          : LiveVideoStartupPhase.recovering);
+      final message =
+          "${liveVideoStartValidationUserMessage(error.reason)} Reference: ${LiveVideoErrorCodes.startResponseInvalid}.";
+      logLiveVideoDiagnostic(
+        checkpoint: "start_response_invalid",
+        correlationId: _startupTrace.clientTraceId,
+        incidentId: activeIncidentId,
+        internalReason: error.reason,
+        exceptionMessage: error.message,
+      );
+      showAppSnackBar(context, message, isError: true);
     } on TimeoutException {
       if (!mounted || _disposed) return;
       _setStartupPhase(activeIncidentId == null

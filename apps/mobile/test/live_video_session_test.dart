@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:the_eye_mobile/live_video/live_video_api_models.dart";
 import "package:the_eye_mobile/live_video/live_video_connection_state.dart";
 import "package:the_eye_mobile/live_video/live_video_evidence_overlay.dart";
+import "package:the_eye_mobile/live_video/live_video_start_validation.dart";
 
 void main() {
   group("live video api models", () {
@@ -28,7 +29,7 @@ void main() {
         "livekit": {
           "url": "wss://livekit.example",
           "roomName": "eye-incident-incident-1",
-          "token": "signed-token",
+          "token": "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.signature",
         },
       });
 
@@ -47,13 +48,86 @@ void main() {
           "livekit": {
             "url": "wss://livekit.example",
             "roomName": "eye-incident-incident-2",
-            "token": "nested-token",
+            "token": "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.signature",
           },
         },
       });
 
       expect(result.livekit.isValid, isTrue);
-      expect(result.livekit.token, "nested-token");
+      expect(result.livekit.token,
+          "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.signature");
+    });
+
+    test("parses connection object from start response", () {
+      final result = LiveVideoStartResult.fromResponse({
+        "data": {
+          "id": "session-3",
+          "incidentId": "incident-3",
+          "roomName": "eye-incident-incident-3",
+          "correlationId": "corr-3",
+          "participantIdentity": "user-user-3",
+        },
+        "connection": {
+          "serverUrl": "wss://staging-livekit.theeye.com.ng",
+          "participantToken": "header.payload.signature",
+          "participantIdentity": "user-user-3",
+          "roomName": "eye-incident-incident-3",
+          "expiresAt": "2099-01-01T00:00:00.000Z",
+        },
+      });
+
+      expect(result.livekit.isValid, isTrue);
+      expect(result.correlationId, "corr-3");
+      expect(result.livekit.url, "wss://staging-livekit.theeye.com.ng");
+    });
+
+    test("fails explicitly when server URL missing", () {
+      expect(
+        () => LiveVideoStartResult.fromResponse({
+          "data": {"id": "session-4", "roomName": "room-4"},
+          "livekit": {"token": "a.b.c", "roomName": "room-4"},
+        }),
+        throwsA(isA<LiveVideoStartValidationException>().having(
+          (error) => error.reason,
+          "reason",
+          LiveVideoStartValidationReason.urlMissing,
+        )),
+      );
+    });
+
+    test("fails explicitly when token missing", () {
+      expect(
+        () => LiveVideoStartResult.fromResponse({
+          "data": {"id": "session-5", "roomName": "room-5"},
+          "livekit": {
+            "url": "wss://staging-livekit.theeye.com.ng",
+            "roomName": "room-5",
+          },
+        }),
+        throwsA(isA<LiveVideoStartValidationException>().having(
+          (error) => error.reason,
+          "reason",
+          LiveVideoStartValidationReason.tokenMissing,
+        )),
+      );
+    });
+
+    test("fails explicitly when token malformed", () {
+      expect(
+        () => LiveVideoStartResult.fromResponse({
+          "data": {"id": "session-6", "roomName": "room-6"},
+          "livekit": {
+            "url": "wss://staging-livekit.theeye.com.ng",
+            "roomName": "room-6",
+            "token": "not-a-jwt",
+          },
+        }),
+        throwsA(isA<LiveVideoStartValidationException>().having(
+          (error) => error.reason,
+          "reason",
+          LiveVideoStartValidationReason.tokenMalformed,
+        )),
+      );
     });
 
     test("maps token failure without leaking secrets", () {

@@ -1,4 +1,6 @@
 /// Stable Live Emergency Video error codes — aligned with API taxonomy.
+import "live_video_start_validation.dart";
+
 abstract final class LiveVideoErrorCodes {
   static const incidentUnavailable = "LIVE-VIDEO-001";
   static const notAuthorized = "LIVE-VIDEO-002";
@@ -14,6 +16,27 @@ abstract final class LiveVideoErrorCodes {
   static const connectLivekitFailed = "LIVE-VIDEO-015";
   static const publishTracksFailed = "LIVE-VIDEO-016";
   static const authRequired = "LIVE-VIDEO-AUTH-001";
+  static const startResponseInvalid = "LIVE-VIDEO-010";
+}
+
+String liveVideoStartValidationUserMessage(String reason) {
+  return switch (reason) {
+    LiveVideoStartValidationReason.urlMissing =>
+      "Live video server URL was not returned by the API.",
+    LiveVideoStartValidationReason.tokenMissing =>
+      "Live video access token was not returned by the API.",
+    LiveVideoStartValidationReason.roomMissing =>
+      "Live video room name was not returned by the API.",
+    LiveVideoStartValidationReason.tokenMalformed =>
+      "Live video access token from the API was malformed.",
+    LiveVideoStartValidationReason.tokenExpired =>
+      "Live video access token from the API was already expired.",
+    LiveVideoStartValidationReason.urlInvalidScheme =>
+      "Live video server URL from the API was invalid.",
+    LiveVideoStartValidationReason.schemaMismatch =>
+      "Live video start response was missing connection details.",
+    _ => "Live video start response could not be validated.",
+  };
 }
 
 String mapLiveVideoApiError(int statusCode, String message, {String? apiCode}) {

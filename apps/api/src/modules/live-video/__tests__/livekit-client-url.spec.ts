@@ -10,6 +10,9 @@ describe("assertClientLivekitUrl", () => {
 
   it("rejects docker-internal hostnames", () => {
     expect(() => assertClientLivekitUrl("ws://livekit:7880")).toThrow(LiveKitClientUrlError);
+    expect(() => assertClientLivekitUrl("wss://host.docker.internal:7880")).toThrow(
+      LiveKitClientUrlError,
+    );
     try {
       assertClientLivekitUrl("ws://livekit:7880");
     } catch (error) {

@@ -9,6 +9,7 @@ import "live_video_api_models.dart";
 import "live_video_connection_state.dart";
 import "live_video_error_codes.dart";
 import "live_video_safe_log.dart";
+import "live_video_start_validation.dart";
 
 class LiveVideoPermissionOutcome {
   const LiveVideoPermissionOutcome({required this.granted, this.message});
@@ -39,6 +40,10 @@ class LiveVideoSessionController extends ChangeNotifier {
   String? errorMessage;
   String roomName = "";
   String sessionId = "";
+  String correlationId = "";
+  String? lastConnectFailureReason;
+  String? lastConnectExceptionType;
+  String? lastConnectExceptionMessage;
   bool recordingConfigured = false;
   Map<String, dynamic>? evidenceOverlayRaw;
 
@@ -135,12 +140,10 @@ class LiveVideoSessionController extends ChangeNotifier {
   }
 
   Future<bool> connectPublisher(LiveVideoStartResult startResult) async {
-    if (!startResult.livekit.isValid) {
-      _setState(LiveVideoConnectionState.failed,
-          message:
-              "Live video access token was not returned by the server. Reference: ${LiveVideoErrorCodes.clientLivekitUrlInvalid}.");
-      return false;
-    }
+    correlationId = startResult.correlationId;
+    lastConnectFailureReason = null;
+    lastConnectExceptionType = null;
+    lastConnectExceptionMessage = null;
 
     _credentials = startResult.livekit;
     roomName = startResult.roomName;
@@ -148,6 +151,19 @@ class LiveVideoSessionController extends ChangeNotifier {
     recordingConfigured = startResult.recordingConfigured;
     evidenceOverlayRaw = startResult.evidenceOverlay;
     _setState(LiveVideoConnectionState.connecting);
+
+    final uri = liveVideoUrlHost(_credentials!.url);
+    final tokenFingerprint = liveVideoTokenFingerprint(_credentials!.token);
+    logLiveVideoDiagnostic(
+      checkpoint: "connect_begin",
+      correlationId: correlationId,
+      sessionId: sessionId,
+      roomName: roomName,
+      urlScheme: uri?.scheme,
+      urlHost: uri?.host,
+      tokenFingerprint: tokenFingerprint,
+      connectionState: connectionState.name,
+    );
 
     try {
       _room = Room(
@@ -167,6 +183,15 @@ class LiveVideoSessionController extends ChangeNotifier {
         ),
       );
       _bindRoomEvents(_room!);
+      logLiveVideoDiagnostic(
+        checkpoint: "room_connect_begin",
+        correlationId: correlationId,
+        sessionId: sessionId,
+        roomName: roomName,
+        urlScheme: uri?.scheme,
+        urlHost: uri?.host,
+        tokenFingerprint: tokenFingerprint,
+      );
       await _room!
           .connect(
             _credentials!.url,
@@ -179,12 +204,50 @@ class LiveVideoSessionController extends ChangeNotifier {
               "LiveKit connect timed out after ${connectTimeout.inSeconds}s",
             ),
           );
+      logLiveVideoDiagnostic(
+        checkpoint: "room_connect_succeeded",
+        correlationId: correlationId,
+        sessionId: sessionId,
+        roomName: roomName,
+        connectionState: _room!.connectionState.name,
+      );
+    } catch (error, stackTrace) {
+      lastConnectFailureReason = "ROOM_CONNECT_FAILED";
+      lastConnectExceptionType = error.runtimeType.toString();
+      lastConnectExceptionMessage = error.toString();
+      logLiveVideoDiagnostic(
+        checkpoint: "room_connect_failed",
+        correlationId: correlationId,
+        sessionId: sessionId,
+        roomName: roomName,
+        urlScheme: uri?.scheme,
+        urlHost: uri?.host,
+        tokenFingerprint: tokenFingerprint,
+        exceptionType: lastConnectExceptionType,
+        exceptionMessage: lastConnectExceptionMessage,
+        internalReason: lastConnectFailureReason,
+      );
+      if (kDebugMode) {
+        debugPrintStack(stackTrace: stackTrace, label: "live_video_room_connect");
+      }
+      final code = LiveVideoErrorCodes.connectLivekitFailed;
+      _setState(
+        LiveVideoConnectionState.failed,
+        message: error is TimeoutException
+            ? "Live video connection timed out. Check network and try again. Reference: $code."
+            : "Unable to join the live video room (${lastConnectExceptionType}: ${lastConnectExceptionMessage}). Reference: $code.",
+      );
+      return false;
+    }
 
+    try {
       _localAudioTrack ??= await LocalAudioTrack.create();
       await _localAudioTrack!.start();
 
       final participant = _room!.localParticipant;
-      if (participant == null) throw Exception("Local participant unavailable");
+      if (participant == null) {
+        throw StateError("Local participant unavailable after room connect");
+      }
 
       if (_localVideoTrack != null) {
         await participant.publishVideoTrack(_localVideoTrack!);
@@ -194,18 +257,35 @@ class LiveVideoSessionController extends ChangeNotifier {
       await participant.setCameraEnabled(_cameraEnabled);
 
       _setState(LiveVideoConnectionState.connected);
-      logLiveVideoEvent("Live video publisher connected to room $roomName");
+      logLiveVideoDiagnostic(
+        checkpoint: "tracks_published",
+        correlationId: correlationId,
+        sessionId: sessionId,
+        roomName: roomName,
+        connectionState: connectionState.name,
+      );
       return true;
-    } catch (error) {
-      logLiveVideoEvent("Live video publisher connection failed");
-      final code = error is TimeoutException
-          ? LiveVideoErrorCodes.connectLivekitFailed
-          : LiveVideoErrorCodes.connectLivekitFailed;
+    } catch (error, stackTrace) {
+      lastConnectFailureReason = "TRACK_PUBLISH_FAILED";
+      lastConnectExceptionType = error.runtimeType.toString();
+      lastConnectExceptionMessage = error.toString();
+      logLiveVideoDiagnostic(
+        checkpoint: "track_publish_failed",
+        correlationId: correlationId,
+        sessionId: sessionId,
+        roomName: roomName,
+        exceptionType: lastConnectExceptionType,
+        exceptionMessage: lastConnectExceptionMessage,
+        internalReason: lastConnectFailureReason,
+      );
+      if (kDebugMode) {
+        debugPrintStack(stackTrace: stackTrace, label: "live_video_track_publish");
+      }
+      final code = LiveVideoErrorCodes.publishTracksFailed;
       _setState(
         LiveVideoConnectionState.failed,
-        message: error is TimeoutException
-            ? "Live video connection timed out. Check network and try again. Reference: $code."
-            : "Unable to join the live video room. Try again. Reference: $code.",
+        message:
+            "Connected to live video but could not publish camera/microphone (${lastConnectExceptionType}: ${lastConnectExceptionMessage}). Reference: $code.",
       );
       return false;
     }
