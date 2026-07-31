@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { AppShell } from "../../../../../components/app-shell";
-import { SmartwatchSubnav } from "../../../../../components/smartwatch/smartwatch-subnav";
-import { PageHeader, Panel, StatusBadge } from "../../../../../components/ui";
-import { fetchWatchInventory, fetchWatchOwnerDetail } from "../../../../../lib/api/data";
-import { getAdminSession } from "../../../../../lib/session";
-import { canManageSmartwatches } from "../../../../../lib/smartwatch-permissions";
+import { AppShell } from "../../../../../../../components/app-shell";
+import { SmartwatchSubnav } from "../../../../../../../components/smartwatch/smartwatch-subnav";
+import { PageHeader, Panel, StatusBadge } from "../../../../../../../components/ui";
+import { fetchWatchInventory, fetchWatchOwnerDetail } from "../../../../../../../lib/api/data";
+import { getAdminSession } from "../../../../../../../lib/session";
+import { canManageSmartwatches } from "../../../../../../../lib/smartwatch-permissions";
+import type { WatchInventoryRowView } from "../../../../../../../lib/types/admin-views";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,7 @@ export default async function WatchOwnerDetailPage({ params }: { params: Params 
                 <tr><th className="px-3 py-2">Device</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Assignee</th><th className="px-3 py-2">Battery</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {inventory.data.map((row) => (
+                {inventory.data.map((row: WatchInventoryRowView) => (
                   <tr key={row.id}>
                     <td className="px-3 py-2"><Link href={`/devices/smart-watches/${row.id}`} className="text-eye hover:underline">{row.deviceId}</Link></td>
                     <td className="px-3 py-2"><StatusBadge tone={row.onlineStatus === "Online" ? "success" : "warning"}>{row.onlineStatus}</StatusBadge></td>

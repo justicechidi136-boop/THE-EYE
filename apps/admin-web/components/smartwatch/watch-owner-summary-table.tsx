@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { WatchOwnerSummaryView } from "../../../lib/types/admin-views";
+import type { WatchOwnerSummaryView } from "../../lib/types/admin-views";
 
 type Props = {
   owners: WatchOwnerSummaryView[];

@@ -126,7 +126,9 @@ export class WatchFleetService {
   async ownerDetail(actor: JwtPayload, ownerType: string, ownerId: string) {
     this.assertAdmin(actor);
     const permitted = canViewWatchSensitiveFields(actor);
-    const summary = await this.buildOwnerSummary(ownerType, ownerId, actor);
+    const summary: Record<string, unknown> = {
+      ...(await this.buildOwnerSummary(ownerType, ownerId, actor)),
+    };
 
     const [ownershipHistory, assignmentHistory, transferHistory, auditHistory] = await Promise.all([
       ownerType !== WatchOwnerType.UnassignedInventory
@@ -288,8 +290,11 @@ export class WatchFleetService {
       orgIds.length ? (this.prisma as any).watchOrganization.findMany({ where: { id: { in: orgIds } } }) : [],
     ]);
 
-    const userById = new Map(users.map((u) => [u.id, u]));
-    const orgById = new Map(orgs.map((o: { id: string }) => [o.id, o]));
+    const userById = new Map(users.map((u) => [u.id, u] as const));
+    type WatchOrgSummary = { id: string; name: string; status: string; phone?: string; email?: string };
+    const orgById = new Map<string, WatchOrgSummary>(
+      (orgs as WatchOrgSummary[]).map((o) => [o.id, o]),
+    );
 
     return rows.map((row) => {
       const ownerKey = `${row.current_owner_type}:${row.current_owner_id ?? "none"}`;
@@ -434,8 +439,11 @@ export class WatchFleetService {
         : [],
     ]);
 
-    const profileByUser = new Map(profiles.map((p) => [p.userId, p]));
-    const orgById = new Map(orgs.map((o: { id: string }) => [o.id, o]));
+    const profileByUser = new Map(profiles.map((p) => [p.userId, p] as const));
+    type WatchOrgGeo = { id: string; country: string; state: string; lga: string };
+    const orgById = new Map<string, WatchOrgGeo>(
+      (orgs as WatchOrgGeo[]).map((o) => [o.id, o]),
+    );
 
     return groups.filter((group) => {
       if (group.currentOwnerType === WatchOwnerType.UnassignedInventory) return true;

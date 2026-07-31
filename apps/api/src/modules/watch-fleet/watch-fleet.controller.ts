@@ -54,7 +54,20 @@ export class WatchFleetController {
 
   @Post("devices/register-inventory")
   @RequirePermissions("user:manage")
-  registerInventory(@Req() request: any, @Body() body: Record<string, string>) {
+  registerInventory(
+    @Req() request: any,
+    @Body()
+    body: {
+      deviceId: string;
+      serialNumber?: string;
+      imei?: string;
+      eid?: string;
+      model?: string;
+      manufacturer?: string;
+      inventoryLocationId?: string;
+      provider?: string;
+    },
+  ) {
     return this.ownership.registerInventoryDevice(request.user, body);
   }
 

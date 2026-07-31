@@ -529,6 +529,11 @@ export async function fetchWatchOwnerDetail(ownerType: string, ownerId: string):
     lostStolenWatches: 0,
     lastDeviceActivity: null,
     accountStatus: null,
+    ownershipHistory: [],
+    assignmentHistory: [],
+    transferHistory: [],
+    auditHistory: [],
+    departments: [],
   });
 }
 
