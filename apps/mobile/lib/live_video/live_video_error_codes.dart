@@ -1,6 +1,6 @@
-/// Stable Live Emergency Video error codes — aligned with API taxonomy.
 import "live_video_start_validation.dart";
 
+/// Stable Live Emergency Video error codes — aligned with API taxonomy.
 abstract final class LiveVideoErrorCodes {
   static const incidentUnavailable = "LIVE-VIDEO-001";
   static const notAuthorized = "LIVE-VIDEO-002";

@@ -235,7 +235,7 @@ class LiveVideoSessionController extends ChangeNotifier {
         LiveVideoConnectionState.failed,
         message: error is TimeoutException
             ? "Live video connection timed out. Check network and try again. Reference: $code."
-            : "Unable to join the live video room (${lastConnectExceptionType}: ${lastConnectExceptionMessage}). Reference: $code.",
+            : "Unable to join the live video room ($lastConnectExceptionType: $lastConnectExceptionMessage). Reference: $code.",
       );
       return false;
     }
@@ -285,7 +285,7 @@ class LiveVideoSessionController extends ChangeNotifier {
       _setState(
         LiveVideoConnectionState.failed,
         message:
-            "Connected to live video but could not publish camera/microphone (${lastConnectExceptionType}: ${lastConnectExceptionMessage}). Reference: $code.",
+            "Connected to live video but could not publish camera/microphone ($lastConnectExceptionType: $lastConnectExceptionMessage). Reference: $code.",
       );
       return false;
     }

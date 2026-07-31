@@ -52,6 +52,8 @@ import "live_video/live_video_evidence_overlay.dart";
 import "live_video/live_video_preview_pane.dart";
 import "live_video/live_video_safe_log.dart";
 import "live_video/live_video_session_controller.dart";
+import "live_video/live_video_error_codes.dart";
+import "live_video/live_video_startup_trace.dart";
 import "live_video/live_video_start_validation.dart";
 import "brand.dart";
 import "config/app_flavor.dart";
