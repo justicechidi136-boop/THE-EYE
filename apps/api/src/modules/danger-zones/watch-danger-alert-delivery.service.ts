@@ -59,8 +59,19 @@ export class WatchDangerAlertDeliveryService {
       ? await (this.prisma as any).smartwatchDevice.findUnique({ where: { id: payload.deviceId } })
       : null;
 
-    const connectivityMode = String(device?.connectivityMode ?? "PairedPhone");
+    const connectivityMode = String(
+      payload.connectivityModeOverride ?? device?.connectivityMode ?? "PairedPhone",
+    );
     const isStandalone = connectivityMode === "StandaloneCellular" || connectivityMode === "Standalone";
+    const channelMode = payload.channelMode ?? "auto";
+    const allowPhoneRelay =
+      flags.WATCH_PHONE_RELAY &&
+      !isStandalone &&
+      (channelMode === "auto" || channelMode === "phone_relay" || channelMode === "both");
+    const allowWatchPush =
+      flags.WATCH_STANDALONE_ALERTS &&
+      payload.deviceId &&
+      (channelMode === "auto" || channelMode === "watch_push" || channelMode === "both");
     const notificationMetadata = {
       dangerAlert: payload.dangerAlert,
       safetyAlertId: payload.safetyAlertId,
@@ -73,7 +84,7 @@ export class WatchDangerAlertDeliveryService {
 
     const results: Array<{ channel: string; notificationId?: string }> = [];
 
-    if (flags.WATCH_PHONE_RELAY && !isStandalone) {
+    if (allowPhoneRelay) {
       const phoneResult = await this.notifications.create(
         {
           userId: payload.userId,
@@ -102,7 +113,7 @@ export class WatchDangerAlertDeliveryService {
       });
     }
 
-    if (flags.WATCH_STANDALONE_ALERTS && payload.deviceId) {
+    if (allowWatchPush) {
       const watchResult = await this.notifications.create(
         {
           userId: payload.userId,

@@ -7,6 +7,7 @@ export const WatchFeatureFlag = {
   HeadphonePrivacy: "WATCH_HEADPHONE_PRIVACY",
   QuietHours: "WATCH_QUIET_HOURS",
   AdminTestAlert: "WATCH_ADMIN_TEST_ALERT",
+  AdminTelemetry: "WATCH_ADMIN_TELEMETRY",
 } as const;
 
 export type WatchFeatureFlagKey = (typeof WatchFeatureFlag)[keyof typeof WatchFeatureFlag];
@@ -22,6 +23,7 @@ export const DEFAULT_WATCH_FEATURE_FLAGS: WatchFeatureFlags = {
   WATCH_HEADPHONE_PRIVACY: true,
   WATCH_QUIET_HOURS: true,
   WATCH_ADMIN_TEST_ALERT: false,
+  WATCH_ADMIN_TELEMETRY: true,
 };
 
 export const WATCH_FEATURE_FLAG_ENV_KEYS = Object.values(WatchFeatureFlag);

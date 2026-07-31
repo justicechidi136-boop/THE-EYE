@@ -20,6 +20,8 @@ class WatchFeatureFlagsService {
     'WATCH_PHONE_RELAY': true,
     'WATCH_HEADPHONE_PRIVACY': true,
     'WATCH_QUIET_HOURS': true,
+    'WATCH_ADMIN_TEST_ALERT': false,
+    'WATCH_ADMIN_TELEMETRY': true,
   };
 
   bool isEnabled(String flag, {bool fallback = true}) =>

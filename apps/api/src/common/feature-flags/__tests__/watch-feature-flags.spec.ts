@@ -1,4 +1,4 @@
-import { resolveWatchFeatureFlags, isWatchFeatureEnabled } from "../watch-feature-flags";
+import { resolveWatchFeatureFlags, isWatchFeatureEnabled, inspectWatchFeatureFlags } from "../watch-feature-flags";
 
 describe("watch feature flags", () => {
   it("defaults all production-safe flags on", () => {
@@ -30,5 +30,19 @@ describe("watch feature flags", () => {
     expect(flags.WATCH_PHONE_RELAY).toBe(false);
     expect(flags.WATCH_HEADPHONE_PRIVACY).toBe(false);
     expect(isWatchFeatureEnabled({ WATCH_PHONE_RELAY: "0" }, "WATCH_PHONE_RELAY")).toBe(false);
+  });
+
+  it("reports contradictory flag combinations", () => {
+    const validation = inspectWatchFeatureFlags({
+      WATCH_SPOKEN_DANGER_ALERTS: "0",
+      WATCH_STANDALONE_ALERTS: "1",
+    });
+    expect(validation.valid).toBe(true);
+    expect(validation.issues.some((issue) => issue.code === "SPOKEN_OFF_DELIVERY_ON")).toBe(true);
+  });
+
+  it("includes admin telemetry flag by default", () => {
+    const flags = resolveWatchFeatureFlags({});
+    expect(flags.WATCH_ADMIN_TELEMETRY).toBe(true);
   });
 });

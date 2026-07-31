@@ -3,5 +3,6 @@ export * from "./contracts";
 export * from "./danger-alert-codes";
 export * from "./danger-alert-identity";
 export * from "./watch-feature-flags";
+export * from "./watch-feature-flag-validation";
 export type { Permission } from "./permissions";
 export { adminRolePermissions, userRolePermissions, rolePermissions } from "./permissions";

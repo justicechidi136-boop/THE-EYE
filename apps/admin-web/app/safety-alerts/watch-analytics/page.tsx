@@ -2,13 +2,13 @@ import { AppShell } from "../../../components/app-shell";
 import { SafetyAlertsSubnav } from "../../../components/safety-alerts/safety-alerts-subnav";
 import { StagingWatchTestAlertForm } from "../../../components/safety-alerts/staging-watch-test-alert-form";
 import { PageHeader, Panel } from "../../../components/ui";
-import { fetchWatchFeatureFlags, fetchWatchNotificationAnalytics } from "../../../lib/api/data";
+import { fetchWatchFeatureFlags, fetchWatchNotificationAnalytics, type WatchFeatureFlagsResponse } from "../../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function WatchAnalyticsPage() {
   let analytics: Awaited<ReturnType<typeof fetchWatchNotificationAnalytics>> | null = null;
-  let flags: Record<string, boolean> | null = null;
+  let flags: WatchFeatureFlagsResponse | null = null;
   let error: string | null = null;
 
   try {
@@ -22,7 +22,9 @@ export default async function WatchAnalyticsPage() {
 
   const totals = analytics?.totals ?? {};
   const events = analytics?.events ?? [];
-  const testAlertEnabled = flags?.WATCH_ADMIN_TEST_ALERT === true;
+  const flagEntries = flags?.flags ?? {};
+  const flagValidation = flags?.validation;
+  const testAlertEnabled = flagEntries.WATCH_ADMIN_TEST_ALERT === true;
 
   return (
     <AppShell>
@@ -53,8 +55,7 @@ export default async function WatchAnalyticsPage() {
         <div className="lg:col-span-2">
           <Panel title="Feature flags">
           <div className="flex flex-wrap gap-2">
-            {flags
-              ? Object.entries(flags).map(([flag, enabled]) => (
+            {Object.entries(flagEntries).map(([flag, enabled]) => (
                   <span
                     key={flag}
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -63,9 +64,17 @@ export default async function WatchAnalyticsPage() {
                   >
                     {flag}: {enabled ? "ON" : "OFF"}
                   </span>
-                ))
-              : null}
+                ))}
           </div>
+          {flagValidation && !flagValidation.valid ? (
+            <div className="mt-4 space-y-2">
+              {flagValidation.issues.map((issue) => (
+                <p key={issue.code} className="text-xs text-amber-700">
+                  {issue.severity.toUpperCase()}: {issue.message}
+                </p>
+              ))}
+            </div>
+          ) : null}
         </Panel>
         </div>
       </div>

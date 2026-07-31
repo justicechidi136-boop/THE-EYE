@@ -811,14 +811,30 @@ export async function sendNotification(input: SendNotificationInput) {
 }
 
 export type WatchNotificationAnalytics = {
+  scope?: Record<string, string | undefined> | null;
   totals: Record<string, number>;
   events: Array<Record<string, unknown>>;
+};
+
+export type WatchFeatureFlagsResponse = {
+  flags: Record<string, boolean>;
+  validation?: {
+    valid: boolean;
+    issues: Array<{ code: string; message: string; severity: string; flags: string[] }>;
+  };
 };
 
 export async function fetchWatchNotificationAnalytics(query?: {
   from?: string;
   to?: string;
   language?: string;
+  country?: string;
+  state?: string;
+  lga?: string;
+  channel?: string;
+  alertCode?: string;
+  deliveryStatus?: string;
+  acknowledged?: string;
 }) {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");
@@ -831,7 +847,7 @@ export async function fetchWatchNotificationAnalytics(query?: {
 export async function fetchWatchFeatureFlags() {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");
-  return apiRequest<Record<string, boolean>>("/admin/watch-notifications/feature-flags", {
+  return apiRequest<WatchFeatureFlagsResponse>("/admin/watch-notifications/feature-flags", {
     token,
   });
 }
@@ -842,6 +858,8 @@ export async function sendStagingWatchTestAlert(input: {
   alertCode?: string;
   languageHint?: string;
   priority?: "CRITICAL" | "HIGH" | "MEDIUM";
+  channelMode?: "auto" | "phone_relay" | "watch_push" | "both";
+  connectivityModeOverride?: "PairedPhone" | "StandaloneCellular" | "Standalone";
 }) {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");
