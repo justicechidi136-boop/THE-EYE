@@ -3,7 +3,7 @@ import "dart:io" show Directory, File, Platform;
 
 import "package:firebase_core/firebase_core.dart";
 import "package:firebase_messaging/firebase_messaging.dart";
-import "package:flutter/foundation.dart" show kIsWeb;
+import "package:flutter/foundation.dart" show kDebugMode, kIsWeb;
 import "package:flutter/material.dart";
 import "package:geolocator/geolocator.dart";
 import "package:google_fonts/google_fonts.dart";
