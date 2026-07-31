@@ -329,7 +329,7 @@ describe("SmartwatchService", () => {
     expect(result.status).toBe("activated");
     expect(result.watch.deviceId).toBe("EYE-WATCH-001");
     expect(result.authentication.accessToken).toContain(".");
-    expect(result.deviceSecret).toBeTruthy();
+    expect(Boolean(result.deviceSecret)).toBe(true);
     expect(prisma.smartwatchDevice.upsert).toHaveBeenCalled();
     expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "smartwatch.device_activated_with_code",
