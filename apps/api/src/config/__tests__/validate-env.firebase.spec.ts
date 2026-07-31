@@ -119,7 +119,7 @@ describe("validateEnvironment firebase isolation", () => {
         FCM_PROJECT_ID: STAGING_FIREBASE_PROJECT_ID,
         FIREBASE_PROJECT_ID: STAGING_FIREBASE_PROJECT_ID,
       },
-      "NEXT_PUBLIC_LIVEKIT_URL must be a public wss:// URL in staging",
+      "LIVEKIT_PUBLIC_URL (or NEXT_PUBLIC_LIVEKIT_URL) must be a public wss:// URL in staging",
     );
   });
 });

@@ -1,4 +1,5 @@
 import { ConfigService } from "@nestjs/config";
+import { LiveKitClientUrlError } from "../livekit-client-url";
 import { LiveKitTokenService } from "../livekit-token.service";
 
 describe("LiveKitTokenService", () => {
@@ -66,6 +67,34 @@ describe("LiveKitTokenService", () => {
       LIVEKIT_API_SECRET: "secret",
       LIVEKIT_URL: "ws://livekit:7880",
       NEXT_PUBLIC_LIVEKIT_URL: "wss://staging-livekit.example.com",
+    };
+    const config = {
+      get: jest.fn((key: string, fallback: string) => values[key] ?? fallback),
+    } as unknown as ConfigService;
+    const service = new LiveKitTokenService(config);
+    expect(service.clientLivekitUrl()).toBe("wss://staging-livekit.example.com");
+  });
+
+  it("requires explicit public URL in staging instead of internal fallback", () => {
+    const values: Record<string, string> = {
+      LIVEKIT_API_KEY: "key",
+      LIVEKIT_API_SECRET: "secret",
+      LIVEKIT_URL: "ws://host.docker.internal:7880",
+      THE_EYE_APP_ENV: "staging",
+    };
+    const config = {
+      get: jest.fn((key: string, fallback: string) => values[key] ?? fallback),
+    } as unknown as ConfigService;
+    const service = new LiveKitTokenService(config);
+    expect(() => service.clientLivekitUrl({ requireWss: true })).toThrow(LiveKitClientUrlError);
+  });
+
+  it("prefers LIVEKIT_PUBLIC_URL over internal LIVEKIT_URL", () => {
+    const values: Record<string, string> = {
+      LIVEKIT_API_KEY: "key",
+      LIVEKIT_API_SECRET: "secret",
+      LIVEKIT_URL: "ws://livekit:7880",
+      LIVEKIT_PUBLIC_URL: "wss://staging-livekit.example.com",
     };
     const config = {
       get: jest.fn((key: string, fallback: string) => values[key] ?? fallback),

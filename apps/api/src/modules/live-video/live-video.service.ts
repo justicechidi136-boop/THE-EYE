@@ -1,11 +1,13 @@
 import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { LinkLiveVideoEvidenceDto, LiveVideoLocationUpdateDto, StartLiveVideoDto, validateEvidenceLink, validateLocationUpdate } from "./dto/live-video.dto";
+import { buildLiveVideoConnectionDto } from "./live-video-connection.dto";
+import { buildLiveVideoConnectionDiagnostics, decodeJwtExpiryIso } from "./live-video-diagnostics";
 import { LiveVideoErrorCode, liveVideoErrorBody } from "./live-video.errors";
 import { LiveKitTokenService } from "./livekit-token.service";
 
@@ -158,6 +160,18 @@ export class LiveVideoService {
       );
     }
     try {
+      console.log(
+        JSON.stringify({
+          level: "info",
+          scope: "live_video.token_generation",
+          incidentId,
+          sessionId: session.id,
+          roomName,
+          participantIdentity: identity,
+          correlationId: trace.clientTraceId || trace.requestId || session.id,
+          status: "started",
+        }),
+      );
       token = this.livekitTokens.createToken({
         identity,
         name: "Citizen emergency video",
@@ -178,6 +192,40 @@ export class LiveVideoService {
       );
     }
 
+    const tokenExpiresAt = decodeJwtExpiryIso(token);
+    const correlationId = String(trace.clientTraceId || trace.requestId || randomUUID());
+    const connection = buildLiveVideoConnectionDto({
+      serverUrl: clientUrl,
+      participantToken: token,
+      participantIdentity: identity,
+      roomName,
+      expiresAt: tokenExpiresAt,
+    });
+
+    if (
+      !connection.serverUrl ||
+      !connection.participantToken ||
+      !connection.roomName ||
+      !connection.participantIdentity
+    ) {
+      throw new InternalServerErrorException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.TOKEN_CONNECTION_INCOMPLETE,
+          "Live video connection details could not be constructed",
+          trace.requestId,
+          { correlationId },
+        ),
+      );
+    }
+
+    const tokenDiagnostics = buildLiveVideoConnectionDiagnostics({
+      serverUrl: clientUrl,
+      roomName,
+      participantIdentity: identity,
+      token,
+      apiKey: this.livekitTokens.livekitApiKey(),
+    });
+
     const durationMs = Date.now() - startedAt;
     this.metrics.recordLiveVideoOperation("start", durationMs / 1000, "success");
     console.log(
@@ -186,11 +234,18 @@ export class LiveVideoService {
         ...logContext,
         sessionId: session.id,
         roomName,
+        correlationId,
         durationMs,
         locationPersistDegraded,
         warningCodes: locationPersistDegraded
           ? [LiveVideoErrorCode.LOCATION_PERSIST_DEGRADED]
           : [],
+        tokenGeneration: {
+          status: "succeeded",
+          roomGrant: roomName,
+          participantIdentity: identity,
+          ...tokenDiagnostics,
+        },
       }),
     );
 
@@ -205,12 +260,16 @@ export class LiveVideoService {
         startupTimingMs: durationMs,
         requestId: trace.requestId,
         clientTraceId: trace.clientTraceId,
+        correlationId,
+        participantIdentity: identity,
+        connection,
       },
       livekit: {
         url: clientUrl,
         roomName,
         token,
       },
+      connection,
     };
   }
 

@@ -1,7 +1,7 @@
 import { LiveVideoErrorCode } from "./live-video.errors";
 
 const INTERNAL_HOST_PATTERN =
-  /^wss?:\/\/(?:livekit|localhost|127\.0\.0\.1|api|admin-web)(?:[:/]|$)/i;
+  /^wss?:\/\/(?:livekit|localhost|127\.0\.0\.1|host\.docker\.internal|api|admin-web)(?:[:/]|$)/i;
 const PRIVATE_IPV4_PATTERN =
   /^wss?:\/\/(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.)/i;
 
@@ -23,7 +23,7 @@ export function assertClientLivekitUrl(
   if (!url) {
     throw new LiveKitClientUrlError(
       LiveVideoErrorCode.CLIENT_LIVEKIT_URL_INVALID,
-      "NEXT_PUBLIC_LIVEKIT_URL is required for client live video",
+      "LIVEKIT_PUBLIC_URL (or NEXT_PUBLIC_LIVEKIT_URL) is required for client live video",
     );
   }
   if (options.requireWss !== false && !url.startsWith("wss://")) {
