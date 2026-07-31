@@ -44,6 +44,8 @@ describe("authentication security", () => {
       FCM_ALLOW_SIMULATION: "false",
       FCM_SIMULATION_MODE: "false",
       THE_EYE_DISABLE_REDIS: "0",
+      THE_EYE_APP_ENV: "production",
+      WATCH_EXPORT_STORAGE_PROVIDER: "s3",
     };
     expect(validateEnvironment(config)).toBe(config);
   });

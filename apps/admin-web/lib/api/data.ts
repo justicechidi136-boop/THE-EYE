@@ -428,6 +428,8 @@ function toWatchOwnerSummaryView(record: Record<string, unknown>): WatchOwnerSum
     sosActiveWatches: Number(record.sosActiveWatches ?? 0),
     unassignedWatches: Number(record.unassignedWatches ?? 0),
     lostStolenWatches: Number(record.lostStolenWatches ?? 0),
+    replacementPendingWatches: Number(record.replacementPendingWatches ?? 0),
+    retiredWatches: Number(record.retiredWatches ?? 0),
     lastDeviceActivity: record.lastDeviceActivity ? String(record.lastDeviceActivity) : null,
     accountStatus: record.accountStatus ? String(record.accountStatus) : null,
   };
@@ -527,6 +529,8 @@ export async function fetchWatchOwnerDetail(ownerType: string, ownerId: string):
     sosActiveWatches: 0,
     unassignedWatches: 0,
     lostStolenWatches: 0,
+    replacementPendingWatches: 0,
+    retiredWatches: 0,
     lastDeviceActivity: null,
     accountStatus: null,
     ownershipHistory: [],

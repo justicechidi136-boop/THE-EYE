@@ -48,6 +48,7 @@ function buildOwnershipService() {
     },
     watchOwnershipRecord: {
       findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({ id: "ownership-1" }),
     },
     watchTransferRecord: { findUnique: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
@@ -146,6 +147,24 @@ describe("WatchOwnershipService", () => {
     await expect(
       service.ownershipHistory("EYE-WATCH-001", { typ: "user", sub: "u1" } as never),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("marks device as replacement pending with audit trail", async () => {
+    const { service, prisma, audit } = buildOwnershipService();
+    prisma.smartwatchDevice.update = jest.fn().mockResolvedValue({
+      id: "dev-uuid",
+      deviceId: "EYE-WATCH-001",
+      ownershipStatus: "REPLACEMENT_PENDING",
+    });
+    const result = await service.markReplacementPending(adminActor, "EYE-WATCH-001", {
+      reason: "Screen failure",
+      reportedFault: "Display dead",
+      priority: "HIGH",
+    });
+    expect(result.data != null).toBe(true);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "watch.replacement.requested" }),
+    );
   });
 });
 

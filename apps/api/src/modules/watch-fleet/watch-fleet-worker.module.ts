@@ -1,18 +1,15 @@
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
-import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
-import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { shouldRegisterBullMq } from "../../common/queue/queue-config";
 import { WATCH_FLEET_BULK_QUEUE_NAME, WATCH_FLEET_EXPORT_QUEUE_NAME } from "../../common/queue/queue-names";
 import { AuditModule } from "../audit/audit.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { WatchBulkService } from "./watch-bulk.service";
-import { WatchExportService } from "./watch-export.service";
+import { WatchExportCleanupService } from "./watch-export-cleanup.service";
 import { WatchExportMetrics } from "./watch-export-metrics";
+import { WatchExportService } from "./watch-export.service";
 import { WatchFleetBulkProcessor } from "./watch-fleet-bulk.processor";
 import { WatchFleetExportProcessor } from "./watch-fleet-export.processor";
-import { WatchFleetController } from "./watch-fleet.controller";
-import { WatchFleetService } from "./watch-fleet.service";
 import { WatchFleetStatsRepository } from "./watch-fleet-stats.repository";
 import { WatchOwnershipService } from "./watch-ownership.service";
 
@@ -27,18 +24,15 @@ import { WatchOwnershipService } from "./watch-ownership.service";
         ]
       : []),
   ],
-  controllers: [WatchFleetController],
   providers: [
-    WatchFleetService,
     WatchFleetStatsRepository,
     WatchOwnershipService,
     WatchBulkService,
     WatchExportMetrics,
     WatchExportService,
+    WatchExportCleanupService,
     ...(shouldRegisterBullMq() ? [WatchFleetBulkProcessor, WatchFleetExportProcessor] : []),
-    JwtAuthGuard,
-    PermissionsGuard,
   ],
-  exports: [WatchFleetService, WatchOwnershipService, WatchBulkService, WatchExportService],
+  exports: [WatchExportService, WatchExportCleanupService],
 })
-export class WatchFleetModule {}
+export class WatchFleetWorkerModule {}

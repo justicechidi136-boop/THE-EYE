@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { createReadStream } from "fs";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { WatchBulkService } from "./watch-bulk.service";
+import { WatchExportService } from "./watch-export.service";
 import { WatchFleetService, type OwnerSummaryQuery, type WatchInventoryQuery } from "./watch-fleet.service";
 import { WatchOwnershipService, type AssignWatchDto, type TransferWatchDto } from "./watch-ownership.service";
 
@@ -16,6 +18,7 @@ export class WatchFleetController {
     private readonly fleet: WatchFleetService,
     private readonly ownership: WatchOwnershipService,
     private readonly bulk: WatchBulkService,
+    private readonly exports: WatchExportService,
   ) {}
 
   @Get("owners")
@@ -117,6 +120,66 @@ export class WatchFleetController {
     return this.ownership.retireDevice(request.user, deviceId, body.reason);
   }
 
+  @Post("devices/:deviceId/replacement-pending")
+  @RequirePermissions("user:manage")
+  markReplacementPending(
+    @Req() request: any,
+    @Param("deviceId") deviceId: string,
+    @Body()
+    body: { reason?: string; reportedFault?: string; priority?: string; replacementDeviceId?: string },
+  ) {
+    return this.ownership.markReplacementPending(request.user, deviceId, body);
+  }
+
+  @Post("devices/:deviceId/replacement/approve")
+  @RequirePermissions("user:manage")
+  approveReplacement(
+    @Req() request: any,
+    @Param("deviceId") deviceId: string,
+    @Body() body: { notes?: string },
+  ) {
+    return this.ownership.approveReplacement(request.user, deviceId, body.notes);
+  }
+
+  @Post("devices/:deviceId/replacement/cancel")
+  @RequirePermissions("user:manage")
+  cancelReplacement(
+    @Req() request: any,
+    @Param("deviceId") deviceId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.ownership.cancelReplacement(request.user, deviceId, body.reason);
+  }
+
+  @Post("devices/:deviceId/replacement/issue")
+  @RequirePermissions("user:manage")
+  issueReplacement(
+    @Req() request: any,
+    @Param("deviceId") deviceId: string,
+    @Body() body: { replacementDeviceId: string; reason?: string },
+  ) {
+    return this.ownership.issueReplacement(request.user, deviceId, body);
+  }
+
+  @Get("devices/:deviceId/custody-history")
+  @RequirePermissions("user:manage")
+  async custodyHistory(@Req() request: any, @Param("deviceId") deviceId: string) {
+    const [ownership, assignment, transfer, pairing] = await Promise.all([
+      this.ownership.ownershipHistory(deviceId, request.user),
+      this.ownership.assignmentHistory(deviceId, request.user),
+      this.ownership.transferHistory(deviceId, request.user),
+      this.fleet.devicePairingHistory(deviceId, request.user),
+    ]);
+    return {
+      data: {
+        ownership: ownership.data,
+        assignment: assignment.data,
+        transfer: transfer.data,
+        pairing: pairing.data,
+      },
+    };
+  }
+
   @Get("devices/:deviceId/ownership-history")
   @RequirePermissions("user:manage")
   ownershipHistory(@Req() request: any, @Param("deviceId") deviceId: string) {
@@ -154,5 +217,63 @@ export class WatchFleetController {
   @RequirePermissions("user:manage")
   cancelBulkJob(@Req() request: any, @Param("jobId") jobId: string) {
     return this.bulk.cancelBulkJob(jobId, request.user);
+  }
+
+  @Post("exports")
+  @RequirePermissions("user:manage")
+  requestExport(@Req() request: any, @Body() body: WatchInventoryQuery) {
+    return this.exports.requestExport(request.user, body);
+  }
+
+  @Get("exports/:exportJobId")
+  @RequirePermissions("user:manage")
+  getExportJob(@Req() request: any, @Param("exportJobId") exportJobId: string) {
+    return this.exports.getExportJob(exportJobId, request.user);
+  }
+
+  @Post("exports/:exportJobId/cancel")
+  @RequirePermissions("user:manage")
+  cancelExportJob(@Req() request: any, @Param("exportJobId") exportJobId: string) {
+    return this.exports.cancelExportJob(exportJobId, request.user);
+  }
+
+  @Get("exports/:exportJobId/download-url")
+  @RequirePermissions("user:manage")
+  exportDownloadUrl(@Req() request: any, @Param("exportJobId") exportJobId: string) {
+    return this.exports.issueDownloadUrl(exportJobId, request.user);
+  }
+
+  @Get("exports/:exportJobId/download")
+  @RequirePermissions("user:manage")
+  async downloadExport(
+    @Req() request: any,
+    @Param("exportJobId") exportJobId: string,
+    @Query("token") token: string,
+    @Res() response: {
+      status: (code: number) => { send: (body: string) => void };
+      setHeader: (name: string, value: string) => void;
+      end?: (chunk?: unknown) => void;
+    } & NodeJS.WritableStream,
+  ) {
+    const verified = this.exports.verifyDownloadToken(token);
+    if (verified.exportJobId !== exportJobId) {
+      response.status(404).send("Export not found");
+      return;
+    }
+    const job = await this.exports.getExportJob(exportJobId, request.user);
+    try {
+      this.exports.assertExportDownloadAuthorized(request.user, job.data as Record<string, unknown>);
+    } catch {
+      response.status(404).send("Export not available");
+      return;
+    }
+    if (String(job.data.storageProvider ?? "local") !== "local") {
+      response.status(404).send("Use signed download URL for S3-backed exports");
+      return;
+    }
+    const filePath = this.exports.resolveLocalDownloadPath(String(job.data.storageKey));
+    response.setHeader("Content-Type", "text/csv");
+    response.setHeader("Content-Disposition", `attachment; filename="watch-fleet-${exportJobId}.csv"`);
+    createReadStream(filePath).pipe(response);
   }
 }

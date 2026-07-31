@@ -2373,4 +2373,44 @@ model WatchBulkOperationJob {
   @@map("watch_bulk_operation_jobs")
 }
 
+model WatchExportJob {
+  id                  String    @id @default(uuid()) @db.Uuid
+  status              String    @default("QUEUED")
+  requestedByAdminId  String    @map("requested_by_admin_id") @db.Uuid
+  actorRole           String?   @map("actor_role")
+  geographyScope      Json      @default("{}") @map("geography_scope")
+  filters             Json      @default("{}")
+  correlationId       String    @map("correlation_id")
+  maskSensitive       Boolean   @default(true) @map("mask_sensitive")
+  totalRows           Int?      @map("total_rows")
+  processedRows       Int       @default(0) @map("processed_rows")
+  successRows         Int       @default(0) @map("success_rows")
+  failedRows          Int       @default(0) @map("failed_rows")
+  progressPercentage  Int       @default(0) @map("progress_percentage")
+  storageProvider     String?   @map("storage_provider")
+  storageKey          String?   @map("storage_key")
+  bucket              String?
+  contentType         String?   @map("content_type")
+  checksum            String?
+  uploadId            String?   @map("upload_id")
+  localFilePath       String?   @map("local_file_path")
+  fileSizeBytes       Int?      @map("file_size_bytes")
+  failureReason       String?   @map("failure_reason")
+  deletionFailureReason String? @map("deletion_failure_reason")
+  requestedAt         DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  startedAt           DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt         DateTime? @map("completed_at") @db.Timestamptz(6)
+  cancelledAt         DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([requestedByAdminId])
+  @@index([correlationId])
+  @@index([expiresAt])
+  @@map("watch_export_jobs")
+}
+
 

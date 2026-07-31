@@ -10,6 +10,7 @@ import { BroadcastsWorkerModule } from "./modules/broadcasts/broadcasts-worker.m
 import { LocationRetryWorkerModule } from "./modules/dispatch/location-retry-worker.module";
 import { WatchDangerAlertWorkerModule } from "./modules/danger-zones/watch-danger-alert-worker.module";
 import { VoiceTranscriptionWorkerModule } from "./modules/voice-attachments/voice-transcription-worker.module";
+import { WatchFleetWorkerModule } from "./modules/watch-fleet/watch-fleet-worker.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 
 @Module({
@@ -47,6 +48,7 @@ import { PrismaModule } from "./modules/prisma/prisma.module";
     LocationRetryWorkerModule,
     VoiceTranscriptionWorkerModule,
     WatchDangerAlertWorkerModule,
+    WatchFleetWorkerModule,
   ],
 })
 export class WorkerModule {}

@@ -424,6 +424,154 @@ export class WatchOwnershipService {
     return { data: updated };
   }
 
+  async markReplacementPending(
+    actor: JwtPayload,
+    deviceId: string,
+    dto: {
+      reason?: string;
+      reportedFault?: string;
+      priority?: string;
+      replacementDeviceId?: string;
+    },
+  ) {
+    this.assertAdmin(actor);
+    const device = await this.findDeviceOrThrow(deviceId);
+    this.assertNotBlocked(device);
+    const now = new Date();
+    const correlationId = `replacement-pending-${device.id}-${now.getTime()}`;
+
+    const updated = await this.prisma.smartwatchDevice.update({
+      where: { id: device.id },
+      data: {
+        ownershipStatus: WatchOwnershipStatus.ReplacementPending,
+        inventoryStatus: WatchInventoryStatus.ReplacementPending,
+      } as never,
+    });
+
+    await (this.prisma as any).watchOwnershipRecord.create({
+      data: {
+        deviceId: device.id,
+        ownerType: device.currentOwnerType,
+        ownerPersonId: device.currentOwnerType === WatchOwnerType.Person ? device.currentOwnerId : null,
+        ownerOrganizationId:
+          device.currentOwnerType === WatchOwnerType.Organization ? device.currentOwnerId : null,
+        ownershipStatus: WatchOwnershipStatus.ReplacementPending,
+        validFrom: now,
+        actorAdminId: actor.sub,
+        transferReason: dto.reason,
+        correlationId,
+        metadata: {
+          reportedFault: dto.reportedFault,
+          priority: dto.priority ?? "NORMAL",
+          replacementDeviceId: dto.replacementDeviceId ?? null,
+          approvalStatus: "PENDING",
+          requestedByAdminId: actor.sub,
+        },
+      },
+    });
+
+    await this.audit.record({
+      actor,
+      action: "watch.replacement.requested",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      metadata: { ...dto, correlationId },
+    });
+
+    return { data: updated, correlationId };
+  }
+
+  async approveReplacement(actor: JwtPayload, deviceId: string, notes?: string) {
+    this.assertAdmin(actor);
+    const device = await this.findDeviceOrThrow(deviceId);
+    if (device.ownershipStatus !== WatchOwnershipStatus.ReplacementPending) {
+      throw new BadRequestException("Device is not replacement pending");
+    }
+    await this.audit.record({
+      actor,
+      action: "watch.replacement.approved",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      metadata: { notes },
+    });
+    return { data: { deviceId: device.deviceId, approvalStatus: "APPROVED" } };
+  }
+
+  async cancelReplacement(actor: JwtPayload, deviceId: string, reason?: string) {
+    this.assertAdmin(actor);
+    const device = await this.findDeviceOrThrow(deviceId);
+    if (device.ownershipStatus !== WatchOwnershipStatus.ReplacementPending) {
+      throw new BadRequestException("Device is not replacement pending");
+    }
+    const priorStatus =
+      device.currentOwnerType === WatchOwnerType.Organization
+        ? WatchOwnershipStatus.OrganizationOwned
+        : WatchOwnershipStatus.PersonOwned;
+    const now = new Date();
+    const updated = await this.prisma.smartwatchDevice.update({
+      where: { id: device.id },
+      data: {
+        ownershipStatus: priorStatus,
+        inventoryStatus: WatchInventoryStatus.Deployed,
+      } as never,
+    });
+    await (this.prisma as any).watchOwnershipRecord.create({
+      data: {
+        deviceId: device.id,
+        ownerType: device.currentOwnerType,
+        ownershipStatus: priorStatus,
+        validFrom: now,
+        actorAdminId: actor.sub,
+        transferReason: reason ?? "Replacement request cancelled",
+        correlationId: `replacement-cancel-${device.id}-${now.getTime()}`,
+        metadata: { approvalStatus: "CANCELLED" },
+      },
+    });
+    await this.audit.record({
+      actor,
+      action: "watch.replacement.cancelled",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      reason,
+    });
+    return { data: updated };
+  }
+
+  async issueReplacement(
+    actor: JwtPayload,
+    deviceId: string,
+    dto: { replacementDeviceId: string; reason?: string },
+  ) {
+    this.assertAdmin(actor);
+    const device = await this.findDeviceOrThrow(deviceId);
+    if (device.ownershipStatus !== WatchOwnershipStatus.ReplacementPending) {
+      throw new BadRequestException("Device is not replacement pending");
+    }
+    const replacement = await this.findDeviceOrThrow(dto.replacementDeviceId);
+    const correlationId = `replacement-issued-${device.id}-${Date.now()}`;
+
+    await this.assignDevice(actor, {
+      deviceId: replacement.deviceId,
+      ownerType: device.currentOwnerType === WatchOwnerType.Organization ? "ORGANIZATION" : "PERSON",
+      ownerPersonId: device.currentOwnerType === WatchOwnerType.Person ? device.currentOwnerId ?? undefined : undefined,
+      ownerOrganizationId:
+        device.currentOwnerType === WatchOwnerType.Organization ? device.currentOwnerId ?? undefined : undefined,
+      assigneePersonId: device.currentAssigneeId ?? undefined,
+      reason: dto.reason ?? `Replacement for ${device.deviceId}`,
+      idempotencyKey: correlationId,
+    });
+
+    await this.audit.record({
+      actor,
+      action: "watch.replacement.issued",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      metadata: { replacementDeviceId: replacement.deviceId, correlationId },
+    });
+
+    return { data: { faultyDeviceId: device.deviceId, replacementDeviceId: replacement.deviceId } };
+  }
+
   async retireDevice(actor: JwtPayload, deviceId: string, reason?: string) {
     this.assertAdmin(actor);
     const device = await this.findDeviceOrThrow(deviceId);
@@ -501,6 +649,9 @@ export class WatchOwnershipService {
   private assertNotBlocked(device: { ownershipStatus: string }) {
     if (WATCH_OWNERSHIP_BLOCKED_STATUSES.includes(device.ownershipStatus as any)) {
       throw new ConflictException(`Device is ${device.ownershipStatus} and cannot be reassigned`);
+    }
+    if (device.ownershipStatus === WatchOwnershipStatus.ReplacementPending) {
+      throw new ConflictException("Device has a pending replacement request");
     }
   }
 

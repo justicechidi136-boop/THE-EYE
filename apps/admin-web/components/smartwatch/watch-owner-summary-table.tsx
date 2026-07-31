@@ -32,6 +32,8 @@ export function WatchOwnerSummaryTable({ owners, nextCursor, hasMore, searchPara
             <th className="px-4 py-3">SOS</th>
             <th className="px-4 py-3">Unassigned</th>
             <th className="px-4 py-3">Lost/Stolen</th>
+            <th className="px-4 py-3">Replacement</th>
+            <th className="px-4 py-3">Retired</th>
             <th className="px-4 py-3">Last activity</th>
             <th className="px-4 py-3">Status</th>
           </tr>
@@ -75,6 +77,16 @@ export function WatchOwnerSummaryTable({ owners, nextCursor, hasMore, searchPara
               <td className="px-4 py-3">{owner.sosActiveWatches}</td>
               <td className="px-4 py-3">{owner.unassignedWatches}</td>
               <td className="px-4 py-3">{owner.lostStolenWatches}</td>
+              <td className="px-4 py-3">
+                {owner.replacementPendingWatches > 0 ? (
+                  <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                    {owner.replacementPendingWatches}
+                  </span>
+                ) : (
+                  owner.replacementPendingWatches
+                )}
+              </td>
+              <td className="px-4 py-3">{owner.retiredWatches}</td>
               <td className="px-4 py-3 text-xs">{owner.lastDeviceActivity ? new Date(owner.lastDeviceActivity).toLocaleString() : "—"}</td>
               <td className="px-4 py-3">{owner.accountStatus ?? "—"}</td>
             </tr>

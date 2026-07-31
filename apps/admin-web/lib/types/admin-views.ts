@@ -225,6 +225,8 @@ export type WatchOwnerSummaryView = {
   sosActiveWatches: number;
   unassignedWatches: number;
   lostStolenWatches: number;
+  replacementPendingWatches: number;
+  retiredWatches: number;
   lastDeviceActivity: string | null;
   accountStatus: string | null;
 };

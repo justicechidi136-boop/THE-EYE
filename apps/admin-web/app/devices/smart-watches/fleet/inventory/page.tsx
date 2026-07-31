@@ -8,7 +8,7 @@ import { canManageSmartwatches } from "../../../../../lib/smartwatch-permissions
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ cursor?: string; ownerType?: string; ownerId?: string; search?: string }>;
+type SearchParams = Promise<{ cursor?: string; ownerType?: string; ownerId?: string; search?: string; ownershipStatus?: string }>;
 
 export default async function WatchFleetInventoryPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await getAdminSession();
@@ -34,6 +34,23 @@ export default async function WatchFleetInventoryPage({ searchParams }: { search
         </Panel>
       ) : null}
       <Panel title="Fleet inventory">
+        <div className="mb-4 flex flex-wrap gap-2 text-xs">
+          <Link href="/devices/smart-watches/fleet/inventory" className="rounded border border-line px-2 py-1 hover:border-eye">
+            All devices
+          </Link>
+          <Link
+            href="/devices/smart-watches/fleet/inventory?ownershipStatus=REPLACEMENT_PENDING"
+            className="rounded border border-amber-500/40 px-2 py-1 text-amber-300 hover:border-amber-400"
+          >
+            Replacement pending
+          </Link>
+          <Link
+            href="/devices/smart-watches/fleet/inventory?ownershipStatus=LOST_OR_STOLEN"
+            className="rounded border border-line px-2 py-1 hover:border-eye"
+          >
+            Lost / stolen
+          </Link>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1800px] text-left text-sm">
             <thead className="bg-surfaceMuted text-xs uppercase text-muted">
@@ -70,7 +87,13 @@ export default async function WatchFleetInventoryPage({ searchParams }: { search
                   <td className="px-3 py-2">{row.organization ?? "—"}</td>
                   <td className="px-3 py-2">{row.department ?? "—"}</td>
                   <td className="px-3 py-2"><StatusBadge tone="info">{row.pairingStatus}</StatusBadge></td>
-                  <td className="px-3 py-2">{row.ownershipStatus}</td>
+                  <td className="px-3 py-2">
+                    {row.ownershipStatus === "REPLACEMENT_PENDING" ? (
+                      <StatusBadge tone="warning">REPLACEMENT_PENDING</StatusBadge>
+                    ) : (
+                      row.ownershipStatus
+                    )}
+                  </td>
                   <td className="px-3 py-2">{row.inventoryStatus}</td>
                   <td className="px-3 py-2"><StatusBadge tone={row.onlineStatus === "Online" ? "success" : "warning"}>{row.onlineStatus}</StatusBadge></td>
                   <td className="px-3 py-2">{row.batteryLevel != null ? `${row.batteryLevel}%` : "—"}</td>

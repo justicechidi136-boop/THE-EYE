@@ -1,14 +1,19 @@
 import { randomUUID } from "crypto";
-import { Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional, ServiceUnavailableException } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
 import { WatchBulkOperationType } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { WATCH_FLEET_BULK_QUEUE_NAME } from "../../common/queue/queue-names";
-import { shouldRegisterBullMq } from "../../common/queue/queue-config";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { WatchOwnershipService, type AssignWatchDto, type TransferWatchDto } from "./watch-ownership.service";
+import {
+  canRunWatchFleetBulkInline,
+  resolveWatchFleetBulkMode,
+  WATCH_FLEET_INLINE_BULK_MAX_DEVICES,
+  watchFleetQueueAvailable,
+} from "./watch-fleet-bulk-config";
 
 const BULK_CHUNK_SIZE = 100;
 
@@ -55,28 +60,31 @@ export class WatchBulkService {
       metadata: { operationType, requestedCount: deviceIds.length, correlationId },
     });
 
-    if (shouldRegisterBullMq() && this.queue) {
-      await this.queue.add(
-        "process-bulk",
-        {
-          jobId: job.id,
-          operationType,
-          deviceIds,
-          actorAdminId: actor.sub,
-          correlationId,
-          payload,
-        } satisfies BulkWatchJobPayload,
-        { jobId: job.id },
-      );
+    const bulkPayload: BulkWatchJobPayload = {
+      jobId: job.id,
+      operationType,
+      deviceIds,
+      actorAdminId: actor.sub,
+      correlationId,
+      payload,
+    };
+
+    if (watchFleetQueueAvailable()) {
+      if (!this.queue) {
+        throw new ServiceUnavailableException(
+          "Watch fleet bulk jobs require BullMQ. Configure Redis or use WATCH_FLEET_BULK_MODE=inline in development only.",
+        );
+      }
+      await this.queue.add("process-bulk", bulkPayload, { jobId: job.id });
+    } else if (canRunWatchFleetBulkInline(deviceIds.length)) {
+      await this.processBulkJob(bulkPayload);
     } else {
-      await this.processBulkJob({
-        jobId: job.id,
-        operationType,
-        deviceIds,
-        actorAdminId: actor.sub,
-        correlationId,
-        payload,
-      });
+      const mode = resolveWatchFleetBulkMode();
+      throw new ServiceUnavailableException(
+        mode === "required"
+          ? "Watch fleet bulk operations require BullMQ (WATCH_FLEET_BULK_MODE=required)."
+          : `Bulk job too large for inline processing (max ${WATCH_FLEET_INLINE_BULK_MAX_DEVICES} devices). Enable Redis/BullMQ.`,
+      );
     }
 
     return { data: job };
@@ -217,6 +225,8 @@ export class WatchBulkService {
       case WatchBulkOperationType.Retire:
         await this.ownership.retireDevice(actor, deviceId, payload.reason as string | undefined);
         break;
+      case WatchBulkOperationType.ExportInventory:
+        throw new Error("Use /watch-fleet/exports for inventory export jobs");
       default:
         throw new Error(`Unsupported bulk operation: ${operationType}`);
     }
