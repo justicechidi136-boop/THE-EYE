@@ -79,7 +79,10 @@ class PairingService {
     return _state;
   }
 
-  Future<PairingState> completePairing({required String deviceSecret}) async {
+  Future<PairingState> completePairing({
+    required String deviceSecret,
+    String? deviceId,
+  }) async {
     if (deviceSecret.isEmpty) {
       _state = _state.transition(
         PairingPhase.failed,
@@ -88,9 +91,9 @@ class PairingService {
       return _state;
     }
 
-    final deviceId = await _ensureDeviceId();
+    final resolvedDeviceId = deviceId ?? await _ensureDeviceId();
     await _credentials.saveDeviceCredentials(
-      deviceId: deviceId,
+      deviceId: resolvedDeviceId,
       deviceSecret: deviceSecret,
     );
     await _preferences.setPaired(true);

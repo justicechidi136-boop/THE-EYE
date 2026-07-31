@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/pairing_state.dart';
+import '../services/watch_activation_diagnostics.dart';
+import '../services/watch_activation_exception.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
 import '../widgets/watch_ui.dart';
@@ -50,7 +52,7 @@ class _PairingScreenState extends State<PairingScreen> {
       if (!mounted) return;
       if (state.phase == PairingPhase.paired) {
         _statusTimer?.cancel();
-        Navigator.pushReplacementNamed(context, WatchRoutes.locationOnboarding);
+        _navigateAfterPairing();
       } else if (state.phase == PairingPhase.failed) {
         _statusTimer?.cancel();
         setState(() => _error = state.errorMessage);
@@ -60,13 +62,28 @@ class _PairingScreenState extends State<PairingScreen> {
     });
   }
 
+  Future<void> _navigateAfterPairing() async {
+    if (!mounted) return;
+    widget.services.standaloneAuth.diagnostics.log(
+      WatchActivationCheckpoint.homeNavigationBegin,
+    );
+    await Navigator.of(context).pushNamedAndRemoveUntil(
+      WatchRoutes.home,
+      (route) => false,
+    );
+    if (!mounted) return;
+    widget.services.standaloneAuth.diagnostics.log(
+      WatchActivationCheckpoint.homeNavigationSuccess,
+    );
+  }
+
   Future<void> _simulatePaired() async {
     setState(() => _loading = true);
     await widget.services.pairing.completePairing(
       deviceSecret: 'dev-secret-${DateTime.now().millisecondsSinceEpoch}',
     );
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, WatchRoutes.home);
+    await _navigateAfterPairing();
   }
 
   @override
@@ -129,7 +146,7 @@ class _PairingScreenState extends State<PairingScreen> {
           WatchPrimaryButton(
             label: 'Standalone Login',
             color: EyeColors.orange,
-            onPressed: () => _showStandaloneDialog(context),
+            onPressed: _loading ? null : () => _showStandaloneActivation(context),
           ),
           if (state.phase == PairingPhase.awaitingPhoneConfirmation) ...[
             const SizedBox(height: 6),
@@ -144,48 +161,118 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
-  Future<void> _showStandaloneDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    final ok = await showDialog<bool>(
+  Future<void> _showStandaloneActivation(BuildContext context) async {
+    final deviceIdController = TextEditingController();
+    final codeController = TextEditingController();
+    String? dialogError;
+    var submitting = false;
+
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: EyeColors.surface,
-        title: const Text('Activation Code', style: TextStyle(fontSize: 14)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(fontSize: 12),
-          decoration: const InputDecoration(hintText: 'Device secret'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Login'),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> submit() async {
+              if (submitting) return;
+              setDialogState(() {
+                submitting = true;
+                dialogError = null;
+              });
+              try {
+                final result =
+                    await widget.services.standaloneAuth.activateWithAdminCode(
+                  deviceId: deviceIdController.text,
+                  pairingCode: codeController.text,
+                );
+                await widget.services.pairing.completePairing(
+                  deviceSecret: result.deviceSecret,
+                  deviceId: result.deviceId,
+                );
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
+                if (!this.context.mounted) return;
+                await _navigateAfterPairing();
+              } on WatchActivationException catch (error) {
+                setDialogState(() {
+                  dialogError = '${error.code}\n${error.userMessage}';
+                  submitting = false;
+                });
+              } catch (error) {
+                setDialogState(() {
+                  dialogError =
+                      'WATCH-ACTIVATION-003\nThe watch was activated, but setup could not be completed.';
+                  submitting = false;
+                });
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: EyeColors.surface,
+              title: const Text(
+                'Standalone Activation',
+                style: TextStyle(fontSize: 14),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Enter the device ID and 6-digit code from the admin dashboard.',
+                      style: TextStyle(color: EyeColors.muted, fontSize: 10),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: deviceIdController,
+                      enabled: !submitting,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: const InputDecoration(
+                        hintText: 'Device ID (e.g. EYE-WATCH-001)',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: codeController,
+                      enabled: !submitting,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: const InputDecoration(
+                        hintText: '6-digit activation code',
+                      ),
+                    ),
+                    if (dialogError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        dialogError!,
+                        style: const TextStyle(
+                          color: EyeColors.danger,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: submitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: submitting ? null : submit,
+                  child: Text(submitting ? 'Activating…' : 'Login'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
-    if (ok == true) {
-      final success =
-          await widget.services.standaloneAuth.loginWithActivationCode(
-        activationCode: controller.text.trim(),
-      );
-      if (!context.mounted) return;
-      if (success) {
-        await widget.services.pairing.completePairing(
-          deviceSecret: controller.text.trim(),
-        );
-        if (!context.mounted) return;
-        Navigator.pushReplacementNamed(context, WatchRoutes.locationOnboarding);
-      } else {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Standalone login failed')),
-        );
-      }
-    }
+
+    deviceIdController.dispose();
+    codeController.dispose();
   }
 }

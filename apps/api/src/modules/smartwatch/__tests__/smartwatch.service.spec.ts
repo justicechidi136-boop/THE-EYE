@@ -313,4 +313,74 @@ describe("SmartwatchService", () => {
       where: { OR: [{ id: "EYE-WATCH-001" }, { deviceId: "EYE-WATCH-001" }] },
     }));
   });
+
+  it("activates standalone watch with admin pairing code", async () => {
+    const { service, prisma, auditService } = buildService({
+      config: { JWT_ACCESS_SECRET: "test-secret-key-for-jwt-signing", FCM_PROJECT_ID: "the-eye-2stg" },
+    });
+    prisma.smartwatchPairingSession.update = jest.fn().mockResolvedValue({});
+
+    const result = await service.activateWithCode({
+      deviceId: "EYE-WATCH-001",
+      pairingCode: "123456",
+      firebaseEnv: "staging",
+    });
+
+    expect(result.status).toBe("activated");
+    expect(result.watch.deviceId).toBe("EYE-WATCH-001");
+    expect(result.authentication.accessToken).toContain(".");
+    expect(result.deviceSecret).toBeTruthy();
+    expect(prisma.smartwatchDevice.upsert).toHaveBeenCalled();
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "smartwatch.device_activated_with_code",
+    }));
+  });
+
+  it("recovers incomplete activation when session secret is still available", async () => {
+    const { service, auditService } = buildService({
+      config: { JWT_ACCESS_SECRET: "test-secret-key-for-jwt-signing", FCM_PROJECT_ID: "the-eye-2stg" },
+      pairingSession: {
+        id: "session-1",
+        deviceId: "EYE-WATCH-001",
+        pairingCodeHash: hashToken("123456"),
+        firebaseEnv: "staging",
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: new Date(),
+        deviceSecretPlain: "recovery-secret",
+      },
+    });
+
+    const result = await service.activateWithCode({
+      deviceId: "EYE-WATCH-001",
+      pairingCode: "123456",
+      firebaseEnv: "staging",
+    });
+
+    expect(result.status).toBe("activated");
+    expect((result as { recovery?: boolean }).recovery).toBe(true);
+    expect(result.deviceSecret).toBe("recovery-secret");
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "smartwatch.device_activation_recovery",
+    }));
+  });
+
+  it("rejects invalid admin activation codes", async () => {
+    const { service } = buildService({
+      pairingSession: {
+        id: "session-1",
+        deviceId: "EYE-WATCH-001",
+        pairingCodeHash: hashToken("123456"),
+        firebaseEnv: "staging",
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+        deviceSecretPlain: null,
+      },
+    });
+
+    await expect(service.activateWithCode({
+      deviceId: "EYE-WATCH-001",
+      pairingCode: "654321",
+      firebaseEnv: "staging",
+    })).rejects.toMatchObject({ status: 401 });
+  });
 });

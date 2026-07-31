@@ -17,6 +17,7 @@ import {
   UpdateSmartwatchStatusDto,
   IssueSmartwatchPairingCodeDto,
   AdminIssueSmartwatchActivationDto,
+  ActivateWatchWithCodeDto,
 } from "./dto/smartwatch.dto";
 import { SmartwatchService } from "./smartwatch.service";
 
@@ -48,6 +49,12 @@ export class SmartwatchController {
   @RateLimit("auth")
   standaloneLogin(@Body() dto: SmartwatchStandaloneLoginDto) {
     return this.smartwatch.standaloneLogin(dto);
+  }
+
+  @Post("devices/activate-with-code")
+  @RateLimit("auth")
+  activateWithCode(@Body() dto: ActivateWatchWithCodeDto) {
+    return this.smartwatch.activateWithCode(dto);
   }
 
   @ApiBearerAuth()

@@ -1,8 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional, ConflictException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
 import { randomToken, hashToken } from "../../common/auth/crypto";
-import { signJwt, type JwtPayload } from "../../common/auth/jwt";
+import { signJwt, parseTtl, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret } from "../../common/auth/jwt-secrets";
 import { AuditService } from "../audit/audit.service";
 import { IncidentsService } from "../incidents/incidents.service";
@@ -18,6 +18,9 @@ import {
   SmartwatchOfflineSyncDto,
   SmartwatchSosDto,
   SmartwatchStandaloneLoginDto,
+  ActivateWatchWithCodeDto,
+  validateActivateWatchWithCodeDto,
+  normalizeWatchPairingCode,
   WatchAccessibilityPreferencesDto,
   UpdateSmartwatchStatusDto,
   IssueSmartwatchPairingCodeDto,
@@ -201,6 +204,242 @@ export class SmartwatchService {
       metadata: { deviceId: device.deviceId },
     });
     return { accessToken: token, tokenType: "Bearer", mode: "StandaloneCellular", expiresInSeconds: 900 };
+  }
+
+  async activateWithCode(dto: ActivateWatchWithCodeDto) {
+    validateActivateWatchWithCodeDto(dto);
+    const pairingCode = normalizeWatchPairingCode(dto.pairingCode);
+    const correlationId = dto.correlationId ?? `watch-activate-${dto.deviceId}-${Date.now()}`;
+    const firebaseEnv = dto.firebaseEnv ?? this.defaultFirebaseEnv();
+
+    const session = await (this.prisma as any).smartwatchPairingSession.findUnique({
+      where: { deviceId: dto.deviceId },
+    });
+    if (!session) {
+      throw new NotFoundException("No activation session found for this device");
+    }
+    const pairingCodeHash = hashToken(pairingCode);
+    const sessionExpired = new Date(session.expiresAt).getTime() < Date.now();
+    const codeMatches = session.pairingCodeHash === pairingCodeHash;
+
+    if (session.usedAt && session.deviceSecretPlain && codeMatches && !sessionExpired) {
+      return this.buildActivateWithCodeRecoveryResponse(dto, session, pairingCode, correlationId, firebaseEnv);
+    }
+    if (session.usedAt && session.deviceSecretPlain) {
+      throw new ConflictException("Activation code already consumed");
+    }
+    if (session.usedAt) {
+      throw new ConflictException("Activation code already consumed");
+    }
+    if (sessionExpired) {
+      throw new BadRequestException("Activation code expired");
+    }
+    if (session.firebaseEnv !== firebaseEnv) {
+      throw new BadRequestException("Activation code was issued for a different environment");
+    }
+    if (!codeMatches) {
+      throw new UnauthorizedException("Invalid activation code");
+    }
+
+    const deviceSecret = randomToken(32);
+    const now = new Date();
+    const ttl = this.config.get<string>("JWT_ACCESS_TTL", "15m");
+
+    const device = await this.prisma.smartwatchDevice.upsert({
+      where: { deviceId: dto.deviceId },
+      update: {
+        deviceSecretHash: hashToken(deviceSecret),
+        connectivityMode: "StandaloneCellular",
+        preferredMode: "StandaloneCellular",
+        pairingMethod: SmartwatchPairingMethod.PairingCode,
+        isActive: true,
+        isOnline: true,
+        lastSeenAt: now,
+        appVersion: dto.appVersion,
+        model: dto.model,
+        manufacturer: dto.manufacturer,
+        assignmentStatus: "ASSIGNED",
+        inventoryStatus: "DEPLOYED",
+      } as never,
+      create: {
+        deviceId: dto.deviceId,
+        provider: "THE_EYE",
+        deviceSecretHash: hashToken(deviceSecret),
+        connectivityMode: "StandaloneCellular",
+        preferredMode: "StandaloneCellular",
+        pairingMethod: SmartwatchPairingMethod.PairingCode,
+        isActive: true,
+        isOnline: true,
+        lastSeenAt: now,
+        appVersion: dto.appVersion,
+        model: dto.model,
+        manufacturer: dto.manufacturer,
+        ownershipStatus: "UNASSIGNED_INVENTORY",
+        assignmentStatus: "UNASSIGNED",
+        inventoryStatus: "IN_STOCK",
+        currentOwnerType: "UNASSIGNED_INVENTORY",
+      } as never,
+    });
+
+    const subjectUserId =
+      device.userId ??
+      (device as any).currentAssigneeId ??
+      ((device as any).currentOwnerType === "PERSON" ? (device as any).currentOwnerId : null) ??
+      device.id;
+
+    const expiresInSeconds = parseTtl(ttl, 900);
+    const token = signJwt(
+      {
+        sub: subjectUserId,
+        typ: "user",
+        permissions: ["incident:create", "incident:read"],
+        deviceId: device.id,
+        deviceSerialNumber: (device as any).serialNumber,
+        authMode: "standalone_watch",
+      } as any,
+      requireJwtAccessSecret(this.config),
+      ttl,
+    );
+
+    await (this.prisma as any).smartwatchPairingSession.update({
+      where: { deviceId: dto.deviceId },
+      data: {
+        usedAt: now,
+        deviceSecretPlain: deviceSecret,
+      },
+    });
+
+    try {
+      await (this.prisma as any).watchPairingHistoryRecord.create({
+        data: {
+          deviceId: device.id,
+          ownerTypeAtPairing: (device as any).currentOwnerType,
+          ownerIdAtPairing: (device as any).currentOwnerId,
+          assigneeIdAtPairing: (device as any).currentAssigneeId,
+          pairedAt: now,
+          pairingMethod: SmartwatchPairingMethod.PairingCode,
+          pairingCodeRef: hashToken(pairingCode).slice(0, 12),
+          pairingStatus: "ACTIVATED",
+          authenticationStatus: "AUTHENTICATED",
+          lastSuccessfulAuthAt: now,
+          correlationId,
+        },
+      });
+    } catch {
+      // Pairing history table may be unavailable on older schema deployments.
+    }
+
+    await this.auditService.record({
+      actor: { sub: subjectUserId, typ: "user" } as JwtPayload,
+      actorType: "device",
+      action: "smartwatch.device_activated_with_code",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      metadata: { deviceId: dto.deviceId, correlationId, firebaseEnv },
+    });
+
+    const ownerType = (device as any).currentOwnerType ?? "UNASSIGNED_INVENTORY";
+    const ownerId = (device as any).currentOwnerId ?? (device as any).currentAssigneeId ?? null;
+
+    return {
+      status: "activated",
+      correlationId,
+      watch: {
+        id: device.id,
+        deviceId: device.deviceId,
+        pairingStatus: "ACTIVE",
+      },
+      owner: ownerId
+        ? {
+            id: ownerId,
+            type: ownerType === "ORGANIZATION" ? "ORGANIZATION" : "PERSON",
+          }
+        : null,
+      authentication: {
+        accessToken: token,
+        refreshToken: null,
+        expiresAt: new Date(now.getTime() + expiresInSeconds * 1000).toISOString(),
+        tokenType: "Bearer",
+        mode: "StandaloneCellular",
+        expiresInSeconds,
+      },
+      deviceSecret,
+    };
+  }
+
+  private async buildActivateWithCodeRecoveryResponse(
+    dto: ActivateWatchWithCodeDto,
+    session: { deviceSecretPlain: string },
+    pairingCode: string,
+    correlationId: string,
+    firebaseEnv: string,
+  ) {
+    const deviceSecret = session.deviceSecretPlain;
+    const device = await this.prisma.smartwatchDevice.findUnique({
+      where: { deviceId: dto.deviceId },
+    });
+    if (!device) {
+      throw new ConflictException("Activation code already consumed");
+    }
+
+    const now = new Date();
+    const ttl = this.config.get<string>("JWT_ACCESS_TTL", "15m");
+    const subjectUserId =
+      device.userId ??
+      (device as any).currentAssigneeId ??
+      ((device as any).currentOwnerType === "PERSON" ? (device as any).currentOwnerId : null) ??
+      device.id;
+    const expiresInSeconds = parseTtl(ttl, 900);
+    const token = signJwt(
+      {
+        sub: subjectUserId,
+        typ: "user",
+        permissions: ["incident:create", "incident:read"],
+        deviceId: device.id,
+        deviceSerialNumber: (device as any).serialNumber,
+        authMode: "standalone_watch",
+      } as any,
+      requireJwtAccessSecret(this.config),
+      ttl,
+    );
+
+    await this.auditService.record({
+      actor: { sub: subjectUserId, typ: "user" } as JwtPayload,
+      actorType: "device",
+      action: "smartwatch.device_activation_recovery",
+      entityType: "smartwatch_devices",
+      entityId: device.id,
+      metadata: { deviceId: dto.deviceId, correlationId, firebaseEnv },
+    });
+
+    const ownerType = (device as any).currentOwnerType ?? "UNASSIGNED_INVENTORY";
+    const ownerId = (device as any).currentOwnerId ?? (device as any).currentAssigneeId ?? null;
+
+    return {
+      status: "activated",
+      correlationId,
+      recovery: true,
+      watch: {
+        id: device.id,
+        deviceId: device.deviceId,
+        pairingStatus: "ACTIVE",
+      },
+      owner: ownerId
+        ? {
+            id: ownerId,
+            type: ownerType === "ORGANIZATION" ? "ORGANIZATION" : "PERSON",
+          }
+        : null,
+      authentication: {
+        accessToken: token,
+        refreshToken: null,
+        expiresAt: new Date(now.getTime() + expiresInSeconds * 1000).toISOString(),
+        tokenType: "Bearer",
+        mode: "StandaloneCellular",
+        expiresInSeconds,
+      },
+      deviceSecret,
+    };
   }
 
   async listMyDevices(actor: JwtPayload) {

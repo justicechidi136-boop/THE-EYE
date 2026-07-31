@@ -111,10 +111,16 @@ class _WatchBootScreenState extends State<WatchBootScreen>
     }
 
     if (!mounted) return;
-    final destination = widget.services.pairing.state.isPaired
-        ? WatchRoutes.locationOnboarding
-        : WatchRoutes.pairing;
-    await _fadeAndReplace(destination);
+    final paired = widget.services.pairing.state.isPaired;
+    if (paired) {
+      final locationDismissed =
+          await widget.services.preferences.isLocationOnboardingDismissed();
+      final destination =
+          locationDismissed ? WatchRoutes.home : WatchRoutes.locationOnboarding;
+      await _fadeAndReplace(destination);
+      return;
+    }
+    await _fadeAndReplace(WatchRoutes.pairing);
   }
 
   Future<void> _fadeAndReplace(String route) async {
