@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../alerts/danger_alert_models.dart';
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
@@ -56,14 +58,18 @@ class DangerAlertService {
         _preferences = preferences,
         _featureFlags = featureFlags ??
             WatchFeatureFlagsService(api: api, credentials: credentials),
-        _companionRelay = companionRelay ?? CompanionRelayService(),
-        _coordinator = DangerAlertCoordinator(
-          vibration: vibration,
-          versionTracker: versionTracker,
-          quietHours: quietHours,
-          audioOutput: audioOutput,
-          tts: tts,
-        ) {
+        _companionRelay = companionRelay ?? CompanionRelayService() {
+    _coordinator = DangerAlertCoordinator(
+      vibration: vibration,
+      versionTracker: versionTracker,
+      quietHours: quietHours,
+      audioOutput: audioOutput,
+      tts: tts,
+      isFeatureEnabled: _featureFlags.isEnabled,
+      onTelemetry: (event, {alertId, reason}) {
+        unawaited(_forwardCoordinatorTelemetry(event, alertId: alertId, reason: reason));
+      },
+    );
     _coordinator.onNavigate = null;
   }
 
@@ -72,7 +78,8 @@ class DangerAlertService {
   final PreferencesStore _preferences;
   final WatchFeatureFlagsService _featureFlags;
   final CompanionRelayService _companionRelay;
-  final DangerAlertCoordinator _coordinator;
+  late final DangerAlertCoordinator _coordinator;
+  DangerAlertPayload? _telemetryPayload;
 
   set onNavigate(DangerAlertNavigateHandler? handler) {
     _coordinator.onNavigate = handler;
@@ -153,6 +160,7 @@ class DangerAlertService {
         !_featureFlags.isEnabled('WATCH_PHONE_RELAY')) {
       return;
     }
+    _telemetryPayload = payload;
     await _coordinator.handleIncoming(payload);
     await _recordTelemetry(payload, 'received', channel: payload.deliverySource.name);
   }
@@ -247,9 +255,40 @@ class DangerAlertService {
           'event': event,
           if (channel != null) 'channel': channel,
           if (reason != null) 'reason': reason,
-          'language': _coordinator.preferences.preferredSpokenLanguage,
+          'language': payload.languageHint ?? _coordinator.preferences.preferredSpokenLanguage,
         },
       );
     } catch (_) {}
+  }
+
+  Future<void> _forwardCoordinatorTelemetry(
+    DangerAlertTelemetryEvent event, {
+    String? alertId,
+    String? reason,
+  }) async {
+    final payload = _telemetryPayload;
+    if (payload == null) return;
+    if (alertId != null && alertId != payload.alertId) return;
+
+    final mappedEvent = switch (event) {
+      DangerAlertTelemetryEvent.displayed => 'displayed',
+      DangerAlertTelemetryEvent.speechStarted => 'speech_started',
+      DangerAlertTelemetryEvent.speechCompleted => 'speech_completed',
+      DangerAlertTelemetryEvent.ttsUnavailable => 'tts_missing',
+      DangerAlertTelemetryEvent.fallbackLanguage => 'fallback_language',
+      DangerAlertTelemetryEvent.duplicateSuppressed => 'duplicate_suppressed',
+      DangerAlertTelemetryEvent.expired => 'expired',
+      DangerAlertTelemetryEvent.muted => 'muted',
+      DangerAlertTelemetryEvent.signatureRejected => 'speech_failed',
+      DangerAlertTelemetryEvent.received => 'received',
+      DangerAlertTelemetryEvent.acknowledged => 'acknowledged',
+    };
+
+    await _recordTelemetry(
+      payload,
+      mappedEvent,
+      channel: payload.deliverySource.name,
+      reason: reason,
+    );
   }
 }

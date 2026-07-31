@@ -31,6 +31,8 @@ typedef DangerAlertTelemetryHandler = void Function(
   String? reason,
 });
 
+typedef DangerAlertFeatureFlagChecker = bool Function(String flag, {bool fallback});
+
 class DangerAlertCoordinator {
   DangerAlertCoordinator({
     required VibrationService vibration,
@@ -41,6 +43,7 @@ class DangerAlertCoordinator {
     DangerAlertSignatureVerifier? signatureVerifier,
     DangerAlertNavigateHandler? onNavigate,
     DangerAlertTelemetryHandler? onTelemetry,
+    DangerAlertFeatureFlagChecker? isFeatureEnabled,
     bool requireSignature = true,
   })  : _vibration = vibration,
         _versionTracker = versionTracker,
@@ -50,6 +53,7 @@ class DangerAlertCoordinator {
         _signatureVerifier = signatureVerifier ?? DangerAlertSignatureVerifier(),
         _onNavigate = onNavigate,
         _onTelemetry = onTelemetry,
+        _isFeatureEnabled = isFeatureEnabled,
         _requireSignature = requireSignature;
 
   final VibrationService _vibration;
@@ -60,6 +64,7 @@ class DangerAlertCoordinator {
   final DangerAlertSignatureVerifier _signatureVerifier;
   DangerAlertNavigateHandler? _onNavigate;
   final DangerAlertTelemetryHandler? _onTelemetry;
+  final DangerAlertFeatureFlagChecker? _isFeatureEnabled;
   final bool _requireSignature;
 
   WatchAccessibilityPreferences _preferences =
@@ -189,10 +194,18 @@ class DangerAlertCoordinator {
     required bool speak,
   }) async {
     _emit(DangerAlertTelemetryEvent.displayed, alertId: payload.alertId);
-    final quiet = _quietHours.evaluate(
-      preferences: _preferences,
-      priority: payload.priority,
-    );
+    final quietHoursEnabled =
+        _isFeatureEnabled?.call('WATCH_QUIET_HOURS', fallback: true) ?? true;
+    final quiet = quietHoursEnabled
+        ? _quietHours.evaluate(
+            preferences: _preferences,
+            priority: payload.priority,
+          )
+        : QuietHoursEvaluation(
+            inQuietHours: false,
+            allowSpeech: true,
+            allowStrongVibration: true,
+          );
     if (vibrate) {
       if (quiet.inQuietHours && !quiet.allowStrongVibration) {
         await _vibration.playPattern(VibrationPattern.medium);
@@ -201,6 +214,10 @@ class DangerAlertCoordinator {
       }
     }
     if (speak && !_muted) {
+      if (!(_isFeatureEnabled?.call('WATCH_LOCAL_TTS', fallback: true) ?? true)) {
+        _emit(DangerAlertTelemetryEvent.ttsUnavailable, alertId: payload.alertId, reason: 'local_tts_disabled');
+        return;
+      }
       await _speak(payload, quietHours: quiet);
       _scheduleRepeats(payload, quietHours: quiet);
     }
@@ -266,6 +283,10 @@ class DangerAlertCoordinator {
 
   Future<bool> _shouldSpeak(DangerAlertPayload payload) async {
     if (!_preferences.spokenDangerAlertsEnabled) return false;
+
+    final headphonePrivacyEnabled =
+        _isFeatureEnabled?.call('WATCH_HEADPHONE_PRIVACY', fallback: true) ?? true;
+    if (!headphonePrivacyEnabled) return true;
 
     final headphones = await _audioOutput.isHeadphoneConnected();
     if (!_preferences.speakSensitiveAlertsAloud) {

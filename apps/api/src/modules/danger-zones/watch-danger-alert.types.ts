@@ -12,6 +12,8 @@ export type WatchDangerAlertJobPayload = {
   title: string;
   body: string;
   actorAdminId: string;
+  channelMode?: "auto" | "phone_relay" | "watch_push" | "both";
+  connectivityModeOverride?: "PairedPhone" | "StandaloneCellular" | "Standalone";
 };
 
 export type WatchAlertTelemetryEventType =
