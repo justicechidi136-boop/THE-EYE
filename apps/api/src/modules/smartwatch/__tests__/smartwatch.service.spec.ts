@@ -51,6 +51,9 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
     },
     incidentTimeline: { create: jest.fn().mockResolvedValue({ id: "timeline-1" }) },
     auditLog: { create: jest.fn().mockResolvedValue({ id: "audit-1" }) },
+    watchOwnershipRecord: { create: jest.fn().mockResolvedValue({ id: "ownership-1" }) },
+    watchAssignmentRecord: { create: jest.fn().mockResolvedValue({ id: "assignment-1" }) },
+    watchPairingHistoryRecord: { create: jest.fn().mockResolvedValue({ id: "pairing-history-1" }) },
     notification: { create: jest.fn() },
     smartwatchOfflineEvent: {
       create: jest.fn().mockImplementation(async (args: any) => ({ id: "offline-1", ...args.data })),

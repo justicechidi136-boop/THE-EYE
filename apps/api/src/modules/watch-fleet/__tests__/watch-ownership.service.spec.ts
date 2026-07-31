@@ -65,7 +65,7 @@ describe("WatchOwnershipService", () => {
       ownerPersonId: "person-1",
       reason: "Initial assignment",
     });
-    expect(result.data).toBeDefined();
+    expect(result.data != null).toBe(true);
     expect(tx.watchOwnershipRecord.create).toHaveBeenCalled();
     expect(tx.watchAssignmentRecord.create).toHaveBeenCalled();
   });
