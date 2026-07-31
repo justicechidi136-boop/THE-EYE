@@ -15,6 +15,8 @@ abstract final class LiveVideoErrorCodes {
   static const unexpectedApiFailure = "LIVE-VIDEO-011";
   static const connectLivekitFailed = "LIVE-VIDEO-015";
   static const publishTracksFailed = "LIVE-VIDEO-016";
+  static const joinFlowInterruptedBeforeConnect =
+      "JOIN_FLOW_INTERRUPTED_BEFORE_CONNECT";
   static const authRequired = "LIVE-VIDEO-AUTH-001";
   static const startResponseInvalid = "LIVE-VIDEO-010";
 }

@@ -1,0 +1,55 @@
+/// Structured checkpoints for proving whether [Room.connect] executes.
+abstract final class LiveVideoJoinCheckpoint {
+  static const startResponseReceived = "START_RESPONSE_RECEIVED";
+  static const sessionParsed = "SESSION_PARSED";
+  static const connectPublisherInvoked = "CONNECT_PUBLISHER_INVOKED";
+  static const roomCreated = "ROOM_CREATED";
+  static const roomConnectBegin = "ROOM_CONNECT_BEGIN";
+  static const roomConnectSuccess = "ROOM_CONNECT_SUCCESS";
+  static const roomConnectException = "ROOM_CONNECT_EXCEPTION";
+  static const localVideoCreateBegin = "LOCAL_VIDEO_CREATE_BEGIN";
+  static const localVideoCreateSuccess = "LOCAL_VIDEO_CREATE_SUCCESS";
+  static const localAudioCreateBegin = "LOCAL_AUDIO_CREATE_BEGIN";
+  static const localAudioCreateSuccess = "LOCAL_AUDIO_CREATE_SUCCESS";
+  static const tracksPublished = "TRACKS_PUBLISHED";
+  static const joinFlowInterrupted = "JOIN_FLOW_INTERRUPTED_BEFORE_CONNECT";
+}
+
+/// Tracks join-flow checkpoints for post-mortem diagnostics.
+class LiveVideoJoinFlowTracker {
+  final Set<String> _checkpoints = <String>{};
+  String? interruptReason;
+  String? interruptLocation;
+
+  Iterable<String> get checkpoints => _checkpoints;
+
+  bool get roomConnectBeginLogged =>
+      _checkpoints.contains(LiveVideoJoinCheckpoint.roomConnectBegin);
+
+  bool get roomConnectSuccessLogged =>
+      _checkpoints.contains(LiveVideoJoinCheckpoint.roomConnectSuccess);
+
+  void reset() {
+    _checkpoints.clear();
+    interruptReason = null;
+    interruptLocation = null;
+  }
+
+  void mark(String checkpoint) {
+    _checkpoints.add(checkpoint);
+  }
+
+  void recordInterrupt({required String reason, required String location}) {
+    interruptReason = reason;
+    interruptLocation = location;
+    mark(LiveVideoJoinCheckpoint.joinFlowInterrupted);
+  }
+
+  Map<String, Object?> toDiagnosticMap() => {
+        "checkpoints": _checkpoints.toList()..sort(),
+        if (interruptReason != null) "interruptReason": interruptReason,
+        if (interruptLocation != null) "interruptLocation": interruptLocation,
+        "roomConnectBeginLogged": roomConnectBeginLogged,
+        "roomConnectSuccessLogged": roomConnectSuccessLogged,
+      };
+}
