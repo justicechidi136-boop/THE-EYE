@@ -51,6 +51,18 @@ export const WATCH_DANGER_ALERTS_QUEUE_NAME = resolveWatchDangerAlertsQueueNameF
   process.env as Record<string, unknown>,
 );
 
+export function resolveWatchFleetBulkQueueName(appEnvironment: AppEnvironment): string {
+  return `the-eye-${appEnvironment}-watch-fleet-bulk`;
+}
+
+export function resolveWatchFleetBulkQueueNameFromConfig(config: Record<string, unknown>): string {
+  return resolveWatchFleetBulkQueueName(resolveAppEnvironment(config));
+}
+
+export const WATCH_FLEET_BULK_QUEUE_NAME = resolveWatchFleetBulkQueueNameFromConfig(
+  process.env as Record<string, unknown>,
+);
+
 export function resolveVoiceTranscriptionQueueName(appEnvironment: AppEnvironment): string {
   return `the-eye-${appEnvironment}-voice-transcription`;
 }

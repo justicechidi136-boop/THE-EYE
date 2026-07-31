@@ -45,6 +45,9 @@ import type {
   ResidentView,
   PoliceStationView,
   SmartwatchDeviceView,
+  WatchOwnerSummaryView,
+  WatchInventoryRowView,
+  WatchOwnerDetailView,
   SmartwatchDeviceDetailView,
   PairingSessionView,
   ActivationHistoryView,
@@ -405,6 +408,133 @@ export async function fetchSmartwatchDevices(): Promise<SmartwatchDeviceView[]> 
     const response = await apiRequest<{ data: Record<string, unknown>[] }>("/smartwatch/admin/devices", { token });
     return response.data.map(toSmartwatchDeviceView);
   }, []);
+}
+
+function toWatchOwnerSummaryView(record: Record<string, unknown>): WatchOwnerSummaryView {
+  return {
+    ownerKey: String(record.ownerKey ?? ""),
+    ownerType: String(record.ownerType ?? ""),
+    ownerId: record.ownerId ? String(record.ownerId) : null,
+    ownerName: String(record.ownerName ?? ""),
+    phone: record.phone ? String(record.phone) : null,
+    email: record.email ? String(record.email) : null,
+    organization: record.organization ? String(record.organization) : null,
+    department: record.department ? String(record.department) : null,
+    currentAssignee: record.currentAssignee ? String(record.currentAssignee) : null,
+    totalWatches: Number(record.totalWatches ?? 0),
+    onlineWatches: Number(record.onlineWatches ?? 0),
+    offlineWatches: Number(record.offlineWatches ?? 0),
+    lowBatteryWatches: Number(record.lowBatteryWatches ?? 0),
+    sosActiveWatches: Number(record.sosActiveWatches ?? 0),
+    unassignedWatches: Number(record.unassignedWatches ?? 0),
+    lostStolenWatches: Number(record.lostStolenWatches ?? 0),
+    lastDeviceActivity: record.lastDeviceActivity ? String(record.lastDeviceActivity) : null,
+    accountStatus: record.accountStatus ? String(record.accountStatus) : null,
+  };
+}
+
+function toWatchInventoryRowView(record: Record<string, unknown>): WatchInventoryRowView {
+  return {
+    id: String(record.id ?? ""),
+    watchName: String(record.watchName ?? ""),
+    deviceId: String(record.deviceId ?? ""),
+    serialNumber: record.serialNumber ? String(record.serialNumber) : null,
+    imei: record.imei ? String(record.imei) : null,
+    eid: record.eid ? String(record.eid) : null,
+    model: record.model ? String(record.model) : null,
+    manufacturer: record.manufacturer ? String(record.manufacturer) : null,
+    firmwareVersion: record.firmwareVersion ? String(record.firmwareVersion) : null,
+    appVersion: record.appVersion ? String(record.appVersion) : null,
+    currentOwner: String(record.currentOwner ?? ""),
+    currentAssignee: record.currentAssignee ? String(record.currentAssignee) : null,
+    organization: record.organization ? String(record.organization) : null,
+    department: record.department ? String(record.department) : null,
+    pairingStatus: String(record.pairingStatus ?? ""),
+    ownershipStatus: String(record.ownershipStatus ?? ""),
+    inventoryStatus: String(record.inventoryStatus ?? ""),
+    onlineStatus: String(record.onlineStatus ?? ""),
+    batteryLevel: record.batteryLevel != null ? Number(record.batteryLevel) : null,
+    connectivityType: String(record.connectivityType ?? ""),
+    lastSeen: record.lastSeen ? String(record.lastSeen) : null,
+    lastSync: record.lastSync ? String(record.lastSync) : null,
+    lastKnownState: record.lastKnownState ? String(record.lastKnownState) : null,
+    lastKnownLga: record.lastKnownLga ? String(record.lastKnownLga) : null,
+    lastSos: record.lastSos ? String(record.lastSos) : null,
+    lastEmergencyAlert: record.lastEmergencyAlert ? String(record.lastEmergencyAlert) : null,
+    lastLiveVideoSession: record.lastLiveVideoSession ? String(record.lastLiveVideoSession) : null,
+  };
+}
+
+export async function fetchWatchOwnerSummaries(query: Record<string, string | undefined> = {}): Promise<PaginatedResponse<WatchOwnerSummaryView>> {
+  return withToken(async (token) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value) params.set(key, value);
+    }
+    const path = `/watch-fleet/owners${params.size ? `?${params.toString()}` : ""}`;
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>(path, { token });
+    return {
+      ...response,
+      data: response.data.map(toWatchOwnerSummaryView),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 50 });
+}
+
+export async function fetchWatchInventory(query: Record<string, string | undefined> = {}): Promise<PaginatedResponse<WatchInventoryRowView>> {
+  return withToken(async (token) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value) params.set(key, value);
+    }
+    const path = `/watch-fleet/inventory${params.size ? `?${params.toString()}` : ""}`;
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>(path, { token });
+    return {
+      ...response,
+      data: response.data.map(toWatchInventoryRowView),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 50 });
+}
+
+export async function fetchWatchOwnerDetail(ownerType: string, ownerId: string): Promise<WatchOwnerDetailView> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(
+      `/watch-fleet/owners/${encodeURIComponent(ownerType)}/${encodeURIComponent(ownerId)}`,
+      { token },
+    );
+    const base = toWatchOwnerSummaryView(response.data);
+    return {
+      ...base,
+      ownershipHistory: (response.data.ownershipHistory as unknown[]) ?? [],
+      assignmentHistory: (response.data.assignmentHistory as unknown[]) ?? [],
+      transferHistory: (response.data.transferHistory as unknown[]) ?? [],
+      auditHistory: (response.data.auditHistory as unknown[]) ?? [],
+      departments: (response.data.departments as unknown[]) ?? [],
+    };
+  }, {
+    ownerKey: "",
+    ownerType: "",
+    ownerId: null,
+    ownerName: "",
+    phone: null,
+    email: null,
+    organization: null,
+    department: null,
+    currentAssignee: null,
+    totalWatches: 0,
+    onlineWatches: 0,
+    offlineWatches: 0,
+    lowBatteryWatches: 0,
+    sosActiveWatches: 0,
+    unassignedWatches: 0,
+    lostStolenWatches: 0,
+    lastDeviceActivity: null,
+    accountStatus: null,
+    ownershipHistory: [],
+    assignmentHistory: [],
+    transferHistory: [],
+    auditHistory: [],
+    departments: [],
+  });
 }
 
 export async function fetchSmartwatchDevice(id: string): Promise<SmartwatchDeviceView | null> {

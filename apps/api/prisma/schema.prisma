@@ -1406,7 +1406,7 @@ model LiveVideoLocationUpdate {
 
 model SmartwatchDevice {
   id                    String   @id @default(uuid()) @db.Uuid
-  userId                String   @map("user_id") @db.Uuid
+  userId                String?  @map("user_id") @db.Uuid
   deviceId              String   @unique @map("device_id")
   serialNumber          String?  @unique @map("serial_number")
   imei                  String?  @unique
@@ -1415,6 +1415,8 @@ model SmartwatchDevice {
   provider              String
   displayName           String?  @map("display_name")
   model                 String?
+  manufacturer          String?
+  appVersion            String?  @map("app_version")
   deviceSecretHash      String?  @map("device_secret_hash")
   deviceCertificate     String?  @map("device_certificate")
   publicKey             String?  @map("public_key")
@@ -1436,15 +1438,37 @@ model SmartwatchDevice {
   lastGpsAccuracy       Decimal? @map("last_gps_accuracy") @db.Decimal(7, 2)
   lastGpsAt             DateTime? @map("last_gps_at") @db.Timestamptz(6)
   lastSeenAt            DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  lastSyncAt            DateTime? @map("last_sync_at") @db.Timestamptz(6)
+  lastKnownState        String?  @map("last_known_state")
+  lastKnownLga          String?  @map("last_known_lga")
+  lastSosAt             DateTime? @map("last_sos_at") @db.Timestamptz(6)
+  lastEmergencyAlertAt  DateTime? @map("last_emergency_alert_at") @db.Timestamptz(6)
+  lastLiveVideoSessionAt DateTime? @map("last_live_video_session_at") @db.Timestamptz(6)
   criticalAlertsEnabled Boolean  @default(true) @map("critical_alerts_enabled")
   isActive              Boolean  @default(true) @map("is_active")
   isOnline              Boolean  @default(false) @map("is_online")
   remoteDisabledAt      DateTime? @map("remote_disabled_at") @db.Timestamptz(6)
   remoteWipedAt         DateTime? @map("remote_wiped_at") @db.Timestamptz(6)
+  currentOwnerType      String   @default("UNASSIGNED_INVENTORY") @map("current_owner_type")
+  currentOwnerId        String?  @map("current_owner_id") @db.Uuid
+  currentAssigneeId     String?  @map("current_assignee_id") @db.Uuid
+  currentOrganizationId String?  @map("current_organization_id") @db.Uuid
+  currentDepartmentId   String?  @map("current_department_id") @db.Uuid
+  currentInventoryLocationId String? @map("current_inventory_location_id") @db.Uuid
+  ownershipStatus       String   @default("UNASSIGNED_INVENTORY") @map("ownership_status")
+  assignmentStatus      String   @default("UNASSIGNED") @map("assignment_status")
+  inventoryStatus       String   @default("IN_STOCK") @map("inventory_status")
   metadata              Json     @default("{}")
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  currentOrganization   WatchOrganization? @relation(fields: [currentOrganizationId], references: [id], onDelete: SetNull)
+  currentDepartment     WatchDepartment? @relation(fields: [currentDepartmentId], references: [id], onDelete: SetNull)
+  currentInventoryLocation WatchInventoryLocation? @relation(fields: [currentInventoryLocationId], references: [id], onDelete: SetNull)
+  ownershipRecords      WatchOwnershipRecord[]
+  assignmentRecords     WatchAssignmentRecord[]
+  transferRecords       WatchTransferRecord[]
+  pairingHistory        WatchPairingHistoryRecord[]
   sosEvents             SosEvent[]
   gpsTracks             SmartwatchGpsTrack[]
   offlineEvents         SmartwatchOfflineEvent[]
@@ -1453,10 +1477,20 @@ model SmartwatchDevice {
   safetyAlertRecipients SafetyAlertRecipient[]
 
   @@index([userId])
+  @@index([currentOwnerType, currentOwnerId])
+  @@index([currentOrganizationId])
+  @@index([currentDepartmentId])
+  @@index([currentAssigneeId])
+  @@index([ownershipStatus])
+  @@index([assignmentStatus])
+  @@index([inventoryStatus])
   @@index([connectivityMode, isActive])
   @@index([isOnline, lastSeenAt])
   @@index([serialNumber])
   @@index([imei])
+  @@index([eid])
+  @@index([currentOwnerType, ownershipStatus, lastSeenAt])
+  @@index([currentOrganizationId, assignmentStatus, isOnline])
   @@map("smartwatch_devices")
 }
 
@@ -2150,6 +2184,193 @@ model AdminUserPreference {
   adminUser         AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
   @@map("admin_user_preferences")
+}
+
+model WatchOrganization {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  country     String
+  state       String
+  lga         String
+  status      String   @default("ACTIVE")
+  phone       String?
+  email       String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  departments WatchDepartment[]
+  devices     SmartwatchDevice[]
+  ownershipRecords WatchOwnershipRecord[]
+  assignmentRecords WatchAssignmentRecord[]
+
+  @@index([country, state, lga])
+  @@index([status])
+  @@map("watch_organizations")
+}
+
+model WatchDepartment {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  code           String?
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization   WatchOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  devices        SmartwatchDevice[]
+  assignmentRecords WatchAssignmentRecord[]
+
+  @@index([organizationId])
+  @@map("watch_departments")
+}
+
+model WatchInventoryLocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  locationType String @map("location_type")
+  country   String
+  state     String?
+  lga       String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  devices   SmartwatchDevice[]
+  ownershipRecords WatchOwnershipRecord[]
+
+  @@index([locationType, country, state])
+  @@map("watch_inventory_locations")
+}
+
+model WatchOwnershipRecord {
+  id                   String    @id @default(uuid()) @db.Uuid
+  deviceId             String    @map("device_id") @db.Uuid
+  ownerType            String    @map("owner_type")
+  ownerPersonId        String?   @map("owner_person_id") @db.Uuid
+  ownerOrganizationId  String?   @map("owner_organization_id") @db.Uuid
+  inventoryLocationId  String?   @map("inventory_location_id") @db.Uuid
+  ownershipStatus      String    @map("ownership_status")
+  validFrom            DateTime  @map("valid_from") @db.Timestamptz(6)
+  validTo              DateTime? @map("valid_to") @db.Timestamptz(6)
+  transferredAt        DateTime? @map("transferred_at") @db.Timestamptz(6)
+  transferredByAdminId String?   @map("transferred_by_admin_id") @db.Uuid
+  transferReason       String?   @map("transfer_reason")
+  previousRecordId     String?   @map("previous_record_id") @db.Uuid
+  correlationId        String?   @map("correlation_id")
+  actorAdminId         String?   @map("actor_admin_id") @db.Uuid
+  ipAddress            String?   @map("ip_address")
+  metadata             Json      @default("{}")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  device               SmartwatchDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  organization         WatchOrganization? @relation(fields: [ownerOrganizationId], references: [id], onDelete: SetNull)
+  inventoryLocation    WatchInventoryLocation? @relation(fields: [inventoryLocationId], references: [id], onDelete: SetNull)
+
+  @@index([deviceId, validFrom])
+  @@index([ownerType, ownerPersonId])
+  @@index([ownerOrganizationId])
+  @@index([ownershipStatus, validTo])
+  @@map("watch_ownership_records")
+}
+
+model WatchAssignmentRecord {
+  id               String    @id @default(uuid()) @db.Uuid
+  deviceId         String    @map("device_id") @db.Uuid
+  organizationId   String?   @map("organization_id") @db.Uuid
+  departmentId     String?   @map("department_id") @db.Uuid
+  assigneePersonId String?   @map("assignee_person_id") @db.Uuid
+  assignmentStatus String    @map("assignment_status")
+  validFrom        DateTime  @map("valid_from") @db.Timestamptz(6)
+  validTo          DateTime? @map("valid_to") @db.Timestamptz(6)
+  assignedAt       DateTime  @map("assigned_at") @db.Timestamptz(6)
+  unassignedAt     DateTime? @map("unassigned_at") @db.Timestamptz(6)
+  assignedByAdminId String?  @map("assigned_by_admin_id") @db.Uuid
+  reason           String?
+  correlationId    String?   @map("correlation_id")
+  metadata         Json      @default("{}")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  device           SmartwatchDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  organization     WatchOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  department       WatchDepartment? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([deviceId, validFrom])
+  @@index([assigneePersonId, validTo])
+  @@index([organizationId, departmentId])
+  @@map("watch_assignment_records")
+}
+
+model WatchTransferRecord {
+  id                 String   @id @default(uuid()) @db.Uuid
+  deviceId           String   @map("device_id") @db.Uuid
+  fromOwnerType      String   @map("from_owner_type")
+  fromOwnerId        String?  @map("from_owner_id") @db.Uuid
+  toOwnerType        String   @map("to_owner_type")
+  toOwnerId          String?  @map("to_owner_id") @db.Uuid
+  fromAssigneeId     String?  @map("from_assignee_id") @db.Uuid
+  toAssigneeId       String?  @map("to_assignee_id") @db.Uuid
+  transferredByAdminId String @map("transferred_by_admin_id") @db.Uuid
+  transferReason     String?  @map("transfer_reason")
+  correlationId      String   @map("correlation_id")
+  ipAddress          String?  @map("ip_address")
+  approvalStatus     String   @default("APPROVED") @map("approval_status")
+  idempotencyKey     String?  @unique @map("idempotency_key")
+  transferredAt      DateTime @default(now()) @map("transferred_at") @db.Timestamptz(6)
+  metadata           Json     @default("{}")
+  device             SmartwatchDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, transferredAt])
+  @@index([correlationId])
+  @@map("watch_transfer_records")
+}
+
+model WatchPairingHistoryRecord {
+  id                 String    @id @default(uuid()) @db.Uuid
+  deviceId           String    @map("device_id") @db.Uuid
+  ownerTypeAtPairing String?   @map("owner_type_at_pairing")
+  ownerIdAtPairing   String?   @map("owner_id_at_pairing") @db.Uuid
+  assigneeIdAtPairing String?  @map("assignee_id_at_pairing") @db.Uuid
+  pairedUserId       String?   @map("paired_user_id") @db.Uuid
+  pairedAt           DateTime  @map("paired_at") @db.Timestamptz(6)
+  pairedByAdminId    String?   @map("paired_by_admin_id") @db.Uuid
+  pairingMethod      String    @map("pairing_method")
+  pairingCodeRef     String?   @map("pairing_code_ref")
+  pairingStatus      String    @map("pairing_status")
+  authenticationStatus String  @default("PENDING") @map("authentication_status")
+  lastSuccessfulAuthAt DateTime? @map("last_successful_auth_at") @db.Timestamptz(6)
+  unpairedAt         DateTime? @map("unpaired_at") @db.Timestamptz(6)
+  unpairedByAdminId  String?   @map("unpaired_by_admin_id") @db.Uuid
+  unpairReason       String?   @map("unpair_reason")
+  correlationId      String?   @map("correlation_id")
+  metadata           Json      @default("{}")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  device             SmartwatchDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, pairedAt])
+  @@index([pairedUserId])
+  @@map("watch_pairing_history_records")
+}
+
+model WatchBulkOperationJob {
+  id              String    @id @default(uuid()) @db.Uuid
+  operationType   String    @map("operation_type")
+  status          String    @default("QUEUED")
+  requestedCount  Int       @map("requested_count")
+  processedCount  Int       @default(0) @map("processed_count")
+  successCount    Int       @default(0) @map("success_count")
+  failureCount    Int       @default(0) @map("failure_count")
+  skippedCount    Int       @default(0) @map("skipped_count")
+  progressPct     Int       @default(0) @map("progress_pct")
+  actorAdminId    String    @map("actor_admin_id") @db.Uuid
+  correlationId   String    @map("correlation_id")
+  failureReportKey String?  @map("failure_report_key")
+  cancelledAt     DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([actorAdminId])
+  @@index([correlationId])
+  @@map("watch_bulk_operation_jobs")
 }
 
 

@@ -23,6 +23,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { PoliceStationsModule } from "./police-stations/police-stations.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { SmartwatchModule } from "./smartwatch/smartwatch.module";
+import { WatchFleetModule } from "./watch-fleet/watch-fleet.module";
 import { StorageModule } from "./storage/storage.module";
 import { UsersModule } from "./users/users.module";
 import { VerificationModule } from "./verification/verification.module";
@@ -78,6 +79,7 @@ const redisDisabled = !shouldRegisterBullMq();
     PoliceStationsModule,
     LiveVideoModule,
     SmartwatchModule,
+    WatchFleetModule,
     DangerZonesModule,
     AdminSettingsModule,
     VoiceAttachmentsModule,
