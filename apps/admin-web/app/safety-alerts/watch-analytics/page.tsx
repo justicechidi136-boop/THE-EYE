@@ -2,13 +2,13 @@ import { AppShell } from "../../../components/app-shell";
 import { SafetyAlertsSubnav } from "../../../components/safety-alerts/safety-alerts-subnav";
 import { StagingWatchTestAlertForm } from "../../../components/safety-alerts/staging-watch-test-alert-form";
 import { PageHeader, Panel } from "../../../components/ui";
-import { fetchWatchFeatureFlags, fetchWatchNotificationAnalytics } from "../../../lib/api/data";
+import { fetchWatchFeatureFlags, fetchWatchNotificationAnalytics, type WatchFeatureFlagsResponse } from "../../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function WatchAnalyticsPage() {
   let analytics: Awaited<ReturnType<typeof fetchWatchNotificationAnalytics>> | null = null;
-  let flags: Record<string, boolean> | null = null;
+  let flags: WatchFeatureFlagsResponse | null = null;
   let error: string | null = null;
 
   try {
