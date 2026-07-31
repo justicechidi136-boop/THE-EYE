@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import 'alerts/danger_alert_models.dart';
@@ -35,8 +38,18 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
+    debugPrint('[THE_EYE_WATCH] FlutterError: ${details.exceptionAsString()}');
   };
-  runApp(const TheEyeWatchApp());
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[THE_EYE_WATCH] Uncaught: $error\n$stack');
+    return true;
+  };
+  runZonedGuarded(
+    () => runApp(const TheEyeWatchApp()),
+    (error, stack) {
+      debugPrint('[THE_EYE_WATCH] Zone error: $error\n$stack');
+    },
+  );
 }
 
 class TheEyeWatchApp extends StatefulWidget {

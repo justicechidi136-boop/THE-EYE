@@ -21,6 +21,10 @@ class SecureCredentialStore {
   static const _deviceSecretKey = 'watch.device_secret';
   static const _accessTokenKey = 'watch.access_token';
   static const _pushTokenKey = 'watch.push_token';
+  static const _watchInternalIdKey = 'watch.internal_id';
+  static const _ownerIdKey = 'watch.owner_id';
+  static const _ownerTypeKey = 'watch.owner_type';
+  static const _activationCompleteKey = 'watch.activation_complete';
 
   Future<String?> readDeviceId() => _read(_deviceIdKey);
 
@@ -29,6 +33,17 @@ class SecureCredentialStore {
   Future<String?> readAccessToken() => _read(_accessTokenKey);
 
   Future<String?> readPushToken() => _read(_pushTokenKey);
+
+  Future<String?> readWatchInternalId() => _read(_watchInternalIdKey);
+
+  Future<String?> readOwnerId() => _read(_ownerIdKey);
+
+  Future<String?> readOwnerType() => _read(_ownerTypeKey);
+
+  Future<bool> isActivationComplete() async {
+    final value = await _read(_activationCompleteKey);
+    return value == 'true';
+  }
 
   Future<void> saveDeviceCredentials({
     required String deviceId,
@@ -52,6 +67,49 @@ class SecureCredentialStore {
       return;
     }
     await _write(_pushTokenKey, token);
+  }
+
+  Future<void> saveActivationSession({
+    required String deviceId,
+    required String deviceSecret,
+    required String accessToken,
+    required String watchInternalId,
+    String? ownerId,
+    String? ownerType,
+  }) async {
+    await _write(_deviceIdKey, deviceId);
+    await _write(_deviceSecretKey, deviceSecret);
+    await _write(_accessTokenKey, accessToken);
+    await _write(_watchInternalIdKey, watchInternalId);
+    await _write(_activationCompleteKey, 'true');
+    if (ownerId != null && ownerId.isNotEmpty) {
+      await _write(_ownerIdKey, ownerId);
+    } else {
+      await _delete(_ownerIdKey);
+    }
+    if (ownerType != null && ownerType.isNotEmpty) {
+      await _write(_ownerTypeKey, ownerType);
+    } else {
+      await _delete(_ownerTypeKey);
+    }
+  }
+
+  Future<
+      ({
+        bool tokenPresent,
+        bool deviceSecretPresent,
+        String? deviceId,
+      })> verifyActivationSession({
+    required String expectedDeviceId,
+  }) async {
+    final deviceId = await readDeviceId();
+    final secret = await readDeviceSecret();
+    final token = await readAccessToken();
+    return (
+      tokenPresent: token != null && token.isNotEmpty,
+      deviceSecretPresent: secret != null && secret.isNotEmpty,
+      deviceId: deviceId,
+    );
   }
 
   Future<void> wipe() async {

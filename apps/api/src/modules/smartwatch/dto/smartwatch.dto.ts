@@ -106,6 +106,16 @@ export type SmartwatchStandaloneLoginDto = {
   deviceCertificate?: string;
 };
 
+export type ActivateWatchWithCodeDto = {
+  deviceId: string;
+  pairingCode: string;
+  firebaseEnv?: string;
+  model?: string;
+  appVersion?: string;
+  manufacturer?: string;
+  correlationId?: string;
+};
+
 export type SmartwatchHeartbeatDto = {
   deviceId?: string;
   deviceSecret?: string;
@@ -210,6 +220,21 @@ export function validateCriticalAlertDto(dto: SendCriticalAlertDto) {
 export function validateStandaloneLoginDto(dto: SmartwatchStandaloneLoginDto) {
   assertText(dto.deviceId, "deviceId");
   assertText(dto.deviceSecret, "deviceSecret");
+}
+
+export function validateActivateWatchWithCodeDto(dto: ActivateWatchWithCodeDto) {
+  assertText(dto.deviceId, "deviceId");
+  const normalized = dto.pairingCode?.replace(/\s+/g, "") ?? "";
+  if (!/^\d{6}$/.test(normalized)) {
+    throw new BadRequestException("pairingCode must be a 6-digit activation code");
+  }
+  if (dto.firebaseEnv && !firebaseEnvs.has(dto.firebaseEnv)) {
+    throw new BadRequestException("Unsupported firebaseEnv");
+  }
+}
+
+export function normalizeWatchPairingCode(code: string) {
+  return code.replace(/\s+/g, "");
 }
 
 export function validateHeartbeatDto(dto: SmartwatchHeartbeatDto) {
