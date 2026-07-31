@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const allItems: [string, string, "manage" | "any"][] = [
   ["Smart Watches", "/devices/smart-watches", "any"],
+  ["Fleet Management", "/devices/smart-watches/fleet", "manage"],
   ["Pending Activations", "/devices/smart-watches/pending-activations", "manage"],
   ["Firmware Management", "/devices/smart-watches/firmware", "manage"],
   ["SOS History", "/devices/smart-watches/sos-history", "any"],

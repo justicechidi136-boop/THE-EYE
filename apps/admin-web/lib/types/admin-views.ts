@@ -208,6 +208,65 @@ export type PatrolScheduleView = {
   longitude?: number;
 };
 
+export type WatchOwnerSummaryView = {
+  ownerKey: string;
+  ownerType: string;
+  ownerId: string | null;
+  ownerName: string;
+  phone: string | null;
+  email: string | null;
+  organization: string | null;
+  department: string | null;
+  currentAssignee: string | null;
+  totalWatches: number;
+  onlineWatches: number;
+  offlineWatches: number;
+  lowBatteryWatches: number;
+  sosActiveWatches: number;
+  unassignedWatches: number;
+  lostStolenWatches: number;
+  lastDeviceActivity: string | null;
+  accountStatus: string | null;
+};
+
+export type WatchInventoryRowView = {
+  id: string;
+  watchName: string;
+  deviceId: string;
+  serialNumber: string | null;
+  imei: string | null;
+  eid: string | null;
+  model: string | null;
+  manufacturer: string | null;
+  firmwareVersion: string | null;
+  appVersion: string | null;
+  currentOwner: string;
+  currentAssignee: string | null;
+  organization: string | null;
+  department: string | null;
+  pairingStatus: string;
+  ownershipStatus: string;
+  inventoryStatus: string;
+  onlineStatus: string;
+  batteryLevel: number | null;
+  connectivityType: string;
+  lastSeen: string | null;
+  lastSync: string | null;
+  lastKnownState: string | null;
+  lastKnownLga: string | null;
+  lastSos: string | null;
+  lastEmergencyAlert: string | null;
+  lastLiveVideoSession: string | null;
+};
+
+export type WatchOwnerDetailView = WatchOwnerSummaryView & {
+  ownershipHistory?: unknown[];
+  assignmentHistory?: unknown[];
+  transferHistory?: unknown[];
+  auditHistory?: unknown[];
+  departments?: unknown[];
+};
+
 export type SmartwatchDeviceView = {
   id: string;
   deviceId: string;

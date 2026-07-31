@@ -1,6 +1,17 @@
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional, ConflictException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AdminRoleName, EmergencyCategory, IncidentPriority, IncidentType, SmartwatchPairingMethod } from "@the-eye/shared";
+import {
+  AdminRoleName,
+  EmergencyCategory,
+  IncidentPriority,
+  IncidentType,
+  SmartwatchPairingMethod,
+  WatchAssignmentStatus,
+  WatchInventoryStatus,
+  WatchOwnerType,
+  WatchOwnershipStatus,
+  WATCH_OWNERSHIP_BLOCKED_STATUSES,
+} from "@the-eye/shared";
 import { randomToken, hashToken } from "../../common/auth/crypto";
 import { signJwt, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret } from "../../common/auth/jwt-secrets";
@@ -61,7 +72,32 @@ export class SmartwatchService {
     validateRegisterSmartwatchDeviceDto(dto);
     await this.assertValidPairingCode(dto);
 
+    const existing = await this.prisma.smartwatchDevice.findUnique({ where: { deviceId: dto.deviceId } });
+    if (existing) {
+      if (WATCH_OWNERSHIP_BLOCKED_STATUSES.includes(existing.ownershipStatus as never)) {
+        throw new ConflictException(`Device is ${existing.ownershipStatus} and cannot be paired`);
+      }
+      if (
+        existing.currentAssigneeId &&
+        existing.currentAssigneeId !== actor.sub &&
+        existing.userId &&
+        existing.userId !== actor.sub
+      ) {
+        throw new ConflictException("Device is assigned to another person; authorized transfer required");
+      }
+    }
+
     const deviceSecret = randomToken(32);
+    const now = new Date();
+    const ownershipFields = {
+      currentOwnerType: WatchOwnerType.Person,
+      currentOwnerId: actor.sub,
+      currentAssigneeId: actor.sub,
+      ownershipStatus: WatchOwnershipStatus.PersonOwned,
+      assignmentStatus: WatchAssignmentStatus.Assigned,
+      inventoryStatus: WatchInventoryStatus.Deployed,
+    };
+
     const device = await this.prisma.smartwatchDevice.upsert({
       where: { deviceId: dto.deviceId },
       update: {
@@ -88,6 +124,7 @@ export class SmartwatchService {
         isActive: true,
         deviceSecretHash: hashToken(deviceSecret),
         metadata: dto.metadata ?? {},
+        ...ownershipFields,
       } as never,
       create: {
         userId: actor.sub,
@@ -113,7 +150,48 @@ export class SmartwatchService {
         criticalAlertsEnabled: dto.criticalAlertsEnabled ?? true,
         deviceSecretHash: hashToken(deviceSecret),
         metadata: dto.metadata ?? {},
+        ...ownershipFields,
       } as never,
+    });
+
+    if (!existing) {
+      await (this.prisma as any).watchOwnershipRecord.create({
+        data: {
+          deviceId: device.id,
+          ownerType: WatchOwnerType.Person,
+          ownerPersonId: actor.sub,
+          ownershipStatus: WatchOwnershipStatus.PersonOwned,
+          validFrom: now,
+          correlationId: `pair-${device.id}-${now.getTime()}`,
+        },
+      });
+      await (this.prisma as any).watchAssignmentRecord.create({
+        data: {
+          deviceId: device.id,
+          assigneePersonId: actor.sub,
+          assignmentStatus: WatchAssignmentStatus.Assigned,
+          validFrom: now,
+          assignedAt: now,
+          correlationId: `pair-${device.id}-${now.getTime()}`,
+        },
+      });
+    }
+
+    await (this.prisma as any).watchPairingHistoryRecord.create({
+      data: {
+        deviceId: device.id,
+        ownerTypeAtPairing: device.currentOwnerType,
+        ownerIdAtPairing: device.currentOwnerId,
+        assigneeIdAtPairing: device.currentAssigneeId,
+        pairedUserId: actor.sub,
+        pairedAt: now,
+        pairingMethod: dto.pairingMethod ?? SmartwatchPairingMethod.PairingCode,
+        pairingCodeRef: dto.pairingCode ? hashToken(dto.pairingCode).slice(0, 12) : null,
+        pairingStatus: "PAIRED",
+        authenticationStatus: "AUTHENTICATED",
+        lastSuccessfulAuthAt: now,
+        correlationId: `pair-${device.id}-${now.getTime()}`,
+      },
     });
 
     await this.audit(actor, "smartwatch.device_paired", "smartwatch_devices", device.id, { deviceId: dto.deviceId, connectivityMode: dto.connectivityMode ?? "PairedPhone" });
