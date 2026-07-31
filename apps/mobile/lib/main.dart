@@ -3,7 +3,7 @@ import "dart:io" show Directory, File, Platform;
 
 import "package:firebase_core/firebase_core.dart";
 import "package:firebase_messaging/firebase_messaging.dart";
-import "package:flutter/foundation.dart" show kIsWeb;
+import "package:flutter/foundation.dart" show kDebugMode, kIsWeb;
 import "package:flutter/material.dart";
 import "package:geolocator/geolocator.dart";
 import "package:google_fonts/google_fonts.dart";
@@ -50,6 +50,7 @@ import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
 import "live_video/live_video_evidence_overlay.dart";
 import "live_video/live_video_preview_pane.dart";
+import "live_video/live_video_join_flow.dart";
 import "live_video/live_video_safe_log.dart";
 import "live_video/live_video_session_controller.dart";
 import "live_video/live_video_error_codes.dart";
@@ -4495,8 +4496,33 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     );
   }
 
+  void _logStartFlowInterrupt({
+    required String reason,
+    required String location,
+    String? correlationId,
+    String? incidentId,
+  }) {
+    liveVideoController.joinFlow.recordInterrupt(
+      reason: reason,
+      location: location,
+    );
+    logLiveVideoDiagnostic(
+      checkpoint: LiveVideoJoinCheckpoint.joinFlowInterrupted,
+      correlationId: correlationId ?? _startupTrace.clientTraceId,
+      incidentId: incidentId ?? activeIncidentId,
+      internalReason: reason,
+      interruptLocation: location,
+    );
+  }
+
   Future<void> _startStream(BuildContext context) async {
-    if (_streamStartInFlight || streaming) return;
+    if (_streamStartInFlight || streaming) {
+      _logStartFlowInterrupt(
+        reason: "duplicate_stream_start",
+        location: "_startStream:duplicate_guard",
+      );
+      return;
+    }
     _streamStartInFlight = true;
     setState(() {
       startingStream = true;
@@ -4513,6 +4539,10 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       final accessToken = appController.accessToken;
       if (accessToken == null || accessToken.isEmpty) {
         _setStartupPhase(LiveVideoStartupPhase.failed);
+        _logStartFlowInterrupt(
+          reason: "missing_access_token",
+          location: "_startStream:auth_guard",
+        );
         showAppSnackBar(
           context,
           "Sign in required to start live video. Reference: LIVE-VIDEO-AUTH-001",
@@ -4533,13 +4563,25 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           appController.locationCoordinator.resolveImmediateEmergencyAccess();
 
       final previewOk = await previewFuture;
-      if (!mounted || _disposed) return;
+      if (!mounted || _disposed) {
+        _logStartFlowInterrupt(
+          reason: _disposed ? "widget_disposed" : "widget_unmounted",
+          location: "_startStream:after_preview",
+          incidentId: activeIncidentId,
+        );
+        return;
+      }
       if (!previewOk) {
         _setStartupPhase(LiveVideoStartupPhase.failed);
         setState(() {
           permissionDenied = true;
           permissionError = liveVideoController.errorMessage;
         });
+        _logStartFlowInterrupt(
+          reason: "camera_preview_failed",
+          location: "_startStream:preview_guard",
+          incidentId: activeIncidentId,
+        );
         if (liveVideoController.errorMessage != null) {
           showAppSnackBar(context, liveVideoController.errorMessage!,
               isError: true);
@@ -4548,7 +4590,14 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       }
 
       final access = await accessFuture;
-      if (!mounted || _disposed) return;
+      if (!mounted || _disposed) {
+        _logStartFlowInterrupt(
+          reason: _disposed ? "widget_disposed" : "widget_unmounted",
+          location: "_startStream:after_location",
+          incidentId: activeIncidentId,
+        );
+        return;
+      }
 
       if (!resumeVideoOnly) {
         final draft = access.hasFix
@@ -4572,9 +4621,19 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
         _setStartupPhase(LiveVideoStartupPhase.creatingIncident);
         final submission = await _submitLiveVideoIncident(appController, draft);
-        if (!mounted || _disposed) return;
+        if (!mounted || _disposed) {
+          _logStartFlowInterrupt(
+            reason: _disposed ? "widget_disposed" : "widget_unmounted",
+            location: "_startStream:after_incident_submit",
+          );
+          return;
+        }
         if (!submission.isSuccess || submission.incidentId == null) {
           _setStartupPhase(LiveVideoStartupPhase.failed);
+          _logStartFlowInterrupt(
+            reason: "incident_submit_failed",
+            location: "_startStream:incident_submit",
+          );
           showAppSnackBar(
               context,
               "${_startupPhase.label}: ${submission.userMessage ?? "Unable to create incident for live video."}",
@@ -4584,7 +4643,14 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
         activeIncidentId = submission.incidentId;
         await appController.activateActiveEmergency(activeIncidentId!);
-        if (!mounted || _disposed) return;
+        if (!mounted || _disposed) {
+          _logStartFlowInterrupt(
+            reason: _disposed ? "widget_disposed" : "widget_unmounted",
+            location: "_startStream:after_activate_emergency",
+            incidentId: activeIncidentId,
+          );
+          return;
+        }
         if (access.hasFix) {
           latestPosition = access.position;
           lastCapturedAt = access.position!.timestamp;
@@ -4615,15 +4681,24 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         envelope["requestId"] as String? ??
             (envelope["data"] as Map?)?["requestId"] as String?,
       );
+      logLiveVideoDiagnostic(
+        checkpoint: LiveVideoJoinCheckpoint.startResponseReceived,
+        correlationId: _startupTrace.clientTraceId,
+        incidentId: activeIncidentId,
+        internalReason: "http_201_or_success_body",
+      );
       final startResult = LiveVideoStartResult.fromResponse(envelope);
       logLiveVideoDiagnostic(
-        checkpoint: "start_response_decoded",
+        checkpoint: LiveVideoJoinCheckpoint.sessionParsed,
         correlationId: startResult.correlationId,
         incidentId: activeIncidentId,
         sessionId: startResult.sessionId,
         roomName: startResult.roomName,
+        participantIdentity: startResult.participantIdentity,
         urlScheme: liveVideoUrlHost(startResult.livekit.url)?.scheme,
         urlHost: liveVideoUrlHost(startResult.livekit.url)?.host,
+        serverUrlLength: startResult.livekit.url.length.toString(),
+        tokenLength: startResult.livekit.token.length.toString(),
         tokenFingerprint: liveVideoTokenFingerprint(startResult.livekit.token),
       );
       liveSessionId = startResult.sessionId;
@@ -4650,13 +4725,47 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       final connected = await liveVideoController
           .connectPublisher(startResult)
           .timeout(kLiveVideoStartTimeout);
-      if (!mounted || _disposed) return;
+      if (!mounted || _disposed) {
+        _logStartFlowInterrupt(
+          reason: _disposed ? "widget_disposed" : "widget_unmounted",
+          location: "_startStream:after_connectPublisher",
+          correlationId: startResult.correlationId,
+          incidentId: activeIncidentId,
+        );
+        return;
+      }
       if (!connected) {
         _setStartupPhase(LiveVideoStartupPhase.recovering);
+        final joinFlow = liveVideoController.joinFlow;
+        final connectMessage = joinFlow.roomConnectBeginLogged
+            ? (liveVideoController.errorMessage ??
+                "Unable to join live video room "
+                    "(${liveVideoController.lastConnectExceptionType}: "
+                    "${liveVideoController.lastConnectExceptionMessage}). "
+                    "Reference: ${LiveVideoErrorCodes.connectLivekitFailed}.")
+            : (liveVideoController.errorMessage ??
+                "Live video join flow stopped before Room.connect(). "
+                    "Reference: ${LiveVideoErrorCodes.joinFlowInterruptedBeforeConnect}.");
+        if (!joinFlow.roomConnectBeginLogged) {
+          joinFlow.recordInterrupt(
+            reason: joinFlow.interruptReason ?? "connect_publisher_false",
+            location: joinFlow.interruptLocation ??
+                "_startStream:connectPublisher_result",
+          );
+          logLiveVideoDiagnostic(
+            checkpoint: LiveVideoJoinCheckpoint.joinFlowInterrupted,
+            correlationId: startResult.correlationId,
+            incidentId: activeIncidentId,
+            sessionId: startResult.sessionId,
+            internalReason: joinFlow.interruptReason,
+            interruptLocation: joinFlow.interruptLocation,
+          );
+        }
         showAppSnackBar(
             context,
-            liveVideoController.errorMessage ??
-                "Unable to join live video room. Your emergency was still submitted.",
+            connectMessage.contains("emergency was still submitted")
+                ? connectMessage
+                : "$connectMessage Your emergency was still submitted.",
             isError: true);
         return;
       }
@@ -4691,13 +4800,27 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         exceptionMessage: error.message,
       );
       showAppSnackBar(context, message, isError: true);
-    } on TimeoutException {
+    } on TimeoutException catch (error, stackTrace) {
       if (!mounted || _disposed) return;
+      _logStartFlowInterrupt(
+        reason: "timeout:${error.message ?? error.toString()}",
+        location: "_startStream:timeout",
+        incidentId: activeIncidentId,
+      );
+      logLiveVideoDiagnostic(
+        checkpoint: LiveVideoJoinCheckpoint.joinFlowInterrupted,
+        correlationId: _startupTrace.clientTraceId,
+        incidentId: activeIncidentId,
+        exceptionType: error.runtimeType.toString(),
+        exceptionMessage: error.toString(),
+        stackTraceHead: liveVideoStackTraceHead(stackTrace),
+        internalReason: "START_STREAM_TIMEOUT",
+      );
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
       showAppSnackBar(context,
-          "Live video start timed out. Your emergency was still submitted. Retry live video when ready.",
+          "Live video start timed out ($error). Your emergency was still submitted. Retry live video when ready.",
           isError: true);
     } on IncidentApiException catch (error) {
       if (!mounted || _disposed) return;
@@ -4713,19 +4836,36 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
       showAppSnackBar(context, "${_startupPhase.label}: $message", isError: true);
-    } catch (_) {
+    } catch (error, stackTrace) {
       if (!mounted || _disposed) return;
+      _logStartFlowInterrupt(
+        reason: error.runtimeType.toString(),
+        location: "_startStream:unexpected",
+        incidentId: activeIncidentId,
+      );
+      logLiveVideoDiagnostic(
+        checkpoint: LiveVideoJoinCheckpoint.joinFlowInterrupted,
+        correlationId: _startupTrace.clientTraceId,
+        incidentId: activeIncidentId,
+        exceptionType: error.runtimeType.toString(),
+        exceptionMessage: error.toString(),
+        stackTraceHead: liveVideoStackTraceHead(stackTrace),
+        internalReason: "START_STREAM_UNEXPECTED",
+      );
+      if (kDebugMode) {
+        debugPrintStack(stackTrace: stackTrace, label: "live_video_start_stream");
+      }
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
       showAppSnackBar(context,
-          "Live video is temporarily unavailable. Your emergency may still have been submitted.",
+          "Live video is temporarily unavailable ($error). Your emergency may still have been submitted.",
           isError: true);
     } finally {
       _streamStartInFlight = false;
       if (mounted && !_disposed) setState(() => startingStream = false);
       logLiveVideoEvent(
-          "Live video startup trace ${_startupTrace.toDiagnosticMap()}");
+          "Live video startup trace ${_startupTrace.toDiagnosticMap()} joinFlow=${liveVideoController.joinFlow.toDiagnosticMap()}");
     }
   }
 
