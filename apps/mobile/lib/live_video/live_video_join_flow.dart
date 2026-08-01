@@ -1,10 +1,16 @@
 /// Structured checkpoints for proving whether [Room.connect] executes.
 abstract final class LiveVideoJoinCheckpoint {
+  static const startStreamBegin = "START_STREAM_BEGIN";
+  static const startRequestSent = "START_REQUEST_SENT";
   static const startResponseReceived = "START_RESPONSE_RECEIVED";
   static const sessionParsed = "SESSION_PARSED";
   static const connectPublisherInvoked = "CONNECT_PUBLISHER_INVOKED";
   static const roomCreated = "ROOM_CREATED";
+  static const connectivityChecked = "CONNECTIVITY_CHECKED";
+  static const roomPrepareConnectionSuccess = "ROOM_PREPARE_CONNECTION_SUCCESS";
+  static const roomPrepareConnectionFailed = "ROOM_PREPARE_CONNECTION_FAILED";
   static const roomConnectBegin = "ROOM_CONNECT_BEGIN";
+  static const roomConnectSdkInvoke = "ROOM_CONNECT_SDK_INVOKE";
   static const roomConnectSuccess = "ROOM_CONNECT_SUCCESS";
   static const roomConnectException = "ROOM_CONNECT_EXCEPTION";
   static const localVideoCreateBegin = "LOCAL_VIDEO_CREATE_BEGIN";

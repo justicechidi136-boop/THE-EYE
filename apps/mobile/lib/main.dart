@@ -4516,6 +4516,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   }
 
   Future<void> _startStream(BuildContext context) async {
+    logLiveVideoDiagnostic(
+      checkpoint: LiveVideoJoinCheckpoint.startStreamBegin,
+      correlationId: _startupTrace.clientTraceId,
+      incidentId: activeIncidentId,
+    );
     if (_streamStartInFlight || streaming) {
       _logStartFlowInterrupt(
         reason: "duplicate_stream_start",
@@ -4666,6 +4671,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       }
 
       _setStartupPhase(LiveVideoStartupPhase.requestingLiveKitToken);
+      logLiveVideoDiagnostic(
+        checkpoint: LiveVideoJoinCheckpoint.startRequestSent,
+        correlationId: _startupTrace.clientTraceId,
+        incidentId: activeIncidentId,
+      );
       final envelope = await apiClient
           .startLiveVideo(
             incidentId: activeIncidentId!,
@@ -4737,15 +4747,21 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       if (!connected) {
         _setStartupPhase(LiveVideoStartupPhase.recovering);
         final joinFlow = liveVideoController.joinFlow;
+        final failureCode = liveVideoController.lastConnectFailureReason ==
+                LiveVideoErrorCodes.publishTracksFailed
+            ? LiveVideoErrorCodes.publishTracksFailed
+            : joinFlow.roomConnectBeginLogged
+                ? LiveVideoErrorCodes.connectLivekitFailed
+                : LiveVideoErrorCodes.joinFlowInterruptedBeforeConnect;
         final connectMessage = joinFlow.roomConnectBeginLogged
             ? (liveVideoController.errorMessage ??
                 "Unable to join live video room "
                     "(${liveVideoController.lastConnectExceptionType}: "
                     "${liveVideoController.lastConnectExceptionMessage}). "
-                    "Reference: ${LiveVideoErrorCodes.connectLivekitFailed}.")
+                    "Reference: $failureCode.")
             : (liveVideoController.errorMessage ??
                 "Live video join flow stopped before Room.connect(). "
-                    "Reference: ${LiveVideoErrorCodes.joinFlowInterruptedBeforeConnect}.");
+                    "Reference: $failureCode.");
         if (!joinFlow.roomConnectBeginLogged) {
           joinFlow.recordInterrupt(
             reason: joinFlow.interruptReason ?? "connect_publisher_false",
@@ -4815,6 +4831,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         exceptionMessage: error.toString(),
         stackTraceHead: liveVideoStackTraceHead(stackTrace),
         internalReason: "START_STREAM_TIMEOUT",
+        connectionState: liveVideoController.joinFlow.roomConnectBeginLogged
+            ? "room_connect_begin_logged"
+            : "before_room_connect",
       );
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
