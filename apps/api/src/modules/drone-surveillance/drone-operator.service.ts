@@ -66,7 +66,7 @@ export class DroneOperatorService {
       this.prismaAny.droneOperator.count({ where: { ...whereNoCursor, OR: [{ accountStatus: DroneOperatorAccountStatus.Suspended }, { availabilityStatus: DroneOperatorAvailability.Suspended }] } }),
     ]);
 
-    const page = buildCursorPage(rows, limit, (it) => encodeDateIdCursor(it.createdAt, it.id));
+    const page = buildCursorPage(rows, limit, (it: { createdAt: Date; id: string }) => encodeDateIdCursor(it.createdAt, it.id));
     return {
       ...page,
       data: page.data.map((it: any) => this.mapOperatorListItem(it, actor)),
