@@ -4,8 +4,10 @@ import "package:flutter/material.dart";
 import "package:uuid/uuid.dart";
 
 import "../voice/voice_recorder.dart";
+import "../voice/voice_report_validation.dart";
 import "../widgets/eye_scaffold.dart";
 import "pending_support_message_store.dart";
+import "support_attachment_upload_service.dart";
 import "support_models.dart";
 import "support_service.dart";
 
@@ -30,7 +32,7 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
   SupportCategory _category = SupportCategory.other;
   String? _incidentId;
   bool _submitting = false;
-  String? _voiceAttachmentKey;
+  VoiceRecordingResult? _voiceRecording;
   List<Map<String, String>> _incidents = [];
 
   @override
@@ -61,7 +63,7 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
           .showSnackBar(const SnackBar(content: Text("Subject is required")));
       return;
     }
-    if (body.isEmpty && _voiceAttachmentKey == null) {
+    if (body.isEmpty && _voiceRecording == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Add a message or voice recording")),
       );
@@ -76,11 +78,26 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
         subject: subject,
         body: body.isEmpty ? null : body,
         incidentId: _incidentId,
-        clientMessageId: clientMessageId,
-        attachmentKey: _voiceAttachmentKey,
-        messageType: _voiceAttachmentKey != null ? "Voice" : "Text",
+        clientMessageId: _voiceRecording == null ? clientMessageId : null,
         diagnosticMetadata: widget.prefill.diagnosticMetadata,
       );
+      if (_voiceRecording != null) {
+        final uploadService = SupportAttachmentUploadService();
+        final objectKey = await uploadService.uploadVoice(
+          accessToken: widget.accessToken,
+          conversationId: conversation.id,
+          attachment: _voiceRecording!.attachment,
+        );
+        await _service.sendMessage(
+          accessToken: widget.accessToken,
+          conversationId: conversation.id,
+          clientMessageId: clientMessageId,
+          attachmentKey: objectKey,
+          messageType: "Voice",
+          attachmentMimeType: _voiceRecording!.attachment.contentType,
+          attachmentDurationSeconds: _voiceRecording!.durationSeconds,
+        );
+      }
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(
         "/support/conversation",
@@ -149,12 +166,10 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
           const SizedBox(height: 16),
           VoiceRecorder(
             onRecordingReady: (result) {
-              setState(() {
-                _voiceAttachmentKey = "pending";
-                if (_bodyController.text.trim().isEmpty) {
-                  _bodyController.text = "[Voice message attached]";
-                }
-              });
+              setState(() => _voiceRecording = result);
+            },
+            onRecordingRemoved: () {
+              setState(() => _voiceRecording = null);
             },
           ),
           const SizedBox(height: 24),

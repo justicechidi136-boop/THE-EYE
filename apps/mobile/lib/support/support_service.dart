@@ -143,6 +143,23 @@ class SupportService {
     return _decodeBody(response);
   }
 
+  Future<void> confirmAttachment({
+    required String accessToken,
+    required String conversationId,
+    required String objectKey,
+    required String contentType,
+  }) async {
+    final response = await _client.postJson(
+      TheEyeSupportApiPaths.chatAttachmentConfirm(conversationId),
+      {
+        "objectKey": objectKey,
+        "contentType": contentType,
+      },
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+  }
+
   Future<List<Map<String, String>>> listRecentIncidents({
     required String accessToken,
   }) async {

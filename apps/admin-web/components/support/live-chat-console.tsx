@@ -77,6 +77,16 @@ export function LiveChatConsole({ conversationId, canAssign, canEscalate }: Live
         </button>
       </label>
       <div className="flex flex-wrap gap-2">
+        {canAssign ? (
+          <button
+            type="button"
+            disabled={busy}
+            className="rounded-md border border-line px-3 py-2 text-sm font-semibold"
+            onClick={() => post(`/api/admin/support-chats/${conversationId}/assign`, {})}
+          >
+            Assign to me
+          </button>
+        ) : null}
         {canEscalate ? (
           <button
             type="button"
@@ -102,6 +112,14 @@ export function LiveChatConsole({ conversationId, canAssign, canEscalate }: Live
           onClick={() => post(`/api/admin/support-chats/${conversationId}/close`, { status: "Closed" })}
         >
           Close
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded-md border border-line px-3 py-2 text-sm font-semibold"
+          onClick={() => post(`/api/admin/support-chats/${conversationId}/reopen`, {})}
+        >
+          Reopen
         </button>
       </div>
     </div>

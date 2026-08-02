@@ -11,13 +11,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       ? `/support/admin/chats/${conversationId}/reply`
       : action === "internal-note"
         ? `/support/admin/chats/${conversationId}/internal-note`
-        : action === "escalate"
-          ? `/support/admin/chats/${conversationId}/escalate`
-          : action === "resolve"
-            ? `/support/admin/chats/${conversationId}/resolve`
-            : action === "close"
-              ? `/support/admin/chats/${conversationId}/close`
-              : null;
+        : action === "assign"
+          ? `/support/admin/chats/${conversationId}/assign`
+          : action === "escalate"
+            ? `/support/admin/chats/${conversationId}/escalate`
+            : action === "resolve"
+              ? `/support/admin/chats/${conversationId}/resolve`
+              : action === "close"
+                ? `/support/admin/chats/${conversationId}/close`
+                : action === "reopen"
+                  ? `/support/admin/chats/${conversationId}/reopen`
+                  : null;
   if (!path) return NextResponse.json({ message: "Unsupported action" }, { status: 404 });
   return proxyAdminSupportChatMutation(path, body);
 }

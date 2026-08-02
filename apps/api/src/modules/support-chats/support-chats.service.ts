@@ -70,8 +70,8 @@ export class SupportChatsService {
     const reference = this.buildReference();
     const hasBody = Boolean(dto.body?.trim());
     const hasAttachment = Boolean(dto.attachmentKey);
-    if (!hasBody && !hasAttachment) {
-      throw new BadRequestException("A description or attachment is required");
+    if (!dto.subject?.trim()) {
+      throw new BadRequestException("Subject is required");
     }
     const user = await this.prisma.user.findUnique({
       where: { id: actor.sub },
@@ -108,26 +108,28 @@ export class SupportChatsService {
       },
     });
 
-    const messageBody = hasBody ? dto.body!.trim() : "[Attachment]";
-    const message = await this.createMessage({
-      conversationId: conversation.id,
-      senderRole: "Citizen",
-      userId: actor.sub,
-      body: messageBody,
-      clientMessageId: dto.clientMessageId,
-      messageType: dto.messageType ?? (hasAttachment ? "Voice" : "Text"),
-      attachmentKey: dto.attachmentKey,
-      visibility: "UserVisible",
-    });
+    if (hasBody || hasAttachment) {
+      const messageBody = hasBody ? dto.body!.trim() : "[Attachment]";
+      const message = await this.createMessage({
+        conversationId: conversation.id,
+        senderRole: "Citizen",
+        userId: actor.sub,
+        body: messageBody,
+        clientMessageId: dto.clientMessageId,
+        messageType: dto.messageType ?? (hasAttachment ? "Voice" : "Text"),
+        attachmentKey: dto.attachmentKey,
+        visibility: "UserVisible",
+      });
 
-    await this.prisma.supportConversation.update({
-      where: { id: conversation.id },
-      data: {
-        lastMessageAt: message.createdAt,
-        lastUserMessageAt: message.createdAt,
-        unreadAdmin: { increment: 1 },
-      },
-    });
+      await this.prisma.supportConversation.update({
+        where: { id: conversation.id },
+        data: {
+          lastMessageAt: message.createdAt,
+          lastUserMessageAt: message.createdAt,
+          unreadAdmin: { increment: 1 },
+        },
+      });
+    }
 
     await this.audit.record({
       actor,

@@ -90,9 +90,6 @@ import "settings/build_diagnostics_screen.dart";
 import "support/support_chat_screens.dart";
 import "support/support_home_screen.dart";
 import "support/support_models.dart";
-import "support/support_chat_screens.dart";
-import "support/support_home_screen.dart";
-import "support/support_models.dart";
 
 export "app/app_scope.dart" show AppScope;
 export "location/location_permission_service.dart"
@@ -615,6 +612,19 @@ class _TheEyeAppState extends State<TheEyeApp> {
           "incidentId": incidentId,
           "silent": request.silent,
         },
+      );
+      return;
+    }
+
+    if (request.route == "/support/conversation") {
+      final conversationId = request.conversationId;
+      if (conversationId == null || conversationId.isEmpty) {
+        navigator.pushNamed("/support/chats");
+        return;
+      }
+      navigator.pushNamed(
+        request.route,
+        arguments: SupportConversationRouteArgs(conversationId: conversationId),
       );
       return;
     }
@@ -3599,6 +3609,11 @@ class HomeScreen extends StatelessWidget {
                       Icons.radar,
                       Colors.cyan.shade800,
                       () => Navigator.of(context).pushNamed("/tracking")),
+                  ActionTile(
+                      "Help & Support",
+                      Icons.support_agent,
+                      Colors.blue.shade800,
+                      () => Navigator.of(context).pushNamed("/support")),
                 ],
               ),
             ),
