@@ -603,6 +603,7 @@ export {
   toDroneDeviceView,
   toDroneMissionView,
   toDroneOperatorView,
+  toDroneOperatorDetailView,
   toDroneEvidenceView,
   toDroneGeofenceView,
   toDroneNoFlyZoneView,

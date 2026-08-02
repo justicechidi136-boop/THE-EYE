@@ -1,6 +1,7 @@
 import type {
   DroneDashboardView,
   DroneDeviceView,
+  DroneOperatorDetailView,
   DroneEvidenceView,
   DroneFlightLogView,
   DroneGeofenceView,
@@ -94,12 +95,82 @@ export function toDroneDashboardView(record: Record<string, unknown>): DroneDash
 export function toDroneOperatorView(record: Record<string, unknown>): DroneOperatorView {
   return {
     id: text(record.id),
-    name: text(record.name),
+    name: text(record.fullName ?? record.name),
     email: record.email ? text(record.email) : null,
     callsign: record.callsign ? text(record.callsign) : null,
+    operatorCode: record.operatorCode ? text(record.operatorCode) : record.operator_code ? text(record.operator_code) : null,
     operatorRole: text(record.operatorRole, "Operator"),
     certificationLevel: record.certificationLevel ? text(record.certificationLevel) : null,
+    accountStatus: text(record.accountStatus, "Active"),
+    availabilityStatus: text(record.availabilityStatus, "Unavailable"),
+    country: record.country ? text(record.country) : null,
+    state: record.state ? text(record.state) : null,
+    lga: record.lga ? text(record.lga) : null,
+    assignedOperatingBase:
+      record.assignedOperatingBase ? text(record.assignedOperatingBase) : record.assigned_operating_base ? text(record.assigned_operating_base) : null,
+    licenceWarningLevel: text(record.licenceWarningLevel, "none"),
+    activeAssignmentCount: num(record.activeAssignmentCount) ?? 0,
     isActive: record.isActive !== false,
+  };
+}
+
+export function toDroneOperatorDetailView(record: Record<string, unknown>): DroneOperatorDetailView {
+  const base = toDroneOperatorView(record);
+  const currentAssignment = (record.currentAssignment as Record<string, unknown> | null | undefined) ?? null;
+  const missionStats = (record.missionStats as Record<string, unknown> | null | undefined) ?? {};
+  const compliance = (record.complianceSummary as Record<string, unknown> | null | undefined) ?? {};
+  const safety = (record.safetySummary as Record<string, unknown> | null | undefined) ?? {};
+  const documents = Array.isArray(record.documents) ? record.documents : [];
+  const auditEntries = Array.isArray(record.auditEntries) ? record.auditEntries : [];
+  const assignedDrone = (record.assignedDrone as Record<string, unknown> | null | undefined) ?? null;
+
+  return {
+    ...base,
+    phone: record.phone ? text(record.phone) : null,
+    assignedDroneId: record.assignedDroneId ? text(record.assignedDroneId) : assignedDrone?.id ? text(assignedDrone.id) : null,
+    assignedDroneDeviceId:
+      record.assignedDroneDeviceId ? text(record.assignedDroneDeviceId) : assignedDrone?.deviceId ? text(assignedDrone.deviceId) : null,
+    currentAssignment: currentAssignment
+      ? {
+          missionId: text(currentAssignment.missionId ?? currentAssignment.id),
+          missionCode: currentAssignment.missionCode ? text(currentAssignment.missionCode) : null,
+          status: currentAssignment.status ? text(currentAssignment.status) : null,
+        }
+      : null,
+    complianceSummary: {
+      licenceExpiryAt: compliance.licenceExpiryAt ? text(compliance.licenceExpiryAt) : null,
+      certificateExpiryAt: compliance.certificateExpiryAt ? text(compliance.certificateExpiryAt) : null,
+      medicalExpiryAt: compliance.medicalExpiryAt ? text(compliance.medicalExpiryAt) : null,
+    },
+    missionStats: {
+      totalMissions: num(missionStats.totalMissions) ?? 0,
+      completedMissions: num(missionStats.completedMissions) ?? 0,
+      abortedMissions: num(missionStats.abortedMissions) ?? 0,
+      hoursFlown: num(missionStats.hoursFlown) ?? 0,
+    },
+    safetySummary: {
+      incidentsInvolved: num(safety.incidentsInvolved) ?? 0,
+      warningCount: num(safety.warningCount) ?? 0,
+      lastIncidentAt: safety.lastIncidentAt ? text(safety.lastIncidentAt) : null,
+    },
+    documents: documents.map((entry) => {
+      const document = entry as Record<string, unknown>;
+      return {
+        id: text(document.id),
+        type: text(document.type, "Unknown"),
+        status: text(document.status, "Pending"),
+        expiresAt: document.expiresAt ? text(document.expiresAt) : null,
+      };
+    }),
+    auditEntries: auditEntries.map((entry) => {
+      const audit = entry as Record<string, unknown>;
+      return {
+        id: text(audit.id),
+        action: text(audit.action, "updated"),
+        actor: text(audit.actor, "system"),
+        createdAt: text(audit.createdAt),
+      };
+    }),
   };
 }
 

@@ -488,6 +488,7 @@ model Agency {
   responders          Responder[]
   responseUnits       ResponseUnit[]
   incidentAssignments IncidentAssignment[]
+  droneOperators      DroneOperator[]
 
   @@index([jurisdictionId, type])
   @@index([jurisdictionId, isActive])
@@ -537,6 +538,16 @@ model AdminUser {
   preferences                AdminUserPreference?
   droneOperatorProfile       DroneOperator?
   droneMissionsCreated       DroneMission[]        @relation("DroneMissionCreator")
+  droneOperatorsSuspended    DroneOperator[]       @relation("DroneOperatorSuspendedBy")
+  droneOperatorsReactivated  DroneOperator[]       @relation("DroneOperatorReactivatedBy")
+  droneLicencesVerified      DroneOperatorLicence[] @relation("DroneLicenceVerifiedBy")
+  droneCertificationsVerified DroneOperatorCertification[] @relation("DroneCertificationVerifiedBy")
+  droneQualificationsAssessed DroneOperatorQualification[] @relation("DroneQualificationAssessedBy")
+  droneOperatorDocumentsUploaded DroneOperatorDocument[] @relation("DroneOperatorDocumentUploadedBy")
+  droneOperatorStatusChanges DroneOperatorStatusHistory[] @relation("DroneOperatorStatusChangedBy")
+  droneMissionAssignments    DroneMissionAssignment[] @relation("DroneMissionAssignmentBy")
+  dronePreflightOverrides    DroneMissionPreflightCheck[] @relation("DronePreflightOverrideBy")
+  droneSafetyRecordsRecorded DroneOperatorSafetyRecord[] @relation("DroneSafetyRecordedBy")
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -2442,27 +2453,65 @@ model DroneDevice {
   missions         DroneMission[]
   flightLogs       DroneFlightLog[]
   healthSnapshots  DroneHealthSnapshot[]
+  qualifications   DroneOperatorQualification[]
 
   @@index([status, isActive])
   @@map("drone_devices")
 }
 
 model DroneOperator {
-  id                 String         @id @default(uuid()) @db.Uuid
-  adminUserId        String?        @unique @map("admin_user_id") @db.Uuid
-  name               String
-  email              String?
-  callsign           String?
-  operatorRole       String         @default("Operator") @map("operator_role")
-  certificationLevel String?        @map("certification_level")
-  isActive           Boolean        @default(true) @map("is_active")
-  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  adminUser          AdminUser?     @relation(fields: [adminUserId], references: [id])
-  commandedMissions  DroneMission[] @relation("DroneMissionCommander")
-  operatedMissions   DroneMission[] @relation("DroneMissionOperator")
+  id                       String                      @id @default(uuid()) @db.Uuid
+  operatorCode             String                      @unique @map("operator_code")
+  adminUserId              String?                     @unique @map("admin_user_id") @db.Uuid
+  fullName                 String                      @map("name")
+  profilePhotoObjectKey    String?                     @map("profile_photo_object_key")
+  email                    String?
+  phone                    String?
+  country                  String?
+  state                    String?
+  lga                      String?
+  operatingAddress         String?                     @map("operating_address")
+  employmentType           String                      @default("AgencyStaff") @map("employment_type")
+  assignedAgencyId         String?                     @map("assigned_agency_id") @db.Uuid
+  assignedOperatingBase    String?                     @map("assigned_operating_base")
+  emergencyContactName     String?                     @map("emergency_contact_name")
+  emergencyContactPhone    String?                     @map("emergency_contact_phone")
+  callsign                 String?
+  operatorRole             String                      @default("Operator") @map("operator_role")
+  certificationLevel       String?                     @map("certification_level")
+  accountStatus            String                      @default("PendingReview") @map("account_status")
+  availabilityStatus       String                      @default("Unavailable") @map("availability_status")
+  lastCheckInAt            DateTime?                   @map("last_check_in_at") @db.Timestamptz(6)
+  maximumConcurrentMissions Int                        @default(1) @map("maximum_concurrent_missions")
+  emergencyCallAvailable   Boolean                     @default(true) @map("emergency_call_available")
+  suspensionReason         String?                     @map("suspension_reason")
+  suspendedAt              DateTime?                   @map("suspended_at") @db.Timestamptz(6)
+  suspendedById            String?                     @map("suspended_by_id") @db.Uuid
+  reactivatedAt            DateTime?                   @map("reactivated_at") @db.Timestamptz(6)
+  reactivatedById          String?                     @map("reactivated_by_id") @db.Uuid
+  isActive                 Boolean                     @default(true) @map("is_active")
+  createdAt                DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  adminUser                AdminUser?                  @relation(fields: [adminUserId], references: [id])
+  assignedAgency           Agency?                     @relation(fields: [assignedAgencyId], references: [id])
+  suspendedBy              AdminUser?                  @relation("DroneOperatorSuspendedBy", fields: [suspendedById], references: [id])
+  reactivatedBy            AdminUser?                  @relation("DroneOperatorReactivatedBy", fields: [reactivatedById], references: [id])
+  commandedMissions        DroneMission[]              @relation("DroneMissionCommander")
+  operatedMissions         DroneMission[]              @relation("DroneMissionOperator")
+  licences                 DroneOperatorLicence[]
+  certifications           DroneOperatorCertification[]
+  qualifications           DroneOperatorQualification[]
+  documents                DroneOperatorDocument[]
+  statusHistory            DroneOperatorStatusHistory[]
+  missionAssignments       DroneMissionAssignment[]
+  safetyRecords            DroneOperatorSafetyRecord[]
 
   @@index([operatorRole, isActive])
+  @@index([country, state, lga])
+  @@index([assignedAgencyId])
+  @@index([accountStatus, availabilityStatus])
+  @@index([email])
+  @@index([phone])
   @@map("drone_operators")
 }
 
@@ -2498,6 +2547,9 @@ model DroneMission {
   gpsTracks          DroneGpsTrack[]
   evidence           DroneEvidence[]
   flightLogs         DroneFlightLog[]
+  assignments        DroneMissionAssignment[]
+  preflightChecks    DroneMissionPreflightCheck[]
+  safetyRecords      DroneOperatorSafetyRecord[]
 
   @@index([status, scheduledAt])
   @@index([incidentId])
@@ -2598,4 +2650,177 @@ model DroneHealthSnapshot {
 
   @@index([droneId, recordedAt])
   @@map("drone_health_snapshots")
+}
+
+model DroneOperatorLicence {
+  id                 String        @id @default(uuid()) @db.Uuid
+  operatorId         String        @map("operator_id") @db.Uuid
+  licenceNumber      String        @map("licence_number")
+  licenceCategory    String        @map("licence_category")
+  issuingAuthority   String        @map("issuing_authority")
+  issueDate          DateTime?     @map("issue_date") @db.Timestamptz(6)
+  expiryDate         DateTime?     @map("expiry_date") @db.Timestamptz(6)
+  verificationStatus String        @default("Unverified") @map("verification_status")
+  verifiedAt         DateTime?     @map("verified_at") @db.Timestamptz(6)
+  verifiedById       String?       @map("verified_by_id") @db.Uuid
+  rejectionReason    String?       @map("rejection_reason")
+  documentObjectKey  String?       @map("document_object_key")
+  documentMimeType   String?       @map("document_mime_type")
+  documentChecksum   String?       @map("document_checksum")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  operator           DroneOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  verifiedBy         AdminUser?    @relation("DroneLicenceVerifiedBy", fields: [verifiedById], references: [id])
+
+  @@unique([licenceNumber])
+  @@index([operatorId, expiryDate])
+  @@index([verificationStatus, expiryDate])
+  @@map("drone_operator_licences")
+}
+
+model DroneOperatorCertification {
+  id                 String        @id @default(uuid()) @db.Uuid
+  operatorId         String        @map("operator_id") @db.Uuid
+  certificationType  String        @map("certification_type")
+  trainingProvider   String?       @map("training_provider")
+  certificateNumber  String?       @map("certificate_number")
+  issueDate          DateTime?     @map("issue_date") @db.Timestamptz(6)
+  expiryDate         DateTime?     @map("expiry_date") @db.Timestamptz(6)
+  documentObjectKey  String?       @map("document_object_key")
+  verificationStatus String        @default("Unverified") @map("verification_status")
+  verifiedById       String?       @map("verified_by_id") @db.Uuid
+  verifiedAt         DateTime?     @map("verified_at") @db.Timestamptz(6)
+  rejectionReason    String?       @map("rejection_reason")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  operator           DroneOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  verifiedBy         AdminUser?    @relation("DroneCertificationVerifiedBy", fields: [verifiedById], references: [id])
+
+  @@index([operatorId, certificationType])
+  @@index([verificationStatus, expiryDate])
+  @@map("drone_operator_certifications")
+}
+
+model DroneOperatorQualification {
+  id                       String        @id @default(uuid()) @db.Uuid
+  operatorId               String        @map("operator_id") @db.Uuid
+  droneDeviceId            String?       @map("drone_device_id") @db.Uuid
+  droneModel               String?       @map("drone_model")
+  qualificationLevel       String        @default("Trainee") @map("qualification_level")
+  qualifiedAt              DateTime?     @map("qualified_at") @db.Timestamptz(6)
+  expiresAt                DateTime?     @map("expires_at") @db.Timestamptz(6)
+  assessedById             String?       @map("assessed_by_id") @db.Uuid
+  lastCompetencyAssessmentAt DateTime?   @map("last_competency_assessment_at") @db.Timestamptz(6)
+  status                   String        @default("Pending")
+  notes                    String?
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  operator                 DroneOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  droneDevice              DroneDevice?  @relation(fields: [droneDeviceId], references: [id])
+  assessedBy               AdminUser?    @relation("DroneQualificationAssessedBy", fields: [assessedById], references: [id])
+
+  @@index([operatorId, droneDeviceId])
+  @@index([operatorId, droneModel])
+  @@index([status, expiresAt])
+  @@map("drone_operator_qualifications")
+}
+
+model DroneOperatorDocument {
+  id               String        @id @default(uuid()) @db.Uuid
+  operatorId       String        @map("operator_id") @db.Uuid
+  documentType     String        @map("document_type")
+  title            String
+  bucket           String
+  objectKey        String        @map("object_key")
+  mimeType         String        @map("mime_type")
+  checksum         String?
+  sizeBytes        Int?          @map("size_bytes")
+  restricted       Boolean       @default(false)
+  uploadedById     String?       @map("uploaded_by_id") @db.Uuid
+  confirmedAt      DateTime?     @map("confirmed_at") @db.Timestamptz(6)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  operator         DroneOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  uploadedBy       AdminUser?    @relation("DroneOperatorDocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([operatorId, documentType])
+  @@map("drone_operator_documents")
+}
+
+model DroneOperatorStatusHistory {
+  id             String        @id @default(uuid()) @db.Uuid
+  operatorId     String        @map("operator_id") @db.Uuid
+  previousStatus String?       @map("previous_status")
+  newStatus      String        @map("new_status")
+  previousAvailability String? @map("previous_availability")
+  newAvailability String?      @map("new_availability")
+  reason         String?
+  changedById    String?       @map("changed_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  operator       DroneOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  changedBy      AdminUser?    @relation("DroneOperatorStatusChangedBy", fields: [changedById], references: [id])
+
+  @@index([operatorId, createdAt])
+  @@map("drone_operator_status_history")
+}
+
+model DroneMissionAssignment {
+  id              String        @id @default(uuid()) @db.Uuid
+  missionId       String        @map("mission_id") @db.Uuid
+  operatorId      String        @map("operator_id") @db.Uuid
+  assignmentRole  String        @default("Primary") @map("assignment_role")
+  status          String        @default("Pending")
+  assignedById    String?       @map("assigned_by_id") @db.Uuid
+  assignedAt      DateTime      @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  respondedAt     DateTime?     @map("responded_at") @db.Timestamptz(6)
+  declineReason   String?       @map("decline_reason")
+  idempotencyKey  String?       @unique @map("idempotency_key")
+  version         Int           @default(0)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  mission         DroneMission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  operator        DroneOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  assignedBy      AdminUser?    @relation("DroneMissionAssignmentBy", fields: [assignedById], references: [id])
+
+  @@index([missionId, assignmentRole, status])
+  @@index([operatorId, status])
+  @@map("drone_mission_assignments")
+}
+
+model DroneMissionPreflightCheck {
+  id              String       @id @default(uuid()) @db.Uuid
+  missionId       String       @map("mission_id") @db.Uuid
+  operatorId      String?      @map("operator_id") @db.Uuid
+  passed          Boolean      @default(false)
+  failedChecks    Json         @default("[]") @map("failed_checks")
+  emergencyOverride Boolean    @default(false) @map("emergency_override")
+  overrideReason  String?      @map("override_reason")
+  overrideById    String?      @map("override_by_id") @db.Uuid
+  checkedAt       DateTime     @default(now()) @map("checked_at") @db.Timestamptz(6)
+  mission         DroneMission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  overrideBy      AdminUser?   @relation("DronePreflightOverrideBy", fields: [overrideById], references: [id])
+
+  @@index([missionId, checkedAt])
+  @@map("drone_mission_preflight_checks")
+}
+
+model DroneOperatorSafetyRecord {
+  id          String        @id @default(uuid()) @db.Uuid
+  operatorId  String        @map("operator_id") @db.Uuid
+  recordType  String        @map("record_type")
+  title       String
+  description String?
+  missionId   String?       @map("mission_id") @db.Uuid
+  severity    String        @default("Info")
+  restricted  Boolean       @default(false)
+  recordedById String?      @map("recorded_by_id") @db.Uuid
+  recordedAt  DateTime      @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  metadata    Json          @default("{}")
+  operator    DroneOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  mission     DroneMission? @relation(fields: [missionId], references: [id])
+  recordedBy  AdminUser?    @relation("DroneSafetyRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([operatorId, recordedAt])
+  @@index([recordType])
+  @@map("drone_operator_safety_records")
 }

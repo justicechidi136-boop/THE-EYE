@@ -61,6 +61,119 @@ export enum DroneGeofenceType {
   IncidentPerimeter = "IncidentPerimeter",
 }
 
+export enum DroneEmploymentType {
+  AgencyStaff = "AgencyStaff",
+  Contractor = "Contractor",
+  Volunteer = "Volunteer",
+  Trainee = "Trainee",
+}
+
+export enum DroneOperatorAccountStatus {
+  PendingReview = "PendingReview",
+  Active = "Active",
+  Assigned = "Assigned",
+  OnMission = "OnMission",
+  OffDuty = "OffDuty",
+  OnLeave = "OnLeave",
+  Training = "Training",
+  Suspended = "Suspended",
+  Inactive = "Inactive",
+  Rejected = "Rejected",
+}
+
+export enum DroneOperatorAvailability {
+  Available = "Available",
+  Assigned = "Assigned",
+  OnMission = "OnMission",
+  OffDuty = "OffDuty",
+  OnLeave = "OnLeave",
+  Training = "Training",
+  Suspended = "Suspended",
+  Unavailable = "Unavailable",
+}
+
+export enum DroneVerificationStatus {
+  Unverified = "Unverified",
+  PendingReview = "PendingReview",
+  Verified = "Verified",
+  Expired = "Expired",
+  Suspended = "Suspended",
+  Rejected = "Rejected",
+}
+
+export enum DroneCertificationType {
+  EmergencyResponse = "EmergencyResponse",
+  NightOperations = "NightOperations",
+  ThermalImaging = "ThermalImaging",
+  SearchAndRescue = "SearchAndRescue",
+  FireAssessment = "FireAssessment",
+  FloodAssessment = "FloodAssessment",
+  CrowdMonitoring = "CrowdMonitoring",
+  BeyondVisualLineOfSight = "BeyondVisualLineOfSight",
+  PayloadOperation = "PayloadOperation",
+  EvidenceCapture = "EvidenceCapture",
+  Maintenance = "Maintenance",
+  Other = "Other",
+}
+
+export enum DroneQualificationLevel {
+  Trainee = "Trainee",
+  Qualified = "Qualified",
+  Senior = "Senior",
+  Instructor = "Instructor",
+}
+
+export enum DroneQualificationStatus {
+  Active = "Active",
+  Expired = "Expired",
+  Revoked = "Revoked",
+  Pending = "Pending",
+}
+
+export enum DroneOperatorDocumentType {
+  PilotLicence = "PilotLicence",
+  TrainingCertificate = "TrainingCertificate",
+  GovernmentId = "GovernmentId",
+  SecurityClearance = "SecurityClearance",
+  Insurance = "Insurance",
+  MedicalClearance = "MedicalClearance",
+  EmploymentAgreement = "EmploymentAgreement",
+  DisciplinaryRecord = "DisciplinaryRecord",
+  CompetencyAssessment = "CompetencyAssessment",
+  Other = "Other",
+}
+
+export enum DroneMissionAssignmentRole {
+  Primary = "Primary",
+  Secondary = "Secondary",
+  Payload = "Payload",
+}
+
+export enum DroneMissionAssignmentStatus {
+  Pending = "Pending",
+  Accepted = "Accepted",
+  Declined = "Declined",
+  Active = "Active",
+  Completed = "Completed",
+  Removed = "Removed",
+}
+
+export enum DroneSafetyRecordType {
+  SafetyIncident = "SafetyIncident",
+  FlightViolation = "FlightViolation",
+  HardLanding = "HardLanding",
+  SignalLoss = "SignalLoss",
+  GeofenceViolation = "GeofenceViolation",
+  NoFlyZoneAttempt = "NoFlyZoneAttempt",
+  EquipmentDamage = "EquipmentDamage",
+  MissionAbort = "MissionAbort",
+  Complaint = "Complaint",
+  CorrectiveAction = "CorrectiveAction",
+  Suspension = "Suspension",
+  Commendation = "Commendation",
+  RetrainingRequired = "RetrainingRequired",
+}
+
 export enum IncidentType {
   Emergency = "Emergency",
   Crime = "Crime",

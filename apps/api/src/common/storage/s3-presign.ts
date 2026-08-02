@@ -13,6 +13,7 @@ const avatarContentTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const evidenceKeyPattern = /^evidence\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const avatarKeyPattern = /^avatars\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const kycKeyPattern = /^kyc\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
+const droneOperatorDocKeyPattern = /^drone-operators\/[0-9a-f-]{36}\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -70,6 +71,21 @@ export function assertKycObjectKey(userId: string, objectKey: string) {
     throw new BadRequestException("KYC objectKey must remain under the user KYC prefix");
   }
   if (!kycKeyPattern.test(objectKey)) throw new BadRequestException("Invalid KYC object key format");
+}
+
+export function droneOperatorDocumentObjectKey(operatorId: string, fileName: string) {
+  const extension = fileName.toLowerCase().match(/\.[a-z0-9]{1,8}$/)?.[0] ?? "";
+  return `drone-operators/${operatorId}/${randomUUID()}${extension}`;
+}
+
+export function assertDroneOperatorDocumentObjectKey(operatorId: string, objectKey: string, bucket: string, contentType?: string) {
+  const expectedBucket = process.env.S3_BUCKET ?? "the-eye";
+  if (bucket !== expectedBucket) throw new BadRequestException("Document bucket mismatch");
+  if (!operatorId || objectKey.includes("..") || !objectKey.startsWith(`drone-operators/${operatorId}/`)) {
+    throw new BadRequestException("Document objectKey must remain under the operator document prefix");
+  }
+  if (!droneOperatorDocKeyPattern.test(objectKey)) throw new BadRequestException("Invalid operator document object key format");
+  if (contentType) validateEvidenceUpload(contentType);
 }
 
 export function assertEvidenceObjectKey(incidentId: string, objectKey: string, bucket: string, contentType?: string) {

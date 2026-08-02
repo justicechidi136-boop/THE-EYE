@@ -493,9 +493,67 @@ export type DroneOperatorView = {
   name: string;
   email: string | null;
   callsign: string | null;
+  operatorCode: string | null;
   operatorRole: string;
   certificationLevel: string | null;
+  accountStatus: string;
+  availabilityStatus: string;
+  country: string | null;
+  state: string | null;
+  lga: string | null;
+  assignedOperatingBase: string | null;
+  licenceWarningLevel: string;
+  activeAssignmentCount: number;
   isActive: boolean;
+};
+
+export type DroneOperatorDetailView = DroneOperatorView & {
+  phone: string | null;
+  assignedDroneId: string | null;
+  assignedDroneDeviceId: string | null;
+  currentAssignment: {
+    missionId: string;
+    missionCode: string | null;
+    status: string | null;
+  } | null;
+  complianceSummary: {
+    licenceExpiryAt: string | null;
+    certificateExpiryAt: string | null;
+    medicalExpiryAt: string | null;
+  };
+  missionStats: {
+    totalMissions: number;
+    completedMissions: number;
+    abortedMissions: number;
+    hoursFlown: number;
+  };
+  safetySummary: {
+    incidentsInvolved: number;
+    warningCount: number;
+    lastIncidentAt: string | null;
+  };
+  documents: Array<{
+    id: string;
+    type: string;
+    status: string;
+    expiresAt: string | null;
+  }>;
+  auditEntries: Array<{
+    id: string;
+    action: string;
+    actor: string;
+    createdAt: string;
+  }>;
+};
+
+export type DroneOperatorListStats = {
+  total: number;
+  available: number;
+  onMission: number;
+  pending: number;
+  expiredLicences: number;
+  certsExpiring: number;
+  suspended: number;
 };
 
 export type DroneEvidenceView = {

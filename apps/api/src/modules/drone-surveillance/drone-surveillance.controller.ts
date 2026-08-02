@@ -8,11 +8,12 @@ import {
   CreateDroneGeofenceDto,
   CreateDroneMissionDto,
   CreateDroneNoFlyZoneDto,
-  CreateDroneOperatorDto,
   LaunchMissionFromIncidentDto,
   LinkDroneEvidenceDto,
   UpdateDroneMissionStatusDto,
 } from "./dto/drone-surveillance.dto";
+import type { CreateDroneOperatorInput, OperatorListQuery } from "./dto/drone-operator.dto";
+import { DroneOperatorService } from "./drone-operator.service";
 import { DroneSurveillanceService } from "./drone-surveillance.service";
 
 @ApiTags("drone-surveillance")
@@ -20,7 +21,10 @@ import { DroneSurveillanceService } from "./drone-surveillance.service";
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("drone-surveillance")
 export class DroneSurveillanceController {
-  constructor(private readonly drones: DroneSurveillanceService) {}
+  constructor(
+    private readonly drones: DroneSurveillanceService,
+    private readonly operators: DroneOperatorService,
+  ) {}
 
   @Get("admin/dashboard")
   @RequirePermissions("drone:read")
@@ -77,15 +81,15 @@ export class DroneSurveillanceController {
   }
 
   @Get("admin/operators")
-  @RequirePermissions("drone:read")
-  adminListOperators(@Req() request: any) {
-    return this.drones.adminListOperators(request.user);
+  @RequirePermissions("drone:operator:read")
+  adminListOperators(@Query() query: OperatorListQuery, @Req() request: any) {
+    return this.operators.listOperators(query, request.user);
   }
 
   @Post("admin/operators")
-  @RequirePermissions("drone:manage")
-  adminCreateOperator(@Body() dto: CreateDroneOperatorDto, @Req() request: any) {
-    return this.drones.adminCreateOperator(dto, request.user);
+  @RequirePermissions("drone:operator:create")
+  adminCreateOperator(@Body() dto: CreateDroneOperatorInput, @Req() request: any) {
+    return this.operators.createOperator(dto, request.user);
   }
 
   @Get("admin/flight-history")

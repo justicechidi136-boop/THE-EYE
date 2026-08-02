@@ -15,7 +15,7 @@ export function adminCanAccessGeography(
   if (actor.role === AdminRoleName.CountryAdmin) {
     return !geography.country || geography.country === actor.country;
   }
-  if (actor.role === AdminRoleName.StateAdmin) {
+  if (actor.role === AdminRoleName.StateAdmin || actor.role === AdminRoleName.DroneCommander) {
     return (
       geography.country === actor.country &&
       (!geography.state || geography.state === actor.state)
@@ -26,7 +26,8 @@ export function adminCanAccessGeography(
     actor.role === AdminRoleName.CallCenterAgent ||
     actor.role === AdminRoleName.OversightAuditor ||
     actor.role === AdminRoleName.AgencyAdmin ||
-    actor.role === AdminRoleName.PoliceSecurityOfficer
+    actor.role === AdminRoleName.PoliceSecurityOfficer ||
+    actor.role === AdminRoleName.DroneOperator
   ) {
     return (
       geography.country === actor.country &&
@@ -42,7 +43,7 @@ export function adminGeographyWhere(actor: JwtPayload): GeographyScope | null {
   if (actor.role === AdminRoleName.CountryAdmin) {
     return actor.country ? { country: actor.country } : {};
   }
-  if (actor.role === AdminRoleName.StateAdmin) {
+  if (actor.role === AdminRoleName.StateAdmin || actor.role === AdminRoleName.DroneCommander) {
     return actor.country && actor.state
       ? { country: actor.country, state: actor.state }
       : {};
@@ -52,7 +53,8 @@ export function adminGeographyWhere(actor: JwtPayload): GeographyScope | null {
     actor.role === AdminRoleName.CallCenterAgent ||
     actor.role === AdminRoleName.OversightAuditor ||
     actor.role === AdminRoleName.AgencyAdmin ||
-    actor.role === AdminRoleName.PoliceSecurityOfficer
+    actor.role === AdminRoleName.PoliceSecurityOfficer ||
+    actor.role === AdminRoleName.DroneOperator
   ) {
     return actor.country && actor.state && actor.lga
       ? { country: actor.country, state: actor.state, lga: actor.lga }
