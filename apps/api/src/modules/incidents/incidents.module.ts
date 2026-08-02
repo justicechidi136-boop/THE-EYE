@@ -11,14 +11,17 @@ import { DispatchModule } from "../dispatch/dispatch.module";
 import { VoiceAttachmentsModule } from "../voice-attachments/voice-attachments.module";
 import { IncidentsController } from "./incidents.controller";
 import { IncidentsService } from "./incidents.service";
+import { CaseManagementController } from "./case-management.controller";
+import { CaseManagementService } from "./case-management.service";
 import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
 import { JurisdictionCorrectionService } from "./jurisdiction-correction.service";
 
 @Module({
   imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, VoiceAttachmentsModule, forwardRef(() => DispatchModule)],
-  controllers: [IncidentsController],
+  controllers: [IncidentsController, CaseManagementController],
   providers: [
     IncidentsService,
+    CaseManagementService,
     JurisdictionResolutionService,
     JurisdictionCorrectionService,
     JwtAuthGuard,
