@@ -14,10 +14,10 @@ export const PLACEHOLDER_DEPENDENCIES = {
     endpoint: "GET /v1/support/chats",
     note: "Citizen support threads require a realtime chat or ticketing backend.",
   },
-  sailingPermit: {
-    title: "Sailing permit API",
-    endpoint: "GET /v1/sailing-permits",
-    note: "Maritime permit applications require a dedicated permits module.",
+  droneSurveillance: {
+    title: "Drone surveillance API",
+    endpoint: "GET /v1/drone-surveillance/admin/dashboard",
+    note: "Fleet telemetry, missions, geofences, and incident-linked aerial evidence.",
   },
   agencies: {
     title: "Agency registry API",

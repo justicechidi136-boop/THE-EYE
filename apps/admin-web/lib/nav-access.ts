@@ -66,7 +66,10 @@ const roleAllowedPrefixes: Partial<Record<AdminRole, string[]>> = {
     "/settings",
   ],
   [AdminRoleName.CommunityModerator]: ["/", "/neighborhood-watch", "/live-chats", "/settings"],
-  [AdminRoleName.OversightAuditor]: ["/", "/incidents", "/audit", "/neighborhood-watch", "/settings"],
+  [AdminRoleName.OversightAuditor]: ["/", "/incidents", "/audit", "/neighborhood-watch", "/drone-surveillance", "/settings"],
+  [AdminRoleName.DroneCommander]: ["/", "/drone-surveillance", "/incidents", "/live-video", "/dispatch", "/settings"],
+  [AdminRoleName.DroneOperator]: ["/", "/drone-surveillance", "/incidents", "/live-video", "/settings"],
+  [AdminRoleName.ReadOnlyObserver]: ["/", "/drone-surveillance", "/incidents", "/audit", "/settings"],
 };
 
 export function canAccessRoute(role: AdminRole, href: string): boolean {

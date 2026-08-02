@@ -433,6 +433,112 @@ export type JurisdictionRowView = {
   policeStations: number;
 };
 
+export type DroneDashboardView = {
+  fleetActive: number;
+  activeMissions: number;
+  scheduledMissions: number;
+  liveVideoStreams: number;
+  evidenceItems: number;
+  activeOperators: number;
+  geofences: number;
+  noFlyZones: number;
+};
+
+export type DroneDeviceView = {
+  id: string;
+  deviceId: string;
+  model: string;
+  manufacturer: string;
+  serialNumber: string;
+  status: string;
+  healthStatus: string;
+  batteryLevel: number | null;
+  signalStrength: number | null;
+  firmwareVersion: string;
+  flightHours: number;
+  totalMissions: number;
+  liveVideoCapable: boolean;
+  lastGps: { lat: number; lng: number; at?: string | null } | null;
+  lastSeenAt: string | null;
+  isActive: boolean;
+};
+
+export type DroneMissionView = {
+  id: string;
+  missionCode: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  incidentId: string | null;
+  incident: { id: string; title: string; status?: string } | null;
+  droneId: string | null;
+  drone: DroneDeviceView | null;
+  operator: Record<string, unknown> | null;
+  commander: Record<string, unknown> | null;
+  target: { lat: number; lng: number; address?: string | null } | null;
+  scheduledAt: string | null;
+  launchedAt: string | null;
+  completedAt: string | null;
+  liveVideoStatus: string;
+  liveVideoSessionId: string | null;
+  correlationId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  latestTrack?: Record<string, unknown> | null;
+};
+
+export type DroneOperatorView = {
+  id: string;
+  name: string;
+  email: string | null;
+  callsign: string | null;
+  operatorRole: string;
+  certificationLevel: string | null;
+  isActive: boolean;
+};
+
+export type DroneEvidenceView = {
+  id: string;
+  missionId: string;
+  incidentId: string | null;
+  mediaType: string;
+  title: string;
+  capturedAt: string;
+  mission?: { missionCode: string; title: string };
+  incident?: { id: string; title: string };
+};
+
+export type DroneGeofenceView = {
+  id: string;
+  name: string;
+  fenceType: string;
+  description: string | null;
+  isActive: boolean;
+  updatedAt: string;
+};
+
+export type DroneNoFlyZoneView = {
+  id: string;
+  name: string;
+  reason: string | null;
+  isActive: boolean;
+  updatedAt: string;
+};
+
+export type DroneFlightLogView = {
+  id: string;
+  eventType: string;
+  message: string;
+  recordedAt: string;
+  drone?: { deviceId: string; model: string };
+  mission?: { missionCode: string; title: string };
+};
+
+export type DroneHealthView = DroneDeviceView & {
+  latestHealth: Record<string, unknown> | null;
+};
+
 export type AdminSession = {
   sub: string;
   email?: string;
@@ -453,4 +559,7 @@ export const roleScope: Record<AdminRole, string> = {
   [AdminRoleName.CallCenterAgent]: "Assigned LGA intake and response coordination",
   [AdminRoleName.CommunityModerator]: "Assigned communities, membership approvals, post verification, patrols",
   [AdminRoleName.OversightAuditor]: "Read-only audit logs and incident history",
+  [AdminRoleName.DroneCommander]: "Drone fleet command, mission launch, and geofence management",
+  [AdminRoleName.DroneOperator]: "Assigned drone missions, live telemetry, and evidence capture",
+  [AdminRoleName.ReadOnlyObserver]: "Read-only drone surveillance telemetry and evidence review",
 };

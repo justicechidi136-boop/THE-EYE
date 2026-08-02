@@ -33,9 +33,12 @@ const navGroups = [
     ] as [string, string][],
   },
   {
+    label: "Drone Surveillance",
+    items: [["Drone Surveillance", "/drone-surveillance"]] as [string, string][],
+  },
+  {
     label: "Other Services",
     items: [
-      ["Sailing Permit", "/sailing-permit"],
       ["Job Vacancies", "/job-vacancies"],
     ] as [string, string][],
   },

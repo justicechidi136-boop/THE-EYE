@@ -3,6 +3,8 @@ import type { RoleMatrixRow } from "./types/admin-views";
 import { roleScope } from "./types/admin-views";
 
 function incidentAccess(role: AdminRoleName): string {
+  if (role === AdminRoleName.DroneCommander || role === AdminRoleName.DroneOperator) return "Incident-linked missions";
+  if (role === AdminRoleName.ReadOnlyObserver) return "Read-only incident-linked missions";
   if (role === AdminRoleName.SuperAdmin) return "All incidents";
   if (role === AdminRoleName.OversightAuditor) return "Read-only history";
   if (role === AdminRoleName.AgencyAdmin || role === AdminRoleName.PoliceSecurityOfficer) return "Assigned agency incidents";
