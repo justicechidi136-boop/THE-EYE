@@ -1,14 +1,16 @@
 # LiveKit Deployment
 
-LiveKit runs as `livekit/livekit-server:v1.8` on the **the-eye-internal** Docker bridge network. Signaling is reached by nginx and the API via Docker DNS (`livekit:7880`). RTC media ports are **published to the VPS host** for direct client WebRTC.
+LiveKit runs as `livekit/livekit-server:v1.8` on **dual Docker networks**: `the-eye-internal` (signaling via Docker DNS) and `the-eye-public` (required for host port publish). Signaling is reached by nginx and the API via `livekit:7880`. RTC media ports are **published to the VPS host** for direct client WebRTC.
 
 ## Network architecture (staging VPS)
 
 | Component | Network | Signaling | RTC |
 |-----------|---------|-----------|-----|
-| LiveKit | `the-eye-internal` + published ports | `livekit:7880` (Docker DNS) | `7881/TCP`, `7882/UDP` on host via `ports:` |
+| LiveKit | `the-eye-internal` + `the-eye-public` + published ports | `livekit:7880` (Docker DNS) | `7881/TCP`, `7882/UDP` on host via `ports:` |
 | Nginx | bridge (`the-eye-internal` + `the-eye-public`) | proxies to `http://livekit:7880` | not proxied |
 | API | bridge (dual-homed) | `LIVEKIT_URL=ws://livekit:7880` | n/a |
+
+**Why dual-network for LiveKit?** Docker does **not** publish `ports:` to the host when a service is attached only to an `internal: true` network (`the-eye-internal`). You will see `HostConfig.PortBindings` in `docker inspect` but `NetworkSettings.Ports` stays null and `docker port` is empty. Attaching `the-eye-public` (same pattern as api/nginx) allows docker-proxy to bind 7880/7881/7882 on the VPS while signaling stays on Docker DNS.
 
 **Why not `network_mode: host`?** Host networking was used historically so RTC ports bind on the VPS directly. That is **not required**: explicit `ports:` mappings publish 7880/7881/7882 to the host while keeping signaling on Docker service discovery. The prior `host.docker.internal:7880` hop from nginx caused **502 Bad Gateway** when the host gateway could not reach LiveKit signaling reliably.
 

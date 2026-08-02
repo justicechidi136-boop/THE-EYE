@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "../../../components/app-shell";
 import { ConsolePageHeader } from "../../../components/console";
+import { LiveChatConsole } from "../../../components/support/live-chat-console";
 import { Panel, StatusBadge } from "../../../components/ui";
 import { fetchSupportChat } from "../../../lib/api/data";
 
@@ -55,6 +56,9 @@ export default async function LiveChatDetailPage({ params }: { params: Promise<{
           </div>
         </Panel>
         <div className="grid gap-5">
+          <Panel title="Respond">
+            <LiveChatConsole conversationId={conversationId} canAssign canEscalate />
+          </Panel>
           <Panel title="Participants">
             <ul className="grid gap-2 text-sm">
               {participants.map((participant) => (

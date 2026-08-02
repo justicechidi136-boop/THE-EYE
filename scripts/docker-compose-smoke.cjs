@@ -126,6 +126,7 @@ const nginxChecks = [
   ['"${LIVEKIT_HTTP_PORT:-7880}:7880"', compose, "LiveKit signaling port publish"],
   ['"${LIVEKIT_RTC_UDP_PORT:-7882}:7882/udp"', compose, "LiveKit RTC UDP port publish"],
   ["the-eye-internal", compose, "LiveKit internal bridge network"],
+  ["the-eye-public", compose, "LiveKit public network for host port publish"],
   ["resolver 127.0.0.11", fs.readFileSync(path.join(root, "infra", "docker", "nginx", "nginx.conf"), "utf8"), "Docker embedded DNS resolver"],
 ];
 for (const [needle, content, label] of nginxChecks) {

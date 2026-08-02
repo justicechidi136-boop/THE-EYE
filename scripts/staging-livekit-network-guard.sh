@@ -60,18 +60,36 @@ if [[ "$NETWORKS" != *the-eye-internal* ]]; then
   fail "LiveKit must join the-eye-internal for Docker DNS (got: ${NETWORKS:-none})"
 fi
 pass "attached to the-eye-internal"
+if [[ "$NETWORKS" != *the-eye-public* ]]; then
+  fail "LiveKit must also join the-eye-public so Docker can publish RTC ports to the host (got: ${NETWORKS:-none})"
+fi
+pass "attached to the-eye-public (required for host port publish)"
+
+PORT_BINDINGS="$(docker inspect "$CONTAINER" --format '{{json .HostConfig.PortBindings}}' 2>/dev/null || echo '{}')"
+PORTS_JSON="$(docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null || echo '{}')"
+
+port_publish_fail() {
+  local port="$1"
+  local proto="$2"
+  echo "INFO HostConfig.PortBindings=${PORT_BINDINGS}"
+  echo "INFO NetworkSettings.Ports=${PORTS_JSON}"
+  if [[ "$NETWORKS" != *the-eye-public* ]]; then
+    fail "host ${proto} ${port} not published — LiveKit is internal-network-only; attach the-eye-public so Docker can bind host ports (LIVEKIT-DOCKER-001)"
+  fi
+  fail "host ${proto} ${port} not published from LiveKit container — recreate with updated compose (LIVEKIT-DOCKER-001)"
+}
 
 for port in 7880 7881; do
   PUBLISHED="$(docker port "$CONTAINER" "${port}/tcp" 2>/dev/null || true)"
   if [[ -z "$PUBLISHED" ]]; then
-    fail "host TCP ${port} not published from LiveKit container (LIVEKIT-DOCKER-001)"
+    port_publish_fail "$port" "TCP"
   fi
   pass "docker port ${port}/tcp -> ${PUBLISHED}"
 done
 
 UDP_PUBLISHED="$(docker port "$CONTAINER" "7882/udp" 2>/dev/null || true)"
 if [[ -z "$UDP_PUBLISHED" ]]; then
-  fail "host UDP 7882 not published from LiveKit container (LIVEKIT-DOCKER-001)"
+  port_publish_fail "7882" "UDP"
 fi
 pass "docker port 7882/udp -> ${UDP_PUBLISHED}"
 

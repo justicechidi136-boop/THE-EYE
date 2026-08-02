@@ -373,6 +373,7 @@ model User {
   safetyAlertRecipients     SafetyAlertRecipient[]
   supportParticipants       SupportConversationParticipant[] @relation("SupportParticipantUser")
   supportMessages           SupportMessage[]               @relation("SupportMessageUser")
+  supportConversations      SupportConversation[]          @relation("SupportConversationOwner")
 
   @@map("users")
 }
@@ -2842,8 +2843,56 @@ enum SupportConversationType {
 enum SupportConversationStatus {
   Open
   Pending
+  WaitingForAdmin
+  WaitingForUser
+  Assigned
   Escalated
+  Resolved
   Closed
+  Reopened
+  Spam
+  Abusive
+}
+
+enum SupportCategory {
+  EmergencyReport
+  LiveVideo
+  AccountAccess
+  Location
+  PoliceLocator
+  Smartwatch
+  WhistleblowerReward
+  Withdrawal
+  Community
+  EvidenceUpload
+  Notification
+  SafetyConcern
+  AbuseReport
+  TechnicalIssue
+  Other
+}
+
+enum SupportMessageType {
+  Text
+  Voice
+  Image
+  Document
+  System
+  IncidentLink
+  LocationUpdate
+}
+
+enum SupportMessageVisibility {
+  UserVisible
+  AdminInternal
+}
+
+enum SupportDeliveryStatus {
+  Pending
+  Sent
+  Delivered
+  Read
+  Failed
 }
 
 enum SupportConversationPriority {
@@ -2862,37 +2911,53 @@ enum SupportParticipantRole {
 }
 
 model SupportConversation {
-  id              String                       @id @default(uuid()) @db.Uuid
-  reference       String                       @unique
-  type            SupportConversationType
-  status          SupportConversationStatus    @default(Open)
-  priority        SupportConversationPriority  @default(Normal)
-  subject         String
-  incidentId      String?                      @map("incident_id") @db.Uuid
-  assignedAdminId String?                      @map("assigned_admin_id") @db.Uuid
-  country         String?
-  state           String?
-  lga             String?
-  unreadAdmin     Int                          @default(0) @map("unread_admin")
-  unreadCitizen   Int                          @default(0) @map("unread_citizen")
-  lastMessageAt   DateTime?                    @map("last_message_at") @db.Timestamptz(6)
-  closedAt        DateTime?                    @map("closed_at") @db.Timestamptz(6)
-  closedById      String?                      @map("closed_by_id") @db.Uuid
-  closeReason     String?                      @map("close_reason")
-  metadata        Json                         @default("{}")
-  version         Int                          @default(0)
-  createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  incident        Incident?                    @relation(fields: [incidentId], references: [id])
-  assignedAdmin   AdminUser?                   @relation("SupportConversationAssignee", fields: [assignedAdminId], references: [id])
-  closedBy        AdminUser?                   @relation("SupportConversationClosedBy", fields: [closedById], references: [id])
-  messages        SupportMessage[]
-  participants    SupportConversationParticipant[]
+  id                           String                       @id @default(uuid()) @db.Uuid
+  reference                    String                       @unique
+  type                         SupportConversationType      @default(CitizenSupport)
+  category                     SupportCategory              @default(Other)
+  status                       SupportConversationStatus    @default(Open)
+  priority                     SupportConversationPriority  @default(Normal)
+  subject                      String
+  userId                       String?                      @map("user_id") @db.Uuid
+  incidentId                   String?                      @map("incident_id") @db.Uuid
+  linkedReportId               String?                      @map("linked_report_id") @db.Uuid
+  linkedWithdrawalId           String?                      @map("linked_withdrawal_id") @db.Uuid
+  linkedWatchDeviceId          String?                      @map("linked_watch_device_id") @db.Uuid
+  linkedCommunityId            String?                      @map("linked_community_id") @db.Uuid
+  protectedReporterIdentityId  String?                      @map("protected_reporter_identity_id") @db.Uuid
+  assignedAdminId              String?                      @map("assigned_admin_id") @db.Uuid
+  assignedTeam                 String?                      @map("assigned_team")
+  country                      String?
+  state                        String?
+  lga                          String?
+  anonymousMode                Boolean                      @default(false) @map("anonymous_mode")
+  preferredLanguage            String?                      @map("preferred_language")
+  unreadAdmin                  Int                          @default(0) @map("unread_admin")
+  unreadCitizen                Int                          @default(0) @map("unread_citizen")
+  lastMessageAt                DateTime?                    @map("last_message_at") @db.Timestamptz(6)
+  lastUserMessageAt            DateTime?                    @map("last_user_message_at") @db.Timestamptz(6)
+  lastAdminMessageAt           DateTime?                    @map("last_admin_message_at") @db.Timestamptz(6)
+  closedAt                     DateTime?                    @map("closed_at") @db.Timestamptz(6)
+  reopenedAt                   DateTime?                    @map("reopened_at") @db.Timestamptz(6)
+  closedById                   String?                      @map("closed_by_id") @db.Uuid
+  closeReason                  String?                      @map("close_reason")
+  metadata                     Json                         @default("{}")
+  version                      Int                          @default(0)
+  createdAt                    DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                         User?                        @relation("SupportConversationOwner", fields: [userId], references: [id])
+  incident                     Incident?                    @relation(fields: [incidentId], references: [id])
+  assignedAdmin                AdminUser?                   @relation("SupportConversationAssignee", fields: [assignedAdminId], references: [id])
+  closedBy                     AdminUser?                   @relation("SupportConversationClosedBy", fields: [closedById], references: [id])
+  messages                     SupportMessage[]
+  participants                 SupportConversationParticipant[]
 
   @@index([status, priority, lastMessageAt])
+  @@index([userId, status, lastMessageAt])
   @@index([incidentId])
   @@index([assignedAdminId, status])
   @@index([country, state, lga])
+  @@index([category, status])
   @@map("support_conversations")
 }
 
@@ -2914,20 +2979,33 @@ model SupportConversationParticipant {
 }
 
 model SupportMessage {
-  id               String              @id @default(uuid()) @db.Uuid
-  conversationId   String              @map("conversation_id") @db.Uuid
-  senderRole       SupportParticipantRole @map("sender_role")
-  adminUserId      String?             @map("admin_user_id") @db.Uuid
-  userId           String?             @map("user_id") @db.Uuid
+  id               String                   @id @default(uuid()) @db.Uuid
+  conversationId   String                   @map("conversation_id") @db.Uuid
+  senderRole       SupportParticipantRole   @map("sender_role")
+  adminUserId      String?                  @map("admin_user_id") @db.Uuid
+  userId           String?                  @map("user_id") @db.Uuid
+  messageType      SupportMessageType       @default(Text) @map("message_type")
   body             String
-  isInternal       Boolean             @default(false) @map("is_internal")
-  hasAttachment    Boolean             @default(false) @map("has_attachment")
-  attachmentKey    String?             @map("attachment_key")
-  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  conversation     SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  adminUser        AdminUser?          @relation("SupportMessageAdmin", fields: [adminUserId], references: [id])
-  user             User?               @relation("SupportMessageUser", fields: [userId], references: [id])
+  clientMessageId  String?                  @map("client_message_id")
+  replyToMessageId String?                  @map("reply_to_message_id") @db.Uuid
+  visibility       SupportMessageVisibility @default(UserVisible)
+  deliveryStatus   SupportDeliveryStatus    @default(Sent) @map("delivery_status")
+  isInternal       Boolean                  @default(false) @map("is_internal")
+  hasAttachment    Boolean                  @default(false) @map("has_attachment")
+  attachmentKey    String?                  @map("attachment_key")
+  attachmentMimeType String?                @map("attachment_mime_type")
+  attachmentSizeBytes Int?                  @map("attachment_size_bytes")
+  attachmentDurationSeconds Int?             @map("attachment_duration_seconds")
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt         DateTime?                @map("edited_at") @db.Timestamptz(6)
+  deletedAt        DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  conversation     SupportConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  adminUser        AdminUser?               @relation("SupportMessageAdmin", fields: [adminUserId], references: [id])
+  user             User?                    @relation("SupportMessageUser", fields: [userId], references: [id])
+  replyTo          SupportMessage?          @relation("SupportMessageReply", fields: [replyToMessageId], references: [id])
+  replies          SupportMessage[]         @relation("SupportMessageReply")
 
+  @@unique([conversationId, clientMessageId])
   @@index([conversationId, createdAt])
   @@map("support_messages")
 }

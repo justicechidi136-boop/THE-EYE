@@ -167,6 +167,7 @@ class PushNotificationService {
             final request = PushNavigationRequest(
               route: decoded["route"]?.toString() ?? "",
               incidentId: decoded["incidentId"]?.toString(),
+              conversationId: decoded["conversationId"]?.toString(),
               silent: decoded["silent"] == true,
             );
             if (request.route.isNotEmpty) {
@@ -346,6 +347,7 @@ class PushNotificationService {
     return jsonEncode({
       "route": request.route,
       if (request.incidentId != null) "incidentId": request.incidentId,
+      if (request.conversationId != null) "conversationId": request.conversationId,
       "silent": request.silent,
     });
   }

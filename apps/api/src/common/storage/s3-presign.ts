@@ -14,6 +14,7 @@ const evidenceKeyPattern = /^evidence\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1
 const avatarKeyPattern = /^avatars\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const kycKeyPattern = /^kyc\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const droneOperatorDocKeyPattern = /^drone-operators\/[0-9a-f-]{36}\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
+const supportKeyPattern = /^support\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -71,6 +72,21 @@ export function assertKycObjectKey(userId: string, objectKey: string) {
     throw new BadRequestException("KYC objectKey must remain under the user KYC prefix");
   }
   if (!kycKeyPattern.test(objectKey)) throw new BadRequestException("Invalid KYC object key format");
+}
+
+export function supportAttachmentObjectKey(conversationId: string, fileName: string) {
+  const extension = fileName.toLowerCase().match(/\.[a-z0-9]{1,8}$/)?.[0] ?? "";
+  return `support/${conversationId}/${randomUUID()}${extension}`;
+}
+
+export function assertSupportAttachmentObjectKey(conversationId: string, objectKey: string, bucket: string, contentType?: string) {
+  const expectedBucket = process.env.S3_BUCKET ?? "the-eye";
+  if (bucket !== expectedBucket) throw new BadRequestException("Support attachment bucket mismatch");
+  if (!conversationId || objectKey.includes("..") || !objectKey.startsWith(`support/${conversationId}/`)) {
+    throw new BadRequestException("Support attachment objectKey must remain under the conversation prefix");
+  }
+  if (!supportKeyPattern.test(objectKey)) throw new BadRequestException("Invalid support attachment object key format");
+  if (contentType) validateEvidenceUpload(contentType);
 }
 
 export function droneOperatorDocumentObjectKey(operatorId: string, fileName: string) {
