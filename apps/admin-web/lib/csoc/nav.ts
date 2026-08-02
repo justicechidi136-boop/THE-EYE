@@ -1,25 +1,19 @@
+import { ADMIN_ROUTE_REGISTRY } from "../admin/admin-route-registry";
+
 export type CsocNavItem = {
   label: string;
   href: string;
   shortcut?: string;
+  routeId?: string;
 };
 
-export const CSOC_NAV_ITEMS: CsocNavItem[] = [
+/** CSOC-only and shared routes. Duplicated capabilities use canonical paths from the registry. */
+const CSOC_ONLY_NAV: CsocNavItem[] = [
   { label: "Dashboard", href: "/neighborhood-watch", shortcut: "g d" },
   { label: "Community Map", href: "/neighborhood-watch/map", shortcut: "g m" },
-  { label: "Communities", href: "/neighborhood-watch/communities" },
   { label: "Residents", href: "/neighborhood-watch/residents" },
-  { label: "Resident Approvals", href: "/neighborhood-watch/approvals" },
   { label: "Community Feed", href: "/neighborhood-watch/posts" },
-  { label: "Incident Centre", href: "/neighborhood-watch/incidents" },
   { label: "Verification Queue", href: "/neighborhood-watch/verification" },
-  { label: "Emergency Broadcasts", href: "/neighborhood-watch/broadcasts" },
-  { label: "Missing Persons", href: "/neighborhood-watch/missing-persons" },
-  { label: "Stolen Vehicles", href: "/neighborhood-watch/stolen-vehicles" },
-  { label: "Patrol Management", href: "/neighborhood-watch/patrols" },
-  { label: "Volunteer Network", href: "/neighborhood-watch/volunteers" },
-  { label: "Community Chat", href: "/neighborhood-watch/chat" },
-  { label: "Emergency Command Center", href: "/dispatch" },
   { label: "Smartwatch Console", href: "/neighborhood-watch/smartwatch" },
   { label: "Live Monitoring", href: "/neighborhood-watch/live-monitoring" },
   { label: "AI Intelligence", href: "/neighborhood-watch/ai-intelligence" },
@@ -27,6 +21,39 @@ export const CSOC_NAV_ITEMS: CsocNavItem[] = [
   { label: "Reports", href: "/neighborhood-watch/reports" },
   { label: "Audit Logs", href: "/neighborhood-watch/audit" },
   { label: "Settings", href: "/neighborhood-watch/settings" },
+];
+
+const CSOC_REGISTRY_ORDER = [
+  "community-registry",
+  "membership-approval",
+  "incident-centre",
+  "broadcasts",
+  "missing-persons",
+  "stolen-vehicles",
+  "patrol",
+  "volunteers",
+  "community-chat",
+  "emergency-command",
+] as const;
+
+function registryNavItems(): CsocNavItem[] {
+  return CSOC_REGISTRY_ORDER.flatMap((id) => {
+    const route = ADMIN_ROUTE_REGISTRY.find((entry) => entry.id === id);
+    if (!route || route.shell === "main") return [];
+    return [{ label: route.label, href: route.canonicalPath, routeId: route.id }];
+  });
+}
+
+export const CSOC_NAV_ITEMS: CsocNavItem[] = [
+  CSOC_ONLY_NAV[0]!,
+  CSOC_ONLY_NAV[1]!,
+  ...registryNavItems().slice(0, 2),
+  CSOC_ONLY_NAV[2]!,
+  CSOC_ONLY_NAV[3]!,
+  ...registryNavItems().slice(2, 3),
+  CSOC_ONLY_NAV[4]!,
+  ...registryNavItems().slice(3),
+  ...CSOC_ONLY_NAV.slice(5),
 ];
 
 export const CSOC_BASE = "/neighborhood-watch";

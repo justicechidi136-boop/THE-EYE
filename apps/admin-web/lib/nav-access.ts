@@ -16,6 +16,8 @@ const roleAllowedPrefixes: Partial<Record<AdminRole, string[]>> = {
     "/live-chats",
     "/live-video",
     "/sos-monitor",
+    "/missing-persons",
+    "/stolen-vehicles",
     "/users",
     "/settings",
     "/login",
