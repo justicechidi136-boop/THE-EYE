@@ -36,6 +36,10 @@ import {
   SendCommunityMessageDto,
   UpdateCommunityCommentDto,
   VerifyCommunityPostDto,
+  UpdateCommunityDto,
+  ListAdminMembershipsQuery,
+  UpdateVolunteerAdminDto,
+  UpdatePatrolScheduleDto,
   validateCommunity,
   validateCommunityRequest,
   validatePost,
@@ -56,7 +60,14 @@ export class NeighborhoodWatchService {
   async listCommunities(actor: JwtPayload, query: ListCommunitiesQuery = {}) {
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
-    const where: Record<string, unknown> = { status: "Active" as never };
+    const where: Record<string, unknown> = {};
+    if (!query.status?.trim() || query.status === "Active") {
+      where.status = "Active" as never;
+    } else if (query.status === "all") {
+      // no status filter
+    } else {
+      where.status = query.status.trim() as never;
+    }
     if (actor.typ === "admin" && actor.role !== "Super Admin") {
       where.country = actor.country;
       where.state = actor.state;
@@ -138,6 +149,189 @@ export class NeighborhoodWatchService {
     return detail;
   }
 
+  async updateCommunity(id: string, dto: UpdateCommunityDto, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can update communities");
+    await this.assertAdminCommunityScope(id, actor);
+    const community = await this.prisma.community.findUnique({ where: { id } });
+    if (!community) throw new NotFoundException("Community not found");
+
+    if (dto.country || dto.state || dto.lga) {
+      await this.assertAdminJurisdiction(
+        actor,
+        dto.country ?? community.country,
+        dto.state ?? community.state ?? undefined,
+        dto.lga ?? community.lga ?? undefined,
+      );
+    }
+    if (dto.boundaryWkt) await this.assertValidBoundaryWkt(dto.boundaryWkt);
+
+    const updated = await this.prisma.community.update({
+      where: { id },
+      data: {
+        ...(dto.name?.trim() ? { name: dto.name.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.visibility ? { visibility: dto.visibility as never } : {}),
+        ...(dto.country ? { country: dto.country } : {}),
+        ...(dto.state !== undefined ? { state: dto.state } : {}),
+        ...(dto.lga !== undefined ? { lga: dto.lga } : {}),
+        ...(dto.ward !== undefined ? { ward: dto.ward } : {}),
+        ...(dto.estate !== undefined ? { estate: dto.estate } : {}),
+        ...(dto.street !== undefined ? { street: dto.street } : {}),
+        ...(dto.status ? { status: dto.status as never } : {}),
+      } as never,
+    });
+
+    if (dto.boundaryWkt || dto.latitude !== undefined || dto.longitude !== undefined) {
+      await this.writeCommunityLocation(id, {
+        boundaryWkt: dto.boundaryWkt,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        name: updated.name,
+        level: updated.level as CreateCommunityDto["level"],
+        country: updated.country,
+      });
+    }
+
+    await this.audit(actor, "community.updated", "communities", id, {
+      status: dto.status,
+      visibility: dto.visibility,
+      boundaryUpdated: Boolean(dto.boundaryWkt),
+    });
+    return this.getCommunity(id, actor);
+  }
+
+  async getCommunityBoundary(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can export community boundaries");
+    await this.assertAdminCommunityScope(id, actor);
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ wkt: string | null; area_sq_m: number | null }>>(
+      `SELECT ST_AsText(boundary::geometry) AS wkt, ST_Area(boundary) AS area_sq_m FROM communities WHERE id = $1::uuid`,
+      id,
+    );
+    const row = rows[0];
+    if (!row?.wkt) return { data: { wkt: null, areaSqM: null, geojson: null } };
+    return {
+      data: {
+        wkt: row.wkt,
+        areaSqM: row.area_sq_m,
+        geojson: { type: "Feature", geometry: { type: "MultiPolygon", note: "Use WKT import/export in admin console" } },
+      },
+    };
+  }
+
+  async listAdminMemberships(actor: JwtPayload, query: ListAdminMembershipsQuery = {}) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list memberships");
+    const limit = resolvePageLimit(query.limit);
+    if (query.cursor?.trim() && !decodeDateIdCursor(query.cursor)) {
+      throw new BadRequestException("cursor is invalid");
+    }
+    const cursor = decodeDateIdCursor(query.cursor);
+    const where: Record<string, unknown> = {};
+    if (query.status?.trim()) where.status = query.status.trim();
+    if (query.communityId?.trim()) where.communityId = query.communityId.trim();
+    if (query.q?.trim()) {
+      where.OR = [
+        { user: { email: { contains: query.q.trim(), mode: "insensitive" } } },
+        { user: { profile: { firstName: { contains: query.q.trim(), mode: "insensitive" } } } },
+        { user: { profile: { lastName: { contains: query.q.trim(), mode: "insensitive" } } } },
+      ];
+    }
+    if (actor.role !== "Super Admin") {
+      where.community = { country: actor.country, state: actor.state, lga: actor.lga };
+    }
+
+    const rows = await this.prisma.communityMembership.findMany({
+      where: { ...where, ...dateIdCursorWhere(cursor) } as never,
+      include: {
+        community: { select: { id: true, name: true, country: true, state: true, lga: true } },
+        role: { select: { name: true } },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            profile: { select: { firstName: true, lastName: true, country: true, state: true, lga: true } },
+            volunteerProfile: { select: { id: true, verified: true } },
+          },
+        },
+      },
+      orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.requestedAt, item.id));
+  }
+
+  async updateVolunteerAdmin(id: string, dto: UpdateVolunteerAdminDto, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can update volunteers");
+    if (dto.types) validateRegisterVolunteer({ types: dto.types, communityId: dto.communityId ?? undefined });
+    const profile = await this.prisma.volunteerProfile.findUnique({ where: { id }, include: { community: true } });
+    if (!profile) throw new NotFoundException("Volunteer profile not found");
+    if (profile.community) {
+      await this.assertAdminJurisdiction(actor, profile.community.country, profile.community.state ?? undefined, profile.community.lga ?? undefined);
+    }
+    const updated = await this.prisma.volunteerProfile.update({
+      where: { id },
+      data: {
+        ...(dto.communityId !== undefined ? { communityId: dto.communityId } : {}),
+        ...(dto.types ? { types: dto.types as never } : {}),
+        ...(dto.verified !== undefined ? { verified: dto.verified } : {}),
+        ...(dto.available !== undefined ? { available: dto.available } : {}),
+        ...(dto.latitude !== undefined ? { latitude: dto.latitude } : {}),
+        ...(dto.longitude !== undefined ? { longitude: dto.longitude } : {}),
+      } as never,
+    });
+    if (dto.latitude !== undefined && dto.longitude !== undefined) {
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE volunteer_profiles SET gps_location = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography WHERE id = $3::uuid`,
+        dto.longitude,
+        dto.latitude,
+        id,
+      );
+    }
+    await this.audit(actor, "community.volunteer_updated", "volunteer_profiles", id, dto as Record<string, unknown>);
+    return { data: updated };
+  }
+
+  async updatePatrolSchedule(scheduleId: string, dto: UpdatePatrolScheduleDto, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can update patrol schedules");
+    const schedule = await this.prisma.patrolSchedule.findUnique({ where: { id: scheduleId }, include: { community: true } });
+    if (!schedule) throw new NotFoundException("Patrol schedule not found");
+    await this.assertAdminJurisdiction(actor, schedule.community.country, schedule.community.state ?? undefined, schedule.community.lga ?? undefined);
+    const updated = await this.prisma.patrolSchedule.update({
+      where: { id: scheduleId },
+      data: {
+        ...(dto.status ? { status: dto.status as never } : {}),
+        ...(dto.title?.trim() ? { title: dto.title.trim() } : {}),
+        ...(dto.startsAt ? { startsAt: new Date(dto.startsAt) } : {}),
+        ...(dto.endsAt ? { endsAt: new Date(dto.endsAt) } : {}),
+      } as never,
+    });
+    await this.audit(actor, "community.patrol_updated", "patrol_schedules", scheduleId, dto as Record<string, unknown>);
+    return { data: updated };
+  }
+
+  async getPatrolSchedule(scheduleId: string, actor: JwtPayload) {
+    await this.assertDispatchReader(actor);
+    const schedule = await this.prisma.patrolSchedule.findUnique({
+      where: { id: scheduleId },
+      include: {
+        community: { select: { id: true, name: true, country: true, state: true, lga: true } },
+        checkpoints: true,
+        assignments: { include: { user: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } } },
+      },
+    });
+    if (!schedule) throw new NotFoundException("Patrol schedule not found");
+    if (actor.typ === "admin") {
+      await this.assertAdminJurisdiction(actor, schedule.community.country, schedule.community.state ?? undefined, schedule.community.lga ?? undefined);
+      return { data: schedule };
+    }
+    await this.assertCommunityVisible(schedule.communityId, actor);
+    return { data: schedule };
+  }
+
+  private assertDispatchReader(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Admin authentication required");
+  }
+
   async getCommunity(id: string, actor: JwtPayload) {
     await this.assertCommunityVisible(id, actor);
     const community = await this.prisma.community.findUnique({
@@ -155,7 +349,9 @@ export class NeighborhoodWatchService {
       },
     });
     if (!community) throw new NotFoundException("Community not found");
-    if (community.status !== "Active") throw new ForbiddenException("Community is not active");
+    if (community.status !== "Active" && actor.typ !== "admin") {
+      throw new ForbiddenException("Community is not active");
+    }
     const membership = actor.typ === "user"
       ? await this.prisma.communityMembership.findUnique({ where: { communityId_userId: { communityId: id, userId: actor.sub } } })
       : null;
@@ -941,8 +1137,24 @@ export class NeighborhoodWatchService {
     }
   }
 
+  private async assertValidBoundaryWkt(wkt: string) {
+    const trimmed = wkt.trim();
+    if (!trimmed) throw new BadRequestException("boundaryWkt is required");
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<Array<{ ok: boolean }>>(
+        `SELECT ST_IsValid(ST_GeomFromText($1, 4326)) AS ok`,
+        trimmed,
+      );
+      if (!rows[0]?.ok) throw new BadRequestException("Invalid community boundary WKT");
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException("Invalid community boundary WKT");
+    }
+  }
+
   private async writeCommunityLocation(id: string, dto: CreateCommunityDto) {
     if (dto.boundaryWkt) {
+      await this.assertValidBoundaryWkt(dto.boundaryWkt);
       await this.prisma.$executeRawUnsafe(`UPDATE communities SET boundary = ST_Multi(ST_GeomFromText($1, 4326))::geography WHERE id = $2::uuid`, dto.boundaryWkt, id);
     }
     if (dto.latitude !== undefined && dto.longitude !== undefined) {

@@ -20,6 +20,9 @@ import {
   ReviewCommunityRequestDto,
   SendCommunityMessageDto,
   UpdateCommunityCommentDto,
+  UpdateCommunityDto,
+  UpdatePatrolScheduleDto,
+  UpdateVolunteerAdminDto,
   VerifyCommunityPostDto,
 } from "./dto/neighborhood-watch.dto";
 import { NeighborhoodWatchService } from "./neighborhood-watch.service";
@@ -69,6 +72,18 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:read")
   getCommunity(@Param("communityId") communityId: string, @Req() request: any) {
     return this.neighborhoodWatch.getCommunity(communityId, request.user);
+  }
+
+  @Patch("communities/:communityId")
+  @RequirePermissions("community:moderate")
+  updateCommunity(@Param("communityId") communityId: string, @Body() dto: UpdateCommunityDto, @Req() request: any) {
+    return this.neighborhoodWatch.updateCommunity(communityId, dto, request.user);
+  }
+
+  @Get("communities/:communityId/boundary")
+  @RequirePermissions("community:moderate")
+  getCommunityBoundary(@Param("communityId") communityId: string, @Req() request: any) {
+    return this.neighborhoodWatch.getCommunityBoundary(communityId, request.user);
   }
 
   @Get("communities/:communityId/members")
@@ -270,6 +285,18 @@ export class NeighborhoodWatchController {
     return this.neighborhoodWatch.registerVolunteer(dto, request.user);
   }
 
+  @Patch("volunteers/:volunteerId")
+  @RequirePermissions("community:moderate")
+  updateVolunteer(@Param("volunteerId") volunteerId: string, @Body() dto: UpdateVolunteerAdminDto, @Req() request: any) {
+    return this.neighborhoodWatch.updateVolunteerAdmin(volunteerId, dto, request.user);
+  }
+
+  @Get("admin/memberships")
+  @RequirePermissions("community:moderate")
+  listAdminMemberships(@Req() request: any, @Query() query: Record<string, string | undefined>) {
+    return this.neighborhoodWatch.listAdminMemberships(request.user, query);
+  }
+
   @Post("communities/:communityId/patrols")
   @RequirePermissions("community:patrol")
   createPatrol(@Param("communityId") communityId: string, @Body() dto: CreatePatrolScheduleDto, @Req() request: any) {
@@ -280,6 +307,18 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:read")
   listPatrols(@Param("communityId") communityId: string, @Req() request: any) {
     return this.neighborhoodWatch.listPatrols(communityId, request.user);
+  }
+
+  @Get("patrols/:scheduleId")
+  @RequirePermissions("community:read")
+  getPatrol(@Param("scheduleId") scheduleId: string, @Req() request: any) {
+    return this.neighborhoodWatch.getPatrolSchedule(scheduleId, request.user);
+  }
+
+  @Patch("patrols/:scheduleId")
+  @RequirePermissions("community:patrol")
+  updatePatrol(@Param("scheduleId") scheduleId: string, @Body() dto: UpdatePatrolScheduleDto, @Req() request: any) {
+    return this.neighborhoodWatch.updatePatrolSchedule(scheduleId, dto, request.user);
   }
 
   @Post("patrols/:scheduleId/checkpoints")

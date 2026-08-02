@@ -84,6 +84,7 @@ export type ListCommunitiesQuery = {
   country?: string;
   state?: string;
   lga?: string;
+  status?: string;
   cursor?: string;
   limit?: string;
   latitude?: string;
@@ -144,6 +145,44 @@ export type PresignCommunityMediaDto = {
 
 export type ListMembersQuery = CursorPageQuery & {
   search?: string;
+};
+
+export type UpdateCommunityDto = {
+  name?: string;
+  description?: string;
+  visibility?: "Public" | "Private";
+  country?: string;
+  state?: string;
+  lga?: string;
+  ward?: string;
+  estate?: string;
+  street?: string;
+  status?: "Active" | "Archived" | "Suspended";
+  latitude?: number;
+  longitude?: number;
+  boundaryWkt?: string;
+};
+
+export type ListAdminMembershipsQuery = CursorPageQuery & {
+  status?: string;
+  communityId?: string;
+  q?: string;
+};
+
+export type UpdateVolunteerAdminDto = {
+  communityId?: string | null;
+  types?: RegisterVolunteerDto["types"];
+  verified?: boolean;
+  available?: boolean;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type UpdatePatrolScheduleDto = {
+  status?: "Scheduled" | "Active" | "Completed" | "Cancelled";
+  title?: string;
+  startsAt?: string;
+  endsAt?: string;
 };
 
 export const COMMUNITY_REPORT_REASONS = [
