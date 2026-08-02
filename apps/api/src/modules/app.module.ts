@@ -30,6 +30,7 @@ import { VerificationModule } from "./verification/verification.module";
 import { DangerZonesModule } from "./danger-zones/danger-zones.module";
 import { AdminSettingsModule } from "./admin-settings/admin-settings.module";
 import { VoiceAttachmentsModule } from "./voice-attachments/voice-attachments.module";
+import { DroneSurveillanceModule } from "./drone-surveillance/drone-surveillance.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -83,6 +84,7 @@ const redisDisabled = !shouldRegisterBullMq();
     DangerZonesModule,
     AdminSettingsModule,
     VoiceAttachmentsModule,
+    DroneSurveillanceModule,
   ],
   controllers: [HealthController],
   providers: [

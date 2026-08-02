@@ -14,6 +14,51 @@ export enum AdminRoleName {
   CallCenterAgent = "Call Center Agent",
   CommunityModerator = "Community Moderator",
   OversightAuditor = "Oversight Auditor",
+  DroneCommander = "Drone Commander",
+  DroneOperator = "Drone Operator",
+  ReadOnlyObserver = "Read-only Observer",
+}
+
+export enum DroneDeviceStatus {
+  Active = "Active",
+  Maintenance = "Maintenance",
+  Offline = "Offline",
+  Retired = "Retired",
+}
+
+export enum DroneHealthStatus {
+  Healthy = "Healthy",
+  Degraded = "Degraded",
+  Critical = "Critical",
+}
+
+export enum DroneMissionStatus {
+  Scheduled = "Scheduled",
+  Preflight = "Preflight",
+  Active = "Active",
+  Paused = "Paused",
+  Completed = "Completed",
+  Aborted = "Aborted",
+  Failed = "Failed",
+}
+
+export enum DroneLiveVideoStatus {
+  Offline = "Offline",
+  Starting = "Starting",
+  Live = "Live",
+  Ended = "Ended",
+}
+
+export enum DroneOperatorRole {
+  Commander = "Commander",
+  Operator = "Operator",
+  Observer = "Observer",
+}
+
+export enum DroneGeofenceType {
+  Operational = "Operational",
+  Restricted = "Restricted",
+  IncidentPerimeter = "IncidentPerimeter",
 }
 
 export enum IncidentType {
