@@ -1,42 +1,35 @@
-import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
-import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchVolunteers } from "../../../lib/api/data";
+import { Suspense } from "react";
+import { VolunteerNetworkConsole } from "../../../components/community/volunteer-network-console";
+import { ConsolePageHeader } from "../../../components/console";
+import { StatusBadge } from "../../../components/ui";
+import { fetchCommunities, fetchVolunteers } from "../../../lib/api/data";
+import { getRouteById } from "../../../lib/admin/admin-route-registry";
 
 export const dynamic = "force-dynamic";
 
-const VOLUNTEER_CATEGORIES = [
-  "Doctor", "Nurse", "Lawyer", "Fire Volunteer", "Security Volunteer",
-  "Search & Rescue", "Blood Donor", "Mechanical Rescue",
-];
-
-export default async function VolunteerNetworkPage() {
-  const volunteers = await fetchVolunteers();
+export default async function VolunteerNetworkPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const route = getRouteById("volunteers");
+  const [volunteers, communities] = await Promise.all([fetchVolunteers(), fetchCommunities()]);
+  const filteredVolunteers = params.status
+    ? volunteers.filter((volunteer) => volunteer.status === params.status)
+    : volunteers;
 
   return (
     <>
-      <PageHeader
-        eyebrow="Volunteer network"
-        title="Volunteer Network"
-        action={<StatusBadge tone="success">{volunteers.length} volunteers</StatusBadge>}
+      <ConsolePageHeader
+        title={route?.pageHeading ?? "Volunteer network"}
+        eyebrow="Verification, availability, and community assignment"
+        breadcrumbs={route?.breadcrumb}
+        action={<StatusBadge tone="success">{filteredVolunteers.length} volunteers</StatusBadge>}
       />
-      <Panel title="Volunteer categories">
-        <div className="mb-4 flex flex-wrap gap-2">
-          {VOLUNTEER_CATEGORIES.map((cat) => (
-            <span key={cat} className="rounded-md border border-line bg-surfaceMuted px-3 py-1 text-xs font-semibold">{cat}</span>
-          ))}
-        </div>
-        <CsocDataTable
-          columns={["Volunteer", "Type", "Community", "Status", "Distance"]}
-          rows={volunteers.map((v, i) => [
-            v.name,
-            v.type,
-            v.community,
-            <StatusBadge key={`s-${i}`} tone={v.status === "Available" || v.status === "Verified" ? "success" : "neutral"}>{v.status}</StatusBadge>,
-            v.distance,
-          ])}
-          emptyMessage="No volunteers registered in assigned communities."
-        />
-      </Panel>
+      <Suspense fallback={null}>
+        <VolunteerNetworkConsole volunteers={filteredVolunteers} communities={communities} filters={{ q: params.q, status: params.status }} />
+      </Suspense>
     </>
   );
 }

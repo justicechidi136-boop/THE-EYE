@@ -1,34 +1,44 @@
-import Link from "next/link";
-import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
-import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchCommunities } from "../../../lib/api/data";
+import { Suspense } from "react";
+import { CommunityRegistryConsole } from "../../../components/community/community-registry-console";
+import { ConsolePageHeader } from "../../../components/console";
+import { StatusBadge } from "../../../components/ui";
+import { fetchCommunitiesPage } from "../../../lib/api/data";
+import { getRouteById } from "../../../lib/admin/admin-route-registry";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommunitiesPage() {
-  const communities = await fetchCommunities();
+export default async function CommunitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const route = getRouteById("community-registry");
+  const page = await fetchCommunitiesPage({
+    cursor: params.cursor,
+    search: params.search ?? params.q,
+    status: params.status ?? "all",
+  });
 
   return (
     <>
-      <PageHeader
-        eyebrow="Community management"
-        title="Communities"
-        action={<StatusBadge tone="success">{communities.length} communities</StatusBadge>}
+      <ConsolePageHeader
+        title={route?.pageHeading ?? "Community registry"}
+        eyebrow="Community management workspace"
+        breadcrumbs={route?.breadcrumb}
+        action={<StatusBadge tone="success">{page.data.length} loaded</StatusBadge>}
       />
-      <Panel title="Community registry" aside={<span className="text-xs text-muted">Create, edit boundaries, assign admins via API</span>}>
-        <CsocDataTable
-          columns={["Community", "Hierarchy", "Members", "Approvals", "Safety Index", ""]}
-          rows={communities.map((c) => [
-            <div key={`n-${c.id}`}><Link href={`/neighborhood-watch/${c.id}`} className="font-semibold hover:text-eye">{c.name}</Link><p className="text-xs text-muted">{c.level} · {c.visibility}</p></div>,
-            c.hierarchy,
-            String(c.members),
-            <StatusBadge key={`p-${c.id}`} tone={c.pending ? "warning" : "success"}>{c.pending}</StatusBadge>,
-            <StatusBadge key={`c-${c.id}`} tone={c.confidence >= 80 ? "success" : "info"}>{c.confidence}%</StatusBadge>,
-            <Link key={`l-${c.id}`} href={`/neighborhood-watch/${c.id}`} className="text-sm font-semibold text-eye hover:underline">Manage</Link>,
-          ])}
-          emptyMessage="No communities in your jurisdiction."
+      <Suspense fallback={null}>
+        <CommunityRegistryConsole
+          communities={page.data}
+          hasMore={page.hasMore}
+          nextCursor={page.nextCursor ?? undefined}
+          filters={{
+            search: params.search ?? params.q,
+            status: params.status ?? "all",
+          }}
         />
-      </Panel>
+      </Suspense>
     </>
   );
 }
