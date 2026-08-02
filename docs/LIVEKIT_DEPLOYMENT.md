@@ -1,16 +1,18 @@
 # LiveKit Deployment
 
-LiveKit runs as `livekit/livekit-server:v1.8` on the staging VPS using **host networking** so RTC ports bind directly on the VPS.
+LiveKit runs as `livekit/livekit-server:v1.8` on the **the-eye-internal** Docker bridge network. Signaling is reached by nginx and the API via Docker DNS (`livekit:7880`). RTC media ports are **published to the VPS host** for direct client WebRTC.
 
 ## Network architecture (staging VPS)
 
-| Component | Mode | Signaling | RTC |
-|-----------|------|-----------|-----|
-| LiveKit | `network_mode: host` | `0.0.0.0:7880` on host | `7881/TCP`, `7882/UDP` on host |
-| Nginx | bridge + `host.docker.internal` | proxies to `http://host.docker.internal:7880` | not proxied |
-| API | bridge + `host.docker.internal` | `LIVEKIT_URL=ws://host.docker.internal:7880` | n/a |
+| Component | Network | Signaling | RTC |
+|-----------|---------|-----------|-----|
+| LiveKit | `the-eye-internal` + published ports | `livekit:7880` (Docker DNS) | `7881/TCP`, `7882/UDP` on host via `ports:` |
+| Nginx | bridge (`the-eye-internal` + `the-eye-public`) | proxies to `http://livekit:7880` | not proxied |
+| API | bridge (dual-homed) | `LIVEKIT_URL=ws://livekit:7880` | n/a |
 
-**Do not** combine `network_mode: host` with Compose `ports:` mappings. With host networking, `docker port the-eye-livekit` returns nothing — that is expected. Prove RTC with host `ss` and TCP/UDP reachability instead.
+**Why not `network_mode: host`?** Host networking was used historically so RTC ports bind on the VPS directly. That is **not required**: explicit `ports:` mappings publish 7880/7881/7882 to the host while keeping signaling on Docker service discovery. The prior `host.docker.internal:7880` hop from nginx caused **502 Bad Gateway** when the host gateway could not reach LiveKit signaling reliably.
+
+See [LIVEKIT_BRIDGE_MIGRATION.md](./LIVEKIT_BRIDGE_MIGRATION.md) for deploy/rollback steps.
 
 ## Single source for API keys
 
@@ -29,7 +31,7 @@ Do **not** duplicate keys in `livekit.yaml` — port/RTC settings only belong th
 ```env
 LIVEKIT_API_KEY=<staging-key>
 LIVEKIT_API_SECRET=<staging-secret-min-24-chars>
-LIVEKIT_URL=ws://host.docker.internal:7880
+LIVEKIT_URL=ws://livekit:7880
 LIVEKIT_NODE_IP=<vps-public-ipv4>
 NEXT_PUBLIC_LIVEKIT_URL=wss://staging-livekit.theeye.com.ng
 ```
@@ -62,24 +64,38 @@ After recreate (not restart):
 bash scripts/staging-livekit-network-guard.sh
 ```
 
-Verifies host network mode, host listeners on 7880/7881/7882, TCP 7881 connect, `rtc.node_ip`, nginx upstream, and `nginx -t`.
+Verifies bridge network membership, published RTC ports, host listeners on 7880/7881/7882, `rtc.node_ip`, **nginx → livekit:7880** connectivity, proxied LiveKit vhost, and `nginx -t`.
 
 ## Validation
 
 ```bash
 pnpm run test:docker:livekit
 pnpm run test:docker:smoke
+node scripts/validate-nginx-config.cjs
+```
+
+On the VPS after deploy:
+
+```bash
+bash scripts/staging-smoke-check.sh
+# Full WSS room join (stage 5):
+docker run --rm --network host --env-file .env \
+  -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL}" \
+  -e PROOF_TOKEN="<jwt>" -e PROOF_INCIDENT_ID="<uuid>" \
+  the-eye-api-tools:local \
+  npx tsx scripts/staging-live-video-room-join-proof.ts
 ```
 
 ## Nginx proxy
 
-WebSocket endpoint: `wss://staging-livekit.theeye.com.ng` → `http://host.docker.internal:7880` (see `infra/docker/nginx/snippets/livekit-locations.conf`).
+WebSocket endpoint: `wss://staging-livekit.theeye.com.ng` → `http://livekit:7880` (see `infra/docker/nginx/snippets/livekit-locations.conf`).
 
 ## Troubleshooting
 
 | Symptom | Code | Fix |
 |---------|------|-----|
-| `docker port` empty, 7881 refused | LIVEKIT-DOCKER-001 | Use host networking; recreate container; run network guard |
+| nginx 502 on `/rtc` | LIVEKIT-DOCKER-001 | Run network guard; confirm `docker exec the-eye-nginx wget -q --spider http://livekit:7880` |
+| `docker port` empty for 7881/7882 | LIVEKIT-DOCKER-001 | Recreate LiveKit with bridge compose; verify `ports:` in compose config |
 | Host sockets missing | LIVEKIT-CONFIG-001 | Check mounted `livekit.yaml`, keys, startup logs |
 | ICE candidates use Docker/private IP | LIVEKIT-ICE-001 | Set `LIVEKIT_NODE_IP` to VPS public IPv4 |
 | Stage 4 OK, 10–12s SIGNAL_SOURCE_CLOSE | LIVEKIT-DOCKER-001 / ICE | RTC ports not reachable — fix host sockets first |
