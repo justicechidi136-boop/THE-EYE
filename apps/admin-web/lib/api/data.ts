@@ -26,6 +26,15 @@ import {
   toCommunityChannelView,
   toChannelMessageView,
   toContentReportView,
+  toDroneDashboardView,
+  toDroneDeviceView,
+  toDroneMissionView,
+  toDroneOperatorView,
+  toDroneEvidenceView,
+  toDroneGeofenceView,
+  toDroneNoFlyZoneView,
+  toDroneFlightLogView,
+  toDroneHealthView,
 } from "../mappers";
 import { buildJurisdictionRows } from "../jurisdiction-tree";
 import type {
@@ -49,6 +58,15 @@ import type {
   WatchInventoryRowView,
   WatchOwnerDetailView,
   SmartwatchDeviceDetailView,
+  DroneDashboardView,
+  DroneDeviceView,
+  DroneMissionView,
+  DroneOperatorView,
+  DroneEvidenceView,
+  DroneGeofenceView,
+  DroneNoFlyZoneView,
+  DroneFlightLogView,
+  DroneHealthView,
   PairingSessionView,
   ActivationHistoryView,
   SosEventView,
@@ -998,6 +1016,128 @@ export async function sendStagingWatchTestAlert(input: {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");
   return apiRequest<Record<string, unknown>>("/admin/watch-notifications/staging/test-alert", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchDroneDashboard(): Promise<DroneDashboardView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>("/drone-surveillance/admin/dashboard", { token });
+  return toDroneDashboardView(response.data);
+}
+
+export async function fetchDroneFleet(): Promise<DroneDeviceView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/fleet", { token });
+  return (response.data ?? []).map(toDroneDeviceView);
+}
+
+export async function fetchDroneMissions(status?: string): Promise<DroneMissionView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/missions", {
+    token,
+    query: status ? { status } : undefined,
+  });
+  return (response.data ?? []).map(toDroneMissionView);
+}
+
+export async function fetchDroneMission(id: string): Promise<DroneMissionView | null> {
+  const token = await getAccessToken();
+  if (!token) return null;
+  try {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/drone-surveillance/admin/missions/${encodeURIComponent(id)}`, { token });
+    return toDroneMissionView(response.data);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function fetchDroneLiveGps(): Promise<DroneMissionView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/live-gps", { token });
+  return (response.data ?? []).map(toDroneMissionView);
+}
+
+export async function fetchDroneLiveVideoMissions(): Promise<DroneMissionView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/live-video", { token });
+  return (response.data ?? []).map(toDroneMissionView);
+}
+
+export async function fetchDroneFlightHistory(): Promise<DroneMissionView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/flight-history", { token });
+  return (response.data ?? []).map(toDroneMissionView);
+}
+
+export async function fetchDroneIncidentMissions(): Promise<DroneMissionView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/incident-missions", { token });
+  return (response.data ?? []).map(toDroneMissionView);
+}
+
+export async function fetchDroneOperators(): Promise<DroneOperatorView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/operators", { token });
+  return (response.data ?? []).map(toDroneOperatorView);
+}
+
+export async function fetchDroneHealth(): Promise<DroneHealthView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/health", { token });
+  return (response.data ?? []).map(toDroneHealthView);
+}
+
+export async function fetchDroneEvidence(): Promise<DroneEvidenceView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/evidence", { token });
+  return (response.data ?? []).map(toDroneEvidenceView);
+}
+
+export async function fetchDroneFlightLogs(): Promise<DroneFlightLogView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/flight-logs", { token });
+  return (response.data ?? []).map(toDroneFlightLogView);
+}
+
+export async function fetchDroneGeofences(): Promise<DroneGeofenceView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/geofences", { token });
+  return (response.data ?? []).map(toDroneGeofenceView);
+}
+
+export async function fetchDroneNoFlyZones(): Promise<DroneNoFlyZoneView[]> {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/no-fly-zones", { token });
+  return (response.data ?? []).map(toDroneNoFlyZoneView);
+}
+
+export async function launchDroneMissionFromIncident(input: {
+  incidentId: string;
+  droneId?: string;
+  title?: string;
+  description?: string;
+  priority?: string;
+}) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ data: Record<string, unknown> }>("/drone-surveillance/admin/missions/from-incident", {
     method: "POST",
     token,
     body: JSON.stringify(input),

@@ -2,12 +2,13 @@ import Link from "next/link";
 import type { EvidenceAccessEntry, Incident } from "../lib/types/admin-views";
 import { verificationStatusFromScore } from "../lib/verification";
 import { EmptyState, TableScrollHint } from "./form-primitives";
+import { Panel, StatusBadge } from "./ui";
 import { EvidenceAccessLog, VerificationStatusBadge } from "./verification-ui";
 import { LocationTrailMap } from "./location-trail-map";
 import { IncidentAdminActions } from "./incident-admin-actions";
 import { EvidenceViewButton } from "./evidence-view-button";
 import { AudioEvidencePlayer } from "./audio-evidence-player";
-import { Panel, StatusBadge } from "./ui";
+import { LaunchDroneMissionButton } from "./drone/launch-drone-mission-button";
 
 function gpsToMarker(lat: number, lng: number, label: string) {
   const left = `${Math.min(90, Math.max(10, ((lng - 3.2) / 0.4) * 100))}%`;
@@ -114,9 +115,11 @@ export function IncidentTable({ incidents }: { incidents: Incident[] }) {
 export function IncidentDetail({
   incident,
   evidenceAccessLogs,
+  canLaunchDroneMission = false,
 }: {
   incident: Incident;
   evidenceAccessLogs: EvidenceAccessEntry[];
+  canLaunchDroneMission?: boolean;
 }) {
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${incident.gps.lat},${incident.gps.lng}`;
   return (
@@ -149,7 +152,14 @@ export function IncidentDetail({
         </div>
       </Panel>
       <Panel title="Admin operations">
-        <IncidentAdminActions incidentId={incident.id} currentStatus={incident.status} />
+        <div className="grid gap-3">
+          <LaunchDroneMissionButton
+            incidentId={incident.id}
+            incidentTitle={incident.title}
+            canLaunch={canLaunchDroneMission}
+          />
+          <IncidentAdminActions incidentId={incident.id} currentStatus={incident.status} />
+        </div>
       </Panel>
       <Panel title="Status history">
         <ol className="grid gap-3">
