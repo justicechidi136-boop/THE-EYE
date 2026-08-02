@@ -87,6 +87,12 @@ import "profile/profile_edit_screen.dart";
 import "police/police_stations_screen.dart";
 import "profile/profile_screen.dart";
 import "settings/build_diagnostics_screen.dart";
+import "support/support_chat_screens.dart";
+import "support/support_home_screen.dart";
+import "support/support_models.dart";
+import "support/support_chat_screens.dart";
+import "support/support_home_screen.dart";
+import "support/support_models.dart";
 
 export "app/app_scope.dart" show AppScope;
 export "location/location_permission_service.dart"
@@ -796,6 +802,35 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/profile/kyc": (_) => const KycScreen(),
               "/settings": (_) => const SettingsScreen(),
               "/settings/diagnostics": (_) => const BuildDiagnosticsScreen(),
+              "/support": (context) => SupportHomeScreen(
+                    accessToken: appOf(context).accessToken ?? "",
+                  ),
+              "/support/new": (context) {
+                final prefill = ModalRoute.of(context)?.settings.arguments
+                        as SupportNewChatPrefill? ??
+                    const SupportNewChatPrefill();
+                return SupportNewChatScreen(
+                  accessToken: appOf(context).accessToken ?? "",
+                  prefill: prefill,
+                );
+              },
+              "/support/chats": (context) => SupportChatListScreen(
+                    accessToken: appOf(context).accessToken ?? "",
+                  ),
+              "/support/faq": (_) => const SupportFaqScreen(),
+              "/support/conversation": (context) {
+                final args = ModalRoute.of(context)?.settings.arguments
+                    as SupportConversationRouteArgs?;
+                final controller = appOf(context);
+                if (args == null) {
+                  return const Scaffold(body: Center(child: Text("Conversation not found")));
+                }
+                return SupportConversationScreen(
+                  accessToken: controller.accessToken ?? "",
+                  conversationId: args.conversationId,
+                  isOnline: controller.online,
+                );
+              },
               "/your-car": (_) => const YourCarScreen(),
               "/account-status": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments
@@ -7662,6 +7697,17 @@ class SettingsScreen extends StatelessWidget {
             title: "Account",
             child: Column(
               children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.support_agent,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: const Text("Help & Support"),
+                  subtitle: const Text("Chat with THE EYE support — not for emergencies"),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).pushNamed("/support"),
+                ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
