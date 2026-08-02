@@ -229,7 +229,7 @@ export async function fetchSupportChats(
   query: Record<string, string | undefined> = {},
 ): Promise<PaginatedResponse<SupportChatView>> {
   return withToken(async (token) => {
-    return apiRequest<PaginatedResponse<SupportChatView>>("/support/chats", {
+    return apiRequest<PaginatedResponse<SupportChatView>>("/support/admin/chats", {
       token,
       query: { ...query, limit: query.limit ?? "50" },
     });
@@ -237,7 +237,7 @@ export async function fetchSupportChats(
 }
 
 export async function fetchSupportChat(id: string): Promise<Record<string, unknown> | null> {
-  return withToken(async (token) => apiRequest<Record<string, unknown>>(`/support/chats/${id}`, { token }), null);
+  return withToken(async (token) => apiRequest<Record<string, unknown>>(`/support/admin/chats/${id}`, { token }), null);
 }
 
 export type PendingKycRow = {
