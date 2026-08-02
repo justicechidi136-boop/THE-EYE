@@ -1,4 +1,5 @@
 import { AppShell } from "../../../components/app-shell";
+import { AddDroneOperatorForm } from "../../../components/drone/add-drone-operator-form";
 import { DroneSurveillanceSubnav } from "../../../components/drone/drone-surveillance-subnav";
 import { EmptyState, TableScrollHint } from "../../../components/form-primitives";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
@@ -12,12 +13,18 @@ export const dynamic = "force-dynamic";
 export default async function DroneOperatorsPage() {
   const session = await getAdminSession();
   if (!canViewDroneSurveillance(session)) redirect("/");
+  const canManage = canManageDroneFleet(session);
   const operators = await fetchDroneOperators().catch(() => []);
 
   return (
     <AppShell>
       <PageHeader eyebrow="Drone Surveillance" title="Drone operator management" action={<StatusBadge tone="info">{operators.length} operators</StatusBadge>} />
-      <DroneSurveillanceSubnav canManage={canManageDroneFleet(session)} canCommand={canCommandDroneMission(session)} />
+      <DroneSurveillanceSubnav canManage={canManage} canCommand={canCommandDroneMission(session)} />
+      {canManage ? (
+        <Panel title="Add operator" aside={<span className="text-xs text-muted">Requires drone:manage</span>}>
+          <AddDroneOperatorForm />
+        </Panel>
+      ) : null}
       <Panel title="Certified operators">
         {!operators.length ? (
           <EmptyState title="No operators registered" description="Add Drone Commanders and Drone Operators with certification level and callsign." />
