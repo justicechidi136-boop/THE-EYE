@@ -157,4 +157,34 @@ export async function fetchCitizenLiveLocation(incidentId: string) {
   if (!token) return null;
   return apiRequest<{ data: Record<string, unknown> }>(`/incidents/${incidentId}/live-location`, { token });
 }
+
+export async function requestAssignmentBackup(assignmentId: string, reason: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest(`/dispatch/assignments/${assignmentId}/request-backup`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function addAssignmentNote(assignmentId: string, note: string, clientActionId?: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest(`/dispatch/assignments/${assignmentId}/note`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ note, clientActionId }),
+  });
+}
+
+export async function updateDispatchAssignment(id: string, body: Record<string, unknown>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest(`/dispatch/assignments/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
 

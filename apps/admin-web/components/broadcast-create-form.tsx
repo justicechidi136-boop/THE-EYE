@@ -79,28 +79,28 @@ export function BroadcastCreateForm() {
 
   return (
     <form className="grid gap-3" onSubmit={handleSubmit}>
-      <div className="grid gap-3 lg:grid-cols-[220px_1fr_1fr_180px_180px]">
-        <label className="grid gap-2 text-sm font-medium">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(0,180px)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,140px)_auto]">
+        <label className="grid min-w-0 gap-2 text-sm font-medium">
           Type
-          <select className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye" value={type} onChange={(event) => setType(event.target.value as BroadcastType)}>
+          <select className="h-11 w-full rounded-md border border-line px-3 outline-none focus:border-eye" value={type} onChange={(event) => setType(event.target.value as BroadcastType)}>
             {typeOptions.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
           </select>
         </label>
-        <label className="grid gap-2 text-sm font-medium">
+        <label className="grid min-w-0 gap-2 text-sm font-medium">
           Title
-          <input className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye" placeholder="Area safety alert" value={title} onChange={(event) => setTitle(event.target.value)} />
+          <input className="h-11 w-full rounded-md border border-line px-3 outline-none focus:border-eye" placeholder="Area safety alert" value={title} onChange={(event) => setTitle(event.target.value)} />
         </label>
-        <label className="grid gap-2 text-sm font-medium">
+        <label className="grid min-w-0 gap-2 text-sm font-medium">
           Geofence
-          <input className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye" placeholder="Lat, lng, radius" value={geofence} onChange={(event) => setGeofence(event.target.value)} />
+          <input className="h-11 w-full rounded-md border border-line px-3 outline-none focus:border-eye" placeholder="Lat, lng, radius" value={geofence} onChange={(event) => setGeofence(event.target.value)} />
         </label>
-        <label className="grid gap-2 text-sm font-medium">
+        <label className="grid min-w-0 gap-2 text-sm font-medium">
           Priority
-          <select className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye" value={priority} onChange={(event) => setPriority(event.target.value as IncidentPriority)}>
+          <select className="h-11 w-full rounded-md border border-line px-3 outline-none focus:border-eye" value={priority} onChange={(event) => setPriority(event.target.value as IncidentPriority)}>
             {priorityOptions.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
           </select>
         </label>
-        <Button type="submit" className="self-end" disabled={submitting}>{submitting ? "Submitting…" : "Send for approval"}</Button>
+        <Button type="submit" className="self-end justify-self-start xl:justify-self-stretch" disabled={submitting}>{submitting ? "Submitting…" : "Send for approval"}</Button>
       </div>
       {error ? <InlineAlert tone="error"><span>{error}</span></InlineAlert> : null}
       {message ? <InlineAlert tone="success"><span>{message}</span></InlineAlert> : null}

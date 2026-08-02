@@ -1,36 +1,42 @@
-import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
-import { MembershipActionButton } from "../../../components/csoc/membership-action-button";
-import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchPendingMemberships } from "../../../lib/api/data";
+import { Suspense } from "react";
+import { MembershipApprovalConsole } from "../../../components/community/membership-approval-console";
+import { ConsolePageHeader } from "../../../components/console";
+import { StatusBadge } from "../../../components/ui";
+import { fetchAdminMembershipsPage } from "../../../lib/api/data";
+import { getRouteById } from "../../../lib/admin/admin-route-registry";
 
 export const dynamic = "force-dynamic";
 
-export default async function ApprovalsPage() {
-  const pending = await fetchPendingMemberships();
+export default async function ApprovalsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const route = getRouteById("membership-approval");
+  const page = await fetchAdminMembershipsPage({
+    cursor: params.cursor,
+    q: params.q,
+    status: params.status,
+    communityId: params.communityId,
+  });
 
   return (
     <>
-      <PageHeader
-        eyebrow="Membership approvals"
-        title="Resident Approvals"
-        action={<StatusBadge tone="warning">{pending.length} pending</StatusBadge>}
+      <ConsolePageHeader
+        title={route?.pageHeading ?? "Membership approval"}
+        eyebrow="Resident onboarding and moderation"
+        breadcrumbs={route?.breadcrumb}
+        action={<StatusBadge tone="warning">{page.data.filter((row) => row.status === "Pending").length} pending</StatusBadge>}
       />
-      <Panel title="Pending applications">
-        <CsocDataTable
-          columns={["Applicant", "Community", "Role", "Trust", "Actions"]}
-          rows={pending.map((r) => [
-            <div key={`n-${r.membershipId}`}><p className="font-semibold">{r.name}</p><p className="text-xs text-muted">{r.email}</p></div>,
-            r.community,
-            r.role,
-            `${r.trustScore}%`,
-            <div key={`a-${r.membershipId}`} className="flex gap-2">
-              <MembershipActionButton communityId={r.communityId} membershipId={r.membershipId} action="approve" />
-              <MembershipActionButton communityId={r.communityId} membershipId={r.membershipId} action="reject" />
-            </div>,
-          ])}
-          emptyMessage="No pending resident applications."
+      <Suspense fallback={null}>
+        <MembershipApprovalConsole
+          memberships={page.data}
+          hasMore={page.hasMore}
+          nextCursor={page.nextCursor ?? undefined}
+          filters={{ q: params.q, status: params.status, communityId: params.communityId }}
         />
-      </Panel>
+      </Suspense>
     </>
   );
 }

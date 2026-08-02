@@ -38,6 +38,46 @@ export type Incident = {
   }>;
 };
 
+export type MissingPersonCaseView = {
+  incidentId: string;
+  reportId?: string;
+  fullName: string;
+  age?: number;
+  gender?: string;
+  description: string;
+  lastSeenAt?: string;
+  lastSeenAddress?: string;
+  reportStatus: string;
+  incidentStatus: string;
+  priority: Incident["priority"];
+  title: string;
+  location: string;
+  createdAt?: string;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type StolenVehicleCaseView = {
+  incidentId: string;
+  reportId?: string;
+  plateNumber: string;
+  vin?: string;
+  make: string;
+  model: string;
+  color?: string;
+  year?: number;
+  lastSeenAt?: string;
+  lastSeenArea?: string;
+  reportStatus: string;
+  incidentStatus: string;
+  priority: Incident["priority"];
+  title: string;
+  location: string;
+  createdAt?: string;
+  latitude?: number;
+  longitude?: number;
+};
+
 export type PoliceStationView = {
   id: string;
   name: string;
@@ -151,6 +191,11 @@ export type CommunityView = {
   name: string;
   level: string;
   visibility: string;
+  status?: string;
+  description?: string;
+  country?: string;
+  state?: string;
+  lga?: string;
   hierarchy: string;
   members: number;
   pending: number;
@@ -201,9 +246,12 @@ export type PatrolScheduleView = {
   id: string;
   title: string;
   community: string;
+  communityId?: string;
   status: string;
   volunteers: number;
   checkpoints: number;
+  startsAt?: string;
+  endsAt?: string;
   latitude?: number;
   longitude?: number;
 };

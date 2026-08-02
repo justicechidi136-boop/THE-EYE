@@ -8,6 +8,8 @@ import type {
   FirmwareReleaseView,
   DangerZoneView,
   Incident,
+  MissingPersonCaseView,
+  StolenVehicleCaseView,
   LiveVideoSessionView,
   NotificationOperationView,
   PatrolScheduleView,
@@ -203,6 +205,11 @@ export function toCommunityView(record: Record<string, unknown>): CommunityView 
     name: String(record.name ?? "Community"),
     level: String(record.level ?? "Community"),
     visibility: String(record.visibility ?? "Public"),
+    status: record.status ? String(record.status) : undefined,
+    description: record.description ? String(record.description) : undefined,
+    country: record.country ? String(record.country) : undefined,
+    state: record.state ? String(record.state) : undefined,
+    lga: record.lga ? String(record.lga) : undefined,
     hierarchy: [record.country, record.state, record.lga, record.ward].filter(Boolean).join(" / "),
     members: memberships.filter((item) => (item as Record<string, unknown>).status === "Approved").length,
     pending,
@@ -248,9 +255,12 @@ export function toPatrolScheduleView(record: Record<string, unknown>): PatrolSch
     id: String(record.id),
     title: String(record.title ?? "Patrol"),
     community: String((record.community as { name?: string } | undefined)?.name ?? record.communityId ?? "-"),
+    communityId: record.communityId ? String(record.communityId) : undefined,
     status: String(record.status ?? "Scheduled"),
     volunteers: Array.isArray(record.assignments) ? record.assignments.length : Array.isArray(record.volunteerUserIds) ? record.volunteerUserIds.length : 0,
     checkpoints: checkpoints.length,
+    startsAt: record.startsAt ? String(record.startsAt) : undefined,
+    endsAt: record.endsAt ? String(record.endsAt) : undefined,
     latitude: firstCheckpoint?.latitude == null ? undefined : Number(firstCheckpoint.latitude),
     longitude: firstCheckpoint?.longitude == null ? undefined : Number(firstCheckpoint.longitude),
   };
@@ -595,6 +605,55 @@ export function toContentReportView(record: Record<string, unknown>, communityNa
     note: String(record.note ?? ""),
     status: String(record.status ?? "Pending"),
     createdAt: String(record.createdAt ?? ""),
+  };
+}
+
+export function toMissingPersonCaseView(record: Record<string, unknown>): MissingPersonCaseView {
+  const incident = (record.incident ?? record) as Record<string, unknown>;
+  const report = record.report as Record<string, unknown> | null | undefined;
+  return {
+    incidentId: String(incident.id),
+    reportId: report?.id ? String(report.id) : undefined,
+    fullName: String(report?.fullName ?? incident.title ?? "Unknown"),
+    age: report?.age == null ? undefined : Number(report.age),
+    gender: report?.gender ? String(report.gender) : undefined,
+    description: String(report?.description ?? incident.description ?? ""),
+    lastSeenAt: report?.lastSeenAt ? String(report.lastSeenAt) : undefined,
+    lastSeenAddress: report?.lastSeenAddress ? String(report.lastSeenAddress) : undefined,
+    reportStatus: String(report?.status ?? "Open"),
+    incidentStatus: String(incident.status ?? "Submitted"),
+    priority: priorityLabel(String(incident.priority ?? "P4GeneralSafety")),
+    title: String(incident.title ?? "Missing person"),
+    location: [report?.lastSeenAddress, incident.address, incident.lga, incident.state].filter(Boolean).join(", ") || "Unknown location",
+    createdAt: incident.createdAt ? String(incident.createdAt) : undefined,
+    latitude: report?.latitude == null ? toNumber(incident.latitude, NaN) || undefined : Number(report.latitude),
+    longitude: report?.longitude == null ? toNumber(incident.longitude, NaN) || undefined : Number(report.longitude),
+  };
+}
+
+export function toStolenVehicleCaseView(record: Record<string, unknown>): StolenVehicleCaseView {
+  const incident = (record.incident ?? record) as Record<string, unknown>;
+  const report = record.report as Record<string, unknown> | null | undefined;
+  const vehicle = report?.vehicle as Record<string, unknown> | undefined;
+  return {
+    incidentId: String(incident.id),
+    reportId: report?.id ? String(report.id) : undefined,
+    plateNumber: String(vehicle?.plateNumber ?? "Unknown"),
+    vin: vehicle?.vin ? String(vehicle.vin) : undefined,
+    make: String(vehicle?.make ?? "Unknown"),
+    model: String(vehicle?.model ?? "Unknown"),
+    color: vehicle?.color ? String(vehicle.color) : undefined,
+    year: vehicle?.year == null ? undefined : Number(vehicle.year),
+    lastSeenAt: report?.lastSeenAt ? String(report.lastSeenAt) : undefined,
+    lastSeenArea: report?.lastSeenArea ? String(report.lastSeenArea) : undefined,
+    reportStatus: String(report?.status ?? "Open"),
+    incidentStatus: String(incident.status ?? "Submitted"),
+    priority: priorityLabel(String(incident.priority ?? "P4GeneralSafety")),
+    title: String(incident.title ?? "Stolen vehicle"),
+    location: [report?.lastSeenArea, incident.address, incident.lga, incident.state].filter(Boolean).join(", ") || "Unknown location",
+    createdAt: incident.createdAt ? String(incident.createdAt) : undefined,
+    latitude: report?.latitude == null ? toNumber(incident.latitude, NaN) || undefined : Number(report.latitude),
+    longitude: report?.longitude == null ? toNumber(incident.longitude, NaN) || undefined : Number(report.longitude),
   };
 }
 

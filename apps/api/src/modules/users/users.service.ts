@@ -554,14 +554,47 @@ export class UsersService {
     };
   }
 
-  async listDirectory(actor: JwtPayload, query: CursorPageQuery = {}) {
+  async listDirectory(
+    actor: JwtPayload,
+    query: CursorPageQuery & {
+      q?: string;
+      searchType?: string;
+      searchBy?: string;
+      status?: string;
+      role?: string;
+      kind?: string;
+    } = {},
+  ) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list users");
 
     const limit = resolvePageLimit(query.limit);
+    if (query.cursor?.trim() && !decodeDateIdCursor(query.cursor)) {
+      throw new BadRequestException("cursor is invalid");
+    }
     const cursor = decodeDateIdCursor(query.cursor);
     const take = limit + 1;
-    const adminWhere = { ...this.adminScopeWhere(actor), ...dateIdCursorWhere(cursor) };
-    const citizenWhere = { ...this.citizenScopeWhere(actor), ...dateIdCursorWhere(cursor) };
+    const textFilter = this.buildDirectoryTextFilter(query.q, query.searchType, query.searchBy);
+    const adminWhere = {
+      ...this.adminScopeWhere(actor),
+      ...dateIdCursorWhere(cursor),
+      ...(query.kind === "citizen" ? { id: "__deny_all__" } : {}),
+      ...(query.status === "active" ? { isActive: true } : query.status === "inactive" ? { isActive: false } : {}),
+      ...(query.role ? { role: { name: query.role } } : {}),
+      ...textFilter.admin,
+    } as never;
+    const citizenWhere = {
+      ...this.citizenScopeWhere(actor),
+      ...dateIdCursorWhere(cursor),
+      ...(query.kind === "admin" ? { id: "__deny_all__" } : {}),
+      ...(query.status === "active"
+        ? { status: "Active" as const }
+        : query.status === "suspended"
+          ? { status: "Suspended" as const }
+          : query.status === "locked"
+            ? { status: "Deactivated" as const }
+            : {}),
+      ...textFilter.citizen,
+    } as never;
 
     const [admins, citizens] = await Promise.all([
       this.prisma.adminUser.findMany({
@@ -776,5 +809,47 @@ export class UsersService {
       return { profile: { is: { country: actor.country, state: actor.state, lga: actor.lga } } };
     }
     return { id: "__deny_all__" };
+  }
+
+  private buildDirectoryTextFilter(q?: string, searchType?: string, searchBy?: string) {
+    const term = q?.trim();
+    if (!term) return { admin: {}, citizen: {} };
+    const mode = searchType === "exact" ? undefined : ("insensitive" as const);
+    const startsWith = searchType === "startsWith";
+    const contains = !searchType || searchType === "contains" || searchType === "advanced";
+
+    const stringFilter = (value: string): string | { startsWith: string; mode: "insensitive" } | { contains: string; mode: "insensitive" } => {
+      if (searchType === "exact") return value;
+      if (startsWith) return { startsWith: value, mode: "insensitive" };
+      if (contains) return { contains: value, mode: "insensitive" };
+      return { contains: value, mode: "insensitive" };
+    };
+
+    const by = searchBy ?? "name";
+    if (by === "email") {
+      return {
+        admin: { email: stringFilter(term) },
+        citizen: { email: stringFilter(term) },
+      };
+    }
+    if (by === "phone") {
+      return { admin: { id: "__deny_all__" }, citizen: { phone: stringFilter(term) } };
+    }
+    if (by === "userId") {
+      return { admin: { id: term }, citizen: { id: term } };
+    }
+    if (by === "role") {
+      return { admin: { role: { name: stringFilter(term) } }, citizen: { id: "__deny_all__" } };
+    }
+    return {
+      admin: { displayName: stringFilter(term) },
+      citizen: {
+        OR: [
+          { email: stringFilter(term) },
+          { profile: { is: { firstName: stringFilter(term) } } },
+          { profile: { is: { lastName: stringFilter(term) } } },
+        ],
+      },
+    };
   }
 }

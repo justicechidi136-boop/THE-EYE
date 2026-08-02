@@ -31,6 +31,7 @@ import { DangerZonesModule } from "./danger-zones/danger-zones.module";
 import { AdminSettingsModule } from "./admin-settings/admin-settings.module";
 import { VoiceAttachmentsModule } from "./voice-attachments/voice-attachments.module";
 import { DroneSurveillanceModule } from "./drone-surveillance/drone-surveillance.module";
+import { SupportChatsModule } from "./support-chats/support-chats.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -85,6 +86,7 @@ const redisDisabled = !shouldRegisterBullMq();
     AdminSettingsModule,
     VoiceAttachmentsModule,
     DroneSurveillanceModule,
+    SupportChatsModule,
   ],
   controllers: [HealthController],
   providers: [

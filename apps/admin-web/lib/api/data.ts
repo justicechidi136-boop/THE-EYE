@@ -11,6 +11,8 @@ import {
   toFirmwareReleaseView,
   toDangerZoneView,
   toIncidentView,
+  toMissingPersonCaseView,
+  toStolenVehicleCaseView,
   toLiveVideoSessionView,
   toNotificationOperationView,
   toPatrolScheduleView,
@@ -49,6 +51,8 @@ import type {
   FirmwareReleaseView,
   DangerZoneView,
   Incident,
+  MissingPersonCaseView,
+  StolenVehicleCaseView,
   LiveVideoSessionView,
   NotificationOperationView,
   PatrolScheduleView,
@@ -134,6 +138,21 @@ export async function fetchIncidents(filters: { status?: string; priority?: stri
   }, []);
 }
 
+export async function fetchIncidentsPage(
+  query: Record<string, string | undefined> = {},
+): Promise<PaginatedResponse<Incident>> {
+  return withToken(async (token) => {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/incidents", {
+      token,
+      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+    });
+    return {
+      ...response,
+      data: response.data.map(toIncidentView),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+}
+
 export async function fetchIncident(id: string): Promise<Incident | null> {
   return withToken(async (token) => {
     const incident = await apiRequest<Record<string, unknown>>(`/incidents/${id}`, { token });
@@ -171,6 +190,54 @@ export async function fetchUsersDirectory(): Promise<UserDirectoryEntry[]> {
     const rows = await fetchAllPages<Record<string, unknown>>("/users/directory", token);
     return rows.map(toUserDirectoryEntry);
   }, []);
+}
+
+export async function fetchUsersDirectoryPage(
+  query: Record<string, string | undefined> = {},
+): Promise<PaginatedResponse<UserDirectoryEntry>> {
+  return withToken(async (token) => {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/users/directory", {
+      token,
+      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+    });
+    return {
+      ...response,
+      data: response.data.map(toUserDirectoryEntry),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+}
+
+export type SupportChatView = {
+  id: string;
+  reference: string;
+  type: string;
+  status: string;
+  priority: string;
+  subject: string;
+  incidentId: string | null;
+  incidentTitle: string | null;
+  assignedAdminId: string | null;
+  assignedAdminName: string | null;
+  unreadAdmin: number;
+  lastMessagePreview: string | null;
+  hasAttachment: boolean;
+  lastMessageAt: string | null;
+  createdAt: string;
+};
+
+export async function fetchSupportChats(
+  query: Record<string, string | undefined> = {},
+): Promise<PaginatedResponse<SupportChatView>> {
+  return withToken(async (token) => {
+    return apiRequest<PaginatedResponse<SupportChatView>>("/support/chats", {
+      token,
+      query: { ...query, limit: query.limit ?? "50" },
+    });
+  }, { data: [], nextCursor: null, hasMore: false, limit: 50 });
+}
+
+export async function fetchSupportChat(id: string): Promise<Record<string, unknown> | null> {
+  return withToken(async (token) => apiRequest<Record<string, unknown>>(`/support/chats/${id}`, { token }), null);
 }
 
 export type PendingKycRow = {
@@ -219,9 +286,62 @@ export async function fetchAuditLogs(filters?: {
 
 export async function fetchCommunities(): Promise<CommunityView[]> {
   return withToken(async (token) => {
-    const rows = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token);
+    const rows = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token, { status: "all" });
     return rows.map(toCommunityView);
   }, []);
+}
+
+export async function fetchCommunitiesPage(
+  query: Record<string, string | undefined> = {},
+): Promise<PaginatedResponse<CommunityView>> {
+  return withToken(async (token) => {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/neighborhood-watch/communities", {
+      token,
+      query: { ...query, status: query.status ?? "all", limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+    });
+    return {
+      ...response,
+      data: response.data.map(toCommunityView),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+}
+
+export async function fetchCommunityBoundary(communityId: string) {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: { wkt: string | null; areaSqM: number | null } }>(
+      `/neighborhood-watch/communities/${communityId}/boundary`,
+      { token },
+    );
+    return response.data;
+  }, null);
+}
+
+export async function fetchAdminMembershipsPage(
+  query: Record<string, string | undefined> = {},
+): Promise<PaginatedResponse<ResidentView>> {
+  return withToken(async (token) => {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/neighborhood-watch/admin/memberships", {
+      token,
+      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+    });
+    return {
+      ...response,
+      data: response.data.map((membership) => {
+        const community = membership.community as { id?: string; name?: string } | undefined;
+        return toResidentView(membership, {
+          id: String(community?.id ?? membership.communityId ?? ""),
+          name: String(community?.name ?? "Community"),
+        });
+      }),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+}
+
+export async function fetchPatrolDetail(scheduleId: string) {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/neighborhood-watch/patrols/${scheduleId}`, { token });
+    return toPatrolScheduleView(response.data);
+  }, null);
 }
 
 export async function fetchRawCommunities(): Promise<Record<string, unknown>[]> {
@@ -880,8 +1000,52 @@ export async function checkPoliceStationDuplicates(input: Record<string, unknown
 }
 
 export async function fetchIncidentsByType(type: string): Promise<Incident[]> {
-  const incidents = await fetchIncidents();
-  return incidents.filter((incident) => incident.type === type);
+  const page = await fetchIncidentsPage({ type, limit: "100" });
+  return page.data;
+}
+
+export async function fetchMissingPersonsPage(
+  query: Record<string, string | undefined> = {},
+): Promise<PaginatedResponse<MissingPersonCaseView>> {
+  return withToken(async (token) => {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/admin/missing-persons", {
+      token,
+      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+    });
+    return {
+      ...response,
+      data: response.data.map(toMissingPersonCaseView),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+}
+
+export async function fetchStolenVehiclesPage(
+  query: Record<string, string | undefined> = {},
+): Promise<PaginatedResponse<StolenVehicleCaseView>> {
+  return withToken(async (token) => {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/admin/stolen-vehicles", {
+      token,
+      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+    });
+    return {
+      ...response,
+      data: response.data.map(toStolenVehicleCaseView),
+    };
+  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+}
+
+export async function fetchMissingPersonCase(incidentId: string): Promise<MissingPersonCaseView | null> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/admin/missing-persons/${incidentId}`, { token });
+    return toMissingPersonCaseView(response.data);
+  }, null);
+}
+
+export async function fetchStolenVehicleCase(incidentId: string): Promise<StolenVehicleCaseView | null> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/admin/stolen-vehicles/${incidentId}`, { token });
+    return toStolenVehicleCaseView(response.data);
+  }, null);
 }
 
 export async function fetchIncidentDuplicates(incidentId: string): Promise<DuplicateReportView[]> {

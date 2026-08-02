@@ -1,32 +1,24 @@
-import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
-import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchPatrols } from "../../../lib/api/data";
+import { PatrolManagementConsole } from "../../../components/community/patrol-management-console";
+import { ConsolePageHeader } from "../../../components/console";
+import { StatusBadge } from "../../../components/ui";
+import { fetchCommunities, fetchPatrols } from "../../../lib/api/data";
+import { getRouteById } from "../../../lib/admin/admin-route-registry";
 
 export const dynamic = "force-dynamic";
 
 export default async function PatrolManagementPage() {
-  const patrols = await fetchPatrols();
+  const route = getRouteById("patrol");
+  const [patrols, communities] = await Promise.all([fetchPatrols(), fetchCommunities()]);
 
   return (
     <>
-      <PageHeader
-        eyebrow="Patrol operations"
-        title="Patrol Management"
+      <ConsolePageHeader
+        title={route?.pageHeading ?? "Patrol management"}
+        eyebrow="Schedule creation and lifecycle control"
+        breadcrumbs={route?.breadcrumb}
         action={<StatusBadge tone="success">{patrols.length} schedules</StatusBadge>}
       />
-      <Panel title="Patrol schedules" aside={<span className="text-xs text-muted">Create via POST /v1/neighborhood-watch/communities/:id/patrols</span>}>
-        <CsocDataTable
-          columns={["Patrol", "Community", "Status", "Volunteers", "Checkpoints"]}
-          rows={patrols.map((p) => [
-            p.title,
-            p.community,
-            <StatusBadge key={`s-${p.id}`} tone={p.status === "Active" ? "success" : "info"}>{p.status}</StatusBadge>,
-            String(p.volunteers),
-            String(p.checkpoints),
-          ])}
-          emptyMessage="No patrol schedules in assigned communities."
-        />
-      </Panel>
+      <PatrolManagementConsole patrols={patrols} communities={communities} />
     </>
   );
 }

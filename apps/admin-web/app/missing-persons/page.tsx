@@ -1,19 +1,49 @@
-import { IncidentType } from "@the-eye/shared";
+import { Suspense } from "react";
 import { AppShell } from "../../components/app-shell";
-import { IncidentTable } from "../../components/incident-widgets";
-import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { fetchIncidentsByType } from "../../lib/api/data";
+import { MissingPersonConsole } from "../../components/cases/missing-person-console";
+import { ConsolePageHeader } from "../../components/console";
+import { StatusBadge } from "../../components/ui";
+import { fetchMissingPersonsPage } from "../../lib/api/data";
+import { getRouteById } from "../../lib/admin/admin-route-registry";
 
 export const dynamic = "force-dynamic";
 
-export default async function MissingPersonsPage() {
-  const missingPersons = await fetchIncidentsByType(IncidentType.MissingPerson);
+export default async function MissingPersonsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const route = getRouteById("missing-persons");
+  const page = await fetchMissingPersonsPage({
+    cursor: params.cursor,
+    q: params.q,
+    status: params.status,
+    reportStatus: params.reportStatus,
+    priority: params.priority,
+  });
+
   return (
     <AppShell>
-      <PageHeader eyebrow="Case management" title="Missing person management" action={<StatusBadge tone="info">{missingPersons.length} open</StatusBadge>} />
-      <Panel title="Active missing person reports">
-        <IncidentTable incidents={missingPersons} />
-      </Panel>
+      <ConsolePageHeader
+        title={route?.pageHeading ?? "Missing person management"}
+        eyebrow="Case management workspace"
+        breadcrumbs={route?.breadcrumb}
+        action={<StatusBadge tone="warning">{page.data.filter((item) => item.reportStatus === "Open").length} open</StatusBadge>}
+      />
+      <Suspense fallback={null}>
+        <MissingPersonConsole
+          cases={page.data}
+          hasMore={page.hasMore}
+          nextCursor={page.nextCursor ?? undefined}
+          filters={{
+            q: params.q,
+            status: params.status,
+            reportStatus: params.reportStatus,
+            priority: params.priority,
+          }}
+        />
+      </Suspense>
     </AppShell>
   );
 }
