@@ -30,6 +30,7 @@ import {
   toDroneDeviceView,
   toDroneMissionView,
   toDroneOperatorView,
+  toDroneOperatorDetailView,
   toDroneEvidenceView,
   toDroneGeofenceView,
   toDroneNoFlyZoneView,
@@ -62,6 +63,8 @@ import type {
   DroneDeviceView,
   DroneMissionView,
   DroneOperatorView,
+  DroneOperatorDetailView,
+  DroneOperatorListStats,
   DroneEvidenceView,
   DroneGeofenceView,
   DroneNoFlyZoneView,
@@ -1086,11 +1089,120 @@ export async function fetchDroneIncidentMissions(): Promise<DroneMissionView[]> 
   return (response.data ?? []).map(toDroneMissionView);
 }
 
-export async function fetchDroneOperators(): Promise<DroneOperatorView[]> {
+export type DroneOperatorsPageQuery = {
+  cursor?: string;
+  limit?: string;
+  q?: string;
+  operatorRole?: string;
+  accountStatus?: string;
+  availabilityStatus?: string;
+  country?: string;
+  state?: string;
+  lga?: string;
+  licenceWarningLevel?: string;
+};
+
+export type DroneOperatorsPageResponse = PaginatedResponse<DroneOperatorView> & {
+  stats: DroneOperatorListStats;
+};
+
+function toDroneOperatorListStats(value: unknown): DroneOperatorListStats {
+  const raw = (value ?? {}) as Record<string, unknown>;
+  return {
+    total: Number(raw.total ?? 0),
+    available: Number(raw.available ?? 0),
+    onMission: Number(raw.onMission ?? 0),
+    pending: Number(raw.pending ?? raw.pendingVerification ?? 0),
+    expiredLicences: Number(raw.expiredLicences ?? 0),
+    certsExpiring: Number(raw.certsExpiring ?? raw.certsExpiring30d ?? 0),
+    suspended: Number(raw.suspended ?? 0),
+  };
+}
+
+export async function fetchDroneOperatorsPage(query: DroneOperatorsPageQuery = {}): Promise<DroneOperatorsPageResponse> {
   const token = await getAccessToken();
-  if (!token) return [];
-  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/drone-surveillance/admin/operators", { token });
-  return (response.data ?? []).map(toDroneOperatorView);
+  if (!token) {
+    return {
+      data: [],
+      nextCursor: null,
+      hasMore: false,
+      limit: Number(query.limit ?? 25),
+      stats: toDroneOperatorListStats(null),
+    };
+  }
+  const response = await apiRequest<{
+    data: Record<string, unknown>[];
+    nextCursor?: string | null;
+    hasMore?: boolean;
+    limit?: number;
+    stats?: Record<string, unknown>;
+  }>("/drone-surveillance/admin/operators", { token, query });
+  return {
+    data: (response.data ?? []).map(toDroneOperatorView),
+    nextCursor: response.nextCursor ?? null,
+    hasMore: Boolean(response.hasMore),
+    limit: Number(response.limit ?? query.limit ?? 25),
+    stats: toDroneOperatorListStats(response.stats),
+  };
+}
+
+export async function fetchDroneOperators(query: DroneOperatorsPageQuery = {}): Promise<DroneOperatorView[]> {
+  const page = await fetchDroneOperatorsPage(query);
+  return page.data;
+}
+
+export async function fetchDroneOperator(id: string): Promise<DroneOperatorDetailView | null> {
+  const token = await getAccessToken();
+  if (!token) return null;
+  try {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(
+      `/drone-surveillance/admin/operators/${encodeURIComponent(id)}`,
+      { token },
+    );
+    return toDroneOperatorDetailView(response.data);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function createDroneOperator(input: Record<string, unknown>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>("/drone-surveillance/admin/operators", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+  return toDroneOperatorDetailView(response.data);
+}
+
+export async function updateDroneOperator(id: string, input: Record<string, unknown>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>(`/drone-surveillance/admin/operators/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(input),
+  });
+  return toDroneOperatorDetailView(response.data);
+}
+
+export async function updateDroneOperatorStatus(
+  id: string,
+  input: { accountStatus?: string; availabilityStatus?: string; isActive?: boolean },
+) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>(
+    `/drone-surveillance/admin/operators/${encodeURIComponent(id)}/status`,
+    {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(input),
+    },
+  );
+  return toDroneOperatorDetailView(response.data);
 }
 
 export async function fetchDroneHealth(): Promise<DroneHealthView[]> {
