@@ -63,8 +63,8 @@ export function LoginForm() {
   return (
     <form className="grid w-full gap-4" onSubmit={handleSubmit} noValidate>
       <div className="text-center">
-        <h1 className="text-[36px] font-semibold leading-tight text-command">Welcome Back!</h1>
-        <p className="mt-1 text-base text-command/80">Please login to your account</p>
+        <h1 className="text-[36px] font-semibold leading-tight text-ink">Welcome Back!</h1>
+        <p className="mt-1 text-base text-muted">Please login to your account</p>
       </div>
 
       <FormField label="Email" htmlFor={emailId} error={emailError ?? undefined}>

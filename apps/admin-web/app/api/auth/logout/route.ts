@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiRequest } from "../../../../lib/api/client";
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "../../../../lib/session";
+import { clearAuthCookies, setAuthCookies } from "../../../../lib/auth-cookies";
+import { REFRESH_TOKEN_COOKIE } from "../../../../lib/session";
 
 export async function POST(request: Request) {
   const { cookies } = await import("next/headers");
@@ -18,10 +19,8 @@ export async function POST(request: Request) {
     }
   }
 
-  // Form POSTs must land on the login page, not a raw JSON body.
   const loginUrl = new URL("/login", request.url);
   const response = NextResponse.redirect(loginUrl, 303);
-  response.cookies.delete(ACCESS_TOKEN_COOKIE);
-  response.cookies.delete(REFRESH_TOKEN_COOKIE);
+  clearAuthCookies(response);
   return response;
 }

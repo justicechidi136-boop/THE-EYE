@@ -1093,6 +1093,22 @@ export async function fetchDroneOperators(): Promise<DroneOperatorView[]> {
   return (response.data ?? []).map(toDroneOperatorView);
 }
 
+export async function createDroneOperator(input: {
+  name: string;
+  email?: string;
+  callsign?: string;
+  operatorRole?: string;
+  certificationLevel?: string;
+}) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>("/drone-surveillance/admin/operators", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+}
+
 export async function fetchDroneHealth(): Promise<DroneHealthView[]> {
   const token = await getAccessToken();
   if (!token) return [];

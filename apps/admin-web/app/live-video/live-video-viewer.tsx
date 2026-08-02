@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AppShellFrame } from "../../components/app-shell-frame";
 import { LivekitAdminPlayer, type LivekitPlayerState } from "../../components/livekit-admin-player";
 import { LocationTrailMap } from "../../components/location-trail-map";
 import { PageHeader, Panel, StatusBadge } from "../../components/ui";
@@ -101,7 +100,7 @@ export function LiveVideoViewer({ sessions }: Props) {
   }, [gps, playerState, selected.accuracy, selected.connectionStatus, selected.date, selected.id, selected.incidentId, selected.reporter, selected.signedLocationPath, selected.status, selected.time]);
 
   return (
-    <AppShellFrame>
+    <>
       <PageHeader eyebrow="LiveKit incident streams" title="Live video viewer" action={<StatusBadge tone={active.length ? "success" : "neutral"}>{active.length} active</StatusBadge>} />
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <Panel title="Authorized stream viewer">
@@ -169,6 +168,6 @@ export function LiveVideoViewer({ sessions }: Props) {
       <div className="mt-5 grid gap-5">
         <LocationTrailMap title="Live map marker and movement trail" history={selected.locationHistory} openLocationHref={displayOverlay.signedLocationPath} />
       </div>
-    </AppShellFrame>
+    </>
   );
 }
