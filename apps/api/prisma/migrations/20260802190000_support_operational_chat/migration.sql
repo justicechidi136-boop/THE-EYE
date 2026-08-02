@@ -1,99 +1,100 @@
-enum SupportConversationType {
-  Incident
-  CitizenSupport
-  Agency
-  Responder
-}
+-- Support operational chat for admin live chat workspace.
 
-enum SupportConversationStatus {
-  Open
-  Pending
-  Escalated
-  Closed
-}
+CREATE TYPE "SupportConversationType" AS ENUM (
+  'Incident',
+  'CitizenSupport',
+  'Agency',
+  'Responder'
+);
 
-enum SupportConversationPriority {
-  Urgent
-  High
-  Normal
-  Low
-}
+CREATE TYPE "SupportConversationStatus" AS ENUM (
+  'Open',
+  'Pending',
+  'Escalated',
+  'Closed'
+);
 
-enum SupportParticipantRole {
-  Citizen
-  Admin
-  Agency
-  Responder
-  System
-}
+CREATE TYPE "SupportConversationPriority" AS ENUM (
+  'Urgent',
+  'High',
+  'Normal',
+  'Low'
+);
 
-model SupportConversation {
-  id              String                       @id @default(uuid()) @db.Uuid
-  reference       String                       @unique
-  type            SupportConversationType
-  status          SupportConversationStatus    @default(Open)
-  priority        SupportConversationPriority  @default(Normal)
-  subject         String
-  incidentId      String?                      @map("incident_id") @db.Uuid
-  assignedAdminId String?                      @map("assigned_admin_id") @db.Uuid
-  country         String?
-  state           String?
-  lga             String?
-  unreadAdmin     Int                          @default(0) @map("unread_admin")
-  unreadCitizen   Int                          @default(0) @map("unread_citizen")
-  lastMessageAt   DateTime?                    @map("last_message_at") @db.Timestamptz(6)
-  closedAt        DateTime?                    @map("closed_at") @db.Timestamptz(6)
-  closedById      String?                      @map("closed_by_id") @db.Uuid
-  closeReason     String?                      @map("close_reason")
-  metadata        Json                         @default("{}")
-  version         Int                          @default(0)
-  createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  incident        Incident?                    @relation(fields: [incidentId], references: [id])
-  assignedAdmin   AdminUser?                   @relation("SupportConversationAssignee", fields: [assignedAdminId], references: [id])
-  closedBy        AdminUser?                   @relation("SupportConversationClosedBy", fields: [closedById], references: [id])
-  messages        SupportMessage[]
-  participants    SupportConversationParticipant[]
+CREATE TYPE "SupportParticipantRole" AS ENUM (
+  'Citizen',
+  'Admin',
+  'Agency',
+  'Responder',
+  'System'
+);
 
-  @@index([status, priority, lastMessageAt])
-  @@index([incidentId])
-  @@index([assignedAdminId, status])
-  @@index([country, state, lga])
-  @@map("support_conversations")
-}
+CREATE TABLE "support_conversations" (
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "reference" TEXT NOT NULL,
+  "type" "SupportConversationType" NOT NULL,
+  "status" "SupportConversationStatus" NOT NULL DEFAULT 'Open',
+  "priority" "SupportConversationPriority" NOT NULL DEFAULT 'Normal',
+  "subject" TEXT NOT NULL,
+  "incident_id" UUID,
+  "assigned_admin_id" UUID,
+  "country" TEXT,
+  "state" TEXT,
+  "lga" TEXT,
+  "unread_admin" INTEGER NOT NULL DEFAULT 0,
+  "unread_citizen" INTEGER NOT NULL DEFAULT 0,
+  "last_message_at" TIMESTAMPTZ(6),
+  "closed_at" TIMESTAMPTZ(6),
+  "closed_by_id" UUID,
+  "close_reason" TEXT,
+  "metadata" JSONB NOT NULL DEFAULT '{}',
+  "version" INTEGER NOT NULL DEFAULT 0,
+  "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "support_conversations_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "support_conversations_reference_key" UNIQUE ("reference"),
+  CONSTRAINT "support_conversations_incident_id_fkey" FOREIGN KEY ("incident_id") REFERENCES "incidents"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "support_conversations_assigned_admin_id_fkey" FOREIGN KEY ("assigned_admin_id") REFERENCES "admin_users"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "support_conversations_closed_by_id_fkey" FOREIGN KEY ("closed_by_id") REFERENCES "admin_users"("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
 
-model SupportConversationParticipant {
-  id               String                @id @default(uuid()) @db.Uuid
-  conversationId   String                @map("conversation_id") @db.Uuid
-  role             SupportParticipantRole
-  adminUserId      String?               @map("admin_user_id") @db.Uuid
-  userId           String?               @map("user_id") @db.Uuid
-  displayName      String                @map("display_name")
-  joinedAt         DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
-  leftAt           DateTime?             @map("left_at") @db.Timestamptz(6)
-  conversation     SupportConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  adminUser        AdminUser?            @relation("SupportParticipantAdmin", fields: [adminUserId], references: [id])
-  user             User?                 @relation("SupportParticipantUser", fields: [userId], references: [id])
+CREATE INDEX "support_conversations_status_priority_last_message_at_idx" ON "support_conversations"("status", "priority", "last_message_at");
+CREATE INDEX "support_conversations_incident_id_idx" ON "support_conversations"("incident_id");
+CREATE INDEX "support_conversations_assigned_admin_id_status_idx" ON "support_conversations"("assigned_admin_id", "status");
+CREATE INDEX "support_conversations_country_state_lga_idx" ON "support_conversations"("country", "state", "lga");
 
-  @@index([conversationId])
-  @@map("support_conversation_participants")
-}
+CREATE TABLE "support_conversation_participants" (
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "conversation_id" UUID NOT NULL,
+  "role" "SupportParticipantRole" NOT NULL,
+  "admin_user_id" UUID,
+  "user_id" UUID,
+  "display_name" TEXT NOT NULL,
+  "joined_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "left_at" TIMESTAMPTZ(6),
+  CONSTRAINT "support_conversation_participants_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "support_conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "support_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "support_conversation_participants_admin_user_id_fkey" FOREIGN KEY ("admin_user_id") REFERENCES "admin_users"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "support_conversation_participants_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
 
-model SupportMessage {
-  id               String              @id @default(uuid()) @db.Uuid
-  conversationId   String              @map("conversation_id") @db.Uuid
-  senderRole       SupportParticipantRole @map("sender_role")
-  adminUserId      String?             @map("admin_user_id") @db.Uuid
-  userId           String?             @map("user_id") @db.Uuid
-  body             String
-  isInternal       Boolean             @default(false) @map("is_internal")
-  hasAttachment    Boolean             @default(false) @map("has_attachment")
-  attachmentKey    String?             @map("attachment_key")
-  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  conversation     SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  adminUser        AdminUser?          @relation("SupportMessageAdmin", fields: [adminUserId], references: [id])
-  user             User?               @relation("SupportMessageUser", fields: [userId], references: [id])
+CREATE INDEX "support_conversation_participants_conversation_id_idx" ON "support_conversation_participants"("conversation_id");
 
-  @@index([conversationId, createdAt])
-  @@map("support_messages")
-}
+CREATE TABLE "support_messages" (
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "conversation_id" UUID NOT NULL,
+  "sender_role" "SupportParticipantRole" NOT NULL,
+  "admin_user_id" UUID,
+  "user_id" UUID,
+  "body" TEXT NOT NULL,
+  "is_internal" BOOLEAN NOT NULL DEFAULT false,
+  "has_attachment" BOOLEAN NOT NULL DEFAULT false,
+  "attachment_key" TEXT,
+  "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "support_messages_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "support_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "support_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "support_messages_admin_user_id_fkey" FOREIGN KEY ("admin_user_id") REFERENCES "admin_users"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT "support_messages_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+CREATE INDEX "support_messages_conversation_id_created_at_idx" ON "support_messages"("conversation_id", "created_at");
