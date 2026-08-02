@@ -110,8 +110,9 @@ services:
     image: livekit/livekit-server:v1.8
     container_name: the-eye-livekit
     restart: unless-stopped
-    # Bridge network + published ports: nginx/API reach livekit:7880 on the-eye-internal;
-    # RTC 7881/TCP and 7882/UDP are published to the VPS for direct client media.
+    # Dual-network: the-eye-internal for nginx/API Docker DNS (livekit:7880);
+    # the-eye-public is required so Compose can publish 7880/7881/7882 to the host —
+    # Docker ignores port mappings when a service is attached only to internal: true networks.
     command: ["--config", "/etc/livekit/livekit.yaml"]
     environment:
       # LiveKit requires "keyName: secret" (space after colon). Single source — do not duplicate in livekit.yaml.
@@ -130,6 +131,7 @@ services:
       retries: 5
     networks:
       - the-eye-internal
+      - the-eye-public
 
   api:
     build:

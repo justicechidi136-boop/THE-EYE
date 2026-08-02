@@ -18,8 +18,11 @@
 | RTC UDP (7882) | Host bind | `7882:7882/udp` published to VPS |
 | ICE `node_ip` | Public VPS IP in `livekit.yaml` | Same — unchanged |
 | Client WSS URL | `wss://staging-livekit.theeye.com.ng` | Same — unchanged |
+| Docker networks | Host only | **`the-eye-internal` + `the-eye-public`** — public network required for port publish |
 
 Dev compose already used `ws://livekit:7880` successfully. Production/staging should match.
+
+**Important:** Do **not** attach LiveKit only to `the-eye-internal`. That network is `internal: true`; Docker will ignore `ports:` mappings (empty `NetworkSettings.Ports`, no host listeners) even when `PortBindings` appear in inspect output.
 
 **Keep host mode only if** bridge UDP publish fails on your VPS kernel (rare). Rollback procedure below restores host mode.
 
@@ -53,7 +56,7 @@ API (bridge) ── ws://livekit:7880 ──► token mint
 
 | File | Change |
 |------|--------|
-| `infra/docker/docker-compose.yml` | Remove `network_mode: host`; add `networks: [the-eye-internal]` + `ports:` for 7880/7881/7882 |
+| `infra/docker/docker-compose.yml` | Remove `network_mode: host`; add `networks: [the-eye-internal, the-eye-public]` + `ports:` for 7880/7881/7882 |
 | `infra/docker/nginx/snippets/livekit-locations.conf` | `http://livekit:7880` |
 | `infra/docker/nginx/snippets/upstreams.conf` | `livekit:7880 resolve` |
 | `scripts/staging-livekit-network-guard.sh` | Bridge checks + nginx→livekit probe |
@@ -109,6 +112,9 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --wait l
 Expect:
 
 ```bash
+docker inspect the-eye-livekit --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+# Expected: the-eye-internal the-eye-public
+
 docker port the-eye-livekit 7880/tcp   # -> 0.0.0.0:7880
 docker port the-eye-livekit 7881/tcp   # -> 0.0.0.0:7881
 docker port the-eye-livekit 7882/udp   # -> 0.0.0.0:7882

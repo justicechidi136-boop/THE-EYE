@@ -123,9 +123,9 @@ Compose uses two Docker networks:
 | Network | `internal` | Attached by | Purpose |
 |---------|------------|-------------|---------|
 | `the-eye-internal` | `true` | postgres, redis, minio, livekit, admin-web, api | Service-to-service traffic; **no outbound internet** |
-| `the-eye-public` | `false` | nginx, certbot, **api** | Outbound HTTPS for Firebase cert fetch, ACME, TLS bootstrap |
+| `the-eye-public` | `false` | nginx, certbot, **api**, **livekit** | Outbound HTTPS (api/nginx); **host port publish for LiveKit RTC** |
 
-The API joins **both** networks: internal for database/redis/S3/LiveKit, public for Google/Firebase egress. Data stores stay on the internal network only.
+The API joins **both** networks: internal for database/redis/S3/LiveKit, public for Google/Firebase egress. LiveKit also joins **both**: internal for `livekit:7880` Docker DNS, public so Docker can bind 7880/7881/7882 on the host (port mappings are ignored on `internal: true`-only attachments). Data stores stay on the internal network only.
 
 After deploy or network changes, recreate the API container and verify egress from inside it:
 
