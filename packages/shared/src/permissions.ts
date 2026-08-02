@@ -26,12 +26,26 @@ export type Permission =
   | "drone:manage"
   | "drone:mission:create"
   | "drone:mission:command"
-  | "drone:evidence:read";
+  | "drone:evidence:read"
+  | "drone:operator:read"
+  | "drone:operator:create"
+  | "drone:operator:update"
+  | "drone:operator:verify"
+  | "drone:operator:suspend"
+  | "drone:operator:assign"
+  | "drone:operator:documents:read"
+  | "drone:operator:safety:read"
+  | "drone:operator:safety:manage"
+  | "drone:operator:audit:read";
 
-const droneReadOnly: Permission[] = ["drone:read", "drone:evidence:read", "incident:read", "audit:read", "auth:admin", "policy:read"];
-const droneOperatorPerms: Permission[] = [...droneReadOnly, "drone:mission:create"];
-const droneCommanderPerms: Permission[] = [...droneOperatorPerms, "drone:manage", "drone:mission:command"];
-const droneAdminPerms: Permission[] = [...droneCommanderPerms, "incident:update", "incident:assign"];
+const droneOperatorRead: Permission[] = ["drone:operator:read", "drone:read"];
+const droneOperatorManage: Permission[] = [...droneOperatorRead, "drone:operator:create", "drone:operator:update", "drone:operator:assign"];
+const droneOperatorVerify: Permission[] = [...droneOperatorManage, "drone:operator:verify", "drone:operator:suspend", "drone:operator:documents:read", "drone:operator:safety:read", "drone:operator:safety:manage", "drone:operator:audit:read"];
+const droneReadOnly: Permission[] = [...droneOperatorRead, "drone:evidence:read", "incident:read", "audit:read", "auth:admin", "policy:read", "drone:operator:audit:read"];
+const droneOperatorPerms: Permission[] = [...droneReadOnly, "drone:mission:create", "drone:operator:update"];
+const droneCommanderPerms: Permission[] = [...droneOperatorPerms, "drone:manage", "drone:mission:command", ...droneOperatorManage.filter((p) => p !== "drone:operator:verify"), "drone:operator:documents:read", "drone:operator:safety:read", "drone:operator:safety:manage"];
+const droneAdminPerms: Permission[] = [...droneCommanderPerms, "drone:operator:verify", "drone:operator:suspend", "incident:update", "incident:assign"];
+const oversightDroneRead: Permission[] = ["drone:operator:read", "drone:read", "drone:operator:audit:read", "drone:operator:documents:read", "incident:read", "audit:read", "auth:admin", "policy:read"];
 
 export const adminRolePermissions: Record<AdminRoleName, Permission[]> = {
   [AdminRoleName.SuperAdmin]: ["incident:create", "incident:read", "incident:update", "incident:assign", "incident:escalate", "broadcast:create", "broadcast:approve", "broadcast:publish", "community:read", "community:join", "community:post", "community:moderate", "community:verify", "community:patrol", "community:volunteer", "audit:read", "user:manage", "agency:manage", "auth:admin", "policy:read", "policy:manage", ...droneAdminPerms],
@@ -42,7 +56,7 @@ export const adminRolePermissions: Record<AdminRoleName, Permission[]> = {
   [AdminRoleName.PoliceSecurityOfficer]: ["incident:read", "incident:update", "auth:admin", "policy:read"],
   [AdminRoleName.CallCenterAgent]: ["incident:create", "incident:read", "incident:update", "auth:admin", "policy:read"],
   [AdminRoleName.CommunityModerator]: ["community:read", "community:moderate", "community:verify", "community:patrol", "audit:read", "auth:admin", "policy:read", "policy:manage"],
-  [AdminRoleName.OversightAuditor]: ["incident:read", "audit:read", "auth:admin", "policy:read"],
+  [AdminRoleName.OversightAuditor]: oversightDroneRead,
   [AdminRoleName.DroneCommander]: droneCommanderPerms,
   [AdminRoleName.DroneOperator]: droneOperatorPerms,
   [AdminRoleName.ReadOnlyObserver]: droneReadOnly,
