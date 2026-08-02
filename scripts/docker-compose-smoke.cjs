@@ -122,9 +122,10 @@ const nginxChecks = [
   ["/.well-known/acme-challenge/", httpTemplate, "ACME challenge path"],
   ["upstream the_eye_api", upstreams, "API upstream block"],
   [" resolve;", upstreams, "Docker DNS resolve on upstream"],
-  ["host.docker.internal:7880", livekitLocations, "LiveKit host-network upstream"],
-  ["network_mode: host", compose, "LiveKit host networking"],
-  ["host.docker.internal:host-gateway", compose, "Docker host gateway for bridge services"],
+  ["livekit:7880", livekitLocations, "LiveKit Docker DNS upstream"],
+  ['"${LIVEKIT_HTTP_PORT:-7880}:7880"', compose, "LiveKit signaling port publish"],
+  ['"${LIVEKIT_RTC_UDP_PORT:-7882}:7882/udp"', compose, "LiveKit RTC UDP port publish"],
+  ["the-eye-internal", compose, "LiveKit internal bridge network"],
   ["resolver 127.0.0.11", fs.readFileSync(path.join(root, "infra", "docker", "nginx", "nginx.conf"), "utf8"), "Docker embedded DNS resolver"],
 ];
 for (const [needle, content, label] of nginxChecks) {

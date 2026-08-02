@@ -38,7 +38,7 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env rm -sf livekit
 docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate livekit nginx api
 ```
 
-Ensure `.env` has `LIVEKIT_URL=ws://host.docker.internal:7880` and `LIVEKIT_NODE_IP=<vps-public-ipv4>`.
+Ensure `.env` has `LIVEKIT_URL=ws://livekit:7880` and `LIVEKIT_NODE_IP=<vps-public-ipv4>`.
 
 ## nginx exits on first deploy
 
