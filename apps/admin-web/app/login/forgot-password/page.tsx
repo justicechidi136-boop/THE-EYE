@@ -69,8 +69,8 @@ export default function ForgotPasswordPage() {
       {step === "email" ? (
         <form className="grid w-full gap-4" onSubmit={handleEmailSubmit} noValidate>
           <div className="text-center">
-            <h1 className="text-[36px] font-semibold leading-tight text-command">Enter Email</h1>
-            <p className="mt-1 text-base text-command/80">Enter your admin email</p>
+            <h1 className="text-[36px] font-semibold leading-tight text-ink">Enter Email</h1>
+            <p className="mt-1 text-base text-ink/80">Enter your admin email</p>
           </div>
           <FormField label="Email" htmlFor={emailId} error={emailError ?? undefined}>
             <TextInput
@@ -97,8 +97,8 @@ export default function ForgotPasswordPage() {
       {step === "token" ? (
         <form className="grid w-full gap-4" onSubmit={handleTokenSubmit} noValidate>
           <div className="text-center">
-            <h1 className="text-[36px] font-semibold leading-tight text-command">Check your mail</h1>
-            <p className="mt-1 text-base text-command/80">A token has been sent to your email</p>
+            <h1 className="text-[36px] font-semibold leading-tight text-ink">Check your mail</h1>
+            <p className="mt-1 text-base text-ink/80">A token has been sent to your email</p>
           </div>
           {message ? <p className="rounded-md bg-field px-3 py-2 text-sm text-muted">{message}</p> : null}
           <FormField label="Enter token" htmlFor={tokenId} error={tokenError ?? undefined}>
@@ -123,7 +123,7 @@ export default function ForgotPasswordPage() {
       {step === "reset" ? (
         <form className="grid w-full gap-4" onSubmit={handleResetSubmit} noValidate>
           <div className="text-center">
-            <h1 className="text-[36px] font-semibold leading-tight text-command">Reset Password</h1>
+            <h1 className="text-[36px] font-semibold leading-tight text-ink">Reset Password</h1>
           </div>
           <FormField label="New Password" htmlFor={passwordId} error={passwordError ?? undefined}>
             <TextInput

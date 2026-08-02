@@ -30,8 +30,8 @@ export default function VerifyLoginPage() {
     <AuthLayout>
       <form className="grid w-full gap-4" onSubmit={handleSubmit} noValidate>
         <div className="text-center">
-          <h1 className="text-[36px] font-semibold leading-tight text-command">Check your mail</h1>
-          <p className="mt-1 text-base text-command/80">A token has been sent to your mail</p>
+          <h1 className="text-[36px] font-semibold leading-tight text-ink">Check your mail</h1>
+          <p className="mt-1 text-base text-muted">A token has been sent to your mail</p>
         </div>
         <FormField label="Enter token" htmlFor={tokenId} error={tokenError ?? undefined}>
           <TextInput

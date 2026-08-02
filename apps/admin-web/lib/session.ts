@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import type { AdminSession } from "./types/admin-views";
+import { ACCESS_TOKEN_COOKIE } from "./auth-cookies";
 import { verifyAdminAccessToken } from "./verify-jwt";
 
-export const ACCESS_TOKEN_COOKIE = "the_eye_access_token";
-export const REFRESH_TOKEN_COOKIE = "the_eye_refresh_token";
+export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "./auth-cookies";
 
 export async function getAccessToken() {
   const store = await cookies();

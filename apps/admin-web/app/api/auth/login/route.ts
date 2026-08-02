@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiRequest } from "../../../../lib/api/client";
 import { resolveServerApiDiagnostics } from "../../../../lib/public-env";
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "../../../../lib/session";
+import { setAuthCookies } from "../../../../lib/auth-cookies";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { email?: string; password?: string };
@@ -20,21 +20,7 @@ export async function POST(request: Request) {
     });
 
     const response = NextResponse.json({ ok: true, user: session.user });
-    const secure = process.env.NODE_ENV === "production";
-    response.cookies.set(ACCESS_TOKEN_COOKIE, session.accessToken, {
-      httpOnly: true,
-      sameSite: "strict",
-      secure,
-      path: "/",
-      maxAge: 60 * 60,
-    });
-    response.cookies.set(REFRESH_TOKEN_COOKIE, session.refreshToken, {
-      httpOnly: true,
-      sameSite: "strict",
-      secure,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    setAuthCookies(response, session.accessToken, session.refreshToken);
     return response;
   } catch (error) {
     const diagnostics = resolveServerApiDiagnostics();

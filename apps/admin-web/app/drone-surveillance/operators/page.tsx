@@ -101,7 +101,7 @@ export default async function DroneOperatorsPage({ searchParams }: { searchParam
           <select name="accountStatus" defaultValue={params.accountStatus ?? ""} className="h-11 rounded-md border border-line bg-surface px-3 text-sm text-ink">
             <option value="">All account statuses</option>
             <option value="Active">Active</option>
-            <option value="Pending">Pending</option>
+            <option value="PendingReview">Pending review</option>
             <option value="Suspended">Suspended</option>
             <option value="Inactive">Inactive</option>
           </select>
@@ -115,7 +115,7 @@ export default async function DroneOperatorsPage({ searchParams }: { searchParam
           <select name="licenceWarningLevel" defaultValue={params.licenceWarningLevel ?? ""} className="h-11 rounded-md border border-line bg-surface px-3 text-sm text-ink">
             <option value="">All licence alerts</option>
             <option value="none">No alert</option>
-            <option value="warning">Warning</option>
+            <option value="30d">Expiring within 30 days</option>
             <option value="expired">Expired</option>
           </select>
           <div className="md:col-span-5">

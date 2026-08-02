@@ -1,9 +1,14 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { ACCESS_TOKEN_COOKIE } from "./lib/session";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  refreshAuthTokens,
+  setAuthCookies,
+} from "./lib/auth-cookies";
 import { verifyAdminAccessToken } from "./lib/verify-jwt";
 
-const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout"];
+const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/refresh"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -17,15 +22,25 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
-  if (!token || !(await verifyAdminAccessToken(token))) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+  const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
+  if (accessToken && (await verifyAdminAccessToken(accessToken))) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  const refreshToken = request.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
+  if (refreshToken) {
+    const refreshed = await refreshAuthTokens(refreshToken);
+    if (refreshed) {
+      const response = NextResponse.next();
+      setAuthCookies(response, refreshed.accessToken, refreshed.refreshToken);
+      return response;
+    }
+  }
+
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/login";
+  loginUrl.searchParams.set("next", pathname);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {

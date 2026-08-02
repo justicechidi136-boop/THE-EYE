@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const result = await createDroneOperator(body as Record<string, unknown>);
-    return NextResponse.json({ ok: true, data: result });
+    return NextResponse.json({ ok: true, data: result }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
