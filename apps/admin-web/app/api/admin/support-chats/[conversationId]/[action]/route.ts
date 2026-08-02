@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { proxyAdminSupportChatMutation } from "../../../../lib/api/support-chat-admin";
+import { proxyAdminSupportChatMutation } from "../../../../../../lib/api/support-chat-admin";
 
 type RouteContext = { params: Promise<{ conversationId: string; action: string }> };
 

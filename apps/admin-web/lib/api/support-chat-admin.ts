@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAccessToken } from "../../session";
+import { getAccessToken } from "../session";
 import { resolveServerApiBaseUrl } from "../public-env";
 
 export async function proxyAdminSupportChatMutation(path: string, body: Record<string, unknown>) {
