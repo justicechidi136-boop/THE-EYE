@@ -1,19 +1,49 @@
-import { IncidentType } from "@the-eye/shared";
+import { Suspense } from "react";
 import { AppShell } from "../../components/app-shell";
-import { IncidentTable } from "../../components/incident-widgets";
-import { PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { fetchIncidentsByType } from "../../lib/api/data";
+import { StolenVehicleConsole } from "../../components/cases/stolen-vehicle-console";
+import { ConsolePageHeader } from "../../components/console";
+import { StatusBadge } from "../../components/ui";
+import { fetchStolenVehiclesPage } from "../../lib/api/data";
+import { getRouteById } from "../../lib/admin/admin-route-registry";
 
 export const dynamic = "force-dynamic";
 
-export default async function StolenVehiclesPage() {
-  const stolenVehicles = await fetchIncidentsByType(IncidentType.StolenVehicle);
+export default async function StolenVehiclesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const route = getRouteById("stolen-vehicles");
+  const page = await fetchStolenVehiclesPage({
+    cursor: params.cursor,
+    q: params.q,
+    status: params.status,
+    reportStatus: params.reportStatus,
+    priority: params.priority,
+  });
+
   return (
     <AppShell>
-      <PageHeader eyebrow="Vehicle intelligence" title="Stolen vehicle management" action={<StatusBadge tone="warning">{stolenVehicles.length} watchlisted</StatusBadge>} />
-      <Panel title="Stolen vehicle reports">
-        <IncidentTable incidents={stolenVehicles} />
-      </Panel>
+      <ConsolePageHeader
+        title={route?.pageHeading ?? "Stolen vehicle management"}
+        eyebrow="Vehicle intelligence workspace"
+        breadcrumbs={route?.breadcrumb}
+        action={<StatusBadge tone="warning">{page.data.filter((item) => item.reportStatus === "Open").length} watchlisted</StatusBadge>}
+      />
+      <Suspense fallback={null}>
+        <StolenVehicleConsole
+          cases={page.data}
+          hasMore={page.hasMore}
+          nextCursor={page.nextCursor ?? undefined}
+          filters={{
+            q: params.q,
+            status: params.status,
+            reportStatus: params.reportStatus,
+            priority: params.priority,
+          }}
+        />
+      </Suspense>
     </AppShell>
   );
 }
