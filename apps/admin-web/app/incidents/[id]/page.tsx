@@ -2,11 +2,14 @@ import { AppShell } from "../../../components/app-shell";
 import { IncidentDetail } from "../../../components/incident-widgets";
 import { PageHeader, StatusBadge } from "../../../components/ui";
 import { fetchEvidenceAccessLogs, fetchIncident } from "../../../lib/api/data";
+import { canCreateDroneMission, canViewDroneSurveillance } from "../../../lib/drone-permissions";
+import { getAdminSession } from "../../../lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const session = await getAdminSession();
   const [incident, evidenceAccessLogs] = await Promise.all([
     fetchIncident(id),
     fetchEvidenceAccessLogs(id),
@@ -23,7 +26,11 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
   return (
     <AppShell>
       <PageHeader eyebrow={incident.id} title={incident.title} action={<StatusBadge tone="info">{incident.status}</StatusBadge>} />
-      <IncidentDetail incident={incident} evidenceAccessLogs={evidenceAccessLogs} />
+      <IncidentDetail
+        incident={incident}
+        evidenceAccessLogs={evidenceAccessLogs}
+        canLaunchDroneMission={canViewDroneSurveillance(session) && canCreateDroneMission(session)}
+      />
     </AppShell>
   );
 }
