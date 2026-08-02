@@ -16,6 +16,12 @@ import {
   maskSensitiveField,
   organizationMatchesGeography,
 } from "./watch-fleet-scope";
+import {
+  buildGeographyDeviceWhere,
+  decodeOwnerSummaryCursor,
+  encodeOwnerSummaryCursor,
+} from "./watch-fleet-geography";
+import { WatchFleetStatsRepository, type OwnerStatsRow } from "./watch-fleet-stats.repository";
 
 export type OwnerSummaryQuery = CursorPageQuery & {
   search?: string;
@@ -46,78 +52,40 @@ export type WatchInventoryQuery = CursorPageQuery & {
   sort?: string;
 };
 
-type OwnerAggregateRow = {
-  current_owner_type: string;
-  current_owner_id: string | null;
-  total: bigint;
-  online_count: bigint;
-  offline_count: bigint;
-  low_battery_count: bigint;
-  sos_active_count: bigint;
-  unassigned_count: bigint;
-  lost_stolen_count: bigint;
-  last_activity: Date | null;
-};
+type OwnerAggregateRow = OwnerStatsRow;
 
 @Injectable()
 export class WatchFleetService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stats: WatchFleetStatsRepository,
+  ) {}
 
   async ownerSummaries(actor: JwtPayload, query: OwnerSummaryQuery) {
     this.assertAdmin(actor);
     const limit = resolvePageLimit(query.limit);
     const scope = adminGeographyWhere(actor);
+    const cursor = decodeOwnerSummaryCursor(query.cursor);
 
-    const deviceWhere: Record<string, unknown> = {};
-    if (query.ownerType) deviceWhere.currentOwnerType = query.ownerType;
-
-    const groups = await this.prisma.smartwatchDevice.groupBy({
-      by: ["currentOwnerType", "currentOwnerId"],
-      where: deviceWhere as never,
-      _count: { id: true },
-      _max: { lastSeenAt: true },
-      orderBy: { _count: { id: "desc" } },
-      take: limit + 1,
+    const rows = await this.stats.queryOwnerAggregates({
+      ownerType: query.ownerType,
+      scope,
+      limit,
+      cursor,
     });
 
-    const scopedGroups = await this.filterOwnerGroupsByGeography(groups, scope);
-    const pageGroups = scopedGroups.slice(0, limit);
-    const statsByOwner = await this.loadOwnerStats(pageGroups);
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const enriched = await this.enrichOwnerSummaries(pageRows, actor);
 
-    const enriched = await this.enrichOwnerSummaries(
-      pageGroups.map((group) => {
-        const key = `${group.currentOwnerType}:${group.currentOwnerId ?? "none"}`;
-        const stats = statsByOwner.get(key) ?? {
-          total: BigInt(group._count.id),
-          online_count: 0n,
-          offline_count: 0n,
-          low_battery_count: 0n,
-          sos_active_count: 0n,
-          unassigned_count: 0n,
-          lost_stolen_count: 0n,
-          last_activity: group._max.lastSeenAt,
-        };
-        return {
-          current_owner_type: group.currentOwnerType,
-          current_owner_id: group.currentOwnerId,
-          total: stats.total,
-          online_count: stats.online_count,
-          offline_count: stats.offline_count,
-          low_battery_count: stats.low_battery_count,
-          sos_active_count: stats.sos_active_count,
-          unassigned_count: stats.unassigned_count,
-          lost_stolen_count: stats.lost_stolen_count,
-          last_activity: stats.last_activity ?? group._max.lastSeenAt,
-        };
-      }),
-      actor,
-    );
-
-    const hasMore = scopedGroups.length > limit;
     const last = enriched[enriched.length - 1];
+    const lastRow = pageRows[pageRows.length - 1];
     return {
       data: enriched,
-      nextCursor: hasMore && last ? encodeDateIdCursor(last.lastDeviceActivity ?? new Date(), last.ownerKey) : null,
+      nextCursor:
+        hasMore && last && lastRow
+          ? encodeOwnerSummaryCursor(Number(lastRow.total), lastRow.current_owner_type, lastRow.current_owner_id)
+          : null,
       hasMore,
       limit,
     };
@@ -159,6 +127,10 @@ export class WatchFleetService {
       this.prisma.auditLog.findMany({
         where: {
           action: { startsWith: "watch." },
+          OR: [
+            { entityId: ownerId },
+            { metadata: { path: ["ownerId"], equals: ownerId } },
+          ],
         },
         orderBy: { createdAt: "desc" },
         take: 50,
@@ -229,6 +201,13 @@ export class WatchFleetService {
         { serialNumber: { contains: query.search, mode: "insensitive" } },
       ];
     }
+    const geoWhere = buildGeographyDeviceWhere(scope);
+    if (geoWhere) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        geoWhere,
+      ];
+    }
     if (cursor) {
       const createdAt = new Date(cursor.createdAt);
       where.AND = [
@@ -251,8 +230,7 @@ export class WatchFleetService {
       take: limit + 1,
     });
 
-    const filtered = devices.filter((device) => this.deviceInScope(device, scope));
-    const page = buildCursorPage(filtered, limit, (item) =>
+    const page = buildCursorPage(devices, limit, (item) =>
       encodeDateIdCursor(item.lastSeenAt ?? item.createdAt, item.id),
     );
 
@@ -268,6 +246,21 @@ export class WatchFleetService {
       ownerType: WatchOwnerType.UnassignedInventory,
       ownershipStatus: WatchOwnershipStatus.UnassignedInventory,
     });
+  }
+
+  async devicePairingHistory(deviceIdOrUuid: string, actor: JwtPayload) {
+    this.assertAdmin(actor);
+    const device = await this.prisma.smartwatchDevice.findFirst({
+      where: { OR: [{ id: deviceIdOrUuid }, { deviceId: deviceIdOrUuid }] },
+      select: { id: true },
+    });
+    if (!device) throw new NotFoundException("Watch device not found");
+    const records = await (this.prisma as any).watchPairingHistoryRecord.findMany({
+      where: { deviceId: device.id },
+      orderBy: { pairedAt: "desc" },
+      take: 200,
+    });
+    return { data: records };
   }
 
   async organizationFleet(actor: JwtPayload, organizationId: string, query: WatchInventoryQuery) {
@@ -318,6 +311,8 @@ export class WatchFleetService {
           sosActiveWatches: Number(row.sos_active_count),
           unassignedWatches: Number(row.unassigned_count),
           lostStolenWatches: Number(row.lost_stolen_count),
+          replacementPendingWatches: Number(row.replacement_pending_count),
+          retiredWatches: Number(row.retired_count),
           lastDeviceActivity: row.last_activity,
           accountStatus: user?.status ?? null,
         };
@@ -341,6 +336,8 @@ export class WatchFleetService {
           sosActiveWatches: Number(row.sos_active_count),
           unassignedWatches: Number(row.unassigned_count),
           lostStolenWatches: Number(row.lost_stolen_count),
+          replacementPendingWatches: Number(row.replacement_pending_count),
+          retiredWatches: Number(row.retired_count),
           lastDeviceActivity: row.last_activity,
           accountStatus: org?.status ?? null,
         };
@@ -362,6 +359,8 @@ export class WatchFleetService {
         sosActiveWatches: Number(row.sos_active_count),
         unassignedWatches: Number(row.unassigned_count),
         lostStolenWatches: Number(row.lost_stolen_count),
+        replacementPendingWatches: Number(row.replacement_pending_count),
+        retiredWatches: Number(row.retired_count),
         lastDeviceActivity: row.last_activity,
         accountStatus: "INVENTORY",
       };
@@ -369,10 +368,14 @@ export class WatchFleetService {
   }
 
   private async buildOwnerSummary(ownerType: string, ownerId: string, actor: JwtPayload) {
-    const groups = [{ currentOwnerType: ownerType, currentOwnerId: ownerId, _count: { id: 0 }, _max: { lastSeenAt: null as Date | null } }];
-    const statsByOwner = await this.loadOwnerStats(groups);
-    const key = `${ownerType}:${ownerId}`;
-    const stats = statsByOwner.get(key);
+    const scope = adminGeographyWhere(actor);
+    const rows = await this.stats.queryOwnerAggregates({
+      ownerType,
+      ownerId,
+      scope,
+      limit: 1,
+    });
+    const stats = rows[0];
     if (!stats || stats.total === 0n) throw new NotFoundException("Owner not found or has no watches");
 
     const enriched = await this.enrichOwnerSummaries([stats], actor);
@@ -401,6 +404,7 @@ export class WatchFleetService {
       pairingStatus: device.userId ? "PAIRED" : "UNPAIRED",
       ownershipStatus: device.ownershipStatus,
       inventoryStatus: device.inventoryStatus,
+      replacementPending: device.ownershipStatus === WatchOwnershipStatus.ReplacementPending,
       onlineStatus: device.isOnline ? "Online" : "Offline",
       batteryLevel: device.batteryLevel,
       connectivityType: device.connectivityMode,
@@ -412,124 +416,6 @@ export class WatchFleetService {
       lastEmergencyAlert: device.lastEmergencyAlertAt,
       lastLiveVideoSession: device.lastLiveVideoSessionAt,
     };
-  }
-
-  private async filterOwnerGroupsByGeography(
-    groups: { currentOwnerType: string; currentOwnerId: string | null; _count: { id: number }; _max: { lastSeenAt: Date | null } }[],
-    scope: ReturnType<typeof adminGeographyWhere>,
-  ) {
-    if (!scope || (!scope.country && !scope.state && !scope.lga)) return groups;
-
-    const personIds = groups
-      .filter((g) => g.currentOwnerType === WatchOwnerType.Person && g.currentOwnerId)
-      .map((g) => g.currentOwnerId!);
-    const orgIds = groups
-      .filter((g) => g.currentOwnerType === WatchOwnerType.Organization && g.currentOwnerId)
-      .map((g) => g.currentOwnerId!);
-
-    const [profiles, orgs] = await Promise.all([
-      personIds.length
-        ? this.prisma.profile.findMany({ where: { userId: { in: personIds } }, select: { userId: true, country: true, state: true, lga: true } })
-        : [],
-      orgIds.length
-        ? (this.prisma as any).watchOrganization.findMany({
-            where: { id: { in: orgIds } },
-            select: { id: true, country: true, state: true, lga: true },
-          })
-        : [],
-    ]);
-
-    const profileByUser = new Map(profiles.map((p) => [p.userId, p] as const));
-    type WatchOrgGeo = { id: string; country: string; state: string; lga: string };
-    const orgById = new Map<string, WatchOrgGeo>(
-      (orgs as WatchOrgGeo[]).map((o) => [o.id, o]),
-    );
-
-    return groups.filter((group) => {
-      if (group.currentOwnerType === WatchOwnerType.UnassignedInventory) return true;
-      const geo =
-        group.currentOwnerType === WatchOwnerType.Person
-          ? profileByUser.get(group.currentOwnerId!)
-          : orgById.get(group.currentOwnerId!);
-      if (!geo) return true;
-      return organizationMatchesGeography(geo as { country: string; state: string; lga: string }, scope);
-    });
-  }
-
-  private async loadOwnerStats(
-    groups: { currentOwnerType: string; currentOwnerId: string | null }[],
-  ) {
-    const stats = new Map<string, OwnerAggregateRow>();
-    if (!groups.length) return stats;
-
-    const orClauses = groups
-      .filter((g) => g.currentOwnerId)
-      .map((g) => ({
-        currentOwnerType: g.currentOwnerType,
-        currentOwnerId: g.currentOwnerId!,
-      }));
-
-    if (!orClauses.length) return stats;
-
-    const devices = await this.prisma.smartwatchDevice.findMany({
-      where: { OR: orClauses },
-      select: {
-        currentOwnerType: true,
-        currentOwnerId: true,
-        isOnline: true,
-        batteryLevel: true,
-        lastSosAt: true,
-        assignmentStatus: true,
-        ownershipStatus: true,
-        lastSeenAt: true,
-      },
-    });
-
-    const sosCutoff = Date.now() - 24 * 60 * 60 * 1000;
-    for (const device of devices) {
-      const key = `${device.currentOwnerType}:${device.currentOwnerId ?? "none"}`;
-      const row =
-        stats.get(key) ??
-        ({
-          current_owner_type: device.currentOwnerType,
-          current_owner_id: device.currentOwnerId,
-          total: 0n,
-          online_count: 0n,
-          offline_count: 0n,
-          low_battery_count: 0n,
-          sos_active_count: 0n,
-          unassigned_count: 0n,
-          lost_stolen_count: 0n,
-          last_activity: null,
-        } as OwnerAggregateRow);
-
-      row.total += 1n;
-      if (device.isOnline) row.online_count += 1n;
-      else row.offline_count += 1n;
-      if (device.batteryLevel != null && device.batteryLevel <= 20) row.low_battery_count += 1n;
-      if (device.lastSosAt && device.lastSosAt.getTime() > sosCutoff) row.sos_active_count += 1n;
-      if (device.assignmentStatus === "UNASSIGNED") row.unassigned_count += 1n;
-      if (device.ownershipStatus === WatchOwnershipStatus.LostOrStolen) row.lost_stolen_count += 1n;
-      if (!row.last_activity || (device.lastSeenAt && device.lastSeenAt > row.last_activity)) {
-        row.last_activity = device.lastSeenAt;
-      }
-      stats.set(key, row);
-    }
-
-    return stats;
-  }
-
-  private deviceInScope(device: Record<string, any>, scope: ReturnType<typeof adminGeographyWhere>) {
-    if (!scope) return true;
-    const profile = device.user?.profile;
-    const org = device.currentOrganization;
-    const geo = profile
-      ? { country: profile.country, state: profile.state, lga: profile.lga }
-      : org
-        ? { country: org.country, state: org.state, lga: org.lga }
-        : null;
-    if (!geo) return true;
-    return organizationMatchesGeography(geo, scope);
   }
 
   private assertAdmin(actor: JwtPayload) {

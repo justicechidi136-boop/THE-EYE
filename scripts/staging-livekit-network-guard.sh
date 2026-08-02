@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Post-deploy guard: LiveKit host-network RTC sockets and config (staging VPS).
+# Post-deploy guard: LiveKit bridge-network signaling, RTC port publication, and nginx upstream.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -8,9 +8,12 @@ cd "$REPO_ROOT"
 # shellcheck disable=SC1091
 source "$REPO_ROOT/scripts/lib/safe-env.sh"
 
+COMPOSE=(docker compose -f infra/docker/docker-compose.yml --env-file .env)
 CONTAINER="${LIVEKIT_CONTAINER_NAME:-the-eye-livekit}"
+NGINX_CONTAINER="${NGINX_CONTAINER_NAME:-the-eye-nginx}"
 PUBLIC_LIVEKIT_URL="${NEXT_PUBLIC_LIVEKIT_URL:-$(read_env_var NEXT_PUBLIC_LIVEKIT_URL wss://staging-livekit.theeye.com.ng)}"
 EXPECTED_NODE_IP="${LIVEKIT_NODE_IP:-}"
+LIVEKIT_HOST="$(read_env_var THE_EYE_LIVEKIT_SERVER_NAME staging-livekit.theeye.com.ng)"
 
 fail() {
   echo "FAIL LIVEKIT-NET: $1"
@@ -47,22 +50,30 @@ echo "INFO compose_config_files=${CONFIG_FILES:-unknown}"
 echo "INFO compose_working_dir=${WORKING_DIR:-unknown}"
 echo "INFO compose_service=${SERVICE_NAME:-unknown}"
 
-if [[ "$NETWORK_MODE" != "host" ]]; then
-  fail "expected network_mode=host for RTC publication, got ${NETWORK_MODE} (LIVEKIT-DOCKER-001)"
+if [[ "$NETWORK_MODE" == "host" ]]; then
+  fail "LiveKit must use bridge networking on the-eye-internal (got host). Recreate with updated compose (LIVEKIT-DOCKER-001)"
 fi
-pass "network_mode=host"
+pass "network_mode=${NETWORK_MODE} (bridge, not host)"
 
-PORT_BINDINGS="$(docker inspect "$CONTAINER" --format '{{json .HostConfig.PortBindings}}')"
-NETWORK_PORTS="$(docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Ports}}')"
-echo "INFO HostConfig.PortBindings=${PORT_BINDINGS}"
-echo "INFO NetworkSettings.Ports=${NETWORK_PORTS}"
-
-PUBLISHED="$(docker port "$CONTAINER" 2>/dev/null || true)"
-if [[ -n "$PUBLISHED" ]]; then
-  warn "host-network LiveKit should not expose docker port mappings: ${PUBLISHED}"
-else
-  pass "docker port empty (expected for host networking)"
+NETWORKS="$(docker inspect "$CONTAINER" --format '{{range $name, $cfg := .NetworkSettings.Networks}}{{$name}} {{end}}')"
+if [[ "$NETWORKS" != *the-eye-internal* ]]; then
+  fail "LiveKit must join the-eye-internal for Docker DNS (got: ${NETWORKS:-none})"
 fi
+pass "attached to the-eye-internal"
+
+for port in 7880 7881; do
+  PUBLISHED="$(docker port "$CONTAINER" "${port}/tcp" 2>/dev/null || true)"
+  if [[ -z "$PUBLISHED" ]]; then
+    fail "host TCP ${port} not published from LiveKit container (LIVEKIT-DOCKER-001)"
+  fi
+  pass "docker port ${port}/tcp -> ${PUBLISHED}"
+done
+
+UDP_PUBLISHED="$(docker port "$CONTAINER" "7882/udp" 2>/dev/null || true)"
+if [[ -z "$UDP_PUBLISHED" ]]; then
+  fail "host UDP 7882 not published from LiveKit container (LIVEKIT-DOCKER-001)"
+fi
+pass "docker port 7882/udp -> ${UDP_PUBLISHED}"
 
 listen_tcp() {
   local port="$1"
@@ -84,13 +95,13 @@ listen_udp() {
 
 for port in 7880 7881; do
   if ! listen_tcp "$port"; then
-    fail "host TCP ${port} not listening (LIVEKIT-CONFIG-001 or startup failure)"
+    fail "host TCP ${port} not listening after port publish (LIVEKIT-CONFIG-001 or startup failure)"
   fi
   pass "host TCP ${port} listening"
 done
 
 if ! listen_udp 7882; then
-  fail "host UDP 7882 not listening (LIVEKIT-CONFIG-001 or startup failure)"
+  fail "host UDP 7882 not listening after port publish (LIVEKIT-CONFIG-001 or startup failure)"
 fi
 pass "host UDP 7882 listening"
 
@@ -98,6 +109,11 @@ if ! timeout 3 bash -c "echo >/dev/tcp/127.0.0.1/7881" 2>/dev/null; then
   fail "TCP connect to 127.0.0.1:7881 refused (LIVEKIT-DOCKER-001)"
 fi
 pass "TCP 127.0.0.1:7881 accepts connections"
+
+if ! docker exec "$CONTAINER" wget -q --spider http://127.0.0.1:7880 2>/dev/null; then
+  fail "LiveKit signaling http://127.0.0.1:7880 not healthy inside container"
+fi
+pass "LiveKit signaling healthy inside container"
 
 YAML_PATH="/etc/livekit/livekit.yaml"
 if ! docker exec "$CONTAINER" test -r "$YAML_PATH" 2>/dev/null; then
@@ -112,17 +128,33 @@ echo "INFO effective_livekit_yaml:"
 echo "$RTC_LINES" | sed 's/^/  /'
 
 NODE_IP="$(echo "$RTC_LINES" | awk '/node_ip:/ {print $2}' | tail -n1)"
-if [[ -z "$NODE_IP" ]]; then
-  fail "rtc.node_ip missing from effective livekit.yaml (LIVEKIT-ICE-001)"
-fi
-if [[ "$NODE_IP" =~ ^127\. ]] || [[ "$NODE_IP" =~ ^10\. ]] || [[ "$NODE_IP" =~ ^192\.168\. ]] || [[ "$NODE_IP" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]]; then
-  fail "rtc.node_ip is private/unreachable for mobile clients: ${NODE_IP} (LIVEKIT-ICE-001)"
-fi
-pass "rtc.node_ip=${NODE_IP}"
+NODE_IP_COUNT="$(echo "$RTC_LINES" | grep -c 'node_ip:' || true)"
 
-if [[ -n "$EXPECTED_NODE_IP" && "$NODE_IP" != "$EXPECTED_NODE_IP" ]]; then
-  fail "rtc.node_ip ${NODE_IP} != LIVEKIT_NODE_IP ${EXPECTED_NODE_IP}"
+if [[ -z "$NODE_IP" ]]; then
+  fail "LIVEKIT-ICE-001: rtc.node_ip missing from effective livekit.yaml"
 fi
+if [[ "$NODE_IP_COUNT" -gt 1 ]]; then
+  fail "LIVEKIT-ICE-001: duplicate node_ip keys in effective livekit.yaml (count=${NODE_IP_COUNT})"
+fi
+if [[ ! "$NODE_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  fail "LIVEKIT-ICE-001: rtc.node_ip is not valid IPv4: ${NODE_IP}"
+fi
+if [[ "$NODE_IP" == "0.0.0.0" ]]; then
+  fail "LIVEKIT-ICE-001: rtc.node_ip is empty/zero address"
+fi
+if [[ "$NODE_IP" =~ ^127\. ]]; then
+  fail "LIVEKIT-ICE-001: rtc.node_ip is localhost (${NODE_IP})"
+fi
+if [[ "$NODE_IP" =~ ^10\. ]] || [[ "$NODE_IP" =~ ^192\.168\. ]] || [[ "$NODE_IP" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]]; then
+  fail "LIVEKIT-ICE-001: rtc.node_ip is private Docker/RFC1918 (${NODE_IP})"
+fi
+if [[ "$NODE_IP" =~ ^169\.254\. ]]; then
+  fail "LIVEKIT-ICE-001: rtc.node_ip is link-local (${NODE_IP})"
+fi
+if [[ -n "$EXPECTED_NODE_IP" && "$NODE_IP" != "$EXPECTED_NODE_IP" ]]; then
+  fail "LIVEKIT-ICE-001: rtc.node_ip ${NODE_IP} != LIVEKIT_NODE_IP ${EXPECTED_NODE_IP}"
+fi
+pass "LIVEKIT-ICE-001 rtc.node_ip=${NODE_IP} (public IPv4, matches LIVEKIT_NODE_IP)"
 
 if [[ "$PUBLIC_LIVEKIT_URL" != wss://* ]]; then
   fail "NEXT_PUBLIC_LIVEKIT_URL must be wss:// for staging clients"
@@ -137,16 +169,30 @@ if [[ -n "$EXPECTED_NODE_IP" ]]; then
 fi
 
 NGINX_LIVEKIT_BACKEND="$(grep -E 'the_eye_livekit_backend' infra/docker/nginx/snippets/livekit-locations.conf | head -n1 || true)"
-if [[ "$NGINX_LIVEKIT_BACKEND" != *host.docker.internal* ]]; then
-  fail "nginx livekit upstream must target host.docker.internal after host-network migration"
+if [[ "$NGINX_LIVEKIT_BACKEND" != *livekit:7880* ]]; then
+  fail "nginx livekit upstream must target livekit:7880 on the-eye-internal"
 fi
-pass "nginx livekit upstream uses host.docker.internal"
+pass "nginx livekit upstream uses livekit:7880"
 
-if docker compose -f infra/docker/docker-compose.yml --env-file .env ps --status running --services 2>/dev/null | grep -qx nginx; then
-  if ! docker compose -f infra/docker/docker-compose.yml --env-file .env exec -T nginx nginx -t >/dev/null 2>&1; then
-    fail "nginx -t failed after LiveKit host-network change"
+if docker inspect "$NGINX_CONTAINER" >/dev/null 2>&1; then
+  if ! docker exec "$NGINX_CONTAINER" wget -q --spider http://livekit:7880 2>/dev/null; then
+    fail "nginx container cannot reach http://livekit:7880 (Docker service discovery broken)"
+  fi
+  pass "nginx -> livekit:7880 direct upstream reachable"
+
+  if ! "${COMPOSE[@]}" exec -T nginx nginx -t >/dev/null 2>&1; then
+    fail "nginx -t failed after LiveKit bridge-network change"
   fi
   pass "nginx -t"
+
+  if curl -fsS --max-time 10 -H "Host: ${LIVEKIT_HOST}" "http://127.0.0.1/" >/dev/null 2>&1 \
+    || curl -fsSk --max-time 10 -H "Host: ${LIVEKIT_HOST}" "https://127.0.0.1/" >/dev/null 2>&1; then
+    pass "nginx proxied LiveKit vhost responds for Host=${LIVEKIT_HOST}"
+  else
+    fail "nginx proxied LiveKit vhost unreachable for Host=${LIVEKIT_HOST}"
+  fi
+else
+  warn "nginx container ${NGINX_CONTAINER} not running — skipped upstream connectivity checks"
 fi
 
 echo "=== LiveKit network guard complete ==="

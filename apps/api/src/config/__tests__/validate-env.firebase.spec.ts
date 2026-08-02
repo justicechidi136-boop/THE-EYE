@@ -32,6 +32,7 @@ const productionSecrets = {
   FCM_ALLOW_SIMULATION: "false",
   FCM_SIMULATION_MODE: "false",
   THE_EYE_DISABLE_REDIS: "0",
+  WATCH_EXPORT_STORAGE_PROVIDER: "s3",
 };
 
 function expectValidationFailure(config: Record<string, unknown>, messagePart: string) {

@@ -3,6 +3,8 @@ import {
   assertStagingFirebaseGuard,
   resolveAppEnvironment,
 } from "../common/auth/firebase-environment";
+import { assertWatchFleetBulkConfiguration } from "../modules/watch-fleet/watch-fleet-bulk-config";
+import { assertWatchExportStorageConfiguration } from "../modules/watch-fleet/storage/watch-export-storage.config";
 import {
   DEVELOPMENT_FIREBASE_PROJECT_ID,
   FIREBASE_PROJECT_IDS,
@@ -58,6 +60,8 @@ export function validateEnvironment(config: Record<string, unknown>) {
     if (config.THE_EYE_DISABLE_REDIS === "1" || config.THE_EYE_DISABLE_REDIS === 1) {
       throw new Error("THE_EYE_DISABLE_REDIS must be 0 in staging and production");
     }
+    assertWatchFleetBulkConfiguration(config);
+    assertWatchExportStorageConfiguration(config);
   }
 
   if (config.NODE_ENV !== "production") return config;

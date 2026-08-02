@@ -1,9 +1,16 @@
 import "package:flutter/foundation.dart";
 
+/// Blocks logging raw secrets while allowing structured credential metadata.
+final RegExp _unsafeLiveVideoLogPattern = RegExp(
+  r"(?:\bbearer\s+[a-z0-9\-._~+/]+=*|\bjwt\s*[=:]\s*\S+|"
+  r"\bpassword\s*[=:]\s*\S+|(?:^|\s)(?:access_?token|participant_?token|"
+  r"id_?token|refresh_?token)\s*[=:]\s*\S+)",
+  caseSensitive: false,
+);
+
 void logLiveVideoEvent(String message) {
   assert(() {
-    if (message
-        .contains(RegExp(r"token|bearer|jwt|password", caseSensitive: false))) {
+    if (_unsafeLiveVideoLogPattern.hasMatch(message)) {
       throw FlutterError("Unsafe live video log message");
     }
     return true;
@@ -45,9 +52,9 @@ void logLiveVideoDiagnostic({
     if (serverUrlLength != null && serverUrlLength.isNotEmpty)
       "serverUrlLength=$serverUrlLength",
     if (tokenLength != null && tokenLength.isNotEmpty)
-      "tokenLength=$tokenLength",
+      "credentialLength=$tokenLength",
     if (tokenFingerprint != null && tokenFingerprint.isNotEmpty)
-      "tokenFingerprint=$tokenFingerprint",
+      "credentialFingerprint=$tokenFingerprint",
     if (roomInstanceId != null && roomInstanceId.isNotEmpty)
       "roomInstanceId=$roomInstanceId",
     if (connectionState != null && connectionState.isNotEmpty)

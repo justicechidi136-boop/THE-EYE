@@ -37,7 +37,7 @@
     "dev:bootstrap": "node scripts/local-dev-bootstrap.cjs",
     "test:docker:smoke": "node scripts/docker-compose-smoke.cjs",
     "test:backup": "bash scripts/test/backup-the-eye.test.sh",
-    "test:docker:livekit": "node scripts/validate-livekit-keys.cjs",
+    "test:docker:livekit": "node scripts/validate-livekit-keys.cjs && node scripts/patch-livekit-node-ip.spec.cjs",
     "test:deploy:env": "node scripts/validate-production-env.cjs",
     "test:firebase:guard": "node scripts/firebase-guard-production.test.cjs",
     "test:secrets": "node scripts/validate-secrets.cjs",

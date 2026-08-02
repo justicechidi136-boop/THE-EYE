@@ -7,23 +7,10 @@ cd "$REPO_ROOT"
 
 COMPOSE=(docker compose -f infra/docker/docker-compose.yml --env-file .env)
 
-patch_livekit_node_ip() {
-  local cfg="${REPO_ROOT}/infra/docker/livekit/livekit.yaml"
-  local ip="${LIVEKIT_NODE_IP:-}"
-  if [[ -z "$ip" ]]; then
-    ip="$(curl -sf --max-time 8 https://api.ipify.org 2>/dev/null || curl -sf --max-time 8 https://ifconfig.me/ip 2>/dev/null || true)"
-  fi
-  if [[ -z "$ip" ]]; then
-    echo "WARN: could not resolve LiveKit node_ip — set LIVEKIT_NODE_IP in .env or mobile RTC may fail (LIVE-VIDEO-015)"
-    return 0
-  fi
-  if grep -q '^  node_ip:' "$cfg"; then
-    sed -i "s/^  node_ip:.*/  node_ip: ${ip}/" "$cfg"
-  else
-    sed -i "/^  use_external_ip:/a\\  node_ip: ${ip}" "$cfg"
-  fi
-  echo "LiveKit rtc.node_ip=${ip}"
-}
+# shellcheck disable=SC1091
+source "$REPO_ROOT/scripts/lib/prepare-livekit-deploy.sh"
+# shellcheck disable=SC1091
+source "$REPO_ROOT/scripts/lib/staging-release-validation.sh"
 
 echo "STEP env-check-start"
 if [[ ! -f .env ]]; then
@@ -42,15 +29,8 @@ RUN_LOCATION_PROOF="${RUN_LOCATION_PROOF:-false}"
 echo "STEP deploy-start proof_only=${PROOF_ONLY}"
 
 if [[ "$PROOF_ONLY" == "true" ]]; then
-  echo "=== Proof-only mode (skip redeploy) ==="
+  echo "=== Proof-only mode (skip full redeploy) ==="
   "${COMPOSE[@]}" build api-tools --no-cache api-tools
-  bash scripts/staging-livekit-network-guard.sh
-  echo "=== Admin container logs (proof-only SSR forensics) ==="
-  docker ps --filter "name=the-eye-admin-web" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
-  docker exec the-eye-admin-web sh -c 'printenv | sort | grep -E "^(NODE_ENV|API_ORIGIN|NEXT_PUBLIC_|JWT_ACCESS_SECRET=)" | sed "s/JWT_ACCESS_SECRET=.*/JWT_ACCESS_SECRET=<set>/"' || true
-  curl -fsS --max-time 10 -H "Host: ${THE_EYE_ADMIN_SERVER_NAME:-staging-dashboard8jps.theeye.com.ng}" "http://127.0.0.1/api/auth/login" || true
-  echo ""
-  docker logs the-eye-admin-web --tail 500 2>&1 || true
 else
   echo "STEP compose-ps-start"
   "${COMPOSE[@]}" ps || true
@@ -58,18 +38,24 @@ else
   echo "STEP compose-build-start"
   "${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools
   "${COMPOSE[@]}" --profile tools run --rm api-migrate
-  patch_livekit_node_ip
   echo "=== Rendered LiveKit service (compose config) ==="
   "${COMPOSE[@]}" config 2>/dev/null | grep -A 20 '^  livekit:' || true
-  echo "=== Recreate LiveKit (host network — restart insufficient) ==="
-  "${COMPOSE[@]}" rm -sf livekit
-  "${COMPOSE[@]}" up -d --force-recreate livekit
-  "${COMPOSE[@]}" up -d --wait livekit
-  bash scripts/staging-livekit-network-guard.sh
+fi
+
+# Patch rtc.node_ip, recreate LiveKit, verify runtime config — always before validation.
+prepare_livekit_deploy
+
+if [[ "$PROOF_ONLY" == "true" ]]; then
+  echo "=== Admin container logs (proof-only SSR forensics) ==="
+  docker ps --filter "name=the-eye-admin-web" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
+  docker exec the-eye-admin-web sh -c 'printenv | sort | grep -E "^(NODE_ENV|API_ORIGIN|NEXT_PUBLIC_|JWT_ACCESS_SECRET=)" | sed "s/JWT_ACCESS_SECRET=.*/JWT_ACCESS_SECRET=<set>/"' || true
+  curl -fsS --max-time 10 -H "Host: ${THE_EYE_ADMIN_SERVER_NAME:-staging-dashboard8jps.theeye.com.ng}" "http://127.0.0.1/api/auth/login" || true
+  echo ""
+  docker logs the-eye-admin-web --tail 500 2>&1 || true
+else
   "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web nginx
   "${COMPOSE[@]}" up -d --wait api admin-web livekit
   bash scripts/reload-nginx-upstreams.sh
-  bash scripts/staging-smoke-check.sh
   echo "=== Admin container logs (SSR forensics) ==="
   docker logs the-eye-admin-web --tail 300 2>&1 || true
   echo "=== Prisma runtime forensics (API container) ==="
@@ -86,6 +72,9 @@ else
     -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
     api-tools scripts/verify-staging-test-accounts.ts
 fi
+
+# Release gate: compose ps, runtime yaml, network guard, smoke, health — before proofs.
+staging_release_validation
 
 echo "=== Staging live video public proof (mobile parity) ==="
 if [[ "${SKIP_LIVE_VIDEO_PROOF:-false}" == "true" ]]; then
