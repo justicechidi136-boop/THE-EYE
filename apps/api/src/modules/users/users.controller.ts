@@ -117,8 +117,14 @@ export class UsersController {
     @Req() request: { user: Parameters<UsersService["listDirectory"]>[0] },
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
+    @Query("q") q?: string,
+    @Query("searchType") searchType?: string,
+    @Query("searchBy") searchBy?: string,
+    @Query("status") status?: string,
+    @Query("role") role?: string,
+    @Query("kind") kind?: string,
   ) {
-    return this.users.listDirectory(request.user, { cursor, limit });
+    return this.users.listDirectory(request.user, { cursor, limit, q, searchType, searchBy, status, role, kind });
   }
 
   @Get("kyc/pending")
