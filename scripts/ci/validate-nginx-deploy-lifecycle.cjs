@@ -15,6 +15,7 @@ const deployStaging = read("scripts/deploy-staging.sh");
 const deployVpsCi = read("scripts/deploy-staging-vps-ci.sh");
 const reloadScript = read("scripts/reload-nginx-upstreams.sh");
 const smokeScript = read("scripts/staging-smoke-check.sh");
+const releaseValidation = read("scripts/lib/staging-release-validation.sh");
 
 const checks = [
   [nginxConf.includes("resolver 127.0.0.11"), "nginx.conf must configure Docker embedded DNS resolver"],
@@ -28,7 +29,9 @@ const checks = [
   ],
   [
     deployYml.includes("deploy-staging-vps-ci.sh") &&
-      deployVpsCi.includes("staging-smoke-check.sh"),
+      (deployVpsCi.includes("staging-smoke-check.sh") ||
+        (deployVpsCi.includes("staging_release_validation") &&
+          releaseValidation.includes("staging-smoke-check.sh"))),
     "deploy workflow must run Host-aware smoke checks",
   ],
   [deployStaging.includes("reload-nginx-upstreams.sh"), "deploy-staging.sh must reload nginx"],
