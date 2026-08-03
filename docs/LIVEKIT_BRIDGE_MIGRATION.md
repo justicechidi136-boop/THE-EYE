@@ -24,7 +24,34 @@ Dev compose already used `ws://livekit:7880` successfully. Production/staging sh
 
 **Important:** Do **not** attach LiveKit only to `the-eye-internal`. That network is `internal: true`; Docker will ignore `ports:` mappings (empty `NetworkSettings.Ports`, no host listeners) even when `PortBindings` appear in inspect output.
 
+**List `the-eye-public` first** in LiveKit `networks:` — when the primary network is internal-only, Docker may attach only `the-eye-internal` and leave `NetworkSettings.Ports` null even though `HostConfig.PortBindings` is populated.
+
 **Keep host mode only if** bridge UDP publish fails on your VPS kernel (rare). Rollback procedure below restores host mode.
+
+### Symptom: `LIVEKIT-DOCKER-001` with PortBindings set but Ports null
+
+| Observation | Meaning |
+|-------------|---------|
+| `docker compose config` shows both networks + `ports:` | Compose file is correct |
+| `HostConfig.PortBindings` populated | Create spec requested publish |
+| Container on `the-eye_the-eye-internal` only | Runtime attach failed / primary network internal |
+| `NetworkSettings.Ports` null, `docker port` empty | docker-proxy never bound host ports |
+
+**Repair on VPS (no full redeploy):**
+
+```bash
+cd /path/to/the-eye
+git pull   # includes network-order + repair script
+bash scripts/repair-livekit-network-publish.sh
+```
+
+Or manually:
+
+```bash
+docker rm -f the-eye-livekit
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate --no-deps livekit
+bash scripts/staging-livekit-network-guard.sh
+```
 
 ---
 
@@ -113,7 +140,7 @@ Expect:
 
 ```bash
 docker inspect the-eye-livekit --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
-# Expected: the-eye-internal the-eye-public
+# Expected: the-eye_the-eye-public the-eye_the-eye-internal (public first in compose)
 
 docker port the-eye-livekit 7880/tcp   # -> 0.0.0.0:7880
 docker port the-eye-livekit 7881/tcp   # -> 0.0.0.0:7881

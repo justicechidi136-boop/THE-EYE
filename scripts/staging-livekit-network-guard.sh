@@ -55,18 +55,21 @@ if [[ "$NETWORK_MODE" == "host" ]]; then
 fi
 pass "network_mode=${NETWORK_MODE} (bridge, not host)"
 
+PORT_BINDINGS="$(docker inspect "$CONTAINER" --format '{{json .HostConfig.PortBindings}}' 2>/dev/null || echo '{}')"
+PORTS_JSON="$(docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null || echo '{}')"
+
 NETWORKS="$(docker inspect "$CONTAINER" --format '{{range $name, $cfg := .NetworkSettings.Networks}}{{$name}} {{end}}')"
+echo "INFO attached_networks=${NETWORKS:-none}"
 if [[ "$NETWORKS" != *the-eye-internal* ]]; then
   fail "LiveKit must join the-eye-internal for Docker DNS (got: ${NETWORKS:-none})"
 fi
 pass "attached to the-eye-internal"
 if [[ "$NETWORKS" != *the-eye-public* ]]; then
-  fail "LiveKit must also join the-eye-public so Docker can publish RTC ports to the host (got: ${NETWORKS:-none})"
+  echo "INFO HostConfig.PortBindings=${PORT_BINDINGS:-{}}"
+  echo "INFO NetworkSettings.Ports=${PORTS_JSON:-{}}"
+  fail "LiveKit must also join the-eye-public so Docker can publish RTC ports to the host (got: ${NETWORKS:-none}). Run: bash scripts/repair-livekit-network-publish.sh"
 fi
 pass "attached to the-eye-public (required for host port publish)"
-
-PORT_BINDINGS="$(docker inspect "$CONTAINER" --format '{{json .HostConfig.PortBindings}}' 2>/dev/null || echo '{}')"
-PORTS_JSON="$(docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null || echo '{}')"
 
 port_publish_fail() {
   local port="$1"
