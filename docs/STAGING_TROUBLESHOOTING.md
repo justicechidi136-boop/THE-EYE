@@ -25,20 +25,37 @@ docker logs the-eye-livekit 2>&1 | tail -20
 
 ## Mobile LIVE-VIDEO-015 (unable to join live video room)
 
-**Symptom:** Stage 4 HTTP 201, WSS starts, then ~10–12s `SIGNAL_SOURCE_CLOSE`, LIVE-VIDEO-015.
+**Symptom:** Stage 4 HTTP 201, WSS 101, ICE candidates include VPS public IP, then ~10–12s `SIGNAL_SOURCE_CLOSE` / `could not restart participant`.
 
-**Cause:** RTC TCP/UDP not reachable on the host (`docker port` empty, `:7881` refused) while signaling via nginx worked.
+**If `staging-livekit-network-guard.sh` passes:** signaling and host port publish are healthy. The failure is usually **client-to-host RTC media** (UDP 7882 / TCP 7881), not nginx/WSS.
+
+**Checks:**
+
+```bash
+# On VPS — listeners (guard already covers this)
+ss -lun 'sport = :7882'
+ss -ltn 'sport = :7881'
+
+# From OUTSIDE the VPS (phone hotspot or external host) — UDP often blocked in cloud firewall even when localhost passes
+nc -vz <VPS_PUBLIC_IP> 7881
+# UDP probe: use staging-live-video-room-join-proof or WebRTC ICE test from mobile network
+
+PROOF_ONLY=false bash scripts/deploy-staging-vps-ci.sh   # stage-5 room join proof
+```
 
 **Fix:**
 
 ```bash
-# Requires host-network LiveKit compose + recreate (not restart)
 bash scripts/staging-livekit-network-guard.sh
-docker compose -f infra/docker/docker-compose.yml --env-file .env rm -sf livekit
-docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --force-recreate livekit nginx api
+# DigitalOcean/cloud firewall: allow inbound 7881/tcp and 7882/udp to the droplet
+# ufw on VPS:
+sudo ufw allow 7881/tcp
+sudo ufw allow 7882/udp
 ```
 
 Ensure `.env` has `LIVEKIT_URL=ws://livekit:7880` and `LIVEKIT_NODE_IP=<vps-public-ipv4>`.
+
+If signaling passes but mobile still drops at ~10s on cellular NAT, plan **TURN** (see LIVEKIT_DEPLOYMENT.md LIVEKIT-RTC-001).
 
 ## nginx exits on first deploy
 
