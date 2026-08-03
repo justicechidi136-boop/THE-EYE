@@ -72,6 +72,7 @@ log_livekit_runtime_state() {
 
 force_recreate_livekit_container() {
   echo "STEP livekit-force-recreate"
+  ensure_livekit_node_ip_on_host
   docker rm -f "$CONTAINER" 2>/dev/null || true
   "${COMPOSE[@]}" rm -sf livekit 2>/dev/null || true
   # Ensure compose project networks exist before LiveKit create (both internal + public).
@@ -82,7 +83,9 @@ force_recreate_livekit_container() {
 
 patch_livekit_node_ip() {
   echo "STEP livekit-patch-start"
-  if ! node "$REPO_ROOT/scripts/lib/patch-livekit-node-ip.cjs"; then
+  export LIVEKIT_NODE_IP="${LIVEKIT_NODE_IP:-$(resolve_livekit_node_ip)}"
+  echo "INFO patching livekit.yaml with LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP}"
+  if ! LIVEKIT_NODE_IP="$LIVEKIT_NODE_IP" node "$REPO_ROOT/scripts/lib/patch-livekit-node-ip.cjs"; then
     dep_fail "rtc.node_ip missing after patch"
   fi
 
@@ -98,6 +101,21 @@ patch_livekit_node_ip() {
     dep_fail "patched node_ip ${PATCHED_IP} != LIVEKIT_NODE_IP ${LIVEKIT_NODE_IP}"
   fi
   echo "PASS DEP-LIVEKIT-001: host livekit.yaml node_ip=${PATCHED_IP}"
+}
+
+ensure_livekit_node_ip_on_host() {
+  export LIVEKIT_NODE_IP="${LIVEKIT_NODE_IP:-$(resolve_livekit_node_ip)}"
+  if grep -qE '^  node_ip:' "$LIVEKIT_CFG" 2>/dev/null; then
+    HOST_IP="$(grep -E '^  node_ip:' "$LIVEKIT_CFG" | awk '{print $2}' | tail -n1)"
+    if [[ -n "$HOST_IP" && "$HOST_IP" == "$LIVEKIT_NODE_IP" ]]; then
+      echo "PASS DEP-LIVEKIT-001: host livekit.yaml node_ip=${HOST_IP} (already patched)"
+      return 0
+    fi
+    echo "WARN host livekit.yaml node_ip=${HOST_IP:-<empty>} != LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP} — re-patching"
+  else
+    echo "WARN host livekit.yaml missing rtc.node_ip — patching before LiveKit recreate"
+  fi
+  patch_livekit_node_ip
 }
 
 verify_livekit_runtime_config() {

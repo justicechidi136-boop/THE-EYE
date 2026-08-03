@@ -70,12 +70,13 @@ function patchLivekitYaml(content, nodeIp) {
     throw new Error("livekit.yaml has duplicate rtc: sections");
   }
 
-  let result = content.replace(/^  node_ip:.*\n?/gm, "");
+  let result = content.replace(/^  # node_ip patched[^\n]*\n/m, "");
+  result = result.replace(/^  node_ip:.*\n?/gm, "");
 
-  if (/^  use_external_ip:/m.test(result)) {
-    result = result.replace(/^([ \t]*use_external_ip:.*)$/m, `$1\n${nodeIpLine}`);
-  } else if (/^  udp_port:/m.test(result)) {
+  if (/^  udp_port:/m.test(result)) {
     result = result.replace(/^([ \t]*udp_port:.*)$/m, `$1\n${nodeIpLine}`);
+  } else if (/^  use_external_ip:/m.test(result)) {
+    result = result.replace(/^([ \t]*use_external_ip:.*)$/m, `${nodeIpLine}\n$1`);
   } else {
     result = result.replace(/^(rtc:\s*)$/m, `$1\n${nodeIpLine}`);
   }

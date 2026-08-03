@@ -152,7 +152,7 @@ NODE_IP="$(echo "$RTC_LINES" | awk '/node_ip:/ {print $2}' | tail -n1)"
 NODE_IP_COUNT="$(echo "$RTC_LINES" | grep -c 'node_ip:' || true)"
 
 if [[ -z "$NODE_IP" ]]; then
-  fail "LIVEKIT-ICE-001: rtc.node_ip missing from effective livekit.yaml"
+  fail "LIVEKIT-ICE-001: rtc.node_ip missing from effective livekit.yaml — run: bash scripts/repair-livekit-node-ip.sh"
 fi
 if [[ "$NODE_IP_COUNT" -gt 1 ]]; then
   fail "LIVEKIT-ICE-001: duplicate node_ip keys in effective livekit.yaml (count=${NODE_IP_COUNT})"
