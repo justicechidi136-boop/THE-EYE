@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Shared LiveKit deploy prep — patch rtc.node_ip, verify, recreate container.
-# Runs before network guard in both full deploy and PROOF_ONLY modes.
+# Shared LiveKit deploy prep — patch rtc.node_ip, recreate with dual-network publish, verify.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -30,17 +29,58 @@ resolve_livekit_node_ip() {
   printf '%s' "$ip"
 }
 
-prepare_livekit_deploy() {
-  echo "STEP livekit-prepare-start"
+livekit_attached_networks() {
+  docker inspect "$CONTAINER" --format '{{range $name, $cfg := .NetworkSettings.Networks}}{{$name}} {{end}}' 2>/dev/null || true
+}
 
-  export LIVEKIT_NODE_IP
-  LIVEKIT_NODE_IP="$(resolve_livekit_node_ip)"
-  echo "INFO LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP}"
+livekit_port_published() {
+  local port="$1"
+  local proto="$2"
+  docker port "$CONTAINER" "${port}/${proto}" 2>/dev/null || true
+}
 
-  if [[ ! -f "$LIVEKIT_CFG" ]]; then
-    dep_fail "livekit config not found: ${LIVEKIT_CFG}"
+livekit_dual_network_publish_ok() {
+  local networks
+  networks="$(livekit_attached_networks)"
+  if [[ "$networks" != *the-eye-public* ]]; then
+    return 1
   fi
+  if [[ "$networks" != *the-eye-internal* ]]; then
+    return 1
+  fi
+  if [[ -z "$(livekit_port_published 7880 tcp)" ]]; then
+    return 1
+  fi
+  if [[ -z "$(livekit_port_published 7881 tcp)" ]]; then
+    return 1
+  fi
+  if [[ -z "$(livekit_port_published 7882 udp)" ]]; then
+    return 1
+  fi
+  return 0
+}
 
+log_livekit_runtime_state() {
+  echo "INFO livekit_networks=$(livekit_attached_networks)"
+  echo "INFO livekit_network_mode=$(docker inspect "$CONTAINER" --format '{{.HostConfig.NetworkMode}}' 2>/dev/null || echo unknown)"
+  echo "INFO livekit_port_bindings=$(docker inspect "$CONTAINER" --format '{{json .HostConfig.PortBindings}}' 2>/dev/null || echo '{}')"
+  echo "INFO livekit_network_ports=$(docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null || echo '{}')"
+  echo "INFO livekit_docker_port_7880=$(livekit_port_published 7880 tcp)"
+  echo "INFO livekit_docker_port_7881=$(livekit_port_published 7881 tcp)"
+  echo "INFO livekit_docker_port_7882=$(livekit_port_published 7882 udp)"
+}
+
+force_recreate_livekit_container() {
+  echo "STEP livekit-force-recreate"
+  docker rm -f "$CONTAINER" 2>/dev/null || true
+  "${COMPOSE[@]}" rm -sf livekit 2>/dev/null || true
+  # Ensure compose project networks exist before LiveKit create (both internal + public).
+  "${COMPOSE[@]}" up -d --no-start nginx >/dev/null 2>&1 || true
+  "${COMPOSE[@]}" up -d --force-recreate --no-deps livekit
+  "${COMPOSE[@]}" up -d --wait livekit
+}
+
+patch_livekit_node_ip() {
   echo "STEP livekit-patch-start"
   if ! node "$REPO_ROOT/scripts/lib/patch-livekit-node-ip.cjs"; then
     dep_fail "rtc.node_ip missing after patch"
@@ -58,12 +98,9 @@ prepare_livekit_deploy() {
     dep_fail "patched node_ip ${PATCHED_IP} != LIVEKIT_NODE_IP ${LIVEKIT_NODE_IP}"
   fi
   echo "PASS DEP-LIVEKIT-001: host livekit.yaml node_ip=${PATCHED_IP}"
+}
 
-  echo "STEP livekit-recreate-start"
-  "${COMPOSE[@]}" rm -sf livekit
-  "${COMPOSE[@]}" up -d --force-recreate livekit
-  "${COMPOSE[@]}" up -d --wait livekit
-
+verify_livekit_runtime_config() {
   if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     dep_fail "LiveKit container ${CONTAINER} not running after recreate"
   fi
@@ -80,7 +117,61 @@ prepare_livekit_deploy() {
     dep_fail "runtime node_ip ${RUNTIME_IP} != LIVEKIT_NODE_IP ${LIVEKIT_NODE_IP}"
   fi
   echo "PASS DEP-LIVEKIT-001: runtime livekit.yaml node_ip=${RUNTIME_IP}"
+}
 
+ensure_livekit_dual_network_publish() {
+  local attempt
+  echo "STEP livekit-dual-network-publish-start"
+
+  RENDERED_NETWORKS="$("${COMPOSE[@]}" config 2>/dev/null | awk '
+    /^  livekit:/ { in_livekit=1; next }
+    in_livekit && /^  [a-zA-Z0-9_-]+:/ { in_livekit=0 }
+    in_livekit && /^      - / { print }
+  ' | tr '\n' ' ' || true)"
+  echo "INFO rendered_livekit_networks=${RENDERED_NETWORKS:-unknown}"
+  if [[ "$RENDERED_NETWORKS" != *the-eye-public* || "$RENDERED_NETWORKS" != *the-eye-internal* ]]; then
+    dep_fail "rendered compose livekit service must attach the-eye-public and the-eye-internal"
+  fi
+
+  for attempt in 1 2 3; do
+    if docker inspect "$CONTAINER" >/dev/null 2>&1 && livekit_dual_network_publish_ok; then
+      log_livekit_runtime_state
+      echo "PASS DEP-LIVEKIT-002: dual-network host port publish attempt=${attempt}"
+      return 0
+    fi
+
+    echo "WARN livekit dual-network publish incomplete attempt=${attempt}/3"
+    if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+      log_livekit_runtime_state
+    else
+      echo "INFO livekit container missing before recreate attempt=${attempt}"
+    fi
+    force_recreate_livekit_container
+    sleep 2
+  done
+
+  log_livekit_runtime_state
+  dep_fail "LiveKit missing the-eye-public attachment or host ports after 3 recreates (LIVEKIT-DOCKER-001)"
+}
+
+prepare_livekit_node_ip_only() {
+  echo "STEP livekit-node-ip-only-start"
+  export LIVEKIT_NODE_IP
+  LIVEKIT_NODE_IP="$(resolve_livekit_node_ip)"
+  echo "INFO LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP}"
+  if [[ ! -f "$LIVEKIT_CFG" ]]; then
+    dep_fail "livekit config not found: ${LIVEKIT_CFG}"
+  fi
+  patch_livekit_node_ip
+  echo "STEP livekit-node-ip-only-ok"
+}
+
+prepare_livekit_deploy() {
+  echo "STEP livekit-prepare-start"
+  prepare_livekit_node_ip_only
+  echo "STEP livekit-recreate-start"
+  ensure_livekit_dual_network_publish
+  verify_livekit_runtime_config
   echo "STEP livekit-prepare-ok"
 }
 

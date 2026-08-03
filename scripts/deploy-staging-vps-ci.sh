@@ -42,10 +42,13 @@ else
   "${COMPOSE[@]}" config 2>/dev/null | grep -A 20 '^  livekit:' || true
 fi
 
-# Patch rtc.node_ip, recreate LiveKit, verify runtime config — always before validation.
-prepare_livekit_deploy
+# Patch rtc.node_ip first; LiveKit recreate with dual-network publish runs after api/admin
+# (and before nginx) so both compose networks exist on the host.
+prepare_livekit_node_ip_only
 
 if [[ "$PROOF_ONLY" == "true" ]]; then
+  ensure_livekit_dual_network_publish
+  verify_livekit_runtime_config
   echo "=== Admin container logs (proof-only SSR forensics) ==="
   docker ps --filter "name=the-eye-admin-web" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
   docker exec the-eye-admin-web sh -c 'printenv | sort | grep -E "^(NODE_ENV|API_ORIGIN|NEXT_PUBLIC_|JWT_ACCESS_SECRET=)" | sed "s/JWT_ACCESS_SECRET=.*/JWT_ACCESS_SECRET=<set>/"' || true
@@ -53,8 +56,12 @@ if [[ "$PROOF_ONLY" == "true" ]]; then
   echo ""
   docker logs the-eye-admin-web --tail 500 2>&1 || true
 else
-  "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web nginx
-  "${COMPOSE[@]}" up -d --wait api admin-web livekit
+  "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web
+  "${COMPOSE[@]}" up -d --wait api admin-web
+  ensure_livekit_dual_network_publish
+  verify_livekit_runtime_config
+  "${COMPOSE[@]}" up -d --force-recreate nginx
+  "${COMPOSE[@]}" up -d --wait nginx livekit
   bash scripts/reload-nginx-upstreams.sh
   echo "=== Admin container logs (SSR forensics) ==="
   docker logs the-eye-admin-web --tail 300 2>&1 || true
