@@ -45,6 +45,12 @@ git pull   # includes network-order + repair script
 bash scripts/repair-livekit-network-publish.sh
 ```
 
+If networking already passes but `LIVEKIT-ICE-001` fails (host `livekit.yaml` never patched):
+
+```bash
+bash scripts/repair-livekit-node-ip.sh
+```
+
 Or manually:
 
 ```bash
