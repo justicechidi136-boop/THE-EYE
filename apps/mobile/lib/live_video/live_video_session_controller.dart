@@ -456,6 +456,43 @@ class LiveVideoSessionController extends ChangeNotifier {
 
     try {
 
+      await _disconnectRoom();
+
+      await _preparePublisherTracks(
+        correlationId: correlationId,
+        sessionId: sessionId,
+      );
+
+    } catch (error, stackTrace) {
+
+      lastConnectFailureReason = LiveVideoErrorCodes.publishTracksFailed;
+
+      lastConnectExceptionType = error.runtimeType.toString();
+
+      lastConnectExceptionMessage = error.toString();
+
+      lastConnectStackTraceHead = liveVideoStackTraceHead(stackTrace);
+
+      _setState(
+
+        LiveVideoConnectionState.failed,
+
+        message:
+
+            "Unable to prepare camera/microphone for live video ($error). "
+
+            "Reference: ${LiveVideoErrorCodes.publishTracksFailed}.",
+
+      );
+
+      return false;
+
+    }
+
+
+
+    try {
+
       _room = Room(
 
         roomOptions: RoomOptions(
@@ -634,6 +671,8 @@ class LiveVideoSessionController extends ChangeNotifier {
 
       );
 
+      await _disconnectRoom();
+
       return false;
 
     }
@@ -642,37 +681,10 @@ class LiveVideoSessionController extends ChangeNotifier {
 
     try {
 
-      if (_localAudioTrack == null) {
-
-        logLiveVideoDiagnostic(
-
-          checkpoint: LiveVideoJoinCheckpoint.localAudioCreateBegin,
-
-          correlationId: correlationId,
-
-          sessionId: sessionId,
-
-          roomInstanceId: _activeRoomInstanceId.toString(),
-
-        );
-
-        _localAudioTrack = await LocalAudioTrack.create();
-
-        await _localAudioTrack!.start();
-
-        logLiveVideoDiagnostic(
-
-          checkpoint: LiveVideoJoinCheckpoint.localAudioCreateSuccess,
-
-          correlationId: correlationId,
-
-          sessionId: sessionId,
-
-          roomInstanceId: _activeRoomInstanceId.toString(),
-
-        );
-
-      }
+      await _ensureLocalAudioTrack(
+        correlationId: correlationId,
+        sessionId: sessionId,
+      );
 
 
 
@@ -772,9 +784,15 @@ class LiveVideoSessionController extends ChangeNotifier {
 
             "($lastConnectExceptionType: $lastConnectExceptionMessage). "
 
-            "Reference: $code.",
+                "Reference: $code.",
 
       );
+
+      await _disconnectRoom();
+
+      await _disposeAudioTrack();
+
+      await _disposeVideoTrack();
 
       return false;
 
@@ -930,37 +948,15 @@ class LiveVideoSessionController extends ChangeNotifier {
 
   Future<void> stop({bool keepPreview = false}) async {
 
-    final room = _room;
-
-    _room = null;
+    await _disconnectRoom();
 
     _credentials = null;
-
-    _activeRoomInstanceId = null;
 
     sessionId = "";
 
     recordingConfigured = false;
 
     evidenceOverlayRaw = null;
-
-    _roomListener?.dispose();
-
-    _roomListener = null;
-
-    if (room != null) {
-
-      try {
-
-        await room.disconnect();
-
-      } catch (_) {
-
-        // Best effort cleanup.
-
-      }
-
-    }
 
     if (!keepPreview) {
 
@@ -971,6 +967,18 @@ class LiveVideoSessionController extends ChangeNotifier {
       _setState(LiveVideoConnectionState.idle);
 
     } else {
+
+      await _disposeAudioTrack();
+
+      await _recreateLocalVideoTrack(
+
+        correlationId:
+
+            correlationId.isNotEmpty ? correlationId : "live-video-preview",
+
+        sessionId: "preview-after-stop",
+
+      );
 
       _setState(LiveVideoConnectionState.previewing);
 
@@ -1058,31 +1066,207 @@ class LiveVideoSessionController extends ChangeNotifier {
 
 
 
-  Future<void> _disposeTracks() async {
+  Future<void> _disconnectRoom() async {
 
-    final video = _localVideoTrack;
+    final room = _room;
 
-    final audio = _localAudioTrack;
+    if (room == null) return;
 
-    _localVideoTrack = null;
+    _room = null;
 
-    _localAudioTrack = null;
+    _activeRoomInstanceId = null;
 
-    if (video != null) {
+    _roomListener?.dispose();
 
-      await video.stop();
+    _roomListener = null;
 
-      await video.dispose();
+    try {
+
+      await room.disconnect();
+
+    } catch (_) {
+
+      // Best effort cleanup.
 
     }
 
-    if (audio != null) {
+  }
+
+
+
+  Future<void> _disposeAudioTrack() async {
+
+    final audio = _localAudioTrack;
+
+    _localAudioTrack = null;
+
+    if (audio == null) return;
+
+    try {
 
       await audio.stop();
 
       await audio.dispose();
 
+    } catch (_) {
+
+      // Best effort cleanup.
+
     }
+
+  }
+
+
+
+  Future<void> _ensureLocalAudioTrack({
+
+    required String correlationId,
+
+    required String sessionId,
+
+  }) async {
+
+    await _disposeAudioTrack();
+
+    logLiveVideoDiagnostic(
+
+      checkpoint: LiveVideoJoinCheckpoint.localAudioCreateBegin,
+
+      correlationId: correlationId,
+
+      sessionId: sessionId,
+
+      roomInstanceId: _activeRoomInstanceId?.toString(),
+
+    );
+
+    _localAudioTrack = await LocalAudioTrack.create();
+
+    await _localAudioTrack!.start();
+
+    logLiveVideoDiagnostic(
+
+      checkpoint: LiveVideoJoinCheckpoint.localAudioCreateSuccess,
+
+      correlationId: correlationId,
+
+      sessionId: sessionId,
+
+      roomInstanceId: _activeRoomInstanceId?.toString(),
+
+    );
+
+  }
+
+
+
+  Future<void> _preparePublisherTracks({
+
+    required String correlationId,
+
+    required String sessionId,
+
+  }) async {
+
+    // Always recreate camera track before a new publish session. Reusing a track
+
+    // that was published to a prior Room causes addTransceiver(): track is null
+
+    // (LIVE-VIDEO-016) on the next connect after stop(keepPreview: true).
+
+    await _recreateLocalVideoTrack(
+
+      correlationId: correlationId,
+
+      sessionId: sessionId,
+
+    );
+
+  }
+
+
+
+  Future<void> _recreateLocalVideoTrack({
+
+    required String correlationId,
+
+    required String sessionId,
+
+  }) async {
+
+    await _disposeVideoTrack();
+
+    logLiveVideoDiagnostic(
+
+      checkpoint: LiveVideoJoinCheckpoint.localVideoCreateBegin,
+
+      correlationId: correlationId,
+
+      sessionId: sessionId,
+
+      roomName: roomName,
+
+    );
+
+    _localVideoTrack = await LocalVideoTrack.createCameraTrack(
+
+      CameraCaptureOptions(
+
+        cameraPosition: CameraPosition.back,
+
+        params: VideoParametersPresets.h360_169,
+
+      ),
+
+    );
+
+    await _localVideoTrack!.start();
+
+    logLiveVideoDiagnostic(
+
+      checkpoint: LiveVideoJoinCheckpoint.localVideoCreateSuccess,
+
+      correlationId: correlationId,
+
+      sessionId: sessionId,
+
+      roomName: roomName,
+
+    );
+
+  }
+
+
+
+  Future<void> _disposeVideoTrack() async {
+
+    final video = _localVideoTrack;
+
+    _localVideoTrack = null;
+
+    if (video == null) return;
+
+    try {
+
+      await video.stop();
+
+      await video.dispose();
+
+    } catch (_) {
+
+      // Best effort cleanup.
+
+    }
+
+  }
+
+
+
+  Future<void> _disposeTracks() async {
+
+    await _disposeVideoTrack();
+
+    await _disposeAudioTrack();
 
   }
 

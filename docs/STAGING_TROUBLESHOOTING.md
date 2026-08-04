@@ -90,6 +90,18 @@ Ensure `.env` has `LIVEKIT_URL=ws://livekit:7880` and `LIVEKIT_NODE_IP=<vps-publ
 
 If signaling passes but mobile still drops at ~10s on cellular NAT, plan **TURN** (see LIVEKIT_DEPLOYMENT.md LIVEKIT-RTC-001).
 
+## Mobile LIVE-VIDEO-016 (track is null on second stream)
+
+**Symptom:** First live video attempt succeeds (UDP, audio + video published, participant active). Second attempt without reinstall or re-login fails during publish with `RTCConnection::addTransceiver(): track is null` (LIVE-VIDEO-016). Third+ attempts may degrade to LIVE-VIDEO-015 (`MediaConnectException` / `wait_pc_connection timed out`).
+
+**Server logs (failed retry):** `SIGNAL_SOURCE_CLOSE`, `connectionType = unknown`, no `participant active`, no `mediaTrack published`, `could not restart participant`.
+
+**Cause:** `stop(keepPreview: true)` kept the camera `LocalVideoTrack` that was already published to the prior LiveKit room. The next `connectPublisher` reused that stale track instead of creating a fresh one. WebRTC tracks cannot be republished to a new room without recreation.
+
+**Fix (mobile):** Recreate camera (and fresh audio) at the start of each `connectPublisher` session; refresh the preview track after stop-with-preview.
+
+**Distinguishing from LIVE-VIDEO-015:** If the **first** attempt after fresh install/login succeeds over UDP, the RTC path is working. Retry failures with `track is null` are a **client track lifecycle** issue, not blocked UDP 7882.
+
 ## nginx exits on first deploy
 
 **Symptom:** `ERROR: TLS certificates missing`
