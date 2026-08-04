@@ -25,9 +25,42 @@ docker logs the-eye-livekit 2>&1 | tail -20
 
 ## Mobile LIVE-VIDEO-015 (unable to join live video room)
 
-**Symptom:** Stage 4 HTTP 201, WSS 101, ICE candidates include VPS public IP, then ~10–12s `SIGNAL_SOURCE_CLOSE` / `could not restart participant`.
+**Symptom:** Stage 4 HTTP 201, WSS 101, ICE candidates include VPS public IP, then ~10–12s `SIGNAL_SOURCE_CLOSE` / `could not restart participant`. Mobile shows `MediaConnectException: Timed out waiting for PeerConnection to connect` (LIVE-VIDEO-015).
 
-**If `staging-livekit-network-guard.sh` passes:** signaling and host port publish are healthy. The failure is usually **client-to-host RTC media** (UDP 7882 / TCP 7881), not nginx/WSS.
+**Timeline (LiveKit SDK default `connection` timeout = 10s):**
+
+| Phase | Client | Server |
+|-------|--------|--------|
+| 0–2s | WSS connect + `EngineJoinResponseEvent` | Participant joins signaling |
+| 2–10s | ICE / DTLS / primary PeerConnection | Waiting for media |
+| ~10s | `MediaConnectException` (LIVE-VIDEO-015) | `SIGNAL_SOURCE_CLOSE`, participant removed |
+
+This is **not** a Flutter parsing bug. The failure is at `EnginePeerStateUpdatedEvent` (ICE never reaches connected). Track publish (`TRACKS_PUBLISHED`) is never reached.
+
+### Stage 5 vs Stage 6 proofs
+
+| Proof | Script | What it validates |
+|-------|--------|-------------------|
+| **Stage 5** | `staging-live-video-room-join-proof.ts` | HTTP 201, TCP 7881 from VPS, **WSS open only** (closes immediately) |
+| **Stage 6** | `staging-live-video-webrtc-media-proof.ts` | Full `Room.connect()` — **PeerConnection / ICE / DTLS** (must run **outside** the VPS) |
+
+Stage 5 passing does **not** prove external clients can complete WebRTC. VPS-to-own-public-IP TCP probes can succeed while phone/laptop ICE still fails.
+
+**Run stage 6 from a developer machine or GitHub Actions runner (not on the VPS):**
+
+```bash
+export STAGING_API_BASE_URL=https://staging-api.theeye.com.ng/v1
+export STAGING_TEST_CITIZEN_EMAIL=...
+export STAGING_TEST_CITIZEN_PASSWORD=...
+pnpm --filter @the-eye/api exec tsx scripts/staging-live-video-webrtc-media-proof.ts
+```
+
+If stage 6 **fails** externally → RTC path from internet to VPS (UDP 7882, Docker UDP publish, or missing TURN).  
+If stage 6 **passes** externally but Android fails → capture mobile logcat (`live_video checkpoint=`) and compare ICE candidates in LiveKit logs during the join.
+
+**TURN:** Staging `livekit.yaml` has **no TURN** configured. Direct host ICE to `LIVEKIT_NODE_IP` must work. TURN is only needed for symmetric NAT once direct path is proven.
+
+**If `staging-livekit-network-guard.sh` passes:** signaling and host port publish are healthy on the VPS. Remaining failures are usually **external client → host RTC media** (UDP 7882 / TCP 7881), not nginx/WSS.
 
 **Checks:**
 

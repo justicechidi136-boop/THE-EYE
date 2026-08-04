@@ -1,6 +1,19 @@
+/**
+ * Stage 6 — full WebRTC media proof (PeerConnection / ICE / DTLS).
+ *
+ * Stage 5 (`staging-live-video-room-join-proof.ts`) only opens WSS and closes;
+ * it does NOT wait for EnginePeerStateUpdatedEvent / ICE connected.
+ *
+ * Run from OUTSIDE the VPS (developer laptop, GitHub Actions ubuntu runner):
+ *   set STAGING_API_BASE_URL=https://staging-api.theeye.com.ng/v1
+ *   set STAGING_TEST_CITIZEN_EMAIL=...
+ *   set STAGING_TEST_CITIZEN_PASSWORD=...
+ *   pnpm --filter @the-eye/api exec tsx scripts/staging-live-video-webrtc-media-proof.ts
+ *
+ * Requires devDependencies: livekit-client, @livekit/rtc-node
+ */
 import { randomUUID } from "node:crypto";
-import net from "node:net";
-import WebSocket from "ws";
+import { ConnectionState, Room, RoomEvent } from "@livekit/rtc-node";
 import { IncidentType } from "@the-eye/shared";
 import { assertStagingOnlySeedAllowed } from "../prisma/staging-guard";
 import {
@@ -11,17 +24,10 @@ import {
 type JsonRecord = Record<string, unknown>;
 
 const EXPECTED_CLIENT_LIVEKIT_URL = "wss://staging-livekit.theeye.com.ng";
-const CONNECT_TIMEOUT_MS = 30000;
+const CONNECT_TIMEOUT_MS = 35_000;
 
 function normalizeApiBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
-}
-
-function resolveRequestBaseUrl(): { canonicalUrl: string; requestUrl: string } {
-  const canonicalUrl = normalizeApiBaseUrl(String(process.env.STAGING_API_BASE_URL ?? "").trim());
-  const probeOverride = String(process.env.STAGING_API_PROBE_BASE_URL ?? "").trim();
-  const requestUrl = probeOverride ? normalizeApiBaseUrl(probeOverride) : canonicalUrl;
-  return { canonicalUrl, requestUrl };
 }
 
 function apiPath(baseUrl: string, suffix: string): string {
@@ -57,7 +63,7 @@ async function apiRequest(
       ...(options.headers ?? {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(20_000),
   });
 
   const text = await response.text().catch(() => "");
@@ -71,84 +77,72 @@ async function apiRequest(
   return { ok: response.ok, status: response.status, body };
 }
 
-function extractLivekit(body: JsonRecord): { url?: string; token?: string; roomName?: string } {
+function extractLivekit(body: JsonRecord): { url?: string; token?: string } {
   const livekit = body.livekit as JsonRecord | undefined;
   if (!livekit) return {};
   return {
     url: typeof livekit.url === "string" ? livekit.url : undefined,
     token: typeof livekit.token === "string" ? livekit.token : undefined,
-    roomName: typeof livekit.roomName === "string" ? livekit.roomName : undefined,
   };
 }
 
-function livekitWsUrl(baseUrl: string, token: string): string {
-  const normalized = baseUrl.replace(/\/$/, "");
-  const params = new URLSearchParams({
-    access_token: token,
-    auto_subscribe: "0",
-    sdk: "node",
-    protocol: "12",
-  });
-  return `${normalized}/rtc?${params.toString()}`;
-}
+async function connectWithFullWebRtc(url: string, token: string): Promise<void> {
+  const room = new Room();
+  const states: string[] = [];
 
-async function probeRtcTcp(host: string, port = 7881): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const socket = net.connect({ host, port, timeout: 5000 });
-    socket.once("connect", () => {
-      socket.end();
-      console.log(`PASS livekit RTC TCP ${host}:${port} reachable`);
-      resolve();
-    });
-    socket.once("timeout", () => {
-      socket.destroy();
-      reject(new Error(`RTC TCP ${host}:${port} timed out`));
-    });
-    socket.once("error", reject);
+  room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+    states.push(String(state));
+    console.log(`INFO room.connectionState=${state}`);
   });
-}
+  room.on(RoomEvent.Connected, () => {
+    console.log("PASS LiveKit room connected (PeerConnection / ICE established)");
+  });
+  room.on(RoomEvent.Disconnected, (reason) => {
+    console.log(`WARN room disconnected reason=${String(reason)}`);
+  });
 
-async function connectLivekitSignaling(url: string, token: string): Promise<void> {
-  const wsUrl = livekitWsUrl(url, token);
   const startedAt = Date.now();
-  // Signaling-only: opens WSS then closes. Does NOT wait for PeerConnection / ICE.
-  // For full WebRTC proof run staging-live-video-webrtc-media-proof.ts from OUTSIDE the VPS.
-  await new Promise<void>((resolve, reject) => {
-    const ws = new WebSocket(wsUrl, { handshakeTimeout: CONNECT_TIMEOUT_MS });
-    const timer = setTimeout(() => {
-      ws.terminate();
-      reject(new Error(`LiveKit WSS timed out after ${CONNECT_TIMEOUT_MS}ms`));
-    }, CONNECT_TIMEOUT_MS);
-    ws.once("open", () => {
-      clearTimeout(timer);
-      ws.close();
-      const durationMs = Date.now() - startedAt;
-      console.log(
-        `PASS livekit WSS signaling open durationMs=${durationMs} (signaling-only; not ICE/media)`,
+  try {
+    await room.connect(url, token, { autoSubscribe: false, dynacast: false });
+    const durationMs = Date.now() - startedAt;
+    if (room.connectionState !== ConnectionState.CONN_CONNECTED) {
+      fail(
+        `room.connect resolved but state=${room.connectionState} (history=${states.join("->")}) durationMs=${durationMs}`,
       );
-      resolve();
-    });
-    ws.once("unexpected-response", (_req, res) => {
-      clearTimeout(timer);
-      reject(new Error(`LiveKit WSS unexpected HTTP ${res.statusCode}`));
-    });
-    ws.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
+    }
+    console.log(
+      `PASS stage 6 WebRTC media connected durationMs=${durationMs} stateHistory=${states.join("->")}`,
+    );
+  } finally {
+    await room.disconnect().catch(() => undefined);
+  }
 }
 
 async function main() {
   assertStagingOnlySeedAllowed();
+  console.log("INFO @livekit/rtc-node Room SDK loaded for Node WebRTC");
 
-  const { canonicalUrl, requestUrl } = resolveRequestBaseUrl();
-  if (!canonicalUrl.startsWith("https://")) {
+  const apiBase = normalizeApiBaseUrl(String(process.env.STAGING_API_BASE_URL ?? "").trim());
+  if (!apiBase.startsWith("https://")) {
     fail("STAGING_API_BASE_URL must be the public HTTPS API base URL.");
   }
 
   const presetToken = String(process.env.PROOF_TOKEN ?? "").trim();
   const presetIncidentId = String(process.env.PROOF_INCIDENT_ID ?? "").trim();
+  const presetLivekitUrl = String(process.env.PROOF_LIVEKIT_URL ?? "").trim();
+  const presetLivekitToken = String(process.env.PROOF_LIVEKIT_TOKEN ?? "").trim();
+
+  if (presetLivekitUrl && presetLivekitToken) {
+    console.log(`=== Staging live video WebRTC media proof (stage 6) ===`);
+    console.log(`livekitUrl=${presetLivekitUrl} (token supplied via PROOF_LIVEKIT_TOKEN)`);
+    console.log(
+      "NOTE run this script from OUTSIDE the VPS — stage 5 on-VPS does not prove external ICE.",
+    );
+    await connectWithFullWebRtc(presetLivekitUrl, presetLivekitToken);
+    console.log("=== Staging live video WebRTC media proof complete ===");
+    return;
+  }
+
   let token = presetToken;
   let incidentId = presetIncidentId;
 
@@ -158,9 +152,9 @@ async function main() {
     if (!citizen) fail("STAGING_TEST_CITIZEN_* credentials are required.");
 
     const spec = toAccountSpec(citizen);
-    const clientSubmissionId = `live-video-room-proof-${randomUUID()}`;
+    const clientSubmissionId = `live-video-webrtc-proof-${randomUUID()}`;
 
-    const login = await apiRequest(requestUrl, "/auth/login", {
+    const login = await apiRequest(apiBase, "/auth/login", {
       method: "POST",
       body: { email: spec.email, password: spec.password },
     });
@@ -169,12 +163,12 @@ async function main() {
     }
     token = login.body.accessToken;
 
-    const created = await apiRequest(requestUrl, "/incidents/emergency", {
+    const created = await apiRequest(apiBase, "/incidents/emergency", {
       method: "POST",
       token,
       body: {
         type: IncidentType.Emergency,
-        description: "Live emergency video room join proof",
+        description: "Live emergency video WebRTC media proof",
         title: "Live emergency video",
         latitude: 6.5244,
         longitude: 3.3792,
@@ -195,29 +189,28 @@ async function main() {
     if (!incidentId) fail("emergency create response missing incident id");
   }
 
-  console.log(`=== Staging live video room join proof (stage 5) ===`);
-  console.log(`apiBase=${canonicalUrl} startBase=${requestUrl} incidentId=${incidentId}`);
-
-  const liveStart = await apiRequest(
-    requestUrl,
-    `/live-video/incidents/${incidentId}/start`,
-    {
-      method: "POST",
-      token,
-      body: {
-        latitude: 6.5244,
-        longitude: 3.3792,
-        accuracy: 12,
-        capturedAt: new Date().toISOString(),
-        lowBandwidthMode: true,
-        sourceDeviceId: "room-join-proof",
-      },
-      headers: {
-        "X-Client-Trace-ID": `live-video-room-proof-${randomUUID()}`,
-        "X-Request-ID": randomUUID(),
-      },
-    },
+  console.log(`=== Staging live video WebRTC media proof (stage 6) ===`);
+  console.log(`apiBase=${apiBase} incidentId=${incidentId}`);
+  console.log(
+    "NOTE run this script from OUTSIDE the VPS — stage 5 on-VPS does not prove external ICE.",
   );
+
+  const liveStart = await apiRequest(apiBase, `/live-video/incidents/${incidentId}/start`, {
+    method: "POST",
+    token,
+    body: {
+      latitude: 6.5244,
+      longitude: 3.3792,
+      accuracy: 12,
+      capturedAt: new Date().toISOString(),
+      lowBandwidthMode: true,
+      sourceDeviceId: "webrtc-media-proof",
+    },
+    headers: {
+      "X-Client-Trace-ID": `live-video-webrtc-proof-${randomUUID()}`,
+      "X-Request-ID": randomUUID(),
+    },
+  });
 
   if (!liveStart.ok) {
     fail(
@@ -231,15 +224,8 @@ async function main() {
   }
   if (!livekit.token) fail("live-video start response missing livekit.token");
 
-  const rtcHost = String(process.env.LIVEKIT_NODE_IP ?? "").trim();
-  if (rtcHost) {
-    await probeRtcTcp(rtcHost, 7881);
-  } else {
-    console.log("WARN LIVEKIT_NODE_IP unset — skipping public RTC TCP probe");
-  }
-
-  await connectLivekitSignaling(livekit.url, livekit.token);
-  console.log("=== Staging live video room join proof complete ===");
+  await connectWithFullWebRtc(livekit.url, livekit.token);
+  console.log("=== Staging live video WebRTC media proof complete ===");
 }
 
 main().catch((error) => {

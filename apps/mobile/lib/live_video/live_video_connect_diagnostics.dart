@@ -119,18 +119,33 @@ Future<void> connectLiveKitRoomWithDiagnostics({
       roomInstanceId: roomInstanceId,
       internalReason: internalReason,
     );
-    await room
-        .connect(
-          runtimeUrl,
-          runtimeToken,
-          connectOptions: const ConnectOptions(autoSubscribe: false),
-        )
-        .timeout(
-          connectTimeout,
-          onTimeout: () => throw TimeoutException(
-            "LiveKit connect timed out after ${connectTimeout.inSeconds}s",
-          ),
-        );
+    final iceProbeTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      logLiveVideoDiagnostic(
+        checkpoint: LiveVideoJoinCheckpoint.roomConnectSdkInvoke,
+        correlationId: correlationId,
+        sessionId: sessionId,
+        roomName: roomName,
+        roomInstanceId: roomInstanceId,
+        connectionState: room.connectionState.name,
+        internalReason: "ice_connect_probe",
+      );
+    });
+    try {
+      await room
+          .connect(
+            runtimeUrl,
+            runtimeToken,
+            connectOptions: const ConnectOptions(autoSubscribe: false),
+          )
+          .timeout(
+            connectTimeout,
+            onTimeout: () => throw TimeoutException(
+              "LiveKit connect timed out after ${connectTimeout.inSeconds}s",
+            ),
+          );
+    } finally {
+      iceProbeTimer.cancel();
+    }
   }
 
   try {
