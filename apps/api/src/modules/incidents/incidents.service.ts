@@ -37,6 +37,7 @@ import {
   canReporterCancelDirectly,
   canReporterRequestCancellation,
   canTransitionIncident,
+  isTerminalIncidentStatus,
 } from "./incident-lifecycle";
 import { buildIncidentPresentation } from "./incident-presentation.mapper";
 import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
@@ -647,6 +648,173 @@ export class IncidentsService {
       beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
       afterState: { status: IncidentStatus.CancellationRequested, statusVersion: updated.statusVersion },
       metadata: { fromStatus: currentStatus, toStatus: IncidentStatus.CancellationRequested },
+    });
+
+    return updated;
+  }
+
+  async submitReporterStatus(
+    id: string,
+    body: { status: "Resolved" | "StillOngoing" | "Unsure"; note?: string; clientActionId: string },
+    actor?: JwtPayload,
+  ) {
+    if (!body.clientActionId?.trim()) {
+      throw new BadRequestException("clientActionId is required");
+    }
+    const allowedStatuses = new Set(["Resolved", "StillOngoing", "Unsure"]);
+    if (!allowedStatuses.has(body.status)) {
+      throw new BadRequestException(`Invalid reporter status ${body.status}`);
+    }
+
+    const incident = await this.get(id, actor);
+    if (actor?.typ === "user" && incident.reporterId !== actor.sub) {
+      throw new ForbiddenException("Only the reporting citizen can update reporter status");
+    }
+
+    const currentStatus = incident.status as IncidentStatus;
+    if (isTerminalIncidentStatus(currentStatus)) {
+      throw new BadRequestException(`Incident in status ${currentStatus} cannot accept reporter status updates`);
+    }
+
+    const metadata = (incident.metadata ?? {}) as Record<string, unknown>;
+    const priorActions =
+      (metadata.reporterStatusActions as Record<string, unknown> | undefined) ?? {};
+    if (priorActions[body.clientActionId]) {
+      return incident;
+    }
+
+    const activeAssignment = await this.prisma.incidentAssignment.findFirst({
+      where: {
+        incidentId: id,
+        status: {
+          notIn: ["Completed", "Cancelled", "Declined", "Reassigned"] as never,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const hasActiveAssignment = activeAssignment != null;
+
+    const now = new Date();
+    const actionRecord = {
+      status: body.status,
+      note: body.note ?? null,
+      recordedAt: now.toISOString(),
+    };
+
+    if (body.status === "Resolved") {
+      const canDirectResolve =
+        !hasActiveAssignment &&
+        (currentStatus === IncidentStatus.Verified ||
+          currentStatus === IncidentStatus.Verifying ||
+          currentStatus === IncidentStatus.Received ||
+          currentStatus === IncidentStatus.Submitted);
+
+      if (canDirectResolve && canTransitionIncident(currentStatus, IncidentStatus.Resolved)) {
+        const updated = await this.transitionIncidentStatus(id, incident, IncidentStatus.Resolved, {
+          note: body.note,
+          actor,
+          resolutionSource: ResolutionSource.Reporter,
+          timelineEventType: "incident.reporter_confirmed_resolved",
+        });
+        await this.audit.record({
+          actor,
+          action: "incident.reporter_confirmed_resolved",
+          entityType: "incidents",
+          entityId: id,
+          reason: body.note,
+          beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
+          afterState: { status: IncidentStatus.Resolved, statusVersion: updated.statusVersion },
+          metadata: { clientActionId: body.clientActionId, reporterStatus: body.status },
+        });
+        await this.prisma.incident.update({
+          where: { id },
+          data: {
+            metadata: {
+              ...metadata,
+              reporterStatusActions: { ...priorActions, [body.clientActionId]: actionRecord },
+            },
+          } as never,
+        });
+        return updated;
+      }
+
+      const updated = await this.prisma.incident.update({
+        where: { id },
+        data: {
+          lastTrustedUpdateAt: now,
+          statusVersion: { increment: 1 },
+          metadata: {
+            ...metadata,
+            reporterResolutionSignal: actionRecord,
+            reporterStatusActions: { ...priorActions, [body.clientActionId]: actionRecord },
+          },
+          timeline: {
+            create: {
+              actorId: actor?.sub,
+              actorType: actor?.typ ?? "user",
+              eventType: "incident.reporter_resolution_signal",
+              message: body.note ?? "Reporter indicated the situation appears resolved.",
+              metadata: {
+                reporterStatus: body.status,
+                clientActionId: body.clientActionId,
+                requiresDispatcherReview: hasActiveAssignment,
+              },
+            },
+          },
+        } as never,
+      });
+      await this.audit.record({
+        actor,
+        action: "incident.reporter_resolution_signal",
+        entityType: "incidents",
+        entityId: id,
+        reason: body.note,
+        beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
+        afterState: { status: currentStatus, statusVersion: updated.statusVersion },
+        metadata: { clientActionId: body.clientActionId, reporterStatus: body.status },
+      });
+      return updated;
+    }
+
+    const eventType =
+      body.status === "StillOngoing"
+        ? "incident.reporter_still_ongoing"
+        : "incident.reporter_unsure";
+
+    const updated = await this.prisma.incident.update({
+      where: { id },
+      data: {
+        lastTrustedUpdateAt: now,
+        statusVersion: { increment: 1 },
+        metadata: {
+          ...metadata,
+          reporterStatusActions: { ...priorActions, [body.clientActionId]: actionRecord },
+        },
+        timeline: {
+          create: {
+            actorId: actor?.sub,
+            actorType: actor?.typ ?? "user",
+            eventType,
+            message:
+              body.note ??
+              (body.status === "StillOngoing"
+                ? "Reporter confirmed the situation is still ongoing."
+                : "Reporter is unsure whether the situation is resolved."),
+            metadata: { reporterStatus: body.status, clientActionId: body.clientActionId },
+          },
+        },
+      } as never,
+    });
+
+    await this.audit.record({
+      actor,
+      action: eventType,
+      entityType: "incidents",
+      entityId: id,
+      reason: body.note,
+      beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
+      afterState: { status: currentStatus, statusVersion: updated.statusVersion },
+      metadata: { clientActionId: body.clientActionId, reporterStatus: body.status },
     });
 
     return updated;

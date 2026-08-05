@@ -23,6 +23,12 @@ class AssignIncidentDto {
   reason?: string;
 }
 
+class ReporterStatusDto {
+  status!: "Resolved" | "StillOngoing" | "Unsure";
+  note?: string;
+  clientActionId!: string;
+}
+
 @ApiTags("incidents")
 @Controller("incidents")
 export class IncidentsController {
@@ -164,6 +170,15 @@ export class IncidentsController {
   @RequirePermissions("incident:create")
   requestCancellation(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
     return this.incidentsService.requestCancellation(id, body.reason, request.user);
+  }
+
+  @Post(":id/reporter-status")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:create")
+  async reporterStatus(@Param("id") id: string, @Body() body: ReporterStatusDto, @Req() request: any) {
+    await this.incidentsService.submitReporterStatus(id, body, request.user);
+    return this.activeEmergencyService.getActiveEmergency(id, request.user);
   }
 
   @Get(":id/media/:mediaId/view")
