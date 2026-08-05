@@ -144,6 +144,10 @@ describe("incident lifecycle contract", () => {
       expect(typeof presentation.isActive).toBe("boolean");
       expect(presentation.progressStages.length).toBeGreaterThan(0);
       expect(typeof presentation.allowedActions.addEvidence).toBe("boolean");
+      expect(typeof presentation.allowedActions.uploadPhoto).toBe("boolean");
+      expect(typeof presentation.allowedActions.uploadVideo).toBe("boolean");
+      expect(typeof presentation.allowedActions.uploadVoice).toBe("boolean");
+      expect(typeof presentation.allowedActions.addUpdate).toBe("boolean");
       expect(typeof presentation.allowedActions.cancel).toBe("boolean");
       expect(typeof presentation.allowedActions.requestCancellation).toBe("boolean");
       expect(typeof presentation.allowedActions.confirmResolved).toBe("boolean");
@@ -276,7 +280,7 @@ describe("IncidentsService cancellation and lifecycle", () => {
 
     const result = await service.cancelEmergency("inc-1", "Repeat", reporter);
     expect(incidentUpdate).not.toHaveBeenCalled();
-    expect(result.duplicate).toBe(true);
+    expect((result as Record<string, unknown>).duplicate).toBe(true);
   });
 
   it("rejects invalid Closed transition server-side", async () => {
