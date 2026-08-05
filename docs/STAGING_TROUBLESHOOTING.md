@@ -102,6 +102,20 @@ If signaling passes but mobile still drops at ~10s on cellular NAT, plan **TURN*
 
 **Distinguishing from LIVE-VIDEO-015:** If the **first** attempt after fresh install/login succeeds over UDP, the RTC path is working. Retry failures with `track is null` are a **client track lifecycle** issue, not blocked UDP 7882.
 
+## Mobile intermittent live video (client lifecycle)
+
+**Symptom:** Some sessions succeed end-to-end; others fail under identical conditions. Successful sessions may end with `CLIENT_REQUEST_LEAVE`. No consistent auth/token/ICE failure on server.
+
+**Cause (typical):** Overlapping start/stop, stale async cleanup disconnecting a newer `Room`, or camera track reuse between sessions.
+
+**Fix (mobile):** Strict lifecycle state machine, `connectionAttemptId` per start/retry, serialized start/stop via operation lock, owned-room cleanup (`cleanupRoom(oldRoom, oldAttemptId)`), stale-attempt guards after every await. Filter logcat:
+
+```powershell
+adb logcat -s flutter | Select-String "connectionAttemptId=|disconnectReason=|lifecyclePhase="
+```
+
+**CLIENT_REQUEST_LEAVE callers (instrumented):** `stopSession` / `_stopStream` (`user_stop`), `connectPublisher:preconnect_cleanup` (`retry_replacement`), connect/publish failure cleanup, `safeReconnect`, `LiveVideoSessionController.dispose` (`widget_dispose`), `RoomDisconnectedEvent` (SDK).
+
 ## nginx exits on first deploy
 
 **Symptom:** `ERROR: TLS certificates missing`

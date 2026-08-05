@@ -4,6 +4,7 @@ import "package:livekit_client/livekit_client.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "live_video_connection_state.dart";
 import "live_video_evidence_overlay.dart";
+import "live_video_lifecycle_phase.dart";
 import "live_video_session_controller.dart";
 
 class LiveVideoPreviewPane extends StatelessWidget {
@@ -22,6 +23,7 @@ class LiveVideoPreviewPane extends StatelessWidget {
   Widget build(BuildContext context) {
     final track = controller.localVideoTrack;
     final streaming = controller.isStreaming ||
+        controller.lifecyclePhase == LiveVideoLifecyclePhase.stopped ||
         controller.connectionState == LiveVideoConnectionState.previewing;
     final failed =
         controller.connectionState == LiveVideoConnectionState.failed;
