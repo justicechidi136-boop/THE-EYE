@@ -56,12 +56,27 @@ Future<void> connectLiveKitRoomWithDiagnostics({
   String? tokenLength,
   String? tokenFingerprint,
   String? roomInstanceId,
+  String? connectionAttemptId,
+  bool Function()? isAttemptActive,
 }) async {
   await logLiveVideoConnectivity(
     correlationId: correlationId,
     sessionId: sessionId,
     internalReason: "before_room_connect",
   );
+
+  void guardAttempt(String stage) {
+    if (isAttemptActive != null && !isAttemptActive()) {
+      logLiveVideoDiagnostic(
+        checkpoint: LiveVideoJoinCheckpoint.staleAttemptIgnored,
+        correlationId: correlationId,
+        sessionId: sessionId,
+        connectionAttemptId: connectionAttemptId,
+        internalReason: stage,
+      );
+      throw StateError("Stale connection attempt at $stage");
+    }
+  }
 
   try {
     await room.prepareConnection(runtimeUrl, runtimeToken);
@@ -105,6 +120,7 @@ Future<void> connectLiveKitRoomWithDiagnostics({
   );
 
   Future<void> invokeConnect({String? internalReason}) async {
+    guardAttempt("before_connect_invoke");
     logLiveVideoDiagnostic(
       checkpoint: LiveVideoJoinCheckpoint.roomConnectSdkInvoke,
       correlationId: correlationId,
@@ -117,15 +133,18 @@ Future<void> connectLiveKitRoomWithDiagnostics({
       tokenLength: tokenLength,
       tokenFingerprint: tokenFingerprint,
       roomInstanceId: roomInstanceId,
+      connectionAttemptId: connectionAttemptId,
       internalReason: internalReason,
     );
     final iceProbeTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (isAttemptActive != null && !isAttemptActive()) return;
       logLiveVideoDiagnostic(
         checkpoint: LiveVideoJoinCheckpoint.roomConnectSdkInvoke,
         correlationId: correlationId,
         sessionId: sessionId,
         roomName: roomName,
         roomInstanceId: roomInstanceId,
+        connectionAttemptId: connectionAttemptId,
         connectionState: room.connectionState.name,
         internalReason: "ice_connect_probe",
       );
@@ -139,10 +158,21 @@ Future<void> connectLiveKitRoomWithDiagnostics({
           )
           .timeout(
             connectTimeout,
-            onTimeout: () => throw TimeoutException(
-              "LiveKit connect timed out after ${connectTimeout.inSeconds}s",
-            ),
+            onTimeout: () {
+              logLiveVideoDiagnostic(
+                checkpoint: LiveVideoJoinCheckpoint.timeoutFired,
+                correlationId: correlationId,
+                sessionId: sessionId,
+                connectionAttemptId: connectionAttemptId,
+                timeoutName: "room_connect",
+                timeoutDurationMs: connectTimeout.inMilliseconds.toString(),
+              );
+              throw TimeoutException(
+                "LiveKit connect timed out after ${connectTimeout.inSeconds}s",
+              );
+            },
           );
+      guardAttempt("after_connect_success");
     } finally {
       iceProbeTimer.cancel();
     }

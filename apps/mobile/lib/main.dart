@@ -48,7 +48,9 @@ import "location/location_permission_settings_section.dart";
 import "location/location_permission_service.dart";
 import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
+import "live_video/live_video_disconnect_source.dart";
 import "live_video/live_video_evidence_overlay.dart";
+import "live_video/live_video_lifecycle_phase.dart";
 import "live_video/live_video_preview_pane.dart";
 import "live_video/live_video_join_flow.dart";
 import "live_video/live_video_safe_log.dart";
@@ -4471,7 +4473,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                   style: FilledButton.styleFrom(
                       backgroundColor:
                           streaming ? Colors.black : Colors.red.shade700),
-                  onPressed: (startingStream || stoppingStream)
+                  onPressed: (startingStream ||
+                          stoppingStream ||
+                          (!streaming && !liveVideoController.canStartSession))
                       ? null
                       : () => streaming
                           ? _stopStream(context)
@@ -4571,9 +4575,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       correlationId: _startupTrace.clientTraceId,
       incidentId: activeIncidentId,
     );
-    if (_streamStartInFlight || streaming) {
+    if (_streamStartInFlight || streaming || !liveVideoController.canStartSession) {
       _logStartFlowInterrupt(
-        reason: "duplicate_stream_start",
+        reason: _streamStartInFlight
+            ? "duplicate_stream_start"
+            : "start_blocked_lifecycle_${liveVideoController.lifecyclePhase.name}",
         location: "_startStream:duplicate_guard",
       );
       return;
@@ -4606,8 +4612,10 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         return;
       }
 
-      final alreadyPreviewing = liveVideoController.connectionState ==
-          LiveVideoConnectionState.previewing;
+      final alreadyPreviewing =
+          liveVideoController.lifecyclePhase == LiveVideoLifecyclePhase.stopped ||
+          liveVideoController.connectionState ==
+              LiveVideoConnectionState.previewing;
       final previewFuture = alreadyPreviewing
           ? Future.value(true)
           : liveVideoController
@@ -4783,7 +4791,10 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
       _setStartupPhase(LiveVideoStartupPhase.connectingRoom);
       final connected = await liveVideoController
-          .connectPublisher(startResult)
+          .startSession(
+            startResult,
+            incidentIdOverride: activeIncidentId,
+          )
           .timeout(kLiveVideoStartTimeout);
       if (!mounted || _disposed) {
         _logStartFlowInterrupt(
@@ -4958,7 +4969,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           // Local stop still proceeds; server reconciliation happens on next start.
         }
       }
-      await liveVideoController.stop(keepPreview: true);
+      await liveVideoController.stopSession(
+        keepPreview: true,
+        reason: LiveVideoDisconnectReason.userStop,
+        caller: "_stopStream",
+      );
       if (!mounted) return;
       setState(() {
         liveSessionId = "";

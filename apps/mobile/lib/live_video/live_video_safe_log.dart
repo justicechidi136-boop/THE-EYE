@@ -23,6 +23,7 @@ void logLiveVideoDiagnostic({
   String? correlationId,
   String? incidentId,
   String? sessionId,
+  String? connectionAttemptId,
   String? roomName,
   String? participantIdentity,
   String? urlScheme,
@@ -32,11 +33,19 @@ void logLiveVideoDiagnostic({
   String? tokenFingerprint,
   String? roomInstanceId,
   String? connectionState,
+  String? lifecyclePhase,
+  String? controllerGeneration,
+  String? disconnectReason,
+  String? disconnectCaller,
   String? exceptionType,
   String? exceptionMessage,
   String? stackTraceHead,
   String? internalReason,
   String? interruptLocation,
+  String? timeoutName,
+  String? timeoutDurationMs,
+  String? cameraState,
+  String? microphoneState,
 }) {
   final parts = <String>[
     "live_video checkpoint=$checkpoint",
@@ -44,6 +53,8 @@ void logLiveVideoDiagnostic({
       "correlationId=$correlationId",
     if (incidentId != null && incidentId.isNotEmpty) "incidentId=$incidentId",
     if (sessionId != null && sessionId.isNotEmpty) "sessionId=$sessionId",
+    if (connectionAttemptId != null && connectionAttemptId.isNotEmpty)
+      "connectionAttemptId=$connectionAttemptId",
     if (roomName != null && roomName.isNotEmpty) "roomName=$roomName",
     if (participantIdentity != null && participantIdentity.isNotEmpty)
       "participantIdentity=$participantIdentity",
@@ -59,6 +70,14 @@ void logLiveVideoDiagnostic({
       "roomInstanceId=$roomInstanceId",
     if (connectionState != null && connectionState.isNotEmpty)
       "connectionState=$connectionState",
+    if (lifecyclePhase != null && lifecyclePhase.isNotEmpty)
+      "lifecyclePhase=$lifecyclePhase",
+    if (controllerGeneration != null && controllerGeneration.isNotEmpty)
+      "controllerGeneration=$controllerGeneration",
+    if (disconnectReason != null && disconnectReason.isNotEmpty)
+      "disconnectReason=$disconnectReason",
+    if (disconnectCaller != null && disconnectCaller.isNotEmpty)
+      "disconnectCaller=$disconnectCaller",
     if (exceptionType != null && exceptionType.isNotEmpty)
       "exceptionType=$exceptionType",
     if (exceptionMessage != null && exceptionMessage.isNotEmpty)
@@ -69,6 +88,14 @@ void logLiveVideoDiagnostic({
       "internalReason=$internalReason",
     if (interruptLocation != null && interruptLocation.isNotEmpty)
       "interruptLocation=$interruptLocation",
+    if (timeoutName != null && timeoutName.isNotEmpty)
+      "timeoutName=$timeoutName",
+    if (timeoutDurationMs != null && timeoutDurationMs.isNotEmpty)
+      "timeoutDurationMs=$timeoutDurationMs",
+    if (cameraState != null && cameraState.isNotEmpty)
+      "cameraState=$cameraState",
+    if (microphoneState != null && microphoneState.isNotEmpty)
+      "microphoneState=$microphoneState",
   ];
   logLiveVideoEvent(parts.join(" "));
 }

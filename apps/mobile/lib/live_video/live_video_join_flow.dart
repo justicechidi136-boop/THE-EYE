@@ -19,6 +19,12 @@ abstract final class LiveVideoJoinCheckpoint {
   static const localAudioCreateSuccess = "LOCAL_AUDIO_CREATE_SUCCESS";
   static const tracksPublished = "TRACKS_PUBLISHED";
   static const joinFlowInterrupted = "JOIN_FLOW_INTERRUPTED_BEFORE_CONNECT";
+  static const lifecycleTransition = "LIFECYCLE_TRANSITION";
+  static const disconnectRequested = "DISCONNECT_REQUESTED";
+  static const disconnectCompleted = "DISCONNECT_COMPLETED";
+  static const staleAttemptIgnored = "STALE_ATTEMPT_IGNORED";
+  static const operationSerialized = "OPERATION_SERIALIZED";
+  static const timeoutFired = "TIMEOUT_FIRED";
 }
 
 /// Tracks join-flow checkpoints for post-mortem diagnostics.
@@ -26,6 +32,7 @@ class LiveVideoJoinFlowTracker {
   final Set<String> _checkpoints = <String>{};
   String? interruptReason;
   String? interruptLocation;
+  String? activeConnectionAttemptId;
 
   Iterable<String> get checkpoints => _checkpoints;
 
@@ -35,10 +42,15 @@ class LiveVideoJoinFlowTracker {
   bool get roomConnectSuccessLogged =>
       _checkpoints.contains(LiveVideoJoinCheckpoint.roomConnectSuccess);
 
-  void reset() {
+  void reset({String? connectionAttemptId}) {
     _checkpoints.clear();
     interruptReason = null;
     interruptLocation = null;
+    activeConnectionAttemptId = connectionAttemptId;
+  }
+
+  void bindAttempt(String connectionAttemptId) {
+    activeConnectionAttemptId = connectionAttemptId;
   }
 
   void mark(String checkpoint) {
@@ -53,6 +65,8 @@ class LiveVideoJoinFlowTracker {
 
   Map<String, Object?> toDiagnosticMap() => {
         "checkpoints": _checkpoints.toList()..sort(),
+        if (activeConnectionAttemptId != null)
+          "activeConnectionAttemptId": activeConnectionAttemptId,
         if (interruptReason != null) "interruptReason": interruptReason,
         if (interruptLocation != null) "interruptLocation": interruptLocation,
         "roomConnectBeginLogged": roomConnectBeginLogged,
