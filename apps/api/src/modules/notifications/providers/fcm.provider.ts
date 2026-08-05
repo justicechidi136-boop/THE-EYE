@@ -3,7 +3,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { resolveAppEnvironment, type AppEnvironment } from "../../../common/auth/firebase-environment";
 import { PrismaService } from "../../prisma/prisma.service";
-import { buildNotificationDeepLink } from "../notification-inbox.mapper";
+import { buildNotificationDeepLink, resolveNotificationRouting } from "../notification-inbox.mapper";
 import { NotificationDispatchError } from "../notification-dispatch.error";
 import type { NotificationDispatchPayload, NotificationDispatchResult } from "../notification.types";
 import { isEmergencyPriority } from "../notification.types";
@@ -120,6 +120,19 @@ export class FcmProvider implements OnModuleInit {
       broadcastId: payload.broadcastId,
       metadata: storedMetadata,
     });
+    const routing = resolveNotificationRouting({
+      id: payload.notificationId ?? "",
+      type: payload.type ?? "IncidentStatusUpdate",
+      priority: payload.priority ?? "Normal",
+      channel: payload.channel ?? "push",
+      title: payload.title,
+      body: payload.body,
+      status: "Pending",
+      createdAt: new Date(),
+      incidentId: payload.incidentId,
+      broadcastId: payload.broadcastId,
+      metadata: storedMetadata,
+    });
     const dangerAlert = parseDangerAlertPayloadFromMetadata(storedMetadata);
     const dangerAlertData = dangerAlert ? dangerAlertPayloadToFcmData(dangerAlert) : {};
     const relayToWatch = storedMetadata.relayToWatch === true ? "true" : "false";
@@ -152,8 +165,13 @@ export class FcmProvider implements OnModuleInit {
                 priority: payload.priority ?? "Normal",
                 incidentId: payload.incidentId ?? "",
                 broadcastId: payload.broadcastId ?? "",
-                route: deepLink,
-                deepLink,
+                route: routing.destination,
+                deepLink: routing.destination,
+                destination: routing.destination,
+                schemaVersion: String(routing.schemaVersion),
+                routeType: routing.routeType,
+                notificationType: routing.notificationType,
+                status: routing.status ?? "",
                 silent: silent ? "true" : "false",
                 relayToWatch,
                 ...(alertId ? { alertId } : {}),
