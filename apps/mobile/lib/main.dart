@@ -143,6 +143,7 @@ Widget _buildActiveEmergencyRoute(BuildContext context, {String? routeIncidentId
       (args is Map ? args["incidentId"] as String? : args as String?) ??
       "";
   final silent = args is Map ? args["silent"] == true : false;
+  final liveVideoError = args is Map ? args["liveVideoError"] as String? : null;
   final controller = appOf(context);
   final token = controller.accessToken ?? "";
   if (incidentId.isNotEmpty) {
@@ -152,8 +153,32 @@ Widget _buildActiveEmergencyRoute(BuildContext context, {String? routeIncidentId
     incidentId: incidentId,
     accessToken: token,
     service: controller.activeEmergencyService,
+    apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
     silent: silent,
+    liveVideoErrorMessage: liveVideoError,
     onStopLocationTracking: () async => controller.stopIncidentLocationTracking(),
+    onStartLiveVideo: (activeIncidentId) async {
+      final result = await Navigator.of(context).pushNamed(
+        "/live-video",
+        arguments: LiveVideoRouteArgs(
+          incidentId: activeIncidentId,
+          autoStartStream: true,
+          returnToActiveEmergency: true,
+        ),
+      );
+      if (result is LiveVideoReturnResult &&
+          result.errorMessage != null &&
+          context.mounted) {
+        await Navigator.of(context).pushReplacementNamed(
+          "/active-emergency/$activeIncidentId",
+          arguments: {
+            "incidentId": activeIncidentId,
+            "silent": silent,
+            "liveVideoError": result.errorMessage,
+          },
+        );
+      }
+    },
   );
 }
 
@@ -633,11 +658,18 @@ class _TheEyeAppState extends State<TheEyeApp> {
   }
 
   Future<void> _handlePushNavigation(PushNavigationRequest request) async {
-    if (!PushDeepLinkRouter.allowedRoutes.contains(request.route)) return;
+    if (!PushDeepLinkRouter.isAllowedDestination(request.route)) return;
     await controller.handlePushNavigation(request);
     if (!mounted) return;
     final navigator = theEyeNavigatorKey.currentState;
     if (navigator == null) return;
+
+    if (request.route == "/incident-detail") {
+      final incidentId = request.incidentId;
+      if (incidentId == null || incidentId.isEmpty) return;
+      navigator.pushNamed("/incident-detail", arguments: incidentId);
+      return;
+    }
 
     if (request.route == "/active-emergency") {
       final currentRoute =
@@ -760,9 +792,13 @@ class _TheEyeAppState extends State<TheEyeApp> {
                   _reportRoute(context, ReportType.emergency),
               "/live-video": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments;
-                final autoStart =
-                    args is LiveVideoRouteArgs && args.autoStartStream;
-                return LiveEmergencyVideoScreen(autoStartStream: autoStart);
+                final routeArgs = args is LiveVideoRouteArgs ? args : null;
+                final autoStart = routeArgs?.autoStartStream ?? false;
+                return LiveEmergencyVideoScreen(
+                  autoStartStream: autoStart,
+                  incidentId: routeArgs?.incidentId,
+                  returnToActiveEmergency: routeArgs?.returnToActiveEmergency ?? false,
+                );
               },
               "/report/crime": (context) =>
                   _reportRoute(context, ReportType.crime),
@@ -1473,6 +1509,7 @@ class AppController extends SessionAccessor
     if (_lastPushNavigationKey == key) return;
     _lastPushNavigationKey = key;
 
+    if (request.route == "/incident-detail") return;
     if (request.route != "/active-emergency") return;
     final token = accessToken;
     if (token == null || token.isEmpty) return;
@@ -4336,15 +4373,34 @@ class _MissingPersonBroadcastScreenState
 }
 
 class LiveVideoRouteArgs {
-  const LiveVideoRouteArgs({this.autoStartStream = false});
+  const LiveVideoRouteArgs({
+    this.autoStartStream = false,
+    this.incidentId,
+    this.returnToActiveEmergency = false,
+  });
 
   final bool autoStartStream;
+  final String? incidentId;
+  final bool returnToActiveEmergency;
+}
+
+class LiveVideoReturnResult {
+  const LiveVideoReturnResult({this.errorMessage});
+
+  final String? errorMessage;
 }
 
 class LiveEmergencyVideoScreen extends StatefulWidget {
-  const LiveEmergencyVideoScreen({this.autoStartStream = false, super.key});
+  const LiveEmergencyVideoScreen({
+    this.autoStartStream = false,
+    this.incidentId,
+    this.returnToActiveEmergency = false,
+    super.key,
+  });
 
   final bool autoStartStream;
+  final String? incidentId;
+  final bool returnToActiveEmergency;
 
   @override
   State<LiveEmergencyVideoScreen> createState() =>
@@ -4376,6 +4432,10 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.incidentId != null && widget.incidentId!.isNotEmpty) {
+      activeIncidentId = widget.incidentId;
+      roomName = "eye-incident-${widget.incidentId}";
+    }
     liveVideoController.addListener(_onLiveVideoChanged);
     unawaited(_initializeLiveVideo());
   }
@@ -4622,6 +4682,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     );
   }
 
+  void _returnToActiveEmergency({String? errorMessage}) {
+    if (!widget.returnToActiveEmergency || !mounted) return;
+    Navigator.of(context).pop(LiveVideoReturnResult(errorMessage: errorMessage));
+  }
+
   void _logStartFlowInterrupt({
     required String reason,
     required String location,
@@ -4720,6 +4785,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         if (liveVideoController.errorMessage != null) {
           showAppSnackBar(context, liveVideoController.errorMessage!,
               isError: true);
+        }
+        if (widget.returnToActiveEmergency && activeIncidentId != null) {
+          _returnToActiveEmergency(
+            errorMessage:
+                "Unable to start live video. Your emergency remains active. Retry?",
+          );
         }
         return;
       }
@@ -4916,6 +4987,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                 ? connectMessage
                 : "$connectMessage Your emergency was still submitted.",
             isError: true);
+        if (widget.returnToActiveEmergency && activeIncidentId != null) {
+          _returnToActiveEmergency(
+            errorMessage:
+                "Unable to start live video. Your emergency remains active. Retry?",
+          );
+        }
         return;
       }
 
@@ -4974,6 +5051,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       showAppSnackBar(context,
           "Live video start timed out ($error). Your emergency was still submitted. Retry live video when ready.",
           isError: true);
+      if (widget.returnToActiveEmergency && activeIncidentId != null) {
+        _returnToActiveEmergency(
+          errorMessage:
+              "Unable to start live video. Your emergency remains active. Retry?",
+        );
+      }
     } on IncidentApiException catch (error) {
       if (!mounted || _disposed) return;
       _startupTrace.recordRequestId(error.requestId);
@@ -5049,8 +5132,14 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       if (!mounted) return;
       setState(() {
         liveSessionId = "";
-        activeIncidentId = null;
+        if (!widget.returnToActiveEmergency) {
+          activeIncidentId = null;
+        }
       });
+      if (widget.returnToActiveEmergency) {
+        _returnToActiveEmergency();
+        return;
+      }
       showAppSnackBar(context, "Live stream stopped.");
     } finally {
       if (mounted) setState(() => stoppingStream = false);
@@ -5761,6 +5850,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               final route = alert.deepLink ?? "/notifications";
               if (!context.mounted) return;
               if (route == "/notifications") return;
+              if (route == "/incident-detail") {
+                final incidentId = alert.incidentId;
+                if (incidentId == null || incidentId.isEmpty) return;
+                Navigator.of(context).pushNamed("/incident-detail", arguments: incidentId);
+                return;
+              }
+              if (route == "/active-emergency") {
+                final incidentId = alert.incidentId;
+                if (incidentId != null && incidentId.isNotEmpty) {
+                  await controller.activateActiveEmergency(incidentId);
+                  if (!context.mounted) return;
+                  Navigator.of(context).pushNamed(
+                    "/active-emergency/$incidentId",
+                    arguments: {"incidentId": incidentId},
+                  );
+                  return;
+                }
+              }
               Navigator.of(context).pushNamed(route);
             },
           );
