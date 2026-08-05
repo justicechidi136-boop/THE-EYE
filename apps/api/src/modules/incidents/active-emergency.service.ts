@@ -13,6 +13,75 @@ import {
 } from "./incident-presentation.mapper";
 import { isActiveIncidentStatus } from "./incident-lifecycle";
 
+function deriveLiveVideoCard(session: {
+  id: string;
+  status: string;
+  startedAt: Date | null;
+  endedAt: Date | null;
+} | null | undefined) {
+  if (!session) {
+    return {
+      sessionId: null as string | null,
+      status: "NotStarted",
+      displayState: "NotStarted" as const,
+      startedAt: null as string | null,
+      endedAt: null as string | null,
+      durationSeconds: null as number | null,
+      connectionStatus: "Not connected",
+      participantCount: 0,
+      retryAvailable: true,
+    };
+  }
+
+  const startedAt = session.startedAt?.toISOString() ?? null;
+  const endedAt = session.endedAt?.toISOString() ?? null;
+  const durationSeconds =
+    session.startedAt != null
+      ? Math.max(
+          0,
+          Math.floor(
+            ((session.endedAt ?? new Date()).getTime() - session.startedAt.getTime()) / 1000,
+          ),
+        )
+      : null;
+
+  let displayState:
+    | "NotStarted"
+    | "Connecting"
+    | "Streaming"
+    | "Disconnected"
+    | "RetryAvailable"
+    | "Completed" = "Connecting";
+  if (session.status === "Ended" || session.endedAt) {
+    displayState = "Completed";
+  } else if (session.status === "Active" && session.startedAt) {
+    displayState = "Streaming";
+  } else if (session.status === "Failed") {
+    displayState = "RetryAvailable";
+  } else if (session.status === "Disconnected") {
+    displayState = "Disconnected";
+  }
+
+  return {
+    sessionId: session.id,
+    status: session.status,
+    displayState,
+    startedAt,
+    endedAt,
+    durationSeconds,
+    connectionStatus:
+      displayState === "Streaming"
+        ? "Connected"
+        : displayState === "Completed"
+          ? "Ended"
+          : displayState === "RetryAvailable"
+            ? "Failed"
+            : "Not connected",
+    participantCount: displayState === "Streaming" ? 1 : 0,
+    retryAvailable: displayState !== "Streaming" && displayState !== "Connecting",
+  };
+}
+
 @Injectable()
 export class ActiveEmergencyService {
   constructor(
@@ -113,6 +182,10 @@ export class ActiveEmergencyService {
 
     const activeAssignment = incident.assignments[0] ?? null;
     const metadata = (incident.metadata ?? {}) as Record<string, unknown>;
+    const reporterConfidence =
+      (metadata.confidence as string | undefined) ??
+      (metadata.reporterConfidence as string | undefined) ??
+      null;
     const locationSource =
       (metadata.locationSource as string | undefined) ??
       (incident.manualLocationAdjusted ? "manual" : "gps");
@@ -147,6 +220,7 @@ export class ActiveEmergencyService {
         videos: incident.media.filter((m) => m.mediaType === "Video").length,
         voice: incident.media.filter((m) => m.mediaType === "Audio").length,
       },
+      reporterConfidence,
       status,
       displayLabel: presentation.displayLabel,
       statusVersion: incident.statusVersion,
@@ -178,14 +252,7 @@ export class ActiveEmergencyService {
           }
         : null,
       responderEtaMinutes: null,
-      liveVideo: liveSession
-        ? {
-            sessionId: liveSession.id,
-            status: liveSession.status,
-            startedAt: liveSession.startedAt?.toISOString() ?? null,
-            endedAt: liveSession.endedAt?.toISOString() ?? null,
-          }
-        : null,
+      liveVideo: deriveLiveVideoCard(liveSession),
       communityVerificationSummary: {
         witnessCount: incident.verifications.filter(
           (v) => v.method.includes("nearby") || v.method.includes("crowd"),

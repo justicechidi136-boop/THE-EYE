@@ -37,6 +37,7 @@ import {
   canReporterCancelDirectly,
   canReporterRequestCancellation,
   canTransitionIncident,
+  isActiveIncidentStatus,
   isTerminalIncidentStatus,
 } from "./incident-lifecycle";
 import { buildIncidentPresentation } from "./incident-presentation.mapper";
@@ -353,18 +354,60 @@ export class IncidentsService {
       void this.voiceTranscription.enqueueIncidentMediaTranscription(media.id).catch(() => undefined);
     }
 
+    const timelineMessage = evidenceTimelineMessage(dto.mediaType);
     await this.prisma.incidentTimeline.create({
       data: {
         incidentId: id,
         actorId: actor?.typ === "user" ? actor.sub : undefined,
         actorType: actor?.typ ?? "system",
         eventType: "incident.media_attached",
-        message: `${dto.mediaType} evidence attached to incident.`,
-        metadata: { mediaId: media.id, fileHash: dto.fileHash },
+        message: timelineMessage,
+        metadata: { mediaId: media.id, fileHash: dto.fileHash, mediaType: dto.mediaType },
       },
     });
 
     return media;
+  }
+
+  async submitWrittenUpdate(
+    id: string,
+    body: { text: string; clientActionId?: string },
+    actor?: JwtPayload,
+  ) {
+    const text = body.text?.trim();
+    if (!text) throw new BadRequestException("Update text is required");
+
+    const incident = await this.get(id, actor);
+    if (actor?.typ !== "user" || incident.reporterId !== actor.sub) {
+      throw new ForbiddenException("Only the reporter can add updates");
+    }
+    if (!isActiveIncidentStatus(incident.status as IncidentStatus)) {
+      throw new BadRequestException("Cannot add updates to a closed incident");
+    }
+
+    await this.prisma.incidentTimeline.create({
+      data: {
+        incidentId: id,
+        actorId: actor.sub,
+        actorType: "user",
+        eventType: "incident.reporter_update",
+        message: "Reporter added additional information.",
+        metadata: {
+          text,
+          clientActionId: body.clientActionId,
+        },
+      },
+    });
+
+    await this.prisma.incident.update({
+      where: { id },
+      data: {
+        updatedAt: new Date(),
+        statusVersion: { increment: 1 },
+      },
+    });
+
+    return { ok: true };
   }
 
   async get(id: string, actor?: JwtPayload) {
@@ -1116,6 +1159,19 @@ export class IncidentsService {
     }
 
     return this.prisma.incident.update({ where: { id }, data: data as never });
+  }
+}
+
+function evidenceTimelineMessage(mediaType: string): string {
+  switch (mediaType) {
+    case "Image":
+      return "Reporter uploaded a photo.";
+    case "Video":
+      return "Reporter uploaded a video.";
+    case "Audio":
+      return "Reporter added a voice update.";
+    default:
+      return "Reporter uploaded evidence.";
   }
 }
 
