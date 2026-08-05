@@ -10,6 +10,7 @@ import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { ConfirmIncidentMediaDto, PresignIncidentMediaDto, ReportIncidentDto, UpdateIncidentLocationDto } from "./dto/report-incident.dto";
 import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { IncidentsService } from "./incidents.service";
+import { ActiveEmergencyService } from "./active-emergency.service";
 
 class UpdateIncidentStatusDto {
   status!: IncidentStatus;
@@ -25,7 +26,10 @@ class AssignIncidentDto {
 @ApiTags("incidents")
 @Controller("incidents")
 export class IncidentsController {
-  constructor(private readonly incidentsService: IncidentsService) {}
+  constructor(
+    private readonly incidentsService: IncidentsService,
+    private readonly activeEmergencyService: ActiveEmergencyService,
+  ) {}
 
   @Post("report")
   @UseGuards(OptionalJwtAuthGuard)
@@ -138,12 +142,28 @@ export class IncidentsController {
     return this.incidentsService.getTimeline(id, request.user);
   }
 
+  @Get(":id/active-emergency")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:read")
+  activeEmergency(@Param("id") id: string, @Req() request: any) {
+    return this.activeEmergencyService.getActiveEmergency(id, request.user);
+  }
+
   @Post(":id/cancel")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
   @RequirePermissions("incident:create")
   cancel(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
     return this.incidentsService.cancelEmergency(id, body.reason, request.user);
+  }
+
+  @Post(":id/request-cancellation")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:create")
+  requestCancellation(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
+    return this.incidentsService.requestCancellation(id, body.reason, request.user);
   }
 
   @Get(":id/media/:mediaId/view")

@@ -7,7 +7,7 @@
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
+import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType, ResolutionSource } from "@the-eye/shared";
 import { hashPassword, randomToken } from "../../common/auth/crypto";
 import { createS3PresignedPutUrl, createS3PresignedGetUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
 import type { JwtPayload } from "../../common/auth/jwt";
@@ -32,7 +32,13 @@ import { EtaService } from "../dispatch/eta.service";
 import { DispatchService } from "../dispatch/dispatch.service";
 import { EmergencyClassificationService } from "../dispatch/emergency-classification.service";
 import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
-import { canTransitionIncident } from "./incident-lifecycle";
+import {
+  canActorTransitionIncident,
+  canReporterCancelDirectly,
+  canReporterRequestCancellation,
+  canTransitionIncident,
+} from "./incident-lifecycle";
+import { buildIncidentPresentation } from "./incident-presentation.mapper";
 import { JurisdictionResolutionService } from "./jurisdiction-resolution.service";
 import { emptyOptionalString, runNonCriticalWrite } from "./incident-write-side-effects";
 import { incidentHasSubmissionCoordinates } from "./location-status";
@@ -384,43 +390,36 @@ export class IncidentsService {
 
     const incident = await this.get(id, actor);
     const currentStatus = incident.status as IncidentStatus;
-    if (!canTransitionIncident(currentStatus, status)) throw new BadRequestException(`Incident cannot move from ${currentStatus} to ${status}`);
+    if (!canTransitionIncident(currentStatus, status)) {
+      throw new BadRequestException(`Incident cannot move from ${currentStatus} to ${status}`);
+    }
+    if (!canActorTransitionIncident(actor, currentStatus, status)) {
+      throw new ForbiddenException(`You are not allowed to transition incident from ${currentStatus} to ${status}`);
+    }
 
-    const updated = await this.prisma.incident.update({
-      where: { id },
-      data: {
-        status: status as never,
-        resolvedAt: status === IncidentStatus.Resolved ? new Date() : undefined,
-        closedAt: status === IncidentStatus.Closed ? new Date() : undefined,
-        timeline: {
-          create: {
-            actorId: actor?.typ === "user" ? actor.sub : undefined,
-            actorType: actor?.typ ?? "system",
-            eventType: "incident.status_changed",
-            message: note ?? `Status changed from ${currentStatus} to ${status}`,
-            metadata: { fromStatus: currentStatus, toStatus: status },
-          },
-        },
-        statusHistory: {
-          create: {
-            fromStatus: currentStatus as never,
-            toStatus: status as never,
-            changedById: actor?.typ === "user" ? actor.sub : undefined,
-            note: note ?? `Status changed from ${currentStatus} to ${status}`,
-          },
-        },
-      } as never,
+    const resolutionSource =
+      status === IncidentStatus.Resolved ? this.inferResolutionSource(actor) : undefined;
+
+    const updated = await this.transitionIncidentStatus(id, incident, status, {
+      note,
+      actor,
+      resolutionSource,
     });
 
-    const action = status === IncidentStatus.Closed ? "incident.closed" : status === IncidentStatus.FalseReport ? "incident.marked_false" : "incident.status_changed";
+    const action =
+      status === IncidentStatus.Closed
+        ? "incident.closed"
+        : status === IncidentStatus.FalseReport
+          ? "incident.marked_false"
+          : "incident.status_changed";
     await this.audit.record({
       actor,
       action,
       entityType: "incidents",
       entityId: id,
       reason: note,
-      beforeState: { status: currentStatus },
-      afterState: { status },
+      beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
+      afterState: { status, statusVersion: updated.statusVersion },
       metadata: { fromStatus: currentStatus, toStatus: status },
     });
 
@@ -567,11 +566,90 @@ export class IncidentsService {
     if (actor?.typ === "user" && incident.reporterId !== actor.sub) {
       throw new ForbiddenException("Only the reporting citizen can cancel this emergency");
     }
-    const allowed = [IncidentStatus.Submitted, IncidentStatus.Received, IncidentStatus.Verifying, IncidentStatus.Verified, IncidentStatus.Assigned];
-    if (!allowed.includes(incident.status as IncidentStatus)) {
-      throw new BadRequestException(`Incident in status ${incident.status} cannot be cancelled`);
+
+    const currentStatus = incident.status as IncidentStatus;
+    if (currentStatus === IncidentStatus.CancelledByReporter) {
+      return {
+        ...incident,
+        ...buildIncidentPresentation(incident as Parameters<typeof buildIncidentPresentation>[0], actor),
+        duplicate: true,
+      };
     }
-    return this.updateStatus(id, IncidentStatus.Closed, reason, actor);
+    if (!canReporterCancelDirectly(currentStatus)) {
+      if (canReporterRequestCancellation(currentStatus)) {
+        throw new BadRequestException(
+          `Incident in status ${currentStatus} requires a cancellation request rather than direct cancellation`,
+        );
+      }
+      throw new BadRequestException(`Incident in status ${currentStatus} cannot be cancelled`);
+    }
+
+    const updated = await this.transitionIncidentStatus(id, incident, IncidentStatus.CancelledByReporter, {
+      note: reason,
+      actor,
+      cancellationReason: reason,
+      timelineEventType: "incident.cancelled_by_reporter",
+    });
+
+    await this.audit.record({
+      actor,
+      action: "incident.cancelled_by_reporter",
+      entityType: "incidents",
+      entityId: id,
+      reason,
+      beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
+      afterState: { status: IncidentStatus.CancelledByReporter, statusVersion: updated.statusVersion },
+      metadata: { fromStatus: currentStatus, toStatus: IncidentStatus.CancelledByReporter },
+    });
+
+    if (incident.reporterId) {
+      void this.notifications
+        .enqueue({
+          userId: incident.reporterId,
+          incidentId: id,
+          title: "Emergency cancelled",
+          body: "Your emergency report was cancelled and remains in your history.",
+        })
+        .catch(() => undefined);
+    }
+
+    return updated;
+  }
+
+  async requestCancellation(id: string, reason: string, actor?: JwtPayload) {
+    if (!reason?.trim()) throw new BadRequestException("Cancellation reason is required");
+    const incident = await this.get(id, actor);
+    if (actor?.typ === "user" && incident.reporterId !== actor.sub) {
+      throw new ForbiddenException("Only the reporting citizen can request cancellation");
+    }
+
+    const currentStatus = incident.status as IncidentStatus;
+    if (incident.cancellationRequestedAt || currentStatus === IncidentStatus.CancellationRequested) {
+      throw new BadRequestException("Cancellation has already been requested for this incident");
+    }
+    if (!canReporterRequestCancellation(currentStatus)) {
+      throw new BadRequestException(`Incident in status ${currentStatus} cannot request cancellation`);
+    }
+
+    const updated = await this.transitionIncidentStatus(id, incident, IncidentStatus.CancellationRequested, {
+      note: reason,
+      actor,
+      cancellationReason: reason,
+      timelineEventType: "incident.cancellation_requested",
+    });
+
+    await this.audit.record({
+      actor,
+      action: "incident.cancellation_requested",
+      entityType: "incidents",
+      entityId: id,
+      reason,
+      beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
+      afterState: { status: IncidentStatus.CancellationRequested, statusVersion: updated.statusVersion },
+      metadata: { fromStatus: currentStatus, toStatus: IncidentStatus.CancellationRequested },
+    });
+
+    return updated;
   }
 
   async accessMedia(incidentId: string, mediaId: string, action: "view" | "download", actor?: JwtPayload) {
@@ -799,6 +877,77 @@ export class IncidentsService {
     if (actor.role === AdminRoleName.LgaAdmin || actor.role === AdminRoleName.CallCenterAgent || actor.role === AdminRoleName.OversightAuditor) return { country: actor.country, state: actor.state, lga: actor.lga };
     if (actor.role === AdminRoleName.AgencyAdmin || actor.role === AdminRoleName.PoliceSecurityOfficer) return { assignedAgencyId: actor.agencyId ?? "__no_agency__" };
     return { id: "__deny_all__" };
+  }
+
+  private inferResolutionSource(actor?: JwtPayload): ResolutionSource {
+    if (actor?.typ === "user") return ResolutionSource.Reporter;
+    if (actor?.role === AdminRoleName.CallCenterAgent) return ResolutionSource.Dispatcher;
+    if (actor?.typ === "admin") return ResolutionSource.Administrator;
+    return ResolutionSource.Agency;
+  }
+
+  private async transitionIncidentStatus(
+    id: string,
+    incident: { status: unknown; statusVersion?: number },
+    nextStatus: IncidentStatus,
+    options: {
+      note?: string;
+      actor?: JwtPayload;
+      cancellationReason?: string;
+      resolutionSource?: ResolutionSource;
+      timelineEventType?: string;
+    },
+  ) {
+    const currentStatus = incident.status as IncidentStatus;
+    const now = new Date();
+    const data: Record<string, unknown> = {
+      status: nextStatus,
+      statusVersion: { increment: 1 },
+      lastTrustedUpdateAt: now,
+      timeline: {
+        create: {
+          actorId: options.actor?.typ === "user" ? options.actor.sub : undefined,
+          actorType: options.actor?.typ ?? "system",
+          eventType: options.timelineEventType ?? "incident.status_changed",
+          message: options.note ?? `Status changed from ${currentStatus} to ${nextStatus}`,
+          metadata: { fromStatus: currentStatus, toStatus: nextStatus },
+        },
+      },
+      statusHistory: {
+        create: {
+          fromStatus: currentStatus as never,
+          toStatus: nextStatus as never,
+          changedById: options.actor?.sub,
+          note: options.note ?? `Status changed from ${currentStatus} to ${nextStatus}`,
+        },
+      },
+    };
+
+    if (nextStatus === IncidentStatus.Resolved) {
+      data.resolvedAt = now;
+      data.resolutionReason = options.note;
+      data.resolvedById = options.actor?.sub;
+      data.resolutionSource = options.resolutionSource ?? this.inferResolutionSource(options.actor);
+    }
+    if (nextStatus === IncidentStatus.Closed) {
+      data.closedAt = now;
+      data.closureReviewAt = now;
+    }
+    if (nextStatus === IncidentStatus.CancelledByReporter) {
+      data.cancelledAt = now;
+      data.cancelledById = options.actor?.sub;
+      data.cancellationReason = options.cancellationReason ?? options.note;
+    }
+    if (nextStatus === IncidentStatus.CancellationRequested) {
+      data.cancellationRequestedAt = now;
+      data.cancellationRequestedById = options.actor?.sub;
+      data.cancellationReason = options.cancellationReason ?? options.note;
+    }
+    if (nextStatus === IncidentStatus.ExpiredAfterReview) {
+      data.closureReviewAt = now;
+    }
+
+    return this.prisma.incident.update({ where: { id }, data: data as never });
   }
 }
 

@@ -9,6 +9,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { VerificationModule } from "../verification/verification.module";
 import { DispatchModule } from "../dispatch/dispatch.module";
 import { VoiceAttachmentsModule } from "../voice-attachments/voice-attachments.module";
+import { ActiveEmergencyService } from "./active-emergency.service";
 import { IncidentsController } from "./incidents.controller";
 import { IncidentsService } from "./incidents.service";
 import { CaseManagementController } from "./case-management.controller";
@@ -21,6 +22,7 @@ import { JurisdictionCorrectionService } from "./jurisdiction-correction.service
   controllers: [IncidentsController, CaseManagementController],
   providers: [
     IncidentsService,
+    ActiveEmergencyService,
     CaseManagementService,
     JurisdictionResolutionService,
     JurisdictionCorrectionService,
@@ -29,6 +31,6 @@ import { JurisdictionCorrectionService } from "./jurisdiction-correction.service
     PermissionsGuard,
     IncidentScopeGuard,
   ],
-  exports: [IncidentsService, JurisdictionResolutionService, JurisdictionCorrectionService],
+  exports: [IncidentsService, ActiveEmergencyService, JurisdictionResolutionService, JurisdictionCorrectionService],
 })
 export class IncidentsModule {}

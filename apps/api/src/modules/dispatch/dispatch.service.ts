@@ -772,7 +772,7 @@ export class DispatchService {
       nextStatus = IncidentStatus.Responding;
     }
     if (status === IncidentAssignmentStatus.Arrived || status === IncidentAssignmentStatus.InProgress) {
-      nextStatus = IncidentStatus.Responding;
+      nextStatus = IncidentStatus.UnderControl;
     }
     if (status === IncidentAssignmentStatus.Completed) nextStatus = IncidentStatus.Resolved;
 
