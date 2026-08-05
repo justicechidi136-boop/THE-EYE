@@ -827,6 +827,19 @@
 
 ---
 
+## Phase 3.5 — Active Emergency reporter experience (2026-08-05)
+
+| Item | Status | Evidence |
+|------|:------:|----------|
+| Evidence upload from Active Emergency | PASS (code) | `active_emergency_evidence_actions.dart`, presign/confirm reuse |
+| Voice update on Active Emergency | PASS (code) | VoiceRecorder + Audio presign |
+| Live video returns to Active Emergency | PASS (code) | `LiveVideoRouteArgs.returnToActiveEmergency` |
+| Notification schema v1 | PASS (code) | `notification-routing.schema.ts`, `NOTIFICATION_SCHEMA_V1.md` |
+| Reporter push/inbox routing | PASS (code) | No `/tracking` for reporter incident notifications |
+| Staging device QA | NOT TESTED | DevOps deploy pending |
+
+---
+
 ## Maintenance instructions
 
 1. After every fix, update the row's **Status**, **Files Changed**, **Automated Test**, **Manual Device Test**, **Staging Verified**, and add a **Changelog** entry.

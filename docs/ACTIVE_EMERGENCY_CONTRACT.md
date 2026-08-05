@@ -65,6 +65,10 @@ Returned when status is in the active set: `Submitted`, `Received`, `Verifying`,
   ],
   "allowedActions": {
     "addEvidence": true,
+    "uploadPhoto": true,
+    "uploadVideo": true,
+    "uploadVoice": true,
+    "addUpdate": true,
     "cancel": true,
     "requestCancellation": false,
     "confirmResolved": false,
@@ -148,4 +152,6 @@ Implementation: `apps/api/src/modules/incidents/incident-presentation.mapper.ts`
 |--------|------|---------|
 | POST | `/v1/incidents/:id/cancel` | Pre-assignment cancel |
 | POST | `/v1/incidents/:id/request-cancellation` | Post-assignment cancel request |
+| POST | `/v1/incidents/:id/updates` | Reporter written update (timeline) |
+| POST | `/v1/incidents/:id/reporter-status` | Reporter resolution feedback |
 | GET | `/v1/incidents/:id` | Full incident record (history/details) |
