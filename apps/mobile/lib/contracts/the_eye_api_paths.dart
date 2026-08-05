@@ -38,6 +38,9 @@ abstract final class TheEyeApiPaths {
       "/incidents/$incidentId/request-cancellation";
   static String incidentReporterStatus(String incidentId) =>
       "/incidents/$incidentId/reporter-status";
+
+  static String incidentUpdates(String incidentId) =>
+      "/incidents/$incidentId/updates";
   static String incidentActiveEmergency(String incidentId) =>
       "/incidents/$incidentId/active-emergency";
   static const health = "/health";
