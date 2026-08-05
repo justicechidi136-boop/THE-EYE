@@ -147,6 +147,7 @@ describe("incident lifecycle contract", () => {
       expect(typeof presentation.allowedActions.cancel).toBe("boolean");
       expect(typeof presentation.allowedActions.requestCancellation).toBe("boolean");
       expect(typeof presentation.allowedActions.confirmResolved).toBe("boolean");
+      expect(typeof presentation.allowedActions.confirmStillOngoing).toBe("boolean");
     }
   });
 
@@ -479,6 +480,110 @@ describe("ActiveEmergencyService contract", () => {
 
     const result = await service.getActiveEmergency("inc-1", reporter);
     expect(result.allowedActions.confirmResolved).toBe(true);
+    expect(result.allowedActions.confirmStillOngoing).toBe(true);
     expect(result.allowedActions.requestCancellation).toBe(true);
+  });
+});
+
+describe("IncidentsService reporter status", () => {
+  const baseIncident = {
+    id: "inc-1",
+    reporterId: "user-1",
+    statusVersion: 1,
+    metadata: {},
+    statusHistory: [],
+  };
+
+  it("records StillOngoing for reporter owner", async () => {
+    const { service, prisma, audit, incidentUpdate } = buildIncidentsService({
+      prisma: {
+        incidentAssignment: { findFirst: jest.fn().mockResolvedValue({ id: "a1" }) },
+      },
+    });
+    prisma.incident.findFirst.mockResolvedValue({
+      ...baseIncident,
+      status: IncidentStatus.Responding,
+    });
+    incidentUpdate.mockResolvedValue({
+      ...baseIncident,
+      status: IncidentStatus.Responding,
+      statusVersion: 2,
+    });
+
+    await service.submitReporterStatus(
+      "inc-1",
+      { status: "StillOngoing", note: "Still unsafe", clientActionId: "act-1" },
+      reporter,
+    );
+
+    expect(incidentUpdate).toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "incident.reporter_still_ongoing" }),
+    );
+  });
+
+  it("rejects cross-user reporter status", async () => {
+    const { service, prisma } = buildIncidentsService();
+    prisma.incident.findFirst.mockResolvedValue(null);
+    await expect(
+      service.submitReporterStatus(
+        "inc-1",
+        { status: "Unsure", clientActionId: "act-2" },
+        otherCitizen,
+      ),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it("is idempotent by clientActionId", async () => {
+    const { service, prisma, incidentUpdate } = buildIncidentsService({
+      prisma: {
+        incidentAssignment: { findFirst: jest.fn().mockResolvedValue(null) },
+      },
+    });
+    prisma.incident.findFirst.mockResolvedValue({
+      ...baseIncident,
+      status: IncidentStatus.Verified,
+      metadata: {
+        reporterStatusActions: {
+          "act-dup": { status: "Unsure", recordedAt: new Date().toISOString() },
+        },
+      },
+    });
+
+    await service.submitReporterStatus(
+      "inc-1",
+      { status: "Unsure", clientActionId: "act-dup" },
+      reporter,
+    );
+    expect(incidentUpdate).not.toHaveBeenCalled();
+  });
+
+  it("creates review signal for assigned Resolved reporter status", async () => {
+    const { service, prisma, incidentUpdate } = buildIncidentsService({
+      prisma: {
+        incidentAssignment: {
+          findFirst: jest.fn().mockResolvedValue({ id: "assign-1", status: "Accepted" }),
+        },
+      },
+    });
+    prisma.incident.findFirst.mockResolvedValue({
+      ...baseIncident,
+      status: IncidentStatus.Responding,
+    });
+    incidentUpdate.mockResolvedValue({
+      ...baseIncident,
+      status: IncidentStatus.Responding,
+      statusVersion: 2,
+    });
+
+    await service.submitReporterStatus(
+      "inc-1",
+      { status: "Resolved", note: "Looks clear", clientActionId: "act-3" },
+      reporter,
+    );
+
+    expect(incidentUpdate.mock.calls[0][0].data.timeline.create.eventType).toBe(
+      "incident.reporter_resolution_signal",
+    );
   });
 });

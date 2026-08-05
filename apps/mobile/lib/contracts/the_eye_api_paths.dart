@@ -34,6 +34,12 @@ abstract final class TheEyeApiPaths {
       "/incidents/$incidentId/timeline";
   static String incidentCancel(String incidentId) =>
       "/incidents/$incidentId/cancel";
+  static String incidentRequestCancellation(String incidentId) =>
+      "/incidents/$incidentId/request-cancellation";
+  static String incidentReporterStatus(String incidentId) =>
+      "/incidents/$incidentId/reporter-status";
+  static String incidentActiveEmergency(String incidentId) =>
+      "/incidents/$incidentId/active-emergency";
   static const health = "/health";
   static const authLogin = "/auth/login";
   static const authRegister = "/auth/register";

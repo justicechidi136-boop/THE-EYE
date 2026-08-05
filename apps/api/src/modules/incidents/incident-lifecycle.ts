@@ -23,6 +23,7 @@ export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]
   ],
   [IncidentStatus.Verified]: [
     IncidentStatus.Assigned,
+    IncidentStatus.Resolved,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
     IncidentStatus.ExpiredAfterReview,

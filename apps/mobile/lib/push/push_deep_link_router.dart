@@ -11,6 +11,7 @@ abstract final class PushDeepLinkRouter {
     "/live-video",
     "/report/emergency",
     "/active-emergency",
+    "/active-emergencies",
     "/support",
     "/support/chats",
     "/support/conversation",

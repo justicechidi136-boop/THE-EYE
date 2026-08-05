@@ -25,6 +25,7 @@ export interface IncidentAllowedActions {
   cancel: boolean;
   requestCancellation: boolean;
   confirmResolved: boolean;
+  confirmStillOngoing: boolean;
   addWrittenUpdate: boolean;
   updateLocation: boolean;
   retryLiveVideo: boolean;
@@ -181,6 +182,13 @@ function deriveAllowedActions(
       isReporter &&
       (status === IncidentStatus.UnderControl ||
         status === IncidentStatus.Responding) &&
+      hasActiveAssignment,
+    confirmStillOngoing:
+      active &&
+      isReporter &&
+      (status === IncidentStatus.UnderControl ||
+        status === IncidentStatus.Responding ||
+        status === IncidentStatus.Assigned) &&
       hasActiveAssignment,
     addWrittenUpdate: active && isReporter,
     updateLocation: active && isReporter,

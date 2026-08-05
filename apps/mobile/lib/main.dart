@@ -40,6 +40,8 @@ import "incidents/incident_location_tracker.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
 import "emergency/active_emergency_screen.dart";
+import "emergency/active_emergency_navigation.dart";
+import "emergency/active_emergencies_selector_screen.dart";
 import "emergency/live_video_startup_phase.dart";
 import "emergency/active_emergency_service.dart";
 import "emergency/active_emergency_store.dart";
@@ -133,6 +135,48 @@ AppController appOf(BuildContext context) {
   final session = AppScope.of(context);
   assert(session is AppController, "AppController required in AppScope");
   return session as AppController;
+}
+
+Widget _buildActiveEmergencyRoute(BuildContext context, {String? routeIncidentId}) {
+  final args = ModalRoute.of(context)?.settings.arguments;
+  final incidentId = routeIncidentId ??
+      (args is Map ? args["incidentId"] as String? : args as String?) ??
+      "";
+  final silent = args is Map ? args["silent"] == true : false;
+  final controller = appOf(context);
+  final token = controller.accessToken ?? "";
+  if (incidentId.isNotEmpty) {
+    unawaited(controller.startIncidentLocationTracking(incidentId));
+  }
+  return ActiveEmergencyScreen(
+    incidentId: incidentId,
+    accessToken: token,
+    service: controller.activeEmergencyService,
+    silent: silent,
+    onStopLocationTracking: () async => controller.stopIncidentLocationTracking(),
+  );
+}
+
+Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
+  final name = settings.name ?? "";
+  if (name.startsWith("/active-emergency/") &&
+      name != "/active-emergency/none") {
+    final incidentId = name.substring("/active-emergency/".length).trim();
+    if (incidentId.isEmpty) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (context) => const NoActiveEmergencyScreen(),
+      );
+    }
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (context) => _buildActiveEmergencyRoute(
+        context,
+        routeIncidentId: incidentId,
+      ),
+    );
+  }
+  return null;
 }
 
 Uri mapsUri(double latitude, double longitude) {
@@ -598,17 +642,33 @@ class _TheEyeAppState extends State<TheEyeApp> {
     if (request.route == "/active-emergency") {
       final currentRoute =
           ModalRoute.of(theEyeNavigatorKey.currentContext!)?.settings.name;
-      if (currentRoute == "/active-emergency") return;
-      final incidentId = request.incidentId ??
-          (await controller.activeEmergencyService
-                  .restoreActiveEmergency(controller.accessToken ?? ""))
-              ?.incidentId;
-      if (incidentId == null || incidentId.isEmpty) {
-        navigator.pushNamed("/tracking");
+      if (currentRoute != null &&
+          currentRoute.startsWith("/active-emergency")) {
         return;
       }
+      final incidentId = request.incidentId;
+      if (incidentId == null || incidentId.isEmpty) {
+        navigator.pushNamed("/active-emergencies");
+        return;
+      }
+      final token = controller.accessToken;
+      if (token != null && token.isNotEmpty) {
+        try {
+          await controller.activeEmergencyService.fetchActiveEmergencyContract(
+            incidentId,
+            token,
+            silent: request.silent,
+          );
+        } catch (_) {
+          await controller.activateActiveEmergency(
+            incidentId,
+            silent: request.silent,
+          );
+        }
+      }
+      unawaited(controller.startIncidentLocationTracking(incidentId));
       navigator.pushNamedAndRemoveUntil(
-        request.route,
+        "/active-emergency/$incidentId",
         (existing) => existing.isFirst || existing.settings.name == "/home",
         arguments: {
           "incidentId": incidentId,
@@ -658,6 +718,7 @@ class _TheEyeAppState extends State<TheEyeApp> {
             theme: buildTheme(controller.highContrastMode),
             darkTheme: buildDarkTheme(controller.highContrastMode),
             themeMode: controller.themeMode,
+            onGenerateRoute: _onGenerateRoute,
             builder: (context, child) {
               if (child == null) {
                 return const StartupSplashScreen();
@@ -721,27 +782,15 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/police-stations": (_) => const NearbyPoliceStationsScreen(),
               "/notifications": (_) => const NotificationsScreen(),
               "/tracking": (_) => const IncidentTrackingScreen(),
-              "/active-emergency": (context) {
-                final args = ModalRoute.of(context)?.settings.arguments;
-                final incidentId = args is Map
-                    ? args["incidentId"] as String?
-                    : args as String?;
-                final silent = args is Map ? args["silent"] == true : false;
-                final controller = appOf(context);
-                final token = controller.accessToken ?? "";
-                if (incidentId != null && incidentId.isNotEmpty) {
-                  unawaited(
-                      controller.startIncidentLocationTracking(incidentId));
-                }
-                return ActiveEmergencyScreen(
-                  incidentId: incidentId ?? "",
-                  accessToken: token,
-                  service: controller.activeEmergencyService,
-                  silent: silent,
-                  onStopLocationTracking: () async =>
-                      controller.stopIncidentLocationTracking(),
-                );
-              },
+              "/active-emergency": (context) => _buildActiveEmergencyRoute(context),
+              "/active-emergencies": (context) => FutureBuilder(
+                    future: appOf(context).activeEmergencyService.listActiveReferences(),
+                    builder: (context, snapshot) {
+                      final refs = snapshot.data ?? const [];
+                      return ActiveEmergenciesSelectorScreen(references: refs);
+                    },
+                  ),
+              "/active-emergency/none": (_) => const NoActiveEmergencyScreen(),
               "/incident-detail": (context) {
                 final incidentId =
                     ModalRoute.of(context)?.settings.arguments as String? ?? "";
@@ -1029,7 +1078,8 @@ ThemeData buildDarkTheme(bool highContrast) {
   );
 }
 
-class AppController extends SessionAccessor {
+class AppController extends SessionAccessor
+    implements ActiveEmergencyNavigationController {
   AppController({
     required IncidentSubmissionService submissionService,
     required ConnectivityService connectivity,
@@ -2022,6 +2072,14 @@ class AppController extends SessionAccessor {
           _shouldTrackIncidentLocation(draft.type)) {
         unawaited(startIncidentLocationTracking(result.incidentId!));
       }
+      if (result.incidentId != null) {
+        unawaited(
+          activateActiveEmergency(
+            result.incidentId!,
+            silent: result.silent || draft.silent,
+          ),
+        );
+      }
       unawaited(deleteComposeDraft(draft.clientSubmissionId));
       unawaited(loadIncidentsFromApi());
       unawaited(loadNotificationsFromApi(refresh: true));
@@ -2054,9 +2112,12 @@ class AppController extends SessionAccessor {
     for (final result in results) {
       if (result.isSuccess && result.incidentId != null) {
         unawaited(loadIncidentsFromApi());
-        if (result.silent) {
-          unawaited(activateActiveEmergency(result.incidentId!, silent: true));
-        }
+        unawaited(
+          activateActiveEmergency(
+            result.incidentId!,
+            silent: result.silent,
+          ),
+        );
       }
     }
 
@@ -2141,9 +2202,12 @@ class _SplashScreenState extends State<SplashScreen> {
       final active = await controller.restoreActiveEmergency();
       if (active != null && mounted) {
         await controller.startIncidentLocationTracking(active.incidentId);
-        Navigator.of(context).pushReplacementNamed(
-          "/active-emergency",
-          arguments: {"incidentId": active.incidentId, "silent": active.silent},
+        await ActiveEmergencyNavigation.open(
+          context,
+          controller,
+          incidentId: active.incidentId,
+          silent: active.silent,
+          replace: true,
         );
         StartupDiagnostics.checkpoint("STARTUP 5: /active-emergency visible");
         return;
@@ -4121,7 +4185,7 @@ class _ReportScreenState extends State<ReportScreen> {
         showAppSnackBar(
             context,
             urgent
-                ? "Emergency sent. Track status in Incident status."
+                ? ActiveEmergencyNavigation.receivedCopy
                 : "${widget.type.label} report submitted.");
       } else if (result.isQueued || result.canRetry) {
         showAppSnackBar(context,
@@ -4133,7 +4197,11 @@ class _ReportScreenState extends State<ReportScreen> {
         return;
       }
 
-      Navigator.of(context).pushNamed("/tracking");
+      await ActiveEmergencyNavigation.openAfterSubmission(
+        context,
+        controller,
+        result,
+      );
     } on TimeoutException {
       if (!context.mounted) return;
       setState(() => submitting = false);
@@ -4209,7 +4277,11 @@ class _MissingPersonBroadcastScreenState
     if (result.isSuccess || result.isQueued || result.canRetry) {
       showAppSnackBar(
           context, result.userMessage ?? "Missing person report submitted.");
-      Navigator.of(context).pushNamed("/tracking");
+      await ActiveEmergencyNavigation.openAfterSubmission(
+        context,
+        controller,
+        result,
+      );
       return;
     }
 
@@ -5102,7 +5174,11 @@ class _StolenVehicleBroadcastScreenState
     if (result.isSuccess || result.isQueued || result.canRetry) {
       showAppSnackBar(
           context, result.userMessage ?? "Stolen vehicle report submitted.");
-      Navigator.of(context).pushNamed("/tracking");
+      await ActiveEmergencyNavigation.openAfterSubmission(
+        context,
+        controller,
+        result,
+      );
       return;
     }
 
@@ -8116,9 +8192,11 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
           parentContext,
           sosLocationUserMessage(access, submitted: true),
         );
-        Navigator.of(parentContext).pushNamed(
-          "/active-emergency",
-          arguments: {"incidentId": incidentId, "silent": silent},
+        await ActiveEmergencyNavigation.open(
+          parentContext,
+          controller,
+          incidentId: incidentId,
+          silent: silent,
         );
         return;
       }
@@ -8126,7 +8204,7 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
         parentContext,
         sosLocationUserMessage(access, submitted: true),
       );
-      Navigator.of(parentContext).pushNamed("/tracking");
+      await ActiveEmergencyNavigation.open(parentContext, controller);
       return;
     }
 
