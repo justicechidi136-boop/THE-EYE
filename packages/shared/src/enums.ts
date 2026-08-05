@@ -196,9 +196,23 @@ export enum IncidentStatus {
   Verified = "Verified",
   Assigned = "Assigned",
   Responding = "Responding",
+  UnderControl = "UnderControl",
+  CancellationRequested = "CancellationRequested",
   Resolved = "Resolved",
   Closed = "Closed",
   FalseReport = "FalseReport",
+  CancelledByReporter = "CancelledByReporter",
+  ExpiredAfterReview = "ExpiredAfterReview",
+}
+
+/** Who or what recorded the terminal resolution — not a duplicate lifecycle status. */
+export enum ResolutionSource {
+  Agency = "Agency",
+  Dispatcher = "Dispatcher",
+  Administrator = "Administrator",
+  Reporter = "Reporter",
+  Community = "Community",
+  SystemReview = "SystemReview",
 }
 
 export enum IncidentPriority {

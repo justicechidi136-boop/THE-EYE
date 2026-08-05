@@ -28,9 +28,22 @@ enum IncidentStatus {
   Verified
   Assigned
   Responding
+  UnderControl
+  CancellationRequested
   Resolved
   Closed
   FalseReport
+  CancelledByReporter
+  ExpiredAfterReview
+}
+
+enum ResolutionSource {
+  Agency
+  Dispatcher
+  Administrator
+  Reporter
+  Community
+  SystemReview
 }
 
 enum IncidentPriority {
@@ -594,6 +607,17 @@ model Incident {
   updatedAt                DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   resolvedAt               DateTime?                             @map("resolved_at") @db.Timestamptz(6)
   closedAt                 DateTime?                             @map("closed_at") @db.Timestamptz(6)
+  resolutionSource         ResolutionSource?                     @map("resolution_source")
+  resolvedById             String?                               @map("resolved_by_id") @db.Uuid
+  resolutionReason         String?                               @map("resolution_reason")
+  cancellationRequestedAt  DateTime?                             @map("cancellation_requested_at") @db.Timestamptz(6)
+  cancellationRequestedById String?                              @map("cancellation_requested_by_id") @db.Uuid
+  cancellationReason       String?                               @map("cancellation_reason")
+  cancelledAt              DateTime?                             @map("cancelled_at") @db.Timestamptz(6)
+  cancelledById            String?                               @map("cancelled_by_id") @db.Uuid
+  statusVersion            Int                                   @default(1) @map("status_version")
+  lastTrustedUpdateAt      DateTime?                             @map("last_trusted_update_at") @db.Timestamptz(6)
+  closureReviewAt          DateTime?                             @map("closure_review_at") @db.Timestamptz(6)
   liveLocationUpdatedAt    DateTime?                             @map("live_location_updated_at") @db.Timestamptz(6)
   liveLocationStale        Boolean                               @default(false) @map("live_location_stale")
   reporter                 User?                                 @relation("IncidentReporter", fields: [reporterId], references: [id])
@@ -622,6 +646,10 @@ model Incident {
   @@index([country, state, lga])
   @@index([status, priority, createdAt])
   @@index([jurisdictionId, status])
+  @@index([reporterId, status])
+  @@index([status, updatedAt])
+  @@index([cancellationRequestedAt])
+  @@index([closureReviewAt])
   @@map("incidents")
 }
 
