@@ -75,6 +75,9 @@ abstract final class TheEyeApiPaths {
   static const notifications = "/notifications";
   static const notificationsUnreadCount = "/notifications/unread-count";
   static const notificationsReadAll = "/notifications/read-all";
+  static const usersMeActivityHistory = "/users/me/activity-history";
+  static String incidentArchive(String incidentId) => "/incidents/$incidentId/archive";
+  static String broadcastArchive(String broadcastId) => "/broadcasts/$broadcastId/archive";
   static String notificationDetail(String notificationId) =>
       "/notifications/$notificationId";
   static String notificationRead(String notificationId) =>
