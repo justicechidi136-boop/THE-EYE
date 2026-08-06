@@ -5,6 +5,7 @@ class PushNotificationRoute {
     required this.notificationType,
     required this.destination,
     this.incidentId,
+    this.broadcastId,
     this.status,
     this.silent = false,
   });
@@ -12,6 +13,7 @@ class PushNotificationRoute {
   final int schemaVersion;
   final String routeType;
   final String? incidentId;
+  final String? broadcastId;
   final String? status;
   final String notificationType;
   final String destination;
@@ -22,6 +24,11 @@ class PushNotificationRoute {
 
   bool get opensIncidentDetails =>
       routeType == "OWN_INCIDENT_DETAILS" || destination == "/incident-detail";
+
+  bool get opensBroadcastDetails =>
+      routeType == "BROADCAST_DETAILS" ||
+      (destination.startsWith("/broadcasts/") &&
+          destination.length > "/broadcasts/".length);
 }
 
 /// Server-authoritative notification routing contract (schema v1).
@@ -37,9 +44,11 @@ abstract final class PushNotificationRouting {
         schemaVersion: 1,
         routeType: data["routeType"]?.toString() ?? "SYSTEM",
         incidentId: data["incidentId"]?.toString(),
+        broadcastId: data["broadcastId"]?.toString(),
         status: data["status"]?.toString(),
         notificationType: data["notificationType"]?.toString() ??
             data["type"]?.toString() ??
+            data["eventType"]?.toString() ??
             "System",
         destination: destination,
         silent: data["silent"]?.toString().toLowerCase() == "true",

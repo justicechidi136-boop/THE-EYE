@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:the_eye_mobile/broadcasts/broadcast_feed_service.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_navigation.dart";
+import "package:the_eye_mobile/broadcasts/broadcast_public_share.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_screens.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_session.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_submission_service.dart";
@@ -125,7 +126,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Report broadcast"), findsOneWidget);
-    expect(find.text("Misinformation"), findsOneWidget);
+    expect(find.text("False or misleading"), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text("Submit report"),
       120,
@@ -134,17 +135,23 @@ void main() {
     expect(find.text("Submit report"), findsOneWidget);
   });
 
-  test("BroadcastSharePayload builds fallback share text", () {
-    final payload = BroadcastSharePayload.fromJson({
-      "data": {
-        "title": "Missing person: Ada",
-        "body": "Last seen near Ikeja.",
-        "deepLink": "/broadcasts/b1",
-      },
-    });
+  test("BroadcastSharePayload builds public-safe share text", () {
+    final payload = BroadcastSharePayload.fromPublic(
+      BroadcastPublicSharePayload.fromApiJson({
+        "data": {
+          "id": "b1",
+          "type": "MissingPerson",
+          "status": "Active",
+          "title": "Missing person: Ada",
+          "summary": "Missing person alert: Ada, approx. age 10.",
+          "deepLink": "/broadcasts/b1",
+        },
+      }),
+    );
     expect(payload.title, "Missing person: Ada");
     expect(payload.shareText, contains("Missing person: Ada"));
     expect(payload.shareText, contains("/broadcasts/b1"));
+    expect(payload.locallyGenerated, isFalse);
   });
 
   test("BroadcastCommentItem parses sighting metadata", () {

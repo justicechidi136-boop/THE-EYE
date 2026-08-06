@@ -3,6 +3,7 @@ import "dart:convert";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
 import "../incidents/incident_submission_service.dart";
+import "broadcast_public_share.dart";
 
 class BroadcastFeedItem {
   const BroadcastFeedItem({
@@ -136,29 +137,29 @@ class BroadcastSharePayload {
     required this.body,
     required this.shareText,
     this.deepLink,
+    this.locallyGenerated = false,
   });
 
   final String title;
   final String body;
   final String shareText;
   final String? deepLink;
+  final bool locallyGenerated;
+
+  factory BroadcastSharePayload.fromPublic(
+      BroadcastPublicSharePayload payload) {
+    return BroadcastSharePayload(
+      title: payload.title,
+      body: payload.summary,
+      shareText: payload.shareText,
+      deepLink: payload.deepLink,
+      locallyGenerated: payload.locallyGenerated,
+    );
+  }
 
   factory BroadcastSharePayload.fromJson(Map<String, dynamic> json) {
-    final data = json["data"] is Map
-        ? Map<String, dynamic>.from(json["data"] as Map)
-        : json;
-    final title = (data["title"] as String?) ?? "";
-    final body = (data["body"] as String?) ?? "";
-    final deepLink = data["deepLink"] as String?;
-    final shareText = (data["shareText"] as String?) ??
-        [title, body, if (deepLink != null) deepLink]
-            .where((part) => part.trim().isNotEmpty)
-            .join("\n\n");
-    return BroadcastSharePayload(
-      title: title,
-      body: body,
-      shareText: shareText,
-      deepLink: deepLink,
+    return BroadcastSharePayload.fromPublic(
+      BroadcastPublicSharePayload.fromApiJson(json),
     );
   }
 }
@@ -259,10 +260,15 @@ class BroadcastFeedService {
 
   Future<List<BroadcastFeedItem>> listMine({
     required String accessToken,
+    String? status,
   }) async {
     final response = await _apiClient.getJson(
       TheEyeApiPaths.broadcastsMine,
       accessToken: accessToken,
+      query: {
+        if (status != null && status.isNotEmpty && status != "All")
+          "status": status,
+      },
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw IncidentApiException.fromResponse(response);
@@ -307,9 +313,10 @@ class BroadcastFeedService {
         .toList();
   }
 
-  Future<BroadcastSharePayload> getSharePayload({
+  Future<BroadcastPublicSharePayload> getPublicSharePayload({
     required String accessToken,
     required String broadcastId,
+    BroadcastFeedItem? fallbackSource,
   }) async {
     final response = await _apiClient.getJson(
       TheEyeApiPaths.broadcastShare(broadcastId),
@@ -318,22 +325,34 @@ class BroadcastFeedService {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final decoded = jsonDecode(response.body);
       if (decoded is Map) {
-        return BroadcastSharePayload.fromJson(
+        return BroadcastPublicSharePayload.fromApiJson(
           Map<String, dynamic>.from(decoded),
         );
       }
     }
 
-    final detail = await getDetail(
+    if (fallbackSource != null &&
+        (response.statusCode == 404 ||
+            response.statusCode == 501 ||
+            response.statusCode == 502 ||
+            response.statusCode == 503 ||
+            response.statusCode >= 500)) {
+      return BroadcastPublicShareMapper.fromFeedItemFallback(fallbackSource);
+    }
+
+    throw IncidentApiException.fromResponse(response);
+  }
+
+  Future<BroadcastSharePayload> getSharePayload({
+    required String accessToken,
+    required String broadcastId,
+    BroadcastFeedItem? fallbackSource,
+  }) async {
+    final payload = await getPublicSharePayload(
       accessToken: accessToken,
       broadcastId: broadcastId,
+      fallbackSource: fallbackSource,
     );
-    final deepLink = detail.deepLink ?? "/broadcasts/${detail.id}";
-    return BroadcastSharePayload(
-      title: detail.title,
-      body: detail.body,
-      deepLink: deepLink,
-      shareText: "${detail.title}\n\n${detail.body}\n\n$deepLink",
-    );
+    return BroadcastSharePayload.fromPublic(payload);
   }
 }

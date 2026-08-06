@@ -16,7 +16,10 @@ import "../widgets/section_card.dart";
 import "broadcast_feed_service.dart";
 import "broadcast_navigation.dart";
 import "broadcast_session.dart";
+import "broadcast_sighting_draft_store.dart";
+import "broadcast_submission_service.dart";
 import "broadcast_ui_helpers.dart";
+import "../incidents/incident_draft_factory.dart";
 
 class BroadcastCreateHubScreen extends StatelessWidget {
   const BroadcastCreateHubScreen({super.key});
@@ -71,9 +74,20 @@ class MyBroadcastsScreen extends StatefulWidget {
 }
 
 class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
+  static const _filters = [
+    "All",
+    "Active",
+    "Updated",
+    "Resolved",
+    "WithdrawnByAuthor",
+    "Suspended",
+    "Expired",
+  ];
+
   List<BroadcastFeedItem> _items = const [];
   bool _loading = true;
   String? _error;
+  String _statusFilter = "All";
 
   @override
   void initState() {
@@ -95,6 +109,7 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
     try {
       final items = await session.broadcastFeedService.listMine(
         accessToken: session.accessToken!,
+        status: _statusFilter,
       );
       if (!mounted) return;
       setState(() {
@@ -120,63 +135,99 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
   Widget build(BuildContext context) {
     return _BroadcastShell(
       title: "My broadcasts",
-      child: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 120),
-                  Center(child: CircularProgressIndicator()),
-                ],
-              )
-            : _error != null
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(24),
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.cloud_off),
-                        title: const Text("Broadcasts unavailable"),
-                        subtitle: Text(_error!),
-                      ),
-                      FilledButton(
-                        onPressed: () => unawaited(_load()),
-                        child: const Text("Retry"),
-                      ),
-                    ],
-                  )
-                : _items.isEmpty
-                    ? ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(16),
-                        children: const [
-                          SectionCard(
-                            title: "No broadcasts yet",
-                            child: Text(
-                              "Create a missing person or stolen vehicle alert to reach nearby citizens.",
-                            ),
-                          ),
-                        ],
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                        itemCount: _items.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final item = _items[index];
-                          return _BroadcastActionTile(
-                            icon: item.type.toLowerCase().contains("vehicle")
-                                ? Icons.directions_car
-                                : Icons.person_search,
-                            title: item.title,
-                            subtitle: "${item.status} · ${item.type}",
-                            onTap: () => Navigator.of(context).pushNamed(
-                              broadcastDetailRoute(item.id)!,
-                            ),
-                          );
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 48,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              itemCount: _filters.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final filter = _filters[index];
+                final selected = _statusFilter == filter;
+                return FilterChip(
+                  label: Text(
+                      filter == "WithdrawnByAuthor" ? "Withdrawn" : filter),
+                  selected: selected,
+                  onSelected: _loading
+                      ? null
+                      : (value) {
+                          if (!value) return;
+                          setState(() => _statusFilter = filter);
+                          unawaited(_load());
                         },
-                      ),
+                );
+              },
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _loading
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        SizedBox(height: 120),
+                        Center(child: CircularProgressIndicator()),
+                      ],
+                    )
+                  : _error != null
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(24),
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.cloud_off),
+                              title: const Text("Broadcasts unavailable"),
+                              subtitle: Text(_error!),
+                            ),
+                            FilledButton(
+                              onPressed: () => unawaited(_load()),
+                              child: const Text("Retry"),
+                            ),
+                          ],
+                        )
+                      : _items.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(16),
+                              children: const [
+                                SectionCard(
+                                  title: "No broadcasts yet",
+                                  child: Text(
+                                    "Create a missing person or stolen vehicle alert to reach nearby citizens.",
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ListView.separated(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                              itemCount: _items.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final item = _items[index];
+                                return _BroadcastActionTile(
+                                  icon: item.type
+                                          .toLowerCase()
+                                          .contains("vehicle")
+                                      ? Icons.directions_car
+                                      : Icons.person_search,
+                                  title: item.title,
+                                  subtitle: "${item.status} · ${item.type}",
+                                  onTap: () => Navigator.of(context).pushNamed(
+                                    broadcastDetailRoute(item.id)!,
+                                  ),
+                                );
+                              },
+                            ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -273,12 +324,14 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
     if (confirmed != true || !mounted) return;
 
     final session = BroadcastSession.require(context);
+    final clientResolutionId = createClientSubmissionId();
     setState(() => _actionInFlight = true);
     try {
       await session.broadcastSubmissionService.resolve(
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
         note: noteController.text.trim(),
+        clientResolutionId: clientResolutionId,
       );
       if (!mounted) return;
       showBroadcastSnackBar(context, "Broadcast marked as resolved.");
@@ -325,12 +378,14 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
     if (confirmed != true || !mounted) return;
 
     final session = BroadcastSession.require(context);
+    final clientResolutionId = createClientSubmissionId();
     setState(() => _actionInFlight = true);
     try {
       await session.broadcastSubmissionService.withdraw(
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
         reason: reasonController.text.trim(),
+        clientResolutionId: clientResolutionId,
       );
       if (!mounted) return;
       showBroadcastSnackBar(context, "Broadcast withdrawn.");
@@ -694,10 +749,15 @@ class BroadcastReportScreen extends StatefulWidget {
 
 class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
   static const _reasons = [
-    "Misinformation",
+    "FalseOrMisleading",
+    "Duplicate",
     "Harassment",
+    "PrivacyViolation",
+    "Impersonation",
+    "GraphicContent",
     "Spam",
-    "Privacy violation",
+    "PersonAlreadyFound",
+    "VehicleAlreadyRecovered",
     "Other",
   ];
 
@@ -727,7 +787,10 @@ class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
                 : _detailsController.text.trim()),
       );
       if (!mounted) return;
-      showBroadcastSnackBar(context, "Report submitted. Thank you.");
+      showBroadcastSnackBar(
+        context,
+        "Thank you. This broadcast has been reported for review.",
+      );
       Navigator.of(context).pop();
     } on IncidentApiException catch (error) {
       if (!mounted) return;
@@ -761,7 +824,7 @@ class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
               onChanged: _submitting
                   ? null
                   : (value) => setState(() => _reason = value ?? _reason),
-              title: Text(reason),
+              title: Text(broadcastReportReasonLabels[reason] ?? reason),
             ),
           ),
           const SizedBox(height: 8),
@@ -790,9 +853,14 @@ class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
 }
 
 class BroadcastShareScreen extends StatefulWidget {
-  const BroadcastShareScreen({required this.broadcastId, super.key});
+  const BroadcastShareScreen({
+    required this.broadcastId,
+    this.fallbackSource,
+    super.key,
+  });
 
   final String broadcastId;
+  final BroadcastFeedItem? fallbackSource;
 
   @override
   State<BroadcastShareScreen> createState() => _BroadcastShareScreenState();
@@ -820,6 +888,7 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
       final payload = await session.broadcastFeedService.getSharePayload(
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
+        fallbackSource: widget.fallbackSource,
       );
       if (!mounted) return;
       setState(() {
@@ -870,6 +939,18 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
                   children: [
+                    if (payload?.locallyGenerated == true) ...[
+                      SectionCard(
+                        title: "Local preview",
+                        child: Text(
+                          "Share preview generated on this device because the public share service is temporarily unavailable.",
+                          style: TextStyle(
+                            color: EyeSemanticColors.of(context).mutedText,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     SectionCard(
                       title: payload?.title ?? "Safety broadcast",
                       child: Column(
@@ -914,10 +995,25 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   final _descriptionController = TextEditingController();
   final _areaController = TextEditingController();
   final _directionController = TextEditingController();
-  bool _anonymous = false;
+  final _draftStore = BroadcastSightingDraftStore();
+  String _clientActionId = createClientSubmissionId();
+  bool _anonymousToReviewers = false;
   bool _submitting = false;
+  bool _hasPendingDraft = false;
+  String? _pendingDraftMessage;
   Position? _position;
+  double? _draftLatitude;
+  double? _draftLongitude;
   String? _locationStatus;
+  String? _photoReference;
+  String? _videoReference;
+  String? _voiceReference;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreDraft());
+  }
 
   @override
   void dispose() {
@@ -925,6 +1021,72 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
     _areaController.dispose();
     _directionController.dispose();
     super.dispose();
+  }
+
+  String _userScope(BroadcastSession session) =>
+      session.accessToken ?? "anonymous";
+
+  Future<void> _restoreDraft() async {
+    final session = BroadcastSession.require(context);
+    final draft = await _draftStore.load(
+      userScope: _userScope(session),
+      broadcastId: widget.broadcastId,
+    );
+    if (!mounted || draft == null) return;
+    setState(() {
+      _clientActionId = draft.clientActionId.isNotEmpty
+          ? draft.clientActionId
+          : _clientActionId;
+      _descriptionController.text = draft.description;
+      _areaController.text = draft.approximateArea ?? "";
+      _directionController.text = draft.directionOfTravel ?? "";
+      _anonymousToReviewers = draft.anonymousToReviewers;
+      _photoReference = draft.photoReference;
+      _videoReference = draft.videoReference;
+      _voiceReference = draft.voiceReference;
+      _draftLatitude = draft.latitude;
+      _draftLongitude = draft.longitude;
+      if (draft.latitude != null && draft.longitude != null) {
+        _position = null;
+      }
+      _hasPendingDraft = true;
+      _pendingDraftMessage =
+          "A saved sighting draft is ready to retry. Exact coordinates remain private.";
+    });
+  }
+
+  Future<void> _persistDraft() async {
+    final session = BroadcastSession.require(context);
+    final draft = BroadcastSightingDraft(
+      broadcastId: widget.broadcastId,
+      clientActionId: _clientActionId,
+      description: _descriptionController.text.trim(),
+      observedAt: DateTime.now().toUtc().toIso8601String(),
+      latitude: _position?.latitude ?? _draftLatitude,
+      longitude: _position?.longitude ?? _draftLongitude,
+      approximateArea: _areaController.text.trim().isEmpty
+          ? null
+          : _areaController.text.trim(),
+      directionOfTravel: _directionController.text.trim().isEmpty
+          ? null
+          : _directionController.text.trim(),
+      confidence: "ReporterProvided",
+      anonymousToReviewers: _anonymousToReviewers,
+      photoReference: _photoReference,
+      videoReference: _videoReference,
+      voiceReference: _voiceReference,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await _draftStore.save(
+      userScope: _userScope(session),
+      draft: draft,
+    );
+    if (!mounted) return;
+    setState(() {
+      _hasPendingDraft = true;
+      _pendingDraftMessage =
+          BroadcastSightingUnavailableException.temporaryUnavailableMessage;
+    });
   }
 
   Future<void> _captureLocation() async {
@@ -939,7 +1101,10 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
     }
     setState(() {
       _position = outcome.position;
-      _locationStatus = "Location captured.";
+      _draftLatitude = outcome.position?.latitude;
+      _draftLongitude = outcome.position?.longitude;
+      _locationStatus =
+          "Approximate location captured for authorized review only.";
     });
   }
 
@@ -956,22 +1121,34 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       await session.broadcastSubmissionService.submitSighting(
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
+        clientActionId: _clientActionId,
         description: description,
         observedAt: DateTime.now().toUtc().toIso8601String(),
-        latitude: _position?.latitude,
-        longitude: _position?.longitude,
+        latitude: _position?.latitude ?? _draftLatitude,
+        longitude: _position?.longitude ?? _draftLongitude,
         approximateArea: _areaController.text.trim().isEmpty
             ? null
             : _areaController.text.trim(),
         directionOfTravel: _directionController.text.trim().isEmpty
             ? null
             : _directionController.text.trim(),
-        anonymousPublic: _anonymous,
+        anonymousToReviewers: _anonymousToReviewers,
         confidence: "ReporterProvided",
+        photoReference: _photoReference,
+        videoReference: _videoReference,
+        voiceReference: _voiceReference,
+      );
+      await _draftStore.clear(
+        userScope: _userScope(session),
+        broadcastId: widget.broadcastId,
       );
       if (!mounted) return;
-      showBroadcastSnackBar(context, "Sighting submitted. Thank you.");
+      showBroadcastSnackBar(context, "Sighting submitted securely. Thank you.");
       Navigator.of(context).pop();
+    } on BroadcastSightingUnavailableException catch (error) {
+      await _persistDraft();
+      if (!mounted) return;
+      showBroadcastSnackBar(context, error.userMessage, isError: true);
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       showBroadcastSnackBar(context, error.userMessage, isError: true);
@@ -991,10 +1168,15 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
-          const SectionCard(
-            title: "Share a sighting",
+          SectionCard(
+            title: "Submit a private sighting",
             child: Text(
-              "Only share factual observations. Include location details if you can.",
+              _hasPendingDraft && _pendingDraftMessage != null
+                  ? _pendingDraftMessage!
+                  : "Sightings are sent only to authorized reviewers and the broadcast author. They are never posted as public comments.",
+              style: TextStyle(
+                color: EyeSemanticColors.of(context).mutedText,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -1021,11 +1203,11 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
           ),
           const SizedBox(height: 12),
           SwitchListTile(
-            value: _anonymous,
+            value: _anonymousToReviewers,
             onChanged: _submitting
                 ? null
-                : (value) => setState(() => _anonymous = value),
-            title: const Text("Hide my name on public comments"),
+                : (value) => setState(() => _anonymousToReviewers = value),
+            title: const Text("Keep my identity private on authorized review"),
           ),
           Align(
             alignment: Alignment.centerLeft,
@@ -1040,18 +1222,52 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
             const SizedBox(height: 8),
             Text(
               _locationStatus!,
-              style: const TextStyle(color: BrandColors.lightTextMuted),
+              style: TextStyle(
+                color: EyeSemanticColors.of(context).mutedText,
+              ),
             ),
           ],
           const SizedBox(height: 12),
           VoiceRecorder(
             enabled: !_submitting,
             onRecordingReady: (result) {
+              setState(() {
+                _voiceReference = "voice:${result.durationSeconds}s";
+              });
               final note = "Voice note attached (${result.durationSeconds}s).";
               final current = _descriptionController.text.trim();
               _descriptionController.text =
                   current.isEmpty ? note : "$current\n\n$note";
             },
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _submitting
+                    ? null
+                    : () => setState(
+                          () => _photoReference = "photo:attached",
+                        ),
+                icon: const Icon(Icons.photo_camera_outlined),
+                label: Text(_photoReference == null
+                    ? "Attach photo"
+                    : "Photo attached"),
+              ),
+              OutlinedButton.icon(
+                onPressed: _submitting
+                    ? null
+                    : () => setState(
+                          () => _videoReference = "video:attached",
+                        ),
+                icon: const Icon(Icons.videocam_outlined),
+                label: Text(_videoReference == null
+                    ? "Attach video"
+                    : "Video attached"),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           FilledButton(
@@ -1062,7 +1278,9 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text("Submit sighting"),
+                : Text(_hasPendingDraft
+                    ? "Retry sighting submission"
+                    : "Submit sighting"),
           ),
         ],
       ),
