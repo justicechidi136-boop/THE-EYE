@@ -2,18 +2,22 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 
+import "../contracts/the_eye_api_client.dart";
+import "../emergency/incident_communication_contract.dart";
+import "../emergency/incident_communication_service.dart";
 import "incident_history_service.dart";
-import "incident_submission_service.dart";
 
 class IncidentDetailScreen extends StatefulWidget {
   const IncidentDetailScreen({
     required this.incidentId,
     required this.accessToken,
+    this.apiClient,
     super.key,
   });
 
   final String incidentId;
   final String accessToken;
+  final TheEyeApiClient? apiClient;
 
   @override
   State<IncidentDetailScreen> createState() => _IncidentDetailScreenState();
@@ -21,14 +25,35 @@ class IncidentDetailScreen extends StatefulWidget {
 
 class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
   final IncidentHistoryService _historyService = IncidentHistoryService();
+  late final IncidentCommunicationService _communicationService;
   IncidentDetail? _detail;
+  IncidentCommunicationSummary? _communication;
   String? _error;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _communicationService = IncidentCommunicationService(
+      widget.apiClient ?? TheEyeApiClient(),
+    );
     unawaited(_load());
+  }
+
+  Future<void> _loadCommunication() async {
+    try {
+      final conversation = await _communicationService.fetchConversation(
+        widget.incidentId,
+        widget.accessToken,
+      );
+      if (!mounted) return;
+      setState(() {
+        _communication = IncidentCommunicationSummary.fromJson(conversation);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _communication = null);
+    }
   }
 
   Future<void> _load() async {
@@ -46,6 +71,7 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
         _detail = detail;
         _loading = false;
       });
+      await _loadCommunication();
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -94,6 +120,28 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
                   "Evidence files: ${_detail!.evidenceCount}",
                 ),
               ),
+              if (_communication?.conversationAvailable == true) ...[
+                const SizedBox(height: 12),
+                const Text("Communication history",
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                ListTile(
+                  leading: const Icon(Icons.chat_bubble_outline),
+                  title: Text(
+                    _communication!.lastMessagePreview ?? "View communication record",
+                  ),
+                  subtitle: Text(
+                    _communication!.unreadMessageCount > 0
+                        ? "${_communication!.unreadMessageCount} unread message(s)"
+                        : "Read-only communication record",
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).pushNamed(
+                      "/incident-detail/${widget.incidentId}/messages",
+                    );
+                  },
+                ),
+              ],
               if (_detail!.statusHistory.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 const Text("Status history",

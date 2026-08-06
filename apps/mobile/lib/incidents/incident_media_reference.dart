@@ -1,5 +1,6 @@
 class IncidentMediaReference {
   const IncidentMediaReference({
+    this.id,
     required this.mediaType,
     required this.bucket,
     required this.objectKey,
@@ -15,6 +16,7 @@ class IncidentMediaReference {
     this.clientAttachmentId,
   });
 
+  final String? id;
   final String mediaType;
   final String bucket;
   final String objectKey;
@@ -47,6 +49,7 @@ class IncidentMediaReference {
 
   factory IncidentMediaReference.fromJson(Map<String, dynamic> json) {
     return IncidentMediaReference(
+      id: json["id"]?.toString(),
       mediaType: json["mediaType"] as String,
       bucket: json["bucket"] as String,
       objectKey: json["objectKey"] as String,

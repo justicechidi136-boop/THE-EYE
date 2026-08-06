@@ -87,7 +87,24 @@ Returned when status is in the active set: `Submitted`, `Received`, `Verifying`,
   },
   "cancellationSummary": { "status": "none" },
   "resolutionSummary": null,
-  "lastUpdatedAt": "2026-08-05T10:05:00.000Z"
+  "lastUpdatedAt": "2026-08-05T10:05:00.000Z",
+  "communication": {
+    "conversationAvailable": true,
+    "unreadMessageCount": 0,
+    "lastMessagePreview": "Dispatcher: stay on the line",
+    "lastMessageAt": "2026-08-05T10:04:00.000Z",
+    "pendingInformationRequestCount": 0,
+    "conversationStatus": "Active",
+    "allowedCommunicationActions": {
+      "sendText": true,
+      "sendVoice": true,
+      "sendPhoto": true,
+      "sendVideo": true,
+      "sendLocation": true,
+      "quickReply": true,
+      "openThread": true
+    }
+  }
 }
 ```
 
@@ -112,6 +129,23 @@ HTTP **200** — not 404 — so mobile can redirect safely without treating data
     "status": "cancelled",
     "reason": "False alarm",
     "cancelledAt": "2026-08-05T10:10:00.000Z"
+  },
+  "communication": {
+    "conversationAvailable": true,
+    "unreadMessageCount": 0,
+    "lastMessagePreview": "Official notice: incident closed",
+    "lastMessageAt": "2026-08-05T10:09:00.000Z",
+    "pendingInformationRequestCount": 0,
+    "conversationStatus": "Closed",
+    "allowedCommunicationActions": {
+      "sendText": false,
+      "sendVoice": false,
+      "sendPhoto": false,
+      "sendVideo": false,
+      "sendLocation": false,
+      "quickReply": false,
+      "openThread": true
+    }
   }
 }
 ```
@@ -131,6 +165,7 @@ Mobile should navigate to Incident Details using `routeType: "INCIDENT_DETAILS"`
 | `isActive` / `isTerminal` | Active/terminal status sets |
 | `cancellationSummary` | Cancellation fields + status |
 | `resolutionSummary` | Resolution fields |
+| `communication` | Incident communication summary (Phase 6) |
 
 Implementation: `apps/api/src/modules/incidents/incident-presentation.mapper.ts`
 
@@ -155,3 +190,5 @@ Implementation: `apps/api/src/modules/incidents/incident-presentation.mapper.ts`
 | POST | `/v1/incidents/:id/updates` | Reporter written update (timeline) |
 | POST | `/v1/incidents/:id/reporter-status` | Reporter resolution feedback |
 | GET | `/v1/incidents/:id` | Full incident record (history/details) |
+| GET | `/v1/incidents/:id/conversation` | Communication summary + allowed actions |
+| GET | `/v1/incidents/:id/messages` | Incident-scoped message thread |

@@ -343,6 +343,25 @@ export class IncidentCommunicationsService {
     return { data: { request: this.mapInformationRequest(request), message: message.data } };
   }
 
+  async closeConversationForTerminalIncident(
+    incidentId: string,
+    reason = "Incident resolved",
+  ) {
+    const conversation = await this.prisma.incidentConversation.findUnique({
+      where: { incidentId },
+    });
+    if (!conversation || CLOSED_CONVERSATION.has(conversation.status)) return;
+    await this.prisma.incidentConversation.update({
+      where: { id: conversation.id },
+      data: {
+        status: "Closed",
+        closedAt: new Date(),
+        closeReason: reason,
+        version: { increment: 1 },
+      },
+    });
+  }
+
   async getCommunicationSummary(incidentId: string, actor: JwtPayload) {
     const ctx = await this.access.assertAccess(incidentId, actor);
     const conversation = await this.prisma.incidentConversation.findUnique({
@@ -367,6 +386,7 @@ export class IncidentCommunicationsService {
     ctx: IncidentCommunicationAccess,
     actor: JwtPayload,
   ) {
+    await this.expireStaleInformationRequests(conversation.id);
     const unread = await this.prisma.incidentMessageReceipt.count({
       where: {
         readAt: null,
@@ -504,32 +524,9 @@ export class IncidentCommunicationsService {
     });
     if (!incident) return;
     const now = new Date();
-    const recipients: Array<{ recipientUserId?: string; recipientAdminId?: string }> = [];
+    const recipients = await this.resolveOperatorRecipients(incident, sender);
     if (incident.reporterId && !(sender.typ === "user" && sender.sub === incident.reporterId)) {
       recipients.push({ recipientUserId: incident.reporterId });
-    }
-    if (sender.typ === "user" && incident.assignedAgencyId) {
-      const admins = await this.prisma.adminUser.findMany({
-        where: { agencyId: incident.assignedAgencyId, isActive: true },
-        select: { id: true },
-        take: 20,
-      });
-      for (const admin of admins) {
-        recipients.push({ recipientAdminId: admin.id });
-      }
-    }
-    if (sender.typ !== "admin") {
-      const dispatchers = await this.prisma.adminUser.findMany({
-        where: {
-          isActive: true,
-          role: { name: { in: ["Call Center Agent", "LGA Admin", "Super Admin"] as never[] } },
-        },
-        select: { id: true },
-        take: 10,
-      });
-      for (const admin of dispatchers) {
-        recipients.push({ recipientAdminId: admin.id });
-      }
     }
     if (recipients.length) {
       await this.prisma.incidentMessageReceipt.createMany({
@@ -553,7 +550,7 @@ export class IncidentCommunicationsService {
     if (!this.notifications) return;
     const incident = await this.prisma.incident.findUnique({
       where: { id: incidentId },
-      select: { reporterId: true, status: true },
+      select: { reporterId: true, status: true, assignedAgencyId: true },
     });
     if (!incident) return;
 
@@ -576,7 +573,97 @@ export class IncidentCommunicationsService {
         },
         undefined,
       );
+      return;
     }
+
+    if (ctx.role === "Reporter") {
+      const operatorRecipients = await this.resolveOperatorRecipients(incident, {
+        typ: "user",
+        sub: incident.reporterId ?? "",
+      } as JwtPayload);
+      const metadata = {
+        ...buildIncidentMessageNotificationMetadata({
+          incidentId,
+          status: incident.status,
+          messageId,
+          notificationType: "IncidentMessageReceived",
+        }),
+        destination: `/dispatch/incidents/${incidentId}`,
+        route: `/dispatch/incidents/${incidentId}`,
+        deepLink: `/dispatch/incidents/${incidentId}`,
+        audience: "admin",
+      };
+      for (const recipient of operatorRecipients) {
+        if (!recipient.recipientAdminId) continue;
+        await this.notifications.create(
+          {
+            type: "IncidentMessageReceived",
+            title: "Reporter message on incident",
+            body: "Open dispatch to read the latest reporter update.",
+            incidentId,
+            adminUserId: recipient.recipientAdminId,
+            priority: "High",
+            metadata,
+          },
+          undefined,
+        );
+      }
+    }
+  }
+
+  private async resolveOperatorRecipients(
+    incident: { reporterId: string | null; assignedAgencyId: string | null },
+    sender: JwtPayload,
+  ) {
+    const recipients: Array<{ recipientUserId?: string; recipientAdminId?: string }> = [];
+    const seen = new Set<string>();
+    const addAdmin = (id: string) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      recipients.push({ recipientAdminId: id });
+    };
+
+    if (sender.typ === "user" && incident.assignedAgencyId) {
+      const agencyAdmins = await this.prisma.adminUser.findMany({
+        where: { agencyId: incident.assignedAgencyId, isActive: true },
+        select: { id: true },
+        take: 20,
+      });
+      for (const admin of agencyAdmins) addAdmin(admin.id);
+    }
+    if (sender.typ === "user") {
+      const dispatchers = await this.prisma.adminUser.findMany({
+        where: {
+          isActive: true,
+          role: {
+            name: {
+              in: [
+                "Call Center Agent",
+                "LGA Admin",
+                "State Admin",
+                "Country Admin",
+                "Super Admin",
+              ] as never[],
+            },
+          },
+        },
+        select: { id: true },
+        take: 20,
+      });
+      for (const admin of dispatchers) addAdmin(admin.id);
+    }
+    return recipients;
+  }
+
+  private async expireStaleInformationRequests(conversationId: string) {
+    await this.prisma.incidentInformationRequest.updateMany({
+      where: {
+        conversationId,
+        status: "Open",
+        expiresAt: { lte: new Date() },
+      },
+      data: { status: "Expired" },
+    });
   }
 
   private async notifyInformationRequest(incidentId: string, requestId: string, status: string) {

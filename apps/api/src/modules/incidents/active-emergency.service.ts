@@ -172,6 +172,10 @@ export class ActiveEmergencyService {
     );
 
     if (!isActiveIncidentStatus(status)) {
+      const communication = await this.incidentCommunications.getCommunicationSummary(
+        incidentId,
+        actor!,
+      );
       return {
         isActive: false,
         routeType: TERMINAL_ROUTE_TYPE,
@@ -181,6 +185,7 @@ export class ActiveEmergencyService {
         statusVersion: incident.statusVersion,
         resolutionSummary: presentation.resolutionSummary ?? null,
         cancellationSummary: presentation.cancellationSummary ?? null,
+        communication,
       };
     }
 

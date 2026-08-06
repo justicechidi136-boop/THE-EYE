@@ -156,7 +156,10 @@ class QueuedIncidentMessage {
     required this.messageType,
     required this.body,
     required this.createdAt,
+    this.attachmentId,
     this.attachmentLocalPath,
+    this.localAttachment,
+    this.structuredAction,
     this.state = QueuedMessageState.queued,
     this.retryCount = 0,
   });
@@ -166,7 +169,10 @@ class QueuedIncidentMessage {
   final String messageType;
   final String body;
   final DateTime createdAt;
+  String? attachmentId;
   final String? attachmentLocalPath;
+  final Map<String, dynamic>? localAttachment;
+  final Map<String, dynamic>? structuredAction;
   QueuedMessageState state;
   int retryCount;
 
@@ -176,7 +182,10 @@ class QueuedIncidentMessage {
         "messageType": messageType,
         "body": body,
         "createdAt": createdAt.toIso8601String(),
-        "attachmentLocalPath": attachmentLocalPath,
+        if (attachmentId != null) "attachmentId": attachmentId,
+        if (attachmentLocalPath != null) "attachmentLocalPath": attachmentLocalPath,
+        if (localAttachment != null) "localAttachment": localAttachment,
+        if (structuredAction != null) "structuredAction": structuredAction,
         "state": state.name,
         "retryCount": retryCount,
       };
@@ -188,7 +197,10 @@ class QueuedIncidentMessage {
       messageType: json["messageType"].toString(),
       body: json["body"].toString(),
       createdAt: DateTime.parse(json["createdAt"].toString()),
+      attachmentId: json["attachmentId"]?.toString(),
       attachmentLocalPath: json["attachmentLocalPath"]?.toString(),
+      localAttachment: json["localAttachment"] as Map<String, dynamic>?,
+      structuredAction: json["structuredAction"] as Map<String, dynamic>?,
       state: QueuedMessageState.values.firstWhere(
         (v) => v.name == json["state"]?.toString(),
         orElse: () => QueuedMessageState.queued,

@@ -25,6 +25,7 @@ function createService(overrides: Record<string, unknown> = {}) {
       create: jest.fn(),
       count: jest.fn(),
       updateMany: jest.fn(),
+      findFirst: jest.fn(),
     },
     incident: { findUnique: jest.fn() },
     adminUser: { findMany: jest.fn().mockResolvedValue([]) },
@@ -145,5 +146,84 @@ describe("IncidentCommunicationsService", () => {
     const { service, access } = createService();
     access.assertAccess.mockRejectedValue(new NotFoundException());
     await expect(service.listMessages("inc-1", reporter, {})).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("notifies dispatch operators when reporter sends a message", async () => {
+    const { service, prisma, access, notifications } = createService();
+    access.assertAccess.mockResolvedValue(ctx);
+    prisma.incidentConversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      status: "Active",
+    });
+    prisma.incidentMessage.findFirst.mockResolvedValue(null);
+    prisma.incidentMessage.create.mockResolvedValue({
+      id: "msg-1",
+      messageType: "Text",
+      body: "Need help",
+      senderRole: "Reporter",
+      attachmentId: null,
+      structuredAction: null,
+      replyToMessageId: null,
+      clientMessageId: "client-1",
+      moderationStatus: "Approved",
+      metadata: {},
+      createdAt: new Date(),
+      editedAt: null,
+    });
+    prisma.incidentConversation.update.mockResolvedValue({});
+    prisma.incident.findUnique.mockResolvedValue({
+      reporterId: "user-1",
+      status: "Verified",
+      assignedAgencyId: "agency-1",
+    });
+    prisma.adminUser.findMany.mockImplementation(async (args: { where?: Record<string, unknown> }) => {
+      if (args.where && "agencyId" in args.where) {
+        return [{ id: "agency-admin-1" }];
+      }
+      return [{ id: "dispatcher-1" }];
+    });
+    prisma.incidentMessageReceipt.createMany.mockResolvedValue({ count: 2 });
+    prisma.incidentInformationRequest.updateMany.mockResolvedValue({ count: 0 });
+    prisma.incidentInformationRequest.findFirst.mockResolvedValue(null);
+
+    await service.sendMessage("inc-1", reporter, {
+      clientMessageId: "client-1",
+      messageType: "Text",
+      body: "Need help",
+    });
+
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminUserId: "agency-admin-1",
+        type: "IncidentMessageReceived",
+      }),
+      undefined,
+    );
+  });
+
+  it("expires stale information requests when building summary", async () => {
+    const { service, prisma, access } = createService();
+    access.assertAccess.mockResolvedValue(ctx);
+    prisma.incidentConversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      incidentId: "inc-1",
+      status: "Active",
+      version: 1,
+      lastMessageAt: null,
+      closedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prisma.incidentInformationRequest.updateMany.mockResolvedValue({ count: 1 });
+    prisma.incidentMessageReceipt.count.mockResolvedValue(0);
+    prisma.incidentMessage.findFirst.mockResolvedValue(null);
+    prisma.incidentInformationRequest.count.mockResolvedValue(0);
+    await service.getConversation("inc-1", reporter);
+    expect(prisma.incidentInformationRequest.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ conversationId: "conv-1", status: "Open" }),
+        data: { status: "Expired" },
+      }),
+    );
   });
 });

@@ -725,7 +725,7 @@
 | S6-023 | ETA and distance | API + Mobile + Admin | CODE COMPLETE — STAGING QA PENDING | Straight-line distance + Maps link | Partial | `EtaService` | N | Haversine/PostGIS | N | N/A | External link | Y | P1 | Y | Road ETA **BLOCKED** without provider integration |
 | S6-024 | Command center dashboard | Admin | CODE COMPLETE — STAGING ADMIN QA PENDING | `/dispatch` queue + incident detail actions | Y | Y | Y | Coordinate list (map **BLOCKED**) | N | BLOCKED | Y | Y | P0 | Y | Embedded map **BLOCKED**; staging admin QA |
 | S6-025 | Agency-scoped dashboards | Admin | CODE COMPLETE — STAGING ADMIN QA PENDING | `/dispatch/agency` availability actions | Y | Y | Y | N | N | N/A | Y | Partial | P1 | N | Staging admin QA |
-| S6-026 | Incident communications (chat) | All | NOT IMPLEMENTED | Inert chat buttons | N | N | N | N | N | N/A | N | N | P1 | Y | Typed incident conversation API or mark BLOCKED — no simulation |
+| S6-026 | Incident communications (chat) | All | CODE COMPLETE — STAGING QA PENDING | Mobile thread + admin panel + push deep links | `/incidents/:id/conversation`, `/messages` | Y | `IncidentConversation`, `IncidentMessage` | N | Offline queue | N/A | Y | Y | P1 | Y | Staging QA for reporter/dispatcher flows |
 | S6-027 | LiveKit incident A/V | All | BLOCKED | Mobile + admin player wired | Token endpoints | `LiveVideoService` | `LiveVideoSession` | Session GPS | N | INF-003 | Viewer exists | live-video tests | P0 | Y | Staging credentials; incident/assignment binding; role-scoped tokens |
 | S6-028 | Escalation and SLA engine | API + Worker | CODE COMPLETE — STAGING QA PENDING (display) / NOT IMPLEMENTED (auto) | Manual escalate + SLA timer panel | `/dispatch/incidents/:id/escalate` | Y | `EscalationRule` | N | Not scheduled | N/A | Y | Y | P0 | Y | Display layer complete; cron/worker auto-escalation **NOT IMPLEMENTED** |
 | S6-029 | Unified incident timeline | API + All clients | CODE COMPLETE — STAGING QA PENDING | Citizen/responder/dispatcher views + admin detail panel | `/incidents/:id/timeline` | Y | `DispatchEvent` | Location milestones partial | N | Partial | Y | Y | P1 | N | Staging QA |
@@ -746,7 +746,7 @@
 | Citizen/responder location | S6-021–S6-023 | CODE COMPLETE — STAGING DEVICE QA PENDING | Required | Sequence dedupe; road ETA **BLOCKED** |
 | Command center | S6-024–S6-025, ADM-INC-010/015 | CODE COMPLETE — STAGING ADMIN QA PENDING | Required | Coordinate list; embedded map **BLOCKED** |
 | Dispatch core | S6-014–S6-020, S6-016–S6-018 | CODE COMPLETE — STAGING QA PENDING | Required | `/dispatch/*` module + tests |
-| Communications + LiveKit | S6-026–S6-027 | BLOCKED / NOT IMPL | Required | INF-003 LiveKit; chat API missing |
+| Communications + LiveKit | S6-026–S6-027 | S6-026 CODE COMPLETE — STAGING QA PENDING; S6-027 BLOCKED | Required | Phase 6 thread shipped; INF-003 LiveKit |
 | SLA + timeline + analytics | S6-028–S6-030 | CODE COMPLETE — STAGING QA PENDING | Required | SLA display complete; worker cron **NOT IMPLEMENTED** |
 | Security + notifications | S6-031–S6-034 | CODE COMPLETE — STAGING QA PENDING | Required | Inherits INF-005/FCM/SMS blockers |
 | Test coverage | S6-035 | CODE COMPLETE — STAGING QA PENDING | Required | End-to-end staging QA still required |

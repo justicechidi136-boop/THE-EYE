@@ -487,10 +487,25 @@ class ActiveEmergencyTerminalContract extends ActiveEmergencyContract {
     required super.routeType,
     this.cancellationSummary,
     this.resolutionSummary,
+    this.communication = const IncidentCommunicationSummary(
+      conversationAvailable: false,
+      unreadMessageCount: 0,
+      conversationStatus: "Closed",
+      allowedCommunicationActions: IncidentCommunicationAllowedActions(
+        sendText: false,
+        sendVoice: false,
+        sendPhoto: false,
+        sendVideo: false,
+        sendLocation: false,
+        quickReply: false,
+        openThread: false,
+      ),
+    ),
   }) : super(isActive: false);
 
   final ActiveEmergencyCancellationSummary? cancellationSummary;
   final ActiveEmergencyResolutionSummary? resolutionSummary;
+  final IncidentCommunicationSummary communication;
 
   factory ActiveEmergencyTerminalContract.fromJson(Map<String, dynamic> json) {
     final cancellation = json["cancellationSummary"] as Map<String, dynamic>?;
@@ -507,6 +522,9 @@ class ActiveEmergencyTerminalContract extends ActiveEmergencyContract {
       resolutionSummary: resolution == null
           ? null
           : ActiveEmergencyResolutionSummary.fromJson(resolution),
+      communication: IncidentCommunicationSummary.fromJson(
+        json["communication"] as Map<String, dynamic>?,
+      ),
     );
   }
 }

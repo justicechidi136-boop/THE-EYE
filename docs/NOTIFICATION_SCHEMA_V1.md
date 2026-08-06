@@ -56,6 +56,18 @@ FCM data also includes legacy `route` / `deepLink` mirroring `destination` for b
 
 ---
 
+## Phase 6 communication notifications
+
+| notificationType | Recipient | destination (active) | destination (terminal) |
+|------------------|-----------|----------------------|-------------------------|
+| `IncidentMessageReceived` | Reporter | `/active-emergency/:id/messages` | `/incident-detail/:id/messages` |
+| `IncidentMessageReceived` | Dispatcher/admin | `/dispatch/incidents/:id` | `/dispatch/incidents/:id` |
+| `IncidentInformationRequest` | Reporter | `/active-emergency/:id/messages` | `/incident-detail/:id/messages` |
+
+Push allowlist includes message subpaths under active-emergency and incident-detail routes.
+
+---
+
 ## Server implementation
 
 - `apps/api/src/modules/notifications/notification-routing.schema.ts` — routing builder
