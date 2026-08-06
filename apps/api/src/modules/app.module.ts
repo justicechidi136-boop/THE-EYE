@@ -34,6 +34,7 @@ import { VoiceAttachmentsModule } from "./voice-attachments/voice-attachments.mo
 import { DroneSurveillanceModule } from "./drone-surveillance/drone-surveillance.module";
 import { SupportChatsModule } from "./support-chats/support-chats.module";
 import { IncidentCommunicationsModule } from "./incident-communications/incident-communications.module";
+import { CitizenActivityModule } from "./citizen-activity/citizen-activity.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -91,6 +92,7 @@ const redisDisabled = !shouldRegisterBullMq();
     DroneSurveillanceModule,
     SupportChatsModule,
     IncidentCommunicationsModule,
+    CitizenActivityModule,
   ],
   controllers: [HealthController],
   providers: [

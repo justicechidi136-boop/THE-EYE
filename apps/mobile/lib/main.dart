@@ -36,6 +36,10 @@ import "incidents/incident_detail_screen.dart";
 import "incidents/incident_draft.dart";
 import "incidents/incident_draft_factory.dart";
 import "incidents/incident_history_service.dart";
+import "activity/activity_history_screen.dart";
+import "activity/incident_archive_screen.dart";
+import "activity/broadcast_archive_screen.dart";
+import "activity/activity_navigation.dart";
 import "incidents/incident_location_tracker.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
@@ -264,6 +268,28 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
           highContrast: app.highContrastMode,
         );
       },
+    );
+  }
+  if (name.startsWith("/incident-archive/")) {
+    final incidentId = name.substring("/incident-archive/".length).trim();
+    if (incidentId.isEmpty) return null;
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (context) => IncidentArchiveScreen(
+        incidentId: incidentId,
+        accessToken: appOf(context).accessToken ?? "",
+      ),
+    );
+  }
+  if (name.startsWith("/broadcast-archive/")) {
+    final broadcastId = name.substring("/broadcast-archive/".length).trim();
+    if (broadcastId.isEmpty) return null;
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (context) => BroadcastArchiveScreen(
+        broadcastId: broadcastId,
+        accessToken: appOf(context).accessToken ?? "",
+      ),
     );
   }
   return null;
@@ -5940,99 +5966,15 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
     return SafetyScaffold(
       title: "Incident status",
       selectedIndex: 2,
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await controller.loadIncidentsFromApi();
-          await controller.refreshPendingDrafts();
-        },
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-          children: [
-            if (controller.loadingIncidents)
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            if (controller.incidentLoadError != null)
-              ListTile(
-                leading: const Icon(Icons.cloud_off),
-                title: const Text("History unavailable"),
-                subtitle: Text(controller.incidentLoadError!),
-              ),
-            if (controller.composeDrafts.isNotEmpty)
-              SectionCard(
-                title: "Saved drafts",
-                child: Column(
-                  children: controller.composeDrafts
-                      .map(
-                        (draft) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.edit_note),
-                          title: Text(draft.type),
-                          subtitle: Text(draft.description),
-                          onTap: () {
-                            final reportType =
-                                reportTypeForIncidentType(draft.type);
-                            if (reportType == null) return;
-                            Navigator.of(context).pushNamed(
-                              reportType.routePath,
-                              arguments: draft,
-                            );
-                          },
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => controller
-                                .deleteComposeDraft(draft.clientSubmissionId),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            if (controller.pendingDrafts.isNotEmpty)
-              SectionCard(
-                title: "Pending submissions",
-                child: Column(
-                  children: [
-                    ...controller.pendingDrafts.map(
-                      (draft) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.cloud_off),
-                        title: Text(draft.type),
-                        subtitle: Text(draft.description),
-                      ),
-                    ),
-                    if (controller.online)
-                      FilledButton(
-                        onPressed: controller.syncingPending
-                            ? null
-                            : () => controller.syncPendingSubmissions(),
-                        child: Text(controller.syncingPending
-                            ? "Retrying..."
-                            : "Retry pending submissions"),
-                      ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 12),
-            if (controller.incidents.isEmpty && !controller.loadingIncidents)
-              const ListTile(
-                leading: Icon(Icons.history),
-                title: Text("No submitted incidents yet"),
-                subtitle: Text(
-                    "Reports you submit will appear here after server confirmation."),
-              ),
-            ...controller.incidents.map(
-              (incident) => IncidentStatusTile(
-                incident: incident,
-                onTap: () => Navigator.of(context).pushNamed(
-                  "/incident-detail",
-                  arguments: incident.id,
-                ),
-              ),
-            ),
-          ],
-        ),
+      body: ActivityHistoryScreen(
+        accessToken: controller.accessToken,
+        controller: controller,
+        onRefreshDrafts: controller.refreshComposeDrafts,
+        composeDrafts: controller.composeDrafts,
+        pendingDrafts: controller.pendingDrafts,
+        syncingPending: controller.syncingPending,
+        online: controller.online,
+        onRetryPending: controller.syncPendingSubmissions,
       ),
     );
   }
