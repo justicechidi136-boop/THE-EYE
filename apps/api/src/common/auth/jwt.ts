@@ -16,7 +16,7 @@ export function parseTtl(ttl: string | undefined, fallbackSeconds: number): numb
 
 export type JwtPayload = {
   sub: string;
-  typ: "user" | "admin";
+  typ: "user" | "admin" | "field";
   jti?: string;
   email?: string;
   phone?: string;
@@ -27,6 +27,12 @@ export type JwtPayload = {
   lga?: string;
   agencyId?: string;
   jurisdictionId?: string;
+  fieldDeviceId?: string;
+  fieldRole?: string;
+  sessionId?: string;
+  tokenVersion?: number;
+  authMode?: string;
+  assignedUnitId?: string;
 };
 
 export function signJwt(payload: JwtPayload, secret: string, ttl: string | undefined): string {
@@ -53,7 +59,7 @@ export function verifyJwt(token: string, secret: string): JwtPayload & { exp: nu
   }
 
   const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
-  if (!payload.sub || !["user", "admin"].includes(payload.typ) || !Number.isInteger(payload.iat) || !Number.isInteger(payload.exp)) {
+  if (!payload.sub || !["user", "admin", "field"].includes(payload.typ) || !Number.isInteger(payload.iat) || !Number.isInteger(payload.exp)) {
     throw new Error("Invalid token payload");
   }
   if (payload.exp <= Math.floor(Date.now() / 1000)) throw new Error("Token expired");
