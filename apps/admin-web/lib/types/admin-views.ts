@@ -157,6 +157,7 @@ export type BroadcastView = {
   status: string;
   target: string;
   author: string;
+  authorLabel: "Citizen" | "Admin" | "Verified";
   requiresApproval: boolean;
   recipients: number;
   delivery: string;
@@ -164,6 +165,42 @@ export type BroadcastView = {
   schedulingState: string;
   dispatchFailureReason: string | null;
   autoDispatchStatus: string;
+  adminVerified: boolean;
+  reportCount: number;
+  commentCount: number;
+  country: string | null;
+  state: string | null;
+  suspendedReason: string | null;
+  createdAt: string | null;
+};
+
+export type BroadcastDetailView = BroadcastView & {
+  body: string;
+  incidentId: string | null;
+  publishedAt: string | null;
+  resolvedAt: string | null;
+  suspendedAt: string | null;
+};
+
+export type BroadcastReportView = {
+  id: string;
+  broadcastId: string;
+  reason: string;
+  details: string;
+  status: string;
+  createdAt: string | null;
+};
+
+export type BroadcastAnalyticsView = {
+  total: number;
+  byStatus: Record<string, number>;
+  byCategory: Record<string, number>;
+  byAuthorLabel: Record<string, number>;
+  suspended: number;
+  verified: number;
+  totalReports: number;
+  totalComments: number;
+  citizenSubmitted: number;
 };
 
 export type UserDirectoryEntry = {
