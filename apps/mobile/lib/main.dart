@@ -40,6 +40,7 @@ import "incidents/incident_location_tracker.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
 import "emergency/active_emergency_screen.dart";
+import "emergency/incident_communication_screen.dart";
 import "emergency/active_emergency_navigation.dart";
 import "emergency/active_emergencies_selector_screen.dart";
 import "emergency/live_video_startup_phase.dart";
@@ -194,7 +195,24 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? "";
   if (name.startsWith("/active-emergency/") &&
       name != "/active-emergency/none") {
-    final incidentId = name.substring("/active-emergency/".length).trim();
+    final remainder = name.substring("/active-emergency/".length).trim();
+    if (remainder.endsWith("/messages")) {
+      final incidentId =
+          remainder.substring(0, remainder.length - "/messages".length).trim();
+      if (incidentId.isEmpty) return null;
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (context) {
+          final app = appOf(context);
+          return IncidentCommunicationScreen(
+            incidentId: incidentId,
+            accessToken: app.accessToken ?? "",
+            apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+          );
+        },
+      );
+    }
+    final incidentId = remainder;
     if (incidentId.isEmpty) {
       return MaterialPageRoute(
         settings: settings,

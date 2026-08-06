@@ -2,6 +2,7 @@
 library;
 
 import "active_emergency_errors.dart";
+import "incident_communication_contract.dart";
 
 enum ActiveEmergencyProgressStageState {
   pending,
@@ -361,6 +362,20 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
     this.cancellationSummary,
     this.resolutionSummary,
     this.reporterConfidence,
+    this.communication = const IncidentCommunicationSummary(
+      conversationAvailable: false,
+      unreadMessageCount: 0,
+      conversationStatus: "Active",
+      allowedCommunicationActions: IncidentCommunicationAllowedActions(
+        sendText: false,
+        sendVoice: false,
+        sendPhoto: false,
+        sendVideo: false,
+        sendLocation: false,
+        quickReply: false,
+        openThread: false,
+      ),
+    ),
   }) : super(isActive: true);
 
   final String category;
@@ -383,6 +398,7 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
   final ActiveEmergencyCancellationSummary? cancellationSummary;
   final ActiveEmergencyResolutionSummary? resolutionSummary;
   final String? reporterConfidence;
+  final IncidentCommunicationSummary communication;
 
   factory ActiveEmergencyActiveContract.fromJson(Map<String, dynamic> json) {
     final progressStagesRaw = json["progressStages"];
@@ -455,6 +471,9 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
           ? null
           : ActiveEmergencyResolutionSummary.fromJson(resolution),
       reporterConfidence: json["reporterConfidence"]?.toString(),
+      communication: IncidentCommunicationSummary.fromJson(
+        json["communication"] as Map<String, dynamic>?,
+      ),
     );
   }
 }

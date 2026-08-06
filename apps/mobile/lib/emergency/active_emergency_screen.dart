@@ -469,6 +469,37 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                     const SizedBox(height: 16),
                     _buildLiveVideoCard(active),
                     const SizedBox(height: 16),
+                    Text("Communication",
+                        style: Theme.of(context).textTheme.titleMedium),
+                    if (active.communication.conversationAvailable) ...[
+                      Text(
+                        active.communication.lastMessagePreview ??
+                            "No messages yet. You can contact dispatch here.",
+                      ),
+                      if (active.communication.unreadMessageCount > 0)
+                        Text(
+                          "${active.communication.unreadMessageCount} unread",
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                      const SizedBox(height: 8),
+                      Semantics(
+                        button: true,
+                        label: "Open emergency communication",
+                        child: FilledButton.icon(
+                          onPressed: active.communication.allowedCommunicationActions.openThread
+                              ? () {
+                                  Navigator.of(context).pushNamed(
+                                    "/active-emergency/${active.incidentId}/messages",
+                                  );
+                                }
+                              : null,
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          label: const Text("Open communication"),
+                        ),
+                      ),
+                    ] else
+                      const Text("Communication will be available once dispatch connects."),
+                    const SizedBox(height: 16),
                     Text("Progress",
                         style: Theme.of(context).textTheme.titleMedium),
                     ...active.progressStages.map(
