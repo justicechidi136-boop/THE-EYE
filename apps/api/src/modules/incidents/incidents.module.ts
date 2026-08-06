@@ -10,6 +10,7 @@ import { VerificationModule } from "../verification/verification.module";
 import { CommunityVerificationModule } from "../community-verification/community-verification.module";
 import { DispatchModule } from "../dispatch/dispatch.module";
 import { VoiceAttachmentsModule } from "../voice-attachments/voice-attachments.module";
+import { IncidentCommunicationsModule } from "../incident-communications/incident-communications.module";
 import { ActiveEmergencyService } from "./active-emergency.service";
 import { IncidentsController } from "./incidents.controller";
 import { IncidentsService } from "./incidents.service";
@@ -19,7 +20,7 @@ import { JurisdictionResolutionService } from "./jurisdiction-resolution.service
 import { JurisdictionCorrectionService } from "./jurisdiction-correction.service";
 
 @Module({
-  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, CommunityVerificationModule, VoiceAttachmentsModule, forwardRef(() => DispatchModule)],
+  imports: [AuditModule, NotificationsModule, PrismaModule, VerificationModule, CommunityVerificationModule, VoiceAttachmentsModule, IncidentCommunicationsModule, forwardRef(() => DispatchModule)],
   controllers: [IncidentsController, CaseManagementController],
   providers: [
     IncidentsService,

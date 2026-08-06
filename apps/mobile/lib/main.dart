@@ -44,6 +44,7 @@ import "incidents/incident_location_tracker.dart";
 import "incidents/incident_submission_result.dart";
 import "incidents/incident_submission_service.dart";
 import "emergency/active_emergency_screen.dart";
+import "emergency/incident_communication_screen.dart";
 import "emergency/active_emergency_navigation.dart";
 import "emergency/active_emergencies_selector_screen.dart";
 import "emergency/live_video_startup_phase.dart";
@@ -196,9 +197,43 @@ Widget _buildActiveEmergencyRoute(BuildContext context,
 
 Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? "";
+  if (name.startsWith("/incident-detail/") && name.endsWith("/messages")) {
+    final incidentId =
+        name.substring("/incident-detail/".length, name.length - "/messages".length).trim();
+    if (incidentId.isEmpty) return null;
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (context) {
+        final app = appOf(context);
+        return IncidentCommunicationScreen(
+          incidentId: incidentId,
+          accessToken: app.accessToken ?? "",
+          apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+          readOnly: true,
+        );
+      },
+    );
+  }
   if (name.startsWith("/active-emergency/") &&
       name != "/active-emergency/none") {
-    final incidentId = name.substring("/active-emergency/".length).trim();
+    final remainder = name.substring("/active-emergency/".length).trim();
+    if (remainder.endsWith("/messages")) {
+      final incidentId =
+          remainder.substring(0, remainder.length - "/messages".length).trim();
+      if (incidentId.isEmpty) return null;
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (context) {
+          final app = appOf(context);
+          return IncidentCommunicationScreen(
+            incidentId: incidentId,
+            accessToken: app.accessToken ?? "",
+            apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+          );
+        },
+      );
+    }
+    final incidentId = remainder;
     if (incidentId.isEmpty) {
       return MaterialPageRoute(
         settings: settings,
@@ -719,6 +754,26 @@ class _TheEyeAppState extends State<TheEyeApp> {
     if (!mounted) return;
     final navigator = theEyeNavigatorKey.currentState;
     if (navigator == null) return;
+
+    if (request.route.startsWith("/active-emergency/") &&
+        request.route.endsWith("/messages")) {
+      final incidentId = request.route
+          .substring("/active-emergency/".length, request.route.length - "/messages".length)
+          .trim();
+      if (incidentId.isEmpty) return;
+      navigator.pushNamed("/active-emergency/$incidentId/messages");
+      return;
+    }
+
+    if (request.route.startsWith("/incident-detail/") &&
+        request.route.endsWith("/messages")) {
+      final incidentId = request.route
+          .substring("/incident-detail/".length, request.route.length - "/messages".length)
+          .trim();
+      if (incidentId.isEmpty) return;
+      navigator.pushNamed("/incident-detail/$incidentId/messages");
+      return;
+    }
 
     if (request.route == "/incident-detail") {
       final incidentId = request.incidentId;

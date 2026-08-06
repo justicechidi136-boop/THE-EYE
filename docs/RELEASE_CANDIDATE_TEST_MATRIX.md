@@ -254,3 +254,18 @@ For each FAIL or NOT TESTED row after fix:
 | AE-035-007 | Inbox tap active incident | P0 | Opens Active Emergency, not Tracking |
 | AE-035-008 | Offline evidence queue retry | P1 | Queued upload succeeds on reconnect |
 | AE-035-009 | Accessibility labels on AE actions | P1 | TalkBack reads action labels |
+
+---
+
+## Phase 6 — Incident communication QA (add to staging matrix)
+
+| ID | Scenario | Priority | Expected |
+|----|----------|----------|----------|
+| IC-006-001 | Reporter sends text on active incident | P0 | Message in thread; dispatcher in-app notification |
+| IC-006-002 | Dispatcher sends official notice | P0 | Reporter push opens `/active-emergency/:id/messages` |
+| IC-006-003 | Information request + quick reply | P0 | Request resolves; pending count clears |
+| IC-006-004 | Reporter sends photo/voice/location | P1 | Media message with attachmentId |
+| IC-006-005 | Terminal incident read-only thread | P0 | Send disabled; history visible from Incident Details |
+| IC-006-006 | Community verifier access | P0 | `404` on conversation/messages |
+| IC-006-007 | Admin restrict/close/report | P1 | Thread status updates; flagged message audited |
+| IC-006-008 | Offline message queue flush | P1 | Queued text retries after reconnect |

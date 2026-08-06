@@ -5,6 +5,7 @@
   HttpStatus,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType, ResolutionSource } from "@the-eye/shared";
@@ -54,6 +55,7 @@ import {
   validateReportIncidentDto,
 } from "./dto/report-incident.dto";
 import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
+import { IncidentCommunicationsService } from "../incident-communications/incident-communications.service";
 
 @Injectable()
 export class IncidentsService {
@@ -71,6 +73,7 @@ export class IncidentsService {
     private readonly etaService: EtaService,
     private readonly jurisdictionResolution: JurisdictionResolutionService,
     private readonly voiceTranscription: VoiceTranscriptionService,
+    @Optional() private readonly incidentCommunications?: IncidentCommunicationsService,
   ) {}
 
   async list(
@@ -466,6 +469,12 @@ export class IncidentsService {
       afterState: { status, statusVersion: updated.statusVersion },
       metadata: { fromStatus: currentStatus, toStatus: status },
     });
+
+    if (isTerminalIncidentStatus(status)) {
+      await this.incidentCommunications
+        ?.closeConversationForTerminalIncident(id, note ?? `Incident ${status}`)
+        .catch(() => undefined);
+    }
 
     return updated;
   }

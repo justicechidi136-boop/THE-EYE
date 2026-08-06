@@ -7,6 +7,7 @@ import { IncidentAssignmentStatus, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { CommunityVerificationService } from "../community-verification/community-verification.service";
+import { IncidentCommunicationsService } from "../incident-communications/incident-communications.service";
 import { IncidentsService } from "./incidents.service";
 import {
   buildIncidentPresentation,
@@ -89,6 +90,7 @@ export class ActiveEmergencyService {
     private readonly prisma: PrismaService,
     private readonly incidentsService: IncidentsService,
     private readonly communityVerification: CommunityVerificationService,
+    private readonly incidentCommunications: IncidentCommunicationsService,
   ) {}
 
   async getActiveEmergency(incidentId: string, actor?: JwtPayload) {
@@ -170,6 +172,10 @@ export class ActiveEmergencyService {
     );
 
     if (!isActiveIncidentStatus(status)) {
+      const communication = await this.incidentCommunications.getCommunicationSummary(
+        incidentId,
+        actor!,
+      );
       return {
         isActive: false,
         routeType: TERMINAL_ROUTE_TYPE,
@@ -179,6 +185,7 @@ export class ActiveEmergencyService {
         statusVersion: incident.statusVersion,
         resolutionSummary: presentation.resolutionSummary ?? null,
         cancellationSummary: presentation.cancellationSummary ?? null,
+        communication,
       };
     }
 
@@ -197,6 +204,7 @@ export class ActiveEmergencyService {
 
     const liveSession = incident.liveVideoSessions[0];
     const communityAggregate = await this.communityVerification.getIncidentAggregate(incidentId);
+    const communication = await this.incidentCommunications.getCommunicationSummary(incidentId, actor!);
 
     return {
       isActive: true,
@@ -266,6 +274,7 @@ export class ActiveEmergencyService {
       cancellationSummary: presentation.cancellationSummary,
       resolutionSummary: presentation.resolutionSummary ?? null,
       lastUpdatedAt: incident.updatedAt.toISOString(),
+      communication,
     };
   }
 }

@@ -58,4 +58,18 @@ void main() {
     expect(request?.route, "/broadcasts/broadcast-9");
     expect(request?.routing?.opensBroadcastDetails, isTrue);
   });
+
+  test("allows incident message thread deep links", () {
+    final request = PushNavigationRequest.fromMessageData({
+      "schemaVersion": "1",
+      "routeType": "OWN_ACTIVE_INCIDENT",
+      "eventType": "INCIDENT_MESSAGE_RECEIVED",
+      "destination": "/active-emergency/inc-123/messages",
+      "incidentId": "inc-123",
+      "messageId": "msg-1",
+      "notificationType": "IncidentMessageReceived",
+    });
+    expect(request?.route, "/active-emergency/inc-123/messages");
+    expect(request?.incidentId, "inc-123");
+  });
 }

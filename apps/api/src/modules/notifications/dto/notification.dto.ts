@@ -14,7 +14,9 @@ export type NotificationType =
   | "SupportChatAssigned"
   | "SupportChatEscalated"
   | "SupportChatResolved"
-  | "SupportChatReopened";
+  | "SupportChatReopened"
+  | "IncidentMessageReceived"
+  | "IncidentInformationRequest";
 export type NotificationPriority = "Low" | "Normal" | "High" | "Critical";
 
 export type CreateNotificationDto = {
@@ -50,7 +52,7 @@ export type RegisterPushTokenDto = {
 };
 
 const channels = new Set(["push", "sms", "email", "in_app", "watch_push"]);
-const types = new Set(["EmergencyAlert", "IncidentStatusUpdate", "BroadcastAlert", "NearbyDangerWarning", "MissingPersonAlert", "StolenVehicleAlert", "FamilySosAlert", "AdminAssignmentAlert", "SupportChatReply", "SupportChatAssigned", "SupportChatEscalated", "SupportChatResolved", "SupportChatReopened"]);
+const types = new Set(["EmergencyAlert", "IncidentStatusUpdate", "BroadcastAlert", "NearbyDangerWarning", "MissingPersonAlert", "StolenVehicleAlert", "FamilySosAlert", "AdminAssignmentAlert", "SupportChatReply", "SupportChatAssigned", "SupportChatEscalated", "SupportChatResolved", "SupportChatReopened", "IncidentMessageReceived", "IncidentInformationRequest"]);
 const priorities = new Set(["Low", "Normal", "High", "Critical"]);
 const appEnvironments = new Set(["development", "staging", "production"]);
 

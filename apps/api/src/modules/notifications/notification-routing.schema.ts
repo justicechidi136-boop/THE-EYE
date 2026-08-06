@@ -202,3 +202,53 @@ export function buildCommunityVerificationNotificationMetadata(input: {
     silent: false,
   };
 }
+
+export function buildIncidentMessageNotificationMetadata(input: {
+  incidentId: string;
+  status: IncidentStatus | string;
+  messageId: string;
+  notificationType: string;
+}): Record<string, unknown> {
+  const terminal = isTerminalIncidentStatus(input.status as IncidentStatus);
+  const destination = terminal
+    ? `/incident-detail/${input.incidentId}/messages`
+    : `/active-emergency/${input.incidentId}/messages`;
+  return {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: terminal ? "OWN_INCIDENT_DETAILS" : "OWN_ACTIVE_INCIDENT",
+    eventType: "INCIDENT_MESSAGE_RECEIVED",
+    incidentId: input.incidentId,
+    messageId: input.messageId,
+    notificationType: input.notificationType,
+    destination,
+    route: destination,
+    deepLink: destination,
+    issuedAt: new Date().toISOString(),
+    silent: false,
+  };
+}
+
+export function buildIncidentInformationRequestNotificationMetadata(input: {
+  incidentId: string;
+  status: IncidentStatus | string;
+  requestId: string;
+  notificationType: string;
+}): Record<string, unknown> {
+  const terminal = isTerminalIncidentStatus(input.status as IncidentStatus);
+  const destination = terminal
+    ? `/incident-detail/${input.incidentId}/messages`
+    : `/active-emergency/${input.incidentId}/messages`;
+  return {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: terminal ? "OWN_INCIDENT_DETAILS" : "OWN_ACTIVE_INCIDENT",
+    eventType: "INCIDENT_INFORMATION_REQUEST",
+    incidentId: input.incidentId,
+    requestId: input.requestId,
+    notificationType: input.notificationType,
+    destination,
+    route: destination,
+    deepLink: destination,
+    issuedAt: new Date().toISOString(),
+    silent: false,
+  };
+}
