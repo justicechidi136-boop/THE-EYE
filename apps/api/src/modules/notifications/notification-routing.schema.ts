@@ -7,6 +7,7 @@ export type NotificationRouteType =
   | "OWN_ACTIVE_INCIDENT"
   | "OWN_INCIDENT_DETAILS"
   | "COMMUNITY_VERIFICATION"
+  | "BROADCAST_DETAILS"
   | "SYSTEM";
 
 export interface NotificationRoutingV1 {
@@ -16,6 +17,11 @@ export interface NotificationRoutingV1 {
   status?: string;
   notificationType: string;
   destination: string;
+  broadcastId?: string;
+  broadcastCategory?: string;
+  countryCode?: string;
+  issuedAt?: string;
+  eventType?: string;
 }
 
 const TERMINAL_REPORTER_STATUSES = new Set<IncidentStatus>([
@@ -113,4 +119,42 @@ export function resolveNotificationRoutingFromMetadata(
 export function isActiveReporterIncidentStatus(status?: string | null): boolean {
   if (!status) return true;
   return isActiveIncidentStatus(status as IncidentStatus);
+}
+
+export function resolveBroadcastNotificationRouting(input: {
+  broadcastId: string;
+  broadcastCategory: string;
+  countryCode: string;
+  issuedAt: string;
+  eventType: string;
+}): NotificationRoutingV1 {
+  return {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: "BROADCAST_DETAILS",
+    notificationType: "BroadcastAlert",
+    destination: `/broadcasts/${input.broadcastId}`,
+    broadcastId: input.broadcastId,
+    broadcastCategory: input.broadcastCategory,
+    countryCode: input.countryCode,
+    issuedAt: input.issuedAt,
+    eventType: input.eventType,
+  };
+}
+
+export function buildBroadcastNotificationMetadata(input: {
+  broadcastId: string;
+  broadcastCategory: string;
+  countryCode: string;
+  issuedAt: string;
+  eventType: string;
+  status?: string;
+}): Record<string, unknown> {
+  const routing = resolveBroadcastNotificationRouting(input);
+  return {
+    ...routing,
+    route: routing.destination,
+    deepLink: routing.destination,
+    silent: false,
+    ...(input.status ? { status: input.status } : {}),
+  };
 }
