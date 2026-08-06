@@ -182,13 +182,22 @@ export function resolveNotificationRouting(notification: NotificationLike): Noti
   };
 }
 
+const ALLOWED_DEEP_LINK_PREFIXES = [
+  "/active-emergency/",
+  "/incident-detail/",
+  "/broadcasts/",
+  "/community-verification/",
+];
+
 export function sanitizeDeepLink(value?: string | null): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed.startsWith("/")) return null;
   if (trimmed.includes("..") || trimmed.includes("://")) return null;
   const route = trimmed.split("?")[0];
-  return ALLOWED_DEEP_LINKS.has(route) ? route : null;
+  if (ALLOWED_DEEP_LINKS.has(route)) return route;
+  if (ALLOWED_DEEP_LINK_PREFIXES.some((prefix) => route.startsWith(prefix))) return route;
+  return null;
 }
 
 export function mapNotificationInboxItem(notification: NotificationLike) {
