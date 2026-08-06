@@ -154,7 +154,7 @@ describe("CitizenActivityService", () => {
     const page1 = await service.listActivityHistory(citizen as any, { limit: "2" });
     expect(page1.data).toHaveLength(2);
     expect(page1.hasMore).toBe(true);
-    expect(page1.nextCursor).toBeTruthy();
+    expect(page1.nextCursor).not.toBe(null);
 
     const page2 = await service.listActivityHistory(citizen as any, {
       limit: "2",

@@ -15,7 +15,7 @@ class _FakeApiClient extends TheEyeApiClient {
     String path, {
     String? accessToken,
     Map<String, String>? query,
-    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 30),
   }) async {
     final key = query == null || query.isEmpty ? path : "$path?${Uri(queryParameters: query).query}";
     return responses[key] ?? responses[path] ?? http.Response('{"data":[]}', 404);
