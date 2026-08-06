@@ -27,6 +27,12 @@ abstract final class PushDeepLinkRouter {
     if (route.startsWith("/broadcasts/") && route.length > "/broadcasts/".length) {
       return true;
     }
+    if (route.startsWith("/active-emergency/") && route.endsWith("/messages")) {
+      return route.length > "/active-emergency/".length + "/messages".length;
+    }
+    if (route.startsWith("/incident-detail/") && route.endsWith("/messages")) {
+      return route.length > "/incident-detail/".length + "/messages".length;
+    }
     return route.startsWith("/community-verification/") &&
         route.length > "/community-verification/".length;
   }

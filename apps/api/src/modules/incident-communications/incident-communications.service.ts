@@ -93,7 +93,12 @@ export class IncidentCommunicationsService {
     };
   }
 
-  async sendMessage(incidentId: string, actor: JwtPayload, dto: SendIncidentMessageDto) {
+  async sendMessage(
+    incidentId: string,
+    actor: JwtPayload,
+    dto: SendIncidentMessageDto,
+    options?: { skipPush?: boolean },
+  ) {
     const ctx = await this.access.assertAccess(incidentId, actor);
     if (!ctx.canWrite) {
       throw new NotFoundException("Incident not found or outside your scope");
@@ -150,7 +155,9 @@ export class IncidentCommunicationsService {
     });
 
     await this.createDeliveryReceipts(message.id, incidentId, actor);
-    await this.notifyRecipients(incidentId, message.id, ctx, dto.messageType);
+    if (!options?.skipPush && dto.messageType !== "InformationRequest") {
+      await this.notifyRecipients(incidentId, message.id, ctx, dto.messageType);
+    }
     await this.audit.record({
       actor,
       action: "communication.message_sent",
@@ -164,10 +171,13 @@ export class IncidentCommunicationsService {
       },
     });
 
-    if (dto.messageType === "QuickReply" && dto.structuredAction) {
+    if (ctx.role === "Reporter") {
       await this.tryResolveInformationRequest(
         incidentId,
-        dto.structuredAction as Record<string, unknown>,
+        {
+          ...((dto.metadata ?? {}) as Record<string, unknown>),
+          ...((dto.structuredAction ?? {}) as Record<string, unknown>),
+        },
         message.id,
       );
     }
@@ -308,13 +318,18 @@ export class IncidentCommunicationsService {
       },
     });
 
-    const message = await this.sendMessage(incidentId, actor, {
-      clientMessageId: `info-req-${request.id}`,
-      messageType: "InformationRequest",
-      body: prompt,
-      structuredAction: { requestId: request.id, requestType },
-      metadata: { informationRequestId: request.id },
-    });
+    const message = await this.sendMessage(
+      incidentId,
+      actor,
+      {
+        clientMessageId: `info-req-${request.id}`,
+        messageType: "InformationRequest",
+        body: prompt,
+        structuredAction: { requestId: request.id, requestType },
+        metadata: { informationRequestId: request.id },
+      },
+      { skipPush: true },
+    );
 
     await this.notifyInformationRequest(incidentId, request.id, ctx.incident.status);
     await this.audit.record({
@@ -592,12 +607,24 @@ export class IncidentCommunicationsService {
     action: Record<string, unknown>,
     messageId: string,
   ) {
-    const requestId =
+    let requestId =
       typeof action.requestId === "string"
         ? action.requestId
         : typeof action.informationRequestId === "string"
           ? action.informationRequestId
           : null;
+    if (!requestId) {
+      const open = await this.prisma.incidentInformationRequest.findFirst({
+        where: {
+          incidentId,
+          status: "Open",
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      requestId = open?.id ?? null;
+    }
     if (!requestId) return;
     await this.prisma.incidentInformationRequest.updateMany({
       where: { id: requestId, incidentId, status: "Open" },

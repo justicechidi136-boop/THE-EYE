@@ -35,6 +35,7 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
   bool _loading = true;
   String? _error;
   bool _sending = false;
+  String? _pendingInformationRequestId;
   Timer? _pollTimer;
   String _conversationStatus = "Active";
 
@@ -64,6 +65,7 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
       if (!mounted) return;
       setState(() {
         _messages = messages.reversed.toList(growable: false);
+        _pendingInformationRequestId = _extractPendingRequestId(_messages);
         _conversationStatus = conversation["conversationStatus"]?.toString() ?? "Active";
         _actions = IncidentCommunicationAllowedActions.fromJson(
           (conversation["allowedCommunicationActions"] as Map<String, dynamic>?) ?? const {},
@@ -71,6 +73,7 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
         _error = null;
         _loading = false;
       });
+      await _markOfficialMessagesRead(_messages);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -115,17 +118,53 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     }
   }
 
+  String? _extractPendingRequestId(List<IncidentThreadMessage> messages) {
+    for (final message in messages.reversed) {
+      if (message.messageType != "InformationRequest") continue;
+      final requestId = message.structuredAction?["requestId"]?.toString();
+      if (requestId != null && requestId.isNotEmpty) return requestId;
+    }
+    return null;
+  }
+
+  Future<void> _markOfficialMessagesRead(List<IncidentThreadMessage> messages) async {
+    for (final message in messages) {
+      if (message.senderRole == "Reporter") continue;
+      if (message.deliveryState == "Read") continue;
+      try {
+        await _service.markRead(widget.incidentId, message.id, widget.accessToken);
+      } catch (_) {
+        // Non-fatal; unread badge may lag until next refresh.
+      }
+    }
+  }
+
   Future<void> _sendQuickReply(String action) async {
     if (!_actions.quickReply || widget.readOnly) return;
+    setState(() => _sending = true);
     final clientMessageId = const Uuid().v4();
-    await _service.sendMessage(
-      incidentId: widget.incidentId,
-      accessToken: widget.accessToken,
-      clientMessageId: clientMessageId,
-      messageType: "QuickReply",
-      structuredAction: {"action": action},
-    );
-    await _refresh();
+    try {
+      await _service.sendMessage(
+        incidentId: widget.incidentId,
+        accessToken: widget.accessToken,
+        clientMessageId: clientMessageId,
+        messageType: "QuickReply",
+        structuredAction: {
+          "action": action,
+          if (_pendingInformationRequestId != null)
+            "requestId": _pendingInformationRequestId,
+        },
+      );
+      await _refresh();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Unable to send quick reply. Please try again.")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override

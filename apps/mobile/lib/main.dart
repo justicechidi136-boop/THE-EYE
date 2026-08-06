@@ -193,6 +193,23 @@ Widget _buildActiveEmergencyRoute(BuildContext context,
 
 Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? "";
+  if (name.startsWith("/incident-detail/") && name.endsWith("/messages")) {
+    final incidentId =
+        name.substring("/incident-detail/".length, name.length - "/messages".length).trim();
+    if (incidentId.isEmpty) return null;
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (context) {
+        final app = appOf(context);
+        return IncidentCommunicationScreen(
+          incidentId: incidentId,
+          accessToken: app.accessToken ?? "",
+          apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+          readOnly: true,
+        );
+      },
+    );
+  }
   if (name.startsWith("/active-emergency/") &&
       name != "/active-emergency/none") {
     final remainder = name.substring("/active-emergency/".length).trim();
@@ -711,6 +728,26 @@ class _TheEyeAppState extends State<TheEyeApp> {
     if (!mounted) return;
     final navigator = theEyeNavigatorKey.currentState;
     if (navigator == null) return;
+
+    if (request.route.startsWith("/active-emergency/") &&
+        request.route.endsWith("/messages")) {
+      final incidentId = request.route
+          .substring("/active-emergency/".length, request.route.length - "/messages".length)
+          .trim();
+      if (incidentId.isEmpty) return;
+      navigator.pushNamed("/active-emergency/$incidentId/messages");
+      return;
+    }
+
+    if (request.route.startsWith("/incident-detail/") &&
+        request.route.endsWith("/messages")) {
+      final incidentId = request.route
+          .substring("/incident-detail/".length, request.route.length - "/messages".length)
+          .trim();
+      if (incidentId.isEmpty) return;
+      navigator.pushNamed("/incident-detail/$incidentId/messages");
+      return;
+    }
 
     if (request.route == "/incident-detail") {
       final incidentId = request.incidentId;
