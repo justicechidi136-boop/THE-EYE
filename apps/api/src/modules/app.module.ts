@@ -35,6 +35,7 @@ import { DroneSurveillanceModule } from "./drone-surveillance/drone-surveillance
 import { SupportChatsModule } from "./support-chats/support-chats.module";
 import { IncidentCommunicationsModule } from "./incident-communications/incident-communications.module";
 import { CitizenActivityModule } from "./citizen-activity/citizen-activity.module";
+import { FieldOperationsModule } from "./field-operations/field-operations.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -93,6 +94,7 @@ const redisDisabled = !shouldRegisterBullMq();
     SupportChatsModule,
     IncidentCommunicationsModule,
     CitizenActivityModule,
+    FieldOperationsModule,
   ],
   controllers: [HealthController],
   providers: [
