@@ -6,6 +6,7 @@ import { CoordinatePanel, googleMapsUrl } from "../../../../components/dispatch/
 import { DispatchActions } from "../../../../components/dispatch/dispatch-actions";
 import { IncidentSlaPanel } from "../../../../components/dispatch/incident-sla-panel";
 import { IncidentTimelinePanel } from "../../../../components/dispatch/incident-timeline-panel";
+import { IncidentCommunicationPanel } from "../../../../components/dispatch/incident-communication-panel";
 import { ConsolePageHeader } from "../../../../components/console";
 import { Panel, StatusBadge } from "../../../../components/ui";
 import { getRouteById } from "../../../../lib/admin/admin-route-registry";
@@ -126,6 +127,9 @@ export default async function DispatchIncidentDetailPage({ params }: PageProps) 
           <div className="xl:col-span-2">
             <IncidentTimelinePanel entries={(timeline.data ?? []) as Array<{ at?: string; type?: string; label?: string; silent?: boolean }>} />
           </div>
+          <div className="xl:col-span-2">
+            <IncidentCommunicationPanel incidentId={incident.id} />
+          </div>
         </div>
 
         <div className="grid min-w-0 gap-5">
@@ -166,9 +170,9 @@ export default async function DispatchIncidentDetailPage({ params }: PageProps) 
           </Panel>
           <Panel title="Communication status">
             <dl className="grid gap-2 text-sm">
-              <div><dt className="text-muted">Live Chat</dt><dd><Link href="/live-chats" className="text-eye underline">Open operational chat console</Link></dd></div>
+              <div><dt className="text-muted">Incident thread</dt><dd>Reporter/dispatcher secure messaging panel above</dd></div>
               <div><dt className="text-muted">Live video</dt><dd>Unavailable until LiveKit admin viewer is configured</dd></div>
-              <div><dt className="text-muted">Notifications</dt><dd>Dispatch events recorded in timeline</dd></div>
+              <div><dt className="text-muted">Notifications</dt><dd>Push routes to Active Emergency messages (no message body in payload)</dd></div>
             </dl>
           </Panel>
           <Panel title="Command actions">
