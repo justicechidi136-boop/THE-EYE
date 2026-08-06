@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiRequest } from "../../../../../lib/api/client";
-import { getAccessToken } from "../../../../../lib/session";
+import { apiRequest } from "../../../../../../lib/api/client";
+import { getAccessToken } from "../../../../../../lib/session";
 
 type RouteContext = { params: Promise<{ incidentId: string; action?: string[] }> };
 
