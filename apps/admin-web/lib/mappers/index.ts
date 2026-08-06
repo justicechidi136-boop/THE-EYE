@@ -1,6 +1,8 @@
 import type {
   AuditLogView,
   BroadcastView,
+  BroadcastDetailView,
+  BroadcastReportView,
   CommunityPostView,
   CommunityView,
   DuplicateReportView,
@@ -113,10 +115,36 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
   };
 }
 
+function broadcastAuthorLabel(record: Record<string, unknown>): "Citizen" | "Admin" | "Verified" {
+  const authorType = String(record.authorType ?? "Admin");
+  const adminVerified = Boolean(record.adminVerified);
+  if (authorType === "Admin") return "Admin";
+  if (adminVerified) return "Verified";
+  return "Citizen";
+}
+
+function broadcastReportCount(record: Record<string, unknown>) {
+  const count = record._count as { reports?: number } | undefined;
+  if (typeof count?.reports === "number") return count.reports;
+  return Array.isArray(record.reports) ? record.reports.length : 0;
+}
+
+function broadcastCommentCount(record: Record<string, unknown>) {
+  const count = record._count as { comments?: number } | undefined;
+  if (typeof count?.comments === "number") return count.comments;
+  return Array.isArray(record.comments) ? record.comments.length : 0;
+}
+
+function broadcastRecipientCount(record: Record<string, unknown>) {
+  const count = record._count as { deliveries?: number } | undefined;
+  if (typeof count?.deliveries === "number") return count.deliveries;
+  return Array.isArray(record.deliveries) ? record.deliveries.length : 0;
+}
+
 export function toBroadcastView(record: Record<string, unknown>): BroadcastView {
   const deliveries = Array.isArray(record.deliveries) ? record.deliveries : [];
   const status = String(record.status ?? "Draft");
-  const recipients = deliveries.length;
+  const recipients = deliveries.length || broadcastRecipientCount(record);
   const scheduledAt = record.scheduledAt ? String(record.scheduledAt) : null;
   const dispatchFailureReason = record.dispatchFailureReason ? String(record.dispatchFailureReason) : null;
   const delivery =
@@ -154,7 +182,12 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
         : record.targetArea
           ? "Custom geofence area"
           : "Jurisdiction target",
-    author: String((record.creator as { displayName?: string } | undefined)?.displayName ?? "Admin"),
+    author: String(
+      (record.creator as { displayName?: string } | undefined)?.displayName
+        ?? (record.creatorUser as { displayName?: string } | undefined)?.displayName
+        ?? broadcastAuthorLabel(record),
+    ),
+    authorLabel: broadcastAuthorLabel(record),
     requiresApproval: Boolean(record.requiresApproval ?? true),
     recipients,
     delivery,
@@ -162,6 +195,35 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
     schedulingState: status === "PendingApproval" ? "Pending approval" : status,
     dispatchFailureReason,
     autoDispatchStatus,
+    adminVerified: Boolean(record.adminVerified),
+    reportCount: broadcastReportCount(record),
+    commentCount: broadcastCommentCount(record),
+    country: record.country ? String(record.country) : null,
+    state: record.state ? String(record.state) : null,
+    suspendedReason: record.suspendedReason ? String(record.suspendedReason) : null,
+    createdAt: record.createdAt ? String(record.createdAt) : null,
+  };
+}
+
+export function toBroadcastDetailView(record: Record<string, unknown>): BroadcastDetailView {
+  return {
+    ...toBroadcastView(record),
+    body: String(record.body ?? ""),
+    incidentId: record.incidentId ? String(record.incidentId) : null,
+    publishedAt: record.publishedAt ? String(record.publishedAt) : null,
+    resolvedAt: record.resolvedAt ? String(record.resolvedAt) : null,
+    suspendedAt: record.suspendedAt ? String(record.suspendedAt) : null,
+  };
+}
+
+export function toBroadcastReportView(record: Record<string, unknown>): BroadcastReportView {
+  return {
+    id: String(record.id),
+    broadcastId: String(record.broadcastId),
+    reason: String(record.reason ?? "Unknown"),
+    details: String(record.details ?? ""),
+    status: String(record.status ?? "Open"),
+    createdAt: record.createdAt ? String(record.createdAt) : null,
   };
 }
 

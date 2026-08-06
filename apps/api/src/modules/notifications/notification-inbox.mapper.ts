@@ -1,4 +1,9 @@
 import type { NotificationPriority, NotificationType } from "./dto/notification.dto";
+import {
+  NOTIFICATION_SCHEMA_VERSION,
+  resolveNotificationRoutingFromMetadata,
+  type NotificationRoutingV1,
+} from "./notification-routing.schema";
 
 export type CanonicalDeliveryStatus =
   | "Created"
@@ -52,6 +57,8 @@ const ALLOWED_DEEP_LINKS = new Set([
   "/live-video",
   "/report/emergency",
   "/active-emergency",
+  "/active-emergencies",
+  "/incident-detail",
 ]);
 
 export function mapCanonicalDeliveryStatus(notification: NotificationLike): CanonicalDeliveryStatus {
@@ -87,24 +94,92 @@ export function isExpiredNotification(notification: NotificationLike): boolean {
 }
 
 export function buildNotificationDeepLink(notification: NotificationLike): string {
-  const metadataRoute = sanitizeDeepLink(
-    typeof notification.metadata?.route === "string"
-      ? notification.metadata.route
-      : typeof notification.metadata?.deepLink === "string"
-        ? notification.metadata.deepLink
-        : undefined,
+  const routing = resolveNotificationRouting(notification);
+  return routing.destination;
+}
+
+export function resolveNotificationRouting(notification: NotificationLike): NotificationRoutingV1 {
+  const metadata = notification.metadata ?? {};
+  const destination = sanitizeDeepLink(
+    typeof metadata.destination === "string"
+      ? metadata.destination
+      : typeof metadata.route === "string"
+        ? metadata.route
+        : typeof metadata.deepLink === "string"
+          ? metadata.deepLink
+          : undefined,
   );
-  if (metadataRoute) return metadataRoute;
+  if (destination) {
+    return {
+      schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+      routeType:
+        (metadata.routeType as NotificationRoutingV1["routeType"]) ??
+        (destination === "/active-emergency"
+          ? "OWN_ACTIVE_INCIDENT"
+          : destination === "/incident-detail"
+            ? "OWN_INCIDENT_DETAILS"
+            : "SYSTEM"),
+      incidentId: notification.incidentId ?? undefined,
+      status: typeof metadata.status === "string" ? metadata.status : undefined,
+      notificationType: notification.type,
+      destination,
+    };
+  }
 
   const type = notification.type.toLowerCase();
-  if (type.includes("emergency") || type.includes("sos")) return "/report/emergency";
-  if (type.includes("missingperson")) return "/missing-person";
-  if (type.includes("stolenvehicle")) return "/stolen-vehicle";
-  if (type.includes("broadcast")) return "/broadcasts";
-  if (type.includes("neighborhood") || notification.metadata?.communityId) return "/neighborhood-watch";
-  if (notification.incidentId && type.includes("incidentstatus")) return "/active-emergency";
-  if (notification.incidentId) return "/tracking";
-  return "/notifications";
+  if (type.includes("emergency") || type.includes("sos")) {
+    return {
+      schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+      routeType: "SYSTEM",
+      notificationType: notification.type,
+      destination: "/report/emergency",
+    };
+  }
+  if (type.includes("missingperson")) {
+    return {
+      schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+      routeType: "SYSTEM",
+      notificationType: notification.type,
+      destination: "/missing-person",
+    };
+  }
+  if (type.includes("stolenvehicle")) {
+    return {
+      schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+      routeType: "SYSTEM",
+      notificationType: notification.type,
+      destination: "/stolen-vehicle",
+    };
+  }
+  if (type.includes("broadcast")) {
+    return {
+      schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+      routeType: "SYSTEM",
+      notificationType: notification.type,
+      destination: "/broadcasts",
+    };
+  }
+  if (type.includes("neighborhood") || notification.metadata?.communityId) {
+    return {
+      schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+      routeType: "COMMUNITY_VERIFICATION",
+      notificationType: notification.type,
+      destination: "/neighborhood-watch",
+    };
+  }
+  if (notification.incidentId) {
+    return resolveNotificationRoutingFromMetadata(metadata, {
+      incidentId: notification.incidentId,
+      status: typeof metadata.status === "string" ? metadata.status : undefined,
+      notificationType: notification.type,
+    });
+  }
+  return {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: "SYSTEM",
+    notificationType: notification.type,
+    destination: "/notifications",
+  };
 }
 
 export function sanitizeDeepLink(value?: string | null): string | null {
@@ -118,6 +193,7 @@ export function sanitizeDeepLink(value?: string | null): string | null {
 
 export function mapNotificationInboxItem(notification: NotificationLike) {
   const expired = isExpiredNotification(notification);
+  const routing = resolveNotificationRouting(notification);
   return {
     id: notification.id,
     type: notification.type as NotificationType,
@@ -132,7 +208,8 @@ export function mapNotificationInboxItem(notification: NotificationLike) {
     sentAt: notification.sentAt,
     incidentId: notification.incidentId,
     broadcastId: notification.broadcastId,
-    deepLink: buildNotificationDeepLink(notification),
+    deepLink: routing.destination,
+    routing,
     expired,
     metadata: sanitizeInboxMetadata(notification.metadata ?? {}),
   };

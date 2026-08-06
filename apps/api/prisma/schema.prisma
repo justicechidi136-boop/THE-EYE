@@ -99,10 +99,21 @@ enum BroadcastStatus {
   DispatchQueued
   Dispatching
   Published
+  Active
+  Updated
+  Resolved
+  Suspended
+  DeletedByAdmin
+  WithdrawnByAuthor
   Failed
   Expired
   Cancelled
   Rejected
+}
+
+enum BroadcastAuthorType {
+  Citizen
+  Admin
 }
 
 enum BroadcastType {
@@ -357,6 +368,10 @@ model User {
   pushTokens                UserPushToken[]
   broadcastDeliveries       BroadcastDelivery[]
   broadcastReads            BroadcastRead[]
+  broadcastsCreated         Broadcast[]            @relation("BroadcastCitizenCreator")
+  broadcastComments         BroadcastComment[]     @relation("BroadcastCommentAuthor")
+  broadcastReports          BroadcastReport[]      @relation("BroadcastReportReporter")
+  broadcastSightings        BroadcastSighting[]      @relation("BroadcastSightingReporter")
   groupMessages             GroupMessage[]
   smartwatchDevices         SmartwatchDevice[]
   sosEvents                 SosEvent[]
@@ -541,6 +556,8 @@ model AdminUser {
   assignedIncidents          Incident[]            @relation("IncidentAssignedAdmin")
   broadcastsCreated          Broadcast[]           @relation("BroadcastCreator")
   broadcastsApproved         Broadcast[]           @relation("BroadcastApprover")
+  broadcastsVerified         Broadcast[]           @relation("BroadcastVerifier")
+  broadcastComments          BroadcastComment[]    @relation("BroadcastCommentAdmin")
   reports                    Report[]
   auditLogs                  AuditLog[]            @relation("AuditAdminActor")
   refreshTokens              RefreshToken[]
@@ -782,7 +799,9 @@ model Broadcast {
   id                    String                                       @id @default(uuid()) @db.Uuid
   jurisdictionId        String?                                      @map("jurisdiction_id") @db.Uuid
   incidentId            String?                                      @map("incident_id") @db.Uuid
-  creatorAdminId        String                                       @map("creator_admin_id") @db.Uuid
+  creatorAdminId        String?                                      @map("creator_admin_id") @db.Uuid
+  creatorUserId         String?                                      @map("creator_user_id") @db.Uuid
+  authorType            BroadcastAuthorType                          @default(Admin) @map("author_type")
   approverAdminId       String?                                      @map("approver_admin_id") @db.Uuid
   type                  BroadcastType
   title                 String
@@ -791,6 +810,26 @@ model Broadcast {
   priority              IncidentPriority                             @default(P4GeneralSafety)
   requiresApproval      Boolean                                      @default(true) @map("requires_approval")
   autoPublished         Boolean                                      @default(false) @map("auto_published")
+  country               String?
+  state                 String?
+  lga                   String?
+  metadata              Json                                         @default("{}")
+  clientBroadcastId     String?                                      @map("client_broadcast_id")
+  adminVerified         Boolean                                      @default(false) @map("admin_verified")
+  verifiedAt            DateTime?                                    @map("verified_at") @db.Timestamptz(6)
+  verifiedByAdminId     String?                                      @map("verified_by_admin_id") @db.Uuid
+  suspendedAt           DateTime?                                    @map("suspended_at") @db.Timestamptz(6)
+  suspendedReason       String?                                      @map("suspended_reason")
+  suspendedByAdminId    String?                                      @map("suspended_by_admin_id") @db.Uuid
+  deletedAt             DateTime?                                    @map("deleted_at") @db.Timestamptz(6)
+  deletedByAdminId      String?                                      @map("deleted_by_admin_id") @db.Uuid
+  withdrawnAt           DateTime?                                    @map("withdrawn_at") @db.Timestamptz(6)
+  withdrawnByUserId     String?                                      @map("withdrawn_by_user_id") @db.Uuid
+  resolvedAt            DateTime?                                    @map("resolved_at") @db.Timestamptz(6)
+  resolvedByUserId      String?                                      @map("resolved_by_user_id") @db.Uuid
+  resolvedByAdminId     String?                                      @map("resolved_by_admin_id") @db.Uuid
+  duplicateOfId         String?                                      @map("duplicate_of_id") @db.Uuid
+  commentsLocked        Boolean                                      @default(false) @map("comments_locked")
   targetRadiusMeters    Int?                                         @map("target_radius_meters")
   targetArea            Unsupported("geography(MultiPolygon,4326)")? @map("target_area")
   targetCenter          Unsupported("geography(Point,4326)")?        @map("target_center")
@@ -805,12 +844,19 @@ model Broadcast {
   createdAt             DateTime                                     @default(now()) @map("created_at") @db.Timestamptz(6)
   jurisdiction          Jurisdiction?                                @relation(fields: [jurisdictionId], references: [id])
   incident              Incident?                                    @relation(fields: [incidentId], references: [id])
-  creator               AdminUser                                    @relation("BroadcastCreator", fields: [creatorAdminId], references: [id])
+  creator               AdminUser?                                   @relation("BroadcastCreator", fields: [creatorAdminId], references: [id])
+  creatorUser           User?                                        @relation("BroadcastCitizenCreator", fields: [creatorUserId], references: [id])
   approver              AdminUser?                                   @relation("BroadcastApprover", fields: [approverAdminId], references: [id])
+  verifiedBy            AdminUser?                                   @relation("BroadcastVerifier", fields: [verifiedByAdminId], references: [id])
+  duplicateOf           Broadcast?                                   @relation("BroadcastDuplicate", fields: [duplicateOfId], references: [id])
+  duplicates            Broadcast[]                                  @relation("BroadcastDuplicate")
   notifications         Notification[]
   deliveries            BroadcastDelivery[]
   reads                 BroadcastRead[]
   communityPosts        CommunityPost[]
+  comments              BroadcastComment[]
+  reports               BroadcastReport[]
+  sightings             BroadcastSighting[]
 
   @@index([status, publishedAt])
   @@index([type, status])
@@ -818,7 +864,72 @@ model Broadcast {
   @@index([incidentId])
   @@index([scheduledAt])
   @@index([status, scheduledAt])
+  @@index([country, status])
+  @@index([authorType, status])
+  @@unique([creatorUserId, clientBroadcastId])
   @@map("broadcasts")
+}
+
+model BroadcastComment {
+  id              String     @id @default(uuid()) @db.Uuid
+  broadcastId     String     @map("broadcast_id") @db.Uuid
+  authorUserId    String?    @map("author_user_id") @db.Uuid
+  authorAdminId   String?    @map("author_admin_id") @db.Uuid
+  parentId        String?    @map("parent_id") @db.Uuid
+  body            String
+  isOfficial      Boolean    @default(false) @map("is_official")
+  isPinned        Boolean    @default(false) @map("is_pinned")
+  hiddenAt        DateTime?  @map("hidden_at") @db.Timestamptz(6)
+  hiddenByAdminId String?    @map("hidden_by_admin_id") @db.Uuid
+  metadata        Json       @default("{}")
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  broadcast       Broadcast  @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  authorUser      User?      @relation("BroadcastCommentAuthor", fields: [authorUserId], references: [id])
+  authorAdmin     AdminUser? @relation("BroadcastCommentAdmin", fields: [authorAdminId], references: [id])
+  parent          BroadcastComment? @relation("BroadcastCommentThread", fields: [parentId], references: [id])
+  replies         BroadcastComment[] @relation("BroadcastCommentThread")
+
+  @@index([broadcastId, createdAt])
+  @@map("broadcast_comments")
+}
+
+model BroadcastReport {
+  id                 String    @id @default(uuid()) @db.Uuid
+  broadcastId        String    @map("broadcast_id") @db.Uuid
+  reporterUserId     String    @map("reporter_user_id") @db.Uuid
+  reason             String
+  details            String?
+  status             String    @default("Open")
+  reviewedByAdminId  String?   @map("reviewed_by_admin_id") @db.Uuid
+  reviewedAt         DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  broadcast          Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  reporter           User      @relation("BroadcastReportReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId, status])
+  @@map("broadcast_reports")
+}
+
+model BroadcastSighting {
+  id                String    @id @default(uuid()) @db.Uuid
+  broadcastId       String    @map("broadcast_id") @db.Uuid
+  reporterUserId    String    @map("reporter_user_id") @db.Uuid
+  observedAt        DateTime? @map("observed_at") @db.Timestamptz(6)
+  latitude          Decimal?  @db.Decimal(9, 6)
+  longitude         Decimal?  @db.Decimal(9, 6)
+  approximateArea   String?   @map("approximate_area")
+  description       String
+  confidence        String?
+  anonymousPublic   Boolean   @default(false) @map("anonymous_public")
+  directionOfTravel String?   @map("direction_of_travel")
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  broadcast         Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  reporter          User      @relation("BroadcastSightingReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId, createdAt])
+  @@map("broadcast_sightings")
 }
 
 model BroadcastRead {

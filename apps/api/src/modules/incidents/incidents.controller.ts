@@ -77,6 +77,14 @@ export class IncidentsController {
     return this.incidentsService.confirmMedia(id, dto, request.user);
   }
 
+  @Post(":id/updates")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
+  @RequirePermissions("incident:create")
+  submitUpdate(@Param("id") id: string, @Body() body: { text: string; clientActionId?: string }, @Req() request: any) {
+    return this.incidentsService.submitWrittenUpdate(id, body, request.user);
+  }
+
   @Get()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)

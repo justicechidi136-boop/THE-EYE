@@ -239,10 +239,21 @@ export enum BroadcastStatus {
   DispatchQueued = "DispatchQueued",
   Dispatching = "Dispatching",
   Published = "Published",
+  Active = "Active",
+  Updated = "Updated",
+  Resolved = "Resolved",
+  Suspended = "Suspended",
+  DeletedByAdmin = "DeletedByAdmin",
+  WithdrawnByAuthor = "WithdrawnByAuthor",
   Failed = "Failed",
   Expired = "Expired",
   Cancelled = "Cancelled",
   Rejected = "Rejected",
+}
+
+export enum BroadcastAuthorType {
+  Citizen = "Citizen",
+  Admin = "Admin",
 }
 
 export enum CommunityRoleName {

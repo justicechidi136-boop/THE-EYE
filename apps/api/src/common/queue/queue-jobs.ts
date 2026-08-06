@@ -3,6 +3,9 @@ import { buildBullJobId } from "./bull-job-id";
 
 export const NOTIFICATION_DISPATCH_JOB_NAME = "dispatch";
 export const BROADCAST_AUTO_DISPATCH_JOB_NAME = "auto-dispatch";
+export const BROADCAST_COUNTRY_DELIVERY_JOB_NAME = "country-delivery";
+export const BROADCAST_RESOLUTION_DELIVERY_JOB_NAME = "resolution-delivery";
+export const BROADCAST_EXPIRY_REVIEW_JOB_NAME = "expiry-review";
 export const DANGER_ZONE_TARGET_JOB_NAME = "danger-zone-target";
 
 export function buildNotificationDispatchJobId(
@@ -28,6 +31,47 @@ export function buildNotificationIdempotencyKey(
 
 export function buildBroadcastAutoDispatchJobId(broadcastId: string): string {
   return buildBullJobId("broadcast", "auto-dispatch", broadcastId);
+}
+
+export function buildBroadcastCountryDeliveryJobId(
+  broadcastId: string,
+  countryCode: string,
+  batchNumber: number,
+): string {
+  return buildBullJobId("broadcast-country", broadcastId, countryCode, String(batchNumber));
+}
+
+export type BroadcastCountryDeliveryJobPayload = {
+  broadcastId: string;
+  countryCode: string;
+  batchNumber: number;
+  batchSize: number;
+  idempotencyKey: string;
+};
+
+export type BroadcastResolutionDeliveryJobPayload = {
+  broadcastId: string;
+  eventType: string;
+  batchNumber: number;
+  batchSize: number;
+  idempotencyKey: string;
+};
+
+export type BroadcastExpiryReviewJobPayload = {
+  broadcastId: string;
+  idempotencyKey: string;
+};
+
+export function buildBroadcastResolutionDeliveryJobId(
+  broadcastId: string,
+  eventType: string,
+  batchNumber: number,
+): string {
+  return buildBullJobId("broadcast-resolution", broadcastId, eventType, String(batchNumber));
+}
+
+export function buildBroadcastExpiryReviewJobId(broadcastId: string): string {
+  return buildBullJobId("broadcast-expiry-review", broadcastId);
 }
 
 export function buildDangerZoneActivateJobId(dangerZoneId: string): string {

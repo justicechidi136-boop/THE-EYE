@@ -4,6 +4,8 @@ import {
   evidenceAccessEntriesForIncident,
   toAuditLogView,
   toBroadcastView,
+  toBroadcastDetailView,
+  toBroadcastReportView,
   toCommunityPostView,
   toCommunityView,
   toDuplicateReportView,
@@ -43,6 +45,9 @@ import { buildJurisdictionRows } from "../jurisdiction-tree";
 import type {
   AuditLogView,
   BroadcastView,
+  BroadcastDetailView,
+  BroadcastReportView,
+  BroadcastAnalyticsView,
   CommunityPostView,
   CommunityView,
   DuplicateReportView,
@@ -183,6 +188,148 @@ export async function fetchBroadcasts(): Promise<BroadcastView[]> {
     const rows = await fetchAllPages<Record<string, unknown>>("/broadcasts", token);
     return rows.map(toBroadcastView);
   }, []);
+}
+
+export type AdminBroadcastListQuery = {
+  country?: string;
+  state?: string;
+  category?: string;
+  status?: string;
+  author?: string;
+  cursor?: string;
+  limit?: string;
+};
+
+export async function fetchAdminBroadcasts(
+  query: AdminBroadcastListQuery = {},
+): Promise<BroadcastView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/admin/broadcasts", {
+      token,
+      query: {
+        country: query.country,
+        state: query.state,
+        category: query.category,
+        status: query.status,
+        author: query.author,
+        cursor: query.cursor,
+        limit: query.limit ?? ADMIN_LIST_PAGE_SIZE,
+      },
+    });
+    return response.data.map(toBroadcastView);
+  }, []);
+}
+
+export async function fetchAdminBroadcast(id: string): Promise<BroadcastDetailView | null> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/broadcasts/${encodeURIComponent(id)}`, { token });
+    return toBroadcastDetailView(response.data);
+  }, null);
+}
+
+export async function suspendBroadcast(id: string, reason?: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/admin/broadcasts/${encodeURIComponent(id)}/suspend`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function restoreBroadcast(id: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/admin/broadcasts/${encodeURIComponent(id)}/restore`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({}),
+  });
+}
+
+export async function verifyBroadcast(id: string, note?: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/admin/broadcasts/${encodeURIComponent(id)}/verify`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function resolveBroadcast(id: string, note?: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/admin/broadcasts/${encodeURIComponent(id)}/resolve`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function deleteBroadcast(id: string, reason?: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/admin/broadcasts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    token,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function addOfficialBroadcastComment(id: string, body: string, pin?: boolean) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/admin/broadcasts/${encodeURIComponent(id)}/comments`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ body, pin }),
+  });
+}
+
+export async function fetchBroadcastReports(id: string): Promise<BroadcastReportView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>(
+      `/admin/broadcasts/${encodeURIComponent(id)}/reports`,
+      { token },
+    );
+    return response.data.map(toBroadcastReportView);
+  }, []);
+}
+
+export async function fetchBroadcastAnalytics(): Promise<BroadcastAnalyticsView> {
+  const broadcasts = await fetchAdminBroadcasts({ limit: "100" });
+  const byStatus: Record<string, number> = {};
+  const byCategory: Record<string, number> = {};
+  const byAuthorLabel: Record<string, number> = {};
+  let suspended = 0;
+  let verified = 0;
+  let totalReports = 0;
+  let totalComments = 0;
+  let citizenSubmitted = 0;
+
+  for (const broadcast of broadcasts) {
+    byStatus[broadcast.status] = (byStatus[broadcast.status] ?? 0) + 1;
+    byCategory[broadcast.type] = (byCategory[broadcast.type] ?? 0) + 1;
+    byAuthorLabel[broadcast.authorLabel] = (byAuthorLabel[broadcast.authorLabel] ?? 0) + 1;
+    if (broadcast.status === "Suspended") suspended += 1;
+    if (broadcast.adminVerified) verified += 1;
+    if (broadcast.authorLabel === "Citizen" || broadcast.authorLabel === "Verified") citizenSubmitted += 1;
+    totalReports += broadcast.reportCount;
+    totalComments += broadcast.commentCount;
+  }
+
+  return {
+    total: broadcasts.length,
+    byStatus,
+    byCategory,
+    byAuthorLabel,
+    suspended,
+    verified,
+    totalReports,
+    totalComments,
+    citizenSubmitted,
+  };
 }
 
 export async function fetchUsersDirectory(): Promise<UserDirectoryEntry[]> {

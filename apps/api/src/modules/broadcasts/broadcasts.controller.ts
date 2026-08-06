@@ -4,15 +4,48 @@ import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
+import { BroadcastCitizenService } from "./broadcast-citizen.service";
 import { BroadcastsService } from "./broadcasts.service";
 import { CreateBroadcastDto, NearbyBroadcastsQuery, RejectBroadcastDto, ReviewBroadcastDto, ScheduleBroadcastDto } from "./dto/broadcast.dto";
+import {
+  CreateCitizenBroadcastCommentDto,
+  CreateMissingPersonBroadcastDto,
+  CreateStolenVehicleBroadcastDto,
+  ReportBroadcastDto,
+  ResolveBroadcastDto,
+  SubmitBroadcastSightingDto,
+  WithdrawBroadcastDto,
+} from "./dto/citizen-broadcast.dto";
 
 @ApiTags("broadcasts")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("broadcasts")
 export class BroadcastsController {
-  constructor(private readonly broadcastsService: BroadcastsService) {}
+  constructor(
+    private readonly broadcastsService: BroadcastsService,
+    private readonly broadcastCitizen: BroadcastCitizenService,
+  ) {}
+
+  @Get("mine")
+  @RequirePermissions("incident:read")
+  listMine(@Req() request: any, @Query("status") status?: string) {
+    return this.broadcastCitizen.listMine(request.user, status);
+  }
+
+  @Post("missing-person")
+  @RateLimit("broadcastCreate")
+  @RequirePermissions("incident:create")
+  createMissingPerson(@Body() dto: CreateMissingPersonBroadcastDto, @Req() request: any) {
+    return this.broadcastCitizen.createMissingPerson(dto, request.user);
+  }
+
+  @Post("stolen-vehicle")
+  @RateLimit("broadcastCreate")
+  @RequirePermissions("incident:create")
+  createStolenVehicle(@Body() dto: CreateStolenVehicleBroadcastDto, @Req() request: any) {
+    return this.broadcastCitizen.createStolenVehicle(dto, request.user);
+  }
 
   @Get()
   @RequirePermissions("broadcast:create")
@@ -56,6 +89,49 @@ export class BroadcastsController {
   @RequirePermissions("broadcast:publish")
   autoBroadcast(@Param("incidentId") incidentId: string, @Body() body: { confidenceScore: number }) {
     return this.broadcastsService.autoBroadcastVerifiedIncident(incidentId, body.confidenceScore);
+  }
+
+  @Post(":id/sightings")
+  @RateLimit("broadcastCreate")
+  @RequirePermissions("incident:read")
+  submitSighting(@Param("id") id: string, @Body() dto: SubmitBroadcastSightingDto, @Req() request: any) {
+    return this.broadcastCitizen.submitSighting(id, dto, request.user);
+  }
+
+  @Get(":id/share")
+  @RequirePermissions("incident:read")
+  share(@Param("id") id: string) {
+    return this.broadcastCitizen.getShare(id);
+  }
+
+  @Post(":id/resolve")
+  @RequirePermissions("incident:create")
+  resolve(@Param("id") id: string, @Body() dto: ResolveBroadcastDto, @Req() request: any) {
+    return this.broadcastCitizen.resolve(id, dto, request.user);
+  }
+
+  @Post(":id/withdraw")
+  @RequirePermissions("incident:create")
+  withdraw(@Param("id") id: string, @Body() dto: WithdrawBroadcastDto, @Req() request: any) {
+    return this.broadcastCitizen.withdraw(id, dto, request.user);
+  }
+
+  @Post(":id/report")
+  @RequirePermissions("incident:read")
+  report(@Param("id") id: string, @Body() dto: ReportBroadcastDto, @Req() request: any) {
+    return this.broadcastCitizen.report(id, dto, request.user);
+  }
+
+  @Post(":id/comments")
+  @RequirePermissions("incident:read")
+  addComment(@Param("id") id: string, @Body() dto: CreateCitizenBroadcastCommentDto, @Req() request: any) {
+    return this.broadcastCitizen.addComment(id, dto, request.user);
+  }
+
+  @Get(":id/comments")
+  @RequirePermissions("incident:read")
+  listComments(@Param("id") id: string) {
+    return this.broadcastCitizen.listComments(id);
   }
 
   @Get(":id")

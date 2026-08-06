@@ -9,6 +9,12 @@ import {
   rejectBroadcast,
   retryBroadcast,
   scheduleBroadcast,
+  suspendBroadcast,
+  restoreBroadcast,
+  verifyBroadcast,
+  resolveBroadcast,
+  deleteBroadcast,
+  addOfficialBroadcastComment,
 } from "../../../../../../lib/api/data";
 
 type RouteParams = { params: Promise<{ id: string; action: string }> };
@@ -70,7 +76,56 @@ export async function POST(_request: Request, { params }: RouteParams) {
       const result = await fetchBroadcastProgress(id);
       return NextResponse.json({ ok: true, data: result });
     }
+    if (action === "suspend") {
+      const body = (await _request.json()) as Record<string, unknown>;
+      const result = await suspendBroadcast(id, typeof body.reason === "string" ? body.reason : undefined);
+      return NextResponse.json({ ok: true, data: result });
+    }
+    if (action === "restore") {
+      const result = await restoreBroadcast(id);
+      return NextResponse.json({ ok: true, data: result });
+    }
+    if (action === "verify") {
+      const body = (await _request.json()) as Record<string, unknown>;
+      const result = await verifyBroadcast(id, typeof body.note === "string" ? body.note : undefined);
+      return NextResponse.json({ ok: true, data: result });
+    }
+    if (action === "resolve") {
+      const body = (await _request.json()) as Record<string, unknown>;
+      const result = await resolveBroadcast(id, typeof body.note === "string" ? body.note : undefined);
+      return NextResponse.json({ ok: true, data: result });
+    }
+    if (action === "comment") {
+      const body = (await _request.json()) as Record<string, unknown>;
+      const result = await addOfficialBroadcastComment(
+        id,
+        String(body.body ?? ""),
+        body.pin === true,
+      );
+      return NextResponse.json({ ok: true, data: result });
+    }
     return NextResponse.json({ message: `Unsupported broadcast action: ${action}` }, { status: 400 });
+  } catch (error) {
+    const message = error instanceof ApiError
+      ? (typeof error.body === "object" && error.body && "message" in error.body ? String((error.body as { message?: string }).message) : error.message)
+      : error instanceof Error
+        ? error.message
+        : "Broadcast action failed";
+    const status = error instanceof ApiError ? error.status : 500;
+    return NextResponse.json({ message }, { status });
+  }
+}
+
+export async function DELETE(request: Request, { params }: RouteParams) {
+  const { id, action } = await params;
+  if (action !== "delete") {
+    return NextResponse.json({ message: `Unsupported broadcast action: ${action}` }, { status: 400 });
+  }
+
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    const result = await deleteBroadcast(id, typeof body.reason === "string" ? body.reason : undefined);
+    return NextResponse.json({ ok: true, data: result });
   } catch (error) {
     const message = error instanceof ApiError
       ? (typeof error.body === "object" && error.body && "message" in error.body ? String((error.body as { message?: string }).message) : error.message)

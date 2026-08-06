@@ -1,3 +1,5 @@
+import "notification_routing.dart";
+
 abstract final class PushDeepLinkRouter {
   static const allowedRoutes = <String>{
     "/home",
@@ -12,22 +14,29 @@ abstract final class PushDeepLinkRouter {
     "/report/emergency",
     "/active-emergency",
     "/active-emergencies",
+    "/incident-detail",
     "/support",
     "/support/chats",
     "/support/conversation",
     "/support/new",
   };
 
+  static bool isAllowedDestination(String route) {
+    if (allowedRoutes.contains(route)) return true;
+    return route.startsWith("/broadcasts/") && route.length > "/broadcasts/".length;
+  }
+
   /// Returns a safe in-app route from FCM data payload fields.
   static String? resolveRoute(Map<String, dynamic> data) {
+    final routing = PushNotificationRouting.fromMessageData(data);
+    if (routing != null && isAllowedDestination(routing.destination)) {
+      return routing.destination;
+    }
+
     final explicitRoute =
         _sanitize(data["route"] ?? data["deepLink"] ?? data["deep_link"]);
     if (explicitRoute != null) {
-      if (allowedRoutes.contains(explicitRoute)) return explicitRoute;
-      if (explicitRoute.startsWith("/broadcasts/") &&
-          explicitRoute.length > "/broadcasts/".length) {
-        return explicitRoute;
-      }
+      if (isAllowedDestination(explicitRoute)) return explicitRoute;
     }
 
     final type = (data["type"] ?? "").toString().toLowerCase();

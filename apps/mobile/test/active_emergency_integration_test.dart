@@ -41,6 +41,10 @@ const activeFixture = {
   ],
   "allowedActions": {
     "addEvidence": true,
+    "uploadPhoto": true,
+    "uploadVideo": true,
+    "uploadVoice": true,
+    "addUpdate": true,
     "cancel": true,
     "requestCancellation": false,
     "confirmResolved": false,

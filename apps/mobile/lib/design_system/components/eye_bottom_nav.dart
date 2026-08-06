@@ -32,6 +32,7 @@ abstract final class EyeNavRoutes {
       return 1;
     }
     if (route == broadcast || route == "/notifications") return 3;
+    if (route.startsWith("/broadcasts/")) return 3;
     if (route == settings || route == "/profile" || route == "/your-car") {
       return 4;
     }

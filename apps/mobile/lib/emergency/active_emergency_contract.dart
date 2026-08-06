@@ -49,6 +49,10 @@ class ActiveEmergencyProgressStage {
 class ActiveEmergencyAllowedActions {
   const ActiveEmergencyAllowedActions({
     required this.addEvidence,
+    required this.uploadPhoto,
+    required this.uploadVideo,
+    required this.uploadVoice,
+    required this.addUpdate,
     required this.cancel,
     required this.requestCancellation,
     required this.confirmResolved,
@@ -59,6 +63,10 @@ class ActiveEmergencyAllowedActions {
   });
 
   final bool addEvidence;
+  final bool uploadPhoto;
+  final bool uploadVideo;
+  final bool uploadVoice;
+  final bool addUpdate;
   final bool cancel;
   final bool requestCancellation;
   final bool confirmResolved;
@@ -68,13 +76,18 @@ class ActiveEmergencyAllowedActions {
   final bool retryLiveVideo;
 
   factory ActiveEmergencyAllowedActions.fromJson(Map<String, dynamic> json) {
+    final addEvidence = _requiredBool(json, "addEvidence");
     return ActiveEmergencyAllowedActions(
-      addEvidence: _requiredBool(json, "addEvidence"),
+      addEvidence: addEvidence,
+      uploadPhoto: _optionalBool(json, "uploadPhoto", addEvidence),
+      uploadVideo: _optionalBool(json, "uploadVideo", addEvidence),
+      uploadVoice: _optionalBool(json, "uploadVoice", addEvidence),
+      addUpdate: _optionalBool(json, "addUpdate", _optionalBool(json, "addWrittenUpdate", addEvidence)),
       cancel: _requiredBool(json, "cancel"),
       requestCancellation: _requiredBool(json, "requestCancellation"),
       confirmResolved: _requiredBool(json, "confirmResolved"),
       confirmStillOngoing: _requiredBool(json, "confirmStillOngoing"),
-      addWrittenUpdate: _requiredBool(json, "addWrittenUpdate"),
+      addWrittenUpdate: _optionalBool(json, "addWrittenUpdate", addEvidence),
       updateLocation: _requiredBool(json, "updateLocation"),
       retryLiveVideo: _requiredBool(json, "retryLiveVideo"),
     );
@@ -82,6 +95,10 @@ class ActiveEmergencyAllowedActions {
 
   static ActiveEmergencyAllowedActions empty() => const ActiveEmergencyAllowedActions(
         addEvidence: false,
+        uploadPhoto: false,
+        uploadVideo: false,
+        uploadVoice: false,
+        addUpdate: false,
         cancel: false,
         requestCancellation: false,
         confirmResolved: false,
@@ -202,21 +219,40 @@ class ActiveEmergencyLiveVideo {
   const ActiveEmergencyLiveVideo({
     required this.sessionId,
     required this.status,
+    required this.displayState,
     this.startedAt,
     this.endedAt,
+    this.durationSeconds,
+    this.connectionStatus,
+    this.participantCount,
+    this.retryAvailable = false,
   });
 
-  final String sessionId;
+  final String? sessionId;
   final String status;
+  final String displayState;
   final DateTime? startedAt;
   final DateTime? endedAt;
+  final int? durationSeconds;
+  final String? connectionStatus;
+  final int? participantCount;
+  final bool retryAvailable;
 
   factory ActiveEmergencyLiveVideo.fromJson(Map<String, dynamic> json) {
     return ActiveEmergencyLiveVideo(
-      sessionId: _requiredString(json, "sessionId", field: "liveVideo.sessionId"),
+      sessionId: json["sessionId"]?.toString(),
       status: _requiredString(json, "status", field: "liveVideo.status"),
+      displayState: json["displayState"]?.toString() ?? json["status"]?.toString() ?? "NotStarted",
       startedAt: _optionalDateTime(json["startedAt"]),
       endedAt: _optionalDateTime(json["endedAt"]),
+      durationSeconds: json["durationSeconds"] == null
+          ? null
+          : _requiredInt(json, "durationSeconds"),
+      connectionStatus: json["connectionStatus"]?.toString(),
+      participantCount: json["participantCount"] == null
+          ? null
+          : _requiredInt(json, "participantCount"),
+      retryAvailable: json["retryAvailable"] == true,
     );
   }
 }
@@ -324,6 +360,7 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
     this.latestConfidence,
     this.cancellationSummary,
     this.resolutionSummary,
+    this.reporterConfidence,
   }) : super(isActive: true);
 
   final String category;
@@ -345,6 +382,7 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
   final String? latestConfidence;
   final ActiveEmergencyCancellationSummary? cancellationSummary;
   final ActiveEmergencyResolutionSummary? resolutionSummary;
+  final String? reporterConfidence;
 
   factory ActiveEmergencyActiveContract.fromJson(Map<String, dynamic> json) {
     final progressStagesRaw = json["progressStages"];
@@ -416,6 +454,7 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
       resolutionSummary: resolution == null
           ? null
           : ActiveEmergencyResolutionSummary.fromJson(resolution),
+      reporterConfidence: json["reporterConfidence"]?.toString(),
     );
   }
 }
@@ -492,6 +531,12 @@ bool _requiredBool(Map<String, dynamic> json, String key) {
     ActiveEmergencyErrorCode.malformedContract,
     "Missing required boolean $key",
   );
+}
+
+bool _optionalBool(Map<String, dynamic> json, String key, bool fallback) {
+  final value = json[key];
+  if (value is bool) return value;
+  return fallback;
 }
 
 DateTime _requiredDateTime(Object? value, {required String field}) {

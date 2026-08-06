@@ -22,10 +22,15 @@ export interface IncidentProgressStage {
 
 export interface IncidentAllowedActions {
   addEvidence: boolean;
+  uploadPhoto: boolean;
+  uploadVideo: boolean;
+  uploadVoice: boolean;
+  addUpdate: boolean;
   cancel: boolean;
   requestCancellation: boolean;
   confirmResolved: boolean;
   confirmStillOngoing: boolean;
+  /** @deprecated Use addUpdate */
   addWrittenUpdate: boolean;
   updateLocation: boolean;
   retryLiveVideo: boolean;
@@ -169,8 +174,13 @@ function deriveAllowedActions(
     activeAssignment.status !== IncidentAssignmentStatus.Declined;
 
   const active = isActiveIncidentStatus(status);
+  const canAddEvidence = active && isReporter;
   return {
-    addEvidence: active && isReporter,
+    addEvidence: canAddEvidence,
+    uploadPhoto: canAddEvidence,
+    uploadVideo: canAddEvidence,
+    uploadVoice: canAddEvidence,
+    addUpdate: canAddEvidence,
     cancel: active && isReporter && canReporterCancelDirectly(status),
     requestCancellation:
       active &&
@@ -190,7 +200,7 @@ function deriveAllowedActions(
         status === IncidentStatus.Responding ||
         status === IncidentStatus.Assigned) &&
       hasActiveAssignment,
-    addWrittenUpdate: active && isReporter,
+    addWrittenUpdate: canAddEvidence,
     updateLocation: active && isReporter,
     retryLiveVideo: active && isReporter,
   };

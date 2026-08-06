@@ -3,10 +3,12 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/semantics.dart";
 
+import "../contracts/the_eye_api_client.dart";
 import "../design_system/components/eye_page_back_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "active_emergency_contract.dart";
 import "active_emergency_errors.dart";
+import "active_emergency_evidence_actions.dart";
 import "active_emergency_navigation.dart";
 import "active_emergency_refresh_coordinator.dart";
 import "active_emergency_service.dart";
@@ -17,15 +19,21 @@ class ActiveEmergencyScreen extends StatefulWidget {
     required this.incidentId,
     required this.accessToken,
     required this.service,
+    required this.apiClient,
     this.silent = false,
     this.onStopLocationTracking,
+    this.onStartLiveVideo,
+    this.liveVideoErrorMessage,
   });
 
   final String incidentId;
   final String accessToken;
   final ActiveEmergencyService service;
+  final TheEyeApiClient apiClient;
   final bool silent;
   final Future<void> Function()? onStopLocationTracking;
+  final Future<void> Function(String incidentId)? onStartLiveVideo;
+  final String? liveVideoErrorMessage;
 
   @override
   State<ActiveEmergencyScreen> createState() => _ActiveEmergencyScreenState();
@@ -36,6 +44,7 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
   ActiveEmergencyContract? _contract;
   ActiveEmergencyActiveContract? _cachedActive;
   String? _errorLabel;
+  String? _liveVideoError;
   bool _isStale = false;
   bool _actionInFlight = false;
   Timer? _pollTimer;
@@ -45,6 +54,7 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _liveVideoError = widget.liveVideoErrorMessage;
     unawaited(_refresh(initial: true));
     _pollTimer = Timer.periodic(
       const Duration(seconds: 15),
@@ -262,6 +272,82 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
     return value.isEmpty ? null : value;
   }
 
+  Future<void> _startLiveVideo() async {
+    if (widget.onStartLiveVideo != null) {
+      await widget.onStartLiveVideo!(widget.incidentId);
+      await _refresh();
+    }
+  }
+
+  String _formatRelativeTime(DateTime value) {
+    final diff = DateTime.now().toUtc().difference(value.toUtc());
+    if (diff.inMinutes < 1) return "Just now";
+    if (diff.inMinutes < 60) return "${diff.inMinutes} minutes ago";
+    if (diff.inHours < 24) return "${diff.inHours} hours ago";
+    return value.toLocal().toString();
+  }
+
+  Widget _buildLiveVideoCard(ActiveEmergencyActiveContract active) {
+    final liveVideo = active.liveVideo;
+    final displayState = liveVideo?.displayState ?? "NotStarted";
+    return Semantics(
+      label: "Live emergency video, $displayState",
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text("Live emergency video",
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _InfoRow(label: "State", value: displayState),
+              if (liveVideo?.startedAt != null)
+                _InfoRow(
+                  label: "Started",
+                  value: liveVideo!.startedAt!.toLocal().toString(),
+                ),
+              if (liveVideo?.durationSeconds != null)
+                _InfoRow(
+                  label: "Duration",
+                  value: "${liveVideo!.durationSeconds}s",
+                ),
+              if (liveVideo?.connectionStatus != null)
+                _InfoRow(
+                  label: "Connection",
+                  value: liveVideo!.connectionStatus!,
+                ),
+              if (liveVideo?.participantCount != null)
+                _InfoRow(
+                  label: "Participants",
+                  value: liveVideo!.participantCount.toString(),
+                ),
+              if (_liveVideoError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _liveVideoError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 8),
+              if (active.allowedActions.retryLiveVideo ||
+                  liveVideo?.retryAvailable == true)
+                FilledButton.icon(
+                  onPressed: _actionInFlight ? null : _startLiveVideo,
+                  icon: const Icon(Icons.videocam),
+                  label: Text(
+                    displayState == "Streaming"
+                        ? "Return to live video"
+                        : "Start live video",
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   String _spokenSummary(ActiveEmergencyActiveContract active) {
     return "Your ${active.category.toLowerCase()} report has been received. "
         "It is currently ${active.displayLabel.toLowerCase()}.";
@@ -360,9 +446,28 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                     ),
                     _InfoRow(label: "Status", value: active.displayLabel),
                     _InfoRow(
+                      label: "Progress",
+                      value: "${active.progressStep}/${active.progressStages.length}",
+                    ),
+                    if (active.reporterConfidence != null)
+                      _InfoRow(
+                        label: "Reporter confidence",
+                        value: active.reporterConfidence!,
+                      ),
+                    _InfoRow(
                       label: "Last updated",
                       value: active.lastUpdatedAt.toLocal().toString(),
                     ),
+                    const SizedBox(height: 16),
+                    Text("Evidence summary",
+                        style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      "Photos ${active.evidenceSummary.photos}, "
+                      "Videos ${active.evidenceSummary.videos}, "
+                      "Voice ${active.evidenceSummary.voice}",
+                    ),
+                    const SizedBox(height: 16),
+                    _buildLiveVideoCard(active),
                     const SizedBox(height: 16),
                     Text("Progress",
                         style: Theme.of(context).textTheme.titleMedium),
@@ -379,15 +484,7 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Text("Evidence",
-                        style: Theme.of(context).textTheme.titleMedium),
-                    Text(
-                      "Photos ${active.evidenceSummary.photos}, "
-                      "Videos ${active.evidenceSummary.videos}, "
-                      "Voice ${active.evidenceSummary.voice}",
-                    ),
-                    const SizedBox(height: 16),
-                    Text("Response",
+                    Text("Response progress",
                         style: Theme.of(context).textTheme.titleMedium),
                     if (active.assignedAgencyName != null)
                       Text("Assigned agency: ${active.assignedAgencyName}")
@@ -399,20 +496,47 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                       Text("Responder ETA: ${active.responderEtaMinutes} minutes")
                     else
                       const Text("Responder ETA unavailable."),
+                    if (active.witnessCount != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        "Community witnesses: ${active.witnessCount}"
+                        "${active.latestConfidence != null ? " (confidence ${active.latestConfidence})" : ""}",
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     if (active.timelineSummary.isNotEmpty) ...[
-                      Text("Activity",
+                      Text("Timeline",
                           style: Theme.of(context).textTheme.titleMedium),
-                      ...active.timelineSummary.take(8).map(
-                            (entry) => ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(entry.message),
-                              subtitle: Text(entry.createdAt.toLocal().toString()),
+                      ...active.timelineSummary.take(12).map(
+                            (entry) => Semantics(
+                              label: "${entry.message}, ${_formatRelativeTime(entry.createdAt)}",
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(entry.message),
+                                subtitle: Text(_formatRelativeTime(entry.createdAt)),
+                              ),
                             ),
                           ),
                     ],
                     const SizedBox(height: 24),
+                    Text("Actions",
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    if (active.allowedActions.addEvidence ||
+                        active.allowedActions.uploadPhoto ||
+                        active.allowedActions.uploadVideo ||
+                        active.allowedActions.uploadVoice ||
+                        active.allowedActions.addUpdate ||
+                        active.allowedActions.addWrittenUpdate)
+                      ActiveEmergencyEvidenceActions(
+                        incidentId: widget.incidentId,
+                        accessToken: widget.accessToken,
+                        allowedActions: active.allowedActions,
+                        apiClient: widget.apiClient,
+                        accessibilityVoiceGuidance: true,
+                        onUploaded: _refresh,
+                      ),
                     if (active.allowedActions.cancel)
                       FilledButton.tonal(
                         onPressed: _actionInFlight ? null : _cancelEmergency,
@@ -442,6 +566,16 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                             ? null
                             : () => _submitReporterStatus("StillOngoing"),
                         child: const Text("Still ongoing"),
+                      ),
+                    ],
+                    if (active.allowedActions.confirmResolved ||
+                        active.allowedActions.confirmStillOngoing) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: _actionInFlight
+                            ? null
+                            : () => _submitReporterStatus("Unsure"),
+                        child: const Text("Unsure"),
                       ),
                     ],
                   ],

@@ -14,6 +14,8 @@ import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { approvalRequiredTypes, CreateBroadcastDto, validateCreateBroadcastDto } from "./dto/broadcast.dto";
+import { buildBroadcastNotificationMetadata } from "../notifications/notification-routing.schema";
+import type { BroadcastCountryDeliveryJobPayload } from "../../common/queue/queue-jobs";
 
 import { BroadcastSchedulerDiagnosticsService } from "./broadcast-scheduler-diagnostics.service";
 
@@ -26,6 +28,13 @@ export const BROADCAST_SYSTEM_ACTOR: JwtPayload = {
 
 const AUTO_BROADCAST_CONFIDENCE = 85;
 const DISPATCH_BATCH_SIZE = 25;
+const COUNTRY_DELIVERY_BATCH_SIZE = 100;
+export const LIVE_BROADCAST_STATUSES = new Set<string>([
+  BroadcastStatus.Published,
+  BroadcastStatus.Active,
+  BroadcastStatus.Updated,
+]);
+const LIVE_BROADCAST_STATUS_SQL = `'Published', 'Active', 'Updated'`;
 const PRIORITY_ORDER_SQL = `
   CASE b.priority
     WHEN 'P1LifeThreatening' THEN 1
@@ -166,8 +175,8 @@ export class BroadcastsService {
     try {
       await this.assertCanAccess(id, actor);
       const broadcast = await this.getById(id);
-      if (broadcast.status !== BroadcastStatus.Published) {
-        throw new BadRequestException("Broadcast must be published before dispatch");
+      if (!LIVE_BROADCAST_STATUSES.has(String(broadcast.status))) {
+        throw new BadRequestException("Broadcast must be live before dispatch");
       }
 
       const recipients = await this.expandRecipients(id);
@@ -482,10 +491,27 @@ export class BroadcastsService {
   }
 
   private async dispatchToRecipient(
-    broadcast: { incidentId?: string | null; title: string; body: string; priority: string },
+    broadcast: {
+      incidentId?: string | null;
+      title: string;
+      body: string;
+      priority: string;
+      type?: string;
+      country?: string | null;
+      publishedAt?: Date | null;
+    },
     id: string,
     recipient: { user_id: string; distance_meters: number },
+    routingContext?: { countryCode: string; eventType: string },
   ) {
+    const issuedAt = (broadcast.publishedAt ?? new Date()).toISOString();
+    const routingMetadata = buildBroadcastNotificationMetadata({
+      broadcastId: id,
+      broadcastCategory: String(broadcast.type ?? "Broadcast"),
+      countryCode: routingContext?.countryCode ?? String(broadcast.country ?? ""),
+      issuedAt,
+      eventType: routingContext?.eventType ?? "BROADCAST_ALERT",
+    });
     const notification = await this.prisma.notification.create({
       data: {
         userId: recipient.user_id,
@@ -498,6 +524,7 @@ export class BroadcastsService {
         body: broadcast.body,
         status: "Pending" as never,
         provider: "firebase-cloud-messaging",
+        metadata: routingMetadata,
       } as never,
     });
     await this.prisma.broadcastDelivery.upsert({
@@ -620,8 +647,14 @@ export class BroadcastsService {
               b.title,
               b.body,
               b.priority,
+              b.status,
+              b.author_type,
+              b.admin_verified,
+              b.country,
+              b.state,
               b.published_at,
               b.expires_at,
+              (SELECT COUNT(*)::int FROM broadcast_comments bc WHERE bc.broadcast_id = b.id AND bc.hidden_at IS NULL) AS comments_count,
               ST_Distance(
                 COALESCE(b.target_center, ST_Centroid(b.target_area::geometry)::geography),
                 ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
@@ -637,7 +670,8 @@ export class BroadcastsService {
          FROM broadcasts b
          LEFT JOIN profiles p ON p.user_id = $4::uuid
          LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
-        WHERE b.status = 'Published'
+        WHERE b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+          AND b.deleted_at IS NULL
           AND (b.expires_at IS NULL OR b.expires_at > NOW())
           AND (
             ST_DWithin(
@@ -646,6 +680,11 @@ export class BroadcastsService {
               $3
             )
             OR EXISTS (SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $4::uuid)
+            OR (
+              p.user_id IS NOT NULL
+              AND b.country IS NOT NULL
+              AND b.country = p.country
+            )
             OR (
               p.user_id IS NOT NULL
               AND j.id IS NOT NULL
@@ -694,10 +733,18 @@ export class BroadcastsService {
     const rows = await this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
       `SELECT COUNT(*) AS count
          FROM broadcasts b
-        WHERE b.status = 'Published'
+        WHERE b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+          AND b.deleted_at IS NULL
           AND (b.expires_at IS NULL OR b.expires_at > NOW())
           AND (
             EXISTS (SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $1::uuid)
+            OR EXISTS (
+              SELECT 1
+                FROM profiles p
+               WHERE p.user_id = $1::uuid
+                 AND b.country IS NOT NULL
+                 AND b.country = p.country
+            )
             OR EXISTS (
               SELECT 1
                 FROM profiles p
@@ -793,17 +840,32 @@ export class BroadcastsService {
   }
 
   private async deliverToRecipients(
-    broadcast: { incidentId?: string | null; title: string; body: string; priority: string },
+    broadcast: {
+      incidentId?: string | null;
+      title: string;
+      body: string;
+      priority: string;
+      type?: string;
+      country?: string | null;
+      publishedAt?: Date | null;
+    },
     id: string,
     recipients: Array<{ user_id: string; distance_meters: number }>,
     actor: JwtPayload,
     action: string,
+    routingContext?: { countryCode: string; eventType: string; batchNumber?: number },
   ) {
     for (let offset = 0; offset < recipients.length; offset += DISPATCH_BATCH_SIZE) {
       const batch = recipients.slice(offset, offset + DISPATCH_BATCH_SIZE);
-      await Promise.all(batch.map((recipient) => this.dispatchToRecipient(broadcast, id, recipient)));
+      await Promise.all(
+        batch.map((recipient) => this.dispatchToRecipient(broadcast, id, recipient, routingContext)),
+      );
     }
-    await this.audit(actor, action, id, { recipientCount: recipients.length, actorType: actor.sub === "system" ? "system" : "admin" });
+    await this.audit(actor, action, id, {
+      recipientCount: recipients.length,
+      actorType: actor.sub === "system" ? "system" : actor.typ,
+      ...(routingContext ?? {}),
+    });
   }
 
   private async expandRecipients(broadcastId: string) {
@@ -824,6 +886,16 @@ export class BroadcastsService {
     const publishedAt = row.published_at ? new Date(String(row.published_at)) : null;
     const expiresAt = row.expires_at ? new Date(String(row.expires_at)) : null;
     const expired = expiresAt ? expiresAt.getTime() <= Date.now() : false;
+    const authorType = String(row.author_type ?? "Admin");
+    const adminVerified = row.admin_verified === true || row.admin_verified === "t";
+    const authorLabel =
+      authorType === "Citizen"
+        ? adminVerified
+          ? "Verified by Admin"
+          : "Citizen Broadcast"
+        : adminVerified
+          ? "Verified by Admin"
+          : "Admin Broadcast";
     return {
       id: String(row.id),
       type: String(row.type),
@@ -832,6 +904,12 @@ export class BroadcastsService {
       priority: String(row.priority),
       category: String(row.type),
       severity: String(row.priority),
+      status: String(row.status ?? "Active"),
+      country: row.country ? String(row.country) : null,
+      state: row.state ? String(row.state) : null,
+      authorLabel,
+      adminVerified,
+      commentsCount: row.comments_count != null ? Number(row.comments_count) : 0,
       publishedAt: publishedAt?.toISOString() ?? null,
       expiresAt: expiresAt?.toISOString() ?? null,
       expired,
@@ -843,7 +921,9 @@ export class BroadcastsService {
 
   private async findCitizenBroadcastRow(id: string, userId: string) {
     const rows = await this.prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT b.id, b.type, b.title, b.body, b.priority, b.published_at, b.expires_at,
+      `SELECT b.id, b.type, b.title, b.body, b.priority, b.status, b.author_type, b.admin_verified,
+              b.country, b.state, b.published_at, b.expires_at,
+              (SELECT COUNT(*)::int FROM broadcast_comments bc WHERE bc.broadcast_id = b.id AND bc.hidden_at IS NULL) AS comments_count,
               CASE
                 WHEN EXISTS (SELECT 1 FROM broadcast_reads br WHERE br.broadcast_id = b.id AND br.user_id = $2::uuid) THEN TRUE
                 WHEN EXISTS (
@@ -856,19 +936,22 @@ export class BroadcastsService {
          LEFT JOIN profiles p ON p.user_id = $2::uuid
          LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
         WHERE b.id = $1::uuid
-          AND b.status = 'Published'
+          AND b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+          AND b.deleted_at IS NULL
           AND (b.expires_at IS NULL OR b.expires_at > NOW())
           AND (
             EXISTS (SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $2::uuid)
+            OR (
+              p.user_id IS NOT NULL
+              AND b.country IS NOT NULL
+              AND b.country = p.country
+            )
             OR (
               p.user_id IS NOT NULL
               AND j.id IS NOT NULL
               AND j.country = p.country
               AND j.state = p.state
               AND j.lga = p.lga
-            )
-            OR EXISTS (
-              SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $2::uuid
             )
           )
         LIMIT 1`,
@@ -921,5 +1004,65 @@ export class BroadcastsService {
       reason: typeof metadata.reason === "string" ? metadata.reason : typeof metadata.note === "string" ? metadata.note : undefined,
       metadata,
     });
+  }
+
+  async executeCountryDeliveryBatch(payload: BroadcastCountryDeliveryJobPayload) {
+    const broadcast = await this.getById(payload.broadcastId);
+    if (!LIVE_BROADCAST_STATUSES.has(String(broadcast.status))) {
+      return { skipped: true, reason: "broadcast_not_live" };
+    }
+    const recipients = await this.findCountryRecipientBatch(
+      payload.countryCode,
+      payload.batchSize,
+      payload.batchNumber * payload.batchSize,
+    );
+    if (!recipients.length) {
+      await this.prisma.broadcast.update({
+        where: { id: payload.broadcastId },
+        data: { dispatchCompletedAt: new Date() } as never,
+      });
+      return { delivered: 0, completed: true };
+    }
+
+    await this.deliverToRecipients(
+      broadcast,
+      payload.broadcastId,
+      recipients.map((userId) => ({ user_id: userId, distance_meters: 0 })),
+      BROADCAST_SYSTEM_ACTOR,
+      "broadcast.country_delivery_batch",
+      {
+        countryCode: payload.countryCode,
+        batchNumber: payload.batchNumber,
+        eventType:
+          broadcast.type === BroadcastType.StolenVehicle
+            ? "STOLEN_VEHICLE_BROADCAST"
+            : broadcast.type === BroadcastType.MissingPerson
+              ? "MISSING_PERSON_BROADCAST"
+              : "BROADCAST_ALERT",
+      },
+    );
+
+    return { delivered: recipients.length, completed: recipients.length < payload.batchSize };
+  }
+
+  private async findCountryRecipientBatch(countryCode: string, limit: number, offset: number) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ user_id: string }>>(
+      `SELECT u.id AS user_id
+         FROM users u
+         JOIN profiles p ON p.user_id = u.id
+        WHERE p.country = $1
+          AND u.status = 'Active'
+          AND EXISTS (
+            SELECT 1 FROM user_push_tokens t
+             WHERE t.user_id = u.id
+               AND t.is_active = TRUE
+          )
+        ORDER BY u.created_at ASC
+        LIMIT $2 OFFSET $3`,
+      countryCode,
+      limit,
+      offset,
+    );
+    return rows.map((row) => row.user_id);
   }
 }

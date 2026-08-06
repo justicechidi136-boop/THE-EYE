@@ -7,6 +7,8 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { WorkerHeartbeatService } from "../notifications/worker-heartbeat.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { BroadcastDispatchProcessor } from "./broadcast-dispatch.processor";
+import { BroadcastExpirySchedulerService } from "./broadcast-expiry.scheduler.service";
+import { BroadcastLifecycleService } from "./broadcast-lifecycle.service";
 import { BroadcastQueueService } from "./broadcast-queue.service";
 import { BroadcastSchedulerDiagnosticsService } from "./broadcast-scheduler-diagnostics.service";
 import { BroadcastSchedulerService } from "./broadcast-scheduler.service";
@@ -26,6 +28,8 @@ const workerProviders = shouldRegisterNotificationWorker()
   providers: [
     BroadcastsService,
     BroadcastQueueService,
+    BroadcastLifecycleService,
+    BroadcastExpirySchedulerService,
     BroadcastSchedulerDiagnosticsService,
     ...workerProviders,
   ],

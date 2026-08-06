@@ -8,6 +8,7 @@ import {
   shouldRegisterNotificationWorker,
 } from "../../common/queue/queue-config";
 import { BroadcastQueueService } from "./broadcast-queue.service";
+import { BroadcastExpirySchedulerService } from "./broadcast-expiry.scheduler.service";
 import { BroadcastsService } from "./broadcasts.service";
 
 const SCHEDULER_INTERVAL_MS = 30_000;
@@ -26,6 +27,7 @@ export class BroadcastSchedulerService implements OnModuleInit, OnModuleDestroy 
     private readonly config: ConfigService,
     private readonly broadcastsService: BroadcastsService,
     private readonly broadcastQueueService: BroadcastQueueService,
+    private readonly expiryScheduler: BroadcastExpirySchedulerService,
   ) {
     if (isRedisExplicitlyDisabled() || !shouldRegisterNotificationWorker()) return;
     this.redis = createHealthRedisClient({
@@ -78,7 +80,8 @@ export class BroadcastSchedulerService implements OnModuleInit, OnModuleDestroy 
         }
       }
       this.lastRunAt = new Date().toISOString();
-      await this.touchHeartbeat(reason, { claimed: claimedIds.length, queued });
+      const expiry = await this.expiryScheduler.reviewUpcomingExpiries(CLAIM_BATCH_SIZE);
+      await this.touchHeartbeat(reason, { claimed: claimedIds.length, queued, expiryQueued: expiry.queued });
     } catch (error) {
       const message = error instanceof Error ? error.message : "broadcast scheduler cycle failed";
       this.logger.warn(`Scheduler cycle failed (${reason}): ${message}`);

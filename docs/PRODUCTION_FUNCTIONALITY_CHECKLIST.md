@@ -355,6 +355,18 @@
 | ADM-BRD-008 | Broadcasts | Push channel | Admin | Admin | Notifications | Y | Y | send + FCM | Y | Y | Y | PARTIAL | N | N | N | N | N | **BLOCKED** | P0 | Y | FCM simulated without creds | — | Y | — |
 | ADM-BRD-009 | Broadcasts | SMS / Email channels | Admin | Admin | Notifications | Y | Y | providers | PARTIAL | Y | Y | N | N | N | N | N | N | **FAIL** | P0 | Y | Placeholder providers default off | — | Y | — |
 
+### Phase 14 — Citizen Missing Person / Stolen Vehicle broadcasts (2026-08-06)
+
+| ID | Module | Feature | Status | Automated Test | Device/Staging | Notes |
+|----|--------|---------|--------|:--------------:|:--------------:|-------|
+| P14-MOB-001 | Broadcasts | Create Missing Person (voice-first) | **CODE COMPLETE — DEVICE QA PENDING** | Y (focused) | N | Immediate Active; country delivery queued |
+| P14-MOB-002 | Broadcasts | Create Stolen Vehicle (voice-first) | **CODE COMPLETE — DEVICE QA PENDING** | Y (focused) | N | Registration masked in public views |
+| P14-MOB-003 | Broadcasts | My Broadcasts filters + author actions | **CODE COMPLETE — DEVICE QA PENDING** | Y | N | Active/Resolved/Withdrawn/Suspended/Expired |
+| P14-MOB-004 | Broadcasts | Comments + report abuse + share | **CODE COMPLETE — DEVICE QA PENDING** | Y | N | Public-safe share URL |
+| P14-MOB-005 | Broadcasts | Submit sighting (non-public coords) | **CODE COMPLETE — STAGING QA PENDING** | PARTIAL | N | Dedicated sightings endpoint |
+| P14-ADM-001 | Broadcasts | Moderation workspace | **CODE COMPLETE — STAGING QA PENDING** | Y (typecheck) | N | `/broadcasts`, reports, analytics |
+| P14-API-001 | Broadcasts | Resolution/expiry notifications | **CODE COMPLETE — STAGING WORKER QA PENDING** | Y (567/567) | N | Schema v1 BROADCAST_DETAILS |
+
 ### Missing persons / Stolen vehicles (Admin)
 
 | ID | Module | Feature | User Role | Platform | Screen/Page | UI Present | Navigation Works | API Endpoint | Backend Implemented | Database Implemented | Authorization Implemented | Uses Real Data | Mock/Demo Removed | Automated Test | Manual Device Test | Staging Verified | Production Config Ready | Status | Severity | Blocker | Root Cause | Files Changed | Deployment Required | Notes |
@@ -824,6 +836,19 @@
 | Checklist updated with evidence | **YES** (this document) |
 
 ### **VERDICT: NOT READY FOR PRODUCTION**
+
+---
+
+## Phase 3.5 — Active Emergency reporter experience (2026-08-05)
+
+| Item | Status | Evidence |
+|------|:------:|----------|
+| Evidence upload from Active Emergency | PASS (code) | `active_emergency_evidence_actions.dart`, presign/confirm reuse |
+| Voice update on Active Emergency | PASS (code) | VoiceRecorder + Audio presign |
+| Live video returns to Active Emergency | PASS (code) | `LiveVideoRouteArgs.returnToActiveEmergency` |
+| Notification schema v1 | PASS (code) | `notification-routing.schema.ts`, `NOTIFICATION_SCHEMA_V1.md` |
+| Reporter push/inbox routing | PASS (code) | No `/tracking` for reporter incident notifications |
+| Staging device QA | NOT TESTED | DevOps deploy pending |
 
 ---
 

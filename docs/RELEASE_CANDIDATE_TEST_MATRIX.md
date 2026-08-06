@@ -179,6 +179,11 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | SRB-002 | P0 | Termii OTP — sender ID approval | BLOCKED BY PROVIDER |
 | SRB-003 | P0 | Notifications inbox — device QA pending | NOT TESTED |
 | SRB-004 | P0 | Broadcasts — device QA pending | NOT TESTED |
+| P14-RC-001 | P0 | Citizen Missing Person lifecycle E2E | CODE COMPLETE — DEVICE QA PENDING |
+| P14-RC-002 | P0 | Citizen Stolen Vehicle lifecycle E2E | CODE COMPLETE — DEVICE QA PENDING |
+| P14-RC-003 | P1 | Admin broadcast moderation workspace | CODE COMPLETE — STAGING QA PENDING |
+| P14-RC-004 | P1 | Resolution/expiry push (BROADCAST_DETAILS) | CODE COMPLETE — STAGING WORKER QA PENDING |
+| P14-RC-005 | P1 | Public-safe share page | CODE COMPLETE — STAGING QA PENDING |
 | SRB-005 | P0 | Avatar upload — Spaces E2E pending | NOT TESTED |
 | SRB-006 | P0 | SOS/report termination — per-type device QA | NOT TESTED |
 | SRB-012 | P0 | Admin logout — live browser QA pending | NOT TESTED |
@@ -233,3 +238,19 @@ For each FAIL or NOT TESTED row after fix:
 6. Rebuild APK from exact commit  
 7. Retest row → update **Status** and **Retest** columns  
 8. Never delete historical failure notes  
+
+---
+
+## Phase 3.5 — Active Emergency reporter QA (add to staging matrix)
+
+| ID | Scenario | Priority | Expected |
+|----|----------|----------|----------|
+| AE-035-001 | Upload photo from Active Emergency | P0 | Timeline + evidence summary update |
+| AE-035-002 | Record voice update | P0 | Audio attached; incident stays active |
+| AE-035-003 | Start/stop live video from AE | P0 | Returns to Active Emergency |
+| AE-035-004 | Live video failure retry | P1 | AE shows retry message; same incident |
+| AE-035-005 | Push: responder en route | P0 | Opens Active Emergency |
+| AE-035-006 | Push: resolved | P0 | Opens Incident Details |
+| AE-035-007 | Inbox tap active incident | P0 | Opens Active Emergency, not Tracking |
+| AE-035-008 | Offline evidence queue retry | P1 | Queued upload succeeds on reconnect |
+| AE-035-009 | Accessibility labels on AE actions | P1 | TalkBack reads action labels |

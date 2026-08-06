@@ -47,6 +47,7 @@ import {
 } from "./dto/dispatch.dto";
 import { TriageService, type TriageResult } from "./triage.service";
 import { buildSlaTimerState } from "./sla-policy";
+import { buildReporterNotificationMetadata } from "../notifications/notification-routing.schema";
 
 const DISPATCH_QUEUE_STATUSES = [
   IncidentStatus.Submitted,
@@ -190,12 +191,7 @@ export class DispatchService {
         channels: ["push", "in_app"],
         title: copy.title,
         body: copy.body,
-        metadata: {
-          route: "/active-emergency",
-          deepLink: "/active-emergency",
-          incidentId: id,
-          silent: this.incidentIsSilent(incident),
-        },
+        metadata: this.reporterNotificationMetadata(incident, "IncidentStatusUpdate"),
       });
     }
 
@@ -875,12 +871,9 @@ export class DispatchService {
         channels: ["push", "in_app"],
         title: copy.title,
         body: copy.body,
-        metadata: {
+        metadata: this.reporterNotificationMetadata(incident, "IncidentStatusUpdate", {
           assignmentId: assignment.id,
-          route: "/active-emergency",
-          deepLink: "/active-emergency",
-          silent: this.incidentIsSilent(incident),
-        },
+        }),
       });
     }
   }
@@ -927,13 +920,24 @@ export class DispatchService {
       channels: ["push", "in_app"],
       title: message.title,
       body: message.body,
-      metadata: {
+      metadata: this.reporterNotificationMetadata(incident, "IncidentStatusUpdate", {
         assignmentId: assignment.id,
         assignmentStatus: status,
-        route: "/active-emergency",
-        deepLink: "/active-emergency",
-        silent: this.incidentIsSilent(incident),
-      },
+      }),
+    });
+  }
+
+  private reporterNotificationMetadata(
+    incident: { id: string; status: string; metadata?: unknown },
+    notificationType: string,
+    extra?: Record<string, unknown>,
+  ) {
+    return buildReporterNotificationMetadata({
+      incidentId: incident.id,
+      status: incident.status,
+      notificationType,
+      silent: this.incidentIsSilent(incident),
+      extra,
     });
   }
 
