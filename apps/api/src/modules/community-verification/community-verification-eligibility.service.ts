@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { IncidentStatus, IncidentType } from "@the-eye/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import {
+  ACTIVE_ASSIGNMENT_STATUSES,
   ACTIVE_INCIDENT_STATUSES,
   BLOCKED_INCIDENT_TYPES,
   DEFAULT_VERIFICATION_RADIUS_METERS,
@@ -39,7 +40,7 @@ export class CommunityVerificationEligibilityService {
         country: true,
         state: true,
         lga: true,
-        assignments: { where: { status: { in: ["Assigned", "EnRoute", "OnScene", "Active"] as never[] } }, take: 1 },
+        assignments: { where: { status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] as never[] } }, take: 1 },
       },
     });
     if (!incident) return { eligible: false, reason: "Incident not found", candidates: [] };

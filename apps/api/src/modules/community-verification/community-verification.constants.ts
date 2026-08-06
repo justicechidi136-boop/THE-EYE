@@ -11,10 +11,20 @@ export const ACTIVE_INCIDENT_STATUSES: IncidentStatus[] = [
   IncidentStatus.Submitted,
   IncidentStatus.Received,
   IncidentStatus.Verifying,
-  IncidentStatus.Dispatched,
-  IncidentStatus.EnRoute,
-  IncidentStatus.OnScene,
+  IncidentStatus.Verified,
+  IncidentStatus.Assigned,
+  IncidentStatus.Responding,
+  IncidentStatus.UnderControl,
+  IncidentStatus.CancellationRequested,
 ];
+
+export const ACTIVE_ASSIGNMENT_STATUSES = [
+  "Assigned",
+  "Accepted",
+  "EnRoute",
+  "Arrived",
+  "InProgress",
+] as const;
 
 export const PASSIVE_ONLY_INCIDENT_TYPES = new Set<IncidentType>([
   IncidentType.Kidnapping,

@@ -10,6 +10,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import {
+  ACTIVE_ASSIGNMENT_STATUSES,
   DEFAULT_VERIFICATION_LIMIT,
   DEFAULT_VERIFICATION_RADIUS_METERS,
   DEFAULT_VERIFICATION_REQUEST_TTL_MINUTES,
@@ -96,7 +97,7 @@ export class CommunityVerificationService {
           body,
           status: "Pending" as never,
           provider: "fcm",
-          metadata,
+          metadata: metadata as never,
         },
       });
 
@@ -155,7 +156,7 @@ export class CommunityVerificationService {
             state: true,
             lga: true,
             submittedAt: true,
-            assignments: { where: { status: { in: ["Assigned", "EnRoute", "OnScene", "Active"] as never[] } }, take: 1 },
+            assignments: { where: { status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] as never[] } }, take: 1 },
             media: {
               where: { deletedAt: null, moderationStatus: "Approved" as never },
               select: { id: true, mediaType: true },
@@ -209,7 +210,7 @@ export class CommunityVerificationService {
       select: {
         reporterId: true,
         type: true,
-        assignments: { where: { status: { in: ["Assigned", "EnRoute", "OnScene", "Active"] as never[] } }, take: 1 },
+        assignments: { where: { status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] as never[] } }, take: 1 },
       },
     });
     if (incident.reporterId === actor.sub) throw new ForbiddenException("Reporter cannot verify own incident");
@@ -430,7 +431,7 @@ export class CommunityVerificationService {
       action: "community_verification.flag_response",
       entityType: "community_verification_response",
       entityId: responseId,
-      metadata: dto as Record<string, unknown>,
+      metadata: { flagged: dto.flagged, reason: dto.reason ?? null },
     });
     return { responseId, flaggedSuspicious: dto.flagged };
   }
@@ -441,7 +442,7 @@ export class CommunityVerificationService {
       action: "community_verification.recommendation_review",
       entityType: "incident",
       entityId: incidentId,
-      metadata: dto as Record<string, unknown>,
+      metadata: { decision: dto.decision, note: dto.note ?? null },
     });
     return { incidentId, decision: dto.decision, note: "Incident status unchanged by policy" };
   }
@@ -464,7 +465,7 @@ export class CommunityVerificationService {
             state: true,
             lga: true,
             submittedAt: true,
-            assignments: { where: { status: { in: ["Assigned", "EnRoute", "OnScene", "Active"] as never[] } }, take: 1 },
+            assignments: { where: { status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] as never[] } }, take: 1 },
             media: {
               where: { deletedAt: null, moderationStatus: "Approved" as never },
               select: { id: true, mediaType: true, objectKey: true, bucket: true },

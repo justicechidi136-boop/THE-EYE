@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { IncidentType } from "@the-eye/shared";
 import { PrismaService } from "../prisma/prisma.service";
-import { RESOLUTION_ELIGIBLE_INCIDENT_TYPES } from "./community-verification.constants";
+import { RESOLUTION_ELIGIBLE_INCIDENT_TYPES, ACTIVE_ASSIGNMENT_STATUSES } from "./community-verification.constants";
 
 export interface CommunityVerificationScore {
   confirmedScore: number;
@@ -39,7 +39,7 @@ export class CommunityVerificationScoringService {
         where: { id: incidentId },
         select: {
           type: true,
-          assignments: { where: { status: { in: ["Assigned", "EnRoute", "OnScene", "Active"] as never[] } }, take: 1 },
+          assignments: { where: { status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] as never[] } }, take: 1 },
         },
       }),
       this.prisma.communityVerificationResponse.findMany({
