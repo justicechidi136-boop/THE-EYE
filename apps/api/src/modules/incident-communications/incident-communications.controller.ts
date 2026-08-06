@@ -54,7 +54,7 @@ export class IncidentCommunicationsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
   @RequirePermissions("incident:read")
-  @RateLimit("incidentUpdate")
+  @RateLimit("incidentCreate")
   sendMessage(
     @Param("incidentId") incidentId: string,
     @Body() dto: SendIncidentMessageDto,

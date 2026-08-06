@@ -64,7 +64,7 @@ export class IncidentCommunicationsService {
     const ctx = await this.access.assertAccess(incidentId, actor);
     const conversation = await this.ensureConversation(incidentId);
     const cursor = query.cursor ? decodeDateIdCursor(query.cursor) : undefined;
-    const limit = resolvePageLimit(query.limit, 30, 100);
+    const limit = resolvePageLimit(query.limit, 30);
     const where = {
       conversationId: conversation.id,
       deletedAt: null,
@@ -86,8 +86,8 @@ export class IncidentCommunicationsService {
       encodeDateIdCursor(row.createdAt, row.id),
     );
     return {
-      data: page.items.map((row) => this.mapMessage(row, ctx)),
-      pageInfo: page.pageInfo,
+      ...page,
+      data: page.data.map((row) => this.mapMessage(row, ctx)),
       conversationStatus: conversation.status,
       readOnly: this.isReadOnly(conversation, ctx.incident.status),
     };
@@ -500,9 +500,7 @@ export class IncidentCommunicationsService {
         take: 20,
       });
       for (const admin of admins) {
-        if (!(sender.typ === "admin" && sender.sub === admin.id)) {
-          recipients.push({ recipientAdminId: admin.id });
-        }
+        recipients.push({ recipientAdminId: admin.id });
       }
     }
     if (sender.typ !== "admin") {
@@ -558,7 +556,7 @@ export class IncidentCommunicationsService {
           body: "Open your active emergency to read the official update.",
           incidentId,
           userId: incident.reporterId,
-          priority: "high",
+          priority: "High",
           metadata,
         },
         undefined,
@@ -579,7 +577,7 @@ export class IncidentCommunicationsService {
       body: "Dispatch needs additional details about your emergency.",
       incidentId,
       userId: incident.reporterId,
-      priority: "high",
+      priority: "High",
       metadata: buildIncidentInformationRequestNotificationMetadata({
         incidentId,
         status,

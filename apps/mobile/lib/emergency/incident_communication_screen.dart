@@ -1,7 +1,6 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
-import "package:flutter/semantics.dart";
 import "package:uuid/uuid.dart";
 
 import "../contracts/the_eye_api_client.dart";
@@ -145,7 +144,7 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
       ),
       body: Column(
         children: [
-          EyePageBackHeader(label: "Back to active emergency"),
+          EyePageBackHeader(title: "Back to active emergency"),
           if (readOnly)
             Semantics(
               liveRegion: true,

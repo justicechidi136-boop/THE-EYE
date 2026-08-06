@@ -14,7 +14,9 @@ export type NotificationType =
   | "SupportChatAssigned"
   | "SupportChatEscalated"
   | "SupportChatResolved"
-  | "SupportChatReopened";
+  | "SupportChatReopened"
+  | "IncidentMessageReceived"
+  | "IncidentInformationRequest";
 export type NotificationPriority = "Low" | "Normal" | "High" | "Critical";
 
 export type CreateNotificationDto = {
