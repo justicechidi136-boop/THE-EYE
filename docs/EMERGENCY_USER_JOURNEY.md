@@ -48,6 +48,28 @@ Reporters **never** land on Incident Status (`/tracking`) while an incident is a
 
 ---
 
+## Phase 14 — Citizen broadcast journey (Missing Person / Stolen Vehicle)
+
+```
+Services → Create broadcast
+        ↓
+Missing Person OR Stolen Vehicle form (voice-first optional)
+        ↓
+Active immediately + country delivery queued
+        ↓
+My Broadcasts / feed / detail
+        ↓
+Comments · Report abuse · Share · Submit sighting
+        ↓
+Mark Found/Recovered OR Withdraw
+        ↓
+Resolution notification (BROADCAST_DETAILS deep link)
+```
+
+Broadcast navigation is separate from emergency incident reporting. Job Vacancies and unrelated menu items must not route to broadcast creation.
+
+---
+
 ## Related docs
 
 - [ACTIVE_EMERGENCY_CONTRACT.md](./ACTIVE_EMERGENCY_CONTRACT.md)

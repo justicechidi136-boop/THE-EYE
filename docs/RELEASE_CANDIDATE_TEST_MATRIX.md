@@ -179,6 +179,11 @@ Historical failures are retained in `docs/STAGING_RUNTIME_BLOCKERS.md` (SRB-001�
 | SRB-002 | P0 | Termii OTP — sender ID approval | BLOCKED BY PROVIDER |
 | SRB-003 | P0 | Notifications inbox — device QA pending | NOT TESTED |
 | SRB-004 | P0 | Broadcasts — device QA pending | NOT TESTED |
+| P14-RC-001 | P0 | Citizen Missing Person lifecycle E2E | CODE COMPLETE — DEVICE QA PENDING |
+| P14-RC-002 | P0 | Citizen Stolen Vehicle lifecycle E2E | CODE COMPLETE — DEVICE QA PENDING |
+| P14-RC-003 | P1 | Admin broadcast moderation workspace | CODE COMPLETE — STAGING QA PENDING |
+| P14-RC-004 | P1 | Resolution/expiry push (BROADCAST_DETAILS) | CODE COMPLETE — STAGING WORKER QA PENDING |
+| P14-RC-005 | P1 | Public-safe share page | CODE COMPLETE — STAGING QA PENDING |
 | SRB-005 | P0 | Avatar upload — Spaces E2E pending | NOT TESTED |
 | SRB-006 | P0 | SOS/report termination — per-type device QA | NOT TESTED |
 | SRB-012 | P0 | Admin logout — live browser QA pending | NOT TESTED |
