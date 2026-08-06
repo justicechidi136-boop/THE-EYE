@@ -439,6 +439,8 @@ model User {
   supportParticipants       SupportConversationParticipant[] @relation("SupportParticipantUser")
   supportMessages           SupportMessage[]               @relation("SupportMessageUser")
   supportConversations      SupportConversation[]          @relation("SupportConversationOwner")
+  incidentMessagesSent      IncidentMessage[]              @relation("IncidentMessageSenderUser")
+  incidentMessageReceipts   IncidentMessageReceipt[]       @relation("IncidentMessageReceiptUser")
 
   @@map("users")
 }
@@ -622,6 +624,8 @@ model AdminUser {
   supportConversationsClosed   SupportConversation[]     @relation("SupportConversationClosedBy")
   supportParticipants          SupportConversationParticipant[] @relation("SupportParticipantAdmin")
   supportMessages              SupportMessage[]          @relation("SupportMessageAdmin")
+  incidentMessagesSent         IncidentMessage[]         @relation("IncidentMessageSenderAdmin")
+  incidentInformationRequests  IncidentInformationRequest[] @relation("IncidentInformationRequestAdmin")
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -696,6 +700,9 @@ model Incident {
   droneMissions            DroneMission[]
   droneEvidence            DroneEvidence[]
   supportConversations     SupportConversation[]
+  incidentConversation     IncidentConversation?
+  incidentMessages         IncidentMessage[]
+  incidentInformationRequests IncidentInformationRequest[]
   communityVerificationRequests CommunityVerificationRequest[]
   communityVerificationResponses CommunityVerificationResponse[]
 
@@ -3245,4 +3252,138 @@ model SupportMessage {
   @@unique([conversationId, clientMessageId])
   @@index([conversationId, createdAt])
   @@map("support_messages")
+}
+
+enum IncidentConversationStatus {
+  Active
+  Restricted
+  Closed
+  Archived
+}
+
+enum IncidentMessageType {
+  Text
+  Voice
+  Image
+  Video
+  SystemUpdate
+  InformationRequest
+  QuickReply
+  LocationUpdate
+  SafetyInstruction
+  OfficialNotice
+}
+
+enum IncidentMessageModerationStatus {
+  Pending
+  Approved
+  Flagged
+  Hidden
+}
+
+enum IncidentInformationRequestStatus {
+  Open
+  Responded
+  Expired
+  Cancelled
+}
+
+model IncidentConversation {
+  id            String                     @id @default(uuid()) @db.Uuid
+  incidentId    String                     @unique @map("incident_id") @db.Uuid
+  status        IncidentConversationStatus @default(Active)
+  version       Int                        @default(1)
+  lastMessageAt DateTime?                  @map("last_message_at") @db.Timestamptz(6)
+  closedAt      DateTime?                  @map("closed_at") @db.Timestamptz(6)
+  closedById    String?                    @map("closed_by_id") @db.Uuid
+  closeReason   String?                    @map("close_reason")
+  metadata      Json                       @default("{}")
+  createdAt     DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  incident      Incident                   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  messages      IncidentMessage[]
+  informationRequests IncidentInformationRequest[]
+
+  @@index([status, lastMessageAt])
+  @@map("incident_conversations")
+}
+
+model IncidentMessage {
+  id                 String                          @id @default(uuid()) @db.Uuid
+  conversationId     String                          @map("conversation_id") @db.Uuid
+  incidentId         String                          @map("incident_id") @db.Uuid
+  senderUserId       String?                         @map("sender_user_id") @db.Uuid
+  senderAdminId      String?                         @map("sender_admin_id") @db.Uuid
+  senderRole         String                          @map("sender_role")
+  senderAgencyId     String?                         @map("sender_agency_id") @db.Uuid
+  senderResponderId  String?                         @map("sender_responder_id") @db.Uuid
+  messageType        IncidentMessageType             @map("message_type")
+  body               String
+  attachmentId       String?                         @map("attachment_id") @db.Uuid
+  structuredAction   Json?                           @map("structured_action")
+  replyToMessageId   String?                         @map("reply_to_message_id") @db.Uuid
+  clientMessageId    String?                         @map("client_message_id")
+  moderationStatus   IncidentMessageModerationStatus @default(Approved) @map("moderation_status")
+  deliveryVersion    Int                             @default(1) @map("delivery_version")
+  isInternal         Boolean                         @default(false) @map("is_internal")
+  metadata           Json                            @default("{}")
+  createdAt          DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt           DateTime?                       @map("edited_at") @db.Timestamptz(6)
+  deletedAt          DateTime?                       @map("deleted_at") @db.Timestamptz(6)
+  conversation       IncidentConversation            @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  incident           Incident                        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  senderUser         User?                           @relation("IncidentMessageSenderUser", fields: [senderUserId], references: [id])
+  senderAdmin        AdminUser?                      @relation("IncidentMessageSenderAdmin", fields: [senderAdminId], references: [id])
+  replyTo            IncidentMessage?                @relation("IncidentMessageReply", fields: [replyToMessageId], references: [id])
+  replies            IncidentMessage[]               @relation("IncidentMessageReply")
+  receipts           IncidentMessageReceipt[]
+
+  @@unique([conversationId, clientMessageId])
+  @@index([conversationId, createdAt])
+  @@index([incidentId, createdAt])
+  @@index([senderUserId, createdAt])
+  @@map("incident_messages")
+}
+
+model IncidentMessageReceipt {
+  id               String          @id @default(uuid()) @db.Uuid
+  messageId        String          @map("message_id") @db.Uuid
+  recipientUserId  String?         @map("recipient_user_id") @db.Uuid
+  recipientAdminId String?         @map("recipient_admin_id") @db.Uuid
+  recipientContext String?         @map("recipient_context")
+  deliveredAt      DateTime?         @map("delivered_at") @db.Timestamptz(6)
+  readAt           DateTime?         @map("read_at") @db.Timestamptz(6)
+  failedAt         DateTime?         @map("failed_at") @db.Timestamptz(6)
+  failureCode      String?           @map("failure_code")
+  deliveryChannel  String            @default("in_app") @map("delivery_channel")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  message          IncidentMessage   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  recipientUser    User?             @relation("IncidentMessageReceiptUser", fields: [recipientUserId], references: [id])
+
+  @@index([messageId])
+  @@index([recipientUserId, readAt])
+  @@map("incident_message_receipts")
+}
+
+model IncidentInformationRequest {
+  id               String                           @id @default(uuid()) @db.Uuid
+  conversationId   String                           @map("conversation_id") @db.Uuid
+  incidentId       String                           @map("incident_id") @db.Uuid
+  requestType      String                           @map("request_type")
+  prompt           String
+  allowedReplyTypes Json                            @default("[]") @map("allowed_reply_types")
+  required         Boolean                          @default(false)
+  expiresAt        DateTime?                        @map("expires_at") @db.Timestamptz(6)
+  requestedByAdminId String?                        @map("requested_by_admin_id") @db.Uuid
+  status           IncidentInformationRequestStatus @default(Open)
+  responseMessageId String?                         @map("response_message_id") @db.Uuid
+  createdAt        DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  conversation     IncidentConversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  incident         Incident                         @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  requestedBy      AdminUser?                       @relation("IncidentInformationRequestAdmin", fields: [requestedByAdminId], references: [id])
+
+  @@index([incidentId, status, createdAt])
+  @@index([conversationId, createdAt])
+  @@map("incident_information_requests")
 }
