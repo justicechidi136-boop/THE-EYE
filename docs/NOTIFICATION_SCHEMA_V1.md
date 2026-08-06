@@ -33,6 +33,8 @@ FCM data also includes legacy `route` / `deepLink` mirroring `destination` for b
 | `OWN_ACTIVE_INCIDENT` | `/active-emergency` | Reporter while incident is active |
 | `OWN_INCIDENT_DETAILS` | `/incident-detail` | Terminal states (resolved, cancelled, expired, false report) |
 | `COMMUNITY_VERIFICATION` | `/neighborhood-watch` | Community verification (future phase) |
+| `BROADCAST_DETAILS` | `/broadcasts/:id` | Public safety broadcasts |
+| `FIELD_DEVICE_STATUS` | `/device-registration` | Field tablet registration refresh |
 | `SYSTEM` | varies | Broadcasts, SOS entry, settings |
 
 ---
@@ -65,6 +67,24 @@ FCM data also includes legacy `route` / `deepLink` mirroring `destination` for b
 | `IncidentInformationRequest` | Reporter | `/active-emergency/:id/messages` | `/incident-detail/:id/messages` |
 
 Push allowlist includes message subpaths under active-emergency and incident-detail routes.
+
+---
+
+## Phase 7 field device notifications
+
+| notificationType | Recipient | destination | Notes |
+|------------------|-----------|-------------|-------|
+| `FIELD_DEVICE_APPROVED` | Assigned officer tablet | `/device-registration` | Triggers status refresh only |
+| `FIELD_DEVICE_REJECTED` | Assigned officer tablet | `/device-registration` | No credentials in payload |
+| `FIELD_DEVICE_SUSPENDED` | Assigned officer tablet | `/locked` | Session should lock |
+| `FIELD_DEVICE_REVOKED` | Assigned officer tablet | `/locked` | Clear operational access |
+| `FIELD_DEVICE_REPAIR_REQUIRED` | Assigned officer tablet | `/device-registration` | Re-pair flow |
+| `FIELD_SESSION_REVOKED` | Assigned officer tablet | `/locked` | Remote force sign-out |
+
+**routeType:** `FIELD_DEVICE_STATUS`  
+**Builder:** `buildFieldDeviceNotificationMetadata()` in `notification-routing.schema.ts`
+
+FCM data must not include device credentials, private keys, or raw hardware identifiers.
 
 ---
 

@@ -8,6 +8,7 @@ export type NotificationRouteType =
   | "OWN_INCIDENT_DETAILS"
   | "COMMUNITY_VERIFICATION"
   | "BROADCAST_DETAILS"
+  | "FIELD_DEVICE_STATUS"
   | "SYSTEM";
 
 export interface NotificationRoutingV1 {
@@ -250,5 +251,40 @@ export function buildIncidentInformationRequestNotificationMetadata(input: {
     deepLink: destination,
     issuedAt: new Date().toISOString(),
     silent: false,
+  };
+}
+
+export type FieldDeviceNotificationType =
+  | "FIELD_DEVICE_APPROVED"
+  | "FIELD_DEVICE_REJECTED"
+  | "FIELD_DEVICE_SUSPENDED"
+  | "FIELD_DEVICE_REVOKED"
+  | "FIELD_DEVICE_REPAIR_REQUIRED"
+  | "FIELD_SESSION_REVOKED";
+
+export function resolveFieldDeviceNotificationRouting(input: {
+  publicDeviceId: string;
+  notificationType: FieldDeviceNotificationType;
+}): NotificationRoutingV1 {
+  return {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: "FIELD_DEVICE_STATUS",
+    notificationType: input.notificationType,
+    destination: "/device-registration",
+  };
+}
+
+export function buildFieldDeviceNotificationMetadata(input: {
+  publicDeviceId: string;
+  notificationType: FieldDeviceNotificationType;
+}): Record<string, unknown> {
+  const routing = resolveFieldDeviceNotificationRouting(input);
+  return {
+    ...routing,
+    route: routing.destination,
+    deepLink: routing.destination,
+    publicDeviceId: input.publicDeviceId,
+    silent: false,
+    issuedAt: new Date().toISOString(),
   };
 }

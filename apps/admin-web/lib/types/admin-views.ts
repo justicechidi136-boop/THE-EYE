@@ -382,6 +382,32 @@ export type SmartwatchDeviceDetailView = SmartwatchDeviceView & {
   firmwareUpdates: Array<{ version: string; status: string; startedAt: string }>;
 };
 
+export type FieldDeviceView = {
+  id: string;
+  publicDeviceId: string;
+  deviceName: string;
+  manufacturer: string;
+  model: string;
+  registrationStatus: string;
+  assignedUserId: string | null;
+  agencyId: string | null;
+  assignedUnitId: string | null;
+  countryCode: string | null;
+  stateCode: string | null;
+  lgaCode: string | null;
+  appVersion: string;
+  androidVersion: string;
+  lastSeen: string;
+  batteryLevel: number | null;
+  networkType: string;
+  isLost: boolean;
+  isRevoked: boolean;
+  requiresRePair: boolean;
+  isRootRiskDetected: boolean;
+  approvedAt: string | null;
+  registeredAt: string;
+};
+
 export type PairingSessionView = {
   id: string;
   deviceId: string;

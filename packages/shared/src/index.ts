@@ -7,3 +7,4 @@ export * from "./watch-feature-flag-validation";
 export * from "./watch-ownership";
 export type { Permission } from "./permissions";
 export { adminRolePermissions, userRolePermissions, rolePermissions } from "./permissions";
+export * from "./field-operations";

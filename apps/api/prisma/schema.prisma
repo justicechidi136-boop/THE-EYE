@@ -559,6 +559,7 @@ model Agency {
   responseUnits       ResponseUnit[]
   incidentAssignments IncidentAssignment[]
   droneOperators      DroneOperator[]
+  fieldDevices        FieldDevice[]
 
   @@index([jurisdictionId, type])
   @@index([jurisdictionId, isActive])
@@ -626,6 +627,10 @@ model AdminUser {
   supportMessages              SupportMessage[]          @relation("SupportMessageAdmin")
   incidentMessagesSent         IncidentMessage[]         @relation("IncidentMessageSenderAdmin")
   incidentInformationRequests  IncidentInformationRequest[] @relation("IncidentInformationRequestAdmin")
+  assignedFieldDevices         FieldDevice[]              @relation("FieldDeviceAssignedUser")
+  approvedFieldDevices         FieldDevice[]              @relation("FieldDeviceApprovedBy")
+  revokedFieldDevices          FieldDevice[]              @relation("FieldDeviceRevokedBy")
+  fieldDeviceSessions          FieldDeviceSession[]       @relation("FieldDeviceSessionAdmin")
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -2103,6 +2108,7 @@ model ResponseUnit {
   updatedAt        DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   agency           Agency                                @relation(fields: [agencyId], references: [id])
   assignments      IncidentAssignment[]
+  fieldDevices     FieldDevice[]
 
   @@unique([agencyId, unitIdentifier])
   @@index([agencyId, status, isActive])
@@ -3386,4 +3392,112 @@ model IncidentInformationRequest {
   @@index([incidentId, status, createdAt])
   @@index([conversationId, createdAt])
   @@map("incident_information_requests")
+}
+
+enum FieldDeviceRegistrationStatus {
+  PendingApproval
+  Active
+  Suspended
+  Lost
+  Revoked
+  Retired
+}
+
+model FieldDeviceRegistrationChallenge {
+  id            String    @id @default(uuid()) @db.Uuid
+  challengeHash String    @unique @map("challenge_hash")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt    DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("field_device_registration_challenges")
+}
+
+model FieldDevice {
+  id                     String                        @id @default(uuid()) @db.Uuid
+  publicDeviceId         String                        @unique @map("public_device_id")
+  deviceCredentialHash   String?                       @map("device_credential_hash")
+  publicKey              String                        @map("public_key")
+  assignedUserId         String?                       @map("assigned_user_id") @db.Uuid
+  agencyId               String?                       @map("agency_id") @db.Uuid
+  assignedUnitId         String?                       @map("assigned_unit_id") @db.Uuid
+  countryCode            String?                       @map("country_code")
+  stateCode              String?                       @map("state_code")
+  lgaCode                String?                       @map("lga_code")
+  deviceName             String                        @map("device_name")
+  manufacturer           String?
+  model                  String?
+  androidVersion         String?                       @map("android_version")
+  appVersion             String?                       @map("app_version")
+  buildNumber            String?                       @map("build_number")
+  serialHash             String?                       @map("serial_hash")
+  installationIdHash     String                        @unique @map("installation_id_hash")
+  registrationStatus     FieldDeviceRegistrationStatus @default(PendingApproval) @map("registration_status")
+  registeredAt           DateTime                      @default(now()) @map("registered_at") @db.Timestamptz(6)
+  approvedAt             DateTime?                     @map("approved_at") @db.Timestamptz(6)
+  approvedById           String?                       @map("approved_by_id") @db.Uuid
+  lastSeenAt             DateTime?                     @map("last_seen_at") @db.Timestamptz(6)
+  lastAuthenticatedAt    DateTime?                     @map("last_authenticated_at") @db.Timestamptz(6)
+  lastKnownLatitude      Decimal?                      @map("last_known_latitude") @db.Decimal(9, 6)
+  lastKnownLongitude     Decimal?                      @map("last_known_longitude") @db.Decimal(9, 6)
+  lastLocationAccuracy   Float?                        @map("last_location_accuracy")
+  lastLocationAt         DateTime?                     @map("last_location_at") @db.Timestamptz(6)
+  batteryLevel           Int?                          @map("battery_level")
+  chargingState          String?                       @map("charging_state")
+  networkType            String?                       @map("network_type")
+  notificationPermission String?                       @map("notification_permission")
+  locationPermission     String?                       @map("location_permission")
+  cameraPermission       String?                       @map("camera_permission")
+  microphonePermission   String?                       @map("microphone_permission")
+  isRootRiskDetected     Boolean                       @default(false) @map("is_root_risk_detected")
+  isLost                 Boolean                       @default(false) @map("is_lost")
+  lostAt                 DateTime?                     @map("lost_at") @db.Timestamptz(6)
+  lostReason             String?                       @map("lost_reason")
+  isRevoked              Boolean                       @default(false) @map("is_revoked")
+  revokedAt              DateTime?                     @map("revoked_at") @db.Timestamptz(6)
+  revokedById            String?                       @map("revoked_by_id") @db.Uuid
+  revokeReason           String?                       @map("revoke_reason")
+  requiresRePair         Boolean                       @default(false) @map("requires_re_pair")
+  requiresRepair         Boolean                       @default(false) @map("requires_repair")
+  tokenVersion           Int                           @default(1) @map("token_version")
+  packageName            String?                       @map("package_name")
+  appEnvironment         String?                       @map("app_environment")
+  metadata               Json                          @default("{}")
+  createdAt              DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignedUser           AdminUser?                    @relation("FieldDeviceAssignedUser", fields: [assignedUserId], references: [id])
+  agency                 Agency?                       @relation(fields: [agencyId], references: [id])
+  assignedUnit           ResponseUnit?                 @relation(fields: [assignedUnitId], references: [id])
+  approvedBy             AdminUser?                    @relation("FieldDeviceApprovedBy", fields: [approvedById], references: [id])
+  revokedBy              AdminUser?                    @relation("FieldDeviceRevokedBy", fields: [revokedById], references: [id])
+  sessions               FieldDeviceSession[]
+
+  @@index([assignedUserId, registrationStatus])
+  @@index([agencyId, registrationStatus])
+  @@index([assignedUnitId])
+  @@index([lastSeenAt])
+  @@index([isLost])
+  @@index([isRevoked])
+  @@map("field_devices")
+}
+
+model FieldDeviceSession {
+  id               String      @id @default(uuid()) @db.Uuid
+  fieldDeviceId    String      @map("field_device_id") @db.Uuid
+  adminUserId      String      @map("admin_user_id") @db.Uuid
+  sessionId        String      @unique @map("session_id")
+  refreshTokenHash String      @unique @map("refresh_token_hash")
+  tokenVersion     Int         @map("token_version")
+  lockedAt         DateTime?   @map("locked_at") @db.Timestamptz(6)
+  expiresAt        DateTime    @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime?   @map("revoked_at") @db.Timestamptz(6)
+  lastActiveAt     DateTime    @default(now()) @map("last_active_at") @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  fieldDevice      FieldDevice @relation(fields: [fieldDeviceId], references: [id], onDelete: Cascade)
+  adminUser        AdminUser   @relation("FieldDeviceSessionAdmin", fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([fieldDeviceId, revokedAt])
+  @@index([adminUserId, revokedAt])
+  @@map("field_device_sessions")
 }

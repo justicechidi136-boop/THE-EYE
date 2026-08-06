@@ -18,6 +18,7 @@ import type {
   PoliceStationView,
   SmartwatchDeviceView,
   SmartwatchDeviceDetailView,
+  FieldDeviceView,
   PairingSessionView,
   ActivationHistoryView,
   SosEventView,
@@ -414,6 +415,34 @@ export function toSmartwatchDeviceDetailView(record: Record<string, unknown>): S
       })
     : [];
   return { ...base, sosEvents, gpsTracks, firmwareUpdates };
+}
+
+export function toFieldDeviceView(record: Record<string, unknown>): FieldDeviceView {
+  return {
+    id: String(record.id ?? ""),
+    publicDeviceId: String(record.publicDeviceId ?? ""),
+    deviceName: String(record.deviceName ?? "Unknown device"),
+    manufacturer: String(record.manufacturer ?? "-"),
+    model: String(record.model ?? "-"),
+    registrationStatus: String(record.registrationStatus ?? "PendingApproval"),
+    assignedUserId: record.assignedUserId ? String(record.assignedUserId) : null,
+    agencyId: record.agencyId ? String(record.agencyId) : null,
+    assignedUnitId: record.assignedUnitId ? String(record.assignedUnitId) : null,
+    countryCode: record.countryCode ? String(record.countryCode) : null,
+    stateCode: record.stateCode ? String(record.stateCode) : null,
+    lgaCode: record.lgaCode ? String(record.lgaCode) : null,
+    appVersion: String(record.appVersion ?? "-"),
+    androidVersion: String(record.androidVersion ?? "-"),
+    lastSeen: record.lastSeenAt ? formatTime(String(record.lastSeenAt)) : "Never",
+    batteryLevel: record.batteryLevel != null ? Number(record.batteryLevel) : null,
+    networkType: String(record.networkType ?? "-"),
+    isLost: record.isLost === true,
+    isRevoked: record.isRevoked === true,
+    requiresRePair: record.requiresRePair === true,
+    isRootRiskDetected: record.isRootRiskDetected === true,
+    approvedAt: record.approvedAt ? String(record.approvedAt) : null,
+    registeredAt: record.registeredAt ? String(record.registeredAt) : "-",
+  };
 }
 
 export function toPairingSessionView(record: Record<string, unknown>): PairingSessionView {
