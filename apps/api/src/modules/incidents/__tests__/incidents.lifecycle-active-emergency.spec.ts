@@ -124,8 +124,33 @@ function buildActiveEmergencyService(overrides: Record<string, unknown> = {}) {
     }),
     ...(overrides.communityVerification as object),
   } as any;
-  const service = new ActiveEmergencyService(prisma, incidentsService, communityVerification);
-  return { service, prisma, incidentsService, communityVerification };
+  const incidentCommunications = {
+    getCommunicationSummary: jest.fn().mockResolvedValue({
+      conversationAvailable: true,
+      unreadMessageCount: 0,
+      lastMessagePreview: null,
+      lastMessageAt: null,
+      pendingInformationRequestCount: 0,
+      conversationStatus: "Active",
+      allowedCommunicationActions: {
+        sendText: true,
+        sendVoice: true,
+        sendPhoto: true,
+        sendVideo: true,
+        sendLocation: true,
+        quickReply: true,
+        openThread: true,
+      },
+    }),
+    ...(overrides.incidentCommunications as object),
+  } as any;
+  const service = new ActiveEmergencyService(
+    prisma,
+    incidentsService,
+    communityVerification,
+    incidentCommunications,
+  );
+  return { service, prisma, incidentsService, communityVerification, incidentCommunications };
 }
 
 describe("incident lifecycle contract", () => {

@@ -1,7 +1,9 @@
 import {
   NOTIFICATION_SCHEMA_VERSION,
+  buildIncidentMessageNotificationMetadata,
   resolveReporterNotificationRouting,
 } from "../notification-routing.schema";
+import { sanitizeDeepLink } from "../notification-inbox.mapper";
 
 describe("notification-routing.schema", () => {
   it("routes active incidents to active emergency", () => {
@@ -23,5 +25,18 @@ describe("notification-routing.schema", () => {
     });
     expect(routing.routeType).toBe("OWN_INCIDENT_DETAILS");
     expect(routing.destination).toBe("/incident-detail");
+  });
+
+  it("builds incident message deep link without content", () => {
+    const metadata = buildIncidentMessageNotificationMetadata({
+      incidentId: "inc-3",
+      status: "Responding",
+      messageId: "msg-1",
+      notificationType: "IncidentMessageReceived",
+    });
+    expect(metadata.eventType).toBe("INCIDENT_MESSAGE_RECEIVED");
+    expect(metadata.deepLink).toBe("/active-emergency/inc-3/messages");
+    expect(metadata.body).toBeUndefined();
+    expect(sanitizeDeepLink(metadata.deepLink as string)).toBe("/active-emergency/inc-3/messages");
   });
 });
