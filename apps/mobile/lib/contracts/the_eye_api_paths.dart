@@ -80,6 +80,9 @@ abstract final class TheEyeApiPaths {
   static String notificationRead(String notificationId) =>
       "/notifications/$notificationId/read";
   static const broadcastsNearby = "/broadcasts/nearby";
+  static const broadcastsMine = "/broadcasts/mine";
+  static const broadcastMissingPerson = "/broadcasts/missing-person";
+  static const broadcastStolenVehicle = "/broadcasts/stolen-vehicle";
   static const policeStations = "/police-stations";
   static const policeStationsNearby = "/police-stations/nearby";
   static const policeStationsNearest = "/police-stations/nearest";
@@ -89,6 +92,18 @@ abstract final class TheEyeApiPaths {
       "/broadcasts/$broadcastId";
   static String broadcastRead(String broadcastId) =>
       "/broadcasts/$broadcastId/read";
+  static String broadcastResolve(String broadcastId) =>
+      "/broadcasts/$broadcastId/resolve";
+  static String broadcastWithdraw(String broadcastId) =>
+      "/broadcasts/$broadcastId/withdraw";
+  static String broadcastReport(String broadcastId) =>
+      "/broadcasts/$broadcastId/report";
+  static String broadcastComments(String broadcastId) =>
+      "/broadcasts/$broadcastId/comments";
+  static String broadcastShare(String broadcastId) =>
+      "/broadcasts/$broadcastId/share";
+  static String broadcastSightings(String broadcastId) =>
+      "/broadcasts/$broadcastId/sightings";
   static String incidentsMediaPresign(String incidentId) =>
       "/incidents/$incidentId/media/presign";
   static String incidentsMediaConfirm(String incidentId) =>

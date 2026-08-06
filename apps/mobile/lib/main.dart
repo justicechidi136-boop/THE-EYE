@@ -71,6 +71,10 @@ import "push/push_navigation.dart";
 import "push/push_notification_service.dart";
 import "broadcasts/broadcast_feed_cache.dart";
 import "broadcasts/broadcast_feed_service.dart";
+import "broadcasts/broadcast_navigation.dart";
+import "broadcasts/broadcast_screens.dart";
+import "broadcasts/broadcast_session.dart";
+import "broadcasts/broadcast_submission_service.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
 import "neighborhood_watch/volunteer_categories.dart";
 import "incidents/live_video_incident_retry.dart";
@@ -137,7 +141,8 @@ AppController appOf(BuildContext context) {
   return session as AppController;
 }
 
-Widget _buildActiveEmergencyRoute(BuildContext context, {String? routeIncidentId}) {
+Widget _buildActiveEmergencyRoute(BuildContext context,
+    {String? routeIncidentId}) {
   final args = ModalRoute.of(context)?.settings.arguments;
   final incidentId = routeIncidentId ??
       (args is Map ? args["incidentId"] as String? : args as String?) ??
@@ -156,7 +161,8 @@ Widget _buildActiveEmergencyRoute(BuildContext context, {String? routeIncidentId
     apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
     silent: silent,
     liveVideoErrorMessage: liveVideoError,
-    onStopLocationTracking: () async => controller.stopIncidentLocationTracking(),
+    onStopLocationTracking: () async =>
+        controller.stopIncidentLocationTracking(),
     onStartLiveVideo: (activeIncidentId) async {
       final result = await Navigator.of(context).pushNamed(
         "/live-video",
@@ -201,6 +207,12 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
       ),
     );
   }
+  final broadcastRoute = resolveBroadcastRoute(
+    settings,
+    missingPersonBuilder: () => const MissingPersonBroadcastScreen(),
+    stolenVehicleBuilder: () => const StolenVehicleBroadcastScreen(),
+  );
+  if (broadcastRoute != null) return broadcastRoute;
   return null;
 }
 
@@ -797,7 +809,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
                 return LiveEmergencyVideoScreen(
                   autoStartStream: autoStart,
                   incidentId: routeArgs?.incidentId,
-                  returnToActiveEmergency: routeArgs?.returnToActiveEmergency ?? false,
+                  returnToActiveEmergency:
+                      routeArgs?.returnToActiveEmergency ?? false,
                 );
               },
               "/report/crime": (context) =>
@@ -815,12 +828,21 @@ class _TheEyeAppState extends State<TheEyeApp> {
               "/missing-person": (_) => const MissingPersonBroadcastScreen(),
               "/stolen-vehicle": (_) => const StolenVehicleBroadcastScreen(),
               "/broadcasts": (_) => const BroadcastCenterScreen(),
+              BroadcastRoutes.create: (_) => const BroadcastCreateHubScreen(),
+              BroadcastRoutes.mine: (_) => const MyBroadcastsScreen(),
+              BroadcastRoutes.createMissingPerson: (_) =>
+                  const MissingPersonBroadcastScreen(),
+              BroadcastRoutes.createStolenVehicle: (_) =>
+                  const StolenVehicleBroadcastScreen(),
               "/police-stations": (_) => const NearbyPoliceStationsScreen(),
               "/notifications": (_) => const NotificationsScreen(),
               "/tracking": (_) => const IncidentTrackingScreen(),
-              "/active-emergency": (context) => _buildActiveEmergencyRoute(context),
+              "/active-emergency": (context) =>
+                  _buildActiveEmergencyRoute(context),
               "/active-emergencies": (context) => FutureBuilder(
-                    future: appOf(context).activeEmergencyService.listActiveReferences(),
+                    future: appOf(context)
+                        .activeEmergencyService
+                        .listActiveReferences(),
                     builder: (context, snapshot) {
                       final refs = snapshot.data ?? const [];
                       return ActiveEmergenciesSelectorScreen(references: refs);
@@ -920,7 +942,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
                     as SupportConversationRouteArgs?;
                 final controller = appOf(context);
                 if (args == null) {
-                  return const Scaffold(body: Center(child: Text("Conversation not found")));
+                  return const Scaffold(
+                      body: Center(child: Text("Conversation not found")));
                 }
                 return SupportConversationScreen(
                   accessToken: controller.accessToken ?? "",
@@ -1115,7 +1138,7 @@ ThemeData buildDarkTheme(bool highContrast) {
 }
 
 class AppController extends SessionAccessor
-    implements ActiveEmergencyNavigationController {
+    implements ActiveEmergencyNavigationController, BroadcastSession {
   AppController({
     required IncidentSubmissionService submissionService,
     required ConnectivityService connectivity,
@@ -1143,6 +1166,8 @@ class AppController extends SessionAccessor
   final NotificationInboxCache _notificationInboxCache =
       NotificationInboxCache();
   final BroadcastFeedService _broadcastFeedService = BroadcastFeedService();
+  final BroadcastSubmissionService _broadcastSubmissionService =
+      BroadcastSubmissionService();
   final BroadcastFeedCache _broadcastFeedCache = BroadcastFeedCache();
   final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
   EmergencyLocationCoordinator? _locationCoordinator;
@@ -1203,6 +1228,8 @@ class AppController extends SessionAccessor
   ConnectivityService get connectivity => _connectivity;
   AuthService get authService => _authService;
   BroadcastFeedService get broadcastFeedService => _broadcastFeedService;
+  BroadcastSubmissionService get broadcastSubmissionService =>
+      _broadcastSubmissionService;
   SocialAuthService get socialAuthService => _socialAuthService;
   ConnectivityState get connectivityState => _connectivity.state;
   bool get online => _connectivity.isOnline;
@@ -3469,6 +3496,11 @@ class ServicesHubScreen extends StatelessWidget {
   const ServicesHubScreen({super.key});
 
   static const _destinations = [
+    (
+      label: "Create broadcast",
+      icon: Icons.campaign,
+      route: BroadcastRoutes.create
+    ),
     (label: "Tracking", icon: Icons.route, route: "/tracking"),
     (label: "Family", icon: Icons.family_restroom, route: "/family"),
     (label: "Police", icon: Icons.local_police, route: "/police-stations"),
@@ -3622,14 +3654,12 @@ class HomeScreen extends StatelessWidget {
                       Navigator.of(context).pushNamed("/police-stations"),
                 ),
                 EyeServiceCard(
-                  title: "Job Vacancies",
+                  title: "Safety broadcasts",
                   description:
-                      "Discover job opportunities tailored to your skills and interests",
-                  icon: Icons.work_outline,
-                  onTap: () => showAppSnackBar(
-                    context,
-                    "Job vacancies are coming soon.",
-                  ),
+                      "Create or manage missing person and stolen vehicle alerts",
+                  icon: Icons.campaign_outlined,
+                  onTap: () =>
+                      Navigator.of(context).pushNamed(BroadcastRoutes.create),
                 ),
               ],
             ),
@@ -4113,13 +4143,15 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Future<void> _submit(BuildContext context, {bool urgent = false}) async {
     final trimmed = descriptionController.text.trim();
-    final localMedia = _evidenceSectionKey.currentState?.attachments ?? const [];
+    final localMedia =
+        _evidenceSectionKey.currentState?.attachments ?? const [];
     if (widget.type != ReportType.emergency &&
-        !hasValidReportNarrative(description: trimmed, localMedia: localMedia)) {
-      setState(
-          () => descriptionError = "Add a description, voice recording, or photo/video evidence");
-      showAppSnackBar(
-          context, "Add a description, voice recording, or photo/video evidence.",
+        !hasValidReportNarrative(
+            description: trimmed, localMedia: localMedia)) {
+      setState(() => descriptionError =
+          "Add a description, voice recording, or photo/video evidence");
+      showAppSnackBar(context,
+          "Add a description, voice recording, or photo/video evidence.",
           isError: true);
       return;
     }
@@ -4151,11 +4183,12 @@ class _ReportScreenState extends State<ReportScreen> {
 
     final draft = buildIncidentDraft(
       type: widget.type.incidentType,
-      description: trimmed.isEmpty && draftHasVoiceAttachment(localMedia: localMedia)
-          ? normalizeVoiceOnlyDescription(widget.type.label)
-          : trimmed.isEmpty
-              ? "Emergency report submitted via THE EYE mobile."
-              : trimmed,
+      description:
+          trimmed.isEmpty && draftHasVoiceAttachment(localMedia: localMedia)
+              ? normalizeVoiceOnlyDescription(widget.type.label)
+              : trimmed.isEmpty
+                  ? "Emergency report submitted via THE EYE mobile."
+                  : trimmed,
       position: outcome.position!,
       anonymous: anonymous,
       notifyEmergencyContacts: notifyEmergencyContact,
@@ -4284,6 +4317,12 @@ class _MissingPersonBroadcastScreenState
 
     setState(() => submitting = true);
     final controller = appOf(context);
+    if (controller.accessToken == null) {
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Sign in to publish a broadcast.",
+          isError: true);
+      return;
+    }
     final outcome = await captureLocationOutcome();
     if (!mounted) return;
     if (outcome.result != LocationCaptureResult.granted ||
@@ -4294,36 +4333,50 @@ class _MissingPersonBroadcastScreenState
       return;
     }
 
-    final draft = buildIncidentDraft(
-      type: IncidentType.missingPerson,
-      description: descriptionController.text.trim().isEmpty
-          ? "Missing person report for ${fullNameController.text.trim()}"
-          : descriptionController.text.trim(),
-      position: outcome.position!,
-      title: "Missing person: ${fullNameController.text.trim()}",
-      missingPerson:
-          MissingPersonDetails(fullName: fullNameController.text.trim()),
-      localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
-    );
-
-    final result =
-        await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
-    if (!mounted) return;
-    setState(() => submitting = false);
-
-    if (result.isSuccess || result.isQueued || result.canRetry) {
+    final description = descriptionController.text.trim();
+    try {
+      final result =
+          await controller.broadcastSubmissionService.createMissingPerson(
+        accessToken: controller.accessToken!,
+        payload: {
+          "clientBroadcastId": createClientSubmissionId(),
+          "fullName": fullNameController.text.trim(),
+          "ageOrApproximateAge": "Unknown",
+          "lastSeenAt": DateTime.now().toUtc().toIso8601String(),
+          "lastSeenLatitude": outcome.position!.latitude,
+          "lastSeenLongitude": outcome.position!.longitude,
+          "clothingDescription":
+              description.isEmpty ? "Not specified" : description,
+          "physicalDescription":
+              description.isEmpty ? "See broadcast details" : description,
+          "contactMethod": "in_app",
+          "reporterRelationship": "Reporter",
+          "consentDeclaration": true,
+          if (description.isNotEmpty) "additionalDescription": description,
+        },
+      ).timeout(kSosSubmissionTimeout);
+      if (!mounted) return;
+      setState(() => submitting = false);
       showAppSnackBar(
-          context, result.userMessage ?? "Missing person report submitted.");
-      await ActiveEmergencyNavigation.openAfterSubmission(
         context,
-        controller,
-        result,
+        result.duplicate
+            ? "This broadcast was already published."
+            : "Missing person broadcast is now live.",
       );
-      return;
+      unawaited(controller.loadBroadcastsFromApi(refresh: true));
+      final route = broadcastDetailRoute(result.id);
+      if (route != null) {
+        await Navigator.of(context).pushNamed(route);
+      }
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, error.userMessage, isError: true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Unable to publish broadcast.", isError: true);
     }
-
-    showAppSnackBar(context, result.userMessage ?? "Unable to submit report.",
-        isError: true);
   }
 
   @override
@@ -4652,9 +4705,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                     ),
                   ),
                 Text(streaming
-                ? (locationStatusMessage ??
-                    "Your live location is shared with authorized emergency admins while this stream is active.")
-                : "Location is acquired in the background while your emergency is created. Precise GPS retry continues automatically."),
+                    ? (locationStatusMessage ??
+                        "Your live location is shared with authorized emergency admins while this stream is active.")
+                    : "Location is acquired in the background while your emergency is created. Precise GPS retry continues automatically."),
               ],
             ),
           ),
@@ -4676,15 +4729,15 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
     IncidentDraft draft,
   ) {
     return submitLiveVideoIncidentWithRetry(
-      submit: () => appController
-          .submitIncident(draft)
-          .timeout(kLiveVideoStartTimeout),
+      submit: () =>
+          appController.submitIncident(draft).timeout(kLiveVideoStartTimeout),
     );
   }
 
   void _returnToActiveEmergency({String? errorMessage}) {
     if (!widget.returnToActiveEmergency || !mounted) return;
-    Navigator.of(context).pop(LiveVideoReturnResult(errorMessage: errorMessage));
+    Navigator.of(context)
+        .pop(LiveVideoReturnResult(errorMessage: errorMessage));
   }
 
   void _logStartFlowInterrupt({
@@ -4712,7 +4765,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       correlationId: _startupTrace.clientTraceId,
       incidentId: activeIncidentId,
     );
-    if (_streamStartInFlight || streaming || !liveVideoController.canStartSession) {
+    if (_streamStartInFlight ||
+        streaming ||
+        !liveVideoController.canStartSession) {
       _logStartFlowInterrupt(
         reason: _streamStartInFlight
             ? "duplicate_stream_start"
@@ -4749,8 +4804,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         return;
       }
 
-      final alreadyPreviewing =
-          liveVideoController.lifecyclePhase == LiveVideoLifecyclePhase.stopped ||
+      final alreadyPreviewing = liveVideoController.lifecyclePhase ==
+              LiveVideoLifecyclePhase.stopped ||
           liveVideoController.connectionState ==
               LiveVideoConnectionState.previewing;
       final previewFuture = alreadyPreviewing
@@ -4840,8 +4895,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             reason: "incident_submit_failed",
             location: "_startStream:incident_submit",
           );
-          showAppSnackBar(
-              context,
+          showAppSnackBar(context,
               "${_startupPhase.label}: ${submission.userMessage ?? "Unable to create incident for live video."}",
               isError: true);
           return;
@@ -5070,7 +5124,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
-      showAppSnackBar(context, "${_startupPhase.label}: $message", isError: true);
+      showAppSnackBar(context, "${_startupPhase.label}: $message",
+          isError: true);
     } catch (error, stackTrace) {
       if (!mounted || _disposed) return;
       _logStartFlowInterrupt(
@@ -5088,7 +5143,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         internalReason: "START_STREAM_UNEXPECTED",
       );
       if (kDebugMode) {
-        debugPrintStack(stackTrace: stackTrace, label: "live_video_start_stream");
+        debugPrintStack(
+            stackTrace: stackTrace, label: "live_video_start_stream");
       }
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
@@ -5217,6 +5273,12 @@ class _StolenVehicleBroadcastScreenState
 
     setState(() => submitting = true);
     final controller = appOf(context);
+    if (controller.accessToken == null) {
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Sign in to publish a broadcast.",
+          isError: true);
+      return;
+    }
     final outcome = await captureLocationOutcome();
     if (!mounted) return;
     if (outcome.result != LocationCaptureResult.granted ||
@@ -5227,53 +5289,53 @@ class _StolenVehicleBroadcastScreenState
       return;
     }
 
-    final yearText = yearController.text.trim();
-    int? year;
-    if (yearText.isNotEmpty) {
-      year = int.tryParse(yearText);
-    }
-
-    final draft = buildIncidentDraft(
-      type: IncidentType.stolenVehicle,
-      description: descriptionController.text.trim().isEmpty
-          ? "Stolen vehicle report for ${plateController.text.trim()}"
-          : descriptionController.text.trim(),
-      position: outcome.position!,
-      title: "Stolen vehicle: ${plateController.text.trim()}",
-      stolenVehicle: StolenVehicleDetails(
-        plateNumber: plateController.text.trim(),
-        make: makeController.text.trim(),
-        model: modelController.text.trim(),
-        color: colorController.text.trim().isEmpty
-            ? null
-            : colorController.text.trim(),
-        year: year,
-        vin: vinController.text.trim().isEmpty
-            ? null
-            : vinController.text.trim(),
-      ),
-      localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
-    );
-
-    final result =
-        await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
-    if (!mounted) return;
-    setState(() => submitting = false);
-
-    if (result.isSuccess || result.isQueued || result.canRetry) {
+    final description = descriptionController.text.trim();
+    final vin = vinController.text.trim();
+    try {
+      final result =
+          await controller.broadcastSubmissionService.createStolenVehicle(
+        accessToken: controller.accessToken!,
+        payload: {
+          "clientBroadcastId": createClientSubmissionId(),
+          "vehicleType": "Car",
+          "make": makeController.text.trim(),
+          "model": modelController.text.trim(),
+          "colour": colorController.text.trim().isEmpty
+              ? "Unknown"
+              : colorController.text.trim(),
+          "registrationNumber": plateController.text.trim(),
+          "stolenAt": DateTime.now().toUtc().toIso8601String(),
+          "lastKnownLatitude": outcome.position!.latitude,
+          "lastKnownLongitude": outcome.position!.longitude,
+          "distinguishingFeatures":
+              description.isEmpty ? "See broadcast details" : description,
+          "contactMethod": "in_app",
+          if (description.isNotEmpty) "lastKnownLocation": description,
+          if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
+        },
+      ).timeout(kSosSubmissionTimeout);
+      if (!mounted) return;
+      setState(() => submitting = false);
       showAppSnackBar(
-          context, result.userMessage ?? "Stolen vehicle report submitted.");
-      await ActiveEmergencyNavigation.openAfterSubmission(
         context,
-        controller,
-        result,
+        result.duplicate
+            ? "This broadcast was already published."
+            : "Stolen vehicle broadcast is now live.",
       );
-      return;
+      unawaited(controller.loadBroadcastsFromApi(refresh: true));
+      final route = broadcastDetailRoute(result.id);
+      if (route != null) {
+        await Navigator.of(context).pushNamed(route);
+      }
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, error.userMessage, isError: true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Unable to publish broadcast.", isError: true);
     }
-
-    showAppSnackBar(context,
-        result.userMessage ?? "Unable to submit stolen vehicle report.",
-        isError: true);
   }
 
   @override
@@ -5413,6 +5475,30 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
             title: "Safety broadcasts",
             onBack: () => navigateBackOrHome(context),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed(BroadcastRoutes.create),
+                    icon: const Icon(Icons.add),
+                    label: const Text("Create"),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed(BroadcastRoutes.mine),
+                    icon: const Icon(Icons.list_alt),
+                    label: const Text("Mine"),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => controller.loadBroadcastsFromApi(refresh: true),
@@ -5503,11 +5589,13 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
                 : item.priority.contains("P2")
                     ? Colors.orange.shade800
                     : EyeSemanticColors.of(context).verified;
-            final subtitle = item.distanceMeters != null
-                ? "${(item.distanceMeters! / 1000).toStringAsFixed(1)} km away"
-                : item.expired
-                    ? "Expired"
-                    : "Active alert";
+            final subtitle = item.authorLabel != null
+                ? "${item.authorLabel} · ${item.status}"
+                : item.distanceMeters != null
+                    ? "${(item.distanceMeters! / 1000).toStringAsFixed(1)} km away"
+                    : item.expired
+                        ? "Expired"
+                        : "Active alert";
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: ListTileCard(
@@ -5528,12 +5616,10 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
                     ? const Icon(Icons.chevron_right)
                     : const Icon(Icons.fiber_manual_record, size: 12),
                 onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          BroadcastDetailScreen(broadcastId: item.id),
-                    ),
-                  );
+                  final route = broadcastDetailRoute(item.id);
+                  if (route != null) {
+                    Navigator.of(context).pushNamed(route);
+                  }
                 },
               ),
             );
@@ -5545,127 +5631,6 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
             ),
         ],
       ),
-    );
-  }
-}
-
-class BroadcastDetailScreen extends StatefulWidget {
-  const BroadcastDetailScreen({required this.broadcastId, super.key});
-
-  final String broadcastId;
-
-  @override
-  State<BroadcastDetailScreen> createState() => _BroadcastDetailScreenState();
-}
-
-class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
-  BroadcastFeedItem? _item;
-  String? _error;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadDetail());
-  }
-
-  Future<void> _loadDetail() async {
-    final controller = appOf(context);
-    if (!controller.isAuthenticated || controller.accessToken == null) {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed("/login");
-      return;
-    }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      BroadcastFeedItem? cached;
-      for (final entry in controller.broadcasts) {
-        if (entry.id == widget.broadcastId) {
-          cached = entry;
-          break;
-        }
-      }
-      final item = cached ??
-          await appOf(context).broadcastFeedService.getDetail(
-                accessToken: controller.accessToken!,
-                broadcastId: widget.broadcastId,
-              );
-      await controller.markBroadcastRead(widget.broadcastId);
-      if (!mounted) return;
-      setState(() {
-        _item = item;
-        _loading = false;
-      });
-    } on IncidentApiException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error.userMessage;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = "Unable to load broadcast detail.";
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafetyScaffold(
-      title: "Broadcast detail",
-      selectedIndex: 3,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.cloud_off),
-                      title: const Text("Broadcast unavailable"),
-                      subtitle: Text(_error!),
-                    ),
-                    FilledButton(
-                      onPressed: () => unawaited(_loadDetail()),
-                      child: const Text("Retry"),
-                    ),
-                  ],
-                )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-                  children: [
-                    SectionCard(
-                      title: _item?.title ?? "Safety broadcast",
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_item?.body ?? ""),
-                          const SizedBox(height: 12),
-                          Text(
-                            "${_item?.priority ?? ""} · ${_item?.type ?? ""}",
-                            style: const TextStyle(
-                                color: BrandColors.lightTextMuted),
-                          ),
-                          if (_item?.expiresAt != null) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              _item!.expired
-                                  ? "Expired"
-                                  : "Expires ${formatNotificationAge(_item!.expiresAt!)}",
-                              style: const TextStyle(
-                                  color: BrandColors.lightTextMuted),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
     );
   }
 }
@@ -5853,7 +5818,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               if (route == "/incident-detail") {
                 final incidentId = alert.incidentId;
                 if (incidentId == null || incidentId.isEmpty) return;
-                Navigator.of(context).pushNamed("/incident-detail", arguments: incidentId);
+                Navigator.of(context)
+                    .pushNamed("/incident-detail", arguments: incidentId);
                 return;
               }
               if (route == "/active-emergency") {
@@ -7917,7 +7883,8 @@ class SettingsScreen extends StatelessWidget {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   title: const Text("Help & Support"),
-                  subtitle: const Text("Chat with THE EYE support — not for emergencies"),
+                  subtitle: const Text(
+                      "Chat with THE EYE support — not for emergencies"),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).pushNamed("/support"),
                 ),

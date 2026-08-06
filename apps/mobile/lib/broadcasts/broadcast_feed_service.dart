@@ -17,6 +17,12 @@ class BroadcastFeedItem {
     this.expired = false,
     this.distanceMeters,
     this.deepLink,
+    this.status = "Active",
+    this.authorLabel,
+    this.adminVerified = false,
+    this.country,
+    this.state,
+    this.commentsCount = 0,
   });
 
   final String id;
@@ -30,6 +36,12 @@ class BroadcastFeedItem {
   final bool expired;
   final double? distanceMeters;
   final String? deepLink;
+  final String status;
+  final String? authorLabel;
+  final bool adminVerified;
+  final String? country;
+  final String? state;
+  final int commentsCount;
 
   factory BroadcastFeedItem.fromJson(Map<String, dynamic> json) {
     return BroadcastFeedItem(
@@ -46,6 +58,12 @@ class BroadcastFeedItem {
           ? null
           : double.tryParse("${json["distanceMeters"]}"),
       deepLink: json["deepLink"] as String?,
+      status: (json["status"] as String?) ?? "Active",
+      authorLabel: json["authorLabel"] as String?,
+      adminVerified: json["adminVerified"] == true,
+      country: json["country"] as String?,
+      state: json["state"] as String?,
+      commentsCount: (json["commentsCount"] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -62,6 +80,12 @@ class BroadcastFeedItem {
       expired: expired,
       distanceMeters: distanceMeters,
       deepLink: deepLink,
+      status: status,
+      authorLabel: authorLabel,
+      adminVerified: adminVerified,
+      country: country,
+      state: state,
+      commentsCount: commentsCount,
     );
   }
 }
@@ -76,6 +100,67 @@ class BroadcastFeedPage {
   final List<BroadcastFeedItem> items;
   final String? nextCursor;
   final int unreadCount;
+}
+
+class BroadcastCommentItem {
+  const BroadcastCommentItem({
+    required this.id,
+    required this.body,
+    required this.createdAt,
+    this.isSighting = false,
+    this.isPinned = false,
+  });
+
+  final String id;
+  final String body;
+  final DateTime? createdAt;
+  final bool isSighting;
+  final bool isPinned;
+
+  factory BroadcastCommentItem.fromJson(Map<String, dynamic> json) {
+    final metadata = json["metadata"];
+    final isSighting = metadata is Map && metadata["isSighting"] == true;
+    return BroadcastCommentItem(
+      id: (json["id"] as String?) ?? "",
+      body: (json["body"] as String?) ?? "",
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      isSighting: isSighting || json["isSighting"] == true,
+      isPinned: json["isPinned"] == true,
+    );
+  }
+}
+
+class BroadcastSharePayload {
+  const BroadcastSharePayload({
+    required this.title,
+    required this.body,
+    required this.shareText,
+    this.deepLink,
+  });
+
+  final String title;
+  final String body;
+  final String shareText;
+  final String? deepLink;
+
+  factory BroadcastSharePayload.fromJson(Map<String, dynamic> json) {
+    final data = json["data"] is Map
+        ? Map<String, dynamic>.from(json["data"] as Map)
+        : json;
+    final title = (data["title"] as String?) ?? "";
+    final body = (data["body"] as String?) ?? "";
+    final deepLink = data["deepLink"] as String?;
+    final shareText = (data["shareText"] as String?) ??
+        [title, body, if (deepLink != null) deepLink]
+            .where((part) => part.trim().isNotEmpty)
+            .join("\n\n");
+    return BroadcastSharePayload(
+      title: title,
+      body: body,
+      shareText: shareText,
+      deepLink: deepLink,
+    );
+  }
 }
 
 class BroadcastFeedService {
@@ -170,5 +255,85 @@ class BroadcastFeedService {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw IncidentApiException.fromResponse(response);
     }
+  }
+
+  Future<List<BroadcastFeedItem>> listMine({
+    required String accessToken,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.broadcastsMine,
+      accessToken: accessToken,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw IncidentApiException.fromResponse(response);
+    }
+    final decoded = jsonDecode(response.body);
+    final rows = decoded is Map && decoded["data"] is List
+        ? decoded["data"] as List
+        : decoded is List
+            ? decoded
+            : const [];
+    return rows
+        .whereType<Map>()
+        .map(
+          (row) => BroadcastFeedItem.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .toList();
+  }
+
+  Future<List<BroadcastCommentItem>> listComments({
+    required String accessToken,
+    required String broadcastId,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.broadcastComments(broadcastId),
+      accessToken: accessToken,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw IncidentApiException.fromResponse(response);
+    }
+    final decoded = jsonDecode(response.body);
+    final rows = decoded is Map && decoded["data"] is List
+        ? decoded["data"] as List
+        : decoded is List
+            ? decoded
+            : const [];
+    return rows
+        .whereType<Map>()
+        .map(
+          (row) =>
+              BroadcastCommentItem.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .toList();
+  }
+
+  Future<BroadcastSharePayload> getSharePayload({
+    required String accessToken,
+    required String broadcastId,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.broadcastShare(broadcastId),
+      accessToken: accessToken,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) {
+        return BroadcastSharePayload.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
+      }
+    }
+
+    final detail = await getDetail(
+      accessToken: accessToken,
+      broadcastId: broadcastId,
+    );
+    final deepLink = detail.deepLink ?? "/broadcasts/${detail.id}";
+    return BroadcastSharePayload(
+      title: detail.title,
+      body: detail.body,
+      deepLink: deepLink,
+      shareText: "${detail.title}\n\n${detail.body}\n\n$deepLink",
+    );
   }
 }
