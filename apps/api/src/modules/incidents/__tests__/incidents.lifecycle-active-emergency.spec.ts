@@ -107,8 +107,25 @@ function buildActiveEmergencyService(overrides: Record<string, unknown> = {}) {
     get: jest.fn().mockResolvedValue({ id: "inc-1", reporterId: "user-1", status: IncidentStatus.Verified }),
     ...(overrides.incidentsService as object),
   } as any;
-  const service = new ActiveEmergencyService(prisma, incidentsService);
-  return { service, prisma, incidentsService };
+  const communityVerification = {
+    getIncidentAggregate: jest.fn().mockResolvedValue({
+      requestsSent: 0,
+      responsesReceived: 0,
+      confirmedCount: 0,
+      notFoundCount: 0,
+      ongoingCount: 0,
+      resolvedCount: 0,
+      confidenceLevel: "Insufficient",
+      conflictDetected: false,
+      lastCommunityUpdateAt: null,
+      safeSummaryText: "Community verification is in progress.",
+      recommendation: "NONE",
+      reviewRequired: false,
+    }),
+    ...(overrides.communityVerification as object),
+  } as any;
+  const service = new ActiveEmergencyService(prisma, incidentsService, communityVerification);
+  return { service, prisma, incidentsService, communityVerification };
 }
 
 describe("incident lifecycle contract", () => {

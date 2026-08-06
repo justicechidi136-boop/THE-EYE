@@ -172,6 +172,15 @@ export class FcmProvider implements OnModuleInit {
                 routeType: routing.routeType,
                 notificationType: routing.notificationType,
                 status: routing.status ?? "",
+                verificationRequestId:
+                  typeof storedMetadata.verificationRequestId === "string"
+                    ? storedMetadata.verificationRequestId
+                    : "",
+                eventType:
+                  typeof storedMetadata.eventType === "string" ? storedMetadata.eventType : "",
+                category: typeof storedMetadata.category === "string" ? storedMetadata.category : "",
+                distanceBand:
+                  typeof storedMetadata.distanceBand === "string" ? storedMetadata.distanceBand : "",
                 silent: silent ? "true" : "false",
                 relayToWatch,
                 ...(alertId ? { alertId } : {}),

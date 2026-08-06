@@ -148,4 +148,14 @@ abstract final class TheEyeApiPaths {
       "/neighborhood-watch/communities/$communityId/posts/media/presign";
   static String neighborhoodWatchPost(String postId) =>
       "/neighborhood-watch/posts/$postId";
+
+  static String communityVerification(String requestId) =>
+      "/community-verifications/$requestId";
+  static String communityVerificationOpened(String requestId) =>
+      "/community-verifications/$requestId/opened";
+  static String communityVerificationRespond(String requestId) =>
+      "/community-verifications/$requestId/respond";
+  static String communityVerificationSkip(String requestId) =>
+      "/community-verifications/$requestId/skip";
+  static const communityVerificationsPending = "/community-verifications/pending";
 }

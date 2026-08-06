@@ -90,6 +90,12 @@ function buildNotifications() {
   return { enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }) } as any;
 }
 
+function buildCommunityVerification() {
+  return {
+    issueRequests: jest.fn().mockResolvedValue({ incidentId: "incident-1", issued: 2, passiveOnly: false }),
+  } as any;
+}
+
 describe("VerificationService", () => {
   it("records verification score and auto-escalates high-confidence P1 incidents", async () => {
     const prisma = buildPrisma();
@@ -105,7 +111,7 @@ describe("VerificationService", () => {
       }),
     } as any;
     const broadcasts = buildBroadcasts();
-    const service = new VerificationService(prisma, scorer, broadcasts, createMetricsMock(), buildNotifications());
+    const service = new VerificationService(prisma, scorer, broadcasts, createMetricsMock(), buildNotifications(), buildCommunityVerification());
 
     const result = await service.verifyIncident("incident-1", {}, { typ: "admin", sub: "admin-1" } as any);
 
@@ -138,18 +144,14 @@ describe("VerificationService", () => {
       }),
     } as any;
     const notifications = buildNotifications();
-    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock(), notifications);
+    const communityVerification = buildCommunityVerification();
+    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock(), notifications, communityVerification);
 
     await service.verifyIncident("incident-1");
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ userId: "witness-1" }),
-    }));
-    expect(notifications.enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      userId: "witness-1",
-      incidentId: "incident-1",
-    }));
+    expect(communityVerification.issueRequests).toHaveBeenCalled();
+    expect(communityVerification.issueRequests.mock.calls[0]?.[0]).toBe("incident-1");
   });
 
   it("enqueues crowd confirmation notifications through BullMQ", async () => {
@@ -158,16 +160,16 @@ describe("VerificationService", () => {
       $queryRaw: jest.fn().mockResolvedValue([{ userId: "witness-1", distanceMeters: 120 }]),
     });
     const notifications = buildNotifications();
-    const service = new VerificationService(prisma, {} as any, buildBroadcasts(), createMetricsMock(), notifications);
+    const communityVerification = buildCommunityVerification();
+    const service = new VerificationService(prisma, {} as any, buildBroadcasts(), createMetricsMock(), notifications, communityVerification);
 
     await service.requestCrowdConfirmation("incident-1", { limit: 5, radiusMeters: 500 });
 
-    expect(prisma.notification.create).toHaveBeenCalled();
-    expect(notifications.enqueue).toHaveBeenCalledWith(expect.objectContaining({
-      userId: "witness-1",
-      channel: "push",
-      incidentId: "incident-1",
-    }));
+    expect(communityVerification.issueRequests).toHaveBeenCalledWith(
+      "incident-1",
+      { limit: 5, radiusMeters: 500 },
+      undefined,
+    );
   });
 
   it("lists witness confirmations for an incident", async () => {
@@ -188,7 +190,7 @@ describe("VerificationService", () => {
         ]),
       },
     });
-    const service = new VerificationService(prisma, {} as any, buildBroadcasts(), createMetricsMock(), buildNotifications());
+    const service = new VerificationService(prisma, {} as any, buildBroadcasts(), createMetricsMock(), buildNotifications(), buildCommunityVerification());
 
     const result = await service.listWitnessConfirmations("incident-1");
 
@@ -214,7 +216,7 @@ describe("VerificationService", () => {
         breakdown: { adminConfirmation: 15 },
       }),
     } as any;
-    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock(), buildNotifications());
+    const service = new VerificationService(prisma, scorer, buildBroadcasts(), createMetricsMock(), buildNotifications(), buildCommunityVerification());
 
     await service.adminReviewIncident(
       "incident-1",

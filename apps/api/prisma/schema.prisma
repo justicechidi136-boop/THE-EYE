@@ -213,6 +213,41 @@ enum CommunityVerificationStatus {
   FalseInformation
 }
 
+enum CommunityVerificationRequestStatus {
+  Pending
+  Delivered
+  Opened
+  Responded
+  Skipped
+  Expired
+  Revoked
+  Cancelled
+}
+
+enum CommunityVerificationResponseType {
+  Confirmed
+  NotFound
+  StillOngoing
+  AppearsResolved
+  UnsafeToVerify
+  Skipped
+  Unsure
+}
+
+enum CommunityVerificationConfidenceLevel {
+  High
+  Medium
+  Low
+}
+
+enum CommunityVerificationDistanceBand {
+  WITHIN_100_M
+  WITHIN_250_M
+  WITHIN_500_M
+  WITHIN_1_KM
+  BEYOND_1_KM
+}
+
 enum CommunityReactionType {
   Confirm
   Helpful
@@ -388,6 +423,8 @@ model User {
   communityComments         CommunityPostComment[]
   communityReactions        CommunityPostReaction[]
   communityVerifications    CommunityVerification[]
+  communityVerificationRequests CommunityVerificationRequest[] @relation("CommunityVerificationTarget")
+  communityVerificationResponses CommunityVerificationResponse[] @relation("CommunityVerificationResponder")
   communityMessages         CommunityMessage[]
   communityRequests         CommunityRequest[]
   communityContentReports   CommunityContentReport[]
@@ -659,6 +696,8 @@ model Incident {
   droneMissions            DroneMission[]
   droneEvidence            DroneEvidence[]
   supportConversations     SupportConversation[]
+  communityVerificationRequests CommunityVerificationRequest[]
+  communityVerificationResponses CommunityVerificationResponse[]
 
   @@index([country, state, lga])
   @@index([status, priority, createdAt])
@@ -744,6 +783,64 @@ model IncidentVerification {
 
   @@index([incidentId, result])
   @@map("incident_verifications")
+}
+
+model CommunityVerificationRequest {
+  id                        String                               @id @default(uuid()) @db.Uuid
+  incidentId                String                               @map("incident_id") @db.Uuid
+  targetUserId              String                               @map("target_user_id") @db.Uuid
+  status                    CommunityVerificationRequestStatus   @default(Pending)
+  issuedAt                  DateTime                             @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt                 DateTime                             @map("expires_at") @db.Timestamptz(6)
+  approximateDistanceMeters Int?                                 @map("approximate_distance_meters")
+  distanceBand              CommunityVerificationDistanceBand?   @map("distance_band")
+  safePayloadVersion        Int                                  @default(1) @map("safe_payload_version")
+  notificationId            String?                              @map("notification_id") @db.Uuid
+  deliveryStatus            String?                              @map("delivery_status")
+  openedAt                  DateTime?                            @map("opened_at") @db.Timestamptz(6)
+  respondedAt               DateTime?                            @map("responded_at") @db.Timestamptz(6)
+  revokedAt                 DateTime?                            @map("revoked_at") @db.Timestamptz(6)
+  revokedByAdminId          String?                              @map("revoked_by_admin_id") @db.Uuid
+  metadata                  Json                                 @default("{}")
+  createdAt                 DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime                             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  incident                  Incident                             @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  targetUser                User                                 @relation("CommunityVerificationTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  notification              Notification?                        @relation(fields: [notificationId], references: [id])
+  response                  CommunityVerificationResponse?
+
+  @@unique([incidentId, targetUserId, issuedAt])
+  @@index([targetUserId, status, expiresAt])
+  @@index([incidentId, status, issuedAt])
+  @@index([status, expiresAt])
+  @@map("community_verification_requests")
+}
+
+model CommunityVerificationResponse {
+  id                              String                               @id @default(uuid()) @db.Uuid
+  requestId                       String                               @unique @map("request_id") @db.Uuid
+  incidentId                      String                               @map("incident_id") @db.Uuid
+  userId                          String                               @map("user_id") @db.Uuid
+  responseType                    CommunityVerificationResponseType    @map("response_type")
+  confidence                      CommunityVerificationConfidenceLevel?
+  note                            String?
+  voiceAttachmentId               String?                              @map("voice_attachment_id") @db.Uuid
+  locationQuality                 String?                              @map("location_quality")
+  locationSource                  String?                              @map("location_source")
+  approximateDistanceAtResponse   Int?                                 @map("approximate_distance_at_response")
+  trustWeight                     Decimal?                             @map("trust_weight") @db.Decimal(5, 4)
+  clientActionId                  String                               @map("client_action_id")
+  submittedAt                     DateTime                             @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  metadata                        Json                                 @default("{}")
+  flaggedSuspicious               Boolean                              @default(false) @map("flagged_suspicious")
+  request                         CommunityVerificationRequest         @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  incident                        Incident                             @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user                            User                                 @relation("CommunityVerificationResponder", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clientActionId])
+  @@index([incidentId, responseType, submittedAt])
+  @@index([userId, submittedAt])
+  @@map("community_verification_responses")
 }
 
 model IncidentTimeline {
@@ -1100,6 +1197,7 @@ model Notification {
   community             Community?                            @relation(fields: [communityId], references: [id])
   deliveryLogs          NotificationDeliveryLog[]
   safetyAlertDeliveries SafetyAlertDelivery[]
+  communityVerificationRequests CommunityVerificationRequest[]
 
   @@index([userId, status, createdAt])
   @@index([adminUserId, status, createdAt])

@@ -5,6 +5,7 @@ export type RateLimitPolicyName =
   | "broadcastCreate"
   | "liveStreamCreate"
   | "communityPostCreate"
+  | "communityVerificationRespond"
   | "policeSearch"
   | "stagingDangerZoneTest";
 
@@ -46,6 +47,11 @@ export const RATE_LIMIT_POLICIES: Record<RateLimitPolicyName, RateLimitPolicy> =
     windowSeconds: 300,
     ipLimit: 20,
     roleLimits: { user: 15, admin: 40 },
+  },
+  communityVerificationRespond: {
+    windowSeconds: 300,
+    ipLimit: 30,
+    roleLimits: { user: 20, admin: 60 },
   },
   policeSearch: {
     windowSeconds: 60,

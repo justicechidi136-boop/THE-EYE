@@ -15,6 +15,7 @@ abstract final class PushDeepLinkRouter {
     "/active-emergency",
     "/active-emergencies",
     "/incident-detail",
+    "/community-verification",
     "/support",
     "/support/chats",
     "/support/conversation",
@@ -23,7 +24,11 @@ abstract final class PushDeepLinkRouter {
 
   static bool isAllowedDestination(String route) {
     if (allowedRoutes.contains(route)) return true;
-    return route.startsWith("/broadcasts/") && route.length > "/broadcasts/".length;
+    if (route.startsWith("/broadcasts/") && route.length > "/broadcasts/".length) {
+      return true;
+    }
+    return route.startsWith("/community-verification/") &&
+        route.length > "/community-verification/".length;
   }
 
   /// Returns a safe in-app route from FCM data payload fields.
@@ -44,8 +49,15 @@ abstract final class PushDeepLinkRouter {
       return "/report/emergency";
     if (type.contains("missingperson")) return "/missing-person";
     if (type.contains("stolenvehicle")) return "/stolen-vehicle";
-    if (type.contains("neighborhood") || type.contains("community"))
+    if (type.contains("neighborhood") || type.contains("communitywatch"))
       return "/neighborhood-watch";
+    if (type.contains("nearbyincidentverification") ||
+        data["verificationRequestId"] != null) {
+      final requestId = data["verificationRequestId"]?.toString();
+      if (requestId != null && requestId.isNotEmpty) {
+        return "/community-verification/$requestId";
+      }
+    }
     if (type.contains("incident")) return "/active-emergency";
     if (type.contains("broadcast")) return "/broadcasts";
     if (type.contains("livevideo")) return "/live-video";

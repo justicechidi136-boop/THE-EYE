@@ -4,7 +4,7 @@ import { Button } from "../../components/form-primitives";
 import { IncidentReviewButton } from "../../components/incident-review-button";
 import { DuplicateReportPanel, VerificationStatusBadge, WitnessConfirmationPanel } from "../../components/verification-ui";
 import { MetricCard, PageHeader, Panel, StatusBadge } from "../../components/ui";
-import { fetchVerificationDashboard, fetchVerificationQueue } from "../../lib/api/data";
+import { fetchVerificationDashboard, fetchVerificationQueue, fetchCommunityVerificationAnalytics } from "../../lib/api/data";
 
 const signals = ["GPS accuracy", "Reporter trust", "Media evidence", "Nearby duplicates", "Crowd confirmations", "False-report history"];
 
@@ -15,7 +15,11 @@ function mapsUrl(lat: number, lng: number) {
 }
 
 export default async function VerificationPage() {
-  const [incidents, verification] = await Promise.all([fetchVerificationQueue(), fetchVerificationDashboard()]);
+  const [incidents, verification, communityVerification] = await Promise.all([
+    fetchVerificationQueue(),
+    fetchVerificationDashboard(),
+    fetchCommunityVerificationAnalytics(),
+  ]);
 
   return (
     <AppShell>
@@ -33,6 +37,12 @@ export default async function VerificationPage() {
         <MetricCard label="Queue size" value={String(verification.pending || incidents.length)} detail="From verification dashboard" accent="eyeOrange" />
         <MetricCard label="High confidence (24h)" value={String(verification.highConfidenceLast24h)} accent="eye" />
         <MetricCard label="Low confidence (24h)" value={String(verification.lowConfidenceLast24h)} accent="ink" />
+      </section>
+      <section className="mb-5 grid gap-4 md:grid-cols-4">
+        <MetricCard label="Community requests" value={String(communityVerification.requestsIssued)} detail="Issued verification prompts" accent="eye" />
+        <MetricCard label="Community responses" value={String(communityVerification.responsesReceived)} accent="eyeOrange" />
+        <MetricCard label="Suspicious responses" value={String(communityVerification.suspiciousResponses)} accent="ink" />
+        <MetricCard label="Confirmed responses" value={String(communityVerification.responseDistribution.Confirmed ?? 0)} accent="eye" />
       </section>
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         <Panel title="Queue">
