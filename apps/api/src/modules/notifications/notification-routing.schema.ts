@@ -14,6 +14,7 @@ export interface NotificationRoutingV1 {
   schemaVersion: typeof NOTIFICATION_SCHEMA_VERSION;
   routeType: NotificationRouteType;
   incidentId?: string;
+  verificationRequestId?: string;
   status?: string;
   notificationType: string;
   destination: string;
@@ -21,7 +22,10 @@ export interface NotificationRoutingV1 {
   broadcastCategory?: string;
   countryCode?: string;
   issuedAt?: string;
+  expiresAt?: string;
   eventType?: string;
+  category?: string;
+  distanceBand?: string;
 }
 
 const TERMINAL_REPORTER_STATUSES = new Set<IncidentStatus>([
@@ -156,5 +160,45 @@ export function buildBroadcastNotificationMetadata(input: {
     deepLink: routing.destination,
     silent: false,
     ...(input.status ? { status: input.status } : {}),
+  };
+}
+
+export function resolveCommunityVerificationNotificationRouting(input: {
+  incidentId: string;
+  verificationRequestId: string;
+  category: string;
+  distanceBand: string;
+  issuedAt: string;
+  expiresAt: string;
+}): NotificationRoutingV1 {
+  return {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: "COMMUNITY_VERIFICATION",
+    notificationType: "NearbyIncidentVerification",
+    eventType: "NEARBY_INCIDENT_VERIFICATION",
+    destination: `/community-verification/${input.verificationRequestId}`,
+    incidentId: input.incidentId,
+    verificationRequestId: input.verificationRequestId,
+    category: input.category,
+    distanceBand: input.distanceBand,
+    issuedAt: input.issuedAt,
+    expiresAt: input.expiresAt,
+  };
+}
+
+export function buildCommunityVerificationNotificationMetadata(input: {
+  incidentId: string;
+  verificationRequestId: string;
+  category: string;
+  distanceBand: string;
+  issuedAt: string;
+  expiresAt: string;
+}): Record<string, unknown> {
+  const routing = resolveCommunityVerificationNotificationRouting(input);
+  return {
+    ...routing,
+    route: routing.destination,
+    deepLink: routing.destination,
+    silent: false,
   };
 }
