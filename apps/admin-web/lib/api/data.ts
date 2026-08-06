@@ -22,6 +22,7 @@ import {
   toPoliceStationView,
   toSmartwatchDeviceView,
   toSmartwatchDeviceDetailView,
+  toFieldDeviceView,
   toPairingSessionView,
   toActivationHistoryView,
   toSosEventView,
@@ -68,6 +69,7 @@ import type {
   WatchInventoryRowView,
   WatchOwnerDetailView,
   SmartwatchDeviceDetailView,
+  FieldDeviceView,
   DroneDashboardView,
   DroneDeviceView,
   DroneMissionView,
@@ -904,6 +906,54 @@ export async function smartwatchDeviceAction(id: string, action: "activate" | "d
   return apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/devices/${encodeURIComponent(id)}/${action}`, {
     method: "PATCH",
     token,
+  });
+}
+
+export async function fetchFieldDevices(query: Record<string, string | undefined> = {}): Promise<FieldDeviceView[]> {
+  return withToken(async (token) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value) params.set(key, value);
+    }
+    const path = `/admin/field-devices${params.size ? `?${params.toString()}` : ""}`;
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>(path, { token });
+    return response.data.map(toFieldDeviceView);
+  }, []);
+}
+
+export async function fetchFieldDevice(id: string): Promise<FieldDeviceView | null> {
+  return withToken(async (token) => {
+    try {
+      const response = await apiRequest<{ data: Record<string, unknown> }>(`/admin/field-devices/${encodeURIComponent(id)}`, { token });
+      return toFieldDeviceView(response.data);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  }, null);
+}
+
+export type FieldDeviceAdminAction =
+  | "approve"
+  | "reject"
+  | "suspend"
+  | "restore"
+  | "mark-lost"
+  | "revoke"
+  | "require-re-pair"
+  | "force-sign-out";
+
+export async function fieldDeviceAction(
+  id: string,
+  action: FieldDeviceAdminAction,
+  body: { reason?: string; note?: string; assignedUserId?: string; assignedUnitId?: string } = {},
+) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ data: Record<string, unknown> }>(`/admin/field-devices/${encodeURIComponent(id)}/${action}`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(body),
   });
 }
 

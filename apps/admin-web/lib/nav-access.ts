@@ -25,6 +25,7 @@ const roleAllowedPrefixes: Partial<Record<AdminRole, string[]>> = {
     "/safety-alerts",
     "/devices",
     "/smartwatch",
+    "/field-operations",
   ],
   [AdminRoleName.AgencyAdmin]: [
     "/",
@@ -36,6 +37,7 @@ const roleAllowedPrefixes: Partial<Record<AdminRole, string[]>> = {
     "/sos-monitor",
     "/devices",
     "/smartwatch",
+    "/field-operations",
     "/safety-alerts",
     "/neighborhood-watch",
     "/live-chats",
