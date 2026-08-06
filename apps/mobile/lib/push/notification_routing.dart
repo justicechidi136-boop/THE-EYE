@@ -29,6 +29,10 @@ class PushNotificationRoute {
       routeType == "BROADCAST_DETAILS" ||
       (destination.startsWith("/broadcasts/") &&
           destination.length > "/broadcasts/".length);
+
+  bool get opensCommunityVerification =>
+      routeType == "COMMUNITY_VERIFICATION" ||
+      destination.startsWith("/community-verification/");
 }
 
 /// Server-authoritative notification routing contract (schema v1).

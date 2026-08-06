@@ -75,6 +75,8 @@ import "broadcasts/broadcast_navigation.dart";
 import "broadcasts/broadcast_screens.dart";
 import "broadcasts/broadcast_session.dart";
 import "broadcasts/broadcast_submission_service.dart";
+import "community_verification/community_verification_screen.dart";
+import "community_verification/community_verification_service.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
 import "neighborhood_watch/volunteer_categories.dart";
 import "incidents/live_video_incident_retry.dart";
@@ -213,6 +215,22 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
     stolenVehicleBuilder: () => const StolenVehicleBroadcastScreen(),
   );
   if (broadcastRoute != null) return broadcastRoute;
+  if (name.startsWith("/community-verification/")) {
+    final requestId = name.substring("/community-verification/".length).trim();
+    if (requestId.isEmpty) return null;
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (context) {
+        final app = appOf(context);
+        return CommunityVerificationScreen(
+          requestId: requestId,
+          service: CommunityVerificationService(TheEyeApiClient(baseUrl: theEyeApiUrl)),
+          accessToken: app.accessToken ?? "",
+          highContrast: app.highContrastMode,
+        );
+      },
+    );
+  }
   return null;
 }
 

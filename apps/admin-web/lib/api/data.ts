@@ -506,6 +506,19 @@ export async function fetchVerificationDashboard(): Promise<VerificationDashboar
   }, { pending: 0, highConfidenceLast24h: 0, lowConfidenceLast24h: 0 });
 }
 
+export async function fetchCommunityVerificationAnalytics(): Promise<{
+  requestsIssued: number;
+  responsesReceived: number;
+  suspiciousResponses: number;
+  responseDistribution: Record<string, number>;
+}> {
+  return withToken(
+    (token) =>
+      apiRequest("/admin/community-verifications/analytics", { token }),
+    { requestsIssued: 0, responsesReceived: 0, suspiciousResponses: 0, responseDistribution: {} },
+  );
+}
+
 export async function fetchCommunityChannels(limit = 20): Promise<CommunityChannelView[]> {
   return withToken(async (token) => {
     const communities = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token);
