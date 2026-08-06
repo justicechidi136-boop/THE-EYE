@@ -175,6 +175,33 @@ jobs:
       - name: Test
         run: pnpm run watch:test
 
+  field-ops-tablet:
+    name: Field ops tablet analyze & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm --dir apps/field-ops-tablet run pub-get
+
+      - name: Analyze
+        run: pnpm run field-ops:analyze
+
+      - name: Test
+        run: pnpm run field-ops:test
+
   guards:
     name: Firebase & deploy guards
     runs-on: ubuntu-latest

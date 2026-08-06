@@ -9,6 +9,7 @@
 **Sprint 4 status:** **CODE COMPLETE — PENDING STAGING RUNTIME QA** (DI fix `fe7bb3d`; VPS redeploy pending)  
 **Sprint 5 status:** **FUNCTIONALLY COMPLETE — PENDING STAGING QA** (`feature/sprint-5-neighborhood-watch` @ `ec3362a`+; no PASS without device/runtime evidence; INF-006 media E2E remains blocked)  
 **Sprint 6 status:** **CODE COMPLETE — PENDING STAGING QA** (branch `feature/sprint-6-emergency-response-command-center`; silent SOS, command-center actions, incident detail/timeline, push deep-link refresh, SLA display, reassign flow; staging/device/admin QA pending; no PASS promotions)
+**Phase 7 foundation status:** **CODE COMPLETE — STAGING QA PENDING** (`feature/field-operations-tablet`; field device registration, device-bound auth, tablet scaffold; physical 10" tablet QA pending; no PASS promotions)
 
 > Rules enforced: PASS requires working navigation, real API, backend, DB (where applicable), authorization, UI update, and verified evidence. UI-only or placeholder data = FAIL / NOT IMPLEMENTED.
 

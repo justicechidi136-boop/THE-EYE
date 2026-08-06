@@ -2,52 +2,35 @@
 
 **Branch:** `feature/field-operations-tablet`  
 **Date:** 2026-08-06  
-**Overall status:** **PHASE 7 AUDIT COMPLETE — IMPLEMENTATION NOT STARTED**
+**Overall status:** **PHASE 7 FOUNDATION CODE COMPLETE — STAGING QA PENDING**
 
 ---
 
-## Phase checklist
+## Sprint 1 checklist (Roles, Auth, Device Registration)
 
-| Phase | Topic | Status |
-|-------|-------|--------|
-| 1 | Audit & architecture decision | **Complete** — `docs/FIELD_OPERATIONS_ARCHITECTURE.md` |
-| 2 | Product boundary | **Complete** — `docs/FIELD_OPERATIONS_PRODUCT.md` |
-| 3 | Roles & permissions | Pending |
-| 4 | Tablet authentication | Pending |
-| 5 | Device registration | Pending |
-| 6 | Tablet design system | Pending |
-| 7 | Home / operations dashboard | Pending |
-| 8 | Patrol mode | Pending |
-| 9 | Checkpoint mode | Pending |
-| 10 | Assignment workflow | Pending |
-| 11 | Incident workspace | Pending |
-| 12 | Communication | Pending |
-| 13 | Live map | Pending |
-| 14 | GPS telemetry | Pending |
-| 15 | Broadcasts & BOLO | Pending |
-| 16 | Drone integration | Pending |
-| 17 | Field incident creation | Pending |
-| 18 | Request backup | Pending |
-| 19 | Offline-first | Pending |
-| 20 | Notifications | Pending |
-| 21 | Shift & team management | Pending |
-| 22 | Security | Pending |
-| 23 | Auditing | Pending |
-| 24 | Admin management | Pending |
-| 25 | API contracts | Pending |
-| 26 | Testing | Pending |
-| 27 | Physical tablet QA | Pending — **required before “complete”** |
-| 28 | Documentation | Partial (audit + product) |
-| 29 | Commits & PR | Pending |
+| Item | Status |
+|------|--------|
+| Operational roles + permission matrix | **Complete** — `docs/FIELD_ROLE_PERMISSION_MATRIX.md` |
+| FieldDevice Prisma model + migration | **Complete** — `20260808180000_field_devices` |
+| Registration challenge flow | **Complete** |
+| Device-bound field authentication | **Complete** |
+| Supervisor approval API | **Complete** |
+| Lost/revoked/re-pair handling | **Complete** |
+| Heartbeat telemetry | **Complete** |
+| Flutter tablet scaffold | **Complete** — `apps/field-ops-tablet/` |
+| Staging package `com.theeye.fieldops.staging` | **Complete** |
+| Login / registration / lock UX | **Complete** |
+| Admin field device UI | **Complete** — `/field-operations/devices` |
+| Notification schema v1 extension | **Complete** |
+| Audit events | **Complete** |
+| API + tablet tests | **Complete** (Sprint 1 scope) |
+| Physical 10" tablet QA | **Pending** |
 
 ---
 
-## Architecture decision summary
+## Deferred (Sprint 2+)
 
-- **Dedicated app:** `apps/field-ops-tablet/`
-- **Staging package:** `com.theeye.fieldops.staging`
-- **Production package:** `com.theeye.fieldops`
-- **Reuse:** watch device layer + mobile contracts/design + existing `/dispatch/*` API
+Patrol mode, checkpoint mode, operational map, full incident workspace, shift management.
 
 ---
 
@@ -55,23 +38,24 @@
 
 | Item | Status |
 |------|--------|
-| PR opened | Not yet |
-| CI green | N/A |
-| Physical 10" tablet QA | Not started |
+| PR opened | Pending push |
+| CI green | Pending |
+| Field tablet staging APK | **Built locally** — `app-staging-debug.apk` |
+| CI green | Pending PR |
+| Field tablet staging APK | `apps/field-ops-tablet/build/app/outputs/flutter-apk/app-staging-debug.apk` (~150 MB debug) |
+| APK package | `com.theeye.fieldops.staging` |
+| APK SHA-256 (debug build) | `5B5B28D8684FBDC9239B62CE096BD1AC6E09378F3A89EDD9FD05F64D00750C27` |
 
 ---
 
-## Blockers
+## Blockers before Patrol/Checkpoint
 
-1. Phase 1 audit must be merged/reviewed before implementation sprint planning.
-2. `FieldDevice`, `FieldShift`, agency patrol/checkpoint models not in schema.
-3. Field notification route types not in Notification Schema v1.
-4. No physical 10-inch Android tablet QA evidence.
+1. Physical tablet QA on staging APK (registration + approval + login flow).
+2. Supervisor workflow validation in staging environment.
+3. FCM delivery test for `FIELD_DEVICE_*` notification types.
 
 ---
 
 ## Release recommendation
 
-**Do not deploy to production or claim Phase 7 complete** until patrol and checkpoint workflows are verified on a physical 10-inch Android tablet.
-
-Next step: implement Phase 3–5 (roles, auth, device registration) on `feature/field-operations-tablet`.
+Foundation sprint code is ready for **staging QA**. Do not claim production-ready or device-verified until physical tablet evidence exists.

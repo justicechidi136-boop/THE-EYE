@@ -269,3 +269,20 @@ For each FAIL or NOT TESTED row after fix:
 | IC-006-006 | Community verifier access | P0 | `404` on conversation/messages |
 | IC-006-007 | Admin restrict/close/report | P1 | Thread status updates; flagged message audited |
 | IC-006-008 | Offline message queue flush | P1 | Queued text retries after reconnect |
+
+---
+
+## Phase 7 — Field operations foundation QA (add to staging matrix)
+
+| ID | Scenario | Priority | Expected |
+|----|----------|----------|----------|
+| FO-007-001 | Officer registers field device | P0 | `PendingApproval`; no operational JWT |
+| FO-007-002 | Supervisor approves in-scope device | P0 | Status `Active`; pairing completes |
+| FO-007-003 | Out-of-scope supervisor denied | P0 | `403`; no approval |
+| FO-007-004 | Device-bound login + refresh | P0 | `typ: field` JWT; refresh rotates session |
+| FO-007-005 | Lost/revoked device blocked | P0 | Stable error codes; refresh fails |
+| FO-007-006 | Force sign-out | P0 | Sessions revoked; tablet locks |
+| FO-007-007 | Heartbeat telemetry | P1 | `lastSeenAt` updated in admin |
+| FO-007-008 | Field tablet staging APK install | P0 | Package `com.theeye.fieldops.staging`; login/registration screens |
+| FO-007-009 | 10" tablet landscape shell | P1 | Nav rail; portrait fallback |
+| FO-007-010 | Physical device registration E2E | P0 | **NOT TESTED** until tablet QA evidence |
