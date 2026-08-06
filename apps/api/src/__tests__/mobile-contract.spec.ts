@@ -52,6 +52,9 @@ describe("mobile contract sharing", () => {
     expect(paths.includes("/incidents/report")).toBe(true);
     expect(paths.includes("/auth/register")).toBe(true);
     expect(paths.includes("/users/me")).toBe(true);
+    expect(paths.includes("/users/me/activity-history")).toBe(true);
+    expect(paths.includes("/incidents/")).toBe(true);
+    expect(paths.includes("/archive")).toBe(true);
   });
 
   it("aligns mobile API base URL with backend /v1 prefix", () => {
@@ -60,7 +63,7 @@ describe("mobile contract sharing", () => {
     expect(mobile.includes("TheEyeApiClient")).toBe(true);
     expect(mobile.includes("TheEyeApiConfig.resolveBaseUrl()")).toBe(true);
     expect(enums.includes("THE_EYE_DEV_API_BASE_URL")).toBe(true);
-    expect(mobile.includes("class IncidentTrackingItem")).toBe(true);
+    expect(mobile.includes("ActivityHistoryScreen")).toBe(true);
     expect(mobile.includes("class IncidentStatus ")).toBe(false);
   });
 
