@@ -11,6 +11,7 @@ import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { BroadcastsService } from "../broadcasts/broadcasts.service";
 import { DangerZonesService } from "../danger-zones/danger-zones.service";
+import { CommunityVerificationService } from "../community-verification/community-verification.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConfidenceScorerService } from "./confidence-scorer.service";
@@ -44,6 +45,7 @@ export class VerificationService {
     private readonly broadcasts: BroadcastsService,
     private readonly metrics: MetricsService,
     private readonly notifications: NotificationsService,
+    private readonly communityVerification: CommunityVerificationService,
     @Optional() private readonly dangerZones?: DangerZonesService,
   ) {}
 
@@ -192,73 +194,21 @@ export class VerificationService {
   }
 
   async requestCrowdConfirmation(incidentId: string, dto: CrowdRequestDto = {}, actor?: JwtPayload) {
-    const incident = await this.prisma.incident.findUnique({
-      where: { id: incidentId },
-      select: { id: true, reporterId: true, title: true, latitude: true, longitude: true, country: true, state: true, lga: true },
-    });
-    if (!incident) throw new NotFoundException("Incident not found");
-
-    const limit = Math.min(dto.limit ?? DEFAULT_WITNESS_LIMIT, 100);
-    const radiusMeters = dto.radiusMeters ?? DEFAULT_DUPLICATE_RADIUS_METERS;
-    const latitude = Number(incident.latitude);
-    const longitude = Number(incident.longitude);
-
-    let candidateUsers: Array<{ id: string }> = [];
-    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-      const nearby = await this.findNearbyWitnesses(latitude, longitude, radiusMeters, incident.reporterId, limit);
-      candidateUsers = nearby.map((row) => ({ id: row.userId }));
-    }
-
-    if (!candidateUsers.length) {
-      candidateUsers = await this.prisma.user.findMany({
-        where: {
-          ...(incident.reporterId ? { id: { not: incident.reporterId } } : {}),
-          profile: { is: { country: incident.country, state: incident.state, lga: incident.lga } },
-        },
-        select: { id: true },
-        take: limit,
-      });
-    }
-
-    if (candidateUsers.length) {
-      await Promise.all(
-        candidateUsers.map(async (user) => {
-          const notification = await this.prisma.notification.create({
-            data: {
-              userId: user.id,
-              incidentId,
-              channel: "push",
-              title: "Can you confirm a nearby incident?",
-              body: `THE EYE needs confirmation for: ${incident.title}`,
-              status: "Pending" as never,
-              provider: "fcm",
-            },
-          });
-          await this.notifications.enqueue({
-            notificationId: notification.id,
-            userId: user.id,
-            channel: "push",
-            title: notification.title,
-            body: notification.body,
-            incidentId,
-            provider: "fcm",
-          });
-        }),
-      );
-    }
-
-    await this.prisma.incidentTimeline.create({
-      data: {
-        incidentId,
-        actorId: actor?.typ === "user" ? actor.sub : undefined,
-        actorType: actor?.typ ?? "system",
-        eventType: "incident.crowd_confirmation_requested",
-        message: `Crowd confirmation requested from ${candidateUsers.length} nearby user(s).`,
-        metadata: { targetMs: 10000, radiusMeters, candidateCount: candidateUsers.length, geoScoped: Boolean(candidateUsers.length) },
+    const result = await this.communityVerification.issueRequests(
+      incidentId,
+      {
+        limit: dto.limit,
+        radiusMeters: dto.radiusMeters,
       },
-    });
-
-    return { incidentId, requested: candidateUsers.length, targetDispatchMs: 10000, radiusMeters };
+      actor,
+    );
+    return {
+      incidentId,
+      requested: result.issued,
+      targetDispatchMs: 10000,
+      radiusMeters: dto.radiusMeters ?? DEFAULT_DUPLICATE_RADIUS_METERS,
+      passiveOnly: result.passiveOnly === true,
+    };
   }
 
   async submitWitnessConfirmation(incidentId: string, dto: WitnessConfirmationDto, actor: JwtPayload) {

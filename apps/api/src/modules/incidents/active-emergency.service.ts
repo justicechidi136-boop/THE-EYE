@@ -6,6 +6,7 @@ import {
 import { IncidentAssignmentStatus, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { PrismaService } from "../prisma/prisma.service";
+import { CommunityVerificationService } from "../community-verification/community-verification.service";
 import { IncidentsService } from "./incidents.service";
 import {
   buildIncidentPresentation,
@@ -87,6 +88,7 @@ export class ActiveEmergencyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly incidentsService: IncidentsService,
+    private readonly communityVerification: CommunityVerificationService,
   ) {}
 
   async getActiveEmergency(incidentId: string, actor?: JwtPayload) {
@@ -194,6 +196,7 @@ export class ActiveEmergencyService {
       (incident.latitude != null ? "reported" : "pending");
 
     const liveSession = incident.liveVideoSessions[0];
+    const communityAggregate = await this.communityVerification.getIncidentAggregate(incidentId);
 
     return {
       isActive: true,
@@ -258,6 +261,7 @@ export class ActiveEmergencyService {
           (v) => v.method.includes("nearby") || v.method.includes("crowd"),
         ).length,
         latestConfidence: incident.verifications[0]?.confidence?.toString() ?? null,
+        ...communityAggregate,
       },
       cancellationSummary: presentation.cancellationSummary,
       resolutionSummary: presentation.resolutionSummary ?? null,

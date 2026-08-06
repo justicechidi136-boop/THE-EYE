@@ -27,6 +27,7 @@ import { WatchFleetModule } from "./watch-fleet/watch-fleet.module";
 import { StorageModule } from "./storage/storage.module";
 import { UsersModule } from "./users/users.module";
 import { VerificationModule } from "./verification/verification.module";
+import { CommunityVerificationModule } from "./community-verification/community-verification.module";
 import { DangerZonesModule } from "./danger-zones/danger-zones.module";
 import { AdminSettingsModule } from "./admin-settings/admin-settings.module";
 import { VoiceAttachmentsModule } from "./voice-attachments/voice-attachments.module";
@@ -75,6 +76,7 @@ const redisDisabled = !shouldRegisterBullMq();
     StorageModule,
     AuditModule,
     VerificationModule,
+    CommunityVerificationModule,
     EscalationModule,
     DispatchModule,
     NeighborhoodWatchModule,

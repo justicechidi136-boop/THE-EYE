@@ -2,6 +2,7 @@
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { BroadcastsModule } from "../broadcasts/broadcasts.module";
+import { CommunityVerificationModule } from "../community-verification/community-verification.module";
 import { DangerZonesModule } from "../danger-zones/danger-zones.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
@@ -10,7 +11,7 @@ import { VerificationController } from "./verification.controller";
 import { VerificationService } from "./verification.service";
 
 @Module({
-  imports: [PrismaModule, BroadcastsModule, NotificationsModule, DangerZonesModule],
+  imports: [PrismaModule, BroadcastsModule, NotificationsModule, DangerZonesModule, CommunityVerificationModule],
   controllers: [VerificationController],
   providers: [VerificationService, ConfidenceScorerService, JwtAuthGuard, PermissionsGuard],
   exports: [VerificationService, ConfidenceScorerService],
