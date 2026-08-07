@@ -5,6 +5,7 @@ abstract final class FieldApiPaths {
     defaultValue: 'http://10.0.2.2:4000/v1',
   );
 
+  // Device registration & heartbeat
   static const deviceChallenge = '/field/devices/challenge';
   static const deviceRegister = '/field/devices/register';
   static const deviceRegistrationStatus = '/field/devices/registration-status';
@@ -13,10 +14,74 @@ abstract final class FieldApiPaths {
   static String deviceHeartbeat(String publicDeviceId) =>
       '/field/devices/$publicDeviceId/heartbeat';
 
+  // Auth
   static const authLogin = '/field/auth/login';
   static const authRefresh = '/field/auth/refresh';
   static const authLogout = '/field/auth/logout';
   static const authLock = '/field/auth/lock';
   static const authUnlock = '/field/auth/unlock';
   static const authSession = '/field/auth/session';
+
+  // Dashboard & telemetry
+  static const dashboard = '/field/dashboard';
+  static const dashboardTelemetry = '/field/dashboard/telemetry';
+
+  // Shifts
+  static const shiftsActive = '/field/shifts/active';
+  static const shiftsStart = '/field/shifts/start';
+  static const shiftsPause = '/field/shifts/pause';
+  static const shiftsResume = '/field/shifts/resume';
+  static const shiftsEnd = '/field/shifts/end';
+
+  // Patrols
+  static const patrolsActive = '/field/patrols/active';
+  static const patrolsStart = '/field/patrols/start';
+  static const patrolsPause = '/field/patrols/pause';
+  static const patrolsResume = '/field/patrols/resume';
+  static const patrolsEnd = '/field/patrols/end';
+  static const patrolsLocation = '/field/patrols/location';
+
+  // Checkpoints
+  static const checkpointsActive = '/field/checkpoints/active';
+  static const checkpointsStart = '/field/checkpoints/start';
+  static const checkpointsPause = '/field/checkpoints/pause';
+  static const checkpointsResume = '/field/checkpoints/resume';
+  static const checkpointsEnd = '/field/checkpoints/end';
+  static const checkpointsQueue = '/field/checkpoints/queue';
+  static const checkpointsSearch = '/field/checkpoints/search';
+
+  // Assignments & incident workspace
+  static const assignmentsMine = '/field/assignments/mine';
+
+  static String assignment(String id) => '/field/assignments/$id';
+
+  static String assignmentLocation(String id) =>
+      '/field/assignments/$id/location';
+
+  static String assignmentLiveLocation(String id) =>
+      '/field/assignments/$id/live-location';
+
+  static String assignmentBackup(String id) => '/field/assignments/$id/backup';
+
+  static String assignmentTimeline(String id) =>
+      '/field/assignments/$id/timeline';
+
+  // Operational responses (incident comms)
+  static const responses = '/field/responses';
+
+  static String responsesForAssignment(String assignmentId) =>
+      '/field/responses/assignments/$assignmentId';
+
+  // BOLO
+  static const boloSearch = '/field/bolo';
+  static const boloSightings = '/field/bolo/sightings';
+
+  // Drone
+  static const droneMissions = '/field/drone/missions';
+  static const droneRequest = '/field/drone/request';
+
+  static String droneMission(String id) => '/field/drone/missions/$id';
+
+  // Offline sync
+  static const syncBatch = '/field/sync/batch';
 }

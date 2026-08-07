@@ -23,7 +23,7 @@ export class FieldDevicesController {
   constructor(private readonly devices: FieldDevicesService) {}
 
   @Post("challenge")
-  @RateLimit("authLogin")
+  @RateLimit("auth")
   createChallenge() {
     return this.devices.createRegistrationChallenge();
   }
@@ -42,7 +42,7 @@ export class FieldDevicesController {
   }
 
   @Post("complete-pairing")
-  @RateLimit("authLogin")
+  @RateLimit("auth")
   completePairing(@Body() dto: CompleteFieldPairingDto) {
     return this.devices.completePairing(dto);
   }
@@ -60,13 +60,13 @@ export class FieldAuthController {
   constructor(private readonly auth: FieldAuthService) {}
 
   @Post("login")
-  @RateLimit("authLogin")
+  @RateLimit("auth")
   login(@Body() dto: FieldLoginDto) {
     return this.auth.login(dto);
   }
 
   @Post("refresh")
-  @RateLimit("authLogin")
+  @RateLimit("auth")
   refresh(@Body() dto: FieldRefreshDto) {
     return this.auth.refresh(dto);
   }

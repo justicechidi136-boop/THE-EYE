@@ -694,7 +694,7 @@ export class DispatchService {
       where: {
         isActive: true,
         OR: [
-          actor.typ === "admin" ? { adminUserId: actor.sub } : undefined,
+          actor.typ === "admin" || actor.typ === "field" ? { adminUserId: actor.sub } : undefined,
           actor.typ === "user" ? { userId: actor.sub } : undefined,
         ].filter(Boolean),
       },
@@ -705,14 +705,15 @@ export class DispatchService {
   }
 
   private assertAssignmentReadAccess(assignment: any, actor: JwtPayload) {
-    if (actor.typ === "admin" && actor.permissions?.includes("incident:read")) {
+    if ((actor.typ === "admin" || actor.typ === "field") && actor.permissions?.includes("incident:read")) {
       if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== assignment.agencyId) {
         throw new ForbiddenException("Assignment outside agency scope");
       }
-      return;
+      if (actor.typ === "field" && assignment.responder?.adminUserId === actor.sub) return;
+      if (actor.typ === "admin") return;
     }
     if (actor.typ === "user" && assignment.responder?.userId === actor.sub) return;
-    if (actor.typ === "admin" && assignment.responder?.adminUserId === actor.sub) return;
+    if ((actor.typ === "admin" || actor.typ === "field") && assignment.responder?.adminUserId === actor.sub) return;
     throw new ForbiddenException("Not authorized to view this assignment");
   }
 
@@ -1016,19 +1017,22 @@ export class DispatchService {
   }
 
   private assertAssignmentActor(assignment: any, actor: JwtPayload, supervisorOk = false) {
-    if (actor.typ === "admin") {
+    if (actor.typ === "admin" || actor.typ === "field") {
       if (assignment.responder?.adminUserId === actor.sub) return;
-      if (supervisorOk && actor.permissions?.includes("incident:assign")) {
+      if (actor.typ === "admin") {
+        if (supervisorOk && actor.permissions?.includes("incident:assign")) {
+          if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== assignment.agencyId) {
+            throw new ForbiddenException("Assignment is outside agency scope");
+          }
+          return;
+        }
+        this.assertDispatcher(actor);
         if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== assignment.agencyId) {
           throw new ForbiddenException("Assignment is outside agency scope");
         }
         return;
       }
-      this.assertDispatcher(actor);
-      if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== assignment.agencyId) {
-        throw new ForbiddenException("Assignment is outside agency scope");
-      }
-      return;
+      throw new ForbiddenException("Not authorized to update this assignment");
     }
 
     if (actor.typ === "user" && assignment.responder?.userId === actor.sub) return;
@@ -1036,12 +1040,17 @@ export class DispatchService {
   }
 
   private assertResponderActor(responder: any, actor: JwtPayload) {
-    if (actor.typ === "admin") {
-      this.assertDispatchReader(actor);
-      if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== responder.agencyId) {
-        throw new ForbiddenException("Responder is outside agency scope");
+    if (actor.typ === "admin" || actor.typ === "field") {
+      if (actor.typ === "field" && responder.adminUserId === actor.sub) return;
+      if (actor.typ === "admin") {
+        this.assertDispatchReader(actor);
+        if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId && actor.agencyId !== responder.agencyId) {
+          throw new ForbiddenException("Responder is outside agency scope");
+        }
+        return;
       }
-      return;
+      if (actor.typ === "field" && responder.adminUserId === actor.sub) return;
+      throw new ForbiddenException("Not authorized to update this responder");
     }
     if (actor.typ === "user" && responder.userId === actor.sub) return;
     throw new ForbiddenException("Not authorized to update this responder");

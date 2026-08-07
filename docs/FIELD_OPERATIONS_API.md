@@ -1,7 +1,50 @@
 # Field Operations API
 
-**Project:** THE EYE — Phase 7 Sprint 1  
+**Project:** THE EYE — Phase 7  
 **Base path:** `/v1`
+
+Sprint 1 covers device registration and auth. Sprint 2 adds operational workflows below.
+
+---
+
+## Operational dashboard
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/field/dashboard` | `field:session:operate` |
+| POST | `/field/dashboard/telemetry` | `field:session:operate` |
+
+---
+
+## Shift management
+
+See `docs/FIELD_SHIFT_WORKFLOW.md`.
+
+| Method | Path |
+|--------|------|
+| GET | `/field/shifts/active` |
+| POST | `/field/shifts/start` |
+| POST | `/field/shifts/pause` |
+| POST | `/field/shifts/resume` |
+| POST | `/field/shifts/end` |
+| POST | `/admin/field-operations/shifts/:id/approve` |
+
+---
+
+## Patrol / checkpoint / assignments / BOLO / drone / sync
+
+| Area | Prefix |
+|------|--------|
+| Patrol | `/field/patrols/*` |
+| Checkpoint | `/field/checkpoints/*` |
+| Assignments (dispatch proxy) | `/field/assignments/*` |
+| Emergency responses | `/field/responses` |
+| BOLO | `/field/bolo` |
+| Drone (read-only) | `/field/drone/*` |
+| Offline sync | `/field/sync/batch` |
+| Admin monitoring | `/admin/field-operations/monitoring` |
+
+Patrol and checkpoint docs: `docs/PATROL_MODE.md`, `docs/CHECKPOINT_MODE.md`.
 
 ---
 

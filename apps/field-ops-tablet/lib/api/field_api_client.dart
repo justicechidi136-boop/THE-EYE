@@ -78,6 +78,20 @@ class FieldApiClient {
     return _decode(response);
   }
 
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+    Map<String, String>? query,
+  }) async {
+    final response = await _http.patch(
+      _uri(path, query),
+      headers: {..._headers(), ...?headers},
+      body: jsonEncode(body ?? const {}),
+    );
+    return _decode(response);
+  }
+
   Map<String, dynamic> _decode(http.Response response) {
     final raw = response.body.isEmpty ? '{}' : response.body;
     Map<String, dynamic> decoded;

@@ -61,6 +61,7 @@ const navGroups = [
     items: [
       ["Smart Watches", "/devices/smart-watches"],
       ["Field Tablets", "/field-operations/devices"],
+      ["Field Monitoring", "/field-operations/monitoring"],
     ] as [string, string][],
   },
   {
