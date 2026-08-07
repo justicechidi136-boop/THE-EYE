@@ -9,3 +9,4 @@ export type { Permission } from "./permissions";
 export { adminRolePermissions, userRolePermissions, rolePermissions } from "./permissions";
 export * from "./field-operations";
 export * from "./field-workflows";
+export * from "./field-sprint3";
