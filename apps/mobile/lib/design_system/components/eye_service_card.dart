@@ -23,11 +23,11 @@ class EyeServiceCard extends StatelessWidget {
     return Material(
       color: semantics.cardSurface,
       borderRadius: BorderRadius.circular(8),
-      child: InkWell(
+        child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
-        child: SizedBox(
-          height: 150,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 150),
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Column(
@@ -59,7 +59,7 @@ class EyeServiceCard extends StatelessWidget {
                 Text(
                   description,
                   textAlign: TextAlign.center,
-                  maxLines: 3,
+                  maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
