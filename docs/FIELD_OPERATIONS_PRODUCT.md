@@ -92,6 +92,8 @@ The field tablet must **never** expose:
 ## Related documents
 
 - `docs/FIELD_OPERATIONS_ARCHITECTURE.md`
-- `docs/FIELD_DEVICE_SECURITY.md` (Phase 22)
-- `docs/PATROL_MODE.md` (Phase 8)
-- `docs/CHECKPOINT_MODE.md` (Phase 9)
+- `docs/FIELD_OPERATIONS_API.md`
+- `docs/FIELD_SHIFT_WORKFLOW.md`
+- `docs/PATROL_MODE.md`
+- `docs/CHECKPOINT_MODE.md`
+- `docs/FIELD_DEVICE_SECURITY.md`

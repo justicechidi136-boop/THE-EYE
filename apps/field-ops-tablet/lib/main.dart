@@ -5,11 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'screens/approval_pending_screen.dart';
+import 'screens/assignments/assignments_screen.dart';
+import 'screens/assignments/incident_workspace_screen.dart';
+import 'screens/bolo/bolo_screen.dart';
+import 'screens/checkpoint/checkpoint_mode_screen.dart';
+import 'screens/comms/comms_screen.dart';
 import 'screens/device_registration_screen.dart';
 import 'screens/device_status_screen.dart';
+import 'screens/drone/drone_monitor_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/locked_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/patrol/patrol_mode_screen.dart';
 import 'screens/routes.dart';
 import 'screens/splash_screen.dart';
 import 'screens/unauthorized_screen.dart';
@@ -89,6 +96,30 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
               UnauthorizedScreen(services: _services),
               settings,
             );
+          case FieldRoutes.patrol:
+            return _page(PatrolModeScreen(services: _services), settings);
+          case FieldRoutes.checkpoint:
+            return _page(CheckpointModeScreen(services: _services), settings);
+          case FieldRoutes.assignments:
+            return _page(AssignmentsScreen(services: _services), settings);
+          case FieldRoutes.incidentWorkspace:
+            final args = settings.arguments;
+            final assignmentId = args is Map
+                ? args['assignmentId']?.toString() ?? ''
+                : args?.toString() ?? '';
+            return _page(
+              IncidentWorkspaceScreen(
+                services: _services,
+                assignmentId: assignmentId,
+              ),
+              settings,
+            );
+          case FieldRoutes.bolo:
+            return _page(BoloScreen(services: _services), settings);
+          case FieldRoutes.drone:
+            return _page(DroneMonitorScreen(services: _services), settings);
+          case FieldRoutes.comms:
+            return _page(CommsScreen(services: _services), settings);
           default:
             return _page(SplashScreen(services: _services), settings);
         }

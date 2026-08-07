@@ -560,6 +560,10 @@ model Agency {
   incidentAssignments IncidentAssignment[]
   droneOperators      DroneOperator[]
   fieldDevices        FieldDevice[]
+  fieldShifts         FieldShift[]
+  patrolSessions      PatrolSession[]
+  checkpointSessions  CheckpointSession[]
+  operationalSightings OperationalSighting[]
 
   @@index([jurisdictionId, type])
   @@index([jurisdictionId, isActive])
@@ -631,6 +635,13 @@ model AdminUser {
   approvedFieldDevices         FieldDevice[]              @relation("FieldDeviceApprovedBy")
   revokedFieldDevices          FieldDevice[]              @relation("FieldDeviceRevokedBy")
   fieldDeviceSessions          FieldDeviceSession[]       @relation("FieldDeviceSessionAdmin")
+  fieldShifts                  FieldShift[]               @relation("FieldShiftOfficer")
+  fieldShiftsApproved          FieldShift[]               @relation("FieldShiftApprovedBy")
+  patrolSessions               PatrolSession[]            @relation("PatrolSessionOfficer")
+  checkpointSessions           CheckpointSession[]        @relation("CheckpointSessionOfficer")
+  officerStatus                OfficerStatus?
+  operationalResponses         OperationalResponse[]      @relation("OperationalResponseOfficer")
+  operationalSightings         OperationalSighting[]      @relation("OperationalSightingOfficer")
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -710,6 +721,7 @@ model Incident {
   incidentInformationRequests IncidentInformationRequest[]
   communityVerificationRequests CommunityVerificationRequest[]
   communityVerificationResponses CommunityVerificationResponse[]
+  operationalResponses         OperationalResponse[]
 
   @@index([country, state, lga])
   @@index([status, priority, createdAt])
@@ -966,6 +978,7 @@ model Broadcast {
   comments              BroadcastComment[]
   reports               BroadcastReport[]
   sightings             BroadcastSighting[]
+  operationalSightings  OperationalSighting[]
 
   @@index([status, publishedAt])
   @@index([type, status])
@@ -2109,6 +2122,8 @@ model ResponseUnit {
   agency           Agency                                @relation(fields: [agencyId], references: [id])
   assignments      IncidentAssignment[]
   fieldDevices     FieldDevice[]
+  fieldShifts      FieldShift[]
+  patrolSessions   PatrolSession[]
 
   @@unique([agencyId, unitIdentifier])
   @@index([agencyId, status, isActive])
@@ -2145,6 +2160,7 @@ model IncidentAssignment {
   previousAssignment   IncidentAssignment?       @relation("AssignmentReassignmentChain", fields: [previousAssignmentId], references: [id])
   nextAssignments      IncidentAssignment[]      @relation("AssignmentReassignmentChain")
   locationUpdates      ResponderLocationUpdate[]
+  operationalResponses OperationalResponse[]
 
   @@index([incidentId, status, createdAt])
   @@index([agencyId, status, priority, createdAt])
@@ -3472,6 +3488,12 @@ model FieldDevice {
   approvedBy             AdminUser?                    @relation("FieldDeviceApprovedBy", fields: [approvedById], references: [id])
   revokedBy              AdminUser?                    @relation("FieldDeviceRevokedBy", fields: [revokedById], references: [id])
   sessions               FieldDeviceSession[]
+  fieldShifts            FieldShift[]
+  patrolSessions         PatrolSession[]
+  checkpointSessions     CheckpointSession[]
+  officerStatuses        OfficerStatus[]
+  operationalResponses   OperationalResponse[]
+  operationalSightings   OperationalSighting[]
 
   @@index([assignedUserId, registrationStatus])
   @@index([agencyId, registrationStatus])
@@ -3500,4 +3522,266 @@ model FieldDeviceSession {
   @@index([fieldDeviceId, revokedAt])
   @@index([adminUserId, revokedAt])
   @@map("field_device_sessions")
+}
+
+enum FieldShiftStatus {
+  PendingApproval
+  Active
+  Paused
+  Ended
+  Cancelled
+}
+
+enum PatrolSessionStatus {
+  Active
+  Paused
+  Ended
+}
+
+enum CheckpointSessionStatus {
+  Active
+  Paused
+  Ended
+}
+
+enum OfficerOperationalStatus {
+  OffDuty
+  OnShift
+  OnPatrol
+  AtCheckpoint
+  Responding
+  OnBreak
+  Panic
+}
+
+enum OperationalResponseType {
+  Arrived
+  UnderControl
+  Evacuating
+  RoadClosed
+  MedicalRequired
+  FireEscalating
+  NeedMoreUnits
+  NeedDrone
+  Resolved
+  BackupRequested
+  SituationReport
+}
+
+enum OperationalSightingType {
+  MissingPerson
+  WantedSuspect
+  WantedVehicle
+  KidnappingAlert
+  AmberAlert
+  DroneObservation
+  BroadcastMatch
+  Other
+}
+
+enum OperationalSightingStatus {
+  Open
+  Acknowledged
+  Closed
+}
+
+model FieldShift {
+  id                       String           @id @default(uuid()) @db.Uuid
+  officerId                String           @map("officer_id") @db.Uuid
+  fieldDeviceId            String           @map("field_device_id") @db.Uuid
+  agencyId                 String           @map("agency_id") @db.Uuid
+  assignedUnitId           String?          @map("assigned_unit_id") @db.Uuid
+  vehicleIdentifier        String?          @map("vehicle_identifier")
+  status                   FieldShiftStatus @default(PendingApproval)
+  requiresSupervisorApproval Boolean        @default(false) @map("requires_supervisor_approval")
+  approvedById             String?          @map("approved_by_id") @db.Uuid
+  approvedAt               DateTime?        @map("approved_at") @db.Timestamptz(6)
+  supervisorNote           String?          @map("supervisor_note")
+  startedAt                DateTime?        @map("started_at") @db.Timestamptz(6)
+  pausedAt                 DateTime?        @map("paused_at") @db.Timestamptz(6)
+  resumedAt                DateTime?        @map("resumed_at") @db.Timestamptz(6)
+  endedAt                  DateTime?        @map("ended_at") @db.Timestamptz(6)
+  startLatitude            Decimal?         @map("start_latitude") @db.Decimal(9, 6)
+  startLongitude           Decimal?         @map("start_longitude") @db.Decimal(9, 6)
+  endLatitude              Decimal?         @map("end_latitude") @db.Decimal(9, 6)
+  endLongitude             Decimal?         @map("end_longitude") @db.Decimal(9, 6)
+  clientActionId           String?          @unique @map("client_action_id")
+  metadata                 Json             @default("{}")
+  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  officer                  AdminUser        @relation("FieldShiftOfficer", fields: [officerId], references: [id])
+  fieldDevice              FieldDevice      @relation(fields: [fieldDeviceId], references: [id])
+  agency                   Agency           @relation(fields: [agencyId], references: [id])
+  assignedUnit             ResponseUnit?    @relation(fields: [assignedUnitId], references: [id])
+  approvedBy               AdminUser?       @relation("FieldShiftApprovedBy", fields: [approvedById], references: [id])
+  patrolSessions           PatrolSession[]
+  checkpointSessions       CheckpointSession[]
+  operationalResponses     OperationalResponse[]
+
+  @@index([officerId, status])
+  @@index([agencyId, status, startedAt])
+  @@index([fieldDeviceId, status])
+  @@map("field_shifts")
+}
+
+model PatrolSession {
+  id               String              @id @default(uuid()) @db.Uuid
+  fieldShiftId     String              @map("field_shift_id") @db.Uuid
+  officerId        String              @map("officer_id") @db.Uuid
+  fieldDeviceId    String              @map("field_device_id") @db.Uuid
+  agencyId         String              @map("agency_id") @db.Uuid
+  assignedUnitId   String?             @map("assigned_unit_id") @db.Uuid
+  patrolZoneLabel  String?             @map("patrol_zone_label")
+  status           PatrolSessionStatus @default(Active)
+  startedAt        DateTime            @default(now()) @map("started_at") @db.Timestamptz(6)
+  pausedAt         DateTime?           @map("paused_at") @db.Timestamptz(6)
+  endedAt          DateTime?           @map("ended_at") @db.Timestamptz(6)
+  lastLatitude     Decimal?            @map("last_latitude") @db.Decimal(9, 6)
+  lastLongitude    Decimal?            @map("last_longitude") @db.Decimal(9, 6)
+  lastLocationAt   DateTime?           @map("last_location_at") @db.Timestamptz(6)
+  routeRecording   Json                @default("[]") @map("route_recording")
+  clientActionId   String?             @unique @map("client_action_id")
+  metadata         Json                @default("{}")
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  fieldShift       FieldShift          @relation(fields: [fieldShiftId], references: [id], onDelete: Cascade)
+  officer          AdminUser           @relation("PatrolSessionOfficer", fields: [officerId], references: [id])
+  fieldDevice      FieldDevice         @relation(fields: [fieldDeviceId], references: [id])
+  agency           Agency              @relation(fields: [agencyId], references: [id])
+  assignedUnit     ResponseUnit?       @relation(fields: [assignedUnitId], references: [id])
+  operationalResponses OperationalResponse[]
+
+  @@index([fieldShiftId, status])
+  @@index([agencyId, status, startedAt])
+  @@index([officerId, status])
+  @@map("patrol_sessions")
+}
+
+model CheckpointSession {
+  id               String                  @id @default(uuid()) @db.Uuid
+  fieldShiftId     String                  @map("field_shift_id") @db.Uuid
+  officerId        String                  @map("officer_id") @db.Uuid
+  fieldDeviceId    String                  @map("field_device_id") @db.Uuid
+  agencyId         String                  @map("agency_id") @db.Uuid
+  checkpointName   String                  @map("checkpoint_name")
+  checkpointZoneLabel String?              @map("checkpoint_zone_label")
+  status           CheckpointSessionStatus @default(Active)
+  queueCount       Int                     @default(0) @map("queue_count")
+  vehicleChecks    Int                     @default(0) @map("vehicle_checks")
+  startedAt        DateTime                @default(now()) @map("started_at") @db.Timestamptz(6)
+  pausedAt         DateTime?               @map("paused_at") @db.Timestamptz(6)
+  endedAt          DateTime?               @map("ended_at") @db.Timestamptz(6)
+  lastLatitude     Decimal?                @map("last_latitude") @db.Decimal(9, 6)
+  lastLongitude    Decimal?                @map("last_longitude") @db.Decimal(9, 6)
+  lastLocationAt   DateTime?               @map("last_location_at") @db.Timestamptz(6)
+  clientActionId   String?                 @unique @map("client_action_id")
+  metadata         Json                    @default("{}")
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  fieldShift       FieldShift              @relation(fields: [fieldShiftId], references: [id], onDelete: Cascade)
+  officer          AdminUser               @relation("CheckpointSessionOfficer", fields: [officerId], references: [id])
+  fieldDevice      FieldDevice             @relation(fields: [fieldDeviceId], references: [id])
+  agency           Agency                  @relation(fields: [agencyId], references: [id])
+  operationalResponses OperationalResponse[]
+
+  @@index([fieldShiftId, status])
+  @@index([agencyId, status, startedAt])
+  @@index([officerId, status])
+  @@map("checkpoint_sessions")
+}
+
+model OfficerStatus {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  officerId              String                   @unique @map("officer_id") @db.Uuid
+  fieldDeviceId          String?                  @map("field_device_id") @db.Uuid
+  fieldShiftId           String?                  @map("field_shift_id") @db.Uuid
+  patrolSessionId        String?                  @map("patrol_session_id") @db.Uuid
+  checkpointSessionId    String?                  @map("checkpoint_session_id") @db.Uuid
+  status                 OfficerOperationalStatus @default(OffDuty)
+  latitude               Decimal?                 @db.Decimal(9, 6)
+  longitude              Decimal?                 @db.Decimal(9, 6)
+  locationAt             DateTime?                @map("location_at") @db.Timestamptz(6)
+  locationAccuracyMeters Float?                   @map("location_accuracy_meters")
+  batteryLevel           Int?                     @map("battery_level")
+  chargingState          String?                  @map("charging_state")
+  gpsStatus              String?                  @map("gps_status")
+  radioStatus            String?                  @map("radio_status")
+  networkType            String?                  @map("network_type")
+  vehicleIdentifier      String?                  @map("vehicle_identifier")
+  droneAvailable         Boolean                  @default(false) @map("drone_available")
+  activeAssignmentCount  Int                      @default(0) @map("active_assignment_count")
+  emergencyIncidentCount Int                      @default(0) @map("emergency_incident_count")
+  weatherSummary         String?                  @map("weather_summary")
+  isOffline              Boolean                  @default(false) @map("is_offline")
+  lastHeartbeatAt        DateTime?                @map("last_heartbeat_at") @db.Timestamptz(6)
+  metadata               Json                     @default("{}")
+  createdAt              DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  officer                AdminUser                @relation(fields: [officerId], references: [id], onDelete: Cascade)
+  fieldDevice            FieldDevice?             @relation(fields: [fieldDeviceId], references: [id])
+
+  @@index([status, lastHeartbeatAt])
+  @@index([fieldDeviceId])
+  @@map("officer_statuses")
+}
+
+model OperationalResponse {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  officerId           String                  @map("officer_id") @db.Uuid
+  fieldDeviceId       String                  @map("field_device_id") @db.Uuid
+  fieldShiftId        String?                 @map("field_shift_id") @db.Uuid
+  patrolSessionId     String?                 @map("patrol_session_id") @db.Uuid
+  checkpointSessionId String?                 @map("checkpoint_session_id") @db.Uuid
+  incidentId          String?                 @map("incident_id") @db.Uuid
+  assignmentId        String?                 @map("assignment_id") @db.Uuid
+  responseType        OperationalResponseType @map("response_type")
+  note                String?
+  latitude            Decimal?                @db.Decimal(9, 6)
+  longitude           Decimal?                @db.Decimal(9, 6)
+  clientActionId      String?                 @unique @map("client_action_id")
+  syncedAt            DateTime?               @map("synced_at") @db.Timestamptz(6)
+  metadata            Json                    @default("{}")
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  officer             AdminUser               @relation("OperationalResponseOfficer", fields: [officerId], references: [id])
+  fieldDevice         FieldDevice             @relation(fields: [fieldDeviceId], references: [id])
+  fieldShift          FieldShift?             @relation(fields: [fieldShiftId], references: [id])
+  patrolSession       PatrolSession?          @relation(fields: [patrolSessionId], references: [id])
+  checkpointSession   CheckpointSession?      @relation(fields: [checkpointSessionId], references: [id])
+  incident            Incident?               @relation(fields: [incidentId], references: [id])
+  assignment          IncidentAssignment?     @relation(fields: [assignmentId], references: [id])
+
+  @@index([officerId, createdAt])
+  @@index([incidentId, createdAt])
+  @@index([assignmentId, createdAt])
+  @@map("operational_responses")
+}
+
+model OperationalSighting {
+  id               String                    @id @default(uuid()) @db.Uuid
+  officerId        String                    @map("officer_id") @db.Uuid
+  fieldDeviceId    String                    @map("field_device_id") @db.Uuid
+  agencyId         String                    @map("agency_id") @db.Uuid
+  broadcastId      String?                   @map("broadcast_id") @db.Uuid
+  sightingType     OperationalSightingType   @map("sighting_type")
+  status           OperationalSightingStatus @default(Open)
+  title            String
+  description      String?
+  searchQuery      String?                   @map("search_query")
+  latitude         Decimal?                  @db.Decimal(9, 6)
+  longitude        Decimal?                  @db.Decimal(9, 6)
+  distanceMeters   Float?                    @map("distance_meters")
+  clientActionId   String?                   @unique @map("client_action_id")
+  syncedAt         DateTime?                 @map("synced_at") @db.Timestamptz(6)
+  metadata         Json                      @default("{}")
+  createdAt        DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  officer          AdminUser                 @relation("OperationalSightingOfficer", fields: [officerId], references: [id])
+  fieldDevice      FieldDevice               @relation(fields: [fieldDeviceId], references: [id])
+  agency           Agency                    @relation(fields: [agencyId], references: [id])
+  broadcast        Broadcast?                @relation(fields: [broadcastId], references: [id])
+
+  @@index([agencyId, sightingType, status])
+  @@index([officerId, createdAt])
+  @@index([broadcastId])
+  @@map("operational_sightings")
 }

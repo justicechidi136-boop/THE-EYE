@@ -933,6 +933,39 @@ export async function fetchFieldDevice(id: string): Promise<FieldDeviceView | nu
   }, null);
 }
 
+export type FieldOperationsMonitoringView = {
+  counts: {
+    activeShifts: number;
+    activePatrols: number;
+    activeCheckpoints: number;
+    offlineOfficers: number;
+  };
+  officers: Array<{
+    officerId: string;
+    displayName: string;
+    status: string;
+    batteryLevel: number | null;
+    gpsStatus: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    activeAssignmentCount: number;
+    isOffline: boolean;
+    lastHeartbeatAt: string | null;
+  }>;
+};
+
+export async function fetchFieldOperationsMonitoring(query: Record<string, string | undefined> = {}): Promise<FieldOperationsMonitoringView | null> {
+  return withToken(async (token) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value) params.set(key, value);
+    }
+    const path = `/admin/field-operations/monitoring${params.size ? `?${params.toString()}` : ""}`;
+    const response = await apiRequest<{ data: FieldOperationsMonitoringView }>(path, { token });
+    return response.data;
+  }, null);
+}
+
 export type FieldDeviceAdminAction =
   | "approve"
   | "reject"

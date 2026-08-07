@@ -30,15 +30,22 @@ ThemeData buildFieldTheme() {
     colorScheme: colorScheme,
     navigationRailTheme: const NavigationRailThemeData(
       backgroundColor: FieldColors.surface,
-      selectedIconTheme: IconThemeData(color: FieldColors.orange, size: 28),
-      unselectedIconTheme: IconThemeData(color: FieldColors.muted, size: 28),
+      indicatorColor: FieldColors.orangeDark,
+      selectedIconTheme: IconThemeData(color: FieldColors.orange, size: 30),
+      unselectedIconTheme: IconThemeData(color: FieldColors.white, size: 28),
       selectedLabelTextStyle: TextStyle(
         color: FieldColors.orange,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        fontSize: 15,
       ),
-      unselectedLabelTextStyle: TextStyle(color: FieldColors.muted),
-      minWidth: 88,
+      unselectedLabelTextStyle: TextStyle(
+        color: FieldColors.muted,
+        fontSize: 14,
+      ),
+      minWidth: 96,
+      minExtendedWidth: 200,
       groupAlignment: 0,
+      useIndicator: true,
     ),
     textTheme: const TextTheme(
       headlineLarge: TextStyle(
