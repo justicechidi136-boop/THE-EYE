@@ -127,6 +127,14 @@ export class FieldDashboardService {
     networkType?: string;
     weatherSummary?: string;
     isOffline?: boolean;
+    appVersion?: string;
+    offlineQueueDepth?: number;
+    crashCount?: number;
+    storagePressure?: string;
+    notificationPermission?: string;
+    cameraPermission?: string;
+    microphonePermission?: string;
+    locationPermission?: string;
   }) {
     const ctx = assertFieldSession(actor);
     const status = await this.prisma.officerStatus.upsert({
@@ -164,19 +172,42 @@ export class FieldDashboardService {
       },
     });
 
-    if (dto.batteryLevel != null || dto.latitude != null) {
+    if (dto.batteryLevel != null || dto.latitude != null || dto.appVersion != null) {
       await this.prisma.fieldDevice.update({
         where: { id: ctx.fieldDeviceId },
         data: {
           batteryLevel: dto.batteryLevel ?? undefined,
           chargingState: dto.chargingState ?? undefined,
           networkType: dto.networkType ?? undefined,
+          appVersion: dto.appVersion ?? undefined,
+          notificationPermission: dto.notificationPermission ?? undefined,
+          locationPermission: dto.locationPermission ?? undefined,
+          cameraPermission: dto.cameraPermission ?? undefined,
+          microphonePermission: dto.microphonePermission ?? undefined,
           lastKnownLatitude: dto.latitude ?? undefined,
           lastKnownLongitude: dto.longitude ?? undefined,
           lastLocationAccuracy: dto.accuracyMeters ?? undefined,
           lastLocationAt: dto.latitude != null ? new Date() : undefined,
           lastSeenAt: new Date(),
+          metadata: {
+            offlineQueueDepth: dto.offlineQueueDepth,
+            crashCount: dto.crashCount,
+            storagePressure: dto.storagePressure,
+          },
         },
+      });
+    }
+
+    if (dto.offlineQueueDepth != null) {
+      await this.prisma.fieldDeviceSyncState.upsert({
+        where: { fieldDeviceId: ctx.fieldDeviceId },
+        create: {
+          fieldDeviceId: ctx.fieldDeviceId,
+          officerId: ctx.officerId,
+          generationId: "default",
+          offlineQueueDepth: dto.offlineQueueDepth,
+        },
+        update: { offlineQueueDepth: dto.offlineQueueDepth },
       });
     }
 

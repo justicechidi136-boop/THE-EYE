@@ -9,6 +9,7 @@ export type NotificationRouteType =
   | "COMMUNITY_VERIFICATION"
   | "BROADCAST_DETAILS"
   | "FIELD_DEVICE_STATUS"
+  | "FIELD_OPERATIONAL"
   | "SYSTEM";
 
 export interface NotificationRoutingV1 {
@@ -27,6 +28,10 @@ export interface NotificationRoutingV1 {
   eventType?: string;
   category?: string;
   distanceBand?: string;
+  assignmentId?: string;
+  backupRequestId?: string;
+  safetyAlertId?: string;
+  fieldDeviceId?: string;
 }
 
 const TERMINAL_REPORTER_STATUSES = new Set<IncidentStatus>([
@@ -286,5 +291,74 @@ export function buildFieldDeviceNotificationMetadata(input: {
     publicDeviceId: input.publicDeviceId,
     silent: false,
     issuedAt: new Date().toISOString(),
+  };
+}
+
+export type FieldOperationalNotificationType =
+  | "FIELD_ASSIGNMENT"
+  | "FIELD_ASSIGNMENT_REASSIGNED"
+  | "FIELD_MESSAGE"
+  | "FIELD_BACKUP_REQUEST"
+  | "FIELD_BACKUP_ASSIGNED"
+  | "FIELD_OFFICER_SAFETY_ALERT"
+  | "FIELD_CHECKPOINT_ALERT"
+  | "FIELD_BOLO_ALERT"
+  | "FIELD_DRONE_MISSION"
+  | "FIELD_DEVICE_HEALTH_WARNING"
+  | "FIELD_SHIFT_ALERT";
+
+const FIELD_OPERATIONAL_DESTINATIONS: Record<FieldOperationalNotificationType, string> = {
+  FIELD_ASSIGNMENT: "/assignments",
+  FIELD_ASSIGNMENT_REASSIGNED: "/assignments",
+  FIELD_MESSAGE: "/comms",
+  FIELD_BACKUP_REQUEST: "/backup",
+  FIELD_BACKUP_ASSIGNED: "/backup",
+  FIELD_OFFICER_SAFETY_ALERT: "/safety",
+  FIELD_CHECKPOINT_ALERT: "/checkpoint",
+  FIELD_BOLO_ALERT: "/bolo",
+  FIELD_DRONE_MISSION: "/drone",
+  FIELD_DEVICE_HEALTH_WARNING: "/device-status",
+  FIELD_SHIFT_ALERT: "/dashboard",
+};
+
+export function resolveFieldOperationalNotificationRouting(input: {
+  notificationType: FieldOperationalNotificationType;
+  assignmentId?: string;
+  incidentId?: string;
+  backupRequestId?: string;
+  safetyAlertId?: string;
+  fieldDeviceId?: string;
+}): NotificationRoutingV1 {
+  const base = FIELD_OPERATIONAL_DESTINATIONS[input.notificationType] ?? "/dashboard";
+  return {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: "FIELD_OPERATIONAL",
+    notificationType: input.notificationType,
+    destination: base,
+    assignmentId: input.assignmentId,
+    incidentId: input.incidentId,
+    backupRequestId: input.backupRequestId,
+    safetyAlertId: input.safetyAlertId,
+    fieldDeviceId: input.fieldDeviceId,
+  };
+}
+
+export function buildFieldOperationalNotificationMetadata(input: {
+  notificationType: FieldOperationalNotificationType;
+  assignmentId?: string;
+  incidentId?: string;
+  backupRequestId?: string;
+  safetyAlertId?: string;
+  fieldDeviceId?: string;
+  status?: string;
+}): Record<string, unknown> {
+  const routing = resolveFieldOperationalNotificationRouting(input);
+  return {
+    ...routing,
+    route: routing.destination,
+    deepLink: routing.destination,
+    silent: false,
+    issuedAt: new Date().toISOString(),
+    ...(input.status ? { status: input.status } : {}),
   };
 }
