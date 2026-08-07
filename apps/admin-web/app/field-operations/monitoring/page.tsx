@@ -48,12 +48,14 @@ export default async function FieldOperationsMonitoringPage({
       {summary ? (
         <>
           <div className="mb-5 grid gap-4 md:grid-cols-4">
-            {[
-              ["Active shifts", summary.counts.activeShifts],
-              ["Active patrols", summary.counts.activePatrols],
-              ["Active checkpoints", summary.counts.activeCheckpoints],
-              ["Offline officers", summary.counts.offlineOfficers],
-            ].map(([label, value]) => (
+            {(
+              [
+                ["Active shifts", summary.counts.activeShifts],
+                ["Active patrols", summary.counts.activePatrols],
+                ["Active checkpoints", summary.counts.activeCheckpoints],
+                ["Offline officers", summary.counts.offlineOfficers],
+              ] as const
+            ).map(([label, value]) => (
               <Panel key={label} title={label}>
                 <p className="text-3xl font-semibold">{value}</p>
               </Panel>

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { OperationalSightingStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";

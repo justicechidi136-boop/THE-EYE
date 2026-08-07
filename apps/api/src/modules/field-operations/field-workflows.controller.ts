@@ -319,7 +319,7 @@ export class FieldSyncController {
 export class FieldWorkflowsAdminController {
   constructor(
     private readonly admin: FieldWorkflowsAdminService,
-    private readonly shifts: FieldShiftsService,
+    private readonly fieldShifts: FieldShiftsService,
   ) {}
 
   @Get("monitoring")
@@ -342,13 +342,13 @@ export class FieldWorkflowsAdminController {
 
   @Get("shifts")
   @RequirePermissions("field:device:manage")
-  shifts(@Req() request: { user: never }, @Query("agencyId") agencyId?: string, @Query("limit") limit?: string) {
+  listShifts(@Req() request: { user: never }, @Query("agencyId") agencyId?: string, @Query("limit") limit?: string) {
     return this.admin.listShifts(request.user, { agencyId, limit });
   }
 
   @Post("shifts/:id/approve")
   @RequirePermissions("field:device:approve")
   approveShift(@Param("id") id: string, @Req() request: { user: never }, @Body() body: { note?: string }) {
-    return this.shifts.approveShift(id, request.user, body.note);
+    return this.fieldShifts.approveShift(id, request.user, body.note);
   }
 }

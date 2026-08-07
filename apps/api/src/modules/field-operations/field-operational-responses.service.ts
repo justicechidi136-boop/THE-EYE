@@ -97,15 +97,19 @@ export class FieldOperationalResponsesService {
     const assignment = await (this.prisma as any).incidentAssignment.findUnique({ where: { id: dto.assignmentId } });
     if (!assignment) throw new NotFoundException("Assignment not found");
 
-    const statusMap: Partial<Record<OperationalResponseType, string>> = {
-      [OperationalResponseType.Arrived]: "OnScene",
-      [OperationalResponseType.UnderControl]: "OnScene",
-      [OperationalResponseType.Resolved]: "Completed",
+    const actionMap: Partial<Record<OperationalResponseType, "arrive" | "in_progress" | "complete">> = {
+      [OperationalResponseType.Arrived]: "arrive",
+      [OperationalResponseType.UnderControl]: "in_progress",
+      [OperationalResponseType.Resolved]: "complete",
     };
 
-    const mapped = statusMap[dto.responseType];
-    if (mapped) {
-      await this.dispatch.updateAssignment(dto.assignmentId, { status: mapped as never, note: dto.note }, actor);
+    const action = actionMap[dto.responseType];
+    if (action) {
+      await this.dispatch.updateAssignment(
+        dto.assignmentId,
+        { action, version: assignment.version, note: dto.note },
+        actor,
+      );
     }
 
     if (dto.responseType === OperationalResponseType.NeedMoreUnits || dto.responseType === OperationalResponseType.BackupRequested) {
