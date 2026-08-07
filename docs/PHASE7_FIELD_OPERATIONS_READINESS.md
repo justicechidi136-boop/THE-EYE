@@ -1,61 +1,70 @@
 # Phase 7 Field Operations — Readiness Tracker
 
 **Branch:** `feature/field-operations-tablet`  
-**Date:** 2026-08-06  
-**Overall status:** **PHASE 7 FOUNDATION CODE COMPLETE — STAGING QA PENDING**
+**PR:** #86 → `staging`  
+**Date:** 2026-08-07  
+**Overall status:** **PHASE 7 SPRINT 3 CODE COMPLETE — PHYSICAL QA PENDING**
 
 ---
 
-## Sprint 1 checklist (Roles, Auth, Device Registration)
+## Sprint 1 — Foundation
 
 | Item | Status |
 |------|--------|
-| Operational roles + permission matrix | **Complete** — `docs/FIELD_ROLE_PERMISSION_MATRIX.md` |
-| FieldDevice Prisma model + migration | **Complete** — `20260808180000_field_devices` |
-| Registration challenge flow | **Complete** |
-| Device-bound field authentication | **Complete** |
-| Supervisor approval API | **Complete** |
-| Lost/revoked/re-pair handling | **Complete** |
-| Heartbeat telemetry | **Complete** |
-| Flutter tablet scaffold | **Complete** — `apps/field-ops-tablet/` |
-| Staging package `com.theeye.fieldops.staging` | **Complete** |
-| Login / registration / lock UX | **Complete** |
-| Admin field device UI | **Complete** — `/field-operations/devices` |
-| Notification schema v1 extension | **Complete** |
-| Audit events | **Complete** |
-| API + tablet tests | **Complete** (Sprint 1 scope) |
-| Physical 10" tablet QA | **Pending** |
+| FieldDevice + device-bound auth | **Complete** |
+| Admin device management | **Complete** |
+| Flutter tablet scaffold | **Complete** |
 
----
-
-## Deferred (Sprint 2+)
-
-Patrol mode, checkpoint mode, operational map, full incident workspace, shift management.
-
----
-
-## CI / PR
+## Sprint 2 — Operational workflows
 
 | Item | Status |
 |------|--------|
-| PR opened | Pending push |
-| CI green | Pending |
-| Field tablet staging APK | **Built locally** — `app-staging-debug.apk` |
-| CI green | Pending PR |
-| Field tablet staging APK | `apps/field-ops-tablet/build/app/outputs/flutter-apk/app-staging-debug.apk` (~150 MB debug) |
-| APK package | `com.theeye.fieldops.staging` |
-| APK SHA-256 (debug build) | `5B5B28D8684FBDC9239B62CE096BD1AC6E09378F3A89EDD9FD05F64D00750C27` |
+| Dashboard, shift, patrol, checkpoint | **Complete** |
+| Assignments, incident workspace shell | **Complete** |
+| BOLO, drone read-only, offline sync v1 | **Complete** |
+| Admin monitoring (baseline) | **Complete** |
+
+## Sprint 3 — Hardening (this delivery)
+
+| Item | Status |
+|------|--------|
+| GIS map context API + tablet `flutter_map` | **Complete** |
+| Realtime event poll (`/field/events`) | **Complete** (poll; FCM fallback pending tablet config) |
+| Officer safety (panic/officer-down/distress) | **Complete** |
+| Backup request lifecycle model + API | **Complete** |
+| Patrol/checkpoint hardening endpoints | **Complete** |
+| Incident comms bridge (`/field/incidents/*`) | **Complete** (field JWT access) |
+| Offline sync hardening + conflict codes | **Complete** |
+| Device health telemetry expansion | **Complete** |
+| Admin situational awareness expansion | **Complete** |
+| Notification schema FIELD_* routing | **Complete** |
+| API + tablet tests (Sprint 3 scope) | **Complete** — 625 API / 7 tablet |
+| Physical 10" tablet QA matrix | **Prepared** — `docs/PHASE7_TABLET_PHYSICAL_QA.md` |
 
 ---
 
-## Blockers before Patrol/Checkpoint
+## CI / artifacts
 
-1. Physical tablet QA on staging APK (registration + approval + login flow).
-2. Supervisor workflow validation in staging environment.
-3. FCM delivery test for `FIELD_DEVICE_*` notification types.
+| Item | Status |
+|------|--------|
+| PR | [#86](https://github.com/justicechidi136-boop/THE-EYE/pull/86) OPEN |
+| API tests | **625 passed** (local) |
+| Tablet tests | **7 passed** (local) |
+| Migration | `20260809180000_field_operations_sprint3` |
+| Staging APK | Rebuild required after Sprint 3 Flutter changes |
+
+---
+
+## Remaining blockers
+
+1. **Physical tablet QA** — matrix prepared, not executed.
+2. **FCM on field tablet** — `google-services.json` per flavor not in repo.
+3. **Hardware-backed Android Keystore** — required before production.
+4. **WebSocket/SSE** — not in scope; polling + push fallback only.
+5. **Full incident workspace actions** — core actions wired via assignments; some Phase 6 media paths remain incremental.
 
 ---
 
 ## Release recommendation
 
-Foundation sprint code is ready for **staging QA**. Do not claim production-ready or device-verified until physical tablet evidence exists.
+Sprint 3 code is ready for **consolidated staging QA**. Do not merge to production or claim field-test sign-off until physical QA evidence exists.

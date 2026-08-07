@@ -88,6 +88,29 @@ FCM data must not include device credentials, private keys, or raw hardware iden
 
 ---
 
+## Phase 7 Sprint 3 field operational notifications
+
+| notificationType | Recipient | destination | Notes |
+|------------------|-----------|-------------|-------|
+| `FIELD_ASSIGNMENT` | Field tablet | `/assignments` | Safe metadata only |
+| `FIELD_ASSIGNMENT_REASSIGNED` | Field tablet | `/assignments` | Includes assignmentId when present |
+| `FIELD_MESSAGE` | Field tablet | `/comms` | Incident-scoped comms refresh |
+| `FIELD_BACKUP_REQUEST` | Dispatcher/admin | `/backup` | Monitoring + nearby units per policy |
+| `FIELD_BACKUP_ASSIGNED` | Field tablet | `/backup` | Assigned support metadata |
+| `FIELD_OFFICER_SAFETY_ALERT` | Dispatcher/admin | `/safety` | Panic / officer-down |
+| `FIELD_CHECKPOINT_ALERT` | Supervisor | `/checkpoint` | BOLO match / escalation |
+| `FIELD_BOLO_ALERT` | Field tablet | `/bolo` | No witness identity |
+| `FIELD_DRONE_MISSION` | Field tablet | `/drone` | Read-only mission link |
+| `FIELD_DEVICE_HEALTH_WARNING` | Admin | `/device-status` | Battery/GPS/sync backlog |
+| `FIELD_SHIFT_ALERT` | Field tablet | `/dashboard` | Shift approval / alerts |
+
+**routeType:** `FIELD_OPERATIONAL`  
+**Builder:** `buildFieldOperationalNotificationMetadata()` in `notification-routing.schema.ts`
+
+On open: authenticate → validate field session + device → validate assignment/jurisdiction → fetch current state → route safely.
+
+---
+
 ## Server implementation
 
 - `apps/api/src/modules/notifications/notification-routing.schema.ts` — routing builder
