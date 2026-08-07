@@ -82,7 +82,15 @@ export type FieldBoloSearchDto = {
 };
 
 export type FieldSyncItemDto = {
-  type: "shift" | "patrol" | "checkpoint" | "response" | "sighting" | "patrolLocation";
+  type:
+    | "shift"
+    | "patrol"
+    | "checkpoint"
+    | "response"
+    | "sighting"
+    | "patrolLocation"
+    | "backup"
+    | "safety";
   clientActionId: string;
   capturedAt?: string;
   payload: Record<string, unknown>;
@@ -90,6 +98,8 @@ export type FieldSyncItemDto = {
 
 export type FieldSyncBatchDto = {
   items: FieldSyncItemDto[];
+  generationId?: string;
+  offlineQueueDepth?: number;
 };
 
 export type FieldTelemetryDto = {
@@ -103,6 +113,14 @@ export type FieldTelemetryDto = {
   networkType?: string;
   weatherSummary?: string;
   isOffline?: boolean;
+  appVersion?: string;
+  offlineQueueDepth?: number;
+  crashCount?: number;
+  storagePressure?: string;
+  notificationPermission?: string;
+  cameraPermission?: string;
+  microphonePermission?: string;
+  locationPermission?: string;
 };
 
 const shiftStatuses = new Set<string>(Object.values(FieldShiftStatus));

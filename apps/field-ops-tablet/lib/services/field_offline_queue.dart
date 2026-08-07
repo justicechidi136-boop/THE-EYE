@@ -15,7 +15,9 @@ enum FieldOfflineActionType {
   checkpoint('checkpoint'),
   response('response'),
   sighting('sighting'),
-  patrolLocation('patrolLocation');
+  patrolLocation('patrolLocation'),
+  backup('backup'),
+  safety('safety');
 
   const FieldOfflineActionType(this.apiValue);
   final String apiValue;
@@ -77,6 +79,7 @@ class FieldOfflineQueue {
   final Future<bool> Function()? _connectivityProbe;
 
   static const _fileName = 'field_offline_queue.json';
+  String? _generationId;
 
   static Future<Directory> _defaultQueueDirectory() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -154,16 +157,27 @@ class FieldOfflineQueue {
 
     final result = await _workflows.syncBatch(
       pending.map((a) => a.toSyncItem()).toList(),
+      generationId: _generationId,
+      offlineQueueDepth: pending.length,
     );
 
     final syncedIds = <String>{};
+    final failedItems = <FieldOfflineAction>[];
     final results = result['results'];
     if (results is List) {
-      for (final row in results) {
+      for (var i = 0; i < results.length && i < pending.length; i++) {
+        final row = results[i];
+        final action = pending[i];
         if (row is Map) {
-          final id = row['clientActionId']?.toString();
-          final ok = row['success'] == true || row['status'] == 'applied';
-          if (id != null && ok) syncedIds.add(id);
+          final id = row['clientActionId']?.toString() ?? action.clientActionId;
+          final ok = row['ok'] == true ||
+              row['success'] == true ||
+              row['status'] == 'applied';
+          if (ok) {
+            syncedIds.add(id);
+          } else {
+            failedItems.add(action);
+          }
         }
       }
     }
@@ -180,6 +194,13 @@ class FieldOfflineQueue {
     return {
       'synced': syncedIds.length,
       'remaining': remaining.length,
+      'failed': failedItems.length,
+      'conflicts': failedItems
+          .map((a) => {
+                'clientActionId': a.clientActionId,
+                'type': a.type.apiValue,
+              })
+          .toList(),
       'result': result,
     };
   }
