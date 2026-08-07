@@ -10,6 +10,8 @@ export type VerifiedFirebaseIdentity = {
   email?: string;
   emailVerified: boolean;
   name?: string;
+  givenName?: string;
+  familyName?: string;
   picture?: string;
 };
 
@@ -93,6 +95,8 @@ export async function verifyFirebaseIdToken(
     email?: string;
     email_verified?: boolean;
     name?: string;
+    given_name?: string;
+    family_name?: string;
     picture?: string;
     firebase?: { sign_in_provider?: string };
   };
@@ -135,6 +139,8 @@ export async function verifyFirebaseIdToken(
     email: typeof payload.email === "string" ? payload.email : undefined,
     emailVerified: payload.email_verified === true,
     name: typeof payload.name === "string" ? payload.name : undefined,
+    givenName: typeof payload.given_name === "string" ? payload.given_name : undefined,
+    familyName: typeof payload.family_name === "string" ? payload.family_name : undefined,
     picture: typeof payload.picture === "string" ? payload.picture : undefined,
   };
 }

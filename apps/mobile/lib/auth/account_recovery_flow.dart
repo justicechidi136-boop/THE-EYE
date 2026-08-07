@@ -89,9 +89,24 @@ class _AccountRecoveryRequestScreenState
           ],
           if (sent) ...[
             const SizedBox(height: 12),
-            Text(
-              "If an eligible account exists, recovery instructions have been sent.",
-              style: TextStyle(color: semantics.secondaryText),
+            Material(
+              color: semantics.success.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: semantics.success),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        "If an account matches that email, recovery instructions have been sent.",
+                        style: TextStyle(color: semantics.bodyText),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
           const SizedBox(height: 16),

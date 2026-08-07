@@ -37,12 +37,40 @@ function validateFirebaseProjectEnv(config: Record<string, unknown>) {
   }
 }
 
+function assertHttpsLinkBase(value: string, envKey: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${envKey} must be a valid HTTPS URL in staging`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`${envKey} must use HTTPS in staging`);
+  }
+}
+
+export function assertStagingRecoveryLinkBases(config: Record<string, unknown>) {
+  const recoveryBase = String(
+    config.ACCOUNT_RECOVERY_LINK_BASE_URL ??
+      config.MOBILE_ACCOUNT_RECOVERY_URL ??
+      config.AUTH_RECOVERY_DEEP_LINK_BASE ??
+      "",
+  ).trim();
+  const resetBase = String(
+    config.PASSWORD_RESET_LINK_BASE_URL ?? config.MOBILE_PASSWORD_RESET_URL ?? "",
+  ).trim();
+
+  if (recoveryBase) assertHttpsLinkBase(recoveryBase, "ACCOUNT_RECOVERY_LINK_BASE_URL");
+  if (resetBase) assertHttpsLinkBase(resetBase, "PASSWORD_RESET_LINK_BASE_URL");
+}
+
 export function validateEnvironment(config: Record<string, unknown>) {
   validateFirebaseProjectEnv(config);
 
   const appEnvironment = resolveAppEnvironment(config);
   if (appEnvironment === "staging") {
     assertStagingFirebaseGuard(config);
+    assertStagingRecoveryLinkBases(config);
     const clientLivekitUrl = String(
       config.LIVEKIT_PUBLIC_URL ?? config.NEXT_PUBLIC_LIVEKIT_URL ?? "",
     ).trim();
