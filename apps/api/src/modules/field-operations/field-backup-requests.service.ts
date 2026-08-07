@@ -55,7 +55,7 @@ export class FieldBackupRequestsService {
         assignmentId: dto.assignmentId ?? null,
         requestType: dto.requestType,
         status: FieldBackupRequestStatus.Requested,
-        priority: dto.priority ?? IncidentPriority.P3Elevated,
+        priority: dto.priority ?? IncidentPriority.P3SuspiciousActivity,
         reason: dto.reason?.trim() || null,
         latitude: decimalOrNull(dto.latitude),
         longitude: decimalOrNull(dto.longitude),

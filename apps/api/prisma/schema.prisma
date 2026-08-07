@@ -3885,7 +3885,7 @@ model FieldBackupRequest {
   assignmentId     String?                  @map("assignment_id") @db.Uuid
   requestType      FieldBackupRequestType   @map("request_type")
   status           FieldBackupRequestStatus @default(Requested)
-  priority         IncidentPriority         @default(P3Elevated)
+  priority         IncidentPriority         @default(P3SuspiciousActivity)
   reason           String?
   latitude         Decimal?                 @db.Decimal(9, 6)
   longitude        Decimal?                 @db.Decimal(9, 6)

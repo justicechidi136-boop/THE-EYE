@@ -25,7 +25,7 @@ CREATE TABLE "field_backup_requests" (
   "assignment_id" UUID,
   "request_type" "FieldBackupRequestType" NOT NULL,
   "status" "FieldBackupRequestStatus" NOT NULL DEFAULT 'Requested',
-  "priority" "IncidentPriority" NOT NULL DEFAULT 'P3Elevated',
+  "priority" "IncidentPriority" NOT NULL DEFAULT 'P3SuspiciousActivity',
   "reason" TEXT,
   "latitude" DECIMAL(9,6),
   "longitude" DECIMAL(9,6),
