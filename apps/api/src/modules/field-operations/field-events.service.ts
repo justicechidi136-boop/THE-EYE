@@ -34,7 +34,7 @@ export class FieldEventsService {
         entityType: input.entityType ?? null,
         entityId: input.entityId ?? null,
         generationId: input.generationId ?? null,
-        payload: input.payload ?? {},
+        payload: (input.payload ?? {}) as never,
         occurredAt: new Date(),
       },
     });
