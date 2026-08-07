@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter/semantics.dart";
 
 import "../contracts/the_eye_api_client.dart";
+import "../presentation/citizen_presentation.dart";
 import "../design_system/components/eye_page_back_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "active_emergency_contract.dart";
@@ -427,38 +428,67 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _InfoRow(label: "Incident ID", value: active.incidentId),
-                    _InfoRow(label: "Category", value: active.category),
+                    _InfoRow(
+                      label: "Reference",
+                      value: resolveIncidentPublicReference(
+                        incidentId: active.incidentId,
+                        submittedAt: active.reportedAt,
+                        apiPublicReference: active.publicReference,
+                      ),
+                    ),
+                    _InfoRow(
+                      label: "Category",
+                      value: active.categoryLabel ?? citizenIncidentCategoryLabel(active.category),
+                    ),
                     _InfoRow(
                       label: "Reported",
-                      value: active.reportedAt.toLocal().toString(),
+                      value: formatCitizenDateTime(active.reportedAt),
                     ),
                     _InfoRow(
                       label: "Location",
                       value: active.reportedLocation.address ??
-                          "${active.reportedLocation.latitude ?? "pending"}, "
-                              "${active.reportedLocation.longitude ?? "pending"}",
-                    ),
-                    _InfoRow(
-                      label: "Location quality",
-                      value:
-                          "${active.reportedLocation.source} / ${active.reportedLocation.quality}",
+                          active.reportedLocation.locationLabel ??
+                          citizenLocationQualityLabel(
+                            quality: active.reportedLocation.quality,
+                            latitude: active.reportedLocation.latitude,
+                            longitude: active.reportedLocation.longitude,
+                          ),
                     ),
                     _InfoRow(label: "Status", value: active.displayLabel),
                     _InfoRow(
                       label: "Progress",
-                      value: "${active.progressStep}/${active.progressStages.length}",
+                      value: "Step ${active.progressStep} of ${active.progressStages.length}",
                     ),
-                    if (active.reporterConfidence != null)
+                    if (active.reporterConfidence != null &&
+                        !active.reporterConfidence!.toLowerCase().contains("low"))
                       _InfoRow(
-                        label: "Reporter confidence",
-                        value: active.reporterConfidence!,
+                        label: "Verification",
+                        value: "Your report is being verified",
                       ),
                     _InfoRow(
                       label: "Last updated",
-                      value: active.lastUpdatedAt.toLocal().toString(),
+                      value: formatCitizenDateTime(active.lastUpdatedAt),
                     ),
                     const SizedBox(height: 16),
+                    if (active.evidenceItems.isNotEmpty) ...[
+                      Text("Existing evidence",
+                          style: Theme.of(context).textTheme.titleMedium),
+                      ...active.evidenceItems.map(
+                        (item) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            item.mediaType == "Video"
+                                ? Icons.videocam
+                                : item.mediaType == "Audio"
+                                    ? Icons.mic
+                                    : Icons.image,
+                          ),
+                          title: Text(item.mediaType),
+                          subtitle: Text(formatCitizenDateTime(item.uploadedAt)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     Text("Evidence summary",
                         style: Theme.of(context).textTheme.titleMedium),
                     Text(
@@ -510,7 +540,9 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(_stageIcon(stage.state)),
                           title: Text(stage.label),
-                          subtitle: Text(stage.state.name),
+                          subtitle: Text(
+                            citizenProgressStageStateLabel(stage.state.name),
+                          ),
                         ),
                       ),
                     ),
@@ -522,16 +554,22 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                     else
                       const Text("No agency assigned yet."),
                     if (active.assignment != null)
-                      Text("Assignment status: ${active.assignment!.status}"),
+                      Text(
+                        "Assignment status: ${active.assignment!.statusLabel ?? citizenAssignmentStatusLabel(active.assignment!.status)}",
+                      ),
                     if (active.responderEtaMinutes != null)
                       Text("Responder ETA: ${active.responderEtaMinutes} minutes")
                     else
                       const Text("Responder ETA unavailable."),
-                    if (active.witnessCount != null) ...[
+                    if (active.witnessSummary != null ||
+                        active.witnessCount != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        "Community witnesses: ${active.witnessCount}"
-                        "${active.latestConfidence != null ? " (confidence ${active.latestConfidence})" : ""}",
+                        active.witnessSummary ??
+                            citizenWitnessSummary(
+                              witnessCount: active.witnessCount,
+                            ) ??
+                            "Awaiting community verification",
                       ),
                     ],
                     const SizedBox(height: 16),
