@@ -5,6 +5,9 @@ import '../../api/field_api_client.dart';
 import '../../services/field_app_services.dart';
 import '../../services/field_offline_queue.dart';
 import '../../theme/field_theme.dart';
+import '../../widgets/backup_request_sheet.dart';
+import '../../widgets/field_map_widget.dart';
+import '../../widgets/officer_safety_panel.dart';
 
 class PatrolModeScreen extends StatefulWidget {
   const PatrolModeScreen({super.key, required this.services});
@@ -21,12 +24,23 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
   String? _error;
   bool _busy = true;
   bool _recordingRoute = false;
+  bool _mapBusy = false;
   final List<Map<String, double>> _routePoints = [];
+  List<Map<String, dynamic>> _mapMarkers = [];
+  List<String> _mapLayers = [];
+  Map<String, dynamic>? _mapCenter;
 
   @override
   void initState() {
     super.initState();
     _load();
+    widget.services.events.startPolling();
+  }
+
+  @override
+  void dispose() {
+    widget.services.events.stopPolling();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -49,6 +63,7 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
         _position = position;
         _busy = false;
       });
+      await _refreshMap();
     } on FieldApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -56,6 +71,45 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
         _busy = false;
       });
     }
+  }
+
+  Future<void> _refreshMap() async {
+    setState(() => _mapBusy = true);
+    try {
+      await widget.services.restoreSession();
+      final mapData = await widget.services.workflows.getMapContext(
+        latitude: _position?.latitude,
+        longitude: _position?.longitude,
+      );
+      if (!mounted) return;
+      final markers = (mapData['markers'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          const [];
+      final layers = (mapData['layersEnabled'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [];
+      setState(() {
+        _mapMarkers = markers;
+        _mapLayers = layers;
+        _mapCenter = mapData['center'] is Map
+            ? Map<String, dynamic>.from(mapData['center'] as Map)
+            : null;
+        _mapBusy = false;
+      });
+    } on FieldApiException {
+      if (mounted) setState(() => _mapBusy = false);
+    }
+  }
+
+  void _showBackupSheet() {
+    showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: FieldColors.surface,
+      builder: (_) => BackupRequestSheet(services: widget.services),
+    );
   }
 
   Future<void> _startPatrol() async {
@@ -147,10 +201,14 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
               children: [
                 Expanded(
                   flex: 3,
-                  child: _MapShell(
+                  child: FieldMapWidget(
+                    markers: _mapMarkers,
+                    center: _mapCenter,
                     position: _position,
-                    zoneLabel: _patrol?['patrolZoneLabel']?.toString(),
-                    routePoints: _routePoints,
+                    followUnit: true,
+                    layersEnabled: _mapLayers,
+                    busy: _mapBusy,
+                    onRefresh: _refreshMap,
                   ),
                 ),
                 SizedBox(
@@ -201,91 +259,22 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
                             onPressed: _endPatrol,
                             child: const Text('End patrol'),
                           ),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: _showBackupSheet,
+                            child: const Text('Request backup'),
+                          ),
                         ],
                         const Spacer(),
-                        _EvidencePlaceholder(),
+                        OfficerSafetyPanel(services: widget.services),
                         const SizedBox(height: 12),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: FieldColors.danger,
-                            foregroundColor: FieldColors.white,
-                          ),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Emergency signal placeholder'),
-                              ),
-                            );
-                          },
-                          child: const Text('EMERGENCY'),
-                        ),
+                        _EvidencePlaceholder(),
                       ],
                     ),
                   ),
                 ),
               ],
             ),
-    );
-  }
-}
-
-class _MapShell extends StatelessWidget {
-  const _MapShell({
-    this.position,
-    this.zoneLabel,
-    required this.routePoints,
-  });
-
-  final Position? position;
-  final String? zoneLabel;
-  final List<Map<String, double>> routePoints;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: FieldColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: FieldColors.orange.withValues(alpha: 0.4)),
-      ),
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.map, size: 72, color: FieldColors.muted),
-                const SizedBox(height: 12),
-                Text(
-                  zoneLabel ?? 'Patrol zone',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  position == null
-                      ? 'Waiting for GPS fix'
-                      : 'Lat ${position!.latitude.toStringAsFixed(5)} · '
-                          'Lng ${position!.longitude.toStringAsFixed(5)}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                if (routePoints.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text('Route points: ${routePoints.length}'),
-                ],
-              ],
-            ),
-          ),
-          Positioned(
-            top: 16,
-            left: 16,
-            child: Chip(
-              label: Text(zoneLabel ?? 'Unassigned zone'),
-              backgroundColor: FieldColors.surface,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
