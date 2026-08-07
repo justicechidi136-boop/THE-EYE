@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:permission_handler/permission_handler.dart";
 
@@ -62,7 +64,7 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: EyeSemanticColors.of(context).cardSurface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: const [
           BoxShadow(
@@ -80,7 +82,6 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF032221),
             ),
           ),
           const SizedBox(height: 12),
@@ -168,17 +169,21 @@ class EvidenceAttachmentPicker extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         controller.lowDataMode = lowDataMode;
+        final hasVoiceAttachment =
+            controller.attachments.any((attachment) => attachment.isAudio);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const VoiceConsentBanner(),
-            const SizedBox(height: 12),
-            VoiceRecorder(
-              enabled: !controller.busy && controller.canAddMore,
-              onRecordingReady: (result) => controller.addVoiceAttachment(result.attachment),
-              onRecordingRemoved: () {},
-            ),
-            const SizedBox(height: 12),
+            if (!hasVoiceAttachment) ...[
+              const SizedBox(height: 12),
+              VoiceRecorder(
+                enabled: !controller.busy && controller.canAddMore,
+                onRecordingReady: (result) =>
+                    controller.addVoiceAttachment(result.attachment),
+                onRecordingRemoved: () {},
+              ),
+            ],
             if (figmaStyle) ...[
               Material(
                 color: EyeSemanticColors.of(context).elevatedSurface,
@@ -355,13 +360,29 @@ class EvidencePreviewTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            attachment.isVideo
-                ? Icons.videocam
-                : attachment.isAudio
-                    ? Icons.mic
-                    : Icons.image,
-          ),
+          if (attachment.isImage && File(attachment.uploadPath).existsSync())
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(
+                File(attachment.uploadPath),
+                width: 56,
+                height: 56,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Icon(
+                  Icons.image,
+                  size: 32,
+                  color: EyeSemanticColors.of(context).bodyText,
+                ),
+              ),
+            )
+          else
+            Icon(
+              attachment.isVideo
+                  ? Icons.videocam
+                  : attachment.isAudio
+                      ? Icons.mic
+                      : Icons.image,
+            ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

@@ -336,7 +336,7 @@ class IncidentSubmissionService {
     } on EvidenceUploadFailure catch (error) {
       return "$baseMessage ${error.message}";
     } catch (_) {
-      return "$baseMessage Evidence upload failed. Try again from incident tracking.";
+      return "$baseMessage Evidence upload failed. Retry from Active Emergency.";
     }
   }
 }

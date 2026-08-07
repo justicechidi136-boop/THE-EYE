@@ -165,6 +165,9 @@ class _ActiveEmergencyEvidenceActionsState
             child: Text(_statusMessage!),
           ),
         if (showEvidence) ...[
+          Text("Add more evidence",
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
           Semantics(
             label: "Add photo or video evidence",
             child: ManagedEvidenceSection(
