@@ -96,6 +96,10 @@ export class IncidentCommunicationsAccessService {
 
     if (!actor) return denied(incidentView);
 
+    if (actor.typ === "field") {
+      return this.resolveFieldOfficerAccess(incidentView, actor);
+    }
+
     if (actor.typ === "user" && actor.role === "responder") {
       return this.resolveResponderAccess(incidentView, actor);
     }
@@ -164,6 +168,48 @@ export class IncidentCommunicationsAccessService {
     }
 
     return denied(incidentView);
+  }
+
+  private async resolveFieldOfficerAccess(
+    incident: IncidentCommunicationAccess["incident"],
+    actor: JwtPayload,
+  ): Promise<IncidentCommunicationAccess> {
+    const assignment = await this.prisma.incidentAssignment.findFirst({
+      where: {
+        incidentId: incident.id,
+        responder: { adminUserId: actor.sub },
+        status: { in: ["Assigned", "Accepted", "EnRoute", "OnScene", "Active"] as never[] },
+      },
+      select: {
+        id: true,
+        responder: { select: { id: true, agencyId: true, displayName: true } },
+      },
+    });
+    if (!assignment?.responder) {
+      return {
+        role: "Denied",
+        canRead: false,
+        canWrite: false,
+        canReadInternal: false,
+        canModerate: false,
+        senderRole: "Denied",
+        displayLabel: "Denied",
+        incident,
+      };
+    }
+
+    return {
+      role: "Responder",
+      canRead: true,
+      canWrite: true,
+      canReadInternal: false,
+      canModerate: false,
+      senderRole: "Responder",
+      senderAgencyId: assignment.responder.agencyId ?? undefined,
+      senderResponderId: assignment.responder.id,
+      displayLabel: assignment.responder.displayName ?? "Field officer",
+      incident,
+    };
   }
 
   private async resolveResponderAccess(

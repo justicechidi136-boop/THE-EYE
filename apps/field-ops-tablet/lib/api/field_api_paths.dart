@@ -84,4 +84,32 @@ abstract final class FieldApiPaths {
 
   // Offline sync
   static const syncBatch = '/field/sync/batch';
+
+  // Sprint 3 — GIS, events, safety, backup, comms
+  static const mapContext = '/field/map/context';
+  static const eventsPoll = '/field/events';
+  static const safetyPanic = '/field/safety/panic';
+  static const safetyOfficerDown = '/field/safety/officer-down';
+  static const safetyDistress = '/field/safety/distress';
+  static const safetyCheckInSchedule = '/field/safety/check-in/schedule';
+  static const backupCreate = '/field/backup';
+  static const backupMine = '/field/backup/mine';
+  static const patrolEvents = '/field/patrols/events';
+  static const checkpointObservations = '/field/checkpoints/observations';
+  static const checkpointClosureSummary = '/field/checkpoints/closure-summary';
+
+  static String patrolRouteHistory(String patrolId) =>
+      '/field/patrols/$patrolId/route-history';
+
+  static String incidentConversation(String incidentId) =>
+      '/field/incidents/$incidentId/conversation';
+
+  static String incidentMessages(String incidentId) =>
+      '/field/incidents/$incidentId/messages';
+
+  static String incidentMessageRead(String incidentId, String messageId) =>
+      '/field/incidents/$incidentId/messages/$messageId/read';
+
+  static String incidentInformationRequests(String incidentId) =>
+      '/field/incidents/$incidentId/information-requests';
 }

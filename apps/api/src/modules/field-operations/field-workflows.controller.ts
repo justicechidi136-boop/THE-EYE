@@ -24,6 +24,8 @@ import { FieldDashboardService } from "./field-dashboard.service";
 import { FieldDroneReadService } from "./field-drone-read.service";
 import { FieldOperationalResponsesService } from "./field-operational-responses.service";
 import { FieldPatrolsService } from "./field-patrols.service";
+import { FieldPatrolHardeningService } from "./field-patrol-hardening.service";
+import { FieldCheckpointHardeningService } from "./field-checkpoint-hardening.service";
 import { FieldShiftsService } from "./field-shifts.service";
 import { FieldSyncService } from "./field-sync.service";
 import { FieldWorkflowsAdminService } from "./field-workflows-admin.service";
@@ -93,7 +95,10 @@ export class FieldShiftsController {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class FieldPatrolsController {
-  constructor(private readonly patrols: FieldPatrolsService) {}
+  constructor(
+    private readonly patrols: FieldPatrolsService,
+    private readonly patrolHardening: FieldPatrolHardeningService,
+  ) {}
 
   @Get("active")
   @RequirePermissions("field:session:operate")
@@ -130,6 +135,18 @@ export class FieldPatrolsController {
   location(@Req() request: { user: never }, @Body() dto: PatrolLocationDto) {
     return this.patrols.recordLocation(request.user, dto);
   }
+
+  @Post("events")
+  @RequirePermissions("field:session:operate")
+  recordEvent(@Req() request: { user: never }, @Body() dto: Record<string, unknown>) {
+    return this.patrolHardening.recordEvent(request.user, dto as never);
+  }
+
+  @Get(":id/route-history")
+  @RequirePermissions("field:session:operate")
+  routeHistory(@Param("id") id: string, @Req() request: { user: never }) {
+    return this.patrolHardening.getRouteHistory(request.user, id);
+  }
 }
 
 @ApiTags("field-checkpoints")
@@ -137,7 +154,10 @@ export class FieldPatrolsController {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class FieldCheckpointsController {
-  constructor(private readonly checkpoints: FieldCheckpointsService) {}
+  constructor(
+    private readonly checkpoints: FieldCheckpointsService,
+    private readonly checkpointHardening: FieldCheckpointHardeningService,
+  ) {}
 
   @Get("active")
   @RequirePermissions("field:session:operate")
@@ -179,6 +199,18 @@ export class FieldCheckpointsController {
   @RequirePermissions("field:session:operate")
   search(@Req() request: { user: never }, @Query("q") q?: string, @Query("type") type?: string, @Query("limit") limit?: string) {
     return this.checkpoints.search(request.user, { q, type, limit });
+  }
+
+  @Post("observations")
+  @RequirePermissions("field:session:operate")
+  observation(@Req() request: { user: never }, @Body() dto: Record<string, unknown>) {
+    return this.checkpointHardening.recordObservation(request.user, dto as never);
+  }
+
+  @Get("closure-summary")
+  @RequirePermissions("field:session:operate")
+  closureSummary(@Req() request: { user: never }) {
+    return this.checkpointHardening.closureSummary(request.user);
   }
 }
 
@@ -324,8 +356,13 @@ export class FieldWorkflowsAdminController {
 
   @Get("monitoring")
   @RequirePermissions("field:device:manage")
-  monitoring(@Req() request: { user: never }, @Query("agencyId") agencyId?: string) {
-    return this.admin.monitoringSummary(request.user, { agencyId });
+  monitoring(
+    @Req() request: { user: never },
+    @Query("agencyId") agencyId?: string,
+    @Query("state") state?: string,
+    @Query("status") status?: string,
+  ) {
+    return this.admin.monitoringSummary(request.user, { agencyId, state, status });
   }
 
   @Get("patrols")

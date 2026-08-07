@@ -46,7 +46,7 @@ class _RecordingClient extends FieldApiClient {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('field workflow paths cover sprint 2 endpoints', () {
+  test('field workflow paths cover sprint 2 and sprint 3 endpoints', () {
     expect(FieldApiPaths.dashboard, '/field/dashboard');
     expect(FieldApiPaths.patrolsStart, '/field/patrols/start');
     expect(FieldApiPaths.checkpointsSearch, '/field/checkpoints/search');
@@ -54,6 +54,11 @@ void main() {
     expect(FieldApiPaths.responsesForAssignment('abc'),
         '/field/responses/assignments/abc');
     expect(FieldApiPaths.syncBatch, '/field/sync/batch');
+    expect(FieldApiPaths.mapContext, '/field/map/context');
+    expect(FieldApiPaths.eventsPoll, '/field/events');
+    expect(FieldApiPaths.safetyPanic, '/field/safety/panic');
+    expect(FieldApiPaths.backupCreate, '/field/backup');
+    expect(FieldApiPaths.incidentMessages('inc-1'), '/field/incidents/inc-1/messages');
   });
 
   test('operational routes are registered', () {

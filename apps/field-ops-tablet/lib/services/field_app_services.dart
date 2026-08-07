@@ -3,6 +3,7 @@ import '../auth/field_auth_service.dart';
 import '../device/field_device_service.dart';
 import '../security/device_keystore_service.dart';
 import '../security/secure_session_store.dart';
+import 'field_events_service.dart';
 import 'field_offline_queue.dart';
 import 'field_workflows_service.dart';
 
@@ -27,6 +28,7 @@ class FieldAppServices {
     );
     workflows = FieldWorkflowsService(api: this.api);
     offlineQueue = FieldOfflineQueue(api: this.api, workflows: workflows);
+    events = FieldEventsService(workflows: workflows);
   }
 
   final FieldApiClient api;
@@ -36,12 +38,14 @@ class FieldAppServices {
   late final FieldDeviceService devices;
   late final FieldWorkflowsService workflows;
   late final FieldOfflineQueue offlineQueue;
+  late final FieldEventsService events;
 
   Future<void> restoreSession() async {
     await auth.restoreApiToken();
   }
 
   Future<void> dispose() async {
+    events.dispose();
     api.dispose();
   }
 }

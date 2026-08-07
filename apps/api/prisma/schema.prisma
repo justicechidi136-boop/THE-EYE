@@ -564,6 +564,9 @@ model Agency {
   patrolSessions      PatrolSession[]
   checkpointSessions  CheckpointSession[]
   operationalSightings OperationalSighting[]
+  fieldBackupRequests  FieldBackupRequest[]
+  fieldOperationalEvents FieldOperationalEvent[]
+  fieldOfficerSafetyAlerts FieldOfficerSafetyAlert[]
 
   @@index([jurisdictionId, type])
   @@index([jurisdictionId, isActive])
@@ -642,6 +645,10 @@ model AdminUser {
   officerStatus                OfficerStatus?
   operationalResponses         OperationalResponse[]      @relation("OperationalResponseOfficer")
   operationalSightings         OperationalSighting[]      @relation("OperationalSightingOfficer")
+  fieldBackupRequests          FieldBackupRequest[]       @relation("FieldBackupRequestOfficer")
+  fieldOfficerSafetyAlerts     FieldOfficerSafetyAlert[]  @relation("FieldOfficerSafetyAlertOfficer")
+  fieldPatrolEvents            FieldPatrolEvent[]         @relation("FieldPatrolEventOfficer")
+  fieldCheckpointObservations  FieldCheckpointObservation[] @relation("FieldCheckpointObservationOfficer")
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -722,6 +729,7 @@ model Incident {
   communityVerificationRequests CommunityVerificationRequest[]
   communityVerificationResponses CommunityVerificationResponse[]
   operationalResponses         OperationalResponse[]
+  fieldBackupRequests          FieldBackupRequest[]
 
   @@index([country, state, lga])
   @@index([status, priority, createdAt])
@@ -979,6 +987,7 @@ model Broadcast {
   reports               BroadcastReport[]
   sightings             BroadcastSighting[]
   operationalSightings  OperationalSighting[]
+  checkpointObservations FieldCheckpointObservation[]
 
   @@index([status, publishedAt])
   @@index([type, status])
@@ -2161,6 +2170,7 @@ model IncidentAssignment {
   nextAssignments      IncidentAssignment[]      @relation("AssignmentReassignmentChain")
   locationUpdates      ResponderLocationUpdate[]
   operationalResponses OperationalResponse[]
+  fieldBackupRequests  FieldBackupRequest[]
 
   @@index([incidentId, status, createdAt])
   @@index([agencyId, status, priority, createdAt])
@@ -3494,6 +3504,9 @@ model FieldDevice {
   officerStatuses        OfficerStatus[]
   operationalResponses   OperationalResponse[]
   operationalSightings   OperationalSighting[]
+  fieldBackupRequests    FieldBackupRequest[]
+  fieldOfficerSafetyAlerts FieldOfficerSafetyAlert[]
+  syncState              FieldDeviceSyncState?
 
   @@index([assignedUserId, registrationStatus])
   @@index([agencyId, registrationStatus])
@@ -3617,6 +3630,7 @@ model FieldShift {
   patrolSessions           PatrolSession[]
   checkpointSessions       CheckpointSession[]
   operationalResponses     OperationalResponse[]
+  fieldBackupRequests      FieldBackupRequest[]
 
   @@index([officerId, status])
   @@index([agencyId, status, startedAt])
@@ -3650,6 +3664,7 @@ model PatrolSession {
   agency           Agency              @relation(fields: [agencyId], references: [id])
   assignedUnit     ResponseUnit?       @relation(fields: [assignedUnitId], references: [id])
   operationalResponses OperationalResponse[]
+  patrolEvents         FieldPatrolEvent[]
 
   @@index([fieldShiftId, status])
   @@index([agencyId, status, startedAt])
@@ -3683,6 +3698,7 @@ model CheckpointSession {
   fieldDevice      FieldDevice             @relation(fields: [fieldDeviceId], references: [id])
   agency           Agency                  @relation(fields: [agencyId], references: [id])
   operationalResponses OperationalResponse[]
+  checkpointObservations FieldCheckpointObservation[]
 
   @@index([fieldShiftId, status])
   @@index([agencyId, status, startedAt])
@@ -3784,4 +3800,224 @@ model OperationalSighting {
   @@index([officerId, createdAt])
   @@index([broadcastId])
   @@map("operational_sightings")
+}
+
+enum FieldBackupRequestType {
+  Immediate
+  Medical
+  Fire
+  Armed
+  Traffic
+  Supervisor
+  Tow
+  Drone
+}
+
+enum FieldBackupRequestStatus {
+  Requested
+  Acknowledged
+  Assigned
+  EnRoute
+  Arrived
+  Cancelled
+  Resolved
+}
+
+enum FieldOfficerSafetyAlertType {
+  Panic
+  OfficerDown
+  MissedCheckIn
+  DistressSignal
+}
+
+enum FieldOfficerSafetyAlertStatus {
+  Active
+  Acknowledged
+  Resolved
+  Cancelled
+}
+
+enum FieldOperationalEventType {
+  AssignmentCreated
+  AssignmentCancelled
+  AssignmentReassigned
+  DispatcherMessage
+  BackupRequested
+  BackupAssigned
+  PatrolStatus
+  CheckpointAlert
+  BoloMatch
+  DroneMission
+  IncidentStatus
+  ResponderStatus
+  OfficerSafety
+  DeviceHealth
+  ShiftAlert
+}
+
+enum FieldPatrolEventType {
+  ZoneEntry
+  ZoneExit
+  Stop
+  Deviation
+  CheckpointMissed
+  GpsUnavailable
+  WeakAccuracy
+  Break
+  ConnectivityLoss
+}
+
+enum FieldCheckpointObservationType {
+  Vehicle
+  Person
+  Plate
+  Vin
+  BroadcastMatch
+}
+
+model FieldBackupRequest {
+  id               String                   @id @default(uuid()) @db.Uuid
+  officerId        String                   @map("officer_id") @db.Uuid
+  fieldDeviceId    String                   @map("field_device_id") @db.Uuid
+  agencyId         String                   @map("agency_id") @db.Uuid
+  fieldShiftId     String?                  @map("field_shift_id") @db.Uuid
+  incidentId       String?                  @map("incident_id") @db.Uuid
+  assignmentId     String?                  @map("assignment_id") @db.Uuid
+  requestType      FieldBackupRequestType   @map("request_type")
+  status           FieldBackupRequestStatus @default(Requested)
+  priority         IncidentPriority         @default(P3SuspiciousActivity)
+  reason           String?
+  latitude         Decimal?                 @db.Decimal(9, 6)
+  longitude        Decimal?                 @db.Decimal(9, 6)
+  assignedUnitIds  String[]                 @default([]) @map("assigned_unit_ids")
+  acknowledgedAt   DateTime?                @map("acknowledged_at") @db.Timestamptz(6)
+  assignedAt       DateTime?                @map("assigned_at") @db.Timestamptz(6)
+  enRouteAt        DateTime?                @map("en_route_at") @db.Timestamptz(6)
+  arrivedAt        DateTime?                @map("arrived_at") @db.Timestamptz(6)
+  resolvedAt       DateTime?                @map("resolved_at") @db.Timestamptz(6)
+  cancelledAt      DateTime?                @map("cancelled_at") @db.Timestamptz(6)
+  generationId     String?                  @map("generation_id")
+  clientActionId   String?                  @unique @map("client_action_id")
+  metadata         Json                     @default("{}")
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  officer          AdminUser                @relation("FieldBackupRequestOfficer", fields: [officerId], references: [id])
+  fieldDevice      FieldDevice              @relation(fields: [fieldDeviceId], references: [id])
+  agency           Agency                   @relation(fields: [agencyId], references: [id])
+  fieldShift       FieldShift?              @relation(fields: [fieldShiftId], references: [id])
+  incident         Incident?                @relation(fields: [incidentId], references: [id])
+  assignment       IncidentAssignment?      @relation(fields: [assignmentId], references: [id])
+
+  @@index([agencyId, status, createdAt])
+  @@index([officerId, status])
+  @@index([assignmentId, status])
+  @@map("field_backup_requests")
+}
+
+model FieldOfficerSafetyAlert {
+  id             String                      @id @default(uuid()) @db.Uuid
+  officerId      String                      @map("officer_id") @db.Uuid
+  fieldDeviceId  String                      @map("field_device_id") @db.Uuid
+  agencyId       String                      @map("agency_id") @db.Uuid
+  alertType      FieldOfficerSafetyAlertType @map("alert_type")
+  status         FieldOfficerSafetyAlertStatus @default(Active)
+  latitude       Decimal?                    @db.Decimal(9, 6)
+  longitude      Decimal?                    @db.Decimal(9, 6)
+  batteryLevel   Int?                        @map("battery_level")
+  networkType    String?                     @map("network_type")
+  note           String?
+  checkInDueAt   DateTime?                   @map("check_in_due_at") @db.Timestamptz(6)
+  missedCheckInAt DateTime?                  @map("missed_check_in_at") @db.Timestamptz(6)
+  generationId   String?                     @map("generation_id")
+  clientActionId String?                     @unique @map("client_action_id")
+  metadata       Json                        @default("{}")
+  createdAt      DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt     DateTime?                   @map("resolved_at") @db.Timestamptz(6)
+  officer        AdminUser                   @relation("FieldOfficerSafetyAlertOfficer", fields: [officerId], references: [id])
+  fieldDevice    FieldDevice                 @relation(fields: [fieldDeviceId], references: [id])
+  agency         Agency                      @relation(fields: [agencyId], references: [id])
+
+  @@index([agencyId, status, createdAt])
+  @@index([officerId, status])
+  @@map("field_officer_safety_alerts")
+}
+
+model FieldOperationalEvent {
+  id            String                  @id @default(uuid()) @db.Uuid
+  agencyId      String                  @map("agency_id") @db.Uuid
+  officerId     String                  @map("officer_id") @db.Uuid
+  fieldDeviceId String?                 @map("field_device_id") @db.Uuid
+  eventSequence BigInt                  @map("event_sequence")
+  eventType     FieldOperationalEventType @map("event_type")
+  entityType    String?                 @map("entity_type")
+  entityId      String?                 @map("entity_id") @db.Uuid
+  generationId  String?                 @map("generation_id")
+  payload       Json                    @default("{}")
+  occurredAt    DateTime                @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  agency        Agency                  @relation(fields: [agencyId], references: [id])
+
+  @@unique([officerId, eventSequence])
+  @@index([agencyId, occurredAt])
+  @@index([officerId, occurredAt])
+  @@map("field_operational_events")
+}
+
+model FieldPatrolEvent {
+  id              String             @id @default(uuid()) @db.Uuid
+  patrolSessionId String             @map("patrol_session_id") @db.Uuid
+  officerId       String             @map("officer_id") @db.Uuid
+  eventType       FieldPatrolEventType @map("event_type")
+  latitude        Decimal?           @db.Decimal(9, 6)
+  longitude       Decimal?           @db.Decimal(9, 6)
+  accuracyMeters  Float?             @map("accuracy_meters")
+  note            String?
+  clientActionId  String?            @unique @map("client_action_id")
+  metadata        Json               @default("{}")
+  occurredAt      DateTime           @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  patrolSession   PatrolSession      @relation(fields: [patrolSessionId], references: [id], onDelete: Cascade)
+  officer         AdminUser          @relation("FieldPatrolEventOfficer", fields: [officerId], references: [id])
+
+  @@index([patrolSessionId, occurredAt])
+  @@index([officerId, occurredAt])
+  @@map("field_patrol_events")
+}
+
+model FieldCheckpointObservation {
+  id                  String                       @id @default(uuid()) @db.Uuid
+  checkpointSessionId String                       @map("checkpoint_session_id") @db.Uuid
+  officerId           String                       @map("officer_id") @db.Uuid
+  observationType     FieldCheckpointObservationType @map("observation_type")
+  searchQuery         String?                      @map("search_query")
+  matchBroadcastId    String?                      @map("match_broadcast_id") @db.Uuid
+  latitude            Decimal?                     @db.Decimal(9, 6)
+  longitude           Decimal?                     @db.Decimal(9, 6)
+  evidenceReference   String?                      @map("evidence_reference")
+  clientActionId      String?                      @unique @map("client_action_id")
+  metadata            Json                         @default("{}")
+  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  checkpointSession   CheckpointSession            @relation(fields: [checkpointSessionId], references: [id], onDelete: Cascade)
+  officer             AdminUser                    @relation("FieldCheckpointObservationOfficer", fields: [officerId], references: [id])
+  matchBroadcast      Broadcast?                   @relation(fields: [matchBroadcastId], references: [id])
+
+  @@index([checkpointSessionId, createdAt])
+  @@index([officerId, createdAt])
+  @@map("field_checkpoint_observations")
+}
+
+model FieldDeviceSyncState {
+  fieldDeviceId        String      @id @map("field_device_id") @db.Uuid
+  officerId            String      @map("officer_id") @db.Uuid
+  syncCursor           String?     @map("sync_cursor")
+  generationId         String      @map("generation_id")
+  lastEventSequence    BigInt      @default(0) @map("last_event_sequence")
+  offlineQueueDepth    Int         @default(0) @map("offline_queue_depth")
+  deadLetterCount      Int         @default(0) @map("dead_letter_count")
+  lastSyncAt           DateTime?   @map("last_sync_at") @db.Timestamptz(6)
+  metadata             Json        @default("{}")
+  updatedAt            DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  fieldDevice          FieldDevice @relation(fields: [fieldDeviceId], references: [id], onDelete: Cascade)
+
+  @@index([officerId])
+  @@map("field_device_sync_states")
 }

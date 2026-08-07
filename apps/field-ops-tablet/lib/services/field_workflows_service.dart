@@ -267,11 +267,116 @@ class FieldWorkflowsService {
   }
 
   // Sync
-  Future<Map<String, dynamic>> syncBatch(List<Map<String, dynamic>> items) async {
+  Future<Map<String, dynamic>> syncBatch(
+    List<Map<String, dynamic>> items, {
+    String? generationId,
+    int? offlineQueueDepth,
+  }) async {
     final response = await _api.post(
       FieldApiPaths.syncBatch,
-      body: {'items': items},
+      body: {
+        'items': items,
+        if (generationId != null) 'generationId': generationId,
+        if (offlineQueueDepth != null) 'offlineQueueDepth': offlineQueueDepth,
+      },
     );
     return fieldData(response);
+  }
+
+  // Sprint 3 — GIS
+  Future<Map<String, dynamic>> getMapContext({
+    double? latitude,
+    double? longitude,
+    int? radiusMeters,
+    String? layers,
+  }) async {
+    final response = await _api.get(
+      FieldApiPaths.mapContext,
+      query: {
+        if (latitude != null) 'latitude': '$latitude',
+        if (longitude != null) 'longitude': '$longitude',
+        if (radiusMeters != null) 'radiusMeters': '$radiusMeters',
+        if (layers != null && layers.isNotEmpty) 'layers': layers,
+      },
+    );
+    return fieldData(response);
+  }
+
+  // Realtime events
+  Future<Map<String, dynamic>> pollEvents({
+    String? afterSequence,
+    String? generationId,
+    int? limit,
+  }) async {
+    final response = await _api.get(
+      FieldApiPaths.eventsPoll,
+      query: {
+        if (afterSequence != null) 'afterSequence': afterSequence,
+        if (generationId != null) 'generationId': generationId,
+        if (limit != null) 'limit': '$limit',
+      },
+    );
+    return fieldData(response);
+  }
+
+  // Officer safety
+  Future<Map<String, dynamic>> triggerPanic(Map<String, dynamic> body) async {
+    final response = await _api.post(FieldApiPaths.safetyPanic, body: body);
+    return fieldData(response);
+  }
+
+  Future<Map<String, dynamic>> triggerOfficerDown(Map<String, dynamic> body) async {
+    final response = await _api.post(FieldApiPaths.safetyOfficerDown, body: body);
+    return fieldData(response);
+  }
+
+  Future<Map<String, dynamic>> triggerDistress(Map<String, dynamic> body) async {
+    final response = await _api.post(FieldApiPaths.safetyDistress, body: body);
+    return fieldData(response);
+  }
+
+  // Backup
+  Future<Map<String, dynamic>> createBackupRequest(Map<String, dynamic> body) async {
+    final response = await _api.post(FieldApiPaths.backupCreate, body: body);
+    return fieldData(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listMyBackupRequests() async {
+    final response = await _api.get(FieldApiPaths.backupMine);
+    return fieldList(response);
+  }
+
+  // Incident comms (Phase 6 bridge)
+  Future<Map<String, dynamic>> getIncidentConversation(String incidentId) async {
+    final response = await _api.get(FieldApiPaths.incidentConversation(incidentId));
+    return fieldData(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listIncidentMessages(
+    String incidentId, {
+    String? cursor,
+    int? limit,
+  }) async {
+    final response = await _api.get(
+      FieldApiPaths.incidentMessages(incidentId),
+      query: {
+        if (cursor != null) 'cursor': cursor,
+        if (limit != null) 'limit': '$limit',
+      },
+    );
+    return fieldList(response);
+  }
+
+  Future<Map<String, dynamic>> sendIncidentMessage(
+    String incidentId,
+    Map<String, dynamic> body,
+  ) async {
+    final response =
+        await _api.post(FieldApiPaths.incidentMessages(incidentId), body: body);
+    return fieldData(response);
+  }
+
+  Future<void> markIncidentMessageRead(String incidentId, String messageId) async {
+    await _api.patch(FieldApiPaths.incidentMessageRead(incidentId, messageId));
   }
 }

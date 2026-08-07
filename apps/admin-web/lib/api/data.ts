@@ -939,6 +939,10 @@ export type FieldOperationsMonitoringView = {
     activePatrols: number;
     activeCheckpoints: number;
     offlineOfficers: number;
+    openBackupRequests?: number;
+    activeSafetyAlerts?: number;
+    revokedOrLostDevices?: number;
+    syncBacklog?: number;
   };
   officers: Array<{
     officerId: string;
@@ -951,6 +955,29 @@ export type FieldOperationsMonitoringView = {
     activeAssignmentCount: number;
     isOffline: boolean;
     lastHeartbeatAt: string | null;
+    appVersion?: string | null;
+    offlineQueueDepth?: number;
+    deadLetterCount?: number;
+    riskFlags?: string[];
+  }>;
+  backupRequests?: Array<{
+    id: string;
+    requestType: string;
+    status: string;
+    priority: string;
+    officerName: string;
+    latitude: number | null;
+    longitude: number | null;
+    createdAt: string;
+  }>;
+  safetyAlerts?: Array<{
+    id: string;
+    alertType: string;
+    status: string;
+    officerName: string;
+    latitude: number | null;
+    longitude: number | null;
+    createdAt: string;
   }>;
 };
 
