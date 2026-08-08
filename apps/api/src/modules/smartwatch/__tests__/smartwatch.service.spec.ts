@@ -1,7 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { AdminRoleName } from "@the-eye/shared";
 import { hashToken } from "../../../common/auth/crypto";
-import { SmartwatchConnectivityMode, SmartwatchPairingMethod } from "@the-eye/shared";
+import { SmartwatchConnectivityMode, SmartwatchOfflineEventType, SmartwatchPairingMethod } from "@the-eye/shared";
 import { SmartwatchService } from "../smartwatch.service";
 
 function buildService(overrides: { config?: Record<string, string>; pairingSession?: any } = {}) {
@@ -245,7 +245,7 @@ describe("SmartwatchService", () => {
       deviceSecret: "watch-secret",
       events: [
         {
-          eventType: "GPS",
+          eventType: SmartwatchOfflineEventType.GPS,
           occurredAt: new Date().toISOString(),
           payload: {
             deviceId: "EYE-WATCH-001",
@@ -385,5 +385,47 @@ describe("SmartwatchService", () => {
       pairingCode: "654321",
       firebaseEnv: "staging",
     })).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("activates unassigned inventory watches without inventing a user audit FK", async () => {
+    const unassigned = {
+      id: "device-uuid",
+      userId: null,
+      deviceId: "EYE-WATCH-UNASSIGNED",
+      deviceSecretHash: null,
+      connectivityMode: "StandaloneCellular",
+      currentOwnerType: "UNASSIGNED_INVENTORY",
+      currentOwnerId: null,
+      currentAssigneeId: null,
+    };
+    const { service, prisma, auditService } = buildService({
+      config: { JWT_ACCESS_SECRET: "test-secret-key-for-jwt-signing", FCM_PROJECT_ID: "the-eye-2stg" },
+      pairingSession: {
+        id: "session-1",
+        deviceId: "EYE-WATCH-UNASSIGNED",
+        pairingCodeHash: hashToken("123456"),
+        firebaseEnv: "staging",
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+        deviceSecretPlain: null,
+      },
+    });
+    prisma.smartwatchDevice.upsert = jest.fn().mockResolvedValue(unassigned);
+    prisma.smartwatchDevice.findUnique = jest.fn().mockResolvedValue(unassigned);
+    auditService.record.mockRejectedValueOnce(new Error("Foreign key constraint violated"));
+
+    const result = await service.activateWithCode({
+      deviceId: "EYE-WATCH-UNASSIGNED",
+      pairingCode: "123456",
+      firebaseEnv: "staging",
+    });
+
+    expect(result.status).toBe("activated");
+    expect(result.deviceSecret).toBeTruthy();
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
+      actorType: "device",
+      action: "smartwatch.device_activated_with_code",
+      actorUserId: undefined,
+    }));
   });
 });

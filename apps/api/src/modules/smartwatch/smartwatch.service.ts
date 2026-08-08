@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional, ConflictException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional, ConflictException, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
   AdminRoleName,
@@ -223,9 +223,7 @@ export class SmartwatchService {
       },
     });
 
-    await this.auditService.record({
-      actor: { sub: "system", typ: "user" } as JwtPayload,
-      actorType: "device",
+    await this.recordDeviceAudit({
       action: "smartwatch.pairing_code_issued",
       entityType: "smartwatch_pairing_sessions",
       entityId: session.id,
@@ -273,12 +271,11 @@ export class SmartwatchService {
       authMode: "standalone_watch",
     } as any, requireJwtAccessSecret(this.config), this.config.get<string>("JWT_ACCESS_TTL", "15m"));
 
-    await this.auditService.record({
-      actor: { sub: device.userId, typ: "user" } as JwtPayload,
-      actorType: "device",
+    await this.recordDeviceAudit({
       action: "smartwatch.standalone_login",
       entityType: "smartwatch_devices",
       entityId: device.id,
+      actorUserId: device.userId ?? undefined,
       metadata: { deviceId: device.deviceId },
     });
     return { accessToken: token, tokenType: "Bearer", mode: "StandaloneCellular", expiresInSeconds: 900 };
@@ -323,41 +320,51 @@ export class SmartwatchService {
     const now = new Date();
     const ttl = this.config.get<string>("JWT_ACCESS_TTL", "15m");
 
-    const device = await this.prisma.smartwatchDevice.upsert({
-      where: { deviceId: dto.deviceId },
-      update: {
-        deviceSecretHash: hashToken(deviceSecret),
-        connectivityMode: "StandaloneCellular",
-        preferredMode: "StandaloneCellular",
-        pairingMethod: SmartwatchPairingMethod.PairingCode,
-        isActive: true,
-        isOnline: true,
-        lastSeenAt: now,
-        appVersion: dto.appVersion,
-        model: dto.model,
-        manufacturer: dto.manufacturer,
-        assignmentStatus: "ASSIGNED",
-        inventoryStatus: "DEPLOYED",
-      } as never,
-      create: {
-        deviceId: dto.deviceId,
-        provider: "THE_EYE",
-        deviceSecretHash: hashToken(deviceSecret),
-        connectivityMode: "StandaloneCellular",
-        preferredMode: "StandaloneCellular",
-        pairingMethod: SmartwatchPairingMethod.PairingCode,
-        isActive: true,
-        isOnline: true,
-        lastSeenAt: now,
-        appVersion: dto.appVersion,
-        model: dto.model,
-        manufacturer: dto.manufacturer,
-        ownershipStatus: "UNASSIGNED_INVENTORY",
-        assignmentStatus: "UNASSIGNED",
-        inventoryStatus: "IN_STOCK",
-        currentOwnerType: "UNASSIGNED_INVENTORY",
-      } as never,
-    });
+    let device;
+    try {
+      device = await this.prisma.smartwatchDevice.upsert({
+        where: { deviceId: dto.deviceId },
+        update: {
+          deviceSecretHash: hashToken(deviceSecret),
+          connectivityMode: "StandaloneCellular",
+          preferredMode: "StandaloneCellular",
+          pairingMethod: SmartwatchPairingMethod.PairingCode,
+          isActive: true,
+          isOnline: true,
+          lastSeenAt: now,
+          appVersion: dto.appVersion,
+          model: dto.model,
+          manufacturer: dto.manufacturer,
+          assignmentStatus: "ASSIGNED",
+          inventoryStatus: "DEPLOYED",
+        } as never,
+        create: {
+          deviceId: dto.deviceId,
+          provider: "THE_EYE",
+          deviceSecretHash: hashToken(deviceSecret),
+          connectivityMode: "StandaloneCellular",
+          preferredMode: "StandaloneCellular",
+          pairingMethod: SmartwatchPairingMethod.PairingCode,
+          isActive: true,
+          isOnline: true,
+          lastSeenAt: now,
+          appVersion: dto.appVersion,
+          model: dto.model,
+          manufacturer: dto.manufacturer,
+          ownershipStatus: "UNASSIGNED_INVENTORY",
+          assignmentStatus: "UNASSIGNED",
+          inventoryStatus: "IN_STOCK",
+          currentOwnerType: "UNASSIGNED_INVENTORY",
+        } as never,
+      });
+    } catch (error) {
+      if (isStandaloneActivationSchemaError(error)) {
+        throw new ServiceUnavailableException(
+          "Standalone watch activation requires database migration 20260731120000_watch_ownership_fleet on the staging API server.",
+        );
+      }
+      throw error;
+    }
 
     const subjectUserId =
       device.userId ??
@@ -407,12 +414,11 @@ export class SmartwatchService {
       // Pairing history table may be unavailable on older schema deployments.
     }
 
-    await this.auditService.record({
-      actor: { sub: subjectUserId, typ: "user" } as JwtPayload,
-      actorType: "device",
+    await this.recordDeviceAudit({
       action: "smartwatch.device_activated_with_code",
       entityType: "smartwatch_devices",
       entityId: device.id,
+      actorUserId: device.userId ?? undefined,
       metadata: { deviceId: dto.deviceId, correlationId, firebaseEnv },
     });
 
@@ -481,12 +487,11 @@ export class SmartwatchService {
       ttl,
     );
 
-    await this.auditService.record({
-      actor: { sub: subjectUserId, typ: "user" } as JwtPayload,
-      actorType: "device",
+    await this.recordDeviceAudit({
       action: "smartwatch.device_activation_recovery",
       entityType: "smartwatch_devices",
       entityId: device.id,
+      actorUserId: device.userId ?? undefined,
       metadata: { deviceId: dto.deviceId, correlationId, firebaseEnv },
     });
 
@@ -1186,6 +1191,42 @@ export class SmartwatchService {
     });
   }
 
+  /**
+   * Device-originated audits must not invent a users.id FK. Unassigned inventory
+   * watches often have null userId; using device.id (or "system") as actorUserId
+   * caused staging activate-with-code to 500 after the device was already written.
+   */
+  private async recordDeviceAudit(input: {
+    action: string;
+    entityType: string;
+    entityId: string;
+    actorUserId?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      await this.auditService.record({
+        actorType: "device",
+        actorUserId: input.actorUserId || undefined,
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        metadata: input.metadata,
+      });
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          event: "smartwatch.device_audit_failed",
+          action: input.action,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          message: error instanceof Error ? error.message : String(error),
+          timestamp: new Date().toISOString(),
+        }),
+      );
+    }
+  }
+
   private defaultFirebaseEnv() {
     return resolveAppEnvironment({
       THE_EYE_APP_ENV: this.config.get<string>("THE_EYE_APP_ENV"),
@@ -1218,4 +1259,19 @@ export class SmartwatchService {
       data: { usedAt: new Date(), deviceSecretPlain: deviceSecret },
     });
   }
+}
+
+function isStandaloneActivationSchemaError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const message = String((error as { message?: unknown }).message ?? "");
+  const code = String((error as { code?: unknown }).code ?? "");
+  if (code === "P2022") return true;
+  return (
+    /user_id.*null/i.test(message) ||
+    /column.*does not exist/i.test(message) ||
+    /assignment_status/i.test(message) ||
+    /inventory_status/i.test(message) ||
+    /current_owner_type/i.test(message) ||
+    /ownership_status/i.test(message)
+  );
 }
