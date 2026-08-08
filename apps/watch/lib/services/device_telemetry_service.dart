@@ -31,10 +31,20 @@ class DeviceTelemetryService {
     final hasWifi = results.contains(ConnectivityResult.wifi);
     final hasMobile = results.contains(ConnectivityResult.mobile);
     final hasEthernet = results.contains(ConnectivityResult.ethernet);
-    final online = hasWifi || hasMobile || hasEthernet;
+    final hasOther = results.contains(ConnectivityResult.other);
+    final hasVpn = results.contains(ConnectivityResult.vpn);
+    final radioOnline = hasWifi ||
+        hasMobile ||
+        hasEthernet ||
+        hasOther ||
+        hasVpn ||
+        (results.isNotEmpty && !results.contains(ConnectivityResult.none));
+
+    // Do not clear internet when the radio API lies but the API is reachable.
+    final online = radioOnline || _connectivity.serverReachable;
 
     _connectivity.update(
-      wifiAvailable: hasWifi,
+      wifiAvailable: hasWifi || (_connectivity.serverReachable && !hasMobile),
       lteAvailable: hasMobile,
       internetAvailable: online,
     );

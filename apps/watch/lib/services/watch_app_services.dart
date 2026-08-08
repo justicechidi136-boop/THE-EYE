@@ -27,7 +27,11 @@ class WatchAppServices {
         vibration = vibration ?? VibrationService(),
         _enablePush = enablePush {
     final creds = this.credentials;
-    standaloneAuth = StandaloneAuthService(api: api, credentials: creds);
+    standaloneAuth = StandaloneAuthService(
+      api: api,
+      credentials: creds,
+      connectivity: this.connectivity,
+    );
     pairing = PairingService(
       api: api,
       credentials: creds,
@@ -90,6 +94,9 @@ class WatchAppServices {
   Future<void> initialize({bool firebaseReady = false}) async {
     await standaloneAuth.hydrateApiAuth();
     await pairing.initialize();
+    if (await credentials.isActivationComplete()) {
+      connectivity.configureStandaloneOnline();
+    }
     await dangerAlerts.initialize();
     _telemetry = DeviceTelemetryService(
       connectivity: connectivity,

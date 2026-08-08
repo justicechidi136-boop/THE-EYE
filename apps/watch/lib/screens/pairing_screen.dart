@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/pairing_state.dart';
 import '../services/watch_activation_diagnostics.dart';
+import '../config/watch_api_config.dart';
 import '../services/watch_activation_exception.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
@@ -22,6 +23,8 @@ class PairingScreen extends StatefulWidget {
 class _PairingScreenState extends State<PairingScreen> {
   bool _loading = false;
   String? _error;
+  String? _serverTestResult;
+  bool _testingServer = false;
   Timer? _statusTimer;
 
   @override
@@ -86,6 +89,31 @@ class _PairingScreenState extends State<PairingScreen> {
     await _navigateAfterPairing();
   }
 
+  Future<void> _testServer() async {
+    setState(() {
+      _testingServer = true;
+      _serverTestResult = 'Testing ${widget.services.api.apiHost}…';
+    });
+    final started = DateTime.now();
+    try {
+      await widget.services.api.pingHealthReady();
+      final ms = DateTime.now().difference(started).inMilliseconds;
+      if (!mounted) return;
+      setState(() {
+        _serverTestResult =
+            'OK ${widget.services.api.apiHost} (${ms}ms)\nBuild: diag-20260808';
+        _testingServer = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverTestResult =
+            'FAIL ${widget.services.api.apiHost}\n$error\nBuild: diag-20260808';
+        _testingServer = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.services.pairing.state;
@@ -137,6 +165,19 @@ class _PairingScreenState extends State<PairingScreen> {
             Text(_error!,
                 style: const TextStyle(color: EyeColors.danger, fontSize: 10)),
           ],
+          if (_serverTestResult != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _serverTestResult!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _serverTestResult!.startsWith('OK')
+                    ? EyeColors.green
+                    : EyeColors.danger,
+                fontSize: 9,
+              ),
+            ),
+          ],
           const Spacer(),
           WatchPrimaryButton(
             label: _loading ? 'Pairing…' : 'Generate Code',
@@ -147,6 +188,11 @@ class _PairingScreenState extends State<PairingScreen> {
             label: 'Standalone Login',
             color: EyeColors.orange,
             onPressed: _loading ? null : () => _showStandaloneActivation(context),
+          ),
+          const SizedBox(height: 6),
+          WatchOutlineButton(
+            label: _testingServer ? 'Testing…' : 'Test Server',
+            onPressed: (_loading || _testingServer) ? null : _testServer,
           ),
           if (state.phase == PairingPhase.awaitingPhoneConfirmation) ...[
             const SizedBox(height: 6),
@@ -195,7 +241,18 @@ class _PairingScreenState extends State<PairingScreen> {
                 await _navigateAfterPairing();
               } on WatchActivationException catch (error) {
                 setDialogState(() {
-                  dialogError = '${error.code}\n${error.userMessage}';
+                  final bits = <String>[error.code];
+                  if (error.httpStatus != null) {
+                    bits[0] = '${error.code} (HTTP ${error.httpStatus})';
+                  }
+                  bits.add(error.userMessage);
+                  final cause = error.cause?.toString().trim();
+                  if (cause != null &&
+                      cause.isNotEmpty &&
+                      cause != error.userMessage) {
+                    bits.add(cause.length > 160 ? '${cause.substring(0, 160)}…' : cause);
+                  }
+                  dialogError = bits.join('\n');
                   submitting = false;
                 });
               } catch (error) {
@@ -222,6 +279,19 @@ class _PairingScreenState extends State<PairingScreen> {
                       'Enter the device ID and 6-digit code from the admin dashboard.',
                       style: TextStyle(color: EyeColors.muted, fontSize: 10),
                     ),
+                    if (WatchApiConfig.isLocalDevUrl(widget.services.api.baseUrl)) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'This build targets ${widget.services.api.apiHost}, which only works on a dev PC network.',
+                        style: const TextStyle(color: EyeColors.danger, fontSize: 10),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Server: ${widget.services.api.apiHost}',
+                        style: const TextStyle(color: EyeColors.muted, fontSize: 9),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     TextField(
                       controller: deviceIdController,

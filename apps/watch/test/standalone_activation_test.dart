@@ -14,6 +14,9 @@ class _FakeWatchApiClient extends WatchApiClient {
   final Future<Map<String, dynamic>> Function(String path, Map<String, dynamic>? body) handler;
 
   @override
+  Future<void> pingHealthReady() async {}
+
+  @override
   Future<Map<String, dynamic>> post(
     String path, {
     Map<String, dynamic>? body,
@@ -81,7 +84,11 @@ void main() {
           return _validActivationResponse();
         },
       );
-      final service = StandaloneAuthService(api: api, credentials: credentials);
+      final service = StandaloneAuthService(
+        api: api,
+        credentials: credentials,
+        assertNetworkReady: (_) async {},
+      );
 
       final result = await service.activateWithAdminCode(
         deviceId: 'EYE-WATCH-001',
@@ -95,6 +102,32 @@ void main() {
       expect(await credentials.isActivationComplete(), isTrue);
     });
 
+    test('maps HTTP 500 to server setup error', () async {
+      final credentials = SecureCredentialStore(memory: {});
+      final api = _FakeWatchApiClient(
+        handler: (_, __) async {
+          throw WatchApiException('Internal server error', statusCode: 500);
+        },
+      );
+      final service = StandaloneAuthService(
+        api: api,
+        credentials: credentials,
+        assertNetworkReady: (_) async {},
+      );
+
+      expect(
+        () => service.activateWithAdminCode(
+          deviceId: 'EYE-WATCH-001',
+          pairingCode: '123456',
+        ),
+        throwsA(isA<WatchActivationException>().having(
+          (e) => e.code,
+          'code',
+          'WATCH-ACTIVATION-007',
+        )),
+      );
+    });
+
     test('maps HTTP 401 to invalid activation code', () async {
       final credentials = SecureCredentialStore(memory: {});
       final api = _FakeWatchApiClient(
@@ -102,7 +135,11 @@ void main() {
           throw WatchApiException('Invalid activation code', statusCode: 401);
         },
       );
-      final service = StandaloneAuthService(api: api, credentials: credentials);
+      final service = StandaloneAuthService(
+        api: api,
+        credentials: credentials,
+        assertNetworkReady: (_) async {},
+      );
 
       expect(
         () => service.activateWithAdminCode(
@@ -126,7 +163,11 @@ void main() {
           return _validActivationResponse();
         },
       );
-      final service = StandaloneAuthService(api: api, credentials: credentials);
+      final service = StandaloneAuthService(
+        api: api,
+        credentials: credentials,
+        assertNetworkReady: (_) async {},
+      );
 
       expect(
         () => service.activateWithAdminCode(
@@ -143,7 +184,11 @@ void main() {
       final api = _FakeWatchApiClient(
         handler: (_, __) async => {'status': 'activated'},
       );
-      final service = StandaloneAuthService(api: api, credentials: credentials);
+      final service = StandaloneAuthService(
+        api: api,
+        credentials: credentials,
+        assertNetworkReady: (_) async {},
+      );
 
       expect(
         () => service.activateWithAdminCode(

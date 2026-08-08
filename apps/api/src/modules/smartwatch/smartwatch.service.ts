@@ -921,7 +921,7 @@ export class SmartwatchService {
   async adminGetDevice(id: string, actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view smartwatch devices");
     const device = await this.prisma.smartwatchDevice.findFirst({
-      where: { OR: [{ id }, { deviceId: id }] },
+      where: smartwatchDeviceLookupWhere(id),
       include: {
         user: { include: { profile: true } },
         sosEvents: { orderBy: { triggeredAt: "desc" }, take: 20, include: { incident: true } },
@@ -1118,17 +1118,28 @@ export class SmartwatchService {
 
   private async findAuthorizedDevice(deviceLookup: string, deviceSecret?: string, actor?: JwtPayload) {
     const device = await this.prisma.smartwatchDevice.findFirst({
-      where: { OR: [{ id: deviceLookup }, { deviceId: deviceLookup }] },
+      where: smartwatchDeviceLookupWhere(deviceLookup),
     });
-    if (!device || !(device as any).isActive || (device as any).remoteDisabledAt || (device as any).remoteWipedAt) throw new NotFoundException("Active smartwatch device not found");
-
-    if (actor?.typ === "user") {
-      if (device.userId !== actor.sub) throw new ForbiddenException("Device is not paired to this user");
-      return device;
+    if (!device || !(device as any).isActive || (device as any).remoteDisabledAt || (device as any).remoteWipedAt) {
+      throw new NotFoundException("Active smartwatch device not found");
     }
 
     if (actor?.typ === "admin") return device;
-    if (!deviceSecret || (device as any).deviceSecretHash !== hashToken(deviceSecret)) throw new UnauthorizedException("Valid device secret is required");
+
+    // Citizen JWT may only skip the device secret when it owns the watch.
+    // Standalone activation tokens often use a non-user subject and are dropped by
+    // OptionalJwtAuthGuard; when a user JWT is present but does not own the device,
+    // fall through to device-secret auth instead of hard-failing.
+    if (actor?.typ === "user" && device.userId === actor.sub) {
+      return device;
+    }
+
+    if (!deviceSecret || (device as any).deviceSecretHash !== hashToken(deviceSecret)) {
+      if (actor?.typ === "user") {
+        throw new ForbiddenException("Device is not paired to this user");
+      }
+      throw new UnauthorizedException("Valid device secret is required");
+    }
     return device;
   }
 
@@ -1274,4 +1285,23 @@ function isStandaloneActivationSchemaError(error: unknown): boolean {
     /current_owner_type/i.test(message) ||
     /ownership_status/i.test(message)
   );
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Avoid querying Postgres uuid columns with public device serials (e.g. EYE-WATCH-001). */
+export function isUuidLookup(value: string): boolean {
+  return UUID_RE.test(value.trim());
+}
+
+export function smartwatchDeviceLookupWhere(deviceLookup: string): {
+  OR?: Array<{ id: string } | { deviceId: string }>;
+  deviceId?: string;
+} {
+  const lookup = deviceLookup.trim();
+  if (isUuidLookup(lookup)) {
+    return { OR: [{ id: lookup }, { deviceId: lookup }] };
+  }
+  return { deviceId: lookup };
 }

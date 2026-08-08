@@ -1,8 +1,8 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { AdminRoleName } from "@the-eye/shared";
 import { hashToken } from "../../../common/auth/crypto";
 import { SmartwatchConnectivityMode, SmartwatchOfflineEventType, SmartwatchPairingMethod } from "@the-eye/shared";
-import { SmartwatchService } from "../smartwatch.service";
+import { SmartwatchService, smartwatchDeviceLookupWhere } from "../smartwatch.service";
 
 function buildService(overrides: { config?: Record<string, string>; pairingSession?: any } = {}) {
   const device = {
@@ -313,8 +313,34 @@ describe("SmartwatchService", () => {
 
     expect(result.data.deviceId).toBe("EYE-WATCH-001");
     expect(prisma.smartwatchDevice.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { OR: [{ id: "EYE-WATCH-001" }, { deviceId: "EYE-WATCH-001" }] },
+      where: { deviceId: "EYE-WATCH-001" },
     }));
+  });
+
+  it("looks up heartbeat devices by public device id without invalid uuid casts", async () => {
+    expect(smartwatchDeviceLookupWhere("EYE-WATCH-001")).toEqual({ deviceId: "EYE-WATCH-001" });
+    expect(smartwatchDeviceLookupWhere("device-uuid")).toEqual({ deviceId: "device-uuid" });
+    expect(smartwatchDeviceLookupWhere("11111111-1111-4111-8111-111111111111")).toEqual({
+      OR: [
+        { id: "11111111-1111-4111-8111-111111111111" },
+        { deviceId: "11111111-1111-4111-8111-111111111111" },
+      ],
+    });
+
+    const { service, prisma } = buildService();
+    prisma.smartwatchDevice.findFirst = jest.fn().mockResolvedValue(null);
+
+    await expect(
+      service.heartbeat("EYE-WATCH-001", {
+        deviceSecret: "watch-secret",
+        connectivityMode: SmartwatchConnectivityMode.StandaloneCellular,
+        batteryLevel: 80,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.smartwatchDevice.findFirst).toHaveBeenCalledWith({
+      where: { deviceId: "EYE-WATCH-001" },
+    });
   });
 
   it("activates standalone watch with admin pairing code", async () => {

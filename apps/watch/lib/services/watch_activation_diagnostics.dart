@@ -73,6 +73,9 @@ class WatchActivationDiagnostics {
       ...extra,
     };
     final line = '[THE_EYE_WATCH] ${jsonEncode(payload)}';
+    // Always print so logcat captures activation diagnostics on device builds.
+    // ignore: avoid_print
+    print(line);
     if (_sink != null) {
       _sink(line);
     } else {

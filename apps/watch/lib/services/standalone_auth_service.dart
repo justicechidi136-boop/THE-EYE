@@ -1,30 +1,44 @@
 import 'dart:async';
 
+import 'package:http/http.dart' as http;
+
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
+import '../config/watch_api_config.dart';
 import '../config/watch_flavor.dart';
 import '../models/standalone_activation_result.dart';
 import '../storage/secure_credential_store.dart';
+import 'connectivity_service.dart';
 import 'watch_activation_diagnostics.dart';
 import 'watch_activation_exception.dart';
 
 typedef WatchAuthBootstrap = Future<void> Function();
 
+typedef WatchNetworkReadinessCheck = Future<void> Function(WatchApiClient api);
+
 class StandaloneAuthService {
   StandaloneAuthService({
     required WatchApiClient api,
     required SecureCredentialStore credentials,
+    ConnectivityService? connectivity,
     WatchActivationDiagnostics? diagnostics,
     WatchAuthBootstrap? authBootstrap,
+    WatchNetworkReadinessCheck? assertNetworkReady,
   })  : _api = api,
         _credentials = credentials,
+        _connectivity = connectivity,
         _diagnostics = diagnostics ?? WatchActivationDiagnostics(),
-        _authBootstrap = authBootstrap;
+        _authBootstrap = authBootstrap {
+    _assertNetworkReady = assertNetworkReady ??
+        ((api) => defaultNetworkReadinessCheck(api, _diagnostics));
+  }
 
   final WatchApiClient _api;
   final SecureCredentialStore _credentials;
+  final ConnectivityService? _connectivity;
   final WatchActivationDiagnostics _diagnostics;
   final WatchAuthBootstrap? _authBootstrap;
+  late final WatchNetworkReadinessCheck _assertNetworkReady;
 
   WatchActivationDiagnostics get diagnostics => _diagnostics;
 
@@ -56,6 +70,10 @@ class StandaloneAuthService {
       activationCodeFingerprint:
           WatchActivationDiagnostics.fingerprintCode(normalizedCode),
       watchDeviceId: normalizedDeviceId,
+      extra: {
+        'apiHost': _api.apiHost,
+        'firebaseEnv': WatchFlavor.envName,
+      },
     );
 
     Map<String, dynamic> response;
@@ -93,7 +111,14 @@ class StandaloneAuthService {
         exceptionType: error.runtimeType.toString(),
         exceptionMessage: error.toString(),
       );
-      throw WatchActivationException.network(error);
+      throw WatchActivationException.networkTimeout(error);
+    } on http.ClientException catch (error) {
+      _diagnostics.log(
+        WatchActivationCheckpoint.exception,
+        exceptionType: error.runtimeType.toString(),
+        exceptionMessage: error.message,
+      );
+      throw WatchActivationException.networkClient(error);
     } catch (error, stack) {
       _diagnostics.log(
         WatchActivationCheckpoint.exception,
@@ -101,7 +126,7 @@ class StandaloneAuthService {
         exceptionMessage: error.toString(),
         stackTrace: stack.toString(),
       );
-      throw WatchActivationException.network(error);
+      throw WatchActivationException.networkUnexpected(error);
     }
 
     _diagnostics.log(
@@ -173,6 +198,7 @@ class StandaloneAuthService {
 
       _api.accessToken = parsed.accessToken;
       _api.deviceSecret = parsed.deviceSecret;
+      _connectivity?.configureStandaloneOnline();
 
       _diagnostics.log(
         WatchActivationCheckpoint.persistSuccess,
@@ -245,5 +271,45 @@ class StandaloneAuthService {
 
   Future<String?> _safePackageInfo() async {
     return null;
+  }
+}
+
+Future<void> defaultNetworkReadinessCheck(
+  WatchApiClient api, [
+  WatchActivationDiagnostics? diagnostics,
+]) async {
+  if (WatchApiConfig.isLocalDevUrl(api.baseUrl) &&
+      WatchFlavor.firebaseEnv != WatchFirebaseEnv.development) {
+    throw WatchActivationException.devApiMisconfigured(api.apiHost);
+  }
+
+  try {
+    await api.pingHealthReady();
+  } on WatchApiException catch (error) {
+    diagnostics?.log(
+      WatchActivationCheckpoint.exception,
+      httpStatus: error.statusCode,
+      exceptionType: error.runtimeType.toString(),
+      exceptionMessage: error.message,
+      extra: {'apiHost': api.apiHost, 'phase': 'health_check'},
+    );
+    throw WatchActivationException.serverUnreachable(api.apiHost, error);
+  } on TimeoutException catch (error) {
+    diagnostics?.log(
+      WatchActivationCheckpoint.exception,
+      exceptionType: error.runtimeType.toString(),
+      exceptionMessage: error.toString(),
+      extra: {'apiHost': api.apiHost, 'phase': 'health_check'},
+    );
+    throw WatchActivationException.serverUnreachable(api.apiHost, error);
+  } catch (error, stack) {
+    diagnostics?.log(
+      WatchActivationCheckpoint.exception,
+      exceptionType: error.runtimeType.toString(),
+      exceptionMessage: error.toString(),
+      stackTrace: stack.toString(),
+      extra: {'apiHost': api.apiHost, 'phase': 'health_check'},
+    );
+    throw WatchActivationException.serverUnreachable(api.apiHost, error);
   }
 }
