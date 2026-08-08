@@ -6,6 +6,7 @@ abstract final class WatchApiPaths {
     defaultValue: 'http://10.0.2.2:4000/v1',
   );
 
+  static const healthReady = '/health/ready';
   static const activateWithCode = '/smartwatch/devices/activate-with-code';
   static const standaloneLogin = '/smartwatch/devices/standalone-login';
   static const sos = '/smartwatch/sos';

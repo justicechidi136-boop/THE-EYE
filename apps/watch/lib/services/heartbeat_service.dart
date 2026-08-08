@@ -4,6 +4,7 @@ import 'package:battery_plus/battery_plus.dart';
 
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
+import '../models/connectivity_mode.dart';
 import '../models/device_status.dart';
 import '../storage/secure_credential_store.dart';
 import 'connectivity_service.dart';
@@ -61,19 +62,33 @@ class HeartbeatService {
       // Keep caller/default fallback when platform battery API is unavailable.
     }
 
-    await _api.post(
-      WatchApiPaths.heartbeat(deviceId),
-      body: {
-        'deviceId': deviceId,
-        'deviceSecret': deviceSecret,
-        'connectivityMode': _connectivity.activeMode.apiValue,
-        'pairedPhoneAvailable': _connectivity.pairedPhoneAvailable,
-        'internetAvailable': _connectivity.internetAvailable,
-        'batteryLevel': resolvedBattery,
-        'signalStrength': signalStrength,
-        'firmwareVersion': firmwareVersion,
-      },
-    );
+    try {
+      await _api.post(
+        WatchApiPaths.heartbeat(deviceId),
+        body: {
+          'deviceId': deviceId,
+          'deviceSecret': deviceSecret,
+          'connectivityMode': _apiConnectivityMode(),
+          'pairedPhoneAvailable': _connectivity.pairedPhoneAvailable,
+          'internetAvailable': true,
+          'batteryLevel': resolvedBattery,
+          'signalStrength': signalStrength,
+          'firmwareVersion': firmwareVersion,
+        },
+      );
+      _connectivity.markServerReachable();
+    } on WatchApiException catch (error) {
+      // Any HTTP status proves the radio path to THE EYE is up.
+      if (error.statusCode != null) {
+        _connectivity.markServerReachable();
+      } else {
+        _connectivity.markServerUnreachable();
+      }
+      return _latest;
+    } catch (_) {
+      _connectivity.markServerUnreachable();
+      return _latest;
+    }
 
     _latest = DeviceStatusSnapshot(
       deviceId: deviceId,
@@ -88,5 +103,19 @@ class HeartbeatService {
       failoverEnabled: _connectivity.failoverEnabled,
     );
     return _latest;
+  }
+
+  String _apiConnectivityMode() {
+    final mode = _connectivity.activeMode;
+    if (mode == WatchConnectivityMode.offline) {
+      if (_connectivity.wifiAvailable || _connectivity.lteAvailable) {
+        return WatchConnectivityMode.standaloneCellular.apiValue;
+      }
+      if (_connectivity.pairedPhoneAvailable) {
+        return WatchConnectivityMode.pairedPhone.apiValue;
+      }
+      return WatchConnectivityMode.standaloneCellular.apiValue;
+    }
+    return mode.apiValue;
   }
 }

@@ -35,4 +35,19 @@ void main() {
 
     expect(service.activeMode, WatchConnectivityMode.offline);
   });
+
+  test('server reachability marks standalone online without radio APIs', () {
+    final service = ConnectivityService(
+      pairedPhoneAvailable: false,
+      wifiAvailable: false,
+      lteAvailable: false,
+      internetAvailable: false,
+    );
+
+    service.configureStandaloneOnline();
+
+    expect(service.activeMode, WatchConnectivityMode.standaloneCellular);
+    expect(service.internetAvailable, isTrue);
+    expect(service.serverReachable, isTrue);
+  });
 }

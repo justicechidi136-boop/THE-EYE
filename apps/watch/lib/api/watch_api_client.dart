@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/watch_api_config.dart';
 import '../config/watch_flavor.dart';
+import 'watch_api_paths.dart';
 
 class WatchApiException implements Exception {
   WatchApiException(this.message, {this.statusCode, this.body});
@@ -23,6 +24,7 @@ class WatchApiClient {
     this.accessToken,
     this.deviceSecret,
     bool skipEnvGuard = false,
+    this.requestTimeout = const Duration(seconds: 25),
   })  : _http = httpClient ?? http.Client(),
         baseUrl = baseUrl ?? WatchApiConfig.resolveBaseUrl() {
     if (!skipEnvGuard) {
@@ -32,8 +34,11 @@ class WatchApiClient {
 
   final http.Client _http;
   final String baseUrl;
+  final Duration requestTimeout;
   String? accessToken;
   String? deviceSecret;
+
+  String get apiHost => Uri.parse(baseUrl).host;
 
   Map<String, String> _headers({bool jsonBody = true}) {
     final headers = <String, String>{
@@ -49,16 +54,34 @@ class WatchApiClient {
 
   Uri _uri(String path) => Uri.parse('$baseUrl$path');
 
+  Future<void> pingHealthReady() async {
+    final response = await _http
+        .get(
+          _uri(WatchApiPaths.healthReady),
+          headers: _headers(jsonBody: false),
+        )
+        .timeout(requestTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw WatchApiException(
+        'Health check failed',
+        statusCode: response.statusCode,
+        body: response.body,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> post(
     String path, {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
   }) async {
-    final response = await _http.post(
-      _uri(path),
-      headers: {..._headers(), ...?headers},
-      body: jsonEncode(body ?? const {}),
-    );
+    final response = await _http
+        .post(
+          _uri(path),
+          headers: {..._headers(), ...?headers},
+          body: jsonEncode(body ?? const {}),
+        )
+        .timeout(requestTimeout);
     return _decode(response);
   }
 
@@ -66,10 +89,12 @@ class WatchApiClient {
     String path, {
     Map<String, String>? headers,
   }) async {
-    final response = await _http.get(
-      _uri(path),
-      headers: {..._headers(jsonBody: false), ...?headers},
-    );
+    final response = await _http
+        .get(
+          _uri(path),
+          headers: {..._headers(jsonBody: false), ...?headers},
+        )
+        .timeout(requestTimeout);
     return _decode(response);
   }
 
@@ -78,11 +103,13 @@ class WatchApiClient {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
   }) async {
-    final response = await _http.patch(
-      _uri(path),
-      headers: {..._headers(), ...?headers},
-      body: jsonEncode(body ?? const {}),
-    );
+    final response = await _http
+        .patch(
+          _uri(path),
+          headers: {..._headers(), ...?headers},
+          body: jsonEncode(body ?? const {}),
+        )
+        .timeout(requestTimeout);
     return _decode(response);
   }
 
