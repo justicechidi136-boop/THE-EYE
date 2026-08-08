@@ -421,7 +421,7 @@ describe("SmartwatchService", () => {
     });
 
     expect(result.status).toBe("activated");
-    expect(result.deviceSecret).toBeTruthy();
+    expect(Boolean(result.deviceSecret)).toBe(true);
     expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
       actorType: "device",
       action: "smartwatch.device_activated_with_code",
