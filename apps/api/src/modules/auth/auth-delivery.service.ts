@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { formatCitizenEmailTimestamp } from "@the-eye/shared";
 import { SmtpEmailProvider } from "../../common/delivery/smtp-email.provider";
 import { TermiiSmsProvider } from "../../common/delivery/termii-sms.provider";
 import { maskEmail, maskPhone } from "../../common/delivery/safe-delivery-log";
@@ -37,18 +38,19 @@ export class AuthDeliveryService {
     if (this.smtp.isConfigured()) {
       const resetBase = this.config.get<string>("PASSWORD_RESET_LINK_BASE_URL")?.trim()
         ?? this.config.get<string>("MOBILE_PASSWORD_RESET_URL")?.trim();
-      const resetLink = resetBase
-        ? `${resetBase}${resetBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
-        : null;
+      if (!resetBase) {
+        throw new ServiceUnavailableException({
+          message: "Password reset email is not configured for this environment.",
+          code: "AUTH_PASSWORD_RESET_LINK_BASE_MISSING",
+        });
+      }
+      this.assertHttpsRecoveryBase(resetBase, "PASSWORD_RESET_LINK_BASE_URL");
+      const resetLink = `${resetBase}${resetBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
       const result = await this.smtp.send({
         to: email,
         subject: "Reset your THE EYE password",
-        text: resetLink
-          ? `Use this link to reset your password (valid for 30 minutes): ${resetLink}`
-          : "Use the password reset code in THE EYE to complete your request.",
-        html: resetLink
-          ? `<p>Use this link to reset your password (valid for 30 minutes):</p><p><a href="${resetLink}">Reset password</a></p>`
-          : "<p>Use the password reset code in THE EYE to complete your request.</p>",
+        text: `Use this link to reset your password (valid for 30 minutes): ${resetLink}`,
+        html: `<p>Use this link to reset your password (valid for 30 minutes):</p><p><a href="${resetLink}">Reset password</a></p>`,
       });
       if (result.status === "ProviderAccepted") {
         this.logger.log(`Password reset email accepted by SMTP for ${maskEmail(email)}`);
@@ -71,8 +73,8 @@ export class AuthDeliveryService {
     const recoveryBase = this.config.get<string>("ACCOUNT_RECOVERY_LINK_BASE_URL")?.trim()
       ?? this.config.get<string>("MOBILE_ACCOUNT_RECOVERY_URL")?.trim()
       ?? this.config.get<string>("AUTH_RECOVERY_DEEP_LINK_BASE")?.trim();
-    const expiryText = expiresAt.toISOString();
-    const requestedAt = new Date().toISOString();
+    const expiryText = formatCitizenEmailTimestamp(expiresAt);
+    const requestedAt = formatCitizenEmailTimestamp(new Date());
     const fromName = this.config.get<string>("SMTP_FROM_NAME") ?? "THE EYE";
 
     if (this.smtp.isConfigured()) {
@@ -82,6 +84,7 @@ export class AuthDeliveryService {
           code: "AUTH_RECOVERY_LINK_BASE_MISSING",
         });
       }
+      this.assertHttpsRecoveryBase(recoveryBase, "ACCOUNT_RECOVERY_LINK_BASE_URL");
       const recoveryLink = `${recoveryBase}${recoveryBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
       const result = await this.smtp.send({
         to: email,
@@ -171,6 +174,24 @@ export class AuthDeliveryService {
       message: `${channelLabel} delivery is not configured.`,
       code: "AUTH_DELIVERY_UNAVAILABLE",
     });
+  }
+
+  private assertHttpsRecoveryBase(baseUrl: string, envKey: string) {
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl);
+    } catch {
+      throw new ServiceUnavailableException({
+        message: `${envKey} must be a valid HTTPS URL.`,
+        code: "AUTH_RECOVERY_LINK_BASE_INVALID",
+      });
+    }
+    if (parsed.protocol !== "https:") {
+      throw new ServiceUnavailableException({
+        message: `${envKey} must use HTTPS.`,
+        code: "AUTH_RECOVERY_LINK_BASE_INSECURE",
+      });
+    }
   }
 
   private assertSecureWebhookUrl(url: string) {

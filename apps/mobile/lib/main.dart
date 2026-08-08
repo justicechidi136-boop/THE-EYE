@@ -99,6 +99,7 @@ import "profile/car_profile_store.dart";
 import "profile/emergency_contacts_screen.dart";
 import "profile/kyc_screen.dart";
 import "profile/profile_edit_screen.dart";
+import "presentation/citizen_presentation.dart";
 import "police/police_stations_screen.dart";
 import "profile/profile_screen.dart";
 import "settings/build_diagnostics_screen.dart";
@@ -1550,6 +1551,8 @@ class AppController extends SessionAccessor
               row.confidence,
               submittedAt: row.submittedAt,
               verificationStatus: row.verificationStatus,
+              publicReference: row.publicReference,
+              displayStatus: row.displayStatus,
             ),
           ),
         );
@@ -2322,6 +2325,8 @@ class IncidentTrackingItem {
     this.confidence, {
     this.verificationStatus = "Pending",
     this.submittedAt,
+    this.publicReference,
+    this.displayStatus,
   });
 
   final String id;
@@ -2331,6 +2336,8 @@ class IncidentTrackingItem {
   final int confidence;
   final String verificationStatus;
   final DateTime? submittedAt;
+  final String? publicReference;
+  final String? displayStatus;
 }
 
 class SplashScreen extends StatefulWidget {
@@ -2855,7 +2862,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
               const Center(
                 child: Text(
                   "Or",
-                  style: TextStyle(fontSize: 16, color: BrandColors.command),
+                  style: TextStyle(fontSize: 16),
                 ),
               ),
               const SizedBox(height: 16),
@@ -3011,26 +3018,17 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
     });
   }
 
-  InputDecoration _fieldDecoration({
+  InputDecoration _fieldDecoration(
+    BuildContext context, {
     required String hintText,
     String? errorText,
     Widget? suffixIcon,
   }) {
-    return InputDecoration(
+    return EyeInputTheme.decoration(
+      context,
       hintText: hintText,
       errorText: errorText,
-      filled: true,
-      fillColor: Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: BrandColors.authStroke, width: 1),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: BrandColors.accentHover, width: 1),
-      ),
       suffixIcon: suffixIcon,
     );
   }
@@ -3098,6 +3096,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                 field: TextField(
                   controller: _emailController,
                   decoration: _fieldDecoration(
+                    context,
                     hintText: "Enter your email",
                     errorText: emailError,
                   ),
@@ -3113,6 +3112,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                 field: TextField(
                   controller: _firstNameController,
                   decoration: _fieldDecoration(
+                    context,
                     hintText: "First name",
                     errorText: firstNameError,
                   ),
@@ -3126,6 +3126,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                 field: TextField(
                   controller: _lastNameController,
                   decoration: _fieldDecoration(
+                    context,
                     hintText: "Last name",
                     errorText: lastNameError,
                   ),
@@ -3140,6 +3141,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                   controller: _passwordController,
                   obscureText: obscurePassword,
                   decoration: _fieldDecoration(
+                    context,
                     hintText: "At least 8 characters",
                     errorText: passwordError,
                     suffixIcon: IconButton(
@@ -3165,6 +3167,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                   controller: _confirmPasswordController,
                   obscureText: obscureConfirmPassword,
                   decoration: _fieldDecoration(
+                    context,
                     hintText: "Re-enter password",
                     errorText: confirmPasswordError,
                     suffixIcon: IconButton(
@@ -3687,7 +3690,9 @@ class HomeScreen extends StatelessWidget {
       title: "Home",
       selectedIndex: 0,
       useFigmaShell: true,
-      body: ListView(
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
         padding:
             const EdgeInsets.only(bottom: EyeTokens.contentBottomClearance),
         children: [
@@ -3715,6 +3720,10 @@ class HomeScreen extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: StatusStrip(controller: controller),
           ),
           const EyeHeroCarousel(slides: _heroSlides),
           const SizedBox(height: 20),
@@ -3762,11 +3771,6 @@ class HomeScreen extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: StatusStrip(controller: controller),
           ),
           const SizedBox(height: 16),
           Padding(
@@ -3864,6 +3868,7 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -4351,6 +4356,7 @@ class _ReportScreenState extends State<ReportScreen> {
       }
 
       if (result.isSuccess) {
+        await controller.deleteComposeDraft(composeDraftId);
         showAppSnackBar(
             context,
             urgent
@@ -8795,12 +8801,20 @@ class IncidentStatusTile extends StatelessWidget {
         EyeSemanticColors.verificationTint(context, verificationStatus);
     final labelColor =
         EyeSemanticColors.verificationLabel(context, verificationStatus);
+    final reference = incident.publicReference ??
+        (incident.submittedAt == null
+            ? incident.id
+            : resolveIncidentPublicReference(
+                incidentId: incident.id,
+                submittedAt: incident.submittedAt!,
+              ));
+    final statusLabel =
+        incident.displayStatus ?? citizenIncidentStatusLabel(incident.status);
     return ListTileCard(
       onTap: onTap,
       leading: const Icon(Icons.radar),
-      title: "${incident.id} - ${incident.type}",
-      subtitle:
-          "${incident.status} - ${incident.agency} - ${incident.confidence}% confidence\nVerification: $verificationStatus",
+      title: "$reference · ${citizenIncidentCategoryLabel(incident.type)}",
+      subtitle: "$statusLabel · ${incident.agency}\nVerification: $verificationStatus",
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(

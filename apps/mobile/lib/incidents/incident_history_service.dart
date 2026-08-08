@@ -1,5 +1,7 @@
 import "dart:convert";
 
+import "../presentation/citizen_presentation.dart";
+import "../presentation/public_reference.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
 import "incident_submission_service.dart";
@@ -15,6 +17,8 @@ class IncidentSummary {
     this.submittedAt,
     this.description,
     this.address,
+    this.publicReference,
+    this.displayStatus,
   });
 
   final String id;
@@ -26,6 +30,8 @@ class IncidentSummary {
   final DateTime? submittedAt;
   final String? description;
   final String? address;
+  final String? publicReference;
+  final String? displayStatus;
 }
 
 class IncidentDetail extends IncidentSummary {
@@ -126,18 +132,30 @@ class IncidentHistoryService {
     final verificationStatus = _verificationLabel(
         json["status"]?.toString(), latestVerification?["result"]?.toString());
     final assignedAgency = json["assignedAgencyId"]?.toString();
+    final submittedAt = _parseDate(json["submittedAt"]);
+    final id = json["id"]?.toString() ?? "";
+    final status = json["status"]?.toString() ?? "Submitted";
     return IncidentSummary(
-      id: json["id"]?.toString() ?? "",
+      id: id,
       type: json["type"]?.toString() ?? "Incident",
-      status: json["status"]?.toString() ?? "Submitted",
+      status: status,
       agency: assignedAgency == null || assignedAgency.isEmpty
           ? "Awaiting assignment"
           : assignedAgency,
       confidence: confidence,
       verificationStatus: verificationStatus,
-      submittedAt: _parseDate(json["submittedAt"]),
+      submittedAt: submittedAt,
       description: json["description"]?.toString(),
       address: json["address"]?.toString(),
+      publicReference: json["publicReference"]?.toString() ??
+          (submittedAt == null
+              ? null
+              : buildIncidentPublicReference(
+                  incidentId: id,
+                  submittedAt: submittedAt,
+                )),
+      displayStatus: json["displayLabel"]?.toString() ??
+          citizenIncidentStatusLabel(status),
     );
   }
 

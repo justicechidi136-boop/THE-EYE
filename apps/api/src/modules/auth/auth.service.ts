@@ -622,8 +622,30 @@ export class AuthService {
     });
   }
 
+  private splitDisplayName(
+    identity: Pick<VerifiedFirebaseIdentity, "name" | "givenName" | "familyName">,
+  ) {
+    const given = identity.givenName?.trim();
+    const family = identity.familyName?.trim();
+    if (given || family) {
+      return {
+        firstName: given ?? "",
+        lastName: family ?? "",
+      };
+    }
+    const name = identity.name?.trim();
+    if (!name) {
+      return { firstName: "", lastName: "" };
+    }
+    const parts = name.split(/\s+/);
+    return {
+      firstName: parts[0] ?? "",
+      lastName: parts.length > 1 ? parts.slice(1).join(" ") : "",
+    };
+  }
+
   private async createFirebaseCitizen(identity: VerifiedFirebaseIdentity) {
-    const names = this.splitDisplayName(identity.name, identity.provider);
+    const names = this.splitDisplayName(identity);
     const email = identity.emailVerified && identity.email ? this.normalizeEmail(identity.email) : null;
 
     return this.prisma.$transaction(async (tx) => {
@@ -674,18 +696,6 @@ export class AuthService {
 
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
-  }
-
-  private splitDisplayName(name: string | undefined, provider: "google.com" | "apple.com") {
-    if (!name?.trim()) {
-      const fallback = provider === "apple.com" ? "apple" : "google";
-      return this.nameFromEmail(`${fallback}@provider.local`);
-    }
-    const parts = name.trim().split(/\s+/);
-    return {
-      firstName: parts[0] ?? "Citizen",
-      lastName: parts.length > 1 ? parts.slice(1).join(" ") : parts[0] ?? "Citizen",
-    };
   }
 
   private nameFromEmail(email: string) {

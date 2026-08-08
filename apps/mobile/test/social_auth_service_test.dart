@@ -106,10 +106,10 @@ void main() {
 
     final result = await service.signInWithGoogle();
     expect(result.status, SocialAuthStatus.cancelled);
-    expect(result.userMessage, contains("AUTH-GOOGLE-002"));
+    expect(result.userMessage, "Google sign-in was cancelled.");
   });
 
-  test("google configuration errors surface AUTH-GOOGLE-001", () async {
+  test("google configuration errors stay user friendly", () async {
     final service = SocialAuthService(
       apiClient: _FakeApiClient(
         onExchange: () async => const AuthExchangeResult(
@@ -127,7 +127,7 @@ void main() {
 
     final result = await service.signInWithGoogle();
     expect(result.status, SocialAuthStatus.providerError);
-    expect(result.userMessage, contains("AUTH-GOOGLE-001"));
+    expect(result.userMessage, contains("not fully configured"));
   });
 
   test("android GenericIdp unknown error triggers google_sign_in fallback", () {
@@ -165,6 +165,9 @@ void main() {
 
     final result = await service.signInWithGoogle();
     expect(result.status, SocialAuthStatus.serverError);
-    expect(result.userMessage, contains("AUTH-GOOGLE-004"));
+    expect(
+      result.userMessage,
+      "We couldn't sign you in with Google. Please try again.",
+    );
   });
 }

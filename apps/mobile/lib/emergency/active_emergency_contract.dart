@@ -120,6 +120,7 @@ class ActiveEmergencyLocation {
     required this.quality,
     required this.liveLocationStale,
     this.liveLocationUpdatedAt,
+    this.locationLabel,
   });
 
   final String? latitude;
@@ -130,6 +131,7 @@ class ActiveEmergencyLocation {
   final String quality;
   final bool liveLocationStale;
   final DateTime? liveLocationUpdatedAt;
+  final String? locationLabel;
 
   factory ActiveEmergencyLocation.fromJson(Map<String, dynamic> json) {
     return ActiveEmergencyLocation(
@@ -141,6 +143,32 @@ class ActiveEmergencyLocation {
       quality: _requiredString(json, "quality", field: "reportedLocation.quality"),
       liveLocationStale: json["liveLocationStale"] == true,
       liveLocationUpdatedAt: _optionalDateTime(json["liveLocationUpdatedAt"]),
+      locationLabel: json["locationLabel"]?.toString(),
+    );
+  }
+}
+
+class ActiveEmergencyEvidenceItem {
+  const ActiveEmergencyEvidenceItem({
+    required this.id,
+    required this.mediaType,
+    required this.uploadedAt,
+    this.durationSeconds,
+  });
+
+  final String id;
+  final String mediaType;
+  final DateTime uploadedAt;
+  final int? durationSeconds;
+
+  factory ActiveEmergencyEvidenceItem.fromJson(Map<String, dynamic> json) {
+    return ActiveEmergencyEvidenceItem(
+      id: _requiredString(json, "id", field: "evidenceItems.id"),
+      mediaType: _requiredString(json, "mediaType", field: "evidenceItems.mediaType"),
+      uploadedAt: _requiredDateTime(json["uploadedAt"], field: "evidenceItems.uploadedAt"),
+      durationSeconds: json["durationSeconds"] == null
+          ? null
+          : _requiredInt(json, "durationSeconds"),
     );
   }
 }
@@ -197,12 +225,14 @@ class ActiveEmergencyAssignment {
     required this.status,
     this.responderDisplayName,
     this.agencyName,
+    this.statusLabel,
   });
 
   final String id;
   final String status;
   final String? responderDisplayName;
   final String? agencyName;
+  final String? statusLabel;
 
   factory ActiveEmergencyAssignment.fromJson(Map<String, dynamic> json) {
     final responder = json["responder"] as Map<String, dynamic>?;
@@ -212,6 +242,7 @@ class ActiveEmergencyAssignment {
       status: _requiredString(json, "status", field: "assignment.status"),
       responderDisplayName: responder?["displayName"]?.toString(),
       agencyName: agency?["name"]?.toString(),
+      statusLabel: json["statusLabel"]?.toString(),
     );
   }
 }
@@ -309,6 +340,7 @@ sealed class ActiveEmergencyContract {
     required this.statusVersion,
     required this.routeType,
     required this.isActive,
+    this.publicReference,
   });
 
   final String incidentId;
@@ -317,6 +349,7 @@ sealed class ActiveEmergencyContract {
   final int statusVersion;
   final String routeType;
   final bool isActive;
+  final String? publicReference;
 
   bool get isTerminal => !isActive;
 
@@ -376,14 +409,20 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
         openThread: false,
       ),
     ),
+    super.publicReference,
+    this.categoryLabel,
+    this.evidenceItems = const [],
+    this.witnessSummary,
   }) : super(isActive: true);
 
   final String category;
+  final String? categoryLabel;
   final String? description;
   final String title;
   final DateTime reportedAt;
   final ActiveEmergencyLocation reportedLocation;
   final ActiveEmergencyEvidenceSummary evidenceSummary;
+  final List<ActiveEmergencyEvidenceItem> evidenceItems;
   final int progressStep;
   final List<ActiveEmergencyProgressStage> progressStages;
   final ActiveEmergencyAllowedActions allowedActions;
@@ -395,6 +434,7 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
   final ActiveEmergencyLiveVideo? liveVideo;
   final int? witnessCount;
   final String? latestConfidence;
+  final String? witnessSummary;
   final ActiveEmergencyCancellationSummary? cancellationSummary;
   final ActiveEmergencyResolutionSummary? resolutionSummary;
   final String? reporterConfidence;
@@ -422,14 +462,17 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
     final community = json["communityVerificationSummary"] as Map<String, dynamic>?;
     final cancellation = json["cancellationSummary"] as Map<String, dynamic>?;
     final resolution = json["resolutionSummary"] as Map<String, dynamic>?;
+    final evidenceItemsRaw = json["evidenceItems"];
 
     return ActiveEmergencyActiveContract(
       incidentId: _requiredString(json, "incidentId"),
+      publicReference: json["publicReference"]?.toString(),
       status: _requiredString(json, "status"),
       displayLabel: _requiredString(json, "displayLabel"),
       statusVersion: _requiredInt(json, "statusVersion"),
       routeType: _requiredString(json, "routeType"),
       category: _requiredString(json, "category"),
+      categoryLabel: json["categoryLabel"]?.toString(),
       description: json["description"]?.toString(),
       title: _requiredString(json, "title"),
       reportedAt: _requiredDateTime(json["reportedAt"], field: "reportedAt"),
@@ -439,6 +482,12 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
       evidenceSummary: ActiveEmergencyEvidenceSummary.fromJson(
         _requiredMap(json, "evidenceSummary"),
       ),
+      evidenceItems: evidenceItemsRaw is List
+          ? evidenceItemsRaw
+              .whereType<Map<String, dynamic>>()
+              .map(ActiveEmergencyEvidenceItem.fromJson)
+              .toList(growable: false)
+          : const [],
       progressStep: _requiredInt(json, "progressStep"),
       progressStages: progressStagesRaw
           .whereType<Map<String, dynamic>>()
@@ -464,6 +513,7 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
           : ActiveEmergencyLiveVideo.fromJson(liveVideoJson),
       witnessCount: community == null ? null : _requiredInt(community, "witnessCount"),
       latestConfidence: community?["latestConfidence"]?.toString(),
+      witnessSummary: community?["witnessSummary"]?.toString(),
       cancellationSummary: cancellation == null
           ? null
           : ActiveEmergencyCancellationSummary.fromJson(cancellation),

@@ -67,6 +67,7 @@ class ActiveEmergencyNavigation {
       controller,
       incidentId: incidentId,
       silent: silent || result.silent,
+      replace: true,
     );
   }
 

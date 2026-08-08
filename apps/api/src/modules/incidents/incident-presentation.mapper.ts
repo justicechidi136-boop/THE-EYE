@@ -2,6 +2,8 @@ import {
   IncidentAssignmentStatus,
   IncidentStatus,
   ResolutionSource,
+  buildIncidentPublicReference,
+  citizenIncidentStatusLabel,
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
@@ -39,6 +41,7 @@ export interface IncidentAllowedActions {
 export interface IncidentPresentation {
   status: IncidentStatus;
   displayLabel: string;
+  publicReference: string;
   isTerminal: boolean;
   isActive: boolean;
   progressStep: number;
@@ -206,8 +209,24 @@ function deriveAllowedActions(
   };
 }
 
+function deriveIncidentPublicReference(incident: {
+  id?: string;
+  submittedAt?: Date | string | null;
+  createdAt?: Date | string | null;
+}): string {
+  const incidentId = incident.id ?? "00000000-0000-0000-0000-000000000000";
+  const submittedAt =
+    incident.submittedAt ??
+    incident.createdAt ??
+    new Date("2020-01-01T00:00:00.000Z");
+  return buildIncidentPublicReference({ incidentId, submittedAt });
+}
+
 export function buildIncidentPresentation(
   incident: {
+    id?: string;
+    submittedAt?: Date | string | null;
+    createdAt?: Date | string | null;
     status: IncidentStatus;
     reporterId?: string | null;
     resolutionSource?: ResolutionSource | null;
@@ -251,7 +270,8 @@ export function buildIncidentPresentation(
 
   return {
     status,
-    displayLabel: DISPLAY_LABELS[status] ?? status,
+    displayLabel: citizenIncidentStatusLabel(status),
+    publicReference: deriveIncidentPublicReference(incident),
     isTerminal: isTerminalIncidentStatus(status),
     isActive: isActiveIncidentStatus(status),
     progressStep,
