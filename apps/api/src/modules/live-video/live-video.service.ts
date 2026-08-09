@@ -285,6 +285,62 @@ export class LiveVideoService {
     return { data: updated };
   }
 
+  /**
+   * Citizen client reports that Room.connect / publish failed after token mint.
+   * Marks the session Failed so Active Emergency no longer shows "Live".
+   */
+  async reportClientJoinFailure(
+    sessionId: string,
+    actor: JwtPayload,
+    body: { reasonCode?: string; message?: string; clientTraceId?: string } = {},
+  ) {
+    const session = await this.prisma.liveVideoSession.findUnique({
+      where: { id: sessionId },
+      include: { incident: true },
+    });
+    if (!session) throw new NotFoundException("Live video session not found");
+    if (actor.typ !== "user" || session.createdById !== actor.sub) {
+      throw new ForbiddenException("Only the stream owner can report join failure");
+    }
+    if (session.status === "Ended") {
+      return { data: session };
+    }
+
+    const reasonCode = (body.reasonCode ?? LiveVideoErrorCode.CLIENT_JOIN_FAILED).slice(0, 64);
+    const message = (body.message ?? "Client failed to join LiveKit room").slice(0, 480);
+    const updated = await this.prisma.liveVideoSession.update({
+      where: { id: sessionId },
+      data: {
+        status: "Failed",
+        endedAt: new Date(),
+        metadata: {
+          ...(typeof session.metadata === "object" && session.metadata && !Array.isArray(session.metadata)
+            ? (session.metadata as Record<string, unknown>)
+            : {}),
+          clientJoinFailure: {
+            reasonCode,
+            message,
+            clientTraceId: body.clientTraceId ?? null,
+            at: new Date().toISOString(),
+          },
+        },
+      } as never,
+    });
+    await this.timeline(
+      session.incidentId,
+      actor,
+      "live_video.join_failed",
+      "Emergency live video could not connect. Retry available.",
+      { sessionId, reasonCode },
+    );
+    await this.audit(actor, "live_video.join_failed", sessionId, {
+      incidentId: session.incidentId,
+      reasonCode,
+      clientTraceId: body.clientTraceId ?? null,
+    });
+    return { data: updated };
+  }
+
   async adminViewToken(sessionId: string, actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view incident live streams");
     const session = await this.prisma.liveVideoSession.findUnique({ where: { id: sessionId }, include: { incident: true, locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 } } });

@@ -1019,6 +1019,28 @@ class TheEyeApiClient {
     }
   }
 
+  Future<void> reportLiveVideoClientFailure({
+    required String sessionId,
+    String? accessToken,
+    String? reasonCode,
+    String? message,
+    String? clientTraceId,
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.liveVideoClientFailure(sessionId),
+      <String, Object?>{
+        if (reasonCode != null) "reasonCode": reasonCode,
+        if (message != null) "message": message,
+        if (clientTraceId != null) "clientTraceId": clientTraceId,
+      },
+      accessToken: accessToken,
+      clientTraceId: clientTraceId,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw IncidentApiException.fromResponse(response);
+    }
+  }
+
   Future<void> postLiveVideoLocation({
     required String sessionId,
     required Map<String, Object?> payload,

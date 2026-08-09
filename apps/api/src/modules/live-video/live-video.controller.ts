@@ -36,6 +36,16 @@ export class LiveVideoController {
     return this.liveVideo.stopIncidentLiveVideo(sessionId, request.user);
   }
 
+  @Post("sessions/:sessionId/client-failure")
+  @RequirePermissions("incident:create")
+  clientFailure(
+    @Param("sessionId") sessionId: string,
+    @Body() body: { reasonCode?: string; message?: string; clientTraceId?: string },
+    @Req() request: any,
+  ) {
+    return this.liveVideo.reportClientJoinFailure(sessionId, request.user, body);
+  }
+
   @Post("sessions/:sessionId/admin-token")
   @RequirePermissions("incident:read")
   adminToken(@Param("sessionId") sessionId: string, @Req() request: any) {

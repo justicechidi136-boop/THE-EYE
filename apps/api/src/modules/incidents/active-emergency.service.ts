@@ -63,19 +63,21 @@ function deriveLiveVideoCard(session: {
     | "RetryAvailable"
     | "Completed" = "Connecting";
   let userDisplayState = "Preparing camera";
-  if (session.status === "Ended" || session.endedAt) {
+  // Failed/Disconnected before endedAt: client-failure marks Failed + endedAt together.
+  if (session.status === "Failed") {
+    displayState = "RetryAvailable";
+    userDisplayState = "Unavailable";
+  } else if (session.status === "Disconnected") {
+    displayState = "Disconnected";
+    userDisplayState = "Connection interrupted";
+  } else if (session.status === "Ended" || session.endedAt) {
     displayState = "Completed";
     userDisplayState = "Ended";
   } else if (session.status === "Active" && session.startedAt) {
     displayState = "Streaming";
     userDisplayState = "Live";
-  } else if (session.status === "Failed") {
-    displayState = "RetryAvailable";
-    userDisplayState = "Connection interrupted";
-  } else if (session.status === "Disconnected") {
-    displayState = "Disconnected";
-    userDisplayState = "Connection interrupted";
   } else if (session.status === "Pending" || session.status === "Starting") {
+    displayState = "Connecting";
     userDisplayState = "Connecting";
   }
 
