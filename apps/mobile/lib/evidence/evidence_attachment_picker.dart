@@ -375,6 +375,26 @@ class EvidencePreviewTile extends StatelessWidget {
                 ),
               ),
             )
+          else if (attachment.isVideo)
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: EyeSemanticColors.of(context).elevatedSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.videocam, size: 32),
+            )
+          else if (attachment.isAudio)
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: EyeSemanticColors.of(context).elevatedSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.graphic_eq, size: 32),
+            )
           else
             Icon(
               attachment.isVideo
@@ -388,13 +408,24 @@ class EvidencePreviewTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(attachment.fileName,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                Text(statusText,
-                    style: TextStyle(
-                        color: attachment.state == LocalEvidenceState.failed
-                            ? const Color(0xFFB00020)
-                            : const Color(0xFF5C6670))),
+                Text(
+                  attachment.isVideo
+                      ? "Video ready to review"
+                      : attachment.isAudio
+                          ? "Audio ready to review"
+                          : attachment.fileName,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  attachment.isVideo || attachment.isAudio
+                      ? "$statusText · ${attachment.fileName}"
+                      : statusText,
+                  style: TextStyle(
+                    color: attachment.state == LocalEvidenceState.failed
+                        ? const Color(0xFFB00020)
+                        : const Color(0xFF5C6670),
+                  ),
+                ),
                 if (attachment.state == LocalEvidenceState.uploading)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),

@@ -10,6 +10,7 @@ import "../design_system/eye_semantic_colors.dart";
 import "../design_system/tokens.dart";
 import "../incidents/incident_submission_service.dart";
 import "../location/location_permission_service.dart";
+import "../presentation/citizen_presentation.dart";
 import "../theme/the_eye_theme.dart";
 import "../voice/voice_recorder.dart";
 import "../widgets/section_card.dart";
@@ -431,49 +432,7 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                   children: [
                     SectionCard(
                       title: item?.title ?? "Safety broadcast",
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item?.body ?? ""),
-                          const SizedBox(height: 12),
-                          if (item?.authorLabel != null)
-                            Text(
-                              item!.authorLabel!,
-                              style: TextStyle(
-                                color: item.adminVerified
-                                    ? EyeSemanticColors.of(context).verified
-                                    : BrandColors.lightTextMuted,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          Text(
-                            "${item?.priority ?? ""} · ${item?.type ?? ""} · ${item?.status ?? ""}",
-                            style: const TextStyle(
-                              color: BrandColors.lightTextMuted,
-                            ),
-                          ),
-                          if (item?.expiresAt != null) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              item!.expired
-                                  ? "Expired"
-                                  : "Expires ${formatBroadcastAge(item.expiresAt!)}",
-                              style: const TextStyle(
-                                color: BrandColors.lightTextMuted,
-                              ),
-                            ),
-                          ],
-                          if ((item?.commentsCount ?? 0) > 0) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              "${item!.commentsCount} community comment${item.commentsCount == 1 ? "" : "s"}",
-                              style: const TextStyle(
-                                color: BrandColors.lightTextMuted,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                      child: _BroadcastDetailBody(item: item),
                     ),
                     const SizedBox(height: 16),
                     Wrap(
@@ -536,6 +495,122 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                     ),
                   ],
                 ),
+    );
+  }
+}
+
+class _BroadcastDetailBody extends StatelessWidget {
+  const _BroadcastDetailBody({required this.item});
+
+  final BroadcastFeedItem? item;
+
+  String? _meta(String key) {
+    final value = item?.metadata[key];
+    if (value == null) return null;
+    final text = value.toString().trim();
+    return text.isEmpty ? null : text;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = BrandColors.lightTextMuted;
+    final fullName = _meta("fullName");
+    final age = _meta("ageOrApproximateAge");
+    final gender = _meta("gender");
+    final lastSeenAtRaw = _meta("lastSeenAt");
+    final lastSeenAt = lastSeenAtRaw == null
+        ? null
+        : DateTime.tryParse(lastSeenAtRaw);
+    final lastSeenAddress = _meta("lastSeenAddress");
+    final physical = _meta("physicalDescription");
+    final clothing = _meta("clothingDescription");
+    final additional = _meta("additionalDescription");
+    final isMissingPerson =
+        (item?.type.toLowerCase().contains("missing") ?? false) ||
+            fullName != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (item?.authorLabel != null)
+          Text(
+            item!.authorLabel!,
+            style: TextStyle(
+              color: item!.adminVerified
+                  ? EyeSemanticColors.of(context).verified
+                  : muted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        Text(
+          "${item?.status ?? "Active"}",
+          style: TextStyle(color: muted, fontWeight: FontWeight.w700),
+        ),
+        if (item?.expiresAt != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            item!.expired
+                ? "Expired"
+                : formatBroadcastExpiry(item.expiresAt!),
+            style: TextStyle(color: muted),
+          ),
+        ],
+        if (item?.publishedAt != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            "Published ${formatCitizenDateTime(item!.publishedAt!)}",
+            style: TextStyle(color: muted),
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (isMissingPerson) ...[
+          if (fullName != null) ...[
+            Text("Missing person",
+                style: Theme.of(context).textTheme.titleSmall),
+            Text(fullName, style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+          ],
+          if (age != null || gender != null)
+            Text(
+              [
+                if (age != null) "Approx. age $age",
+                if (gender != null) gender,
+              ].join(" · "),
+            ),
+          if (lastSeenAt != null || lastSeenAddress != null) ...[
+            const SizedBox(height: 8),
+            Text("Last seen", style: Theme.of(context).textTheme.titleSmall),
+            if (lastSeenAt != null) Text(formatCitizenDateTime(lastSeenAt)),
+            if (lastSeenAddress != null) Text(lastSeenAddress),
+          ],
+          if (physical != null) ...[
+            const SizedBox(height: 8),
+            Text("Physical description",
+                style: Theme.of(context).textTheme.titleSmall),
+            Text(physical),
+          ],
+          if (clothing != null) ...[
+            const SizedBox(height: 8),
+            Text("Clothing", style: Theme.of(context).textTheme.titleSmall),
+            Text(clothing),
+          ],
+          if (additional != null) ...[
+            const SizedBox(height: 8),
+            Text("Additional information",
+                style: Theme.of(context).textTheme.titleSmall),
+            Text(additional),
+          ],
+        ] else ...[
+          Text(item?.body ?? ""),
+        ],
+        if ((item?.commentsCount ?? 0) > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            "${item!.commentsCount} community comment${item.commentsCount == 1 ? "" : "s"}",
+            style: TextStyle(color: muted),
+          ),
+        ],
+      ],
     );
   }
 }

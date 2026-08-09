@@ -9,6 +9,8 @@ class EyeNotificationCard extends StatelessWidget {
     required this.title,
     required this.timestamp,
     this.category,
+    this.body,
+    this.read = false,
     this.thumbnails = const [],
     this.onTap,
     super.key,
@@ -17,6 +19,8 @@ class EyeNotificationCard extends StatelessWidget {
   final String title;
   final String timestamp;
   final String? category;
+  final String? body;
+  final bool read;
   final List<Widget> thumbnails;
   final VoidCallback? onTap;
 
@@ -24,45 +28,96 @@ class EyeNotificationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final onSurface = theme.colorScheme.onSurface;
-    final muted = onSurface.withValues(alpha: 0.72);
+    final muted = onSurface.withValues(alpha: read ? 0.55 : 0.72);
+    final surface = read
+        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.72)
+        : theme.colorScheme.surfaceContainerHighest;
     final child = Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
+        color: surface,
         borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
+        border: read
+            ? null
+            : Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.35),
+              ),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withValues(alpha: 0.25),
+            color: theme.shadowColor.withValues(alpha: read ? 0.12 : 0.25),
             blurRadius: 4,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (category != null) ...[
-            Text(category!, style: EyeTypography.fieldHint.copyWith(color: muted)),
-            const SizedBox(height: 4),
-          ],
-          Text(title,
-              style: EyeTypography.fieldHint.copyWith(color: onSurface)),
-          if (thumbnails.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Row(
+          if (!read) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 6, right: 8),
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ] else
+            const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (var i = 0; i < thumbnails.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  thumbnails[i],
+                if (category != null) ...[
+                  Text(
+                    category!,
+                    style: EyeTypography.fieldHint.copyWith(color: muted),
+                  ),
+                  const SizedBox(height: 4),
                 ],
+                Text(
+                  title,
+                  style: EyeTypography.fieldHint.copyWith(
+                    color: onSurface,
+                    fontWeight: read ? FontWeight.w500 : FontWeight.w700,
+                  ),
+                ),
+                if (body != null && body!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    body!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: EyeTypography.fieldHint.copyWith(
+                      fontSize: 12,
+                      color: muted,
+                    ),
+                  ),
+                ],
+                if (thumbnails.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (var i = 0; i < thumbnails.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        thumbnails[i],
+                      ],
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  timestamp,
+                  style: EyeTypography.fieldHint
+                      .copyWith(fontSize: 12, color: muted),
+                ),
               ],
             ),
-          ],
-          const SizedBox(height: 4),
-          Text(timestamp,
-              style: EyeTypography.fieldHint
-                  .copyWith(fontSize: 12, color: muted)),
+          ),
         ],
       ),
     );

@@ -512,7 +512,16 @@ export class BroadcastsService {
       issuedAt,
       eventType: routingContext?.eventType ?? "BROADCAST_ALERT",
     });
-    const notification = await this.prisma.notification.create({
+    // Idempotent: one BroadcastAlert notification per user+broadcast.
+    const existing = await this.prisma.notification.findFirst({
+      where: {
+        userId: recipient.user_id,
+        broadcastId: id,
+        type: "BroadcastAlert",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const notification = existing ?? await this.prisma.notification.create({
       data: {
         userId: recipient.user_id,
         broadcastId: id,
@@ -539,6 +548,9 @@ export class BroadcastsService {
         channel: "push",
       } as never,
     });
+    if (existing) {
+      return;
+    }
     await this.notificationsService.enqueue({
       userId: recipient.user_id,
       notificationId: notification.id,

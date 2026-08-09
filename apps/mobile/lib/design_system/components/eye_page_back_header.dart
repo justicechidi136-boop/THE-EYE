@@ -1,43 +1,47 @@
 import "package:flutter/material.dart";
 
 import "../eye_semantic_colors.dart";
-import "../tokens.dart";
 import "../typography.dart";
 
 /// Back-arrow header used on Figma sub-pages (`719:3366`, `286:188`).
+/// Set [showBack] to false for primary tab pages (Services / Broadcast / Settings).
 class EyePageBackHeader extends StatelessWidget {
   const EyePageBackHeader({
     this.title,
     this.onBack,
+    this.showBack = true,
     super.key,
   });
 
   final String? title;
   final VoidCallback? onBack;
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+      padding: EdgeInsets.fromLTRB(showBack ? 8 : 16, 8, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            tooltip: "Back",
-            onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-            icon: Icon(Icons.arrow_back,
-                color: EyeSemanticColors.of(context).interactiveText, size: 24),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          ),
+          if (showBack)
+            IconButton(
+              tooltip: "Back",
+              onPressed: onBack ?? () => Navigator.of(context).maybePop(),
+              icon: Icon(Icons.arrow_back,
+                  color: semantics.interactiveText, size: 24),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            ),
           if (title != null) ...[
-            const SizedBox(height: 2),
+            if (showBack) const SizedBox(height: 2),
             Padding(
-              padding: const EdgeInsets.only(left: 8),
+              padding: EdgeInsets.only(left: showBack ? 8 : 0),
               child: Text(
                 title!,
                 style: EyeTypography.authHeading.copyWith(
-                  color: EyeSemanticColors.of(context).bodyText,
+                  color: semantics.bodyText,
                 ),
               ),
             ),

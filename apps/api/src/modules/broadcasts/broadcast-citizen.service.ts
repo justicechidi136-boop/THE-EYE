@@ -60,6 +60,7 @@ export class BroadcastCitizenService {
         lastSeenAddress: dto.lastSeenAddress,
         clothingDescription: dto.clothingDescription,
         physicalDescription: dto.physicalDescription,
+        additionalDescription: dto.additionalDescription,
         policeReportReference: dto.policeReportReference,
         reporterRelationship: dto.reporterRelationship,
         medicalVulnerability: dto.medicalVulnerability,
@@ -432,15 +433,40 @@ export class BroadcastCitizenService {
   }
 
   private buildMissingPersonBody(dto: CreateMissingPersonBroadcastDto) {
-    return [
+    const clothing = dto.clothingDescription.trim();
+    const physical = dto.physicalDescription.trim();
+    const additional = dto.additionalDescription?.trim() ?? "";
+    const lastSeenLabel = this.formatCitizenDateTimeLabel(dto.lastSeenAt);
+    const parts = [
       `${dto.fullName.trim()}, approx. age ${dto.ageOrApproximateAge}.`,
-      `Last seen ${dto.lastSeenAt}.`,
-      dto.clothingDescription.trim(),
-      dto.physicalDescription.trim(),
-      dto.additionalDescription?.trim(),
-    ]
-      .filter(Boolean)
-      .join(" ");
+      `Last seen ${lastSeenLabel}.`,
+    ];
+    if (physical) parts.push(`Physical: ${physical}`);
+    // Avoid repeating the same text when clothing was copied from physical.
+    if (clothing && clothing.toLowerCase() !== physical.toLowerCase()) {
+      parts.push(`Clothing: ${clothing}`);
+    }
+    if (
+      additional &&
+      additional.toLowerCase() !== physical.toLowerCase() &&
+      additional.toLowerCase() !== clothing.toLowerCase()
+    ) {
+      parts.push(additional);
+    }
+    return parts.join(" ");
+  }
+
+  private formatCitizenDateTimeLabel(value: string) {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   }
 
   private buildStolenVehicleBody(dto: CreateStolenVehicleBroadcastDto) {

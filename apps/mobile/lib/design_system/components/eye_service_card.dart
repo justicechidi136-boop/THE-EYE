@@ -1,7 +1,6 @@
 import "package:flutter/material.dart";
 
 import "../eye_semantic_colors.dart";
-import "../eye_input_theme.dart";
 
 class EyeServiceCard extends StatelessWidget {
   const EyeServiceCard({
@@ -23,52 +22,53 @@ class EyeServiceCard extends StatelessWidget {
     return Material(
       color: semantics.cardSurface,
       borderRadius: BorderRadius.circular(8),
-        child: InkWell(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 150),
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
-                Container(
-                  width: 50,
-                  height: 47,
-                  decoration: BoxDecoration(
-                    color: semantics.elevatedSurface,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(icon, size: 32, color: semantics.bodyText),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
+          child: Column(
+            children: [
+              Container(
+                width: 44,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: semantics.elevatedSurface,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: semantics.bodyText,
-                  ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 28, color: semantics.bodyText),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
+                  color: semantics.bodyText,
                 ),
-                const SizedBox(height: 4),
-                Text(
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: Text(
                   description,
                   textAlign: TextAlign.center,
-                  maxLines: 4,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: FontWeight.w400,
+                    height: 1.2,
                     color: semantics.secondaryText,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

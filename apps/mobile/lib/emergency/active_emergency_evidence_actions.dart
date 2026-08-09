@@ -7,8 +7,6 @@ import "../contracts/the_eye_api_client.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
-import "../voice/voice_recorder.dart";
-import "../voice/voice_report_validation.dart";
 import "active_emergency_contract.dart";
 
 class ActiveEmergencyEvidenceActions extends StatefulWidget {
@@ -88,10 +86,6 @@ class _ActiveEmergencyEvidenceActionsState
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
-  }
-
-  Future<void> _uploadQueuedVoice(VoiceRecordingResult recording) async {
-    await _uploadAttachments([recording.attachment]);
   }
 
   Future<void> _retryOfflineQueue() async {
@@ -193,20 +187,7 @@ class _ActiveEmergencyEvidenceActionsState
               child: Text(_uploading ? "Uploading..." : "Upload selected evidence"),
             ),
         ],
-        if (actions.uploadVoice) ...[
-          const SizedBox(height: 12),
-          Semantics(
-            label: "Record voice update",
-            child: VoiceRecorder(
-              accessibilityVoiceGuidance: widget.accessibilityVoiceGuidance,
-              enabled: !_uploading,
-              onRecordingReady: (recording) async {
-                setState(() => _statusMessage = "Uploading voice update...");
-                await _uploadQueuedVoice(recording);
-              },
-            ),
-          ),
-        ],
+        // Voice capture lives inside ManagedEvidenceSection to avoid duplicate recorders.
         if (actions.addUpdate || actions.addWrittenUpdate) ...[
           const SizedBox(height: 8),
           OutlinedButton(

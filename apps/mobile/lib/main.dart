@@ -1380,6 +1380,14 @@ class AppController extends SessionAccessor
     unawaited(loadNotificationsFromApi());
   }
 
+  Future<void> ensureFreshSession() async {
+    final session = await _authService.ensureFreshSession();
+    if (session == null) return;
+    _cachedSession = session;
+    _sessionAccessToken = session.accessToken;
+    notifyListeners();
+  }
+
   Future<void> loadNotificationsFromApi({bool refresh = false}) async {
     if (!isAuthenticated || accessToken == null) {
       notifications.clear();
@@ -1389,6 +1397,8 @@ class AppController extends SessionAccessor
       notifyListeners();
       return;
     }
+    await ensureFreshSession();
+    if (accessToken == null) return;
     if (refresh) {
       notificationNextCursor = null;
     }
@@ -1533,6 +1543,8 @@ class AppController extends SessionAccessor
       notifyListeners();
       return;
     }
+    await ensureFreshSession();
+    if (accessToken == null) return;
     loadingIncidents = true;
     incidentLoadError = null;
     notifyListeners();
@@ -2859,10 +2871,14 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                     : const Text("Log In"),
               ),
               const SizedBox(height: 16),
-              const Center(
+              Center(
                 child: Text(
                   "Or",
-                  style: TextStyle(fontSize: 16),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: EyeSemanticColors.of(context).secondaryText,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -2900,9 +2916,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
               Center(
                 child: Text.rich(
                   TextSpan(
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
-                      color: BrandColors.command,
+                      color: EyeSemanticColors.of(context).bodyText,
                     ),
                     children: [
                       const TextSpan(text: "New user? "),
@@ -3042,10 +3058,10 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: BrandColors.command,
+            color: EyeSemanticColors.of(context).bodyText,
           ),
         ),
         const SizedBox(height: 8),
@@ -3056,6 +3072,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     final canSubmit = !submitting &&
         _emailController.text.trim().isNotEmpty &&
         _firstNameController.text.trim().isNotEmpty &&
@@ -3064,11 +3081,11 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
         _confirmPasswordController.text.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: BrandColors.lightBackground,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: BrandColors.lightBackground,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
-        foregroundColor: BrandColors.command,
+        foregroundColor: semantics.bodyText,
         title: const Text("Create account"),
       ),
       body: SafeArea(
@@ -3077,18 +3094,18 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "Join THE EYE",
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
-                  color: BrandColors.command,
+                  color: semantics.bodyText,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 "Create your citizen account with email",
-                style: TextStyle(fontSize: 16, color: BrandColors.ash),
+                style: TextStyle(fontSize: 16, color: semantics.secondaryText),
               ),
               const SizedBox(height: 24),
               _labeledField(
@@ -3151,7 +3168,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                         obscurePassword
                             ? Icons.visibility_off_outlined
                             : Icons.visibility_outlined,
-                        color: BrandColors.ash,
+                        color: semantics.secondaryText,
                       ),
                     ),
                   ),
@@ -3177,7 +3194,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                         obscureConfirmPassword
                             ? Icons.visibility_off_outlined
                             : Icons.visibility_outlined,
-                        color: BrandColors.ash,
+                        color: semantics.secondaryText,
                       ),
                     ),
                   ),
@@ -3228,9 +3245,9 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
               Center(
                 child: Text.rich(
                   TextSpan(
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
-                      color: BrandColors.command,
+                      color: semantics.bodyText,
                     ),
                     children: [
                       const TextSpan(text: "Already have an account? "),
@@ -3619,9 +3636,9 @@ class ServicesHubScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
-          EyePageBackHeader(
+          const EyePageBackHeader(
             title: "Services",
-            onBack: () => navigateBackOrHome(context),
+            showBack: false,
           ),
           const SizedBox(height: 8),
           Text(
@@ -3735,7 +3752,7 @@ class HomeScreen extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: EyeTokens.cardGap,
               crossAxisSpacing: EyeTokens.cardGap,
-              childAspectRatio: 165 / 150,
+              childAspectRatio: 0.92,
               children: [
                 EyeServiceCard(
                   title: "Emergency Case",
@@ -4402,20 +4419,80 @@ class MissingPersonBroadcastScreen extends StatefulWidget {
 class _MissingPersonBroadcastScreenState
     extends State<MissingPersonBroadcastScreen> {
   final fullNameController = TextEditingController();
-  final descriptionController = TextEditingController();
+  final ageController = TextEditingController();
+  final lastSeenLocationController = TextEditingController();
+  final physicalController = TextEditingController();
+  final clothingController = TextEditingController();
+  final additionalController = TextEditingController();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
+  String? _gender;
+  DateTime? _lastSeenAt;
   bool submitting = false;
+  bool consent = false;
 
   @override
   void dispose() {
     fullNameController.dispose();
-    descriptionController.dispose();
+    ageController.dispose();
+    lastSeenLocationController.dispose();
+    physicalController.dispose();
+    clothingController.dispose();
+    additionalController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickLastSeen() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _lastSeenAt ?? now,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now,
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_lastSeenAt ?? now),
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _lastSeenAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    });
   }
 
   Future<void> _submit() async {
     if (fullNameController.text.trim().isEmpty) {
       showAppSnackBar(context, "Enter the missing person's full name.",
+          isError: true);
+      return;
+    }
+    if (ageController.text.trim().isEmpty) {
+      showAppSnackBar(context, "Enter an age or approximate age.",
+          isError: true);
+      return;
+    }
+    if (_lastSeenAt == null) {
+      showAppSnackBar(context, "Select when the person was last seen.",
+          isError: true);
+      return;
+    }
+    if (physicalController.text.trim().isEmpty) {
+      showAppSnackBar(context, "Enter a physical description.", isError: true);
+      return;
+    }
+    if (clothingController.text.trim().isEmpty) {
+      showAppSnackBar(context, "Describe what they were wearing.",
+          isError: true);
+      return;
+    }
+    if (!consent) {
+      showAppSnackBar(context, "Confirm consent to publish this broadcast.",
           isError: true);
       return;
     }
@@ -4438,7 +4515,8 @@ class _MissingPersonBroadcastScreenState
       return;
     }
 
-    final description = descriptionController.text.trim();
+    final lastSeenLocation = lastSeenLocationController.text.trim();
+    final additional = additionalController.text.trim();
     try {
       final result =
           await controller.broadcastSubmissionService.createMissingPerson(
@@ -4446,18 +4524,18 @@ class _MissingPersonBroadcastScreenState
         payload: {
           "clientBroadcastId": createClientSubmissionId(),
           "fullName": fullNameController.text.trim(),
-          "ageOrApproximateAge": "Unknown",
-          "lastSeenAt": DateTime.now().toUtc().toIso8601String(),
+          "ageOrApproximateAge": ageController.text.trim(),
+          if (_gender != null) "gender": _gender,
+          "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
           "lastSeenLatitude": outcome.position!.latitude,
           "lastSeenLongitude": outcome.position!.longitude,
-          "clothingDescription":
-              description.isEmpty ? "Not specified" : description,
-          "physicalDescription":
-              description.isEmpty ? "See broadcast details" : description,
+          if (lastSeenLocation.isNotEmpty) "lastSeenAddress": lastSeenLocation,
+          "clothingDescription": clothingController.text.trim(),
+          "physicalDescription": physicalController.text.trim(),
           "contactMethod": "in_app",
           "reporterRelationship": "Reporter",
           "consentDeclaration": true,
-          if (description.isNotEmpty) "additionalDescription": description,
+          if (additional.isNotEmpty) "additionalDescription": additional,
         },
       ).timeout(kSosSubmissionTimeout);
       if (!mounted) return;
@@ -4494,31 +4572,111 @@ class _MissingPersonBroadcastScreenState
           SectionCard(
             title: "Missing person broadcast",
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Icon(Icons.person_search,
                     size: 52, color: BrandColors.green),
                 const SizedBox(height: 16),
                 TextField(
-                    controller: fullNameController,
-                    decoration: const InputDecoration(labelText: "Full name")),
+                  controller: fullNameController,
+                  decoration:
+                      const InputDecoration(labelText: "Full name"),
+                ),
                 const SizedBox(height: 12),
                 TextField(
-                    controller: descriptionController,
-                    maxLines: 3,
-                    decoration:
-                        const InputDecoration(labelText: "Description")),
+                  controller: ageController,
+                  keyboardType: TextInputType.text,
+                  decoration: const InputDecoration(
+                    labelText: "Age / approximate age",
+                    hintText: "e.g. 14 or mid-20s",
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _gender,
+                  decoration: const InputDecoration(labelText: "Gender"),
+                  items: const [
+                    DropdownMenuItem(value: "Female", child: Text("Female")),
+                    DropdownMenuItem(value: "Male", child: Text("Male")),
+                    DropdownMenuItem(value: "Other", child: Text("Other")),
+                    DropdownMenuItem(
+                        value: "PreferNotToSay",
+                        child: Text("Prefer not to say")),
+                  ],
+                  onChanged: (value) => setState(() => _gender = value),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Last seen date & time"),
+                  subtitle: Text(
+                    _lastSeenAt == null
+                        ? "Tap to select"
+                        : formatCitizenDateTime(_lastSeenAt!),
+                  ),
+                  trailing: const Icon(Icons.event),
+                  onTap: submitting ? null : _pickLastSeen,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: lastSeenLocationController,
+                  decoration: const InputDecoration(
+                    labelText: "Last seen location",
+                    hintText: "Area, landmark, or address",
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: physicalController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: "Physical description",
+                    hintText: "Height, build, hair, distinguishing features",
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: clothingController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: "Clothing / what they were wearing",
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: additionalController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: "Additional information",
+                    hintText: "Optional context that may help locate them",
+                  ),
+                ),
                 const SizedBox(height: 12),
                 ManagedEvidenceSection(
-                    key: _evidenceSectionKey,
-                    lowDataMode: appOf(context).lowDataMode),
-                const SizedBox(height: 16),
+                  key: _evidenceSectionKey,
+                  lowDataMode: appOf(context).lowDataMode,
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: consent,
+                  onChanged: submitting
+                      ? null
+                      : (value) => setState(() => consent = value ?? false),
+                  title: const Text(
+                    "I confirm this information is accurate and I consent to publish this broadcast.",
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                const SizedBox(height: 8),
                 FilledButton(
                   onPressed: submitting ? null : _submit,
                   child: submitting
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2))
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Text("Submit broadcast"),
                 ),
               ],
@@ -5576,9 +5734,9 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          EyePageBackHeader(
+          const EyePageBackHeader(
             title: "Safety broadcasts",
-            onBack: () => navigateBackOrHome(context),
+            showBack: false,
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -5792,6 +5950,8 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool _openingNotification = false;
+
   @override
   void initState() {
     super.initState();
@@ -5803,6 +5963,45 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
       unawaited(controller.loadNotificationsFromApi(refresh: true));
     });
+  }
+
+  Future<void> _openNotification(
+    AppController controller,
+    InboxNotificationItem alert,
+  ) async {
+    if (_openingNotification) return;
+    _openingNotification = true;
+    try {
+      await controller.markNotificationRead(alert.id);
+      final route = alert.deepLink ?? "/notifications";
+      if (!mounted) return;
+      if (route == "/notifications") return;
+      final navigator = Navigator.of(context);
+      if (route == "/incident-detail") {
+        final incidentId = alert.incidentId;
+        if (incidentId == null || incidentId.isEmpty) return;
+        await navigator.pushNamed(
+          "/incident-detail",
+          arguments: incidentId,
+        );
+        return;
+      }
+      if (route == "/active-emergency") {
+        final incidentId = alert.incidentId;
+        if (incidentId != null && incidentId.isNotEmpty) {
+          await controller.activateActiveEmergency(incidentId);
+          if (!mounted) return;
+          await navigator.pushNamed(
+            "/active-emergency/$incidentId",
+            arguments: {"incidentId": incidentId},
+          );
+          return;
+        }
+      }
+      await navigator.pushNamed(route);
+    } finally {
+      _openingNotification = false;
+    }
   }
 
   @override
@@ -5819,7 +6018,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const EyePageBackHeader(),
+            const EyePageBackHeader(title: "Notifications"),
             if (controller.notificationUnreadCount > 0)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -5915,32 +6114,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           final alert = controller.notifications[index];
           return BroadcastAlertTile(
             alert: alert,
-            onTap: () async {
-              await controller.markNotificationRead(alert.id);
-              final route = alert.deepLink ?? "/notifications";
-              if (!context.mounted) return;
-              if (route == "/notifications") return;
-              if (route == "/incident-detail") {
-                final incidentId = alert.incidentId;
-                if (incidentId == null || incidentId.isEmpty) return;
-                Navigator.of(context)
-                    .pushNamed("/incident-detail", arguments: incidentId);
-                return;
-              }
-              if (route == "/active-emergency") {
-                final incidentId = alert.incidentId;
-                if (incidentId != null && incidentId.isNotEmpty) {
-                  await controller.activateActiveEmergency(incidentId);
-                  if (!context.mounted) return;
-                  Navigator.of(context).pushNamed(
-                    "/active-emergency/$incidentId",
-                    arguments: {"incidentId": incidentId},
-                  );
-                  return;
-                }
-              }
-              Navigator.of(context).pushNamed(route);
-            },
+            onTap: () => unawaited(_openNotification(controller, alert)),
           );
         },
       ),
@@ -7891,8 +8065,13 @@ class SettingsScreen extends StatelessWidget {
       selectedIndex: 4,
       useFigmaShell: true,
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
+          const EyePageBackHeader(
+            title: "Settings",
+            showBack: false,
+          ),
+          const SizedBox(height: 8),
           SectionCard(
             title: "Account",
             child: Column(
@@ -8796,35 +8975,37 @@ class IncidentStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final verificationStatus = incident.verificationStatus;
-    final tint =
-        EyeSemanticColors.verificationTint(context, verificationStatus);
-    final labelColor =
-        EyeSemanticColors.verificationLabel(context, verificationStatus);
     final reference = incident.publicReference ??
         (incident.submittedAt == null
-            ? incident.id
+            ? "EYE-PENDING"
             : resolveIncidentPublicReference(
                 incidentId: incident.id,
                 submittedAt: incident.submittedAt!,
               ));
     final statusLabel =
         incident.displayStatus ?? citizenIncidentStatusLabel(incident.status);
+    final reported = incident.submittedAt == null
+        ? "Time unavailable"
+        : formatCitizenDateTime(incident.submittedAt!);
     return ListTileCard(
       onTap: onTap,
       leading: const Icon(Icons.radar),
-      title: "$reference · ${citizenIncidentCategoryLabel(incident.type)}",
-      subtitle: "$statusLabel · ${incident.agency}\nVerification: $verificationStatus",
+      title: citizenIncidentCategoryLabel(incident.type),
+      subtitle: "$reference\n$statusLabel · $reported",
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: tint.withValues(alpha: 0.12),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: tint.withValues(alpha: 0.45)),
         ),
-        child: Text(verificationStatus,
-            style: TextStyle(
-                color: labelColor, fontWeight: FontWeight.w800, fontSize: 11)),
+        child: Text(
+          statusLabel,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
+        ),
       ),
     );
   }
@@ -8841,12 +9022,15 @@ class BroadcastAlertTile extends StatelessWidget {
     final showCategory = alert.type.toLowerCase().contains("health") ||
         alert.type.toLowerCase().contains("broadcast") ||
         alert.type.toLowerCase().contains("official");
+    final preview = alert.body.trim();
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: EyeNotificationCard(
         category: showCategory ? alert.type : null,
         title: alert.title,
+        body: preview.isEmpty ? null : preview,
+        read: alert.read,
         timestamp: formatNotificationAge(alert.receivedAt),
       ),
     );
