@@ -50,4 +50,38 @@ void main() {
     expect(service.internetAvailable, isTrue);
     expect(service.serverReachable, isTrue);
   });
+
+  test('single unreachable blip stays online inside grace window', () {
+    var now = DateTime(2026, 8, 9, 12);
+    final service = ConnectivityService(
+      clock: () => now,
+      reachabilityGrace: const Duration(minutes: 45),
+      unreachableFailureThreshold: 3,
+    );
+
+    service.configureStandaloneOnline();
+    service.markServerUnreachable();
+    service.markServerUnreachable();
+
+    expect(service.activeMode, WatchConnectivityMode.standaloneCellular);
+    expect(service.serverReachable, isTrue);
+  });
+
+  test('offline only after grace expires and repeated failures', () {
+    var now = DateTime(2026, 8, 9, 12);
+    final service = ConnectivityService(
+      clock: () => now,
+      reachabilityGrace: const Duration(minutes: 45),
+      unreachableFailureThreshold: 3,
+    );
+
+    service.configureStandaloneOnline();
+    now = now.add(const Duration(minutes: 50));
+    service.markServerUnreachable();
+    service.markServerUnreachable();
+    service.markServerUnreachable();
+
+    expect(service.serverReachable, isFalse);
+    expect(service.activeMode, WatchConnectivityMode.offline);
+  });
 }

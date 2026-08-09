@@ -59,7 +59,8 @@ class TheEyeWatchApp extends StatefulWidget {
   State<TheEyeWatchApp> createState() => _TheEyeWatchAppState();
 }
 
-class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
+class _TheEyeWatchAppState extends State<TheEyeWatchApp>
+    with WidgetsBindingObserver {
   final WatchAppServices _services = WatchAppServices();
   final LauncherService _launcher = LauncherService();
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
@@ -67,6 +68,7 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _services.push.onActiveEmergencyRefresh = ({required String? incidentId, required String category}) async {
       final nav = _navKey.currentState;
       if (nav == null) return;
@@ -100,7 +102,15 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_services.onAppResumed());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _services.dispose();
     super.dispose();
   }

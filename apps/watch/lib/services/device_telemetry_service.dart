@@ -40,11 +40,13 @@ class DeviceTelemetryService {
         hasVpn ||
         (results.isNotEmpty && !results.contains(ConnectivityResult.none));
 
-    // Do not clear internet when the radio API lies but the API is reachable.
-    final online = radioOnline || _connectivity.serverReachable;
+    // Sticky online: radio APIs on this phone often flip to "none" while idle.
+    final stickyOnline =
+        _connectivity.serverReachable || _connectivity.withinReachabilityGrace;
+    final online = radioOnline || stickyOnline;
 
     _connectivity.update(
-      wifiAvailable: hasWifi || (_connectivity.serverReachable && !hasMobile),
+      wifiAvailable: hasWifi || (stickyOnline && !hasMobile),
       lteAvailable: hasMobile,
       internetAvailable: online,
     );
