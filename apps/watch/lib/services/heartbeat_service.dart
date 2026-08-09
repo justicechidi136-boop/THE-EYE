@@ -30,10 +30,13 @@ class HeartbeatService {
   Timer? _timer;
   DeviceStatusSnapshot? _latest;
   final Battery _battery = Battery();
+  bool _emergency = false;
+  bool _sending = false;
 
   DeviceStatusSnapshot? get latest => _latest;
 
   void start({bool emergency = false}) {
+    _emergency = emergency;
     _timer?.cancel();
     final interval = emergency ? emergencyInterval : normalInterval;
     _timer = Timer.periodic(interval, (_) => unawaited(sendHeartbeat()));
@@ -45,64 +48,92 @@ class HeartbeatService {
     _timer = null;
   }
 
+  /// Re-arm the timer after Android doze / app resume and probe immediately.
+  Future<DeviceStatusSnapshot?> refreshAfterResume() async {
+    start(emergency: _emergency);
+    return _latest;
+  }
+
   Future<DeviceStatusSnapshot?> sendHeartbeat({
     int? batteryLevel,
     int signalStrength = 80,
     String firmwareVersion = '0.1.0',
   }) async {
-    final deviceId = await _credentials.readDeviceId();
-    final deviceSecret = await _credentials.readDeviceSecret();
-    if (deviceId == null || deviceSecret == null) return null;
-
-    var resolvedBattery = batteryLevel ?? 100;
+    if (_sending) return _latest;
+    _sending = true;
     try {
-      final level = await _battery.batteryLevel;
-      if (level >= 0 && level <= 100) resolvedBattery = level;
-    } catch (_) {
-      // Keep caller/default fallback when platform battery API is unavailable.
-    }
+      final deviceId = await _credentials.readDeviceId();
+      final deviceSecret = await _credentials.readDeviceSecret();
+      if (deviceId == null || deviceSecret == null) return null;
 
-    try {
-      await _api.post(
-        WatchApiPaths.heartbeat(deviceId),
-        body: {
-          'deviceId': deviceId,
-          'deviceSecret': deviceSecret,
-          'connectivityMode': _apiConnectivityMode(),
-          'pairedPhoneAvailable': _connectivity.pairedPhoneAvailable,
-          'internetAvailable': true,
-          'batteryLevel': resolvedBattery,
-          'signalStrength': signalStrength,
-          'firmwareVersion': firmwareVersion,
-        },
+      var resolvedBattery = batteryLevel ?? 100;
+      try {
+        final level = await _battery.batteryLevel;
+        if (level >= 0 && level <= 100) resolvedBattery = level;
+      } catch (_) {
+        // Keep caller/default fallback when platform battery API is unavailable.
+      }
+
+      try {
+        await _api.post(
+          WatchApiPaths.heartbeat(deviceId),
+          body: {
+            'deviceId': deviceId,
+            'deviceSecret': deviceSecret,
+            'connectivityMode': _apiConnectivityMode(),
+            'pairedPhoneAvailable': _connectivity.pairedPhoneAvailable,
+            'internetAvailable': true,
+            'batteryLevel': resolvedBattery,
+            'signalStrength': signalStrength,
+            'firmwareVersion': firmwareVersion,
+          },
+        );
+        _connectivity.markServerReachable();
+      } on WatchApiException catch (error) {
+        // Any HTTP status proves the radio path to THE EYE is up.
+        if (error.statusCode != null) {
+          _connectivity.markServerReachable();
+          return _latest;
+        }
+        await _confirmUnreachable();
+        return _latest;
+      } catch (_) {
+        await _confirmUnreachable();
+        return _latest;
+      }
+
+      _latest = DeviceStatusSnapshot(
+        deviceId: deviceId,
+        batteryLevel: resolvedBattery,
+        signalStrength: signalStrength,
+        connectivityMode: _connectivity.activeMode,
+        isOnline: true,
+        firmwareVersion: firmwareVersion,
+        lastSeenAt: DateTime.now(),
+        pairedPhoneAvailable: _connectivity.pairedPhoneAvailable,
+        internetAvailable: _connectivity.internetAvailable,
+        failoverEnabled: _connectivity.failoverEnabled,
       );
+      return _latest;
+    } finally {
+      _sending = false;
+    }
+  }
+
+  /// Heartbeat timed out — try a cheap health probe before counting a failure.
+  Future<void> _confirmUnreachable() async {
+    try {
+      await _api.pingHealthReady();
       _connectivity.markServerReachable();
     } on WatchApiException catch (error) {
-      // Any HTTP status proves the radio path to THE EYE is up.
       if (error.statusCode != null) {
         _connectivity.markServerReachable();
       } else {
         _connectivity.markServerUnreachable();
       }
-      return _latest;
     } catch (_) {
       _connectivity.markServerUnreachable();
-      return _latest;
     }
-
-    _latest = DeviceStatusSnapshot(
-      deviceId: deviceId,
-      batteryLevel: resolvedBattery,
-      signalStrength: signalStrength,
-      connectivityMode: _connectivity.activeMode,
-      isOnline: true,
-      firmwareVersion: firmwareVersion,
-      lastSeenAt: DateTime.now(),
-      pairedPhoneAvailable: _connectivity.pairedPhoneAvailable,
-      internetAvailable: _connectivity.internetAvailable,
-      failoverEnabled: _connectivity.failoverEnabled,
-    );
-    return _latest;
   }
 
   String _apiConnectivityMode() {

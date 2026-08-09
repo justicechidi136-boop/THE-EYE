@@ -9,7 +9,10 @@ class ConnectivityService {
     this.failoverEnabled = true,
     this.preferredMode = WatchConnectivityMode.pairedPhone,
     this.serverReachable = false,
-  });
+    this.reachabilityGrace = const Duration(minutes: 45),
+    this.unreachableFailureThreshold = 3,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   bool pairedPhoneAvailable;
   bool wifiAvailable;
@@ -22,17 +25,32 @@ class ConnectivityService {
   /// Used because connectivity_plus is unreliable on some phones/Wear builds.
   bool serverReachable;
 
+  /// Keep showing online after brief radio/API blips (doze, Wi-Fi handoff).
+  final Duration reachabilityGrace;
+  final int unreachableFailureThreshold;
+  final DateTime Function() _clock;
+
+  DateTime? lastServerOkAt;
+  int consecutiveUnreachable = 0;
+
   WatchConnectivityMode get activeMode => _selectMode();
 
-  bool get _effectivelyOnline => internetAvailable || serverReachable;
+  bool get withinReachabilityGrace {
+    final lastOk = lastServerOkAt;
+    if (lastOk == null) return false;
+    return _clock().difference(lastOk) < reachabilityGrace;
+  }
+
+  bool get effectivelyOnline =>
+      internetAvailable || serverReachable || withinReachabilityGrace;
 
   WatchConnectivityMode _selectMode() {
-    if (!_effectivelyOnline) {
+    if (!effectivelyOnline) {
       return WatchConnectivityMode.offline;
     }
 
     if (preferredMode == WatchConnectivityMode.standaloneCellular &&
-        (lteAvailable || wifiAvailable || serverReachable)) {
+        (lteAvailable || wifiAvailable || serverReachable || withinReachabilityGrace)) {
       return WatchConnectivityMode.standaloneCellular;
     }
 
@@ -44,7 +62,7 @@ class ConnectivityService {
       return WatchConnectivityMode.standaloneCellular;
     }
 
-    if (wifiAvailable || serverReachable) {
+    if (wifiAvailable || serverReachable || withinReachabilityGrace) {
       return preferredMode == WatchConnectivityMode.standaloneCellular
           ? WatchConnectivityMode.standaloneCellular
           : WatchConnectivityMode.pairedPhone;
@@ -76,6 +94,8 @@ class ConnectivityService {
   void markServerReachable({WatchConnectivityMode? preferredMode}) {
     serverReachable = true;
     internetAvailable = true;
+    consecutiveUnreachable = 0;
+    lastServerOkAt = _clock();
     if (preferredMode != null) {
       this.preferredMode = preferredMode;
     }
@@ -87,8 +107,16 @@ class ConnectivityService {
     }
   }
 
+  /// Note a transport failure. Does not flip Offline on the first blip.
   void markServerUnreachable() {
+    consecutiveUnreachable += 1;
+    if (consecutiveUnreachable < unreachableFailureThreshold ||
+        withinReachabilityGrace) {
+      // Keep sticky online through doze / single timeouts.
+      return;
+    }
     serverReachable = false;
+    internetAvailable = false;
   }
 
   void configureStandaloneOnline() {

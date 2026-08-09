@@ -1,4 +1,5 @@
 import '../api/watch_api_client.dart';
+import '../models/connectivity_mode.dart';
 import '../pairing/pairing_service.dart';
 import '../services/alert_service.dart';
 import '../services/connectivity_service.dart';
@@ -121,6 +122,17 @@ class WatchAppServices {
         // Continue degraded — boot must not hang on FCM / network.
       }
     }
+  }
+
+  /// Android doze pauses Dart timers; re-arm heartbeat and re-probe when visible.
+  Future<void> onAppResumed() async {
+    if (await credentials.isActivationComplete()) {
+      // Keep standalone preference sticky; reachability comes from the probe.
+      connectivity.update(
+        preferredMode: WatchConnectivityMode.standaloneCellular,
+      );
+    }
+    await heartbeat.refreshAfterResume();
   }
 
   void dispose() {
