@@ -637,6 +637,7 @@ model AdminUser {
   assignedFieldDevices         FieldDevice[]              @relation("FieldDeviceAssignedUser")
   approvedFieldDevices         FieldDevice[]              @relation("FieldDeviceApprovedBy")
   revokedFieldDevices          FieldDevice[]              @relation("FieldDeviceRevokedBy")
+  updatedFieldLauncherPolicies FieldDeviceLauncherPolicy[] @relation("FieldDeviceLauncherPolicyUpdatedBy")
   fieldDeviceSessions          FieldDeviceSession[]       @relation("FieldDeviceSessionAdmin")
   fieldShifts                  FieldShift[]               @relation("FieldShiftOfficer")
   fieldShiftsApproved          FieldShift[]               @relation("FieldShiftApprovedBy")
@@ -3507,6 +3508,7 @@ model FieldDevice {
   fieldBackupRequests    FieldBackupRequest[]
   fieldOfficerSafetyAlerts FieldOfficerSafetyAlert[]
   syncState              FieldDeviceSyncState?
+  launcherPolicy         FieldDeviceLauncherPolicy?
 
   @@index([assignedUserId, registrationStatus])
   @@index([agencyId, registrationStatus])
@@ -3515,6 +3517,33 @@ model FieldDevice {
   @@index([isLost])
   @@index([isRevoked])
   @@map("field_devices")
+}
+
+/// Launcher / managed-kiosk policy for agency field tablets (1:1 with FieldDevice).
+model FieldDeviceLauncherPolicy {
+  fieldDeviceId            String   @id @map("field_device_id") @db.Uuid
+  deviceMode               String   @default("standard") @map("device_mode")
+  launcherEnabled          Boolean  @default(false) @map("launcher_enabled")
+  kioskEnabled             Boolean  @default(false) @map("kiosk_enabled")
+  approvedApps             Json     @default("[]") @map("approved_apps")
+  settingsAccessLevel      String   @default("none") @map("settings_access_level")
+  maintenanceModeAllowed   Boolean  @default(false) @map("maintenance_mode_allowed")
+  emergencyDialerAllowed   Boolean  @default(true) @map("emergency_dialer_allowed")
+  browserAllowed           Boolean  @default(true) @map("browser_allowed")
+  screenshotsAllowed       Boolean  @default(true) @map("screenshots_allowed")
+  usbPolicy                String   @default("allow") @map("usb_policy")
+  autoLockMinutes          Int      @default(15) @map("auto_lock_minutes")
+  visibleModules           Json     @default("[]") @map("visible_modules")
+  role                     String   @default("officer")
+  policyVersion            Int      @default(1) @map("policy_version")
+  updatedById              String?  @map("updated_by_id") @db.Uuid
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  fieldDevice              FieldDevice @relation(fields: [fieldDeviceId], references: [id], onDelete: Cascade)
+  updatedBy                AdminUser?  @relation("FieldDeviceLauncherPolicyUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([deviceMode])
+  @@map("field_device_launcher_policies")
 }
 
 model FieldDeviceSession {

@@ -14,6 +14,8 @@ import 'screens/device_registration_screen.dart';
 import 'screens/device_status_screen.dart';
 import 'screens/drone/drone_monitor_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/launcher/device_lock_screen.dart';
+import 'screens/launcher/launcher_shell_gate.dart';
 import 'screens/locked_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/patrol/patrol_mode_screen.dart';
@@ -88,7 +90,20 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
           case FieldRoutes.locked:
             return _page(LockedScreen(services: _services), settings);
           case FieldRoutes.home:
-            return _page(HomeScreen(services: _services), settings);
+            return _page(LauncherShellGate(services: _services), settings);
+          case FieldRoutes.launcherHome:
+            return _page(LauncherShellGate(services: _services), settings);
+          case FieldRoutes.deviceLock:
+            final args = settings.arguments;
+            final map = args is Map ? Map<String, dynamic>.from(args) : const {};
+            return _page(
+              DeviceLockScreen(
+                reason: map['reason']?.toString() ?? 'Device locked',
+                deviceReference: map['deviceReference']?.toString() ?? 'unknown',
+                policy: null,
+              ),
+              settings,
+            );
           case FieldRoutes.deviceStatus:
             return _page(DeviceStatusScreen(services: _services), settings);
           case FieldRoutes.unauthorized:

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "../../../../components/app-shell";
 import { FieldDeviceActions } from "../../../../components/field-operations/field-device-actions";
+import { FieldLauncherPolicyPanel } from "../../../../components/field-operations/field-launcher-policy-panel";
 import { PageHeader, Panel, StatusBadge } from "../../../../components/ui";
 import { fetchFieldDevice } from "../../../../lib/api/data";
 import { canManageFieldDevices } from "../../../../lib/field-device-permissions";
@@ -53,9 +54,14 @@ export default async function FieldDeviceDetailPage({ params }: { params: Promis
             <p><span className="font-semibold">Root risk:</span> {device.isRootRiskDetected ? "Detected" : "None reported"}</p>
           </div>
         </Panel>
-        <Panel title="Supervisor actions">
-          <FieldDeviceActions device={device} canManage={canManage} />
-        </Panel>
+        <div className="space-y-5">
+          <Panel title="Supervisor actions">
+            <FieldDeviceActions device={device} canManage={canManage} />
+          </Panel>
+          <Panel title="Launcher policy">
+            <FieldLauncherPolicyPanel deviceId={device.id} canManage={canManage} />
+          </Panel>
+        </div>
       </div>
     </AppShell>
   );

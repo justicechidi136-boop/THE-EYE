@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../../common/auth/optional-jwt-auth.guard";
@@ -8,6 +8,7 @@ import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { FieldAuthService } from "./field-auth.service";
 import { FieldDevicesAdminService } from "./field-devices-admin.service";
 import { FieldDevicesService } from "./field-devices.service";
+import { FieldLauncherPolicyService, type LauncherPolicyPatch } from "./field-launcher-policy.service";
 import type {
   CompleteFieldPairingDto,
   FieldDeviceAdminActionDto,
@@ -20,7 +21,10 @@ import type {
 @ApiTags("field-devices")
 @Controller("field/devices")
 export class FieldDevicesController {
-  constructor(private readonly devices: FieldDevicesService) {}
+  constructor(
+    private readonly devices: FieldDevicesService,
+    private readonly launcherPolicy: FieldLauncherPolicyService,
+  ) {}
 
   @Post("challenge")
   @RateLimit("auth")
@@ -45,6 +49,24 @@ export class FieldDevicesController {
   @RateLimit("auth")
   completePairing(@Body() dto: CompleteFieldPairingDto) {
     return this.devices.completePairing(dto);
+  }
+
+  @Get("me/policy")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  myPolicy(@Req() request: { user: unknown }) {
+    return this.launcherPolicy.getPolicyForFieldSession(request.user as never);
+  }
+
+  @Post("me/launcher-audit")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @RateLimit("auth")
+  launcherAudit(
+    @Req() request: { user: unknown },
+    @Body() body: { action?: string; packageName?: string; ok?: boolean; environment?: string },
+  ) {
+    return this.launcherPolicy.recordLauncherAudit(request.user as never, body);
   }
 
   @Post(":publicDeviceId/heartbeat")
@@ -105,12 +127,27 @@ export class FieldAuthController {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class FieldDevicesAdminController {
-  constructor(private readonly admin: FieldDevicesAdminService) {}
+  constructor(
+    private readonly admin: FieldDevicesAdminService,
+    private readonly launcherPolicy: FieldLauncherPolicyService,
+  ) {}
 
   @Get()
   @RequirePermissions("field:device:manage")
   list(@Req() request: { user: unknown }, @Query("status") status?: string, @Query("agencyId") agencyId?: string, @Query("limit") limit?: string) {
     return this.admin.list(request.user as never, { status, agencyId, limit });
+  }
+
+  @Get(":id/policy")
+  @RequirePermissions("field:device:manage")
+  getPolicy(@Param("id") id: string, @Req() request: { user: unknown }) {
+    return this.launcherPolicy.getPolicyForAdmin(id, request.user as never);
+  }
+
+  @Patch(":id/policy")
+  @RequirePermissions("field:device:manage")
+  patchPolicy(@Param("id") id: string, @Req() request: { user: unknown }, @Body() dto: LauncherPolicyPatch) {
+    return this.launcherPolicy.patchPolicyForAdmin(id, request.user as never, dto);
   }
 
   @Get(":id")

@@ -5,6 +5,8 @@ abstract final class FieldRoutes {
   static const approvalPending = '/approval-pending';
   static const locked = '/locked';
   static const home = '/home';
+  static const launcherHome = '/launcher';
+  static const deviceLock = '/device-lock';
   static const deviceStatus = '/device-status';
   static const unauthorized = '/unauthorized';
 

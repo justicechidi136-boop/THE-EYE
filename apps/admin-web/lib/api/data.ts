@@ -1017,6 +1017,49 @@ export async function fieldDeviceAction(
   });
 }
 
+export type FieldLauncherPolicyView = {
+  deviceMode: string;
+  launcherEnabled: boolean;
+  kioskEnabled: boolean;
+  approvedApps: string[];
+  settingsAccessLevel: string;
+  maintenanceModeAllowed: boolean;
+  emergencyDialerAllowed: boolean;
+  browserAllowed: boolean;
+  screenshotsAllowed: boolean;
+  usbPolicy: string;
+  autoLockMinutes: number;
+  visibleModules: string[];
+  role: string;
+  policyVersion: number;
+  deviceReference?: string | null;
+  agencyId?: string | null;
+};
+
+export async function fetchFieldDevicePolicy(id: string): Promise<FieldLauncherPolicyView | null> {
+  return withToken(async (token) => {
+    try {
+      return await apiRequest<FieldLauncherPolicyView>(
+        `/admin/field-devices/${encodeURIComponent(id)}/policy`,
+        { token },
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  }, null);
+}
+
+export async function patchFieldDevicePolicy(id: string, body: Partial<FieldLauncherPolicyView>) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<FieldLauncherPolicyView>(`/admin/field-devices/${encodeURIComponent(id)}/policy`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
 export async function publishSmartwatchFirmware(input: {
   version: string;
   title: string;

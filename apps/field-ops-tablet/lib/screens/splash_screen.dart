@@ -47,6 +47,22 @@ class _SplashScreenState extends State<SplashScreen> {
         widget.services.api.accessToken = accessToken;
         try {
           await widget.services.auth.refreshSession();
+          setState(() => _status = 'Applying device policy…');
+          try {
+            final policy = await widget.services.launcherPolicy.bootstrap();
+            if (policy.locked) {
+              _go(
+                FieldRoutes.deviceLock,
+                arguments: {
+                  'reason': policy.lockReason ?? 'Device locked',
+                  'deviceReference': policy.deviceReference ?? 'unknown',
+                },
+              );
+              return;
+            }
+          } catch (_) {
+            // Degraded: continue to home gate which uses cached/default policy.
+          }
           _go(FieldRoutes.home);
           return;
         } on FieldApiException {

@@ -9,7 +9,7 @@
 
 ## Purpose
 
-THE EYE Field Operations is a **dedicated 10-inch Android tablet operational console** for authorised field personnel. It is not a replacement for:
+THE EYE Field Operations is a **dedicated 10-inch Android tablet operational console** for authorised field personnel. Agency-owned tablets may optionally run as an Android HOME launcher (`FIELD_LAUNCHER`) or managed dedicated device (`MANAGED_KIOSK`) — see `docs/FIELD_LAUNCHER_ARCHITECTURE.md`. It is not a replacement for:
 
 - The **citizen mobile app** (`apps/mobile`)
 - The **full admin web dashboard** (`apps/admin-web`)

@@ -65,6 +65,10 @@ class SecureSessionStore {
   Future<void> setLocked(bool locked) =>
       _write(_lockedKey, locked ? 'true' : 'false');
 
+  Future<String?> readRaw(String key) => _read(key);
+
+  Future<void> writeRaw(String key, String value) => _write(key, value);
+
   Future<void> clearSession() async {
     await _delete(_accessTokenKey);
     await _delete(_refreshTokenKey);
