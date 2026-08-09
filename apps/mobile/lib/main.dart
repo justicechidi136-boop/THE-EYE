@@ -5298,6 +5298,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             interruptLocation: joinFlow.interruptLocation,
           );
         }
+        await _reportLiveVideoJoinFailure(
+          accessToken: accessToken,
+          sessionId: startResult.sessionId,
+          reasonCode: failureCode,
+          message: connectMessage,
+          clientTraceId: startResult.correlationId,
+        );
         showAppSnackBar(
             context,
             connectMessage.contains("emergency was still submitted")
@@ -5362,6 +5369,18 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             ? "room_connect_begin_logged"
             : "before_room_connect",
       );
+      if (liveSessionId.isNotEmpty) {
+        final token = appController.accessToken;
+        if (token != null && token.isNotEmpty) {
+          await _reportLiveVideoJoinFailure(
+            accessToken: token,
+            sessionId: liveSessionId,
+            reasonCode: LiveVideoErrorCodes.connectLivekitFailed,
+            message: "Live video start timed out: $error",
+            clientTraceId: _startupTrace.clientTraceId,
+          );
+        }
+      }
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
@@ -5409,17 +5428,64 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         debugPrintStack(
             stackTrace: stackTrace, label: "live_video_start_stream");
       }
+      if (liveSessionId.isNotEmpty) {
+        final token = appController.accessToken;
+        if (token != null && token.isNotEmpty) {
+          await _reportLiveVideoJoinFailure(
+            accessToken: token,
+            sessionId: liveSessionId,
+            reasonCode: LiveVideoErrorCodes.connectLivekitFailed,
+            message: "Live video start failed unexpectedly: $error",
+            clientTraceId: _startupTrace.clientTraceId,
+          );
+        }
+      }
       _setStartupPhase(activeIncidentId == null
           ? LiveVideoStartupPhase.failed
           : LiveVideoStartupPhase.recovering);
       showAppSnackBar(context,
           "Live video is temporarily unavailable ($error). Your emergency may still have been submitted.",
           isError: true);
+      if (widget.returnToActiveEmergency && activeIncidentId != null) {
+        _returnToActiveEmergency(
+          errorMessage:
+              "Unable to start live video. Your emergency remains active. Retry?",
+        );
+      }
     } finally {
       _streamStartInFlight = false;
       if (mounted && !_disposed) setState(() => startingStream = false);
       logLiveVideoEvent(
           "Live video startup trace ${_startupTrace.toDiagnosticMap()} joinFlow=${liveVideoController.joinFlow.toDiagnosticMap()}");
+    }
+  }
+
+  Future<void> _reportLiveVideoJoinFailure({
+    required String accessToken,
+    required String sessionId,
+    required String reasonCode,
+    required String message,
+    String? clientTraceId,
+  }) async {
+    if (sessionId.isEmpty) return;
+    try {
+      await apiClient
+          .reportLiveVideoClientFailure(
+            sessionId: sessionId,
+            accessToken: accessToken,
+            reasonCode: reasonCode,
+            message: message,
+            clientTraceId: clientTraceId,
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      try {
+        await apiClient
+            .stopLiveVideo(sessionId: sessionId, accessToken: accessToken)
+            .timeout(const Duration(seconds: 8));
+      } catch (_) {
+        // Best-effort: AE refresh may still show a stale Active session.
+      }
     }
   }
 

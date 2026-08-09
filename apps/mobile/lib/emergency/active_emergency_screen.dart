@@ -291,8 +291,13 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
     return switch (displayState) {
       "Streaming" || "Live" || "Connected" => "Live",
       "Connecting" || "Starting" => "Connecting…",
-      "Failed" || "Error" || "Unavailable" => "Unavailable",
-      "Ended" || "Stopped" => "Ended",
+      "Failed" ||
+      "Error" ||
+      "Unavailable" ||
+      "RetryAvailable" ||
+      "Disconnected" =>
+        "Unavailable",
+      "Ended" || "Stopped" || "Completed" => "Ended",
       _ => "Ready to start",
     };
   }
@@ -312,6 +317,9 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
             displayState == "NotStarted" ||
             displayState == "Ended" ||
             displayState == "Stopped" ||
+            displayState == "Completed" ||
+            displayState == "RetryAvailable" ||
+            displayState == "Disconnected" ||
             displayState == "Failed");
     return Semantics(
       label: "Live emergency video, $citizenState",

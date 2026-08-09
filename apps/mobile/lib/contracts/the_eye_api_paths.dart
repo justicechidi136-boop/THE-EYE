@@ -8,6 +8,8 @@ abstract final class TheEyeApiPaths {
       "/live-video/incidents/$incidentId/start";
   static String liveVideoStop(String sessionId) =>
       "/live-video/sessions/$sessionId/stop";
+  static String liveVideoClientFailure(String sessionId) =>
+      "/live-video/sessions/$sessionId/client-failure";
   static String liveVideoLocation(String sessionId) =>
       "/live-video/sessions/$sessionId/location";
 
