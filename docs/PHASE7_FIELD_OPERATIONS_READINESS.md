@@ -55,6 +55,17 @@
 
 ---
 
+## Field Launcher / Dedicated Device Mode
+
+| Item | Status |
+|------|--------|
+| HOME launcher alias + FIELD_DEVICE_MODE | **Complete** |
+| Launcher home + approved apps + status strip | **Complete** |
+| Managed kiosk bridge + Device Admin receiver | **Complete** (Device Owner via MDM) |
+| Policy API + admin launcher policy UI | **Complete** |
+| Staging maintenance escape (audited) | **Complete** |
+| Physical launcher/kiosk QA | **Pending** — `docs/FIELD_LAUNCHER_QA.md` |
+
 ## Remaining blockers
 
 1. **Physical tablet QA** — matrix prepared, not executed.
@@ -62,6 +73,7 @@
 3. **Hardware-backed Android Keystore** — required before production.
 4. **WebSocket/SSE** — not in scope; polling + push fallback only.
 5. **Full incident workspace actions** — core actions wired via assignments; some Phase 6 media paths remain incremental.
+6. **Managed kiosk Device Owner lab** — requires agency MDM / factory provisioned tablet.
 
 ---
 

@@ -59,8 +59,18 @@ Never log: passwords, PINs, private keys, refresh tokens, raw hardware IDs, exac
 
 ---
 
+## Launcher / kiosk security
+
+- App cannot silently become Device Owner; MDM must provision `FieldDeviceAdminReceiver`.
+- Unapproved packages cannot be launched (`ApprovedAppRegistry` + audit).
+- Deep links / intents must not expose restricted ops while device is locked/revoked.
+- Maintenance escape requires supervisor PIN + audited API event.
+- Outside Device Owner mode, Android OS limits apply — see `FIELD_ANDROID_ENTERPRISE_PROVISIONING.md`.
+
 ## References
 
 - `apps/api/src/common/auth/field-device-crypto.ts`
 - `apps/api/src/modules/field-operations/`
 - `apps/field-ops-tablet/lib/security/`
+- `docs/FIELD_LAUNCHER_ARCHITECTURE.md`
+- `docs/FIELD_KIOSK_MODE.md`
