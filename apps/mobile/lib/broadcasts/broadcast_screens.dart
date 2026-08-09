@@ -551,7 +551,7 @@ class _BroadcastDetailBody extends StatelessWidget {
           Text(
             item!.expired
                 ? "Expired"
-                : formatBroadcastExpiry(item.expiresAt!),
+                : formatBroadcastExpiry(item!.expiresAt!),
             style: TextStyle(color: muted),
           ),
         ],
@@ -606,7 +606,7 @@ class _BroadcastDetailBody extends StatelessWidget {
         if ((item?.commentsCount ?? 0) > 0) ...[
           const SizedBox(height: 8),
           Text(
-            "${item!.commentsCount} community comment${item.commentsCount == 1 ? "" : "s"}",
+            "${item!.commentsCount} community comment${item!.commentsCount == 1 ? "" : "s"}",
             style: TextStyle(color: muted),
           ),
         ],
