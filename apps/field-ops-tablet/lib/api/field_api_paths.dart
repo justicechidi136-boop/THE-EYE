@@ -14,6 +14,10 @@ abstract final class FieldApiPaths {
   static String deviceHeartbeat(String publicDeviceId) =>
       '/field/devices/$publicDeviceId/heartbeat';
 
+  /// Server-authoritative launcher / kiosk policy for this device session.
+  static const devicePolicyMe = '/field/devices/me/policy';
+  static const deviceLauncherAudit = '/field/devices/me/launcher-audit';
+
   // Auth
   static const authLogin = '/field/auth/login';
   static const authRefresh = '/field/auth/refresh';
