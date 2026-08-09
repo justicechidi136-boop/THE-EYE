@@ -303,23 +303,38 @@ class SocialAuthService {
     return _firebaseGoogleCredentialWithGoogleSignIn();
   }
 
-  /// Tries Firebase GenericIdp first, then falls back to [google_sign_in] when
-  /// OEM keystore cannot load Firebear keys (log: GenericIdpActivity encryption
-  /// key failure → FirebaseAuthException code `unknown`).
+  /// Prefer the native Google account picker on Android; fall back to Firebase
+  /// GenericIdp (browser/Custom Tabs) only when the plugin path fails.
   Future<UserCredential?> _firebaseGoogleCredentialAndroid() async {
     try {
-      return await _firebaseGoogleCredentialWithProvider();
+      return await _firebaseGoogleCredentialWithGoogleSignIn();
+    } on PlatformException catch (error) {
+      if (_isGoogleSignInCancelled(error.code)) {
+        return null;
+      }
+      if (error.code == "missing-google-web-client-id" ||
+          error.code == "missing-id-token") {
+        rethrow;
+      }
+      logAuthEvent(
+        "google_sign_in failed (${error.code}); falling back to signInWithProvider",
+      );
+      try {
+        return await _firebaseGoogleCredentialWithProvider();
+      } on FirebaseAuthException catch (providerError) {
+        if (_isGoogleSignInCancelled(providerError.code)) {
+          return null;
+        }
+        rethrow;
+      }
     } on FirebaseAuthException catch (error) {
       if (_isGoogleSignInCancelled(error.code)) {
         return null;
       }
-      if (_shouldFallbackToGoogleSignInPlugin(error.code)) {
-        logAuthEvent(
-          "Google signInWithProvider failed (${error.code}); using google_sign_in fallback",
-        );
-        return _firebaseGoogleCredentialWithGoogleSignIn();
-      }
-      rethrow;
+      logAuthEvent(
+        "google_sign_in credential failed (${error.code}); falling back to signInWithProvider",
+      );
+      return _firebaseGoogleCredentialWithProvider();
     } on TimeoutException {
       logAuthEvent("Google sign-in timed out waiting for provider response");
       throw PlatformException(

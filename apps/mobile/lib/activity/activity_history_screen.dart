@@ -6,6 +6,8 @@ import "package:flutter/semantics.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../emergency/active_emergency_navigation.dart";
 import "../incidents/incident_submission_service.dart";
+import "../presentation/citizen_presentation.dart";
+import "../presentation/public_reference.dart";
 import "activity_history_cache.dart";
 import "activity_history_service.dart";
 import "activity_navigation.dart";
@@ -283,23 +285,38 @@ class _ActivityHistoryCard extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
+  String get _publicReference {
+    final occurred = DateTime.tryParse(item.occurredAt);
+    if (occurred == null) return item.id.length > 12 ? "EYE-${item.id.substring(0, 8)}" : item.id;
+    return resolveIncidentPublicReference(
+      incidentId: item.id,
+      submittedAt: occurred,
+    );
+  }
+
+  String get _statusLabel {
+    final badge = item.statusBadge.trim();
+    if (badge.isNotEmpty &&
+        !badge.contains("LowConfidence") &&
+        !RegExp(r"^[0-9a-f-]{36}$", caseSensitive: false).hasMatch(badge)) {
+      return citizenIncidentStatusLabel(badge) == "Update received"
+          ? badge
+          : citizenIncidentStatusLabel(item.status);
+    }
+    return citizenIncidentStatusLabel(item.status);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tint = EyeSemanticColors.verificationTint(context, item.verificationStatus);
-    final preview = item.timelinePreview.take(3).map((entry) => entry.label).join(", ");
+    final statusLabel = _statusLabel;
+    final reference = _publicReference;
     final semanticsLabel = [
-      item.category,
-      item.id,
-      item.statusBadge,
+      item.title,
+      reference,
+      statusLabel,
       item.dateLabel,
       item.timeLabel,
       if (item.locationAddress != null) item.locationAddress,
-      if (item.agency != null) "Agency ${item.agency}",
-      if (item.verificationConfidence != null) "${item.verificationConfidence}% confidence",
-      if (item.broadcastReach != null) "${item.broadcastReach} people reached",
-      if (item.latestUpdateLabel != null) "Latest update ${item.latestUpdateLabel}",
-      if (item.unreadUpdatesCount > 0) "${item.unreadUpdatesCount} unread updates",
-      if (preview.isNotEmpty) "Timeline preview $preview",
     ].join(". ");
 
     return Semantics(
@@ -312,58 +329,61 @@ class _ActivityHistoryCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Icon(icon, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        reference,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      Text("${item.dateLabel} ${item.timeLabel}"),
+                      if (item.locationAddress != null)
+                        Text(item.locationAddress!),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Icon(icon, size: 28),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                          Text("${item.category} • ${item.id}"),
-                          Text("${item.dateLabel} ${item.timeLabel}"),
-                          if (item.locationAddress != null) Text(item.locationAddress!),
-                        ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: tint.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(item.statusBadge, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    if (item.unreadUpdatesCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Badge(
+                          label: Text("${item.unreadUpdatesCount}"),
                         ),
-                        if (item.unreadUpdatesCount > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Badge(label: Text("${item.unreadUpdatesCount}")),
-                          ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  [
-                    if (item.agency != null) "Agency: ${item.agency}",
-                    "Verification: ${item.verificationStatus}",
-                    if (item.broadcastReach != null) "Reach: ${item.broadcastReach}",
-                    if (item.latestUpdateLabel != null) "Latest: ${item.latestUpdateLabel}",
-                  ].join(" • "),
-                ),
-                if (preview.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text("Timeline: $preview", style: Theme.of(context).textTheme.bodySmall),
-                ],
               ],
             ),
           ),

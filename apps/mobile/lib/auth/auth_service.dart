@@ -394,6 +394,30 @@ class AuthService {
     }
   }
 
+  /// Refresh the access token when the API returns 401 mid-session.
+  /// Returns the latest session, or null only when refresh itself fails.
+  Future<AuthSession?> ensureFreshSession() async {
+    final session = await _sessionStore.load();
+    if (session == null || session.accessToken.isEmpty) return null;
+    try {
+      final profile = await _fetchProfileWithRefresh(session);
+      await _sessionStore.save(profile.session);
+      return profile.session;
+    } on AuthApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _sessionStore.clear();
+        return null;
+      }
+      return session;
+    } on SocketException {
+      return session;
+    } on http.ClientException {
+      return session;
+    } catch (_) {
+      return session;
+    }
+  }
+
   Future<void> logout() async {
     final session = await _sessionStore.load();
     if (session != null && session.refreshToken.isNotEmpty) {

@@ -625,8 +625,8 @@ export class AuthService {
   private splitDisplayName(
     identity: Pick<VerifiedFirebaseIdentity, "name" | "givenName" | "familyName">,
   ) {
-    const given = identity.givenName?.trim();
-    const family = identity.familyName?.trim();
+    const given = this.sanitizeCitizenNamePart(identity.givenName);
+    const family = this.sanitizeCitizenNamePart(identity.familyName);
     if (given || family) {
       return {
         firstName: given ?? "",
@@ -634,14 +634,27 @@ export class AuthService {
       };
     }
     const name = identity.name?.trim();
-    if (!name) {
+    if (!name || this.isPlaceholderDisplayName(name)) {
       return { firstName: "", lastName: "" };
     }
-    const parts = name.split(/\s+/);
+    const parts = name.split(/\s+/).filter(Boolean);
     return {
-      firstName: parts[0] ?? "",
-      lastName: parts.length > 1 ? parts.slice(1).join(" ") : "",
+      firstName: this.sanitizeCitizenNamePart(parts[0]) ?? "",
+      lastName: parts.length > 1
+        ? (this.sanitizeCitizenNamePart(parts.slice(1).join(" ")) ?? "")
+        : "",
     };
+  }
+
+  private sanitizeCitizenNamePart(value: string | null | undefined): string | undefined {
+    const trimmed = value?.trim();
+    if (!trimmed) return undefined;
+    if (/^(google|account|user|citizen)$/i.test(trimmed)) return undefined;
+    return trimmed;
+  }
+
+  private isPlaceholderDisplayName(name: string): boolean {
+    return /^google(\s+account)?$/i.test(name.trim());
   }
 
   private async createFirebaseCitizen(identity: VerifiedFirebaseIdentity) {
@@ -707,7 +720,9 @@ export class AuthService {
         lastName: this.titleCase(segments.slice(1).join(" ")),
       };
     }
-    return { firstName: this.titleCase(localPart), lastName: "Account" };
+    // Leave last name empty so profile setup prompts for a real name
+    // instead of showing the placeholder "Account".
+    return { firstName: this.titleCase(localPart), lastName: "" };
   }
 
   private titleCase(value: string) {

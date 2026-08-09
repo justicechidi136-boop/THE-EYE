@@ -5,7 +5,6 @@ import "package:flutter/semantics.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../presentation/citizen_presentation.dart";
-import "../design_system/components/eye_page_back_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "active_emergency_contract.dart";
 import "active_emergency_errors.dart";
@@ -288,11 +287,34 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
     return value.toLocal().toString();
   }
 
+  String _liveVideoCitizenState(String? displayState) {
+    return switch (displayState) {
+      "Streaming" || "Live" || "Connected" => "Live",
+      "Connecting" || "Starting" => "Connecting…",
+      "Failed" || "Error" || "Unavailable" => "Unavailable",
+      "Ended" || "Stopped" => "Ended",
+      _ => "Ready to start",
+    };
+  }
+
   Widget _buildLiveVideoCard(ActiveEmergencyActiveContract active) {
     final liveVideo = active.liveVideo;
     final displayState = liveVideo?.displayState ?? "NotStarted";
+    final citizenState = _liveVideoCitizenState(displayState);
+    final sessionActive = displayState == "Streaming" ||
+        displayState == "Live" ||
+        displayState == "Connected" ||
+        displayState == "Connecting" ||
+        displayState == "Starting";
+    final canStart = widget.onStartLiveVideo != null &&
+        (active.allowedActions.retryLiveVideo ||
+            liveVideo?.retryAvailable == true ||
+            displayState == "NotStarted" ||
+            displayState == "Ended" ||
+            displayState == "Stopped" ||
+            displayState == "Failed");
     return Semantics(
-      label: "Live emergency video, $displayState",
+      label: "Live emergency video, $citizenState",
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -302,26 +324,30 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
               Text("Live emergency video",
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              _InfoRow(label: "State", value: displayState),
-              if (liveVideo?.startedAt != null)
-                _InfoRow(
-                  label: "Started",
-                  value: liveVideo!.startedAt!.toLocal().toString(),
-                ),
-              if (liveVideo?.durationSeconds != null)
-                _InfoRow(
-                  label: "Duration",
-                  value: "${liveVideo!.durationSeconds}s",
-                ),
-              if (liveVideo?.connectionStatus != null)
-                _InfoRow(
-                  label: "Connection",
-                  value: liveVideo!.connectionStatus!,
-                ),
-              if (liveVideo?.participantCount != null)
-                _InfoRow(
-                  label: "Participants",
-                  value: liveVideo!.participantCount.toString(),
+              if (sessionActive) ...[
+                _InfoRow(label: "Status", value: citizenState),
+                if (liveVideo?.startedAt != null)
+                  _InfoRow(
+                    label: "Started",
+                    value: formatCitizenDateTime(liveVideo!.startedAt!),
+                  ),
+                if (liveVideo?.durationSeconds != null &&
+                    liveVideo!.durationSeconds! > 0)
+                  _InfoRow(
+                    label: "Duration",
+                    value: "${liveVideo.durationSeconds}s",
+                  ),
+                if ((liveVideo?.participantCount ?? 0) > 0)
+                  _InfoRow(
+                    label: "Responders watching",
+                    value: liveVideo!.participantCount.toString(),
+                  ),
+              ] else
+                Text(
+                  citizenState == "Unavailable"
+                      ? "Live video is temporarily unavailable."
+                      : "Start a live video session so responders can see what is happening.",
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               if (_liveVideoError != null) ...[
                 const SizedBox(height: 8),
@@ -331,13 +357,12 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                 ),
               ],
               const SizedBox(height: 8),
-              if (active.allowedActions.retryLiveVideo ||
-                  liveVideo?.retryAvailable == true)
+              if (canStart)
                 FilledButton.icon(
                   onPressed: _actionInFlight ? null : _startLiveVideo,
                   icon: const Icon(Icons.videocam),
                   label: Text(
-                    displayState == "Streaming"
+                    sessionActive && citizenState == "Live"
                         ? "Return to live video"
                         : "Start live video",
                   ),
@@ -393,10 +418,6 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
                   children: [
-                    EyePageBackHeader(
-                      title: widget.silent ? "Status" : "Active emergency",
-                      onBack: () => Navigator.of(context).maybePop(),
-                    ),
                     Semantics(
                       label: _spokenSummary(active),
                       child: Column(

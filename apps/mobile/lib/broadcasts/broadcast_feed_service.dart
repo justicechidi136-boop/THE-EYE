@@ -24,6 +24,7 @@ class BroadcastFeedItem {
     this.country,
     this.state,
     this.commentsCount = 0,
+    this.metadata = const {},
   });
 
   final String id;
@@ -43,8 +44,10 @@ class BroadcastFeedItem {
   final String? country;
   final String? state;
   final int commentsCount;
+  final Map<String, dynamic> metadata;
 
   factory BroadcastFeedItem.fromJson(Map<String, dynamic> json) {
+    final rawMetadata = json["metadata"];
     return BroadcastFeedItem(
       id: (json["id"] as String?) ?? "",
       type: (json["type"] as String?) ?? "Emergency",
@@ -65,6 +68,9 @@ class BroadcastFeedItem {
       country: json["country"] as String?,
       state: json["state"] as String?,
       commentsCount: (json["commentsCount"] as num?)?.toInt() ?? 0,
+      metadata: rawMetadata is Map
+          ? Map<String, dynamic>.from(rawMetadata)
+          : const {},
     );
   }
 
@@ -87,6 +93,7 @@ class BroadcastFeedItem {
       country: country,
       state: state,
       commentsCount: commentsCount,
+      metadata: metadata,
     );
   }
 }
