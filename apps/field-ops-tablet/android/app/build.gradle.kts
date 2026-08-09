@@ -4,6 +4,21 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+fun resolveFieldDeviceMode(): String {
+    val fromProp = (project.findProperty("FIELD_DEVICE_MODE") as String?)?.trim()?.lowercase()
+    val fromEnv = System.getenv("FIELD_DEVICE_MODE")?.trim()?.lowercase()
+    val raw = fromProp?.takeIf { it.isNotEmpty() }
+        ?: fromEnv?.takeIf { it.isNotEmpty() }
+        ?: "standard"
+    return when (raw) {
+        "launcher", "field_launcher" -> "launcher"
+        "managed_kiosk", "kiosk", "managed" -> "managed_kiosk"
+        else -> "standard"
+    }
+}
+
+val fieldDeviceMode = resolveFieldDeviceMode()
+
 android {
     namespace = "com.theeye.fieldops"
     compileSdk = flutter.compileSdkVersion
@@ -24,6 +39,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["fieldDeviceMode"] = fieldDeviceMode
+        buildConfigField("String", "FIELD_DEVICE_MODE", "\"$fieldDeviceMode\"")
     }
 
     flavorDimensions += "environment"
@@ -31,9 +48,32 @@ android {
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
+            // Staging defaults to launcher so agency pilot tablets can set HOME.
+            // Override with -PFIELD_DEVICE_MODE=standard|managed_kiosk.
+            val stagingMode = if (
+                project.hasProperty("FIELD_DEVICE_MODE") ||
+                !System.getenv("FIELD_DEVICE_MODE").isNullOrBlank()
+            ) {
+                fieldDeviceMode
+            } else {
+                "launcher"
+            }
+            manifestPlaceholders["fieldDeviceMode"] = stagingMode
+            buildConfigField("String", "FIELD_DEVICE_MODE", "\"$stagingMode\"")
         }
         create("production") {
             dimension = "environment"
+            // Production stays STANDARD_APP unless explicitly configured.
+            val productionMode = if (
+                project.hasProperty("FIELD_DEVICE_MODE") ||
+                !System.getenv("FIELD_DEVICE_MODE").isNullOrBlank()
+            ) {
+                fieldDeviceMode
+            } else {
+                "standard"
+            }
+            manifestPlaceholders["fieldDeviceMode"] = productionMode
+            buildConfigField("String", "FIELD_DEVICE_MODE", "\"$productionMode\"")
         }
     }
 

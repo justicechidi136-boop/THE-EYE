@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Device-admin metadata for MANAGED_KIOSK provisioning.
+  THE EYE never self-provisions as Device Owner; MDM must set Device Owner
+  and grant this receiver when using Android Enterprise dedicated devices.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <limit-password />
+        <watch-login />
+        <reset-password />
+        <force-lock />
+        <wipe-data />
+        <expire-password />
+        <encrypted-storage />
+        <disable-camera />
+    </uses-policies>
+</device-admin>
