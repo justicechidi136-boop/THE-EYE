@@ -229,7 +229,9 @@ class LiveVideoSessionController extends ChangeNotifier {
       );
 
       final permissions = await ensurePermissions();
-      if (!_lifecycle.phase.allowsStart && !_previewActive) {
+      // preparing is mid-flight: do not use allowsStart (it is false while preparing).
+      if (_disposing ||
+          _lifecycle.phase == LiveVideoLifecyclePhase.stopping) {
         return false;
       }
       if (!permissions.granted) {

@@ -1,5 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
+import "package:permission_handler/permission_handler.dart";
 
+import "package:the_eye_mobile/evidence/evidence_permission_service.dart";
 import "package:the_eye_mobile/live_video/live_video_api_models.dart";
 import "package:the_eye_mobile/live_video/live_video_disconnect_source.dart";
 import "package:the_eye_mobile/live_video/live_video_lifecycle_phase.dart";
@@ -25,6 +27,8 @@ LiveVideoStartResult _minimalStartResult({String sessionId = "session-test"}) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   Future<void> tearDownController(LiveVideoSessionController controller) async {
     await controller.stopSession(caller: "test:teardown");
   }
@@ -69,6 +73,31 @@ void main() {
       controller.debugForceLifecycle(LiveVideoLifecyclePhase.connecting);
       final previewOk = await controller.startLocalPreview();
       expect(previewOk, isFalse);
+      await tearDownController(controller);
+      controller.dispose();
+    });
+
+    test(
+        "preview does not abort solely because preparing disallows start",
+        () async {
+      // Regression: startLocalPreview used to transition to preparing, then
+      // return false because preparing.allowsStart is false — blocking SOS video.
+      expect(LiveVideoLifecyclePhase.preparing.allowsStart, isFalse);
+
+      final controller = LiveVideoSessionController(
+        permissionService: EvidencePermissionService(
+          checkPermission: (_) async => PermissionStatus.granted,
+          requestPermission: (_) async => PermissionStatus.granted,
+        ),
+      );
+
+      await controller.startLocalPreview();
+      expect(
+        controller.lifecyclePhase,
+        isNot(LiveVideoLifecyclePhase.preparing),
+        reason:
+            "must leave preparing (success → stopped, or failure → connectFailed)",
+      );
       await tearDownController(controller);
       controller.dispose();
     });
