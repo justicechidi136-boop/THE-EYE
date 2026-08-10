@@ -50,7 +50,25 @@ export type Permission =
   | "field:device:register"
   | "field:device:manage"
   | "field:device:approve"
-  | "field:session:operate";
+  | "field:session:operate"
+  | "field:assignment:view"
+  | "field:assignment:accept"
+  | "field:incident:view"
+  | "field:incident:update-status"
+  | "field:incident:create"
+  | "field:communication:send"
+  | "field:evidence:add"
+  | "field:bolo:view"
+  | "field:sighting:create"
+  | "field:backup:request"
+  | "field:map:view"
+  | "field:patrol:operate"
+  | "field:checkpoint:operate"
+  | "field:vehicle:search"
+  | "field:broadcast:view"
+  | "field:drone:observe"
+  | "field:shift:operate"
+  | "field:supervisor:manage";
 
 const supportRead: Permission[] = ["support:chat:read", "incident:read", "auth:admin", "policy:read"];
 const supportAgent: Permission[] = [...supportRead, "support:chat:reply", "support:chat:assign", "support:chat:resolve", "support:internal-note:create"];
