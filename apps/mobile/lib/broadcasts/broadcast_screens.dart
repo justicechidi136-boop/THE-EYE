@@ -5,11 +5,13 @@ import "package:flutter/services.dart";
 import "package:geolocator/geolocator.dart";
 
 import "../brand.dart";
-import "../design_system/components/eye_page_back_header.dart";
+import "../design_system/components/eye_page_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../design_system/tokens.dart";
 import "../incidents/incident_submission_service.dart";
 import "../location/location_permission_service.dart";
+import "../presentation/broadcast_expiry_presenter.dart";
+import "../presentation/citizen_date_time.dart";
 import "../presentation/citizen_presentation.dart";
 import "../theme/the_eye_theme.dart";
 import "../voice/voice_recorder.dart";
@@ -542,23 +544,34 @@ class _BroadcastDetailBody extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-        Text(
-          "${item?.status ?? "Active"}",
-          style: TextStyle(color: muted, fontWeight: FontWeight.w700),
+        Builder(
+          builder: (context) {
+            final expiry = BroadcastExpiryPresenter.present(
+              backendStatus: item?.status,
+              expiresAt: item?.expiresAt,
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  expiry.statusLabel,
+                  style: TextStyle(color: muted, fontWeight: FontWeight.w700),
+                ),
+                if (expiry.detailLine != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    expiry.detailLine!,
+                    style: TextStyle(color: muted),
+                  ),
+                ],
+              ],
+            );
+          },
         ),
-        if (item?.expiresAt != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            item!.expired
-                ? "Expired"
-                : formatBroadcastExpiry(item!.expiresAt!),
-            style: TextStyle(color: muted),
-          ),
-        ],
         if (item?.publishedAt != null) ...[
           const SizedBox(height: 4),
           Text(
-            "Published ${formatCitizenDateTime(item!.publishedAt!)}",
+            "Published ${CitizenDateTimeFormatter.formatDateTime(item!.publishedAt!)}",
             style: TextStyle(color: muted),
           ),
         ],
@@ -580,7 +593,8 @@ class _BroadcastDetailBody extends StatelessWidget {
           if (lastSeenAt != null || lastSeenAddress != null) ...[
             const SizedBox(height: 8),
             Text("Last seen", style: Theme.of(context).textTheme.titleSmall),
-            if (lastSeenAt != null) Text(formatCitizenDateTime(lastSeenAt)),
+            if (lastSeenAt != null)
+              Text(CitizenDateTimeFormatter.formatDateTime(lastSeenAt)),
             if (lastSeenAddress != null) Text(lastSeenAddress),
           ],
           if (physical != null) ...[
@@ -1373,24 +1387,22 @@ class _BroadcastShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: EyeSemanticColors.of(context).background,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            EyePageBackHeader(
-              title: title,
-              onBack: () {
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                  return;
-                }
-                Navigator.of(context)
-                    .pushReplacementNamed(BroadcastRoutes.center);
-              },
-            ),
-            Expanded(child: child),
-          ],
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          EyePageHeader.secondary(
+            title: title,
+            onBack: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+                return;
+              }
+              Navigator.of(context)
+                  .pushReplacementNamed(BroadcastRoutes.center);
+            },
+          ),
+          Expanded(child: child),
+        ],
       ),
     );
   }

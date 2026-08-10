@@ -5,7 +5,7 @@ import "package:geolocator/geolocator.dart";
 import "package:uuid/uuid.dart";
 
 import "../contracts/the_eye_api_client.dart";
-import "../design_system/components/eye_page_back_header.dart";
+import "../design_system/components/eye_page_header.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
@@ -29,15 +29,18 @@ class IncidentCommunicationScreen extends StatefulWidget {
   final bool readOnly;
 
   @override
-  State<IncidentCommunicationScreen> createState() => _IncidentCommunicationScreenState();
+  State<IncidentCommunicationScreen> createState() =>
+      _IncidentCommunicationScreenState();
 }
 
-class _IncidentCommunicationScreenState extends State<IncidentCommunicationScreen> {
+class _IncidentCommunicationScreenState
+    extends State<IncidentCommunicationScreen> {
   late final IncidentCommunicationService _service;
   final _composerController = TextEditingController();
   final _scrollController = ScrollController();
   List<IncidentThreadMessage> _messages = const [];
-  IncidentCommunicationAllowedActions _actions = IncidentCommunicationAllowedActions.empty();
+  IncidentCommunicationAllowedActions _actions =
+      IncidentCommunicationAllowedActions.empty();
   bool _loading = true;
   String? _error;
   bool _sending = false;
@@ -53,7 +56,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     _service = IncidentCommunicationService(widget.apiClient);
     _uploadService = EvidenceUploadService(apiClient: widget.apiClient);
     unawaited(_refresh(initial: true));
-    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => unawaited(_refresh()));
+    _pollTimer = Timer.periodic(
+        const Duration(seconds: 10), (_) => unawaited(_refresh()));
   }
 
   @override
@@ -73,16 +77,22 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
         widget.accessToken,
         uploadService: _uploadService,
       );
-      final conversation = await _service.fetchConversation(widget.incidentId, widget.accessToken);
-      final messages = await _service.fetchMessages(widget.incidentId, widget.accessToken);
+      final conversation = await _service.fetchConversation(
+          widget.incidentId, widget.accessToken);
+      final messages =
+          await _service.fetchMessages(widget.incidentId, widget.accessToken);
       if (!mounted) return;
       setState(() {
         _messages = messages.reversed.toList(growable: false);
         _pendingInformationRequestId = _extractPendingRequestId(_messages);
-        _pendingInformationRequestPrompt = _extractPendingRequestPrompt(_messages);
-        _conversationStatus = conversation["conversationStatus"]?.toString() ?? "Active";
+        _pendingInformationRequestPrompt =
+            _extractPendingRequestPrompt(_messages);
+        _conversationStatus =
+            conversation["conversationStatus"]?.toString() ?? "Active";
         _actions = IncidentCommunicationAllowedActions.fromJson(
-          (conversation["allowedCommunicationActions"] as Map<String, dynamic>?) ?? const {},
+          (conversation["allowedCommunicationActions"]
+                  as Map<String, dynamic>?) ??
+              const {},
         );
         _error = null;
         _loading = false;
@@ -124,7 +134,9 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Message queued offline and will retry automatically.")),
+          const SnackBar(
+              content:
+                  Text("Message queued offline and will retry automatically.")),
         );
       }
     } finally {
@@ -150,7 +162,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     return null;
   }
 
-  Future<void> _sendMediaMessage(String messageType, LocalEvidenceAttachment attachment) async {
+  Future<void> _sendMediaMessage(
+      String messageType, LocalEvidenceAttachment attachment) async {
     if (widget.readOnly) return;
     setState(() => _sending = true);
     final clientMessageId = const Uuid().v4();
@@ -194,7 +207,9 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Media queued offline and will retry automatically.")),
+          const SnackBar(
+              content:
+                  Text("Media queued offline and will retry automatically.")),
         );
       }
     } finally {
@@ -206,7 +221,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     if (!_actions.sendPhoto || widget.readOnly) return;
     final controller = createEvidenceCaptureController(context);
     await controller.pickImage();
-    final attachment = controller.attachments.isNotEmpty ? controller.attachments.last : null;
+    final attachment =
+        controller.attachments.isNotEmpty ? controller.attachments.last : null;
     controller.dispose();
     if (attachment == null) return;
     await _sendMediaMessage("Image", attachment);
@@ -236,7 +252,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     final clientMessageId = const Uuid().v4();
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
       );
       await _service.sendMessage(
         incidentId: widget.incidentId,
@@ -255,7 +272,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Unable to share location. Please try again.")),
+          const SnackBar(
+              content: Text("Unable to share location. Please try again.")),
         );
       }
     } finally {
@@ -263,12 +281,14 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     }
   }
 
-  Future<void> _markOfficialMessagesRead(List<IncidentThreadMessage> messages) async {
+  Future<void> _markOfficialMessagesRead(
+      List<IncidentThreadMessage> messages) async {
     for (final message in messages) {
       if (message.senderRole == "Reporter") continue;
       if (message.deliveryState == "Read") continue;
       try {
-        await _service.markRead(widget.incidentId, message.id, widget.accessToken);
+        await _service.markRead(
+            widget.incidentId, message.id, widget.accessToken);
       } catch (_) {
         // Non-fatal; unread badge may lag until next refresh.
       }
@@ -295,7 +315,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Unable to send quick reply. Please try again.")),
+          const SnackBar(
+              content: Text("Unable to send quick reply. Please try again.")),
         );
       }
     } finally {
@@ -310,20 +331,17 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
         _conversationStatus == "Archived" ||
         !_actions.openThread;
     return Scaffold(
-      appBar: AppBar(
-        title: Semantics(
-          header: true,
-          label: "Emergency communication",
-          child: const Text("Communication"),
-        ),
-      ),
       body: Column(
         children: [
-          EyePageBackHeader(title: "Back to active emergency"),
+          EyePageHeader.secondary(
+            title: "Communication",
+            onBack: () => Navigator.of(context).maybePop(),
+          ),
           if (readOnly)
             Semantics(
               liveRegion: true,
-              label: "This incident has been resolved. The communication record is now read-only.",
+              label:
+                  "This incident has been resolved. The communication record is now read-only.",
               child: Material(
                 color: Theme.of(context).colorScheme.secondaryContainer,
                 child: const Padding(
@@ -365,16 +383,22 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
                             label:
                                 "${message.senderLabel}, ${message.messageType}, ${message.createdAt.toLocal()}",
                             child: Align(
-                              alignment:
-                                  isOfficial ? Alignment.centerLeft : Alignment.centerRight,
+                              alignment: isOfficial
+                                  ? Alignment.centerLeft
+                                  : Alignment.centerRight,
                               child: Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 padding: const EdgeInsets.all(12),
-                                constraints: const BoxConstraints(maxWidth: 320),
+                                constraints:
+                                    const BoxConstraints(maxWidth: 320),
                                 decoration: BoxDecoration(
                                   color: isOfficial
-                                      ? Theme.of(context).colorScheme.surfaceContainerHighest
-                                      : Theme.of(context).colorScheme.primaryContainer,
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Column(
@@ -382,14 +406,17 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
                                   children: [
                                     Text(
                                       message.senderLabel,
-                                      style: Theme.of(context).textTheme.labelLarge,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge,
                                     ),
                                     const SizedBox(height: 4),
                                     Text(message.body),
                                     const SizedBox(height: 4),
                                     Text(
                                       message.deliveryState ?? "Sent",
-                                      style: Theme.of(context).textTheme.bodySmall,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
                                     ),
                                   ],
                                 ),
@@ -413,7 +440,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
                           button: true,
                           label: "Send photo",
                           child: OutlinedButton.icon(
-                            onPressed: _sending ? null : () => unawaited(_pickPhoto()),
+                            onPressed:
+                                _sending ? null : () => unawaited(_pickPhoto()),
                             icon: const Icon(Icons.photo_camera_outlined),
                             label: const Text("Photo"),
                           ),
@@ -423,7 +451,9 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
                           button: true,
                           label: "Send voice message",
                           child: OutlinedButton.icon(
-                            onPressed: _sending ? null : () => unawaited(_recordVoice()),
+                            onPressed: _sending
+                                ? null
+                                : () => unawaited(_recordVoice()),
                             icon: const Icon(Icons.mic_none),
                             label: const Text("Voice"),
                           ),
@@ -433,7 +463,9 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
                           button: true,
                           label: "Share current location",
                           child: OutlinedButton.icon(
-                            onPressed: _sending ? null : () => unawaited(_sendLocationUpdate()),
+                            onPressed: _sending
+                                ? null
+                                : () => unawaited(_sendLocationUpdate()),
                             icon: const Icon(Icons.my_location),
                             label: const Text("Location"),
                           ),
@@ -457,7 +489,8 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
                           button: true,
                           label: "Quick reply $action",
                           child: OutlinedButton(
-                            onPressed: _sending ? null : () => _sendQuickReply(action),
+                            onPressed:
+                                _sending ? null : () => _sendQuickReply(action),
                             child: Text(action.replaceAll("_", " ")),
                           ),
                         ),
@@ -486,12 +519,14 @@ class _IncidentCommunicationScreenState extends State<IncidentCommunicationScree
                         button: true,
                         label: "Send message",
                         child: FilledButton(
-                          onPressed: _sending || !_actions.sendText ? null : _sendText,
+                          onPressed:
+                              _sending || !_actions.sendText ? null : _sendText,
                           child: _sending
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.send),
                         ),

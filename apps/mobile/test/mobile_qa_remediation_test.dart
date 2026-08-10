@@ -8,7 +8,7 @@ import "package:the_eye_mobile/presentation/public_reference.dart";
 void main() {
   group("UI-007/UI-010 citizen presentation", () {
     test("maps internal statuses to friendly labels", () {
-      expect(citizenIncidentStatusLabel("Verifying"), "Verification in progress");
+      expect(citizenIncidentStatusLabel("Verifying"), "Verifying");
       expect(citizenIncidentStatusLabel("CancelledByReporter"), "Cancelled");
     });
 
@@ -69,7 +69,8 @@ void main() {
 
     test("past expiresAt is Expired", () {
       final past = DateTime.now().subtract(const Duration(hours: 1));
-      expect(formatBroadcastExpiry(past), "Expired");
+      expect(formatBroadcastExpiry(past), startsWith("Expired"));
+      expect(formatBroadcastExpiry(past).toLowerCase(), isNot(contains("just now")));
     });
   });
 }

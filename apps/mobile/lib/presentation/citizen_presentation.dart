@@ -1,22 +1,66 @@
+import "citizen_date_time.dart";
 import "public_reference.dart";
 
+export "citizen_date_time.dart";
+export "broadcast_expiry_presenter.dart";
+
+/// Compact chip/list labels (UI-007). Prefer [resolveCitizenIncidentStatusLabel]
+/// so authoritative server `displayLabel` wins when present.
 String citizenIncidentStatusLabel(String status) {
   return switch (status) {
-    "Submitted" => "Report submitted",
-    "Received" => "Report received",
-    "Verifying" => "Verification in progress",
-    "Verified" => "Report verified",
-    "Assigned" => "Agency assigned",
-    "Responding" => "Responders en route",
-    "UnderControl" => "Situation under control",
-    "CancellationRequested" => "Cancellation under review",
+    "Submitted" => "Submitted",
+    "Received" => "Received",
+    "Verifying" => "Verifying",
+    "Verified" => "Verified",
+    "Assigned" => "Agency Assigned",
+    "Responding" => "Responders En Route",
+    "UnderControl" => "Under Control",
+    "CancellationRequested" => "Cancellation Requested",
     "Resolved" => "Resolved",
     "Closed" => "Closed",
-    "FalseReport" => "Marked as invalid",
+    "FalseReport" => "Closed / Invalid Report",
     "CancelledByReporter" => "Cancelled",
-    "ExpiredAfterReview" => "Expired after review",
+    "ExpiredAfterReview" => "Closed",
     _ => "Update received",
   };
+}
+
+/// Prefer server [displayLabel] when authoritative; otherwise map [status].
+String resolveCitizenIncidentStatusLabel({
+  String? displayLabel,
+  required String status,
+}) {
+  final trimmed = displayLabel?.trim();
+  if (trimmed != null &&
+      trimmed.isNotEmpty &&
+      !_looksTechnicalStatus(trimmed)) {
+    return trimmed;
+  }
+  return citizenIncidentStatusLabel(status);
+}
+
+bool _looksTechnicalStatus(String value) {
+  if (RegExp(r"^[0-9a-f-]{36}$", caseSensitive: false).hasMatch(value)) {
+    return true;
+  }
+  // Raw backend enums without spaces — map them instead of showing as-is.
+  const rawEnums = {
+    "Submitted",
+    "Received",
+    "Verifying",
+    "Verified",
+    "Assigned",
+    "Responding",
+    "UnderControl",
+    "CancellationRequested",
+    "Resolved",
+    "Closed",
+    "FalseReport",
+    "CancelledByReporter",
+    "ExpiredAfterReview",
+    "LowConfidence",
+  };
+  return rawEnums.contains(value);
 }
 
 String citizenTimelineMessage({String? eventType, String? message}) {
@@ -91,7 +135,8 @@ String citizenLocationQualityLabel({
 
 String citizenIncidentCategoryLabel(String type) {
   return type
-      .replaceAllMapped(RegExp(r"([a-z])([A-Z])"), (match) => "${match[1]} ${match[2]}")
+      .replaceAllMapped(
+          RegExp(r"([a-z])([A-Z])"), (match) => "${match[1]} ${match[2]}")
       .replaceAll("_", " ")
       .trim();
 }
@@ -102,33 +147,9 @@ String? citizenWitnessSummary({int? witnessCount}) {
   return "$count community ${count == 1 ? "witness" : "witnesses"}";
 }
 
+/// Backward-compatible alias → [CitizenDateTimeFormatter.formatFriendly].
 String formatCitizenDateTime(DateTime value, {DateTime? now}) {
-  final reference = (now ?? DateTime.now()).toLocal();
-  final local = value.toLocal();
-  final sameDay = reference.year == local.year &&
-      reference.month == local.month &&
-      reference.day == local.day;
-  final hour = local.hour;
-  final minute = local.minute.toString().padLeft(2, "0");
-  final hour12 = hour % 12 == 0 ? 12 : hour % 12;
-  final suffix = hour >= 12 ? "PM" : "AM";
-  final time = "$hour12:$minute $suffix";
-  if (sameDay) return "Today, $time";
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  return "${local.day} ${months[local.month - 1]} ${local.year}, $time";
+  return CitizenDateTimeFormatter.formatFriendly(value, now: now);
 }
 
 String resolveIncidentPublicReference({

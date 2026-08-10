@@ -1,7 +1,8 @@
 import "package:flutter/material.dart";
 
 import "../brand.dart";
-import "../presentation/citizen_presentation.dart";
+import "../presentation/broadcast_expiry_presenter.dart";
+import "../presentation/citizen_date_time.dart";
 
 void showBroadcastSnackBar(
   BuildContext context,
@@ -21,25 +22,21 @@ void showBroadcastSnackBar(
   );
 }
 
-String formatBroadcastAge(DateTime value) {
-  final diff = DateTime.now().difference(value);
+String formatBroadcastAge(DateTime value, {DateTime? now}) {
+  final reference = now ?? DateTime.now();
+  final diff = reference.difference(value);
   if (diff.isNegative) {
-    return formatBroadcastExpiry(value);
+    return formatBroadcastExpiry(value, now: reference);
   }
-  if (diff.inMinutes < 1) return "Just now";
-  if (diff.inHours < 1) return "${diff.inMinutes}m ago";
-  if (diff.inDays < 1) return "${diff.inHours}h ago";
-  if (diff.inDays < 7) return "${diff.inDays}d ago";
-  return formatCitizenDateTime(value);
+  return CitizenDateTimeFormatter.formatRelative(value, now: reference);
 }
 
-/// Labels for a future expiry timestamp (never "Just now").
-String formatBroadcastExpiry(DateTime expiresAt) {
-  final remaining = expiresAt.difference(DateTime.now());
-  if (remaining.isNegative) return "Expired";
-  if (remaining.inMinutes < 1) return "Expires in under a minute";
-  if (remaining.inHours < 1) return "Expires in ${remaining.inMinutes}m";
-  if (remaining.inDays < 1) return "Expires in ${remaining.inHours}h";
-  if (remaining.inDays < 7) return "Expires in ${remaining.inDays}d";
-  return "Expires ${formatCitizenDateTime(expiresAt)}";
+/// Labels for a future expiry timestamp (never "Just now" while Active).
+String formatBroadcastExpiry(DateTime expiresAt, {DateTime? now}) {
+  final presentation = BroadcastExpiryPresenter.present(
+    backendStatus: "Active",
+    expiresAt: expiresAt,
+    now: now,
+  );
+  return presentation.detailLine ?? presentation.statusLabel;
 }
