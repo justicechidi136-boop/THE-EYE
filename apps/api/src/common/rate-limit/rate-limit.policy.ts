@@ -7,7 +7,8 @@ export type RateLimitPolicyName =
   | "communityPostCreate"
   | "communityVerificationRespond"
   | "policeSearch"
-  | "stagingDangerZoneTest";
+  | "stagingDangerZoneTest"
+  | "fieldPairing";
 
 export type RateLimitActorRole = "anonymous" | "user" | "admin";
 
@@ -62,6 +63,11 @@ export const RATE_LIMIT_POLICIES: Record<RateLimitPolicyName, RateLimitPolicy> =
     windowSeconds: 300,
     ipLimit: 10,
     roleLimits: { admin: 20 },
+  },
+  fieldPairing: {
+    windowSeconds: 60,
+    ipLimit: 8,
+    roleLimits: { anonymous: 8, admin: 30 },
   },
 };
 

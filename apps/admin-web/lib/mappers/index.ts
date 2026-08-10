@@ -19,6 +19,7 @@ import type {
   SmartwatchDeviceView,
   SmartwatchDeviceDetailView,
   FieldDeviceView,
+  FieldPermissionProfileView,
   PairingSessionView,
   ActivationHistoryView,
   SosEventView,
@@ -442,6 +443,39 @@ export function toFieldDeviceView(record: Record<string, unknown>): FieldDeviceV
     isRootRiskDetected: record.isRootRiskDetected === true,
     approvedAt: record.approvedAt ? String(record.approvedAt) : null,
     registeredAt: record.registeredAt ? String(record.registeredAt) : "-",
+    isBound: record.isBound === true,
+    provisioningMode: String(record.provisioningMode ?? "SelfRegistration"),
+    provisionedAt: record.provisionedAt ? String(record.provisionedAt) : null,
+    provisionedById: record.provisionedById ? String(record.provisionedById) : null,
+    permissionProfileId: record.permissionProfileId ? String(record.permissionProfileId) : null,
+    assignedTeamId: record.assignedTeamId ? String(record.assignedTeamId) : null,
+    operationalRole: record.operationalRole ? String(record.operationalRole) : null,
+    deviceMode: record.deviceMode ? String(record.deviceMode) : null,
+    activationPolicy: record.activationPolicy ? String(record.activationPolicy) : null,
+    activationExpiresAt: record.activationExpiresAt ? String(record.activationExpiresAt) : null,
+    reviewAt: record.reviewAt ? String(record.reviewAt) : null,
+    notes: record.notes ? String(record.notes) : null,
+    preProvisionStatus: record.preProvisionStatus ? String(record.preProvisionStatus) : null,
+    inventoryAssetRef: record.inventoryAssetRef ? String(record.inventoryAssetRef) : null,
+    permissionOverrides: Array.isArray(record.permissionOverrides) ? record.permissionOverrides.map(String) : [],
+    permissionDenies: Array.isArray(record.permissionDenies) ? record.permissionDenies.map(String) : [],
+  };
+}
+
+export function toFieldPermissionProfileView(record: Record<string, unknown>): FieldPermissionProfileView {
+  return {
+    id: String(record.id ?? ""),
+    code: String(record.code ?? ""),
+    name: String(record.name ?? ""),
+    description: record.description ? String(record.description) : null,
+    operationalRole: record.operationalRole ? String(record.operationalRole) : null,
+    permissions: Array.isArray(record.permissions) ? record.permissions.map(String) : [],
+    isSystem: record.isSystem === true,
+    isActive: record.isActive !== false,
+    disabledAt: record.disabledAt ? String(record.disabledAt) : null,
+    disabledReason: record.disabledReason ? String(record.disabledReason) : null,
+    createdAt: record.createdAt ? String(record.createdAt) : "-",
+    updatedAt: record.updatedAt ? String(record.updatedAt) : "-",
   };
 }
 

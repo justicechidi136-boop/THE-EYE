@@ -14,6 +14,14 @@ abstract final class FieldApiPaths {
   static String deviceHeartbeat(String publicDeviceId) =>
       '/field/devices/$publicDeviceId/heartbeat';
 
+  // Pre-provisioned device pairing (QR / short code) — unauthenticated,
+  // rate-limited endpoints. See `FieldDevicePairingService` on the API and
+  // `docs/FIELD_DEVICE_PAIRING.md`.
+  static const pairingClaim = '/field/pairing/claim';
+  static const pairingChallenge = '/field/pairing/challenge';
+  static const pairingComplete = '/field/pairing/complete';
+  static const pairingStatus = '/field/pairing/status';
+
   /// Server-authoritative launcher / kiosk policy for this device session.
   static const devicePolicyMe = '/field/devices/me/policy';
   static const deviceLauncherAudit = '/field/devices/me/launcher-audit';

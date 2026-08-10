@@ -406,6 +406,56 @@ export type FieldDeviceView = {
   isRootRiskDetected: boolean;
   approvedAt: string | null;
   registeredAt: string;
+  isBound: boolean;
+  provisioningMode: string;
+  provisionedAt: string | null;
+  provisionedById: string | null;
+  permissionProfileId: string | null;
+  assignedTeamId: string | null;
+  operationalRole: string | null;
+  deviceMode: string | null;
+  activationPolicy: string | null;
+  activationExpiresAt: string | null;
+  reviewAt: string | null;
+  notes: string | null;
+  preProvisionStatus: string | null;
+  inventoryAssetRef: string | null;
+  permissionOverrides: string[];
+  permissionDenies: string[];
+};
+
+export type FieldPermissionProfileView = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  operationalRole: string | null;
+  permissions: string[];
+  isSystem: boolean;
+  isActive: boolean;
+  disabledAt: string | null;
+  disabledReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FieldPairingIssueView = {
+  publicDeviceId: string;
+  pairingToken: string;
+  shortCode: string;
+  expiresAt: string;
+  qrPayload: string;
+};
+
+export type FieldPermissionEffectivePreviewView = {
+  profile: { id: string; code: string; name: string } | null;
+  profilePermissions: string[];
+  overrides: string[];
+  denies: string[];
+  effectivePermissions: string[];
+  withinAuthority: boolean;
+  excessPermissions: string[];
+  actorCeiling: string[];
 };
 
 export type PairingSessionView = {

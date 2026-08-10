@@ -38,7 +38,7 @@ export class FieldAuthService {
     if (!challenge || challenge.consumedAt || challenge.expiresAt <= new Date() || challenge.challengeHash !== hashToken(dto.challenge)) {
       throw new UnauthorizedException({ code: FIELD_ERROR_CODES.DEVICE_SIGNATURE_INVALID, message: "Login challenge invalid" });
     }
-    if (!verifyFieldDeviceSignature(device.publicKey, dto.challenge, dto.challengeSignature)) {
+    if (!device.publicKey || !verifyFieldDeviceSignature(device.publicKey, dto.challenge, dto.challengeSignature)) {
       throw new UnauthorizedException({ code: FIELD_ERROR_CODES.DEVICE_SIGNATURE_INVALID, message: "Device signature invalid" });
     }
     await this.prisma.fieldDeviceRegistrationChallenge.update({

@@ -18,6 +18,7 @@ import 'screens/launcher/device_lock_screen.dart';
 import 'screens/launcher/launcher_shell_gate.dart';
 import 'screens/locked_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/pair_device_screen.dart';
 import 'screens/patrol/patrol_mode_screen.dart';
 import 'screens/routes.dart';
 import 'screens/splash_screen.dart';
@@ -85,6 +86,8 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
             return _page(LoginScreen(services: _services), settings);
           case FieldRoutes.deviceRegistration:
             return _page(DeviceRegistrationScreen(services: _services), settings);
+          case FieldRoutes.pairDevice:
+            return _page(PairDeviceScreen(services: _services), settings);
           case FieldRoutes.approvalPending:
             return _page(ApprovalPendingScreen(services: _services), settings);
           case FieldRoutes.locked:

@@ -117,7 +117,41 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                     'with field:device:register permission is required.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
+                  const SizedBox(height: 20),
+                  Card(
+                    color: FieldColors.surfaceElevated,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.qr_code_scanner, color: FieldColors.orange),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              'Handed a pre-provisioned tablet? Pair it with a QR '
+                              'code or pairing code instead — no supervisor token '
+                              'needed on this device.',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          OutlinedButton(
+                            onPressed: _busy
+                                ? null
+                                : () => Navigator.of(context)
+                                    .pushNamed(FieldRoutes.pairDevice),
+                            child: const Text('I have a pairing code'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
+                  Text(
+                    'Or register with a supervisor access token',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
                   TextFormField(
                     controller: _deviceNameController,
                     decoration: const InputDecoration(labelText: 'Device name'),
