@@ -4,7 +4,7 @@ import "package:flutter/material.dart";
 import "package:geolocator/geolocator.dart";
 import "package:url_launcher/url_launcher.dart";
 
-import "../design_system/components/eye_page_back_header.dart";
+import "../design_system/components/eye_page_header.dart";
 import "../incidents/incident_submission_service.dart";
 import "../location/location_permission_service.dart";
 import "police_stations_service.dart";
@@ -196,23 +196,19 @@ class _NearbyPoliceStationsScreenState
         if (!didPop) _handleBack(context);
       },
       child: Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          title: const Text("Nearby police"),
-          actions: [
-            IconButton(
-              tooltip: "Refresh stations",
-              onPressed: _loading ? null : () => _load(),
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            EyePageBackHeader(
+            EyePageHeader.secondary(
               title: "Nearby police",
               onBack: () => _handleBack(context),
+              actions: [
+                IconButton(
+                  tooltip: "Refresh stations",
+                  onPressed: _loading ? null : () => _load(),
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
             ),
             Expanded(
               child: ListView(

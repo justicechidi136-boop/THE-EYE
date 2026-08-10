@@ -1,7 +1,8 @@
 import "package:flutter/material.dart";
 
-import "../design_system/components/eye_page_back_header.dart";
+import "../design_system/components/eye_page_header.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "../presentation/citizen_date_time.dart";
 import "active_emergency_store.dart";
 
 class ActiveEmergenciesSelectorScreen extends StatelessWidget {
@@ -22,8 +23,12 @@ class ActiveEmergenciesSelectorScreen extends StatelessWidget {
     final colors = EyeSemanticColors.of(context);
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: AppBar(title: const Text("Active emergencies")),
-      body: ListView.separated(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const EyePageHeader.secondary(title: "Active emergencies"),
+          Expanded(
+            child: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: references.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -34,7 +39,7 @@ class ActiveEmergenciesSelectorScreen extends StatelessWidget {
               title: Text(ref.lastKnownStatus ?? "Active emergency"),
               subtitle: Text(
                 "ID ${_shortId(ref.incidentId)}\n"
-                "Reported ${ref.activatedAt.toLocal()}",
+                "Reported ${CitizenDateTimeFormatter.formatDateTime(ref.activatedAt)}",
               ),
               isThreeLine: true,
               trailing: const Icon(Icons.chevron_right),
@@ -50,6 +55,9 @@ class ActiveEmergenciesSelectorScreen extends StatelessWidget {
             ),
           );
         },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -61,28 +69,28 @@ class NoActiveEmergencyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Active emergency")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            EyePageBackHeader(
-              title: "No active emergency",
-              onBack: () => Navigator.of(context).maybePop(),
-            ),
-            const SizedBox(height: 16),
-            const Text(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          EyePageHeader.secondary(
+            title: "No active emergency",
+            onBack: () => Navigator.of(context).maybePop(),
+          ),
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
               "You do not have an active emergency report open right now.",
             ),
-            const SizedBox(height: 16),
-            FilledButton(
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: FilledButton(
               onPressed: () =>
                   Navigator.of(context).pushReplacementNamed("/home"),
               child: const Text("Go home"),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

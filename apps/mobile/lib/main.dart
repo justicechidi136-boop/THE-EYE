@@ -3636,10 +3636,7 @@ class ServicesHubScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
-          const EyePageBackHeader(
-            title: "Services",
-            showBack: false,
-          ),
+          const EyePageHeader.root(title: "Services"),
           const SizedBox(height: 8),
           Text(
             "Quick access to safety tools and account features.",
@@ -4051,10 +4048,9 @@ class _ReportScreenState extends State<ReportScreen> {
     final isEmergency = widget.type == ReportType.emergency;
     return Scaffold(
       backgroundColor: EyeSemanticColors.of(context).background,
-      body: SafeArea(
-        child: Column(
+      body: Column(
           children: [
-            EyePageBackHeader(title: widget.type.figmaTitle),
+            EyePageHeader.secondary(title: widget.type.figmaTitle),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -4258,7 +4254,6 @@ class _ReportScreenState extends State<ReportScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -5800,10 +5795,7 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const EyePageBackHeader(
-            title: "Safety broadcasts",
-            showBack: false,
-          ),
+          const EyePageHeader.root(title: "Safety broadcasts"),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
@@ -6080,33 +6072,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const EyePageBackHeader(title: "Notifications"),
-            if (controller.notificationUnreadCount > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () =>
-                        unawaited(controller.markAllNotificationsRead()),
-                    child: Text(
-                        "Mark all read (${controller.notificationUnreadCount})"),
-                  ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const EyePageHeader.secondary(title: "Notifications"),
+          if (controller.notificationUnreadCount > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () =>
+                      unawaited(controller.markAllNotificationsRead()),
+                  child: Text(
+                      "Mark all read (${controller.notificationUnreadCount})"),
                 ),
               ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () =>
-                    controller.loadNotificationsFromApi(refresh: true),
-                child: _buildBody(controller),
-              ),
             ),
-          ],
-        ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () =>
+                  controller.loadNotificationsFromApi(refresh: true),
+              child: _buildBody(controller),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -8133,10 +8123,7 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
-          const EyePageBackHeader(
-            title: "Settings",
-            showBack: false,
-          ),
+          const EyePageHeader.root(title: "Settings"),
           const SizedBox(height: 8),
           SectionCard(
             title: "Account",
@@ -9041,38 +9028,14 @@ class IncidentStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reference = incident.publicReference ??
-        (incident.submittedAt == null
-            ? "EYE-PENDING"
-            : resolveIncidentPublicReference(
-                incidentId: incident.id,
-                submittedAt: incident.submittedAt!,
-              ));
-    final statusLabel =
-        incident.displayStatus ?? citizenIncidentStatusLabel(incident.status);
-    final reported = incident.submittedAt == null
-        ? "Time unavailable"
-        : formatCitizenDateTime(incident.submittedAt!);
-    return ListTileCard(
-      onTap: onTap,
-      leading: const Icon(Icons.radar),
+    return EyeIncidentSummaryCard.fromIncidentFields(
       title: citizenIncidentCategoryLabel(incident.type),
-      subtitle: "$reference\n$statusLabel · $reported",
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          statusLabel,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            fontWeight: FontWeight.w700,
-            fontSize: 11,
-          ),
-        ),
-      ),
+      incidentId: incident.id,
+      status: incident.status,
+      reportedAt: incident.submittedAt,
+      displayStatus: incident.displayStatus,
+      apiPublicReference: incident.publicReference,
+      onTap: onTap,
     );
   }
 }
