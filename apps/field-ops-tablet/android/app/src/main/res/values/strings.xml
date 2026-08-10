@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">THE EYE Field Ops</string>
+    <string name="launcher_name">THE EYE Field Launcher</string>
     <string name="field_device_admin_label">THE EYE Field Device Admin</string>
     <string name="field_device_admin_description">Allows agency MDM to manage dedicated Field Operations tablets. THE EYE does not self-activate Device Owner.</string>
 </resources>

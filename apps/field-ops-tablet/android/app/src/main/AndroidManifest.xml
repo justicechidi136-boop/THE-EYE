@@ -34,14 +34,17 @@
     </queries>
 
     <application
-        android:label="THE EYE Field Ops"
+        android:label="@string/app_name"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round">
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:screenOrientation="sensorLandscape"
@@ -60,7 +63,9 @@
         <activity-alias
             android:name=".LauncherHomeAlias"
             android:targetActivity=".MainActivity"
-            android:label="THE EYE Field Launcher"
+            android:label="@string/launcher_name"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:enabled="false"
             android:exported="true">
             <intent-filter>
