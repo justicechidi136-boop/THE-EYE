@@ -216,6 +216,7 @@ export class FieldPermissionProfilesService {
     name: string;
     description: string | null;
     operationalRole: string | null;
+    compatibleAgencyTypes?: string[];
     permissions: unknown;
     isSystem: boolean;
     isActive: boolean;
@@ -230,6 +231,7 @@ export class FieldPermissionProfilesService {
       name: profile.name,
       description: profile.description,
       operationalRole: profile.operationalRole,
+      compatibleAgencyTypes: Array.isArray(profile.compatibleAgencyTypes) ? profile.compatibleAgencyTypes : [],
       permissions: Array.isArray(profile.permissions) ? profile.permissions : [],
       isSystem: profile.isSystem,
       isActive: profile.isActive,

@@ -91,21 +91,139 @@ async function upsertJurisdiction(key: keyof typeof JURISDICTION) {
   });
 }
 
+const STAGING_NATIONAL_AGENCIES = [
+  {
+    code: "NG-NPF",
+    name: "Nigeria Police Force (Staging)",
+    shortName: "NPF",
+    type: "POLICE",
+    capabilities: ["INCIDENT_DISPATCH", "PATROL", "CHECKPOINT", "FIELD_OPERATIONS", "BOLO"],
+    isFieldOperationsEnabled: true,
+  },
+  {
+    code: "NG-FRSC",
+    name: "Federal Road Safety Corps (Staging)",
+    shortName: "FRSC",
+    type: "ROAD_SAFETY",
+    capabilities: ["INCIDENT_DISPATCH", "ROAD_RESPONSE", "PATROL", "FIELD_OPERATIONS"],
+    isFieldOperationsEnabled: true,
+  },
+  {
+    code: "NG-NSCDC",
+    name: "Nigeria Security and Civil Defence Corps (Staging)",
+    shortName: "NSCDC",
+    type: "CIVIL_DEFENCE",
+    capabilities: ["INCIDENT_DISPATCH", "PATROL", "CHECKPOINT", "FIELD_OPERATIONS"],
+    isFieldOperationsEnabled: true,
+  },
+  {
+    code: "NG-FFS",
+    name: "Federal Fire Service (Staging)",
+    shortName: "FFS",
+    type: "FIRE_RESCUE",
+    capabilities: ["INCIDENT_DISPATCH", "FIRE_RESPONSE"],
+    isFieldOperationsEnabled: false,
+  },
+] as const;
+
+async function upsertNationalStagingAgencies() {
+  const parents: Record<string, { id: string }> = {};
+  for (const agency of STAGING_NATIONAL_AGENCIES) {
+    const row = await prisma.agency.upsert({
+      where: { code: agency.code },
+      update: {
+        name: agency.name,
+        shortName: agency.shortName,
+        type: agency.type,
+        jurisdictionLevel: "COUNTRY",
+        countryCode: "NG",
+        stateCode: null,
+        lgaCode: null,
+        jurisdictionId: null,
+        capabilities: [...agency.capabilities],
+        isFieldOperationsEnabled: agency.isFieldOperationsEnabled,
+        isDispatchable: true,
+        status: "Active",
+        isActive: true,
+      },
+      create: {
+        code: agency.code,
+        name: agency.name,
+        shortName: agency.shortName,
+        type: agency.type,
+        jurisdictionLevel: "COUNTRY",
+        countryCode: "NG",
+        capabilities: [...agency.capabilities],
+        isFieldOperationsEnabled: agency.isFieldOperationsEnabled,
+        isDispatchable: true,
+        status: "Active",
+        isActive: true,
+        phone: null,
+        email: null,
+      },
+    });
+    parents[agency.code] = row;
+  }
+  return parents;
+}
+
 async function upsertAgency(jurisdictionId: string) {
-  const existing = await prisma.agency.findFirst({
+  const nationals = await upsertNationalStagingAgencies();
+  const npf = nationals["NG-NPF"];
+
+  const existingByName = await prisma.agency.findFirst({
     where: {
-      jurisdictionId,
-      type: "police",
-      name: "Ikeja Police Command (Staging)",
+      OR: [
+        { code: "NG-LAG-IKEJA-POLICE-STAGING" },
+        { name: "Ikeja Police Command (Staging)" },
+        { id: "22222222-2222-2222-2222-222222222222" },
+      ],
     },
   });
-  if (existing) return existing;
+
+  if (existingByName) {
+    return prisma.agency.update({
+      where: { id: existingByName.id },
+      data: {
+        jurisdictionId,
+        parentAgencyId: npf.id,
+        code: existingByName.code?.startsWith("NG-") ? existingByName.code : "NG-LAG-IKEJA-POLICE-STAGING",
+        name: "Ikeja Police Command (Staging)",
+        shortName: "Ikeja Police",
+        type: "POLICE",
+        jurisdictionLevel: "LGA",
+        countryCode: "NG",
+        stateCode: "LA",
+        lgaCode: "IKEJA",
+        capabilities: ["INCIDENT_DISPATCH", "PATROL", "CHECKPOINT", "FIELD_OPERATIONS", "BOLO"],
+        isFieldOperationsEnabled: true,
+        isDispatchable: true,
+        status: "Active",
+        isActive: true,
+        phone: "+2348001001001",
+        email: "staging.ikeja.police@theeye.local",
+      },
+    });
+  }
 
   return prisma.agency.create({
     data: {
+      id: "22222222-2222-2222-2222-222222222222",
       jurisdictionId,
+      parentAgencyId: npf.id,
+      code: "NG-LAG-IKEJA-POLICE-STAGING",
       name: "Ikeja Police Command (Staging)",
-      type: "police",
+      shortName: "Ikeja Police",
+      type: "POLICE",
+      jurisdictionLevel: "LGA",
+      countryCode: "NG",
+      stateCode: "LA",
+      lgaCode: "IKEJA",
+      capabilities: ["INCIDENT_DISPATCH", "PATROL", "CHECKPOINT", "FIELD_OPERATIONS", "BOLO"],
+      isFieldOperationsEnabled: true,
+      isDispatchable: true,
+      status: "Active",
+      isActive: true,
       phone: "+2348001001001",
       email: "staging.ikeja.police@theeye.local",
     },

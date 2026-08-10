@@ -20,6 +20,8 @@ import type {
   SmartwatchDeviceDetailView,
   FieldDeviceView,
   FieldPermissionProfileView,
+  AgencyView,
+  AgencyUnitView,
   PairingSessionView,
   ActivationHistoryView,
   SosEventView,
@@ -469,6 +471,9 @@ export function toFieldPermissionProfileView(record: Record<string, unknown>): F
     name: String(record.name ?? ""),
     description: record.description ? String(record.description) : null,
     operationalRole: record.operationalRole ? String(record.operationalRole) : null,
+    compatibleAgencyTypes: Array.isArray(record.compatibleAgencyTypes)
+      ? record.compatibleAgencyTypes.map(String)
+      : [],
     permissions: Array.isArray(record.permissions) ? record.permissions.map(String) : [],
     isSystem: record.isSystem === true,
     isActive: record.isActive !== false,
@@ -476,6 +481,50 @@ export function toFieldPermissionProfileView(record: Record<string, unknown>): F
     disabledReason: record.disabledReason ? String(record.disabledReason) : null,
     createdAt: record.createdAt ? String(record.createdAt) : "-",
     updatedAt: record.updatedAt ? String(record.updatedAt) : "-",
+  };
+}
+
+export function toAgencyView(record: Record<string, unknown>): AgencyView {
+  const agencyType = String(record.agencyType ?? record.type ?? "");
+  return {
+    id: String(record.id ?? ""),
+    code: String(record.code ?? ""),
+    name: String(record.name ?? ""),
+    shortName: record.shortName ? String(record.shortName) : null,
+    agencyType,
+    jurisdictionLevel: String(record.jurisdictionLevel ?? ""),
+    countryCode: String(record.countryCode ?? ""),
+    stateCode: record.stateCode ? String(record.stateCode) : null,
+    lgaCode: record.lgaCode ? String(record.lgaCode) : null,
+    capabilities: Array.isArray(record.capabilities) ? record.capabilities.map(String) : [],
+    isActive: record.isActive !== false,
+    status: String(record.status ?? (record.isActive === false ? "Inactive" : "Active")),
+    isFieldOperationsEnabled: record.isFieldOperationsEnabled === true,
+    isDispatchable: record.isDispatchable === true,
+    isDroneEnabled: record.isDroneEnabled === true,
+    isBroadcastAuthority: record.isBroadcastAuthority === true,
+    isGovernment: record.isGovernment === true,
+    isEmergencyResponder: record.isEmergencyResponder === true,
+    parentAgencyId: record.parentAgencyId ? String(record.parentAgencyId) : null,
+    jurisdictionId: record.jurisdictionId ? String(record.jurisdictionId) : null,
+    phone: record.phone ? String(record.phone) : null,
+    email: record.email ? String(record.email) : null,
+    serviceCategories: Array.isArray(record.serviceCategories) ? record.serviceCategories.map(String) : [],
+  };
+}
+
+export function toAgencyUnitView(record: Record<string, unknown>): AgencyUnitView {
+  return {
+    id: String(record.id ?? ""),
+    agencyId: String(record.agencyId ?? ""),
+    name: String(record.name ?? record.unitIdentifier ?? ""),
+    unitIdentifier: String(record.unitIdentifier ?? ""),
+    unitKind: String(record.unitKind ?? "Other"),
+    parentUnitId: record.parentUnitId ? String(record.parentUnitId) : null,
+    countryCode: record.countryCode ? String(record.countryCode) : null,
+    stateCode: record.stateCode ? String(record.stateCode) : null,
+    lgaCode: record.lgaCode ? String(record.lgaCode) : null,
+    isActive: record.isActive !== false,
   };
 }
 

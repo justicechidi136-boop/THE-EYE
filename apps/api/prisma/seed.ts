@@ -55,9 +55,25 @@ async function main() {
   `);
 
   await seedSql(`
-    INSERT INTO agencies (id, jurisdiction_id, name, type, phone, email) VALUES
-      ('${policeAgencyId}', '${jurisdictionId}', 'Ikeja Police Command', 'police', '+2348000001001', 'ikeja.police@example.gov'),
-      ('${emergencyAgencyId}', '${jurisdictionId}', 'Lagos Emergency Response Unit', 'emergency', '+2348000001002', 'ikeja.emergency@example.gov')
+    INSERT INTO agencies (
+      id, jurisdiction_id, name, type, phone, email,
+      code, short_name, jurisdiction_level, country_code, state_code, lga_code,
+      capabilities, is_field_operations_enabled, is_dispatchable, status, is_active
+    ) VALUES
+      (
+        '${policeAgencyId}', '${jurisdictionId}', 'Ikeja Police Command', 'POLICE',
+        '+2348000001001', 'ikeja.police@example.gov',
+        'NG-LAG-IKEJA-POLICE', 'Ikeja Police', 'LGA', 'NG', 'LA', 'IKEJA',
+        ARRAY['INCIDENT_DISPATCH','PATROL','CHECKPOINT','FIELD_OPERATIONS','BOLO']::TEXT[],
+        true, true, 'Active', true
+      ),
+      (
+        '${emergencyAgencyId}', '${jurisdictionId}', 'Lagos Emergency Response Unit', 'EMS',
+        '+2348000001002', 'ikeja.emergency@example.gov',
+        'NG-LAG-IKEJA-EMS', 'Ikeja EMS', 'LGA', 'NG', 'LA', 'IKEJA',
+        ARRAY['INCIDENT_DISPATCH','MEDICAL_RESPONSE']::TEXT[],
+        false, true, 'Active', true
+      )
     ON CONFLICT (id) DO NOTHING
   `);
 

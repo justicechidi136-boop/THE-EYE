@@ -536,40 +536,61 @@ model Jurisdiction {
 }
 
 model Agency {
-  id                  String                                @id @default(uuid()) @db.Uuid
-  jurisdictionId      String                                @map("jurisdiction_id") @db.Uuid
-  name                String
-  type                String
-  phone               String?
-  email               String?
-  serviceCategories   String[]                              @default([]) @map("service_categories")
-  isActive            Boolean                               @default(true) @map("is_active")
-  operatingHours      Json                                  @default("{}") @map("operating_hours")
-  escalationPriority  Int                                   @default(0) @map("escalation_priority")
-  latitude            Decimal?                              @db.Decimal(9, 6)
-  longitude           Decimal?                              @db.Decimal(9, 6)
-  agencyLocation      Unsupported("geography(Point,4326)")? @map("agency_location")
-  createdAt           DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  jurisdiction        Jurisdiction                          @relation(fields: [jurisdictionId], references: [id])
-  adminUsers          AdminUser[]
-  incidents           Incident[]
-  policeStations      PoliceStation[]
-  responders          Responder[]
-  responseUnits       ResponseUnit[]
-  incidentAssignments IncidentAssignment[]
-  droneOperators      DroneOperator[]
-  fieldDevices        FieldDevice[]
-  fieldShifts         FieldShift[]
-  patrolSessions      PatrolSession[]
-  checkpointSessions  CheckpointSession[]
-  operationalSightings OperationalSighting[]
-  fieldBackupRequests  FieldBackupRequest[]
-  fieldOperationalEvents FieldOperationalEvent[]
+  id                       String                                @id @default(uuid()) @db.Uuid
+  jurisdictionId           String?                               @map("jurisdiction_id") @db.Uuid
+  parentAgencyId           String?                               @map("parent_agency_id") @db.Uuid
+  code                     String                                @unique
+  name                     String
+  shortName                String?                               @map("short_name")
+  type                     String
+  jurisdictionLevel        String                                @default("LGA") @map("jurisdiction_level")
+  countryCode              String                                @default("NG") @map("country_code")
+  stateCode                String?                               @map("state_code")
+  lgaCode                  String?                               @map("lga_code")
+  phone                    String?
+  email                    String?
+  serviceCategories        String[]                              @default([]) @map("service_categories")
+  capabilities             String[]                              @default([])
+  isGovernment             Boolean                               @default(true) @map("is_government")
+  isEmergencyResponder     Boolean                               @default(true) @map("is_emergency_responder")
+  isDispatchable           Boolean                               @default(true) @map("is_dispatchable")
+  isFieldOperationsEnabled Boolean                               @default(false) @map("is_field_operations_enabled")
+  isDroneEnabled           Boolean                               @default(false) @map("is_drone_enabled")
+  isBroadcastAuthority     Boolean                               @default(false) @map("is_broadcast_authority")
+  isActive                 Boolean                               @default(true) @map("is_active")
+  status                   String                                @default("Active")
+  contactMetadata          Json                                  @default("{}") @map("contact_metadata")
+  operatingHours           Json                                  @default("{}") @map("operating_hours")
+  escalationPriority       Int                                   @default(0) @map("escalation_priority")
+  latitude                 Decimal?                              @db.Decimal(9, 6)
+  longitude                Decimal?                              @db.Decimal(9, 6)
+  agencyLocation           Unsupported("geography(Point,4326)")? @map("agency_location")
+  createdAt                DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  jurisdiction             Jurisdiction?                         @relation(fields: [jurisdictionId], references: [id])
+  parentAgency             Agency?                               @relation("AgencyHierarchy", fields: [parentAgencyId], references: [id])
+  childAgencies            Agency[]                              @relation("AgencyHierarchy")
+  adminUsers               AdminUser[]
+  incidents                Incident[]
+  policeStations           PoliceStation[]
+  responders               Responder[]
+  responseUnits            ResponseUnit[]
+  incidentAssignments      IncidentAssignment[]
+  droneOperators           DroneOperator[]
+  fieldDevices             FieldDevice[]
+  fieldShifts              FieldShift[]
+  patrolSessions           PatrolSession[]
+  checkpointSessions       CheckpointSession[]
+  operationalSightings     OperationalSighting[]
+  fieldBackupRequests      FieldBackupRequest[]
+  fieldOperationalEvents   FieldOperationalEvent[]
   fieldOfficerSafetyAlerts FieldOfficerSafetyAlert[]
 
   @@index([jurisdictionId, type])
   @@index([jurisdictionId, isActive])
+  @@index([countryCode, stateCode, isActive])
+  @@index([type, isActive])
+  @@index([parentAgencyId])
   @@map("agencies")
 }
 
@@ -2124,7 +2145,13 @@ model Responder {
 model ResponseUnit {
   id               String                                @id @default(uuid()) @db.Uuid
   agencyId         String                                @map("agency_id") @db.Uuid
+  parentUnitId     String?                               @map("parent_unit_id") @db.Uuid
   unitIdentifier   String                                @map("unit_identifier")
+  name             String                                @default("")
+  unitKind         String                                @default("Other") @map("unit_kind")
+  countryCode      String?                               @map("country_code")
+  stateCode        String?                               @map("state_code")
+  lgaCode          String?                               @map("lga_code")
   capabilities     String[]                              @default([])
   status           ResponseUnitStatus                    @default(Offline)
   lastLatitude     Decimal?                              @map("last_latitude") @db.Decimal(9, 6)
@@ -2136,6 +2163,8 @@ model ResponseUnit {
   createdAt        DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   agency           Agency                                @relation(fields: [agencyId], references: [id])
+  parentUnit       ResponseUnit?                         @relation("ResponseUnitHierarchy", fields: [parentUnitId], references: [id])
+  childUnits       ResponseUnit[]                        @relation("ResponseUnitHierarchy")
   assignments      IncidentAssignment[]
   fieldDevices     FieldDevice[]
   fieldShifts      FieldShift[]
@@ -2143,6 +2172,7 @@ model ResponseUnit {
 
   @@unique([agencyId, unitIdentifier])
   @@index([agencyId, status, isActive])
+  @@index([parentUnitId])
   @@map("response_units")
 }
 
@@ -3577,21 +3607,22 @@ enum FieldPairingTokenStatus {
 
 /// System or agency-defined catalog of field capability permission bundles assigned to devices.
 model FieldPermissionProfile {
-  id              String    @id @default(uuid()) @db.Uuid
-  code            String    @unique
-  name            String
-  description     String?
-  operationalRole String?   @map("operational_role")
-  permissions     String[]  @default([])
-  isSystem        Boolean   @default(false) @map("is_system")
-  isActive        Boolean   @default(true) @map("is_active")
-  createdById     String?   @map("created_by_id") @db.Uuid
-  updatedById     String?   @map("updated_by_id") @db.Uuid
-  disabledAt      DateTime? @map("disabled_at") @db.Timestamptz(6)
-  disabledById    String?   @map("disabled_by_id") @db.Uuid
-  disabledReason  String?   @map("disabled_reason")
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String    @id @default(uuid()) @db.Uuid
+  code                   String    @unique
+  name                   String
+  description            String?
+  operationalRole        String?   @map("operational_role")
+  compatibleAgencyTypes  String[]  @default([]) @map("compatible_agency_types")
+  permissions            String[]  @default([])
+  isSystem               Boolean   @default(false) @map("is_system")
+  isActive               Boolean   @default(true) @map("is_active")
+  createdById            String?   @map("created_by_id") @db.Uuid
+  updatedById            String?   @map("updated_by_id") @db.Uuid
+  disabledAt             DateTime? @map("disabled_at") @db.Timestamptz(6)
+  disabledById           String?   @map("disabled_by_id") @db.Uuid
+  disabledReason         String?   @map("disabled_reason")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   createdBy       AdminUser?    @relation("FieldPermissionProfileCreatedBy", fields: [createdById], references: [id])
   updatedBy       AdminUser?    @relation("FieldPermissionProfileUpdatedBy", fields: [updatedById], references: [id])

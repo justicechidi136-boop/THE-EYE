@@ -12,5 +12,6 @@ export * from "./field-workflows";
 export * from "./field-sprint3";
 export * from "./field-permission-catalog";
 export * from "./field-preprovisioning";
+export * from "./agency-registry";
 export * from "./public-reference";
 export * from "./citizen-presentation";
