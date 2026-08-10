@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import {
+  AGENCY_ERROR_CODES,
   FIELD_ERROR_CODES,
   FieldActivationPolicy,
   FieldDeviceRegistrationStatus,
@@ -10,6 +11,7 @@ import {
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { randomToken } from "../../common/auth/crypto";
+import { AgenciesService } from "../agencies/agencies.service";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { FieldDevicesAdminService } from "./field-devices-admin.service";
@@ -45,6 +47,7 @@ export class FieldDevicePreprovisionService {
     private readonly devicesAdmin: FieldDevicesAdminService,
     private readonly profiles: FieldPermissionProfilesService,
     private readonly policy: FieldPermissionPolicyService,
+    private readonly agencies: AgenciesService,
   ) {}
 
   async preprovision(actor: JwtPayload, dto: PreProvisionFieldDeviceDto) {
@@ -59,15 +62,33 @@ export class FieldDevicePreprovisionService {
     const reviewAt = this.parseDate(dto.reviewAt, "reviewAt", { futureOnly: false });
     const scope = this.resolveScope(actor, dto);
 
+    if (!scope.agencyId) {
+      throw new BadRequestException({
+        code: AGENCY_ERROR_CODES.NOT_FOUND,
+        message: "agencyId is required for field device pre-provisioning",
+      });
+    }
+
     let permissionProfileId: string | null = null;
     let profileCode: string | null = null;
     let grantedPermissions: Permission[] = [];
+    let compatibleAgencyTypes: string[] = [];
     if (dto.permissionProfileId) {
       const profile = await this.profiles.requireActiveProfile(dto.permissionProfileId);
       grantedPermissions = this.policy.validateGrant(actor, profile.permissions as string[]);
       permissionProfileId = profile.id;
       profileCode = profile.code;
+      compatibleAgencyTypes = (profile as { compatibleAgencyTypes?: string[] }).compatibleAgencyTypes ?? [];
     }
+
+    const agency = await this.agencies.assertFieldOperationsAssignment({
+      actor,
+      agencyId: scope.agencyId,
+      assignedUnitId: dto.assignedUnitId,
+      operationalRole: dto.operationalRole,
+      permissionProfileId,
+      compatibleAgencyTypes,
+    });
 
     const overrides = dto.permissionOverrides?.length ? this.policy.validateGrant(actor, dto.permissionOverrides) : [];
     const denies = dto.permissionDenies?.length ? this.policy.assertKnownPermissions(dto.permissionDenies) : [];
@@ -105,10 +126,10 @@ export class FieldDevicePreprovisionService {
         permissionOverrides: overrides,
         permissionDenies: denies,
         authoritySnapshot: authoritySnapshot as never,
-        agencyId: scope.agencyId ?? undefined,
-        countryCode: scope.countryCode ?? undefined,
-        stateCode: scope.stateCode ?? undefined,
-        lgaCode: scope.lgaCode ?? undefined,
+        agencyId: agency.id,
+        countryCode: scope.countryCode ?? agency.countryCode ?? undefined,
+        stateCode: scope.stateCode ?? agency.stateCode ?? undefined,
+        lgaCode: scope.lgaCode ?? agency.lgaCode ?? undefined,
         metadata: {},
       },
     });

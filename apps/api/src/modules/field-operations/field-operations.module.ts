@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AgenciesModule } from "../agencies/agencies.module";
 import { AuditModule } from "../audit/audit.module";
 import { DispatchModule } from "../dispatch/dispatch.module";
 import { DroneSurveillanceModule } from "../drone-surveillance/drone-surveillance.module";
@@ -53,7 +54,14 @@ import {
 } from "./field-workflows.controller";
 
 @Module({
-  imports: [PrismaModule, AuditModule, DispatchModule, DroneSurveillanceModule, IncidentCommunicationsModule],
+  imports: [
+    PrismaModule,
+    AuditModule,
+    DispatchModule,
+    DroneSurveillanceModule,
+    IncidentCommunicationsModule,
+    AgenciesModule,
+  ],
   controllers: [
     FieldDevicesController,
     FieldAuthController,
