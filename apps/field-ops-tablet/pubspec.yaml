@@ -30,3 +30,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/field_ops_logo.png
+    - assets/branding/field_ops_logo_ui.png

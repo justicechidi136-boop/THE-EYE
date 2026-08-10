@@ -57,6 +57,18 @@ flutter build apk --flavor production --release
 - `/device-status` — registration + heartbeat diagnostics
 - `/unauthorized` — blocked/revoked device state
 
+## Branding
+
+Official Field Operations logo (source of truth — do not redesign):
+
+- Flutter: `assets/branding/field_ops_logo.png` (+ `field_ops_logo_ui.png`)
+- Android launcher / adaptive / round: `android/app/src/main/res/mipmap-*`
+- Native splash: `drawable-*/splash_logo.png` + `LaunchTheme` / `values-v31`
+- Store: `store/icon-512.png`
+- Physical QA checklist: `docs/FIELD_OPS_BRANDING_QA.md`
+
+Staging uses the same logo artwork; environment is indicated by the Android app label (`THE EYE Field Ops (Staging)`), not by altering the logo.
+
 ## Firebase
 
 Add flavor-specific `google-services.json` under:
