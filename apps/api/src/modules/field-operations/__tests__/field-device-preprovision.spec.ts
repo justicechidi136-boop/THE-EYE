@@ -1,5 +1,12 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { AdminRoleName, FIELD_ERROR_CODES, FIELD_PERM_ERROR_CODES, FieldPreProvisionStatus, FieldProvisioningMode } from "@the-eye/shared";
+import {
+  AGENCY_ERROR_CODES,
+  AdminRoleName,
+  FIELD_ERROR_CODES,
+  FIELD_PERM_ERROR_CODES,
+  FieldPreProvisionStatus,
+  FieldProvisioningMode,
+} from "@the-eye/shared";
 import { FieldDevicePreprovisionService } from "../field-device-preprovision.service";
 import { FieldPermissionPolicyService } from "../field-permission-policy.service";
 
@@ -23,6 +30,14 @@ describe("FieldDevicePreprovisionService", () => {
       requireActiveProfile: jest.fn(),
     };
     const policy = new FieldPermissionPolicyService();
+    const agencies = {
+      assertFieldOperationsAssignment: jest.fn().mockResolvedValue({
+        id: "agency-1",
+        countryCode: "NG",
+        stateCode: "LA",
+        lgaCode: "IKEJA",
+      }),
+    };
 
     const service = new FieldDevicePreprovisionService(
       prisma as never,
@@ -31,9 +46,10 @@ describe("FieldDevicePreprovisionService", () => {
       devicesAdmin as never,
       profiles as never,
       policy,
+      agencies as never,
     );
 
-    return { prisma, audit, devices, devicesAdmin, profiles, policy, service };
+    return { prisma, audit, devices, devicesAdmin, profiles, policy, agencies, service };
   }
 
   function actor(overrides: Partial<Record<string, unknown>> = {}) {
@@ -42,9 +58,9 @@ describe("FieldDevicePreprovisionService", () => {
       typ: "admin" as const,
       role: AdminRoleName.AgencyAdmin,
       agencyId: "agency-1",
-      country: "Nigeria",
-      state: "Lagos",
-      lga: "Ikeja",
+      country: "NG",
+      state: "LA",
+      lga: "IKEJA",
       ...overrides,
     };
   }
@@ -63,12 +79,24 @@ describe("FieldDevicePreprovisionService", () => {
   it("rejects preprovisioning outside the actor's jurisdiction scope", async () => {
     const { service } = createService();
     await expect(
-      service.preprovision(actor({ role: AdminRoleName.StateAdmin, state: "Lagos" }), {
+      service.preprovision(actor({ role: AdminRoleName.StateAdmin, state: "LA" }), {
         deviceName: "Tablet 1",
-        stateCode: "Kano",
+        agencyId: "agency-1",
+        stateCode: "KN",
       } as never),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: FIELD_ERROR_CODES.JURISDICTION_MISMATCH }),
+    });
+  });
+
+  it("rejects when agencyId is missing", async () => {
+    const { service } = createService();
+    await expect(
+      service.preprovision(actor({ agencyId: null }), {
+        deviceName: "Tablet 1",
+      } as never),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: AGENCY_ERROR_CODES.NOT_FOUND }),
     });
   });
 
@@ -78,11 +106,13 @@ describe("FieldDevicePreprovisionService", () => {
       id: "profile-1",
       code: "supervisor_profile",
       permissions: ["field:supervisor:manage"],
+      compatibleAgencyTypes: [],
     });
 
     await expect(
       service.preprovision(actor({ role: AdminRoleName.LgaAdmin }), {
         deviceName: "Tablet 1",
+        agencyId: "agency-1",
         permissionProfileId: "profile-1",
       } as never),
     ).rejects.toMatchObject({
@@ -95,17 +125,19 @@ describe("FieldDevicePreprovisionService", () => {
     await expect(
       service.preprovision(actor(), {
         deviceName: "Tablet 1",
+        agencyId: "agency-1",
         permissionOverrides: ["field:definitely-not-real"],
       } as never),
     ).rejects.toThrow(BadRequestException);
   });
 
   it("creates a draft pre-provisioned device with an authority snapshot when the request is valid", async () => {
-    const { service, prisma, profiles, audit } = createService();
+    const { service, prisma, profiles, audit, agencies } = createService();
     profiles.requireActiveProfile.mockResolvedValue({
       id: "profile-1",
       code: "patrol_officer_baseline",
       permissions: ["field:access", "field:session:operate", "field:patrol:operate"],
+      compatibleAgencyTypes: ["POLICE"],
     });
     prisma.fieldDevice.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
       id: "device-1",
@@ -114,16 +146,24 @@ describe("FieldDevicePreprovisionService", () => {
 
     const result = await service.preprovision(actor(), {
       deviceName: "  Patrol Tablet 07  ",
+      agencyId: "agency-1",
       operationalRole: "PatrolOfficer",
       permissionProfileId: "profile-1",
     } as never);
 
+    expect(agencies.assertFieldOperationsAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agencyId: "agency-1",
+        compatibleAgencyTypes: ["POLICE"],
+      }),
+    );
     expect(prisma.fieldDevice.create).toHaveBeenCalledTimes(1);
     const createArgs = prisma.fieldDevice.create.mock.calls[0][0].data;
     expect(createArgs.provisioningMode).toBe(FieldProvisioningMode.PreProvisioned);
     expect(createArgs.preProvisionStatus).toBe(FieldPreProvisionStatus.Draft);
     expect(createArgs.permissionProfileId).toBe("profile-1");
     expect(createArgs.deviceName).toBe("Patrol Tablet 07");
+    expect(createArgs.agencyId).toBe("agency-1");
     expect(createArgs.authoritySnapshot.grantedByAdminId).toBe("admin-1");
     expect(createArgs.authoritySnapshot.profileCode).toBe("patrol_officer_baseline");
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "field.device.preprovisioned" }));
