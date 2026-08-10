@@ -23,6 +23,7 @@ import {
   toSmartwatchDeviceView,
   toSmartwatchDeviceDetailView,
   toFieldDeviceView,
+  toFieldPermissionProfileView,
   toPairingSessionView,
   toActivationHistoryView,
   toSosEventView,
@@ -70,6 +71,9 @@ import type {
   WatchOwnerDetailView,
   SmartwatchDeviceDetailView,
   FieldDeviceView,
+  FieldPermissionProfileView,
+  FieldPairingIssueView,
+  FieldPermissionEffectivePreviewView,
   DroneDashboardView,
   DroneDeviceView,
   DroneMissionView,
@@ -1058,6 +1062,218 @@ export async function patchFieldDevicePolicy(id: string, body: Partial<FieldLaun
     token,
     body: JSON.stringify(body),
   });
+}
+
+export type PreProvisionFieldDeviceInput = {
+  deviceName: string;
+  operationalRole?: string;
+  permissionProfileId?: string;
+  assignedTeamId?: string;
+  assignedUserId?: string;
+  assignedUnitId?: string;
+  agencyId?: string;
+  countryCode?: string;
+  stateCode?: string;
+  lgaCode?: string;
+  deviceMode?: string;
+  activationPolicy?: string;
+  activationExpiresAt?: string;
+  reviewAt?: string;
+  notes?: string;
+  inventoryAssetRef?: string;
+  permissionOverrides?: string[];
+  permissionDenies?: string[];
+};
+
+export async function preprovisionFieldDevice(input: PreProvisionFieldDeviceInput): Promise<FieldDeviceView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>("/admin/field-devices/preprovision", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+  return toFieldDeviceView(response.data);
+}
+
+export async function fetchFieldDeviceProvisioning(id: string): Promise<FieldDeviceView | null> {
+  return withToken(async (token) => {
+    try {
+      const response = await apiRequest<{ data: Record<string, unknown> }>(
+        `/admin/field-devices/${encodeURIComponent(id)}/provisioning`,
+        { token },
+      );
+      return toFieldDeviceView(response.data);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  }, null);
+}
+
+export type UpdateFieldDeviceProvisioningInput = {
+  operationalRole?: string;
+  permissionProfileId?: string | null;
+  assignedTeamId?: string | null;
+  deviceMode?: string | null;
+  activationPolicy?: string;
+  activationExpiresAt?: string | null;
+  reviewAt?: string | null;
+  notes?: string | null;
+  inventoryAssetRef?: string | null;
+  permissionOverrides?: string[];
+  permissionDenies?: string[];
+};
+
+export async function updateFieldDeviceProvisioning(
+  id: string,
+  input: UpdateFieldDeviceProvisioningInput,
+): Promise<FieldDeviceView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>(
+    `/admin/field-devices/${encodeURIComponent(id)}/provisioning`,
+    {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(input),
+    },
+  );
+  return toFieldDeviceView(response.data);
+}
+
+export async function issueFieldDevicePairingCode(
+  id: string,
+  input: { ttlMinutes?: number } = {},
+): Promise<FieldPairingIssueView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: FieldPairingIssueView }>(
+    `/admin/field-devices/${encodeURIComponent(id)}/pairing-code`,
+    { method: "POST", token, body: JSON.stringify(input) },
+  );
+  return response.data;
+}
+
+export async function regenerateFieldDevicePairingCode(
+  id: string,
+  input: { ttlMinutes?: number } = {},
+): Promise<FieldPairingIssueView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: FieldPairingIssueView }>(
+    `/admin/field-devices/${encodeURIComponent(id)}/regenerate-pairing`,
+    { method: "POST", token, body: JSON.stringify(input) },
+  );
+  return response.data;
+}
+
+export async function cancelFieldDevicePairing(
+  id: string,
+  input: { reason?: string } = {},
+): Promise<{ cancelled: number }> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: { cancelled: number } }>(
+    `/admin/field-devices/${encodeURIComponent(id)}/cancel-pairing`,
+    { method: "POST", token, body: JSON.stringify(input) },
+  );
+  return response.data;
+}
+
+export async function fetchFieldPermissionProfiles(
+  query: { isActive?: string; operationalRole?: string } = {},
+): Promise<FieldPermissionProfileView[]> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/admin/field-permission-profiles", {
+      token,
+      query,
+    });
+    return response.data.map(toFieldPermissionProfileView);
+  }, []);
+}
+
+export async function fetchFieldPermissionProfile(id: string): Promise<FieldPermissionProfileView | null> {
+  return withToken(async (token) => {
+    try {
+      const response = await apiRequest<{ data: Record<string, unknown> }>(
+        `/admin/field-permission-profiles/${encodeURIComponent(id)}`,
+        { token },
+      );
+      return toFieldPermissionProfileView(response.data);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  }, null);
+}
+
+export type CreateFieldPermissionProfileInput = {
+  code: string;
+  name: string;
+  description?: string;
+  operationalRole?: string;
+  permissions: string[];
+};
+
+export async function createFieldPermissionProfile(
+  input: CreateFieldPermissionProfileInput,
+): Promise<FieldPermissionProfileView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>("/admin/field-permission-profiles", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input),
+  });
+  return toFieldPermissionProfileView(response.data);
+}
+
+export type UpdateFieldPermissionProfileInput = {
+  name?: string;
+  description?: string;
+  operationalRole?: string;
+  permissions?: string[];
+};
+
+export async function updateFieldPermissionProfile(
+  id: string,
+  input: UpdateFieldPermissionProfileInput,
+): Promise<FieldPermissionProfileView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>(
+    `/admin/field-permission-profiles/${encodeURIComponent(id)}`,
+    { method: "PATCH", token, body: JSON.stringify(input) },
+  );
+  return toFieldPermissionProfileView(response.data);
+}
+
+export async function disableFieldPermissionProfile(
+  id: string,
+  input: { reason?: string } = {},
+): Promise<FieldPermissionProfileView> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  const response = await apiRequest<{ data: Record<string, unknown> }>(
+    `/admin/field-permission-profiles/${encodeURIComponent(id)}/disable`,
+    { method: "POST", token, body: JSON.stringify(input) },
+  );
+  return toFieldPermissionProfileView(response.data);
+}
+
+export async function fetchFieldPermissionEffectivePreview(query: {
+  profileId?: string;
+  overrides?: string;
+  denies?: string;
+}): Promise<FieldPermissionEffectivePreviewView | null> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: FieldPermissionEffectivePreviewView }>(
+      "/admin/field-permissions/effective-preview",
+      { token, query },
+    );
+    return response.data;
+  }, null);
 }
 
 export async function publishSmartwatchFirmware(input: {

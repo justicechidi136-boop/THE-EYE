@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AppShell } from "../../../../components/app-shell";
 import { FieldDeviceActions } from "../../../../components/field-operations/field-device-actions";
+import { FieldDevicePairingPanel } from "../../../../components/field-operations/field-device-pairing-panel";
+import { FieldDeviceProvisioningPanel } from "../../../../components/field-operations/field-device-provisioning-panel";
 import { FieldLauncherPolicyPanel } from "../../../../components/field-operations/field-launcher-policy-panel";
 import { PageHeader, Panel, StatusBadge } from "../../../../components/ui";
 import { fetchFieldDevice } from "../../../../lib/api/data";
@@ -58,10 +60,18 @@ export default async function FieldDeviceDetailPage({ params }: { params: Promis
           <Panel title="Supervisor actions">
             <FieldDeviceActions device={device} canManage={canManage} />
           </Panel>
+          <Panel title="Device pairing">
+            <FieldDevicePairingPanel device={device} canManage={canManage} />
+          </Panel>
           <Panel title="Launcher policy">
             <FieldLauncherPolicyPanel deviceId={device.id} canManage={canManage} />
           </Panel>
         </div>
+      </div>
+      <div className="mt-5">
+        <Panel title="Provisioning & permission profile">
+          <FieldDeviceProvisioningPanel device={device} canManage={canManage} />
+        </Panel>
       </div>
     </AppShell>
   );
