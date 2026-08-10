@@ -1,5 +1,3 @@
-import "dart:io";
-
 import "package:flutter/material.dart";
 import "package:permission_handler/permission_handler.dart";
 
@@ -8,7 +6,9 @@ import "evidence_capture_service.dart";
 import "evidence_media_source.dart";
 import "evidence_permission_service.dart";
 import "local_evidence_attachment.dart";
+import "../design_system/components/eye_evidence_card.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "../presentation/evidence_presentation.dart";
 import "../voice/voice_consent_banner.dart";
 import "../voice/voice_recorder.dart";
 import "../widgets/section_card.dart";
@@ -270,8 +270,28 @@ class EvidenceAttachmentPicker extends StatelessWidget {
               ),
             if (controller.attachments.isNotEmpty) ...[
               const SizedBox(height: 14),
-              ...controller.attachments.map((attachment) => EvidencePreviewTile(
-                  controller: controller, attachment: attachment)),
+              ...() {
+                final presentations =
+                    EvidencePresentationMapper.mapLocalAttachments(
+                  controller.attachments,
+                );
+                return [
+                  for (var i = 0; i < presentations.length; i++)
+                    EyeEvidenceCard(
+                      presentation: presentations[i],
+                      uploadProgress: controller.attachments[i].uploadProgress,
+                      onView: presentations[i].canView ? () {} : null,
+                      onPlay: presentations[i].canPlay ? () {} : null,
+                      onRemove: () =>
+                          controller.remove(controller.attachments[i].localId),
+                      onRetry: presentations[i].canRetry
+                          ? () => controller.retryFailedUpload(
+                                controller.attachments[i].localId,
+                              )
+                          : null,
+                    ),
+                ];
+              }(),
             ],
           ],
         );
@@ -329,131 +349,6 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                 }),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class EvidencePreviewTile extends StatelessWidget {
-  const EvidencePreviewTile(
-      {required this.controller, required this.attachment, super.key});
-
-  final EvidenceCaptureController controller;
-  final LocalEvidenceAttachment attachment;
-
-  @override
-  Widget build(BuildContext context) {
-    final statusText = switch (attachment.state) {
-      LocalEvidenceState.captured => "Ready to upload on submit",
-      LocalEvidenceState.uploading =>
-        "Uploading ${(attachment.uploadProgress * 100).round()}%",
-      LocalEvidenceState.uploaded => "Uploaded",
-      LocalEvidenceState.failed => attachment.errorMessage ?? "Upload failed",
-    };
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFD8DEE4)),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          if (attachment.isImage && File(attachment.uploadPath).existsSync())
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                File(attachment.uploadPath),
-                width: 56,
-                height: 56,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(
-                  Icons.image,
-                  size: 32,
-                  color: EyeSemanticColors.of(context).bodyText,
-                ),
-              ),
-            )
-          else if (attachment.isVideo)
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: EyeSemanticColors.of(context).elevatedSurface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.videocam, size: 32),
-            )
-          else if (attachment.isAudio)
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: EyeSemanticColors.of(context).elevatedSurface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.graphic_eq, size: 32),
-            )
-          else
-            Icon(
-              attachment.isVideo
-                  ? Icons.videocam
-                  : attachment.isAudio
-                      ? Icons.mic
-                      : Icons.image,
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  attachment.isVideo
-                      ? "Video ready to review"
-                      : attachment.isAudio
-                          ? "Audio ready to review"
-                          : attachment.fileName,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                Text(
-                  attachment.isVideo || attachment.isAudio
-                      ? "$statusText · ${attachment.fileName}"
-                      : statusText,
-                  style: TextStyle(
-                    color: attachment.state == LocalEvidenceState.failed
-                        ? const Color(0xFFB00020)
-                        : const Color(0xFF5C6670),
-                  ),
-                ),
-                if (attachment.state == LocalEvidenceState.uploading)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: LinearProgressIndicator(
-                        value: attachment.uploadProgress),
-                  ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: "Remove evidence",
-            onPressed: () => controller.remove(attachment.localId),
-            icon: const Icon(Icons.close),
-          ),
-          if (attachment.isImage)
-            IconButton(
-              tooltip: "Retake photo",
-              onPressed: () =>
-                  controller.retake(attachment.localId, controller.takePhoto),
-              icon: const Icon(Icons.refresh),
-            ),
-          if (attachment.state == LocalEvidenceState.failed)
-            IconButton(
-              tooltip: "Retry upload",
-              onPressed: () => controller.retryFailedUpload(attachment.localId),
-              icon: const Icon(Icons.replay),
-            ),
-        ],
       ),
     );
   }
