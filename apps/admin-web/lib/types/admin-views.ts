@@ -140,6 +140,45 @@ export type AgencySummaryView = {
   activeIncidents: number;
 };
 
+export type AgencyView = {
+  id: string;
+  code: string;
+  name: string;
+  shortName: string | null;
+  agencyType: string;
+  jurisdictionLevel: string;
+  countryCode: string;
+  stateCode: string | null;
+  lgaCode: string | null;
+  capabilities: string[];
+  isActive: boolean;
+  status: string;
+  isFieldOperationsEnabled: boolean;
+  isDispatchable: boolean;
+  isDroneEnabled: boolean;
+  isBroadcastAuthority: boolean;
+  isGovernment: boolean;
+  isEmergencyResponder: boolean;
+  parentAgencyId: string | null;
+  jurisdictionId: string | null;
+  phone: string | null;
+  email: string | null;
+  serviceCategories: string[];
+};
+
+export type AgencyUnitView = {
+  id: string;
+  agencyId: string;
+  name: string;
+  unitIdentifier: string;
+  unitKind: string;
+  parentUnitId: string | null;
+  countryCode: string | null;
+  stateCode: string | null;
+  lgaCode: string | null;
+  isActive: boolean;
+};
+
 export type RoleMatrixRow = {
   role: string;
   scope: string;
@@ -430,6 +469,7 @@ export type FieldPermissionProfileView = {
   name: string;
   description: string | null;
   operationalRole: string | null;
+  compatibleAgencyTypes: string[];
   permissions: string[];
   isSystem: boolean;
   isActive: boolean;

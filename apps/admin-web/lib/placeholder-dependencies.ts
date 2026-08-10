@@ -22,7 +22,7 @@ export const PLACEHOLDER_DEPENDENCIES = {
   agencies: {
     title: "Agency registry API",
     endpoint: "GET /v1/agencies",
-    note: "Full agency registry data requires an agencies module. Active incident counts below are derived from assigned incidents.",
+    note: "Agency registry is served by GET /v1/agencies and admin mutations under /v1/admin/agencies.",
   },
   witnessConfirmations: {
     title: "Witness confirmation listing",
