@@ -265,17 +265,29 @@ export type FieldDeviceNotificationType =
   | "FIELD_DEVICE_SUSPENDED"
   | "FIELD_DEVICE_REVOKED"
   | "FIELD_DEVICE_REPAIR_REQUIRED"
+  | "FIELD_DEVICE_PAIRING_CREATED"
+  | "FIELD_DEVICE_PAIRING_EXPIRING"
+  | "FIELD_DEVICE_ACTIVATED"
+  | "FIELD_DEVICE_PAIRING_CANCELLED"
+  | "FIELD_DEVICE_PERMISSION_CHANGED"
   | "FIELD_SESSION_REVOKED";
 
 export function resolveFieldDeviceNotificationRouting(input: {
   publicDeviceId: string;
   notificationType: FieldDeviceNotificationType;
 }): NotificationRoutingV1 {
+  const destination =
+    input.notificationType === "FIELD_DEVICE_PAIRING_CREATED" ||
+    input.notificationType === "FIELD_DEVICE_PAIRING_EXPIRING" ||
+    input.notificationType === "FIELD_DEVICE_ACTIVATED" ||
+    input.notificationType === "FIELD_DEVICE_PAIRING_CANCELLED"
+      ? "/pair-device"
+      : "/device-registration";
   return {
     schemaVersion: NOTIFICATION_SCHEMA_VERSION,
     routeType: "FIELD_DEVICE_STATUS",
     notificationType: input.notificationType,
-    destination: "/device-registration",
+    destination,
   };
 }
 
