@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import {
   FIELD_ERROR_CODES,
   FieldDeviceRegistrationStatus,
+  FieldPreProvisionStatus,
   canApproveFieldDevices,
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
@@ -50,6 +51,9 @@ export class FieldDevicesAdminService {
   }
 
   async approve(id: string, actor: JwtPayload, dto: FieldDeviceAdminActionDto) {
+    this.assertSupervisor(actor);
+    const current = await this.requireScopedDevice(id, actor);
+    const finalizesPreProvisioning = current.preProvisionStatus === FieldPreProvisionStatus.AwaitingFinalApproval;
     return this.transition(id, actor, dto, FieldDeviceRegistrationStatus.Active, "field.device.approved", {
       approvedAt: new Date(),
       approvedById: actor.sub,
@@ -58,6 +62,7 @@ export class FieldDevicesAdminService {
       requiresRePair: false,
       isLost: false,
       isRevoked: false,
+      ...(finalizesPreProvisioning ? { preProvisionStatus: FieldPreProvisionStatus.Active } : {}),
     });
   }
 
@@ -153,13 +158,15 @@ export class FieldDevicesAdminService {
     return { data: this.devices.mapDevice(updated) };
   }
 
-  private assertSupervisor(actor: JwtPayload) {
+  /** Public: reused by field-device-preprovision.service.ts and field-device-pairing.service.ts. */
+  assertSupervisor(actor: JwtPayload) {
     if (!canApproveFieldDevices(actor.role ?? "")) {
       throw new ForbiddenException({ code: FIELD_ERROR_CODES.JURISDICTION_MISMATCH, message: "Supervisor scope required" });
     }
   }
 
-  private assertDeviceScope(
+  /** Public: reused by field-device-preprovision.service.ts and field-device-pairing.service.ts. */
+  assertDeviceScope(
     actor: JwtPayload,
     device: { countryCode: string | null; stateCode: string | null; lgaCode: string | null; agencyId: string | null },
   ) {
@@ -170,7 +177,8 @@ export class FieldDevicesAdminService {
     throw new ForbiddenException({ code: FIELD_ERROR_CODES.JURISDICTION_MISMATCH, message: "Out of scope" });
   }
 
-  private async requireScopedDevice(id: string, actor: JwtPayload) {
+  /** Public: reused by field-device-preprovision.service.ts and field-device-pairing.service.ts. */
+  async requireScopedDevice(id: string, actor: JwtPayload) {
     const device = await this.prisma.fieldDevice.findUnique({ where: { id } });
     if (!device) throw new NotFoundException("Device not found");
     this.assertDeviceScope(actor, device);

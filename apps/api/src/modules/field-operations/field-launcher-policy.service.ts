@@ -11,6 +11,19 @@ const DEFAULT_APPROVED_APPS = [
   "com.android.chrome",
 ];
 
+/** Maps FieldOperationalRole (packages/shared) values onto the launcher's role/module vocabulary. */
+const OPERATIONAL_ROLE_TO_LAUNCHER_ROLE: Record<string, string> = {
+  PatrolOfficer: "officer",
+  PatrolTeamLead: "patrol",
+  CheckpointOfficer: "checkpoint",
+  CheckpointCommander: "checkpoint",
+  Dispatcher: "officer",
+  AgencySupervisor: "supervisor",
+  EmergencyResponder: "officer",
+  DroneOperator: "drone",
+  FieldReadOnlyObserver: "officer",
+};
+
 const ROLE_MODULES: Record<string, string[]> = {
   officer: [
     "dashboard",
@@ -224,6 +237,18 @@ export class FieldLauncherPolicyService {
       },
     });
     return { ok: true };
+  }
+
+  /** Applies sensible launcher-policy defaults right after a pre-provisioned device finishes pairing. */
+  async applyPairingDefaults(fieldDeviceId: string, operationalRole: string, deviceMode?: string) {
+    const role = OPERATIONAL_ROLE_TO_LAUNCHER_ROLE[operationalRole] ?? "officer";
+    const policy = await this.ensureDefaultPolicy(fieldDeviceId, role);
+    if (deviceMode && deviceMode !== policy.deviceMode) {
+      await this.prisma.fieldDeviceLauncherPolicy.update({
+        where: { fieldDeviceId },
+        data: { deviceMode },
+      });
+    }
   }
 
   private async ensureDefaultPolicy(fieldDeviceId: string, role: string) {

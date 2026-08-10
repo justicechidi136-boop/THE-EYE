@@ -22,10 +22,17 @@ import { FieldOfficerSafetyService } from "./field-officer-safety.service";
 import { FieldOperationalResponsesService } from "./field-operational-responses.service";
 import { FieldPatrolHardeningService } from "./field-patrol-hardening.service";
 import { FieldPatrolsService } from "./field-patrols.service";
+import { FieldPermissionPolicyService } from "./field-permission-policy.service";
+import { FieldPermissionProfilesService } from "./field-permission-profiles.service";
+import { FieldDevicePreprovisionService } from "./field-device-preprovision.service";
+import { FieldDevicePairingService } from "./field-device-pairing.service";
 import { FieldShiftsService } from "./field-shifts.service";
 import { FieldSyncService } from "./field-sync.service";
 import { FieldWorkflowsAdminService } from "./field-workflows-admin.service";
 import { FieldAuthController, FieldDevicesAdminController, FieldDevicesController } from "./field-operations.controller";
+import { FieldPermissionProfilesAdminController, FieldPermissionsAdminController } from "./field-permission-profiles.controller";
+import { FieldDeviceProvisioningAdminController } from "./field-device-preprovisioning.controller";
+import { FieldPairingController } from "./field-pairing.controller";
 import {
   FieldBackupController,
   FieldEventsController,
@@ -51,6 +58,10 @@ import {
     FieldDevicesController,
     FieldAuthController,
     FieldDevicesAdminController,
+    FieldDeviceProvisioningAdminController,
+    FieldPermissionProfilesAdminController,
+    FieldPermissionsAdminController,
+    FieldPairingController,
     FieldDashboardController,
     FieldShiftsController,
     FieldPatrolsController,
@@ -72,6 +83,10 @@ import {
     FieldAuthService,
     FieldDevicesAdminService,
     FieldLauncherPolicyService,
+    FieldPermissionPolicyService,
+    FieldPermissionProfilesService,
+    FieldDevicePreprovisionService,
+    FieldDevicePairingService,
     FieldShiftsService,
     FieldPatrolsService,
     FieldPatrolHardeningService,
@@ -89,7 +104,7 @@ import {
     FieldOfficerSafetyService,
     FieldBackupRequestsService,
   ],
-  exports: [FieldDevicesService, FieldAuthService],
+  exports: [FieldDevicesService, FieldAuthService, FieldPermissionPolicyService],
 })
 export class FieldOperationsModule {}
 

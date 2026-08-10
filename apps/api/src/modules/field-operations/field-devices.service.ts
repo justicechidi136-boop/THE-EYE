@@ -9,6 +9,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   FIELD_ERROR_CODES,
   FieldDeviceRegistrationStatus,
+  FieldProvisioningMode,
   adminRolePermissions,
   canApproveFieldDevices,
   isFieldEligibleAdminRole,
@@ -61,7 +62,8 @@ export class FieldDevicesService {
     };
   }
 
-  private async consumeChallenge(challengeId: string, challenge: string) {
+  /** Public so the pairing flow (field-device-pairing.service.ts) can reuse it. */
+  async consumeChallenge(challengeId: string, challenge: string) {
     const record = await this.prisma.fieldDeviceRegistrationChallenge.findUnique({ where: { id: challengeId } });
     if (!record || record.consumedAt || record.expiresAt <= new Date()) {
       throw new UnauthorizedException({ code: FIELD_ERROR_CODES.DEVICE_SIGNATURE_INVALID, message: "Registration challenge expired or invalid" });
@@ -122,6 +124,7 @@ export class FieldDevicesService {
         stateCode: admin.state,
         lgaCode: admin.lga,
         registrationStatus: FieldDeviceRegistrationStatus.PendingApproval,
+        provisioningMode: FieldProvisioningMode.SelfRegistration,
         metadata: (dto.metadata ?? {}) as never,
       },
     });
@@ -155,7 +158,7 @@ export class FieldDevicesService {
       throw new ForbiddenException({ code: FIELD_ERROR_CODES.DEVICE_APPROVAL_PENDING, message: "Device not approved" });
     }
     await this.consumeChallenge(dto.challengeId, dto.challenge);
-    if (!verifyFieldDeviceSignature(device.publicKey, dto.challenge, dto.challengeSignature)) {
+    if (!device.publicKey || !verifyFieldDeviceSignature(device.publicKey, dto.challenge, dto.challengeSignature)) {
       throw new UnauthorizedException({ code: FIELD_ERROR_CODES.DEVICE_SIGNATURE_INVALID, message: "Device signature invalid" });
     }
     await this.prisma.fieldDevice.update({
@@ -227,6 +230,8 @@ export class FieldDevicesService {
     isLost: boolean;
     isRevoked: boolean;
     requiresRePair: boolean;
+    publicKey?: string | null;
+    installationIdHash?: string | null;
   }) {
     if (device.registrationStatus === FieldDeviceRegistrationStatus.PendingApproval) {
       throw new ForbiddenException({ code: FIELD_ERROR_CODES.DEVICE_APPROVAL_PENDING, message: "Approval pending" });
@@ -245,6 +250,14 @@ export class FieldDevicesService {
     }
     if (device.registrationStatus !== FieldDeviceRegistrationStatus.Active) {
       throw new ForbiddenException({ code: FIELD_ERROR_CODES.DEVICE_REGISTRATION_REQUIRED, message: "Device not active" });
+    }
+    // Safety net: a device should never reach Active without completing self-registration or
+    // pairing, but guard against data drift (e.g. a pre-provisioned record edited directly).
+    if (!device.publicKey || !device.installationIdHash) {
+      throw new ForbiddenException({
+        code: FIELD_ERROR_CODES.DEVICE_REGISTRATION_REQUIRED,
+        message: "Device is not yet paired — complete pairing before authenticating",
+      });
     }
   }
 
@@ -272,6 +285,23 @@ export class FieldDevicesService {
     isRootRiskDetected?: boolean;
     approvedAt: Date | null;
     registeredAt: Date;
+    publicKey?: string | null;
+    installationIdHash?: string | null;
+    provisioningMode?: string;
+    provisionedAt?: Date | null;
+    provisionedById?: string | null;
+    permissionProfileId?: string | null;
+    assignedTeamId?: string | null;
+    operationalRole?: string | null;
+    deviceMode?: string | null;
+    activationExpiresAt?: Date | null;
+    reviewAt?: Date | null;
+    notes?: string | null;
+    preProvisionStatus?: string | null;
+    activationPolicy?: string | null;
+    inventoryAssetRef?: string | null;
+    permissionOverrides?: unknown;
+    permissionDenies?: unknown;
   }) {
     return {
       id: device.id,
@@ -297,6 +327,22 @@ export class FieldDevicesService {
       isRootRiskDetected: device.isRootRiskDetected ?? false,
       approvedAt: device.approvedAt?.toISOString() ?? null,
       registeredAt: device.registeredAt.toISOString(),
+      isBound: Boolean(device.publicKey && device.installationIdHash),
+      provisioningMode: device.provisioningMode ?? "SelfRegistration",
+      provisionedAt: device.provisionedAt?.toISOString() ?? null,
+      provisionedById: device.provisionedById ?? null,
+      permissionProfileId: device.permissionProfileId ?? null,
+      assignedTeamId: device.assignedTeamId ?? null,
+      operationalRole: device.operationalRole ?? null,
+      deviceMode: device.deviceMode ?? null,
+      activationExpiresAt: device.activationExpiresAt?.toISOString() ?? null,
+      reviewAt: device.reviewAt?.toISOString() ?? null,
+      notes: device.notes ?? null,
+      preProvisionStatus: device.preProvisionStatus ?? null,
+      activationPolicy: device.activationPolicy ?? null,
+      inventoryAssetRef: device.inventoryAssetRef ?? null,
+      permissionOverrides: Array.isArray(device.permissionOverrides) ? device.permissionOverrides : [],
+      permissionDenies: Array.isArray(device.permissionDenies) ? device.permissionDenies : [],
     };
   }
 

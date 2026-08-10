@@ -637,8 +637,14 @@ model AdminUser {
   assignedFieldDevices         FieldDevice[]              @relation("FieldDeviceAssignedUser")
   approvedFieldDevices         FieldDevice[]              @relation("FieldDeviceApprovedBy")
   revokedFieldDevices          FieldDevice[]              @relation("FieldDeviceRevokedBy")
+  provisionedFieldDevices      FieldDevice[]              @relation("FieldDeviceProvisionedBy")
   updatedFieldLauncherPolicies FieldDeviceLauncherPolicy[] @relation("FieldDeviceLauncherPolicyUpdatedBy")
   fieldDeviceSessions          FieldDeviceSession[]       @relation("FieldDeviceSessionAdmin")
+  fieldPermissionProfilesCreated  FieldPermissionProfile[] @relation("FieldPermissionProfileCreatedBy")
+  fieldPermissionProfilesUpdated  FieldPermissionProfile[] @relation("FieldPermissionProfileUpdatedBy")
+  fieldPermissionProfilesDisabled FieldPermissionProfile[] @relation("FieldPermissionProfileDisabledBy")
+  fieldDevicePairingTokensIssued    FieldDevicePairingToken[] @relation("FieldDevicePairingTokenIssuedBy")
+  fieldDevicePairingTokensCancelled FieldDevicePairingToken[] @relation("FieldDevicePairingTokenCancelledBy")
   fieldShifts                  FieldShift[]               @relation("FieldShiftOfficer")
   fieldShiftsApproved          FieldShift[]               @relation("FieldShiftApprovedBy")
   patrolSessions               PatrolSession[]            @relation("PatrolSessionOfficer")
@@ -3445,7 +3451,7 @@ model FieldDevice {
   id                     String                        @id @default(uuid()) @db.Uuid
   publicDeviceId         String                        @unique @map("public_device_id")
   deviceCredentialHash   String?                       @map("device_credential_hash")
-  publicKey              String                        @map("public_key")
+  publicKey              String?                       @map("public_key")
   assignedUserId         String?                       @map("assigned_user_id") @db.Uuid
   agencyId               String?                       @map("agency_id") @db.Uuid
   assignedUnitId         String?                       @map("assigned_unit_id") @db.Uuid
@@ -3459,9 +3465,25 @@ model FieldDevice {
   appVersion             String?                       @map("app_version")
   buildNumber            String?                       @map("build_number")
   serialHash             String?                       @map("serial_hash")
-  installationIdHash     String                        @unique @map("installation_id_hash")
+  installationIdHash     String?                       @unique @map("installation_id_hash")
   registrationStatus     FieldDeviceRegistrationStatus @default(PendingApproval) @map("registration_status")
   registeredAt           DateTime                      @default(now()) @map("registered_at") @db.Timestamptz(6)
+  provisioningMode       FieldProvisioningMode         @default(SelfRegistration) @map("provisioning_mode")
+  provisionedAt          DateTime?                     @map("provisioned_at") @db.Timestamptz(6)
+  provisionedById        String?                       @map("provisioned_by_id") @db.Uuid
+  permissionProfileId    String?                       @map("permission_profile_id") @db.Uuid
+  assignedTeamId         String?                       @map("assigned_team_id")
+  operationalRole        String?                       @map("operational_role")
+  deviceMode             String?                       @map("device_mode")
+  activationExpiresAt    DateTime?                     @map("activation_expires_at") @db.Timestamptz(6)
+  reviewAt               DateTime?                     @map("review_at") @db.Timestamptz(6)
+  notes                  String?
+  preProvisionStatus     FieldPreProvisionStatus?      @map("pre_provision_status")
+  activationPolicy       FieldActivationPolicy?        @map("activation_policy")
+  authoritySnapshot      Json?                         @map("authority_snapshot")
+  inventoryAssetRef      String?                       @map("inventory_asset_ref")
+  permissionOverrides    String[]                      @default([]) @map("permission_overrides")
+  permissionDenies       String[]                      @default([]) @map("permission_denies")
   approvedAt             DateTime?                     @map("approved_at") @db.Timestamptz(6)
   approvedById           String?                       @map("approved_by_id") @db.Uuid
   lastSeenAt             DateTime?                     @map("last_seen_at") @db.Timestamptz(6)
@@ -3498,6 +3520,8 @@ model FieldDevice {
   assignedUnit           ResponseUnit?                 @relation(fields: [assignedUnitId], references: [id])
   approvedBy             AdminUser?                    @relation("FieldDeviceApprovedBy", fields: [approvedById], references: [id])
   revokedBy              AdminUser?                    @relation("FieldDeviceRevokedBy", fields: [revokedById], references: [id])
+  provisionedBy          AdminUser?                    @relation("FieldDeviceProvisionedBy", fields: [provisionedById], references: [id])
+  permissionProfile      FieldPermissionProfile?       @relation(fields: [permissionProfileId], references: [id])
   sessions               FieldDeviceSession[]
   fieldShifts            FieldShift[]
   patrolSessions         PatrolSession[]
@@ -3509,6 +3533,7 @@ model FieldDevice {
   fieldOfficerSafetyAlerts FieldOfficerSafetyAlert[]
   syncState              FieldDeviceSyncState?
   launcherPolicy         FieldDeviceLauncherPolicy?
+  pairingTokens          FieldDevicePairingToken[]
 
   @@index([assignedUserId, registrationStatus])
   @@index([agencyId, registrationStatus])
@@ -3516,7 +3541,98 @@ model FieldDevice {
   @@index([lastSeenAt])
   @@index([isLost])
   @@index([isRevoked])
+  @@index([provisioningMode, preProvisionStatus])
+  @@index([permissionProfileId])
   @@map("field_devices")
+}
+
+enum FieldProvisioningMode {
+  SelfRegistration
+  PreProvisioned
+}
+
+enum FieldPreProvisionStatus {
+  Draft
+  AwaitingPairing
+  Paired
+  AwaitingFinalApproval
+  Active
+  Cancelled
+  Expired
+}
+
+enum FieldActivationPolicy {
+  AutoActivateOnPairing
+  RequireSupervisorFinalApproval
+}
+
+enum FieldPairingTokenStatus {
+  Issued
+  Claimed
+  Completed
+  Expired
+  Revoked
+  Failed
+}
+
+/// System or agency-defined catalog of field capability permission bundles assigned to devices.
+model FieldPermissionProfile {
+  id              String    @id @default(uuid()) @db.Uuid
+  code            String    @unique
+  name            String
+  description     String?
+  operationalRole String?   @map("operational_role")
+  permissions     String[]  @default([])
+  isSystem        Boolean   @default(false) @map("is_system")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdById     String?   @map("created_by_id") @db.Uuid
+  updatedById     String?   @map("updated_by_id") @db.Uuid
+  disabledAt      DateTime? @map("disabled_at") @db.Timestamptz(6)
+  disabledById    String?   @map("disabled_by_id") @db.Uuid
+  disabledReason  String?   @map("disabled_reason")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy       AdminUser?    @relation("FieldPermissionProfileCreatedBy", fields: [createdById], references: [id])
+  updatedBy       AdminUser?    @relation("FieldPermissionProfileUpdatedBy", fields: [updatedById], references: [id])
+  disabledBy      AdminUser?    @relation("FieldPermissionProfileDisabledBy", fields: [disabledById], references: [id])
+  devices         FieldDevice[]
+
+  @@index([isActive])
+  @@index([operationalRole])
+  @@map("field_permission_profiles")
+}
+
+/// Hashed, single-use pairing credentials for secure QR/short-code field device pairing.
+/// Only hashes are stored — plaintext tokens/short codes exist only in the one-time API response.
+model FieldDevicePairingToken {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  fieldDeviceId           String                  @map("field_device_id") @db.Uuid
+  tokenHash               String                  @unique @map("token_hash")
+  shortCodeHash           String                  @unique @map("short_code_hash")
+  status                  FieldPairingTokenStatus @default(Issued)
+  issuedById              String                  @map("issued_by_id") @db.Uuid
+  issuedAt                DateTime                @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt               DateTime                @map("expires_at") @db.Timestamptz(6)
+  claimedAt               DateTime?               @map("claimed_at") @db.Timestamptz(6)
+  completedAt             DateTime?               @map("completed_at") @db.Timestamptz(6)
+  cancelledAt             DateTime?               @map("cancelled_at") @db.Timestamptz(6)
+  cancelledById           String?                 @map("cancelled_by_id") @db.Uuid
+  revokedReason           String?                 @map("revoked_reason")
+  attemptCount            Int                     @default(0) @map("attempt_count")
+  maxAttempts             Int                     @default(5) @map("max_attempts")
+  claimIpHash             String?                 @map("claim_ip_hash")
+  metadata                Json                    @default("{}")
+  createdAt               DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  fieldDevice FieldDevice @relation(fields: [fieldDeviceId], references: [id], onDelete: Cascade)
+  issuedBy    AdminUser   @relation("FieldDevicePairingTokenIssuedBy", fields: [issuedById], references: [id])
+  cancelledBy AdminUser?  @relation("FieldDevicePairingTokenCancelledBy", fields: [cancelledById], references: [id])
+
+  @@index([fieldDeviceId, status])
+  @@index([expiresAt])
+  @@map("field_device_pairing_tokens")
 }
 
 /// Launcher / managed-kiosk policy for agency field tablets (1:1 with FieldDevice).
