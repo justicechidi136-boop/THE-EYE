@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -22,9 +23,10 @@ class FieldApiClient {
     http.Client? httpClient,
     String? baseUrl,
     this.accessToken,
+    this.timeout = const Duration(seconds: 15),
     bool skipEnvGuard = false,
-  })  : _http = httpClient ?? http.Client(),
-        baseUrl = baseUrl ?? ApiConfig.resolveBaseUrl() {
+  }) : _http = httpClient ?? http.Client(),
+       baseUrl = baseUrl ?? ApiConfig.resolveBaseUrl() {
     if (!skipEnvGuard) {
       assertApiBaseUrlMatchesFlavor(AppFlavor.firebaseEnv, this.baseUrl);
     }
@@ -32,6 +34,7 @@ class FieldApiClient {
 
   final http.Client _http;
   final String baseUrl;
+  final Duration timeout;
   String? accessToken;
 
   Map<String, String> _headers({bool jsonBody = true}) {
@@ -58,12 +61,27 @@ class FieldApiClient {
     Map<String, String>? headers,
     Map<String, String>? query,
   }) async {
-    final response = await _http.post(
-      _uri(path, query),
-      headers: {..._headers(), ...?headers},
-      body: jsonEncode(body ?? const {}),
-    );
-    return _decode(response);
+    try {
+      final response = await _http
+          .post(
+            _uri(path, query),
+            headers: {..._headers(), ...?headers},
+            body: jsonEncode(body ?? const {}),
+          )
+          .timeout(timeout);
+      return _decode(response);
+    } on TimeoutException {
+      throw FieldApiException(
+        'Network timeout — check connectivity and try again.',
+        code: 'NETWORK_TIMEOUT',
+      );
+    } on http.ClientException catch (error) {
+      throw FieldApiException(
+        'Network unavailable — check connectivity and try again.',
+        code: 'NETWORK_ERROR',
+        body: error.message,
+      );
+    }
   }
 
   Future<Map<String, dynamic>> get(
@@ -71,11 +89,26 @@ class FieldApiClient {
     Map<String, String>? headers,
     Map<String, String>? query,
   }) async {
-    final response = await _http.get(
-      _uri(path, query),
-      headers: {..._headers(jsonBody: false), ...?headers},
-    );
-    return _decode(response);
+    try {
+      final response = await _http
+          .get(
+            _uri(path, query),
+            headers: {..._headers(jsonBody: false), ...?headers},
+          )
+          .timeout(timeout);
+      return _decode(response);
+    } on TimeoutException {
+      throw FieldApiException(
+        'Network timeout — check connectivity and try again.',
+        code: 'NETWORK_TIMEOUT',
+      );
+    } on http.ClientException catch (error) {
+      throw FieldApiException(
+        'Network unavailable — check connectivity and try again.',
+        code: 'NETWORK_ERROR',
+        body: error.message,
+      );
+    }
   }
 
   Future<Map<String, dynamic>> patch(
@@ -84,12 +117,27 @@ class FieldApiClient {
     Map<String, String>? headers,
     Map<String, String>? query,
   }) async {
-    final response = await _http.patch(
-      _uri(path, query),
-      headers: {..._headers(), ...?headers},
-      body: jsonEncode(body ?? const {}),
-    );
-    return _decode(response);
+    try {
+      final response = await _http
+          .patch(
+            _uri(path, query),
+            headers: {..._headers(), ...?headers},
+            body: jsonEncode(body ?? const {}),
+          )
+          .timeout(timeout);
+      return _decode(response);
+    } on TimeoutException {
+      throw FieldApiException(
+        'Network timeout — check connectivity and try again.',
+        code: 'NETWORK_TIMEOUT',
+      );
+    } on http.ClientException catch (error) {
+      throw FieldApiException(
+        'Network unavailable — check connectivity and try again.',
+        code: 'NETWORK_ERROR',
+        body: error.message,
+      );
+    }
   }
 
   Map<String, dynamic> _decode(http.Response response) {
@@ -109,7 +157,8 @@ class FieldApiClient {
         message = nested['message']?.toString() ?? 'Request failed';
         code = nested['code']?.toString();
       } else {
-        message = nested?.toString() ??
+        message =
+            nested?.toString() ??
             decoded['error']?.toString() ??
             'Request failed';
         code = decoded['code']?.toString();

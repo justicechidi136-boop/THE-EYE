@@ -97,16 +97,20 @@ class _SplashScreenState extends State<SplashScreen> {
           return;
         }
       } on FieldApiException catch (error) {
+        // 404 = never registered. Other API/network errors still open the
+        // registration / pairing entry so the tablet is not stuck on splash.
         if (error.statusCode != 404) {
-          _go(FieldRoutes.deviceRegistration, arguments: error.message);
-          return;
+          debugPrint(
+            '[THE_EYE_FIELD_OPS] registration status: ${error.statusCode} ${error.message}',
+          );
         }
       }
 
       setState(() => _status = 'Ready');
       _go(FieldRoutes.deviceRegistration);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
+      debugPrint('[THE_EYE_FIELD_OPS] startup failed: $error');
       setState(() => _status = 'Unable to finish startup. Continuing…');
       await Future<void>.delayed(const Duration(seconds: 2));
       _go(FieldRoutes.deviceRegistration);

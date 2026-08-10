@@ -85,7 +85,9 @@ ThemeData buildFieldTheme() {
       style: ElevatedButton.styleFrom(
         backgroundColor: FieldColors.orange,
         foregroundColor: FieldColors.dark,
-        minimumSize: const Size.fromHeight(56),
+        // Prefer a finite min width — Size.fromHeight(56) is infinite-width and
+        // crashes Outlined/ElevatedButtons placed inside Rows (registration card).
+        minimumSize: const Size(64, 56),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -95,7 +97,7 @@ ThemeData buildFieldTheme() {
       style: OutlinedButton.styleFrom(
         foregroundColor: FieldColors.orange,
         side: const BorderSide(color: FieldColors.orange, width: 2),
-        minimumSize: const Size.fromHeight(56),
+        minimumSize: const Size(64, 56),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

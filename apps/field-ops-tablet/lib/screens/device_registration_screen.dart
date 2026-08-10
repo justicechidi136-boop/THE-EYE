@@ -19,8 +19,7 @@ class DeviceRegistrationScreen extends StatefulWidget {
 
 class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _deviceNameController =
-      TextEditingController(text: 'Field Ops Tablet');
+  final _deviceNameController = TextEditingController(text: 'Field Ops Tablet');
   final _adminTokenController = TextEditingController();
   bool _busy = false;
   String? _error;
@@ -35,11 +34,14 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
 
   Future<void> _loadIdentity() async {
     await widget.services.keystore.ensureKeyPair();
-    final installationId =
-        await FieldAuthService.ensureInstallationId(widget.services.session);
+    final installationId = await FieldAuthService.ensureInstallationId(
+      widget.services.session,
+    );
     final publicKey = await widget.services.keystore.readPublicKeyBase64();
-    final installationHash =
-        await FieldAuthService.hashInstallationId(installationId);
+    final installationHash = await FieldAuthService.hashInstallationId(
+      installationId,
+    );
+    if (!mounted) return;
     setState(() {
       _publicKey = publicKey;
       _installationHash = installationHash;
@@ -50,8 +52,10 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
     if (!_formKey.currentState!.validate()) return;
     final adminToken = _adminTokenController.text.trim();
     if (adminToken.isEmpty) {
-      setState(() => _error =
-          'Supervisor access token required to submit registration.');
+      setState(
+        () =>
+            _error = 'Supervisor access token required to submit registration.',
+      );
       return;
     }
 
@@ -122,25 +126,39 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                     color: FieldColors.surfaceElevated,
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Icon(Icons.qr_code_scanner, color: FieldColors.orange),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              'Handed a pre-provisioned tablet? Pair it with a QR '
-                              'code or pairing code instead — no supervisor token '
-                              'needed on this device.',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.qr_code_scanner,
+                                color: FieldColors.orange,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  'Handed a pre-provisioned tablet? Pair it with a QR '
+                                  'code or pairing code instead — no supervisor token '
+                                  'needed on this device.',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
-                          OutlinedButton(
-                            onPressed: _busy
-                                ? null
-                                : () => Navigator.of(context)
-                                    .pushNamed(FieldRoutes.pairDevice),
-                            child: const Text('I have a pairing code'),
+                          const SizedBox(height: 16),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton(
+                              onPressed:
+                                  _busy
+                                      ? null
+                                      : () => Navigator.of(
+                                        context,
+                                      ).pushNamed(FieldRoutes.pairDevice),
+                              child: const Text('I have a pairing code'),
+                            ),
                           ),
                         ],
                       ),
@@ -155,10 +173,11 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                   TextFormField(
                     controller: _deviceNameController,
                     decoration: const InputDecoration(labelText: 'Device name'),
-                    validator: (value) =>
-                        value == null || value.trim().isEmpty
-                            ? 'Device name is required'
-                            : null,
+                    validator:
+                        (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Device name is required'
+                                : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -169,10 +188,11 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                     obscureText: true,
                   ),
                   const SizedBox(height: 24),
-                  if (_publicKey != null) _IdentityCard(
-                    title: 'Public key (base64)',
-                    value: _publicKey!,
-                  ),
+                  if (_publicKey != null)
+                    _IdentityCard(
+                      title: 'Public key (base64)',
+                      value: _publicKey!,
+                    ),
                   if (_installationHash != null) ...[
                     const SizedBox(height: 12),
                     _IdentityCard(
@@ -182,18 +202,22 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: 16),
-                    Text(_error!, style: const TextStyle(color: FieldColors.danger)),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: FieldColors.danger),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _busy ? null : _submit,
-                    child: _busy
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Submit registration'),
+                    child:
+                        _busy
+                            ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Text('Submit registration'),
                   ),
                 ],
               ),
@@ -221,7 +245,10 @@ class _IdentityCard extends StatelessWidget {
           children: [
             Text(title, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
-            SelectableText(value, style: Theme.of(context).textTheme.bodyMedium),
+            SelectableText(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
