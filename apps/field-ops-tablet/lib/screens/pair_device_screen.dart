@@ -11,6 +11,7 @@ import '../pairing/field_pairing_service.dart';
 import '../pairing/pairing_qr_payload.dart';
 import '../screens/routes.dart';
 import '../services/field_app_services.dart';
+import '../theme/field_branding.dart';
 import '../theme/field_theme.dart';
 
 /// Entry method the officer picked for supplying the pairing code.
@@ -186,17 +187,20 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
 
     try {
       await widget.services.pairing.ensureKeyPair();
-      final installationId =
-          await FieldAuthService.ensureInstallationId(widget.services.session);
-      final installationIdHash =
-          await FieldAuthService.hashInstallationId(installationId);
+      final installationId = await FieldAuthService.ensureInstallationId(
+        widget.services.session,
+      );
+      final installationIdHash = await FieldAuthService.hashInstallationId(
+        installationId,
+      );
       final publicKey = await widget.services.pairing.readPublicKeyBase64();
       if (publicKey == null || publicKey.isEmpty) {
         throw StateError('Device public key unavailable');
       }
 
-      final signedChallenge =
-          await widget.services.pairing.requestChallenge(lookup);
+      final signedChallenge = await widget.services.pairing.requestChallenge(
+        lookup,
+      );
 
       if (!mounted) return;
       setState(() => _stage = PairingStage.completing);
@@ -208,7 +212,9 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
         installationIdHash: installationIdHash,
       );
 
-      await widget.services.session.savePublicDeviceId(completion.publicDeviceId);
+      await widget.services.session.savePublicDeviceId(
+        completion.publicDeviceId,
+      );
 
       if (!mounted) return;
       setState(() => _stage = PairingStage.success);
@@ -218,7 +224,9 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
         if (completion.isActive) {
           Navigator.of(context).pushReplacementNamed(FieldRoutes.login);
         } else {
-          Navigator.of(context).pushReplacementNamed(FieldRoutes.approvalPending);
+          Navigator.of(
+            context,
+          ).pushReplacementNamed(FieldRoutes.approvalPending);
         }
       });
     } on FieldApiException catch (error) {
@@ -286,8 +294,27 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const Center(
+          child: FieldOpsBrandHeader(
+            logoSize: 88,
+            compact: true,
+            showTitle: false,
+            showSubtitle: false,
+          ),
+        ),
+        const SizedBox(height: 8),
         Text(
-          'Pair a pre-provisioned tablet',
+          'THE EYE FIELD OPERATIONS',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Secure Field Device Activation',
+          textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 8),
@@ -295,6 +322,7 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
           'Ask your supervisor for this tablet\'s pairing QR code or '
           '${_shortCodeExampleLabel()} short code, issued from the admin '
           'console.',
+          textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 32),
@@ -549,7 +577,10 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ConfirmRow(label: 'Device name', value: claim?.deviceName ?? '—'),
+                _ConfirmRow(
+                  label: 'Device name',
+                  value: claim?.deviceName ?? '—',
+                ),
                 if (claim?.operationalRole != null) ...[
                   const SizedBox(height: 12),
                   _ConfirmRow(
@@ -625,7 +656,10 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
           ),
         ),
         const SizedBox(height: 24),
-        ElevatedButton(onPressed: _resetToChooser, child: const Text('Try again')),
+        ElevatedButton(
+          onPressed: _resetToChooser,
+          child: const Text('Try again'),
+        ),
       ],
     );
   }

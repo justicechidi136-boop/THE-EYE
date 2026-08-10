@@ -9,6 +9,7 @@ import '../../launcher/launcher_policy.dart';
 import '../../launcher/widgets/emergency_quick_actions.dart';
 import '../../launcher/widgets/operational_status_strip.dart';
 import '../../services/field_app_services.dart';
+import '../../theme/field_branding.dart';
 import '../routes.dart';
 import 'approved_apps_screen.dart';
 import 'maintenance_escape_sheet.dart';
@@ -75,9 +76,8 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
         _unread = (dash['unreadAlerts'] as num?)?.toInt() ?? 0;
         _gps = dash['gpsLabel']?.toString() ?? 'Acquiring';
         _network = dash['networkType']?.toString() ?? 'Unknown';
-        _battery = dash['batteryLevel'] != null
-            ? '${dash['batteryLevel']}%'
-            : '—';
+        _battery =
+            dash['batteryLevel'] != null ? '${dash['batteryLevel']}%' : '—';
         _sync = dash['syncState']?.toString() ?? 'OK';
       });
     } catch (_) {
@@ -137,6 +137,15 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                   children: [
                     Row(
                       children: [
+                        Image.asset(
+                          FieldBrandingAssets.logoUi,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                          semanticLabel: 'THE EYE Field Operations logo',
+                        ),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,7 +163,9 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                                   _officer ?? 'Officer',
                                   _agency ?? 'Agency',
                                   _unit ?? 'Unit',
-                                  FieldDeviceModeConfig.apiValue(_policy.deviceMode),
+                                  FieldDeviceModeConfig.apiValue(
+                                    _policy.deviceMode,
+                                  ),
                                   if (AppFlavor.isStaging) 'STAGING',
                                 ].join(' · '),
                                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -167,16 +178,20 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                         IconButton(
                           tooltip: 'Refresh policy',
                           onPressed: _refresh,
-                          icon: const Icon(Icons.refresh, color: Colors.white70),
+                          icon: const Icon(
+                            Icons.refresh,
+                            color: Colors.white70,
+                          ),
                         ),
                         if (_policy.maintenanceModeAllowed)
                           TextButton(
-                            onPressed: () => showMaintenanceEscapeSheet(
-                              context,
-                              services: widget.services,
-                              platform: _platform,
-                              policy: _policy,
-                            ),
+                            onPressed:
+                                () => showMaintenanceEscapeSheet(
+                                  context,
+                                  services: widget.services,
+                                  platform: _platform,
+                                  policy: _policy,
+                                ),
                             child: const Text('Maintenance'),
                           ),
                       ],
@@ -192,11 +207,11 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                       child: GridView.builder(
                         gridDelegate:
                             const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 220,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 1.35,
-                        ),
+                              maxCrossAxisExtent: 220,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: 1.35,
+                            ),
                         itemCount: modules.length + 1,
                         itemBuilder: (context, index) {
                           if (index == modules.length) {
@@ -206,10 +221,11 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute<void>(
-                                    builder: (_) => ApprovedAppsScreen(
-                                      policy: _policy,
-                                      launcher: _appLauncher,
-                                    ),
+                                    builder:
+                                        (_) => ApprovedAppsScreen(
+                                          policy: _policy,
+                                          launcher: _appLauncher,
+                                        ),
                                   ),
                                 );
                               },
