@@ -66,8 +66,8 @@ admin actions.
   "assignedTeamId": "team-12",
   "assignedUserId": "user-1",
   "assignedUnitId": "unit-1",
-  "agencyId": "agency-1",                    // must be within the actor's own scope
-  "countryCode": "NG", "stateCode": "Lagos", "lgaCode": "Ikeja",
+  "agencyId": "agency-1",                    // required; active FO-enabled agency in actor scope (select via GET /v1/agencies — administrators do not manually enter agency UUIDs)
+  "countryCode": "NG", "stateCode": "LA", "lgaCode": "IKEJA",
   "deviceMode": "standard",                  // standard | launcher | managed_kiosk
   "activationPolicy": "RequireSupervisorFinalApproval", // or AutoActivateOnPairing (default: require approval)
   "activationExpiresAt": "2026-09-01T00:00:00.000Z",    // must be in the future
@@ -85,10 +85,15 @@ Validation performed by `FieldDevicePreprovisionService.preprovision`:
 2. **Jurisdiction scope** — the actor cannot preprovision outside their own
    country/state/LGA/agency (`FIELD_ERROR_CODES.JURISDICTION_MISMATCH`, same
    rule as existing device approval).
-3. **Known-value validation** — `operationalRole`, `deviceMode`,
+3. **Agency registry** — `agencyId` is required; agency must exist, be Active,
+   have `isFieldOperationsEnabled`, and lie in actor scope. Assigned units must
+   belong to that agency. Operational role and permission-profile
+   `compatibleAgencyTypes` must match agency type (`AGENCY-*` error codes; see
+   [`AGENCY_REGISTRY.md`](./AGENCY_REGISTRY.md)).
+4. **Known-value validation** — `operationalRole`, `deviceMode`,
    `activationPolicy` must be from a fixed allow-list; dates must be valid and,
    where required, in the future.
-4. **Permission validation** (delegates to `FieldPermissionPolicyService`, see
+5. **Permission validation** (delegates to `FieldPermissionPolicyService`, see
    [`FIELD_PERMISSION_DELEGATION_POLICY.md`](./FIELD_PERMISSION_DELEGATION_POLICY.md)):
    - The profile's permissions, and any `permissionOverrides`, must be in the
      known field-capability catalog — **arbitrary strings are always
@@ -96,7 +101,7 @@ Validation performed by `FieldDevicePreprovisionService.preprovision`:
    - The full set must be within the actor's own delegation ceiling — a
      supervisor can never hand out more than they themselves are trusted with
      (`FIELD-PERM-002`).
-5. An **authority snapshot** is captured at grant time
+6. An **authority snapshot** is captured at grant time
    (`FieldPermissionPolicyService.buildAuthoritySnapshot`) and stored on the
    device as `authoritySnapshot` (immutable JSON) — this is the audit trail
    answering "who granted this device its permissions, and under what
