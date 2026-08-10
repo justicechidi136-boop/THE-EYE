@@ -13,7 +13,6 @@ import 'screens/comms/comms_screen.dart';
 import 'screens/device_registration_screen.dart';
 import 'screens/device_status_screen.dart';
 import 'screens/drone/drone_monitor_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/launcher/device_lock_screen.dart';
 import 'screens/launcher/launcher_shell_gate.dart';
 import 'screens/locked_screen.dart';
@@ -27,17 +26,23 @@ import 'services/field_app_services.dart';
 import 'theme/field_theme.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    debugPrint('[THE_EYE_FIELD_OPS] FlutterError: ${details.exceptionAsString()}');
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('[THE_EYE_FIELD_OPS] Uncaught: $error\n$stack');
-    return true;
-  };
+  // Bindings and runApp must share the same zone — otherwise async startup
+  // (registration status, secure storage) can stall or mis-handle errors.
   runZonedGuarded(
-    () => runApp(const TheEyeFieldOpsApp()),
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        debugPrint(
+          '[THE_EYE_FIELD_OPS] FlutterError: ${details.exceptionAsString()}',
+        );
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[THE_EYE_FIELD_OPS] Uncaught: $error\n$stack');
+        return true;
+      };
+      runApp(const TheEyeFieldOpsApp());
+    },
     (error, stack) {
       debugPrint('[THE_EYE_FIELD_OPS] Zone error: $error\n$stack');
     },
@@ -85,7 +90,10 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
           case FieldRoutes.login:
             return _page(LoginScreen(services: _services), settings);
           case FieldRoutes.deviceRegistration:
-            return _page(DeviceRegistrationScreen(services: _services), settings);
+            return _page(
+              DeviceRegistrationScreen(services: _services),
+              settings,
+            );
           case FieldRoutes.pairDevice:
             return _page(PairDeviceScreen(services: _services), settings);
           case FieldRoutes.approvalPending:
@@ -98,11 +106,15 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
             return _page(LauncherShellGate(services: _services), settings);
           case FieldRoutes.deviceLock:
             final args = settings.arguments;
-            final map = args is Map ? Map<String, dynamic>.from(args) : const {};
+            final map =
+                args is Map
+                    ? Map<String, dynamic>.from(args)
+                    : const <String, dynamic>{};
             return _page(
               DeviceLockScreen(
                 reason: map['reason']?.toString() ?? 'Device locked',
-                deviceReference: map['deviceReference']?.toString() ?? 'unknown',
+                deviceReference:
+                    map['deviceReference']?.toString() ?? 'unknown',
                 policy: null,
               ),
               settings,
@@ -110,10 +122,7 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
           case FieldRoutes.deviceStatus:
             return _page(DeviceStatusScreen(services: _services), settings);
           case FieldRoutes.unauthorized:
-            return _page(
-              UnauthorizedScreen(services: _services),
-              settings,
-            );
+            return _page(UnauthorizedScreen(services: _services), settings);
           case FieldRoutes.patrol:
             return _page(PatrolModeScreen(services: _services), settings);
           case FieldRoutes.checkpoint:
@@ -122,9 +131,10 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
             return _page(AssignmentsScreen(services: _services), settings);
           case FieldRoutes.incidentWorkspace:
             final args = settings.arguments;
-            final assignmentId = args is Map
-                ? args['assignmentId']?.toString() ?? ''
-                : args?.toString() ?? '';
+            final assignmentId =
+                args is Map
+                    ? args['assignmentId']?.toString() ?? ''
+                    : args?.toString() ?? '';
             return _page(
               IncidentWorkspaceScreen(
                 services: _services,
