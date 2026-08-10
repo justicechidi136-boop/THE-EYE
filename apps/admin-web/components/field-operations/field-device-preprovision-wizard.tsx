@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { FIELD_PROFILE_ASSIGNABLE_PERMISSIONS, FieldActivationPolicy, FieldOperationalRole } from "@the-eye/shared";
 import { Button, FormField, InlineAlert, SelectInput, TextInput } from "../form-primitives";
 import { Panel } from "../ui";
-import type { FieldPermissionEffectivePreviewView, FieldPermissionProfileView } from "../../lib/types/admin-views";
+import type {
+  AgencyUnitView,
+  AgencyView,
+  FieldPermissionEffectivePreviewView,
+  FieldPermissionProfileView,
+} from "../../lib/types/admin-views";
 import { PermissionGroupPicker } from "./permission-group-picker";
 import { PermissionSummaryList } from "./permission-summary-list";
 
@@ -35,7 +40,7 @@ const DEFAULT_VALUES: WizardValues = {
   inventoryAssetRef: "",
   notes: "",
   agencyId: "",
-  countryCode: "",
+  countryCode: "NG",
   stateCode: "",
   lgaCode: "",
   assignedUserId: "",
@@ -52,6 +57,7 @@ const DEFAULT_VALUES: WizardValues = {
 };
 
 const STEPS = ["Identity", "Agency", "Assignment", "Permission Profile", "Device Mode", "Review"] as const;
+const COUNTRY_OPTIONS = [{ code: "NG", label: "NG — Nigeria" }] as const;
 
 function toIsoOrUndefined(localDateTimeValue: string): string | undefined {
   if (!localDateTimeValue) return undefined;
@@ -59,10 +65,24 @@ function toIsoOrUndefined(localDateTimeValue: string): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+function profileCompatibleWithAgency(profile: FieldPermissionProfileView, agencyType: string | null): boolean {
+  if (!agencyType) return true;
+  const compatible = profile.compatibleAgencyTypes ?? [];
+  if (!compatible.length) return true;
+  return compatible.includes(agencyType);
+}
+
 export function FieldDevicePreprovisionWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<WizardValues>(DEFAULT_VALUES);
+  const [agencies, setAgencies] = useState<AgencyView[]>([]);
+  const [units, setUnits] = useState<AgencyUnitView[]>([]);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registryError, setRegistryError] = useState<string | null>(null);
+  const [registryLoaded, setRegistryLoaded] = useState(false);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [unitsError, setUnitsError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<FieldPermissionProfileView[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState<string | null>(null);
@@ -73,6 +93,15 @@ export function FieldDevicePreprovisionWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
+
+  const selectedAgency = useMemo(
+    () => agencies.find((agency) => agency.id === values.agencyId) ?? null,
+    [agencies, values.agencyId],
+  );
+  const selectedUnit = useMemo(
+    () => units.find((unit) => unit.id === values.assignedUnitId) ?? null,
+    [units, values.assignedUnitId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -109,13 +138,104 @@ export function FieldDevicePreprovisionWizard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!values.countryCode) {
+      setAgencies([]);
+      setRegistryLoaded(false);
+      setRegistryError(null);
+      return;
+    }
+    let cancelled = false;
+    setRegistryLoading(true);
+    setRegistryError(null);
+    setRegistryLoaded(false);
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          isFieldOperationsEnabled: "true",
+          isActive: "true",
+          countryCode: values.countryCode,
+        });
+        const response = await fetch(`/api/admin/agencies?${params.toString()}`);
+        const payload = (await response.json()) as { data?: AgencyView[]; message?: string };
+        if (!response.ok) throw new Error(payload.message ?? "Unable to load agencies");
+        if (!cancelled) {
+          setAgencies(payload.data ?? []);
+          setRegistryLoaded(true);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAgencies([]);
+          setRegistryLoaded(false);
+          setRegistryError(
+            error instanceof Error
+              ? error.message
+              : "Agency information is temporarily unavailable. Please try again later.",
+          );
+        }
+      } finally {
+        if (!cancelled) setRegistryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [values.countryCode]);
+
+  useEffect(() => {
+    if (!values.agencyId) {
+      setUnits([]);
+      setUnitsError(null);
+      return;
+    }
+    let cancelled = false;
+    setUnitsLoading(true);
+    setUnitsError(null);
+    (async () => {
+      try {
+        const response = await fetch(`/api/admin/agencies/${encodeURIComponent(values.agencyId)}/units`);
+        const payload = (await response.json()) as { data?: AgencyUnitView[]; message?: string };
+        if (!response.ok) throw new Error(payload.message ?? "Unable to load agency units");
+        if (!cancelled) setUnits(payload.data ?? []);
+      } catch (error) {
+        if (!cancelled) {
+          setUnits([]);
+          setUnitsError(error instanceof Error ? error.message : "Unable to load agency units");
+        }
+      } finally {
+        if (!cancelled) setUnitsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [values.agencyId]);
+
   function updateField<K extends keyof WizardValues>(field: K, value: WizardValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
   }
 
+  function selectAgency(agencyId: string) {
+    const agency = agencies.find((item) => item.id === agencyId) ?? null;
+    setValues((current) => ({
+      ...current,
+      agencyId,
+      assignedUnitId: "",
+      countryCode: agency?.countryCode || current.countryCode,
+      stateCode: agency?.stateCode ?? "",
+      lgaCode: agency?.lgaCode ?? "",
+      permissionProfileId: "",
+    }));
+  }
+
+  const compatibleProfiles = useMemo(
+    () => profiles.filter((profile) => profileCompatibleWithAgency(profile, selectedAgency?.agencyType ?? null)),
+    [profiles, selectedAgency?.agencyType],
+  );
+
   const selectedProfile = useMemo(
-    () => profiles.find((profile) => profile.id === values.permissionProfileId) ?? null,
-    [profiles, values.permissionProfileId],
+    () => compatibleProfiles.find((profile) => profile.id === values.permissionProfileId) ?? null,
+    [compatibleProfiles, values.permissionProfileId],
   );
 
   const overridesCatalog = useMemo(
@@ -156,8 +276,16 @@ export function FieldDevicePreprovisionWizard() {
 
   function validateStep(index: number): string | null {
     if (index === 0 && !values.deviceName.trim()) return "Device name is required.";
+    if (index === 1) {
+      if (registryError || !registryLoaded) {
+        return "Agency information is temporarily unavailable. Please try again later.";
+      }
+      if (!values.agencyId) return "Select an agency to continue.";
+    }
     return null;
   }
+
+  const agencyStepBlocked = Boolean(registryError) || (!registryLoaded && !registryLoading);
 
   function goNext() {
     const error = validateStep(step);
@@ -175,10 +303,16 @@ export function FieldDevicePreprovisionWizard() {
   }
 
   async function handleCreate() {
-    const error = validateStep(0);
-    if (error) {
-      setStepError(error);
+    const identityError = validateStep(0);
+    if (identityError) {
+      setStepError(identityError);
       setStep(0);
+      return;
+    }
+    const agencyError = validateStep(1);
+    if (agencyError) {
+      setStepError(agencyError);
+      setStep(1);
       return;
     }
     setSubmitting(true);
@@ -278,24 +412,76 @@ export function FieldDevicePreprovisionWizard() {
 
       {step === 1 ? (
         <div className="grid gap-3">
-          <InlineAlert tone="info">
-            No agency registry API is available yet (see <code className="text-xs">GET /v1/agencies</code> in missing backend
-            assumptions). Enter the agency ID exactly as issued by your records team.
-          </InlineAlert>
+          {registryError ? (
+            <InlineAlert tone="error">
+              Agency information is temporarily unavailable. Please try again later.
+            </InlineAlert>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-2">
-            <FormField label="Agency ID" htmlFor="wizard-agency-id" hint="Defaults to your own agency if left blank.">
-              <TextInput id="wizard-agency-id" value={values.agencyId} onChange={(event) => updateField("agencyId", event.target.value)} />
+            <FormField label="Country" htmlFor="wizard-country">
+              <SelectInput
+                id="wizard-country"
+                value={values.countryCode}
+                onChange={(event) => {
+                  setValues((current) => ({
+                    ...current,
+                    countryCode: event.target.value,
+                    agencyId: "",
+                    assignedUnitId: "",
+                    stateCode: "",
+                    lgaCode: "",
+                    permissionProfileId: "",
+                  }));
+                }}
+              >
+                {COUNTRY_OPTIONS.map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.label}
+                  </option>
+                ))}
+              </SelectInput>
             </FormField>
-            <FormField label="Country code" htmlFor="wizard-country" hint="Defaults to your assigned jurisdiction if left blank.">
-              <TextInput id="wizard-country" value={values.countryCode} onChange={(event) => updateField("countryCode", event.target.value)} placeholder="NG" />
+            <FormField label="Agency" htmlFor="wizard-agency" hint="Only active, field-operations-enabled agencies for the selected country.">
+              <SelectInput
+                id="wizard-agency"
+                value={values.agencyId}
+                disabled={registryLoading || Boolean(registryError) || !registryLoaded}
+                onChange={(event) => selectAgency(event.target.value)}
+              >
+                <option value="">{registryLoading ? "Loading agencies…" : "Select agency"}</option>
+                {agencies.map((agency) => (
+                  <option key={agency.id} value={agency.id}>
+                    {agency.name} ({agency.code})
+                  </option>
+                ))}
+              </SelectInput>
             </FormField>
-            <FormField label="State code" htmlFor="wizard-state">
-              <TextInput id="wizard-state" value={values.stateCode} onChange={(event) => updateField("stateCode", event.target.value)} placeholder="LA" />
-            </FormField>
-            <FormField label="LGA code" htmlFor="wizard-lga">
-              <TextInput id="wizard-lga" value={values.lgaCode} onChange={(event) => updateField("lgaCode", event.target.value)} />
+            <FormField label="Unit" htmlFor="wizard-unit" hint="Optional — units for the selected agency.">
+              <SelectInput
+                id="wizard-unit"
+                value={values.assignedUnitId}
+                disabled={!values.agencyId || unitsLoading}
+                onChange={(event) => updateField("assignedUnitId", event.target.value)}
+              >
+                <option value="">{unitsLoading ? "Loading units…" : "No unit assigned"}</option>
+                {units.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.name} ({unit.unitIdentifier})
+                  </option>
+                ))}
+              </SelectInput>
             </FormField>
           </div>
+          {selectedAgency ? (
+            <p className="text-sm text-muted">
+              Jurisdiction from agency:{" "}
+              {[selectedAgency.countryCode, selectedAgency.stateCode, selectedAgency.lgaCode].filter(Boolean).join(" / ") || "—"}
+            </p>
+          ) : null}
+          {unitsError ? <InlineAlert tone="warning">{unitsError}</InlineAlert> : null}
+          {!registryLoading && registryLoaded && !agencies.length && !registryError ? (
+            <InlineAlert tone="info">No field-operations-enabled agencies found for this country.</InlineAlert>
+          ) : null}
         </div>
       ) : null}
 
@@ -303,9 +489,6 @@ export function FieldDevicePreprovisionWizard() {
         <div className="grid gap-3 md:grid-cols-2">
           <FormField label="Assigned officer user ID" htmlFor="wizard-assigned-user" hint="Optional — can be assigned later during approval.">
             <TextInput id="wizard-assigned-user" value={values.assignedUserId} onChange={(event) => updateField("assignedUserId", event.target.value)} />
-          </FormField>
-          <FormField label="Assigned unit ID" htmlFor="wizard-assigned-unit">
-            <TextInput id="wizard-assigned-unit" value={values.assignedUnitId} onChange={(event) => updateField("assignedUnitId", event.target.value)} />
           </FormField>
           <FormField label="Assigned team ID" htmlFor="wizard-assigned-team">
             <TextInput id="wizard-assigned-team" value={values.assignedTeamId} onChange={(event) => updateField("assignedTeamId", event.target.value)} />
@@ -324,6 +507,13 @@ export function FieldDevicePreprovisionWizard() {
               ))}
             </SelectInput>
           </FormField>
+          {selectedUnit ? (
+            <p className="md:col-span-2 text-sm text-muted">
+              Unit selected in Agency step: <span className="font-semibold text-ink">{selectedUnit.name}</span> ({selectedUnit.unitIdentifier})
+            </p>
+          ) : (
+            <p className="md:col-span-2 text-sm text-muted">No unit selected in the Agency step.</p>
+          )}
         </div>
       ) : null}
 
@@ -343,7 +533,7 @@ export function FieldDevicePreprovisionWizard() {
                 />
                 <span className="font-semibold text-ink">No profile (assign later)</span>
               </label>
-              {profiles.map((profile) => (
+              {compatibleProfiles.map((profile) => (
                 <div key={profile.id} className="rounded-md border border-line bg-surfaceMuted px-3 py-2 text-sm">
                   <label className="flex items-center gap-2">
                     <input
@@ -369,10 +559,12 @@ export function FieldDevicePreprovisionWizard() {
                   </details>
                 </div>
               ))}
-              {!profiles.length ? (
+              {!compatibleProfiles.length ? (
                 <p className="text-sm text-muted">
-                  No active permission profiles yet. Create one under Field Operations → Permission Profiles first, or continue
-                  without a profile and assign one later from the device page.
+                  No active permission profiles compatible with{" "}
+                  {selectedAgency ? selectedAgency.agencyType.replace(/_/g, " ") : "the selected agency"}. Create one under
+                  Field Operations → Permission Profiles first, or continue without a profile and assign one later from the
+                  device page.
                 </p>
               ) : null}
             </div>
@@ -446,10 +638,19 @@ export function FieldDevicePreprovisionWizard() {
           <div className="grid gap-2 rounded-md border border-line bg-surfaceMuted p-4 text-sm md:grid-cols-2">
             <p><span className="font-semibold">Device name:</span> {values.deviceName || "-"}</p>
             <p><span className="font-semibold">Inventory ref:</span> {values.inventoryAssetRef || "-"}</p>
-            <p><span className="font-semibold">Agency:</span> {values.agencyId || "Defaults to your agency"}</p>
-            <p><span className="font-semibold">Jurisdiction:</span> {[values.countryCode, values.stateCode, values.lgaCode].filter(Boolean).join(" / ") || "Defaults to your jurisdiction"}</p>
+            <p>
+              <span className="font-semibold">Agency:</span>{" "}
+              {selectedAgency ? `${selectedAgency.name} (${selectedAgency.code})` : "Not selected"}
+            </p>
+            <p>
+              <span className="font-semibold">Jurisdiction:</span>{" "}
+              {[values.countryCode, values.stateCode, values.lgaCode].filter(Boolean).join(" / ") || "-"}
+            </p>
             <p><span className="font-semibold">Assigned officer:</span> {values.assignedUserId || "Unassigned"}</p>
-            <p><span className="font-semibold">Assigned unit:</span> {values.assignedUnitId || "-"}</p>
+            <p>
+              <span className="font-semibold">Assigned unit:</span>{" "}
+              {selectedUnit ? `${selectedUnit.name} (${selectedUnit.unitIdentifier})` : "None"}
+            </p>
             <p><span className="font-semibold">Assigned team:</span> {values.assignedTeamId || "-"}</p>
             <p><span className="font-semibold">Operational role:</span> {values.operationalRole || "Not set"}</p>
             <p><span className="font-semibold">Permission profile:</span> {selectedProfile ? `${selectedProfile.name} (${selectedProfile.code})` : "None"}</p>
@@ -491,7 +692,9 @@ export function FieldDevicePreprovisionWizard() {
           Back
         </Button>
         {step < STEPS.length - 1 ? (
-          <Button onClick={goNext}>Next</Button>
+          <Button onClick={goNext} disabled={step === 1 && (registryLoading || agencyStepBlocked || Boolean(registryError))}>
+            Next
+          </Button>
         ) : (
           <Button onClick={() => void handleCreate()} disabled={submitting}>
             {submitting ? "Creating…" : "Create field device"}
