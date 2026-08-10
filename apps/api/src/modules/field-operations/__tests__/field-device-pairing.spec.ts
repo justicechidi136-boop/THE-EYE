@@ -1,13 +1,19 @@
 import { BadRequestException } from "@nestjs/common";
+import { generateKeyPairSync, sign } from "crypto";
 import { FIELD_ERROR_CODES, FIELD_PAIRING_ERROR_CODES, FieldPairingTokenStatus, FieldProvisioningMode } from "@the-eye/shared";
 import { hashToken } from "../../../common/auth/crypto";
 import { FieldDevicePairingService } from "../field-device-pairing.service";
 
-jest.mock("../../../common/auth/field-device-crypto", () => ({
-  verifyFieldDeviceSignature: jest.fn(),
-}));
-
-import { verifyFieldDeviceSignature } from "../../../common/auth/field-device-crypto";
+/** Raw 32-byte Ed25519 public key as base64 — matches verifyFieldDeviceSignature. */
+function createDeviceKeyMaterial() {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const spki = publicKey.export({ type: "spki", format: "der" }) as Buffer;
+  const rawPublicKey = spki.subarray(spki.length - 32);
+  const publicKeyBase64 = rawPublicKey.toString("base64");
+  const signChallenge = (challenge: string) =>
+    sign(null, Buffer.from(challenge, "utf8"), privateKey).toString("base64");
+  return { publicKeyBase64, signChallenge };
+}
 
 describe("FieldDevicePairingService", () => {
   function createService() {
@@ -48,10 +54,6 @@ describe("FieldDevicePairingService", () => {
   }
 
   const actor = { sub: "admin-1", typ: "admin" as const, role: "Agency Admin" };
-
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
 
   describe("issuePairingCode", () => {
     it("refuses to issue a pairing code for a device with no permission profile assigned", async () => {
@@ -98,7 +100,8 @@ describe("FieldDevicePairingService", () => {
       expect(createData.tokenHash).not.toEqual(result.data.pairingToken);
       expect(createData.shortCodeHash).not.toEqual(result.data.shortCode);
       expect(result.data.shortCode).toMatch(/^EYE-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-      expect(result.data.pairingToken).toEqual(expect.any(String));
+      expect(typeof result.data.pairingToken).toBe("string");
+      expect(result.data.pairingToken.length).toBeGreaterThan(0);
     });
   });
 
@@ -179,7 +182,6 @@ describe("FieldDevicePairingService", () => {
       prisma.fieldDevicePairingToken.findFirst.mockResolvedValue(issuedToken({ status: FieldPairingTokenStatus.Claimed }));
       prisma.fieldDevicePairingToken.update.mockResolvedValue({ attemptCount: 1, maxAttempts: 5 });
       devices.consumeChallenge.mockResolvedValue(undefined);
-      (verifyFieldDeviceSignature as jest.Mock).mockReturnValue(false);
 
       await expect(
         service.complete({
@@ -199,9 +201,10 @@ describe("FieldDevicePairingService", () => {
 
     it("rejects completion when the installationIdHash is already bound to a different device (duplicate binding)", async () => {
       const { service, prisma, devices } = createService();
+      const keys = createDeviceKeyMaterial();
+      const challenge = "abc";
       prisma.fieldDevicePairingToken.findFirst.mockResolvedValue(issuedToken({ status: FieldPairingTokenStatus.Claimed }));
       devices.consumeChallenge.mockResolvedValue(undefined);
-      (verifyFieldDeviceSignature as jest.Mock).mockReturnValue(true);
       prisma.fieldDevice.findUnique.mockImplementation(({ where }: { where: Record<string, unknown> }) => {
         if (where.installationIdHash) return { id: "other-device-id" };
         return null;
@@ -211,9 +214,9 @@ describe("FieldDevicePairingService", () => {
         service.complete({
           pairingToken: "claimed-token",
           challengeId: "challenge-1",
-          challenge: "abc",
-          challengeSignature: "good-signature",
-          publicKey: "pk",
+          challenge,
+          challengeSignature: keys.signChallenge(challenge),
+          publicKey: keys.publicKeyBase64,
           installationIdHash: "hash-already-used",
         }),
       ).rejects.toMatchObject({ response: expect.objectContaining({ code: FIELD_PAIRING_ERROR_CODES.DEVICE_ALREADY_BOUND }) });
@@ -221,9 +224,10 @@ describe("FieldDevicePairingService", () => {
 
     it("binds the device and activates immediately under AutoActivateOnPairing", async () => {
       const { service, prisma, devices, launcherPolicy, audit } = createService();
+      const keys = createDeviceKeyMaterial();
+      const challenge = "abc";
       prisma.fieldDevicePairingToken.findFirst.mockResolvedValue(issuedToken({ status: FieldPairingTokenStatus.Claimed }));
       devices.consumeChallenge.mockResolvedValue(undefined);
-      (verifyFieldDeviceSignature as jest.Mock).mockReturnValue(true);
       prisma.fieldDevice.findUnique.mockImplementation(({ where }: { where: Record<string, unknown> }) => {
         if (where.installationIdHash) return null;
         if (where.id === "device-1") {
@@ -259,9 +263,9 @@ describe("FieldDevicePairingService", () => {
       const result = await service.complete({
         pairingToken: "claimed-token",
         challengeId: "challenge-1",
-        challenge: "abc",
-        challengeSignature: "good-signature",
-        publicKey: "pk-new",
+        challenge,
+        challengeSignature: keys.signChallenge(challenge),
+        publicKey: keys.publicKeyBase64,
         installationIdHash: "hash-new",
       });
 

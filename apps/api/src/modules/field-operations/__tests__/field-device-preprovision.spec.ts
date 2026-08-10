@@ -67,7 +67,9 @@ describe("FieldDevicePreprovisionService", () => {
         deviceName: "Tablet 1",
         stateCode: "Kano",
       } as never),
-    ).rejects.toMatchObject({ response: { code: FIELD_ERROR_CODES.JURISDICTION_MISMATCH } });
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: FIELD_ERROR_CODES.JURISDICTION_MISMATCH }),
+    });
   });
 
   it("rejects a permission profile whose permissions exceed the actor's delegation authority", async () => {
@@ -83,7 +85,9 @@ describe("FieldDevicePreprovisionService", () => {
         deviceName: "Tablet 1",
         permissionProfileId: "profile-1",
       } as never),
-    ).rejects.toMatchObject({ response: { code: FIELD_PERM_ERROR_CODES.DELEGATION_EXCEEDS_AUTHORITY } });
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: FIELD_PERM_ERROR_CODES.DELEGATION_EXCEEDS_AUTHORITY }),
+    });
   });
 
   it("rejects unknown/arbitrary permission strings supplied as per-device overrides", async () => {
@@ -120,12 +124,10 @@ describe("FieldDevicePreprovisionService", () => {
     expect(createArgs.preProvisionStatus).toBe(FieldPreProvisionStatus.Draft);
     expect(createArgs.permissionProfileId).toBe("profile-1");
     expect(createArgs.deviceName).toBe("Patrol Tablet 07");
-    expect(createArgs.authoritySnapshot).toMatchObject({
-      grantedByAdminId: "admin-1",
-      profileCode: "patrol_officer_baseline",
-    });
+    expect(createArgs.authoritySnapshot.grantedByAdminId).toBe("admin-1");
+    expect(createArgs.authoritySnapshot.profileCode).toBe("patrol_officer_baseline");
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "field.device.preprovisioned" }));
-    expect(result.data).toMatchObject({ id: "device-1" });
+    expect(result.data.id).toBe("device-1");
   });
 
   it("blocks editing provisioning once the device has moved past pairing", async () => {
