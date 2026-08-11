@@ -9,6 +9,7 @@ import "../design_system/components/eye_page_header.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
+import "../presentation/citizen_date_time.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
 import "incident_communication_contract.dart";
@@ -372,59 +373,83 @@ class _IncidentCommunicationScreenState
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
                     ? Center(child: Text(_error!))
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          final isOfficial = message.senderRole != "Reporter";
-                          return Semantics(
-                            label:
-                                "${message.senderLabel}, ${message.messageType}, ${message.createdAt.toLocal()}",
-                            child: Align(
-                              alignment: isOfficial
-                                  ? Alignment.centerLeft
-                                  : Alignment.centerRight,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                padding: const EdgeInsets.all(12),
-                                constraints:
-                                    const BoxConstraints(maxWidth: 320),
-                                decoration: BoxDecoration(
-                                  color: isOfficial
-                                      ? Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest
-                                      : Theme.of(context)
-                                          .colorScheme
-                                          .primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      message.senderLabel,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(message.body),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      message.deliveryState ?? "Sent",
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                  ],
-                                ),
+                    : _messages.isEmpty
+                        ? ListView(
+                            padding: const EdgeInsets.all(24),
+                            children: const [
+                              Text(
+                                "No messages yet.\nIf responders need more information, their messages will appear here. You can also send an update about your emergency.",
+                                textAlign: TextAlign.center,
                               ),
-                            ),
-                          );
-                        },
-                      ),
+                            ],
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _messages.length,
+                            itemBuilder: (context, index) {
+                              final message = _messages[index];
+                              final isOfficial =
+                                  message.senderRole != "Reporter";
+                              final friendlyTime =
+                                  CitizenDateTimeFormatter.formatFriendly(
+                                message.createdAt,
+                              );
+                              return Semantics(
+                                label:
+                                    "${message.senderLabel}, ${message.messageType}, $friendlyTime",
+                                child: Align(
+                                  alignment: isOfficial
+                                      ? Alignment.centerLeft
+                                      : Alignment.centerRight,
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.all(12),
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 320),
+                                    decoration: BoxDecoration(
+                                      color: isOfficial
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .surfaceContainerHighest
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .primaryContainer,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          message.senderLabel,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelLarge,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          friendlyTime,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(message.body),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          message.deliveryState ?? "Sent",
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
           ),
           if (!readOnly)
             Padding(
