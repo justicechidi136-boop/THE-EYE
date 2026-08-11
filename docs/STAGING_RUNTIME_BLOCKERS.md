@@ -797,6 +797,37 @@ Remaining before **DEVICE VERIFIED**:
 
 ---
 
+## AUTH-001 / AUTH-006 — Password reset & account recovery links (Cloudflare 526)
+
+| Field | Value |
+|---|---|
+| **Platform** | API email links → Cloudflare → staging admin-web origin |
+| **User flow** | Forgot password / account recovery → email → tap link → HTTPS page |
+| **Severity** | P0 |
+| **Reproduction** | Request reset/recovery; open emailed URL |
+| **Expected** | HTTPS page on approved staging host (`/reset-password` or `/account-recovery`) returns HTTP 200 |
+| **Actual (historical)** | Links used `staging-app.theeye.com.ng` → Cloudflare **Error 526** (Invalid SSL Certificate) |
+| **Code URL contract** | **FIXED** — centralized in `apps/api/src/modules/auth/auth-recovery-urls.ts`; bases must be `https://staging-dashboard8jps.theeye.com.ng/{reset-password\|account-recovery}` (or `staging.theeye.com.ng`) |
+| **Frontend routes** | **FIXED** — public admin-web pages `/reset-password`, `/account-recovery` + BFF confirm/verify |
+| **Staging TLS** | **DEVOPS BLOCKER** until origin cert + Cloudflare SSL mode validated for the email-link hostname |
+| **Do not mark PASS** | AUTH-001 / AUTH-006 remain non-PASS while any link returns Cloudflare 526 |
+| **Handoff** | See DevOps section below and `docs/AUTH_RECOVERY_STAGING_QA.md` |
+| **Status** | **CODE FIXED — STAGING TLS QA PENDING** |
+
+### DevOps handoff (no secrets)
+
+| Item | Value |
+|---|---|
+| Required hostname | `staging-dashboard8jps.theeye.com.ng` (recovery/reset email links) |
+| Expected origin | Staging admin-web / Nginx vhost for that hostname |
+| Expected Cloudflare SSL mode | **Full (strict)** |
+| Nginx | `server_name` includes hostname; routes `/reset-password` and `/account-recovery` to admin-web |
+| Certificate | Origin cert trusted by Cloudflare for the hostname (not expired, correct SAN) |
+| Validation commands | `curl -I https://staging-dashboard8jps.theeye.com.ng/reset-password` → expect `200` (not 526); `openssl s_client -connect staging-dashboard8jps.theeye.com.ng:443 -servername staging-dashboard8jps.theeye.com.ng </dev/null` |
+| Do not use | `staging-app.theeye.com.ng` for citizen recovery links |
+
+---
+
 ## RC-APK-001 / RC-QA-001 — Certification artifact & device QA
 
 | ID | Status |

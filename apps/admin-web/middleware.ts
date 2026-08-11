@@ -8,7 +8,16 @@ import {
 } from "./lib/auth-cookies";
 import { verifyAdminAccessToken } from "./lib/verify-jwt";
 
-const publicPaths = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/refresh"];
+const publicPaths = [
+  "/login",
+  "/reset-password",
+  "/account-recovery",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/refresh",
+  "/api/auth/password-reset",
+  "/api/auth/account-recovery",
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

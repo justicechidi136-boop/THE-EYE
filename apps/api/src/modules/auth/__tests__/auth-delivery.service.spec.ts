@@ -133,7 +133,8 @@ describe("AuthDeliveryService", () => {
       SMTP_USERNAME: "user",
       SMTP_PASSWORD: "secret",
       SMTP_FROM_EMAIL: "security@theeye.com.ng",
-      ACCOUNT_RECOVERY_LINK_BASE_URL: "https://staging-app.theeye.com.ng/account-recovery",
+      ACCOUNT_RECOVERY_LINK_BASE_URL:
+        "https://staging-dashboard8jps.theeye.com.ng/account-recovery",
     });
     (service as unknown as { smtp: { send: typeof sendMock } }).smtp.send = sendMock;
 
@@ -146,8 +147,40 @@ describe("AuthDeliveryService", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     const payload = sendMock.mock.calls[0]?.[0] as { html: string; text: string };
     expect(payload.html).toContain("Recover account");
-    expect(payload.html).toContain("https://staging-app.theeye.com.ng/account-recovery?token=recovery-token");
-    expect(payload.text).toContain("https://staging-app.theeye.com.ng/account-recovery?token=recovery-token");
+    expect(payload.html).toContain(
+      "https://staging-dashboard8jps.theeye.com.ng/account-recovery?token=recovery-token",
+    );
+    expect(payload.text).toContain(
+      "https://staging-dashboard8jps.theeye.com.ng/account-recovery?token=recovery-token",
+    );
+    expect(payload.html).not.toContain("staging-app.theeye.com.ng");
+    restore();
+  });
+
+  it("renders password reset email on approved staging host (AUTH-001)", async () => {
+    const sendMock = jest.fn().mockResolvedValue({ status: "ProviderAccepted" });
+    const { service, restore } = createService({
+      NODE_ENV: "staging",
+      THE_EYE_APP_ENV: "staging",
+      EMAIL_PROVIDER: "smtp",
+      SMTP_HOST: "smtp.example.com",
+      SMTP_USERNAME: "user",
+      SMTP_PASSWORD: "secret",
+      SMTP_FROM_EMAIL: "security@theeye.com.ng",
+      PASSWORD_RESET_LINK_BASE_URL:
+        "https://staging-dashboard8jps.theeye.com.ng/reset-password",
+    });
+    (service as unknown as { smtp: { send: typeof sendMock } }).smtp.send = sendMock;
+
+    await service.sendPasswordResetEmail("citizen@theeye.local", "reset-token");
+
+    const payload = sendMock.mock.calls[0]?.[0] as { html: string; text: string };
+    expect(payload.html).toContain(
+      "https://staging-dashboard8jps.theeye.com.ng/reset-password?token=reset-token",
+    );
+    expect(payload.html).toMatch(/https:\/\//);
+    expect(payload.html).not.toContain("localhost");
+    expect(payload.html).not.toContain("staging-app");
     restore();
   });
 });

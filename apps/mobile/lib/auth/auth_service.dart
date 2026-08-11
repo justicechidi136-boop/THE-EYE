@@ -185,17 +185,19 @@ class AuthService {
 
     try {
       await _apiClient.requestPasswordReset(email: parsed.email!);
-      logAuthEvent("Password reset requested");
+      logAuthEvent("Reset request accepted");
       return const AuthRequestResult(
         status: AuthRequestStatus.success,
-        userMessage: "If that email exists, reset instructions were sent.",
+        userMessage:
+            "If an account matches that email, password-reset instructions have been sent.",
       );
     } on AuthApiException catch (error) {
-      return _mapAuthException(error);
+      return _mapRecoveryRequestException(error);
     } on SocketException {
       return const AuthRequestResult(
         status: AuthRequestStatus.networkError,
-        userMessage: "Unable to reach THE EYE right now. Try again shortly.",
+        userMessage:
+            "We couldn’t send recovery instructions right now. Please try again.",
       );
     }
   }
@@ -215,14 +217,15 @@ class AuthService {
       return const AuthRequestResult(
         status: AuthRequestStatus.success,
         userMessage:
-            "If an eligible account exists, recovery instructions have been sent.",
+            "If an account matches that information, recovery instructions have been sent.",
       );
     } on AuthApiException catch (error) {
-      return _mapAuthException(error);
+      return _mapRecoveryRequestException(error);
     } on SocketException {
       return const AuthRequestResult(
         status: AuthRequestStatus.networkError,
-        userMessage: "Unable to reach THE EYE right now. Try again shortly.",
+        userMessage:
+            "We couldn’t send recovery instructions right now. Please try again.",
       );
     }
   }
@@ -457,21 +460,36 @@ class AuthService {
     }
   }
 
-  AuthRequestResult _mapAuthException(AuthApiException error) {
-    final code = error.errorCode ?? "";
-    if (code == "AUTH_DELIVERY_UNAVAILABLE") {
-      return AuthRequestResult(
-        status: AuthRequestStatus.serverError,
-        userMessage: error.userMessage.contains("recovery")
-            ? "AUTH-DELIVERY-001 Account recovery email delivery is not configured."
-            : "AUTH-DELIVERY-001 Password reset email delivery is not configured.",
+  AuthRequestResult _mapRecoveryRequestException(AuthApiException error) {
+    if (error.statusCode == 429) {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.rateLimited,
+        userMessage:
+            "Too many attempts. Please wait a few minutes and try again.",
       );
     }
-    if (code == "AUTH_DELIVERY_FAILED") {
+    if (error.statusCode == 503 ||
+        (error.errorCode ?? "").startsWith("AUTH_DELIVERY") ||
+        (error.errorCode ?? "").startsWith("AUTH-URL-")) {
       return const AuthRequestResult(
         status: AuthRequestStatus.serverError,
         userMessage:
-            "AUTH-DELIVERY-002 Authentication delivery failed. Try again shortly.",
+            "We couldn’t send recovery instructions right now. Please try again.",
+      );
+    }
+    return const AuthRequestResult(
+      status: AuthRequestStatus.serverError,
+      userMessage: "We couldn’t process your request right now.",
+    );
+  }
+
+  AuthRequestResult _mapAuthException(AuthApiException error) {
+    final code = error.errorCode ?? "";
+    if (code == "AUTH_DELIVERY_UNAVAILABLE" || code == "AUTH_DELIVERY_FAILED") {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.serverError,
+        userMessage:
+            "We couldn’t send recovery instructions right now. Please try again.",
       );
     }
     if (error.statusCode == 401) {
@@ -487,9 +505,10 @@ class AuthService {
       );
     }
     if (error.statusCode == 429) {
-      return AuthRequestResult(
+      return const AuthRequestResult(
         status: AuthRequestStatus.rateLimited,
-        userMessage: error.userMessage,
+        userMessage:
+            "Too many attempts. Please wait a few minutes and try again.",
       );
     }
     if (error.statusCode == 400) {
@@ -498,9 +517,9 @@ class AuthService {
         userMessage: error.userMessage,
       );
     }
-    return AuthRequestResult(
+    return const AuthRequestResult(
       status: AuthRequestStatus.serverError,
-      userMessage: error.userMessage,
+      userMessage: "We couldn’t process your request right now.",
     );
   }
 

@@ -2538,7 +2538,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
   String? identifierError;
   String? passwordError;
   String? formError;
+  String? formSuccess;
   bool submitting = false;
+  bool forgotPasswordBusy = false;
   bool obscurePassword = true;
   SocialAuthProvider? activeSocialProvider;
   DateTime? _socialSignInStartedAt;
@@ -2582,6 +2584,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
       identifierError = null;
       passwordError = null;
       formError = null;
+      formSuccess = null;
     });
 
     final controller = appOf(context);
@@ -2687,14 +2690,22 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
   }
 
   Future<void> _handleForgotPassword() async {
+    if (submitting || forgotPasswordBusy || socialBusy) return;
+
     final parsed = parseLoginIdentifier(_identifierController.text);
     final controller = appOf(context);
 
     if (parsed.kind == LoginIdentifierKind.phone &&
         isValidPhoneNumber(_identifierController.text)) {
+      setState(() {
+        forgotPasswordBusy = true;
+        formError = null;
+        formSuccess = null;
+      });
       final result =
           await controller.authService.requestPhoneOtp(parsed.phone!);
       if (!mounted) return;
+      setState(() => forgotPasswordBusy = false);
       if (!result.isSuccess) {
         setState(() => formError = result.userMessage);
         return;
@@ -2706,11 +2717,26 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
       return;
     }
 
+    setState(() {
+      forgotPasswordBusy = true;
+      formError = null;
+      formSuccess = null;
+    });
     final result = await controller.authService
         .requestPasswordReset(_identifierController.text);
     if (!mounted) return;
-    setState(() => formError = result.userMessage ??
-        "If that email exists, reset instructions were sent.");
+    setState(() {
+      forgotPasswordBusy = false;
+      if (result.isSuccess) {
+        formSuccess = result.userMessage ??
+            "If an account matches that email, password-reset instructions have been sent.";
+        formError = null;
+      } else {
+        formError = result.userMessage ??
+            "We couldn’t process your request right now.";
+        formSuccess = null;
+      }
+    });
   }
 
   @override
@@ -2804,14 +2830,16 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: submitting ? null : _handleForgotPassword,
+                  onPressed: (submitting || forgotPasswordBusy || socialBusy)
+                      ? null
+                      : _handleForgotPassword,
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text(
-                    "Forgot password?",
+                    forgotPasswordBusy ? "Sending…" : "Forgot password?",
                     style: EyeTypography.linkFor(context),
                   ),
                 ),
@@ -2819,7 +2847,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
-                  onPressed: submitting
+                  onPressed: (submitting || forgotPasswordBusy)
                       ? null
                       : () =>
                           Navigator.of(context).pushNamed("/account-recovery"),
@@ -2834,13 +2862,47 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                   ),
                 ),
               ),
+              if (formSuccess != null) ...[
+                const SizedBox(height: 8),
+                Semantics(
+                  liveRegion: true,
+                  label: formSuccess!,
+                  child: Material(
+                    color: semantics.success.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline,
+                              color: semantics.success),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              formSuccess!,
+                              style: TextStyle(
+                                color: semantics.bodyText,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               if (formError != null) ...[
                 const SizedBox(height: 8),
-                Text(
-                  formError!,
-                  style: const TextStyle(
-                    color: BrandColors.danger,
-                    fontWeight: FontWeight.w700,
+                Semantics(
+                  liveRegion: true,
+                  label: formError!,
+                  child: Text(
+                    formError!,
+                    style: TextStyle(
+                      color: semantics.error,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
