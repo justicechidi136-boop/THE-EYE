@@ -29,32 +29,32 @@ class ActiveEmergenciesSelectorScreen extends StatelessWidget {
           const EyePageHeader.secondary(title: "Active emergencies"),
           Expanded(
             child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: references.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final ref = references[index];
-          return Card(
-            child: ListTile(
-              title: Text(ref.lastKnownStatus ?? "Active emergency"),
-              subtitle: Text(
-                "ID ${_shortId(ref.incidentId)}\n"
-                "Reported ${CitizenDateTimeFormatter.formatDateTime(ref.activatedAt)}",
-              ),
-              isThreeLine: true,
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).pushNamed(
-                  "/active-emergency/${ref.incidentId}",
-                  arguments: {
-                    "incidentId": ref.incidentId,
-                    "silent": ref.silent,
-                  },
+              padding: const EdgeInsets.all(16),
+              itemCount: references.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final ref = references[index];
+                return Card(
+                  child: ListTile(
+                    title: Text(ref.lastKnownStatus ?? "Active emergency"),
+                    subtitle: Text(
+                      "ID ${_shortId(ref.incidentId)}\n"
+                      "Reported ${CitizenDateTimeFormatter.formatDateTime(ref.activatedAt)}",
+                    ),
+                    isThreeLine: true,
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(context).pushNamed(
+                        "/active-emergency/${ref.incidentId}",
+                        arguments: {
+                          "incidentId": ref.incidentId,
+                          "silent": ref.silent,
+                        },
+                      );
+                    },
+                  ),
                 );
               },
-            ),
-          );
-        },
             ),
           ),
         ],

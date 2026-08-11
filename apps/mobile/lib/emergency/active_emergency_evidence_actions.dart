@@ -71,7 +71,8 @@ class _ActiveEmergencyEvidenceActionsState
     await _announceStatus(_emptyUploadMessage);
   }
 
-  Future<void> _uploadAttachments(List<LocalEvidenceAttachment> attachments) async {
+  Future<void> _uploadAttachments(
+      List<LocalEvidenceAttachment> attachments) async {
     if (attachments.isEmpty) {
       await _handleEmptyUploadAttempt();
       return;
@@ -125,8 +126,8 @@ class _ActiveEmergencyEvidenceActionsState
           setState(() => _statusMessage =
               "${batch.uploaded.length} uploaded, ${batch.failures.length} failed. Retry queued items.");
         } else {
-          setState(() => _statusMessage =
-              "Upload failed. Will retry when online.");
+          setState(
+              () => _statusMessage = "Upload failed. Will retry when online.");
         }
       }
     } catch (error) {
@@ -140,7 +141,8 @@ class _ActiveEmergencyEvidenceActionsState
         }
       }
       if (mounted) {
-        setState(() => _statusMessage = "Upload failed. Will retry when online.");
+        setState(
+            () => _statusMessage = "Upload failed. Will retry when online.");
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -161,7 +163,8 @@ class _ActiveEmergencyEvidenceActionsState
         title: const Text("Add update"),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(labelText: "Additional information"),
+          decoration:
+              const InputDecoration(labelText: "Additional information"),
           minLines: 3,
           maxLines: 6,
         ),
@@ -247,7 +250,8 @@ class _ActiveEmergencyEvidenceActionsState
                       }
                       await _uploadAttachments(attachments);
                     },
-              child: Text(_uploading ? "Uploading..." : "Upload selected evidence"),
+              child: Text(
+                  _uploading ? "Uploading..." : "Upload selected evidence"),
             ),
         ],
         // Voice capture lives inside ManagedEvidenceSection to avoid duplicate recorders.

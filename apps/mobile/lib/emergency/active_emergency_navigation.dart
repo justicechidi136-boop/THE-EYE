@@ -13,7 +13,8 @@ void _showMessage(BuildContext context, String message) {
 abstract class ActiveEmergencyNavigationController {
   String? get accessToken;
   ActiveEmergencyService get activeEmergencyService;
-  Future<void> activateActiveEmergency(String incidentId, {bool silent = false});
+  Future<void> activateActiveEmergency(String incidentId,
+      {bool silent = false});
   Future<void> startIncidentLocationTracking(String incidentId);
 }
 

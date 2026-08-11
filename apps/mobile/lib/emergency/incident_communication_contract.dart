@@ -48,7 +48,8 @@ class IncidentCommunicationSummary {
           (json["pendingInformationRequestCount"] as num?)?.toInt() ?? 0,
       conversationStatus: json["conversationStatus"]?.toString() ?? "Active",
       allowedCommunicationActions: IncidentCommunicationAllowedActions.fromJson(
-        (json["allowedCommunicationActions"] as Map<String, dynamic>?) ?? const {},
+        (json["allowedCommunicationActions"] as Map<String, dynamic>?) ??
+            const {},
       ),
     );
   }
@@ -85,7 +86,8 @@ class IncidentCommunicationAllowedActions {
     );
   }
 
-  factory IncidentCommunicationAllowedActions.fromJson(Map<String, dynamic> json) {
+  factory IncidentCommunicationAllowedActions.fromJson(
+      Map<String, dynamic> json) {
     return IncidentCommunicationAllowedActions(
       sendText: json["sendText"] == true,
       sendVoice: json["sendVoice"] == true,
@@ -129,7 +131,8 @@ class IncidentThreadMessage {
       messageType: json["messageType"].toString(),
       body: json["body"].toString(),
       senderRole: json["senderRole"].toString(),
-      senderLabel: json["senderLabel"]?.toString() ?? json["senderRole"].toString(),
+      senderLabel:
+          json["senderLabel"]?.toString() ?? json["senderRole"].toString(),
       createdAt: DateTime.parse(json["createdAt"].toString()),
       deliveryState: json["deliveryState"]?.toString(),
       structuredAction: json["structuredAction"] as Map<String, dynamic>?,
@@ -183,7 +186,8 @@ class QueuedIncidentMessage {
         "body": body,
         "createdAt": createdAt.toIso8601String(),
         if (attachmentId != null) "attachmentId": attachmentId,
-        if (attachmentLocalPath != null) "attachmentLocalPath": attachmentLocalPath,
+        if (attachmentLocalPath != null)
+          "attachmentLocalPath": attachmentLocalPath,
         if (localAttachment != null) "localAttachment": localAttachment,
         if (structuredAction != null) "structuredAction": structuredAction,
         "state": state.name,
