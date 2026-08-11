@@ -445,15 +445,6 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                           onPressed: _actionInFlight
                               ? null
                               : () => Navigator.of(context).pushNamed(
-                                    "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
-                                  ),
-                          icon: const Icon(Icons.chat_bubble_outline),
-                          label: const Text("Comments"),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _actionInFlight
-                              ? null
-                              : () => Navigator.of(context).pushNamed(
                                     "${BroadcastRoutes.center}/${widget.broadcastId}/share",
                                   ),
                           icon: const Icon(Icons.share_outlined),
@@ -467,6 +458,15 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                                   ),
                           icon: const Icon(Icons.visibility_outlined),
                           label: const Text("Report sighting"),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _actionInFlight
+                              ? null
+                              : () => Navigator.of(context).pushNamed(
+                                    "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
+                                  ),
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          label: const Text("Comments"),
                         ),
                         if (!_isOwner)
                           OutlinedButton.icon(
@@ -577,52 +577,109 @@ class _BroadcastDetailBody extends StatelessWidget {
         ],
         const SizedBox(height: 12),
         if (isMissingPerson) ...[
-          if (fullName != null) ...[
-            Text("Missing person",
-                style: Theme.of(context).textTheme.titleSmall),
-            Text(fullName, style: const TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-          ],
-          if (age != null || gender != null)
-            Text(
-              [
-                if (age != null) "Approx. age $age",
-                if (gender != null) gender,
-              ].join(" · "),
+          Text("MISSING PERSON",
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  )),
+          const SizedBox(height: 12),
+          AspectRatio(
+            aspectRatio: 4 / 3,
+            child: Container(
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: EyeSemanticColors.of(context).elevatedSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: EyeSemanticColors.of(context).border),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.person_search,
+                      size: 56,
+                      color: EyeSemanticColors.of(context).interactiveText),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Main photograph unavailable",
+                    style: TextStyle(color: muted),
+                  ),
+                ],
+              ),
             ),
-          if (lastSeenAt != null || lastSeenAddress != null) ...[
-            const SizedBox(height: 8),
-            Text("Last seen", style: Theme.of(context).textTheme.titleSmall),
-            if (lastSeenAt != null)
-              Text(CitizenDateTimeFormatter.formatDateTime(lastSeenAt)),
-            if (lastSeenAddress != null) Text(lastSeenAddress),
+          ),
+          const SizedBox(height: 16),
+          if (fullName != null)
+            Text(
+              fullName,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          if (age != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              RegExp(r"^\d{1,3}$").hasMatch(age)
+                  ? "Age $age"
+                  : "Approx. age $age",
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ],
+          if (gender != null) ...[
+            const SizedBox(height: 4),
+            Text(gender),
+          ],
+          const SizedBox(height: 12),
+          Text("Last seen", style: Theme.of(context).textTheme.titleSmall),
+          if (lastSeenAt != null)
+            Text(
+              "${CitizenDateTimeFormatter.formatDate(lastSeenAt)} · ${CitizenDateTimeFormatter.formatTime(lastSeenAt)}",
+            ),
+          if (lastSeenAddress != null) Text(lastSeenAddress),
+          const SizedBox(height: 8),
+          Text(
+            "Status: ${BroadcastExpiryPresenter.present(backendStatus: item?.status, expiresAt: item?.expiresAt).statusLabel}",
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
           if (physical != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text("Physical description",
                 style: Theme.of(context).textTheme.titleSmall),
             Text(physical),
           ],
           if (clothing != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text("Clothing", style: Theme.of(context).textTheme.titleSmall),
             Text(clothing),
           ],
           if (additional != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text("Additional information",
                 style: Theme.of(context).textTheme.titleSmall),
             Text(additional),
           ],
-        ] else ...[
-          Text(item?.body ?? ""),
-        ],
-        if ((item?.commentsCount ?? 0) > 0) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          Text("Evidence", style: Theme.of(context).textTheme.titleSmall),
           Text(
-            "${item!.commentsCount} community comment${item!.commentsCount == 1 ? "" : "s"}",
+            "Broadcast evidence will appear here when media is attached.",
             style: TextStyle(color: muted),
           ),
+          if ((item?.commentsCount ?? 0) > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              "Comments: ${item!.commentsCount}",
+              style: TextStyle(color: muted),
+            ),
+          ],
+        ] else ...[
+          Text(item?.body ?? ""),
+          if ((item?.commentsCount ?? 0) > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              "${item!.commentsCount} community comment${item!.commentsCount == 1 ? "" : "s"}",
+              style: TextStyle(color: muted),
+            ),
+          ],
         ],
       ],
     );

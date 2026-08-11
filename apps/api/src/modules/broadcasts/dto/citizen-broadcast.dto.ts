@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { BroadcastType } from "@the-eye/shared";
+import { assertValidMissingPersonAge } from "../../notifications/citizen-notification-copy";
 
 export type CreateMissingPersonBroadcastDto = {
   clientBroadcastId: string;
@@ -110,8 +111,17 @@ export function assertCitizenBroadcastType(type: BroadcastType) {
 export function validateMissingPersonBroadcastDto(dto: CreateMissingPersonBroadcastDto) {
   if (!dto.clientBroadcastId?.trim()) throw new BadRequestException("clientBroadcastId is required");
   if (!dto.fullName?.trim()) throw new BadRequestException("fullName is required");
-  if (!dto.ageOrApproximateAge?.trim()) throw new BadRequestException("ageOrApproximateAge is required");
+  try {
+    dto.ageOrApproximateAge = assertValidMissingPersonAge(dto.ageOrApproximateAge ?? "");
+  } catch (error) {
+    throw new BadRequestException((error as Error).message);
+  }
   if (!dto.lastSeenAt) throw new BadRequestException("lastSeenAt is required");
+  const lastSeen = new Date(dto.lastSeenAt);
+  if (Number.isNaN(lastSeen.getTime())) throw new BadRequestException("lastSeenAt must be a valid date-time");
+  if (!/[Tt ]\d{1,2}:\d{2}/.test(dto.lastSeenAt)) {
+    throw new BadRequestException("lastSeenAt must include both date and time");
+  }
   assertCoordinate(dto.lastSeenLatitude, "lastSeenLatitude", -90, 90);
   assertCoordinate(dto.lastSeenLongitude, "lastSeenLongitude", -180, 180);
   if (!dto.clothingDescription?.trim()) throw new BadRequestException("clothingDescription is required");
