@@ -17,6 +17,7 @@ import { BroadcastQueueService } from "./broadcast-queue.service";
 import { BroadcastLifecycleService, type BroadcastLifecycleEvent } from "./broadcast-lifecycle.service";
 import { BroadcastShareService } from "./broadcast-share.service";
 import { BroadcastsService, LIVE_BROADCAST_STATUSES } from "./broadcasts.service";
+import { buildMissingPersonBroadcastPreview } from "../notifications/citizen-notification-copy";
 import {
   BROADCAST_REPORT_REASONS,
   CreateCitizenBroadcastCommentDto,
@@ -433,27 +434,11 @@ export class BroadcastCitizenService {
   }
 
   private buildMissingPersonBody(dto: CreateMissingPersonBroadcastDto) {
-    const clothing = dto.clothingDescription.trim();
-    const physical = dto.physicalDescription.trim();
-    const additional = dto.additionalDescription?.trim() ?? "";
-    const lastSeenLabel = this.formatCitizenDateTimeLabel(dto.lastSeenAt);
-    const parts = [
-      `${dto.fullName.trim()}, approx. age ${dto.ageOrApproximateAge}.`,
-      `Last seen ${lastSeenLabel}.`,
-    ];
-    if (physical) parts.push(`Physical: ${physical}`);
-    // Avoid repeating the same text when clothing was copied from physical.
-    if (clothing && clothing.toLowerCase() !== physical.toLowerCase()) {
-      parts.push(`Clothing: ${clothing}`);
-    }
-    if (
-      additional &&
-      additional.toLowerCase() !== physical.toLowerCase() &&
-      additional.toLowerCase() !== clothing.toLowerCase()
-    ) {
-      parts.push(additional);
-    }
-    return parts.join(" ");
+    return buildMissingPersonBroadcastPreview({
+      fullName: dto.fullName,
+      ageOrApproximateAge: dto.ageOrApproximateAge,
+      lastSeenAt: dto.lastSeenAt,
+    });
   }
 
   private formatCitizenDateTimeLabel(value: string) {

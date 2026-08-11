@@ -76,16 +76,22 @@ export class CommunityVerificationService {
       });
 
       const category = String(incident.type);
-      const title = `Nearby ${INCIDENT_TYPE_DISPLAY[category] ?? category} Reported`;
-      const body = `A ${INCIDENT_TYPE_DISPLAY[category]?.toLowerCase() ?? category.toLowerCase()} has been reported ${approximateDistanceLabel(candidate.distanceMeters)} from your location. Can you help verify it safely?`;
-      const metadata = buildCommunityVerificationNotificationMetadata({
-        incidentId,
-        verificationRequestId: request.id,
-        category,
-        distanceBand: this.toDistanceBand(candidate.distanceMeters),
-        issuedAt: issuedAt.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-      });
+      const title = "Can you confirm this emergency?";
+      const body =
+        "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active.";
+      const metadata = {
+        ...buildCommunityVerificationNotificationMetadata({
+          incidentId,
+          verificationRequestId: request.id,
+          category,
+          distanceBand: this.toDistanceBand(candidate.distanceMeters),
+          issuedAt: issuedAt.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+        }),
+        route: "COMMUNITY_VERIFICATION",
+        citizenCategory: "Verify Active Incident",
+        approximateDistanceLabel: approximateDistanceLabel(candidate.distanceMeters),
+      };
 
       const notification = await this.prisma.notification.create({
         data: {

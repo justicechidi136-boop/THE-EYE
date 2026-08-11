@@ -18,6 +18,7 @@ class InboxNotificationItem {
     this.incidentId,
     this.broadcastId,
     this.expired = false,
+    this.metadata = const {},
   });
 
   final String id;
@@ -32,12 +33,14 @@ class InboxNotificationItem {
   final String? incidentId;
   final String? broadcastId;
   final bool expired;
+  final Map<String, dynamic> metadata;
 
   String get area => body;
   String get delivery => deliveryStatus;
   DateTime get receivedAt => createdAt;
 
   factory InboxNotificationItem.fromJson(Map<String, dynamic> json) {
+    final rawMetadata = json["metadata"];
     return InboxNotificationItem(
       id: (json["id"] as String?) ?? "",
       type: (json["type"] as String?) ?? "IncidentStatusUpdate",
@@ -54,6 +57,9 @@ class InboxNotificationItem {
       incidentId: json["incidentId"] as String?,
       broadcastId: json["broadcastId"] as String?,
       expired: json["expired"] == true,
+      metadata: rawMetadata is Map
+          ? Map<String, dynamic>.from(rawMetadata)
+          : const {},
     );
   }
 
@@ -71,6 +77,7 @@ class InboxNotificationItem {
       incidentId: incidentId,
       broadcastId: broadcastId,
       expired: expired,
+      metadata: metadata,
     );
   }
 }

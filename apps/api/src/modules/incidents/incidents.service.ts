@@ -8,7 +8,18 @@
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { AdminRoleName, IncidentPriority, IncidentStatus, IncidentType, ResolutionSource } from "@the-eye/shared";
+import {
+  AdminRoleName,
+  buildIncidentPublicReference,
+  IncidentPriority,
+  IncidentStatus,
+  IncidentType,
+  ResolutionSource,
+} from "@the-eye/shared";
+import {
+  reportSubmittedNotificationCopy,
+  resolveCancellationReason,
+} from "../notifications/citizen-notification-copy";
 import { hashPassword, randomToken } from "../../common/auth/crypto";
 import { createS3PresignedPutUrl, createS3PresignedGetUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
 import type { JwtPayload } from "../../common/auth/jwt";
@@ -319,6 +330,30 @@ export class IncidentsService {
     void this.verification.verifyIncident(incident.id).catch(() => undefined);
     void this.dispatchService.runTriageForIncident(incident.id, actor).catch(() => undefined);
 
+    if (!isAnonymous && actor?.typ === "user") {
+      void runNonCriticalWrite(
+        "incident.notifications.report_submitted",
+        sideEffectContext,
+        async () => {
+          const publicReference = buildIncidentPublicReference({
+            incidentId: incident.id,
+            submittedAt: incident.submittedAt,
+          });
+          const copy = reportSubmittedNotificationCopy(publicReference);
+          await this.notifications.create({
+            userId: actor.sub,
+            incidentId: incident.id,
+            type: copy.type,
+            channels: ["in_app", "push"],
+            title: copy.title,
+            body: copy.body,
+            metadata: copy.metadata,
+          });
+        },
+        nonCriticalWarnings,
+      );
+    }
+
     const result = this.buildReportResponse(incident, emergencyFastPath, false, nonCriticalWarnings);
     this.metrics.recordIncidentSubmission(
       incidentType,
@@ -402,6 +437,24 @@ export class IncidentsService {
       },
     });
 
+    if (this.incidentCommunications && actor) {
+      try {
+        await this.incidentCommunications.sendMessage(
+          id,
+          actor,
+          {
+            messageType: "Text",
+            body: text,
+            clientMessageId: body.clientActionId,
+            metadata: { source: "reporter_written_update" },
+          },
+          { skipPush: true },
+        );
+      } catch {
+        // Conversation may be unavailable; timeline remains the durable record.
+      }
+    }
+
     await this.prisma.incident.update({
       where: { id },
       data: {
@@ -410,7 +463,39 @@ export class IncidentsService {
       },
     });
 
-    return { ok: true };
+    return { ok: true, surfacedInCommunication: Boolean(this.incidentCommunications) };
+  }
+
+  async cancelEmergencyWithBody(
+    id: string,
+    body: { reason?: string; reasonCode?: string; reasonText?: string },
+    actor?: JwtPayload,
+  ) {
+    try {
+      const resolved = resolveCancellationReason(body);
+      return this.cancelEmergency(id, resolved.reason, actor, {
+        reasonCode: resolved.reasonCode,
+        reasonText: resolved.reasonText,
+      });
+    } catch (error) {
+      throw new BadRequestException((error as Error).message);
+    }
+  }
+
+  async requestCancellationWithBody(
+    id: string,
+    body: { reason?: string; reasonCode?: string; reasonText?: string },
+    actor?: JwtPayload,
+  ) {
+    try {
+      const resolved = resolveCancellationReason(body);
+      return this.requestCancellation(id, resolved.reason, actor, {
+        reasonCode: resolved.reasonCode,
+        reasonText: resolved.reasonText,
+      });
+    } catch (error) {
+      throw new BadRequestException((error as Error).message);
+    }
   }
 
   async get(id: string, actor?: JwtPayload) {
@@ -613,7 +698,12 @@ export class IncidentsService {
     return this.incidentTimeline.buildTimeline(id, audience, actor);
   }
 
-  async cancelEmergency(id: string, reason: string, actor?: JwtPayload) {
+  async cancelEmergency(
+    id: string,
+    reason: string,
+    actor?: JwtPayload,
+    structured?: { reasonCode?: string; reasonText?: string | null },
+  ) {
     if (!reason?.trim()) throw new BadRequestException("Cancellation reason is required");
     const incident = await this.get(id, actor);
     if (actor?.typ === "user" && incident.reporterId !== actor.sub) {
@@ -652,7 +742,12 @@ export class IncidentsService {
       reason,
       beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
       afterState: { status: IncidentStatus.CancelledByReporter, statusVersion: updated.statusVersion },
-      metadata: { fromStatus: currentStatus, toStatus: IncidentStatus.CancelledByReporter },
+      metadata: {
+        fromStatus: currentStatus,
+        toStatus: IncidentStatus.CancelledByReporter,
+        reasonCode: structured?.reasonCode,
+        reasonText: structured?.reasonText,
+      },
     });
 
     if (incident.reporterId) {
@@ -669,7 +764,12 @@ export class IncidentsService {
     return updated;
   }
 
-  async requestCancellation(id: string, reason: string, actor?: JwtPayload) {
+  async requestCancellation(
+    id: string,
+    reason: string,
+    actor?: JwtPayload,
+    structured?: { reasonCode?: string; reasonText?: string | null },
+  ) {
     if (!reason?.trim()) throw new BadRequestException("Cancellation reason is required");
     const incident = await this.get(id, actor);
     if (actor?.typ === "user" && incident.reporterId !== actor.sub) {
@@ -699,7 +799,12 @@ export class IncidentsService {
       reason,
       beforeState: { status: currentStatus, statusVersion: incident.statusVersion },
       afterState: { status: IncidentStatus.CancellationRequested, statusVersion: updated.statusVersion },
-      metadata: { fromStatus: currentStatus, toStatus: IncidentStatus.CancellationRequested },
+      metadata: {
+        fromStatus: currentStatus,
+        toStatus: IncidentStatus.CancellationRequested,
+        reasonCode: structured?.reasonCode,
+        reasonText: structured?.reasonText,
+      },
     });
 
     return updated;

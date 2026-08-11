@@ -168,16 +168,24 @@ export class IncidentsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
   @RequirePermissions("incident:create")
-  cancel(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
-    return this.incidentsService.cancelEmergency(id, body.reason, request.user);
+  cancel(
+    @Param("id") id: string,
+    @Body() body: { reason?: string; reasonCode?: string; reasonText?: string },
+    @Req() request: any,
+  ) {
+    return this.incidentsService.cancelEmergencyWithBody(id, body, request.user);
   }
 
   @Post(":id/request-cancellation")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard, IncidentScopeGuard)
   @RequirePermissions("incident:create")
-  requestCancellation(@Param("id") id: string, @Body() body: { reason: string }, @Req() request: any) {
-    return this.incidentsService.requestCancellation(id, body.reason, request.user);
+  requestCancellation(
+    @Param("id") id: string,
+    @Body() body: { reason?: string; reasonCode?: string; reasonText?: string },
+    @Req() request: any,
+  ) {
+    return this.incidentsService.requestCancellationWithBody(id, body, request.user);
   }
 
   @Post(":id/reporter-status")

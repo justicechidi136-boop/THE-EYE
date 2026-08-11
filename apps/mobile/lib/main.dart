@@ -70,6 +70,9 @@ import "config/app_flavor.dart";
 import "config/firebase_bootstrap.dart";
 import "config/the_eye_api_config.dart";
 import "design_system/eye_design_system.dart";
+import "presentation/citizen_date_time.dart";
+import "presentation/citizen_notification_presenter.dart";
+import "presentation/missing_person_age.dart";
 import "push/push_background_handler.dart";
 import "push/push_deep_link_router.dart";
 import "push/push_navigation.dart";
@@ -4122,36 +4125,6 @@ class _ReportScreenState extends State<ReportScreen> {
                   if (controller.showConnectivityBanner)
                     const SizedBox(height: 12),
                   if (isEmergency) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      height: EyeTokens.buttonHeight,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red.shade700,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(EyeTokens.radiusSm),
-                          ),
-                        ),
-                        onPressed: submitting
-                            ? null
-                            : () => _submit(context, urgent: true),
-                        icon: submitting
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.flash_on),
-                        label: Text(
-                          submitting ? "Sending..." : "Send emergency now",
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
                     EyeOutlinedButton(
                       label: "Start live emergency video",
                       icon: const Icon(Icons.videocam, size: 20),
@@ -4483,9 +4456,19 @@ class _MissingPersonBroadcastScreenState
   final additionalController = TextEditingController();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   String? _gender;
-  DateTime? _lastSeenAt;
+  String _ageMode = MissingPersonAge.exactMode;
+  String? _ageRange;
+  DateTime? _lastSeenDate;
+  TimeOfDay? _lastSeenTime;
   bool submitting = false;
   bool consent = false;
+
+  DateTime? get _lastSeenAt {
+    final date = _lastSeenDate;
+    final time = _lastSeenTime;
+    if (date == null || time == null) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
 
   @override
   void dispose() {
@@ -4498,29 +4481,32 @@ class _MissingPersonBroadcastScreenState
     super.dispose();
   }
 
-  Future<void> _pickLastSeen() async {
+  Future<void> _pickLastSeenDate() async {
     final now = DateTime.now();
     final date = await showDatePicker(
       context: context,
-      initialDate: _lastSeenAt ?? now,
+      initialDate: _lastSeenDate ?? now,
       firstDate: now.subtract(const Duration(days: 365)),
       lastDate: now,
     );
     if (date == null || !mounted) return;
+    setState(() => _lastSeenDate = date);
+  }
+
+  Future<void> _pickLastSeenTime() async {
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_lastSeenAt ?? now),
+      initialTime: _lastSeenTime ?? TimeOfDay.now(),
     );
     if (time == null || !mounted) return;
-    setState(() {
-      _lastSeenAt = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
-    });
+    setState(() => _lastSeenTime = time);
+  }
+
+  String? get _resolvedAge {
+    if (_ageMode == MissingPersonAge.exactMode) {
+      return ageController.text.trim();
+    }
+    return _ageRange;
   }
 
   Future<void> _submit() async {
@@ -4529,14 +4515,23 @@ class _MissingPersonBroadcastScreenState
           isError: true);
       return;
     }
-    if (ageController.text.trim().isEmpty) {
-      showAppSnackBar(context, "Enter an age or approximate age.",
-          isError: true);
+    final ageValue = _resolvedAge;
+    if (ageValue == null ||
+        ageValue.isEmpty ||
+        !MissingPersonAge.isValidAgeOrRange(ageValue)) {
+      showAppSnackBar(
+        context,
+        "Enter an exact age or choose an approximate age range.",
+        isError: true,
+      );
       return;
     }
-    if (_lastSeenAt == null) {
-      showAppSnackBar(context, "Select when the person was last seen.",
-          isError: true);
+    if (_lastSeenDate == null) {
+      showAppSnackBar(context, "Select the last seen date.", isError: true);
+      return;
+    }
+    if (_lastSeenTime == null) {
+      showAppSnackBar(context, "Select the last seen time.", isError: true);
       return;
     }
     if (physicalController.text.trim().isEmpty) {
@@ -4581,7 +4576,8 @@ class _MissingPersonBroadcastScreenState
         payload: {
           "clientBroadcastId": createClientSubmissionId(),
           "fullName": fullNameController.text.trim(),
-          "ageOrApproximateAge": ageController.text.trim(),
+          "ageOrApproximateAge":
+              MissingPersonAge.normalizeForApi(ageValue),
           if (_gender != null) "gender": _gender,
           "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
           "lastSeenLatitude": outcome.position!.latitude,
@@ -4640,14 +4636,46 @@ class _MissingPersonBroadcastScreenState
                       const InputDecoration(labelText: "Full name"),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: ageController,
-                  keyboardType: TextInputType.text,
-                  decoration: const InputDecoration(
-                    labelText: "Age / approximate age",
-                    hintText: "e.g. 14 or mid-20s",
-                  ),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: MissingPersonAge.exactMode,
+                      label: Text("Exact age"),
+                    ),
+                    ButtonSegment(
+                      value: MissingPersonAge.rangeMode,
+                      label: Text("Approx. range"),
+                    ),
+                  ],
+                  selected: {_ageMode},
+                  onSelectionChanged: submitting
+                      ? null
+                      : (value) => setState(() => _ageMode = value.first),
                 ),
+                const SizedBox(height: 12),
+                if (_ageMode == MissingPersonAge.exactMode)
+                  TextField(
+                    controller: ageController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: "Exact age",
+                      hintText: "e.g. 15",
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    initialValue: _ageRange,
+                    decoration: const InputDecoration(
+                      labelText: "Approximate age range",
+                    ),
+                    items: [
+                      for (final range in MissingPersonAge.approvedRanges)
+                        DropdownMenuItem(value: range, child: Text(range)),
+                    ],
+                    onChanged: submitting
+                        ? null
+                        : (value) => setState(() => _ageRange = value),
+                  ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _gender,
@@ -4665,14 +4693,25 @@ class _MissingPersonBroadcastScreenState
                 const SizedBox(height: 12),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text("Last seen date & time"),
+                  title: const Text("Last seen date"),
                   subtitle: Text(
-                    _lastSeenAt == null
-                        ? "Tap to select"
-                        : formatCitizenDateTime(_lastSeenAt!),
+                    _lastSeenDate == null
+                        ? "Tap to select date"
+                        : CitizenDateTimeFormatter.formatDate(_lastSeenDate!),
                   ),
                   trailing: const Icon(Icons.event),
-                  onTap: submitting ? null : _pickLastSeen,
+                  onTap: submitting ? null : _pickLastSeenDate,
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Last seen time"),
+                  subtitle: Text(
+                    _lastSeenTime == null
+                        ? "Tap to select time"
+                        : _lastSeenTime!.format(context),
+                  ),
+                  trailing: const Icon(Icons.schedule),
+                  onTap: submitting ? null : _pickLastSeenTime,
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -4974,37 +5013,45 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                         style: TextStyle(
                             fontSize: 12, color: BrandColors.lightTextMuted)),
                   ),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                      backgroundColor:
-                          streaming ? Colors.black : Colors.red.shade700),
-                  onPressed: (startingStream ||
-                          stoppingStream ||
-                          (!streaming && !liveVideoController.canStartSession))
-                      ? null
-                      : () => streaming
-                          ? _stopStream(context)
-                          : _startStream(context),
-                  icon: (startingStream || stoppingStream)
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Icon(streaming ? Icons.stop_circle : Icons.play_circle),
-                  label: Text(
-                    startingStream
-                        ? "Starting stream..."
-                        : stoppingStream
-                            ? "Stopping stream..."
-                            : streaming
-                                ? "Stop live video"
-                                : liveVideoRetryUserMessage(
-                                    incidentActive: activeIncidentId != null &&
-                                        activeIncidentId!.isNotEmpty,
-                                  ),
+                if (streaming)
+                  EyeDestructiveButton(
+                    label: stoppingStream
+                        ? "Stopping stream..."
+                        : "Stop Live Video",
+                    loading: stoppingStream,
+                    enabled: !stoppingStream,
+                    onPressed: () => _stopStream(context),
+                  )
+                else
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: EyeSemanticColors.of(context).error,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    onPressed: (startingStream ||
+                            !liveVideoController.canStartSession)
+                        ? null
+                        : () => _startStream(context),
+                    icon: startingStream
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.play_circle),
+                    label: Text(
+                      startingStream
+                          ? "Starting stream..."
+                          : liveVideoRetryUserMessage(
+                              incidentActive: activeIncidentId != null &&
+                                  activeIncidentId!.isNotEmpty,
+                            ),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -9110,19 +9157,28 @@ class BroadcastAlertTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showCategory = alert.type.toLowerCase().contains("health") ||
-        alert.type.toLowerCase().contains("broadcast") ||
-        alert.type.toLowerCase().contains("official");
-    final preview = alert.body.trim();
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: EyeNotificationCard(
-        category: showCategory ? alert.type : null,
-        title: alert.title,
-        body: preview.isEmpty ? null : preview,
-        read: alert.read,
-        timestamp: formatNotificationAge(alert.receivedAt),
+    final presented = CitizenNotificationPresenter.present(
+      type: alert.type,
+      title: alert.title,
+      body: alert.body,
+      createdAt: alert.receivedAt,
+      isUnread: !alert.read,
+      metadata: alert.metadata,
+    );
+    return Semantics(
+      button: true,
+      label:
+          "${presented.isUnread ? "Unread" : "Read"}. ${presented.category}. ${presented.title}. ${presented.preview}",
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: EyeNotificationCard(
+          category: presented.category,
+          title: presented.title,
+          body: presented.preview,
+          read: alert.read,
+          timestamp: presented.timestampLabel,
+        ),
       ),
     );
   }

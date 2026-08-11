@@ -27,6 +27,7 @@ class VoiceRecorder extends StatefulWidget {
     this.selectedLanguage = "auto",
     this.accessibilityVoiceGuidance = false,
     this.enabled = true,
+    this.uploadProgress,
     super.key,
   });
 
@@ -35,6 +36,7 @@ class VoiceRecorder extends StatefulWidget {
   final String selectedLanguage;
   final bool accessibilityVoiceGuidance;
   final bool enabled;
+  final double? uploadProgress;
 
   @override
   State<VoiceRecorder> createState() => _VoiceRecorderState();
@@ -206,10 +208,19 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
     setState(() => _state = VoiceRecorderState.playing);
     await _player.setFilePath(_filePath!);
     await _player.play();
-    _player.processingStateStream.firstWhere((state) => state == ProcessingState.completed).then((_) {
+    _player.processingStateStream
+        .firstWhere((state) => state == ProcessingState.completed)
+        .then((_) {
       if (!mounted) return;
       setState(() => _state = VoiceRecorderState.recorded);
     });
+  }
+
+  Future<void> _pausePlayback() async {
+    if (_state != VoiceRecorderState.playing) return;
+    await _player.pause();
+    if (!mounted) return;
+    setState(() => _state = VoiceRecorderState.recorded);
   }
 
   Future<void> _deleteRecording() async {
@@ -325,22 +336,49 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
                     onPressed: _resumeRecording,
                   ),
                 if (hasRecording) ...[
-                  _ActionChip(label: "Play", icon: Icons.play_circle_outline, onPressed: _playRecording),
-                  _ActionChip(label: "Delete", icon: Icons.delete_outline, onPressed: _deleteRecording),
-                  _ActionChip(label: "Re-record", icon: Icons.refresh_rounded, onPressed: () async {
-                    await _deleteRecording();
-                    await _startRecording();
-                  }),
+                  if (_state == VoiceRecorderState.playing)
+                    _ActionChip(
+                      label: "Pause",
+                      icon: Icons.pause_circle_outline,
+                      onPressed: _pausePlayback,
+                    )
+                  else
+                    _ActionChip(
+                      label: "Play",
+                      icon: Icons.play_circle_outline,
+                      onPressed: _playRecording,
+                    ),
+                  _ActionChip(
+                    label: "Delete",
+                    icon: Icons.delete_outline,
+                    onPressed: _deleteRecording,
+                  ),
+                  _ActionChip(
+                    label: "Re-record",
+                    icon: Icons.refresh_rounded,
+                    onPressed: () async {
+                      await _deleteRecording();
+                      await _startRecording();
+                    },
+                  ),
                 ],
                 if (_state == VoiceRecorderState.failed)
                   _ActionChip(label: "Retry", icon: Icons.replay_rounded, onPressed: _retry),
               ],
             ),
-            if (_state == VoiceRecorderState.uploading) ...[
+            if ((widget.uploadProgress != null && widget.uploadProgress! > 0) ||
+                _state == VoiceRecorderState.uploading) ...[
               const SizedBox(height: 12),
-              LinearProgressIndicator(value: _uploadProgress > 0 ? _uploadProgress : null),
+              LinearProgressIndicator(
+                value: (widget.uploadProgress ?? _uploadProgress) > 0
+                    ? (widget.uploadProgress ?? _uploadProgress)
+                    : null,
+              ),
               const SizedBox(height: 4),
-              Text("Uploading voice report...", style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                "Uploading voice report...",
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
             if (_errorMessage != null) ...[
               const SizedBox(height: 8),
@@ -360,13 +398,13 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
   String _stateLabel() {
     switch (_state) {
       case VoiceRecorderState.idle:
-        return "Tap microphone to record";
+        return "Audio / Voice report";
       case VoiceRecorderState.recording:
-        return "Recording…";
+        return "Recording voice report…";
       case VoiceRecorderState.paused:
-        return "Paused";
+        return "Voice report paused";
       case VoiceRecorderState.recorded:
-        return "Voice report ready";
+        return "Audio / Voice report";
       case VoiceRecorderState.playing:
         return "Playing back";
       case VoiceRecorderState.uploading:
