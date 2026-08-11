@@ -255,34 +255,39 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadDetail());
+    // FUNC-011: never touch InheritedWidgets during initState. Looking up
+    // AppScope/BroadcastSession before the first frame can throw and leave
+    // `_loading == true` forever (indefinite spinner).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_loadDetail());
+    });
   }
 
   Future<void> _loadDetail() async {
-    final session = BroadcastSession.require(context);
-    if (!session.isAuthenticated || session.accessToken == null) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = "We couldn’t load this broadcast. Try again.";
-      });
-      Navigator.of(context).pushReplacementNamed("/login");
-      return;
-    }
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
+
     try {
+      final session = BroadcastSession.require(context);
+      if (!session.isAuthenticated || session.accessToken == null) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = "We couldn’t load this broadcast. Try again.";
+        });
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+
       final item = await session.broadcastFeedService.getDetail(
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
       );
-      try {
-        await session.markBroadcastRead(widget.broadcastId);
-      } catch (_) {
-        // Non-blocking: detail should still render if read receipt fails.
-      }
+      // Never block detail rendering on read-receipt side effects.
+      unawaited(session.markBroadcastRead(widget.broadcastId));
       if (!mounted) return;
       final profileId = session.cachedCitizenProfile?.id;
       setState(() {
@@ -291,6 +296,7 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
             profileId.isNotEmpty &&
             item.creatorUserId == profileId;
         _loading = false;
+        _error = null;
       });
     } on IncidentApiException catch (error) {
       if (!mounted) return;

@@ -13,8 +13,39 @@ import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
 import "package:the_eye_mobile/brand.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
 
+class _FakeBroadcastFeedService extends BroadcastFeedService {
+  _FakeBroadcastFeedService({this.detail});
+
+  final BroadcastFeedItem? detail;
+  int markReadCalls = 0;
+
+  @override
+  Future<BroadcastFeedItem> getDetail({
+    required String accessToken,
+    required String broadcastId,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final item = detail;
+    if (item == null) {
+      throw IncidentApiException(404, "Broadcast not found", apiCode: "NOT_FOUND");
+    }
+    return item;
+  }
+
+  @override
+  Future<void> markRead({
+    required String accessToken,
+    required String broadcastId,
+  }) async {
+    markReadCalls += 1;
+  }
+}
+
 class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
-  _FakeBroadcastSession({this.authenticated = true});
+  _FakeBroadcastSession({
+    this.authenticated = true,
+    BroadcastFeedItem? detail,
+  }) : broadcastFeedService = _FakeBroadcastFeedService(detail: detail);
 
   final bool authenticated;
 
@@ -51,33 +82,48 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
       throw UnimplementedError();
 
   @override
-  final BroadcastFeedService broadcastFeedService = BroadcastFeedService();
+  final _FakeBroadcastFeedService broadcastFeedService;
 
   @override
   final BroadcastSubmissionService broadcastSubmissionService =
       BroadcastSubmissionService();
 
   @override
-  Future<void> markBroadcastRead(String broadcastId) async {}
+  Future<void> markBroadcastRead(String broadcastId) async {
+    await broadcastFeedService.markRead(
+      accessToken: accessToken ?? "",
+      broadcastId: broadcastId,
+    );
+  }
 
   @override
   Future<void> loadBroadcastsFromApi({bool refresh = false}) async {}
 }
 
 void main() {
-  Widget wrap(Widget child, {bool authenticated = true}) {
+  Widget wrap(
+    Widget child, {
+    bool authenticated = true,
+    BroadcastFeedItem? detail,
+    _FakeBroadcastSession? session,
+  }) {
     return MaterialApp(
       theme: ThemeData(
         brightness: Brightness.dark,
         extensions: const [EyeSemanticColors.dark],
       ),
       home: AppScope(
-        controller: _FakeBroadcastSession(authenticated: authenticated),
+        controller: session ??
+            _FakeBroadcastSession(
+              authenticated: authenticated,
+              detail: detail,
+            ),
         child: child,
       ),
       routes: {
         BroadcastRoutes.create: (_) => const BroadcastCreateHubScreen(),
         BroadcastRoutes.mine: (_) => const MyBroadcastsScreen(),
+        "/login": (_) => const Scaffold(body: Text("Login")),
       },
       onGenerateRoute: (settings) => resolveBroadcastRoute(settings),
     );
@@ -163,5 +209,43 @@ void main() {
     });
     expect(comment.isSighting, isTrue);
     expect(comment.body, "Seen near the market.");
+  });
+
+  testWidgets("FUNC-011 detail leaves spinner and shows content",
+      (tester) async {
+    final detail = BroadcastFeedItem(
+      id: "b-detail-1",
+      type: "MissingPerson",
+      title: "Missing person: Ada",
+      body: "Last seen near the market",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+      creatorUserId: "user-1",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-detail-1"),
+        detail: detail,
+      ),
+    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pump(); // post-frame callback
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text("Missing person: Ada"), findsWidgets);
+    expect(find.text("Broadcast unavailable"), findsNothing);
+  });
+
+  testWidgets("FUNC-011 detail shows retry when API fails", (tester) async {
+    await tester.pumpWidget(
+      wrap(const BroadcastDetailScreen(broadcastId: "missing")),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text("Broadcast unavailable"), findsOneWidget);
+    expect(find.text("Retry"), findsOneWidget);
   });
 }
