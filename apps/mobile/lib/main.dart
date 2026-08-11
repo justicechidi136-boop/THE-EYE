@@ -79,6 +79,7 @@ import "push/push_navigation.dart";
 import "push/push_notification_service.dart";
 import "broadcasts/broadcast_feed_cache.dart";
 import "broadcasts/broadcast_feed_service.dart";
+import "broadcasts/broadcast_media_upload_service.dart";
 import "broadcasts/broadcast_navigation.dart";
 import "broadcasts/broadcast_screens.dart";
 import "broadcasts/broadcast_session.dart";
@@ -1271,6 +1272,8 @@ class AppController extends SessionAccessor
   final BroadcastFeedService _broadcastFeedService = BroadcastFeedService();
   final BroadcastSubmissionService _broadcastSubmissionService =
       BroadcastSubmissionService();
+  final BroadcastMediaUploadService _broadcastMediaUploadService =
+      BroadcastMediaUploadService();
   final BroadcastFeedCache _broadcastFeedCache = BroadcastFeedCache();
   final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
   EmergencyLocationCoordinator? _locationCoordinator;
@@ -1333,6 +1336,8 @@ class AppController extends SessionAccessor
   BroadcastFeedService get broadcastFeedService => _broadcastFeedService;
   BroadcastSubmissionService get broadcastSubmissionService =>
       _broadcastSubmissionService;
+  BroadcastMediaUploadService get broadcastMediaUploadService =>
+      _broadcastMediaUploadService;
   SocialAuthService get socialAuthService => _socialAuthService;
   ConnectivityState get connectivityState => _connectivity.state;
   bool get online => _connectivity.isOnline;
@@ -1726,6 +1731,7 @@ class AppController extends SessionAccessor
     await _pushNotifications?.deactivateCurrentToken();
     final cacheScope = _notificationCacheScope;
     await _authService.logout();
+    await _socialAuthService.signOutProviders();
     _cachedSession = null;
     _sessionAccessToken = null;
     clearCitizenProfileCache();
@@ -4570,6 +4576,23 @@ class _MissingPersonBroadcastScreenState
     final lastSeenLocation = lastSeenLocationController.text.trim();
     final additional = additionalController.text.trim();
     try {
+      final localEvidence =
+          _evidenceSectionKey.currentState?.attachments ?? const [];
+      var uploadedEvidence = const <Map<String, String>>[];
+      if (localEvidence.isNotEmpty) {
+        try {
+          uploadedEvidence =
+              await controller.broadcastMediaUploadService.uploadAttachments(
+            attachments: localEvidence,
+            accessToken: controller.accessToken!,
+          );
+        } on BroadcastMediaUploadFailure catch (error) {
+          if (!mounted) return;
+          setState(() => submitting = false);
+          showAppSnackBar(context, error.message, isError: true);
+          return;
+        }
+      }
       final result =
           await controller.broadcastSubmissionService.createMissingPerson(
         accessToken: controller.accessToken!,
@@ -4589,6 +4612,8 @@ class _MissingPersonBroadcastScreenState
           "reporterRelationship": "Reporter",
           "consentDeclaration": true,
           if (additional.isNotEmpty) "additionalDescription": additional,
+          if (uploadedEvidence.isNotEmpty)
+            "metadata": {"attachments": uploadedEvidence},
         },
       ).timeout(kSosSubmissionTimeout);
       if (!mounted) return;
@@ -5050,6 +5075,18 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                               incidentActive: activeIncidentId != null &&
                                   activeIncidentId!.isNotEmpty,
                             ),
+                    ),
+                  ),
+                if (!streaming &&
+                    !startingStream &&
+                    liveVideoController.startUnavailableReason != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      liveVideoController.startUnavailableReason!,
+                      style: TextStyle(
+                        color: EyeSemanticColors.of(context).secondaryText,
+                      ),
                     ),
                   ),
               ],
@@ -5725,6 +5762,23 @@ class _StolenVehicleBroadcastScreenState
     final description = descriptionController.text.trim();
     final vin = vinController.text.trim();
     try {
+      final localEvidence =
+          _evidenceSectionKey.currentState?.attachments ?? const [];
+      var uploadedEvidence = const <Map<String, String>>[];
+      if (localEvidence.isNotEmpty) {
+        try {
+          uploadedEvidence =
+              await controller.broadcastMediaUploadService.uploadAttachments(
+            attachments: localEvidence,
+            accessToken: controller.accessToken!,
+          );
+        } on BroadcastMediaUploadFailure catch (error) {
+          if (!mounted) return;
+          setState(() => submitting = false);
+          showAppSnackBar(context, error.message, isError: true);
+          return;
+        }
+      }
       final result =
           await controller.broadcastSubmissionService.createStolenVehicle(
         accessToken: controller.accessToken!,
@@ -5745,6 +5799,8 @@ class _StolenVehicleBroadcastScreenState
           "contactMethod": "in_app",
           if (description.isNotEmpty) "lastKnownLocation": description,
           if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
+          if (uploadedEvidence.isNotEmpty)
+            "metadata": {"attachments": uploadedEvidence},
         },
       ).timeout(kSosSubmissionTimeout);
       if (!mounted) return;

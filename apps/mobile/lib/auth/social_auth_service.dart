@@ -290,10 +290,20 @@ class SocialAuthService {
   }
 
   Future<void> signOutProviders() async {
-    await Future.wait([
-      _firebaseAuth.signOut(),
-      _googleSignIn.signOut(),
-    ]);
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {
+        // Best effort — local session clear must still complete.
+      }
+    }
+    try {
+      await _firebaseAuth.signOut();
+    } catch (_) {
+      // Best effort — local session clear must still complete.
+    }
   }
 
   Future<UserCredential?> _firebaseGoogleCredential() async {

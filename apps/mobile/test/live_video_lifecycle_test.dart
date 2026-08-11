@@ -20,6 +20,7 @@ void main() {
     });
 
     test("blocks start during active phases", () {
+      expect(LiveVideoLifecyclePhase.preparing.allowsStart, isTrue);
       expect(LiveVideoLifecyclePhase.connecting.allowsStart, isFalse);
       expect(LiveVideoLifecyclePhase.publishing.allowsStart, isFalse);
       expect(LiveVideoLifecyclePhase.stopping.allowsStart, isFalse);

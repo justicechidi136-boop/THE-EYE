@@ -252,5 +252,84 @@ void main() {
       final restore = await service.restorePersistedSession();
       expect(restore.status, SessionRestoreStatus.unauthenticated);
     });
+
+    test("refreshSessionSingleFlight coalesces concurrent refresh calls", () async {
+      final store = InMemoryAuthSessionStore();
+      await store.save(
+        const AuthSession(
+          accessToken: "expired-access",
+          refreshToken: "refresh-token",
+        ),
+      );
+
+      var refreshCalls = 0;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            refreshCalls += 1;
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            return http.Response(
+              jsonEncode({
+                "accessToken": "fresh-access-$refreshCalls",
+                "refreshToken": "fresh-refresh-$refreshCalls",
+              }),
+              200,
+            );
+          }
+          return http.Response("{}", 404);
+        }),
+      );
+
+      final service = AuthService(apiClient: client, sessionStore: store);
+      final results = await Future.wait([
+        service.refreshSessionSingleFlight(),
+        service.refreshSessionSingleFlight(),
+        service.refreshSessionSingleFlight(),
+      ]);
+
+      expect(refreshCalls, 1);
+      expect(results.every((session) => session?.accessToken == "fresh-access-1"),
+          isTrue);
+      expect((await store.load())?.accessToken, "fresh-access-1");
+    });
+
+    test("withAuthorizedRetry refreshes once on 401 and retries action", () async {
+      final store = InMemoryAuthSessionStore();
+      await store.save(
+        const AuthSession(
+          accessToken: "expired-access",
+          refreshToken: "refresh-token",
+        ),
+      );
+
+      var actionCalls = 0;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            return http.Response(
+              jsonEncode({
+                "accessToken": "fresh-access",
+                "refreshToken": "fresh-refresh",
+              }),
+              200,
+            );
+          }
+          return http.Response("{}", 404);
+        }),
+      );
+
+      final service = AuthService(apiClient: client, sessionStore: store);
+      final result = await service.withAuthorizedRetry<String>((accessToken) async {
+        actionCalls += 1;
+        if (accessToken == "expired-access") {
+          throw AuthApiException(401, "Unauthorized");
+        }
+        return "ok-$accessToken";
+      });
+
+      expect(result, "ok-fresh-access");
+      expect(actionCalls, 2);
+      expect((await store.load())?.accessToken, "fresh-access");
+    });
   });
 }

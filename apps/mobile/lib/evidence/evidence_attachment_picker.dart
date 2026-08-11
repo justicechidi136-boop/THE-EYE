@@ -1,6 +1,9 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:permission_handler/permission_handler.dart";
 
+import "evidence_audio_preview.dart";
 import "evidence_capture_controller.dart";
 import "evidence_capture_service.dart";
 import "evidence_media_source.dart";
@@ -17,11 +20,13 @@ class ManagedEvidenceSection extends StatefulWidget {
   const ManagedEvidenceSection({
     required this.lowDataMode,
     this.figmaStyle = false,
+    this.onAttachmentsChanged,
     super.key,
   });
 
   final bool lowDataMode;
   final bool figmaStyle;
+  final ValueChanged<int>? onAttachmentsChanged;
 
   @override
   State<ManagedEvidenceSection> createState() => ManagedEvidenceSectionState();
@@ -53,6 +58,7 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
       controller: _controller!,
       lowDataMode: widget.lowDataMode,
       figmaStyle: widget.figmaStyle,
+      onAttachmentsChanged: widget.onAttachmentsChanged,
     );
     if (!widget.figmaStyle) {
       return SectionCard(
@@ -151,24 +157,43 @@ EvidenceCaptureController createEvidenceCaptureController(
   );
 }
 
-class EvidenceAttachmentPicker extends StatelessWidget {
+class EvidenceAttachmentPicker extends StatefulWidget {
   const EvidenceAttachmentPicker({
     required this.controller,
     required this.lowDataMode,
     this.figmaStyle = false,
+    this.onAttachmentsChanged,
     super.key,
   });
 
   final EvidenceCaptureController controller;
   final bool lowDataMode;
   final bool figmaStyle;
+  final ValueChanged<int>? onAttachmentsChanged;
+
+  @override
+  State<EvidenceAttachmentPicker> createState() =>
+      _EvidenceAttachmentPickerState();
+}
+
+class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
+  final EvidenceAudioPreviewPlayer _audioPreview = EvidenceAudioPreviewPlayer();
+
+  @override
+  void dispose() {
+    unawaited(_audioPreview.dispose());
+    super.dispose();
+  }
+
+  EvidenceCaptureController get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        controller.lowDataMode = lowDataMode;
+        controller.lowDataMode = widget.lowDataMode;
+        widget.onAttachmentsChanged?.call(controller.attachments.length);
         final voiceReportAttachments = controller.attachments
             .where(
               (attachment) =>
@@ -213,7 +238,7 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                 }
               },
             ),
-            if (figmaStyle) ...[
+            if (widget.figmaStyle) ...[
               Material(
                 color: EyeSemanticColors.of(context).elevatedSurface,
                 borderRadius: BorderRadius.circular(8),
@@ -292,7 +317,7 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                   style: const TextStyle(
                       color: Color(0xFFB00020), fontWeight: FontWeight.w700)),
             ],
-            if (lowDataMode)
+            if (widget.lowDataMode)
               const Padding(
                 padding: EdgeInsets.only(top: 12),
                 child: Text("Low-data mode will compress media before upload."),
@@ -310,7 +335,12 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                       presentation: presentations[i],
                       uploadProgress: listAttachments[i].uploadProgress,
                       onView: presentations[i].canView ? () {} : null,
-                      onPlay: presentations[i].canPlay ? () {} : null,
+                      onPlay: presentations[i].canPlay
+                          ? () => _audioPreview.toggle(
+                                listAttachments[i].localId,
+                                listAttachments[i].uploadPath,
+                              )
+                          : null,
                       onRemove: () =>
                           controller.remove(listAttachments[i].localId),
                       onRetry: presentations[i].canRetry

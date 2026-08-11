@@ -5,6 +5,7 @@ import "dart:io";
 import "package:http/http.dart" as http;
 
 import "../evidence/evidence_capture_service.dart";
+import "../evidence/evidence_upload_coordinator.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
@@ -50,18 +51,24 @@ class IncidentSubmissionService {
     required PendingSubmissionStore pendingStore,
     IncidentSubmissionValidator? validator,
     EvidenceUploadService? evidenceUploadService,
+    EvidenceUploadCoordinator? evidenceUploadCoordinator,
     EvidenceCaptureService? evidenceCaptureService,
     this.requestTimeout = const Duration(seconds: 30),
   })  : _apiClient = apiClient,
         _pendingStore = pendingStore,
         _validator = validator ?? const IncidentSubmissionValidator(),
-        _evidenceUploadService = evidenceUploadService,
+        _evidenceUploadCoordinator = evidenceUploadCoordinator ??
+            (evidenceUploadService != null
+                ? EvidenceUploadCoordinator(
+                    uploadService: evidenceUploadService,
+                  )
+                : null),
         _evidenceCaptureService = evidenceCaptureService;
 
   final TheEyeApiClient _apiClient;
   final PendingSubmissionStore _pendingStore;
   final IncidentSubmissionValidator _validator;
-  final EvidenceUploadService? _evidenceUploadService;
+  final EvidenceUploadCoordinator? _evidenceUploadCoordinator;
   final EvidenceCaptureService? _evidenceCaptureService;
   final Duration requestTimeout;
   final Set<String> _inFlightSubmissionIds = {};
@@ -314,14 +321,14 @@ class IncidentSubmissionService {
     if (accessToken == null || accessToken.isEmpty) {
       return "$baseMessage Sign in to upload attached evidence.";
     }
-    final uploader = _evidenceUploadService;
+    final uploader = _evidenceUploadCoordinator;
     final capture = _evidenceCaptureService;
     if (uploader == null) {
       return "$baseMessage Evidence upload is unavailable.";
     }
 
     try {
-      await uploader.uploadForIncident(
+      final batch = await uploader.uploadForIncident(
         incidentId: incidentId,
         attachments: draft.localMedia,
         accessToken: accessToken,
@@ -329,12 +336,19 @@ class IncidentSubmissionService {
         fallbackLongitude: draft.longitude,
         onProgress: onEvidenceProgress,
       );
-      if (capture != null) {
-        await capture.cleanupAttachments(draft.localMedia);
+      if (batch.isFullSuccess) {
+        if (capture != null) {
+          await capture.cleanupAttachments(draft.localMedia);
+        }
+        return "$baseMessage Evidence uploaded.";
       }
-      return "$baseMessage Evidence uploaded.";
-    } on EvidenceUploadFailure catch (error) {
-      return "$baseMessage ${error.message}";
+      if (batch.isPartialSuccess) {
+        return "$baseMessage ${batch.uploaded.length} of ${draft.localMedia.length} evidence file(s) uploaded. "
+            "${batch.failures.length} failed — retry from Active Emergency.";
+      }
+      final firstFailure = batch.failures.first.userMessage ??
+          "Evidence upload failed. Retry from Active Emergency.";
+      return "$baseMessage $firstFailure";
     } catch (_) {
       return "$baseMessage Evidence upload failed. Retry from Active Emergency.";
     }

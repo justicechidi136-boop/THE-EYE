@@ -11,6 +11,11 @@ import {
   IncidentPriority,
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
+import {
+  createS3PresignedPutUrl,
+  evidenceObjectKey,
+  validateEvidenceUpload,
+} from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { BroadcastQueueService } from "./broadcast-queue.service";
@@ -34,6 +39,34 @@ import {
 
 const DEFAULT_EXPIRY_DAYS = 30;
 
+const BROADCAST_MEDIA_TYPES = new Set(["image", "video", "audio"]);
+
+function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string>> {
+  if (!Array.isArray(raw)) return [];
+  const attachments: Array<Record<string, string>> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const mediaType = String(row.mediaType ?? "").trim().toLowerCase();
+    const objectKey = String(row.objectKey ?? "").trim();
+    const bucket = String(row.bucket ?? "").trim();
+    const contentType = String(row.contentType ?? "").trim();
+    if (!BROADCAST_MEDIA_TYPES.has(mediaType) || !objectKey || !bucket || !contentType) continue;
+    if (objectKey.includes("..") || !objectKey.startsWith("evidence/broadcast-")) continue;
+    attachments.push({
+      mediaType,
+      objectKey,
+      bucket,
+      contentType,
+      fileName: String(row.fileName ?? "").trim() || `${mediaType}-attachment`,
+      clientAttachmentId: String(row.clientAttachmentId ?? "").trim(),
+      label: String(row.label ?? "").trim(),
+    });
+    if (attachments.length >= 8) break;
+  }
+  return attachments;
+}
+
 @Injectable()
 export class BroadcastCitizenService {
   constructor(
@@ -45,13 +78,36 @@ export class BroadcastCitizenService {
     private readonly share: BroadcastShareService,
   ) {}
 
+  async presignMedia(
+    actor: JwtPayload,
+    dto: { fileName?: string; contentType?: string; mediaType?: string; sizeBytes?: number },
+  ) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    if (!dto.fileName || !dto.contentType || !dto.mediaType) {
+      throw new BadRequestException("fileName, contentType, and mediaType are required");
+    }
+    validateEvidenceUpload(dto.contentType, dto.sizeBytes);
+    const objectKey = evidenceObjectKey(`broadcast-${actor.sub}`, dto.fileName);
+    return {
+      data: {
+        bucket: process.env.S3_BUCKET ?? "the-eye",
+        objectKey,
+        uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
+        requiredHeaders: { "content-type": dto.contentType },
+        expiresInSeconds: 300,
+      },
+    };
+  }
+
   async createMissingPerson(dto: CreateMissingPersonBroadcastDto, actor: JwtPayload) {
     validateMissingPersonBroadcastDto(dto);
+    const attachments = sanitizeBroadcastAttachments(dto.metadata?.attachments);
+    const { attachments: _ignoredAttachments, ...safeMetadata } = (dto.metadata ?? {}) as Record<string, unknown>;
     return this.createCitizenBroadcast(BroadcastType.MissingPerson, dto, actor, {
       title: `Missing person: ${dto.fullName.trim()}`,
       body: this.buildMissingPersonBody(dto),
       metadata: {
-        ...dto.metadata,
+        ...safeMetadata,
         fullName: dto.fullName.trim(),
         ageOrApproximateAge: dto.ageOrApproximateAge,
         gender: dto.gender,
@@ -67,6 +123,7 @@ export class BroadcastCitizenService {
         medicalVulnerability: dto.medicalVulnerability,
         language: dto.language,
         rewardNotice: dto.rewardNotice,
+        ...(attachments.length > 0 ? { attachments } : {}),
       },
       latitude: dto.lastSeenLatitude,
       longitude: dto.lastSeenLongitude,
@@ -75,11 +132,13 @@ export class BroadcastCitizenService {
 
   async createStolenVehicle(dto: CreateStolenVehicleBroadcastDto, actor: JwtPayload) {
     validateStolenVehicleBroadcastDto(dto);
+    const attachments = sanitizeBroadcastAttachments(dto.metadata?.attachments);
+    const { attachments: _ignoredAttachments, ...safeMetadata } = (dto.metadata ?? {}) as Record<string, unknown>;
     return this.createCitizenBroadcast(BroadcastType.StolenVehicle, dto, actor, {
       title: `Stolen vehicle: ${dto.make.trim()} ${dto.model.trim()} (${maskRegistrationNumber(dto.registrationNumber)})`,
       body: this.buildStolenVehicleBody(dto),
       metadata: {
-        ...dto.metadata,
+        ...safeMetadata,
         vehicleType: dto.vehicleType,
         make: dto.make,
         model: dto.model,
@@ -92,6 +151,7 @@ export class BroadcastCitizenService {
         vinLastFour: dto.vinLastFour,
         directionOfTravel: dto.directionOfTravel,
         rewardNotice: dto.rewardNotice,
+        ...(attachments.length > 0 ? { attachments } : {}),
       },
       latitude: dto.lastKnownLatitude,
       longitude: dto.lastKnownLongitude,
