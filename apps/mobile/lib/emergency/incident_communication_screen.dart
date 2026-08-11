@@ -5,16 +5,25 @@ import "package:geolocator/geolocator.dart";
 import "package:uuid/uuid.dart";
 
 import "../contracts/the_eye_api_client.dart";
-import "../design_system/components/eye_page_header.dart";
+import "../design_system/eye_semantic_colors.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
-import "../presentation/citizen_date_time.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
+import "active_emergency_contract.dart";
+import "active_emergency_service.dart";
 import "incident_communication_contract.dart";
 import "incident_communication_service.dart";
+import "widgets/communication_composer.dart";
+import "widgets/communication_header.dart";
+import "widgets/communication_live_rail.dart";
+import "widgets/communication_message_card.dart";
+import "widgets/communication_tabs.dart";
+import "widgets/emergency_status_update_card.dart";
 
+/// Phase 6 incident communication UI — presentation matched to the Claude
+/// Active Emergency Communication layer. Backend contracts/services unchanged.
 class IncidentCommunicationScreen extends StatefulWidget {
   const IncidentCommunicationScreen({
     super.key,
@@ -22,12 +31,22 @@ class IncidentCommunicationScreen extends StatefulWidget {
     required this.accessToken,
     required this.apiClient,
     this.readOnly = false,
+    this.publicReference,
+    this.locationLabel,
+    this.reportedAt,
+    this.confirmStillOngoing = false,
+    this.confirmResolved = false,
   });
 
   final String incidentId;
   final String accessToken;
   final TheEyeApiClient apiClient;
   final bool readOnly;
+  final String? publicReference;
+  final String? locationLabel;
+  final DateTime? reportedAt;
+  final bool confirmStillOngoing;
+  final bool confirmResolved;
 
   @override
   State<IncidentCommunicationScreen> createState() =>
@@ -37,28 +56,36 @@ class IncidentCommunicationScreen extends StatefulWidget {
 class _IncidentCommunicationScreenState
     extends State<IncidentCommunicationScreen> {
   late final IncidentCommunicationService _service;
+  late final ActiveEmergencyService _activeEmergencyService;
   final _composerController = TextEditingController();
   final _scrollController = ScrollController();
   List<IncidentThreadMessage> _messages = const [];
+  List<QueuedIncidentMessage> _offlineQueue = const [];
   IncidentCommunicationAllowedActions _actions =
       IncidentCommunicationAllowedActions.empty();
   bool _loading = true;
   String? _error;
   bool _sending = false;
+  bool _stale = false;
   String? _pendingInformationRequestId;
   String? _pendingInformationRequestPrompt;
   Timer? _pollTimer;
   String _conversationStatus = "Active";
   late final EvidenceUploadService _uploadService;
+  CommunicationThreadTab _tab = CommunicationThreadTab.all;
 
   @override
   void initState() {
     super.initState();
     _service = IncidentCommunicationService(widget.apiClient);
+    _activeEmergencyService =
+        ActiveEmergencyService(apiClient: widget.apiClient);
     _uploadService = EvidenceUploadService(apiClient: widget.apiClient);
     unawaited(_refresh(initial: true));
     _pollTimer = Timer.periodic(
-        const Duration(seconds: 10), (_) => unawaited(_refresh()));
+      const Duration(seconds: 10),
+      (_) => unawaited(_refresh()),
+    );
   }
 
   @override
@@ -67,6 +94,15 @@ class _IncidentCommunicationScreenState
     _composerController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  String? get _subtitle {
+    final ref = widget.publicReference?.trim();
+    final loc = widget.locationLabel?.trim();
+    if (ref != null && ref.isNotEmpty && loc != null && loc.isNotEmpty) {
+      return "$ref · $loc";
+    }
+    return ref ?? loc;
   }
 
   Future<void> _refresh({bool initial = false}) async {
@@ -79,12 +115,20 @@ class _IncidentCommunicationScreenState
         uploadService: _uploadService,
       );
       final conversation = await _service.fetchConversation(
-          widget.incidentId, widget.accessToken);
-      final messages =
-          await _service.fetchMessages(widget.incidentId, widget.accessToken);
+        widget.incidentId,
+        widget.accessToken,
+      );
+      final messages = await _service.fetchMessages(
+        widget.incidentId,
+        widget.accessToken,
+      );
+      final queue = await _service.loadQueue();
       if (!mounted) return;
       setState(() {
         _messages = messages.reversed.toList(growable: false);
+        _offlineQueue = queue
+            .where((item) => item.incidentId == widget.incidentId)
+            .toList(growable: false);
         _pendingInformationRequestId = _extractPendingRequestId(_messages);
         _pendingInformationRequestPrompt =
             _extractPendingRequestPrompt(_messages);
@@ -96,16 +140,36 @@ class _IncidentCommunicationScreenState
               const {},
         );
         _error = null;
+        _stale = false;
         _loading = false;
       });
       await _markOfficialMessagesRead(_messages);
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _error = "Unable to load communication thread.";
+        _stale = _messages.isNotEmpty || _offlineQueue.isNotEmpty;
         _loading = false;
       });
     }
+  }
+
+  List<IncidentThreadMessage> get _filteredMessages {
+    Iterable<IncidentThreadMessage> rows = _messages;
+    switch (_tab) {
+      case CommunicationThreadTab.all:
+        break;
+      case CommunicationThreadTab.mine:
+        rows = rows.where((m) => m.senderRole == "Reporter");
+      case CommunicationThreadTab.responders:
+        rows = rows.where(
+          (m) =>
+              m.senderRole == "Agency" ||
+              m.senderRole == "Dispatcher" ||
+              m.senderRole == "Responder",
+        );
+    }
+    return rows.toList(growable: false);
   }
 
   Future<void> _sendText() async {
@@ -133,11 +197,15 @@ class _IncidentCommunicationScreenState
           createdAt: DateTime.now().toUtc(),
         ),
       );
+      _composerController.clear();
+      await _refresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content:
-                  Text("Message queued offline and will retry automatically.")),
+            content: Text(
+              "Message queued offline and will retry automatically.",
+            ),
+          ),
         );
       }
     } finally {
@@ -164,7 +232,9 @@ class _IncidentCommunicationScreenState
   }
 
   Future<void> _sendMediaMessage(
-      String messageType, LocalEvidenceAttachment attachment) async {
+    String messageType,
+    LocalEvidenceAttachment attachment,
+  ) async {
     if (widget.readOnly) return;
     setState(() => _sending = true);
     final clientMessageId = const Uuid().v4();
@@ -206,11 +276,14 @@ class _IncidentCommunicationScreenState
               : {"requestId": _pendingInformationRequestId},
         ),
       );
+      await _refresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content:
-                  Text("Media queued offline and will retry automatically.")),
+            content: Text(
+              "Media queued offline and will retry automatically.",
+            ),
+          ),
         );
       }
     } finally {
@@ -234,6 +307,10 @@ class _IncidentCommunicationScreenState
     final recording = await showModalBottomSheet<VoiceRecordingResult>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: EyeSemanticColors.of(context).cardSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -245,6 +322,56 @@ class _IncidentCommunicationScreenState
     );
     if (recording == null) return;
     await _sendMediaMessage("Voice", recording.attachment);
+  }
+
+  Future<void> _showAttachSheet() async {
+    if (widget.readOnly) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: EyeSemanticColors.of(context).cardSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_actions.sendPhoto)
+                  ListTile(
+                    leading: const Icon(Icons.photo_camera_outlined),
+                    title: const Text("Photo"),
+                    onTap: () {
+                      Navigator.pop(context);
+                      unawaited(_pickPhoto());
+                    },
+                  ),
+                if (_actions.sendVoice)
+                  ListTile(
+                    leading: const Icon(Icons.mic_none),
+                    title: const Text("Voice message"),
+                    onTap: () {
+                      Navigator.pop(context);
+                      unawaited(_recordVoice());
+                    },
+                  ),
+                if (_actions.sendLocation)
+                  ListTile(
+                    leading: const Icon(Icons.my_location),
+                    title: const Text("Share location"),
+                    onTap: () {
+                      Navigator.pop(context);
+                      unawaited(_sendLocationUpdate());
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _sendLocationUpdate() async {
@@ -274,7 +401,8 @@ class _IncidentCommunicationScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text("Unable to share location. Please try again.")),
+            content: Text("Unable to share location. Please try again."),
+          ),
         );
       }
     } finally {
@@ -283,68 +411,87 @@ class _IncidentCommunicationScreenState
   }
 
   Future<void> _markOfficialMessagesRead(
-      List<IncidentThreadMessage> messages) async {
+    List<IncidentThreadMessage> messages,
+  ) async {
     for (final message in messages) {
       if (message.senderRole == "Reporter") continue;
       if (message.deliveryState == "Read") continue;
       try {
         await _service.markRead(
-            widget.incidentId, message.id, widget.accessToken);
+          widget.incidentId,
+          message.id,
+          widget.accessToken,
+        );
       } catch (_) {
         // Non-fatal; unread badge may lag until next refresh.
       }
     }
   }
 
-  Future<void> _sendQuickReply(String action) async {
-    if (!_actions.quickReply || widget.readOnly) return;
-    setState(() => _sending = true);
-    final clientMessageId = const Uuid().v4();
+  Future<void> _submitReporterStatus(String status) async {
     try {
-      await _service.sendMessage(
-        incidentId: widget.incidentId,
-        accessToken: widget.accessToken,
-        clientMessageId: clientMessageId,
-        messageType: "QuickReply",
-        structuredAction: {
-          "action": action,
-          if (_pendingInformationRequestId != null)
-            "requestId": _pendingInformationRequestId,
-        },
+      await _activeEmergencyService.submitReporterStatus(
+        widget.incidentId,
+        widget.accessToken,
+        status: status,
+        clientActionId:
+            "comm-${status.toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}",
       );
-      await _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Status update sent.")),
+        );
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text("Unable to send quick reply. Please try again.")),
+            content: Text("Unable to update status. Please try again."),
+          ),
         );
       }
-    } finally {
-      if (mounted) setState(() => _sending = false);
     }
+  }
+
+  void _onPlayVoice(IncidentThreadMessage message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Voice playback opens when a secure media link is available.",
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
     final readOnly = widget.readOnly ||
         _conversationStatus == "Closed" ||
         _conversationStatus == "Archived" ||
         !_actions.openThread;
+    final showStatus =
+        !readOnly && (widget.confirmStillOngoing || widget.confirmResolved);
+    final filtered = _filteredMessages;
+    final queuedForIncident = _offlineQueue;
+
     return Scaffold(
+      backgroundColor: colors.background,
       body: Column(
         children: [
-          EyePageHeader.secondary(
+          CommunicationHeader(
             title: "Communication",
+            subtitle: _subtitle,
             onBack: () => Navigator.of(context).maybePop(),
           ),
+          CommunicationLiveRail(reportedAt: widget.reportedAt),
           if (readOnly)
             Semantics(
               liveRegion: true,
               label:
                   "This incident has been resolved. The communication record is now read-only.",
               child: Material(
-                color: Theme.of(context).colorScheme.secondaryContainer,
+                color: colors.elevatedSurface,
                 child: const Padding(
                   padding: EdgeInsets.all(12),
                   child: Text(
@@ -354,212 +501,171 @@ class _IncidentCommunicationScreenState
               ),
             ),
           if (_pendingInformationRequestPrompt != null && !readOnly)
-            Semantics(
-              liveRegion: true,
-              label: "Information requested: $_pendingInformationRequestPrompt",
-              child: Material(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    "Information requested: $_pendingInformationRequestPrompt",
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+            Material(
+              color: colors.error.withValues(alpha: 0.12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  "Information requested: $_pendingInformationRequestPrompt",
+                  style: TextStyle(color: colors.bodyText, fontSize: 13),
+                ),
+              ),
+            ),
+          if (_stale || (_error != null && filtered.isNotEmpty))
+            Material(
+              color: colors.warning.withValues(alpha: 0.12),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _stale
+                            ? "Showing cached messages. Information may be out of date."
+                            : (_error ?? ""),
+                        style: TextStyle(color: colors.bodyText, fontSize: 12),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => unawaited(_refresh()),
+                      child: const Text("Retry"),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (queuedForIncident.isNotEmpty)
+            Material(
+              color: colors.information.withValues(alpha: 0.12),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(
+                  "${queuedForIncident.length} message${queuedForIncident.length == 1 ? "" : "s"} waiting to send when you are back online.",
+                  style: TextStyle(color: colors.bodyText, fontSize: 12),
                 ),
               ),
             ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(child: Text(_error!))
-                    : _messages.isEmpty
-                        ? ListView(
-                            padding: const EdgeInsets.all(24),
-                            children: const [
+                : _error != null &&
+                        filtered.isEmpty &&
+                        queuedForIncident.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
                               Text(
-                                "No messages yet.\nIf responders need more information, their messages will appear here. You can also send an update about your emergency.",
+                                _error!,
                                 textAlign: TextAlign.center,
+                                style: TextStyle(color: colors.errorText),
+                              ),
+                              const SizedBox(height: 12),
+                              FilledButton(
+                                onPressed: () => unawaited(_refresh()),
+                                child: const Text("Retry"),
                               ),
                             ],
-                          )
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              final message = _messages[index];
-                              final isOfficial =
-                                  message.senderRole != "Reporter";
-                              final friendlyTime =
-                                  CitizenDateTimeFormatter.formatFriendly(
-                                message.createdAt,
-                              );
-                              return Semantics(
-                                label:
-                                    "${message.senderLabel}, ${message.messageType}, $friendlyTime",
-                                child: Align(
-                                  alignment: isOfficial
-                                      ? Alignment.centerLeft
-                                      : Alignment.centerRight,
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    padding: const EdgeInsets.all(12),
-                                    constraints:
-                                        const BoxConstraints(maxWidth: 320),
-                                    decoration: BoxDecoration(
-                                      color: isOfficial
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .surfaceContainerHighest
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .primaryContainer,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          message.senderLabel,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelLarge,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          friendlyTime,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(message.body),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          message.deliveryState ?? "Sent",
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
                           ),
+                        ),
+                      )
+                    : ListView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        children: [
+                          CommunicationTabs(
+                            value: _tab,
+                            onChanged: (tab) => setState(() => _tab = tab),
+                          ),
+                          const SizedBox(height: 12),
+                          if (filtered.isEmpty && queuedForIncident.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 28),
+                              child: Text(
+                                "No messages yet.\nIf responders need more information, their messages will appear here. You can also send an update about your emergency.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: colors.mutedText,
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
+                            )
+                          else ...[
+                            for (final message in filtered) ...[
+                              CommunicationMessageCard(
+                                message: message,
+                                onPlayVoice: message.messageType == "Voice"
+                                    ? () => _onPlayVoice(message)
+                                    : null,
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                            for (final queued in queuedForIncident) ...[
+                              CommunicationMessageCard(
+                                queued: true,
+                                message: IncidentThreadMessage(
+                                  id: queued.clientMessageId,
+                                  messageType: queued.messageType,
+                                  body: queued.body,
+                                  senderRole: "Reporter",
+                                  senderLabel: "You",
+                                  createdAt: queued.createdAt,
+                                  deliveryState: "Queued",
+                                  clientMessageId: queued.clientMessageId,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          ],
+                          if (showStatus) ...[
+                            const SizedBox(height: 4),
+                            EmergencyStatusUpdateCard(
+                              allowedActions: ActiveEmergencyAllowedActions(
+                                addEvidence: false,
+                                uploadPhoto: false,
+                                uploadVideo: false,
+                                uploadVoice: false,
+                                addUpdate: false,
+                                cancel: false,
+                                requestCancellation: false,
+                                confirmResolved: widget.confirmResolved,
+                                confirmStillOngoing: widget.confirmStillOngoing,
+                                addWrittenUpdate: false,
+                                updateLocation: false,
+                                retryLiveVideo: false,
+                              ),
+                              busy: _sending,
+                              onOngoing: () => unawaited(
+                                _submitReporterStatus("StillOngoing"),
+                              ),
+                              onResolved: () => unawaited(
+                                _submitReporterStatus("Resolved"),
+                              ),
+                              onUnsafe: () => unawaited(
+                                _submitReporterStatus("Unsure"),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
           ),
           if (!readOnly)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (_actions.sendPhoto)
-                        Semantics(
-                          button: true,
-                          label: "Send photo",
-                          child: OutlinedButton.icon(
-                            onPressed:
-                                _sending ? null : () => unawaited(_pickPhoto()),
-                            icon: const Icon(Icons.photo_camera_outlined),
-                            label: const Text("Photo"),
-                          ),
-                        ),
-                      if (_actions.sendVoice)
-                        Semantics(
-                          button: true,
-                          label: "Send voice message",
-                          child: OutlinedButton.icon(
-                            onPressed: _sending
-                                ? null
-                                : () => unawaited(_recordVoice()),
-                            icon: const Icon(Icons.mic_none),
-                            label: const Text("Voice"),
-                          ),
-                        ),
-                      if (_actions.sendLocation)
-                        Semantics(
-                          button: true,
-                          label: "Share current location",
-                          child: OutlinedButton.icon(
-                            onPressed: _sending
-                                ? null
-                                : () => unawaited(_sendLocationUpdate()),
-                            icon: const Icon(Icons.my_location),
-                            label: const Text("Location"),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final action in const [
-                        "yes",
-                        "no",
-                        "unsure",
-                        "still_ongoing",
-                        "situation_resolved",
-                        "unsafe_to_respond",
-                      ])
-                        Semantics(
-                          button: true,
-                          label: "Quick reply $action",
-                          child: OutlinedButton(
-                            onPressed:
-                                _sending ? null : () => _sendQuickReply(action),
-                            child: Text(action.replaceAll("_", " ")),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Semantics(
-                          textField: true,
-                          label: "Type a message to dispatch",
-                          child: TextField(
-                            controller: _composerController,
-                            minLines: 1,
-                            maxLines: 4,
-                            decoration: const InputDecoration(
-                              hintText: "Message dispatch or responders",
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Semantics(
-                        button: true,
-                        label: "Send message",
-                        child: FilledButton(
-                          onPressed:
-                              _sending || !_actions.sendText ? null : _sendText,
-                          child: _sending
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.send),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            CommunicationComposer(
+              controller: _composerController,
+              enabled: !readOnly,
+              sending: _sending,
+              canSendText: _actions.sendText,
+              canSendPhoto: _actions.sendPhoto,
+              canSendVoice: _actions.sendVoice,
+              onSend: () => unawaited(_sendText()),
+              onAttach: () => unawaited(_showAttachSheet()),
+              onPhoto: () => unawaited(_pickPhoto()),
+              onVoice: () => unawaited(_recordVoice()),
             ),
         ],
       ),

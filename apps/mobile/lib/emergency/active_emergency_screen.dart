@@ -5,7 +5,7 @@ import "package:flutter/material.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/components/eye_cancellation_reason_sheet.dart";
 import "../design_system/eye_semantic_colors.dart";
-import "../presentation/citizen_date_time.dart";
+import "../presentation/citizen_presentation.dart";
 import "active_emergency_contract.dart";
 import "active_emergency_errors.dart";
 import "active_emergency_evidence_actions.dart";
@@ -320,8 +320,25 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
   Future<void> _openCommunication() async {
     final active = _cachedActive;
     if (active == null) return;
+    final reference = resolveIncidentPublicReference(
+      incidentId: active.incidentId,
+      submittedAt: active.reportedAt,
+      apiPublicReference: active.publicReference,
+    );
+    final location = active.reportedLocation.address?.trim().isNotEmpty == true
+        ? active.reportedLocation.address!.trim()
+        : (active.reportedLocation.locationLabel?.trim().isNotEmpty == true
+            ? active.reportedLocation.locationLabel!.trim()
+            : null);
     await Navigator.of(context).pushNamed(
       "/active-emergency/${active.incidentId}/messages",
+      arguments: {
+        "publicReference": reference,
+        "locationLabel": location,
+        "reportedAt": active.reportedAt,
+        "confirmStillOngoing": active.allowedActions.confirmStillOngoing,
+        "confirmResolved": active.allowedActions.confirmResolved,
+      },
     );
     await _refresh();
   }

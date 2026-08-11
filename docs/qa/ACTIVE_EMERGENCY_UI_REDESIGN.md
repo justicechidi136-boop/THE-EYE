@@ -49,6 +49,17 @@ Communication is a **separate** push layer in the artifact; THE EYE keeps the ca
 4. **Live video preview** uses authoritative session chrome; camera surface remains LiveKit via `/live-video` (no second WebRTC stack).
 5. **Unsafe** UI label submits API status `Unsure`.
 
+## Communication layer (interactive artifact screen 2)
+
+Inspected interactively via local serving of `artifacts/active-emergency-ref.html`:
+- Hub **Communicate** opens the Communication layer (slide-over in mock; Flutter uses pushNamed Phase 6 route).
+- Back closes Communication and returns to Active Emergency.
+- Communication includes: circular back header + reference/location subtitle, live rail, All/Mine/Responders tabs, role-colored message cards (TEXT/PHOTO/VOICE), receipt labels, Your status segments, bottom composer (`+` / pill input with camera+mic / orange send).
+
+Presentation rebuilt in `IncidentCommunicationScreen` + `widgets/communication_*.dart` while preserving Phase 6 service, offline queue, mark-read, and allowedActions gating.
+
+Receipt copy uses server `deliveryState` → Sent / Delivered / Seen (does **not** invent “Seen by N” counts).
+
 ## Validation snapshot
 
 | Item | Result |

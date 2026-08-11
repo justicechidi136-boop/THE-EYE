@@ -206,6 +206,9 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
     final incidentId =
         name.substring("/incident-detail/".length, name.length - "/messages".length).trim();
     if (incidentId.isEmpty) return null;
+    final detailArgs = settings.arguments is Map
+        ? Map<String, dynamic>.from(settings.arguments as Map)
+        : const <String, dynamic>{};
     return MaterialPageRoute(
       settings: settings,
       builder: (context) {
@@ -215,6 +218,11 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
           accessToken: app.accessToken ?? "",
           apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
           readOnly: true,
+          publicReference: detailArgs["publicReference"]?.toString(),
+          locationLabel: detailArgs["locationLabel"]?.toString(),
+          reportedAt: detailArgs["reportedAt"] is DateTime
+              ? detailArgs["reportedAt"] as DateTime
+              : DateTime.tryParse(detailArgs["reportedAt"]?.toString() ?? ""),
         );
       },
     );
@@ -226,6 +234,9 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
       final incidentId =
           remainder.substring(0, remainder.length - "/messages".length).trim();
       if (incidentId.isEmpty) return null;
+      final messageArgs = settings.arguments is Map
+          ? Map<String, dynamic>.from(settings.arguments as Map)
+          : const <String, dynamic>{};
       return MaterialPageRoute(
         settings: settings,
         builder: (context) {
@@ -234,6 +245,13 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
             incidentId: incidentId,
             accessToken: app.accessToken ?? "",
             apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+            publicReference: messageArgs["publicReference"]?.toString(),
+            locationLabel: messageArgs["locationLabel"]?.toString(),
+            reportedAt: messageArgs["reportedAt"] is DateTime
+                ? messageArgs["reportedAt"] as DateTime
+                : DateTime.tryParse(messageArgs["reportedAt"]?.toString() ?? ""),
+            confirmStillOngoing: messageArgs["confirmStillOngoing"] == true,
+            confirmResolved: messageArgs["confirmResolved"] == true,
           );
         },
       );
