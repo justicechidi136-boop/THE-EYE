@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:convert";
 import "dart:io";
 
@@ -72,6 +73,7 @@ class AuthService {
   final TheEyeApiClient _apiClient;
   final AuthSessionStore _sessionStore;
   bool _otpRequestInFlight = false;
+  Completer<AuthSession?>? _refreshInFlight;
 
   Future<AuthRequestResult> login({
     required String identifier,
@@ -421,6 +423,66 @@ class AuthService {
     }
   }
 
+  /// Coalesces concurrent refresh requests into a single API call.
+  Future<AuthSession?> refreshSessionSingleFlight() async {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) {
+      return inFlight.future;
+    }
+
+    final completer = Completer<AuthSession?>();
+    _refreshInFlight = completer;
+    try {
+      final session = await _sessionStore.load();
+      if (session == null || session.refreshToken.isEmpty) {
+        completer.complete(null);
+        return null;
+      }
+
+      try {
+        final refreshed =
+            await _apiClient.refreshSession(refreshToken: session.refreshToken);
+        await _sessionStore.save(refreshed);
+        completer.complete(refreshed);
+        return refreshed;
+      } on AuthApiException catch (error) {
+        if (error.statusCode == 401) {
+          await _sessionStore.clear();
+          completer.complete(null);
+          return null;
+        }
+        completer.completeError(error);
+        rethrow;
+      }
+    } catch (error, stackTrace) {
+      if (!completer.isCompleted) {
+        completer.completeError(error, stackTrace);
+      }
+      rethrow;
+    } finally {
+      _refreshInFlight = null;
+    }
+  }
+
+  /// Runs [action] with the current access token; refreshes once on 401 and retries.
+  Future<T> withAuthorizedRetry<T>(
+    Future<T> Function(String accessToken) action,
+  ) async {
+    final session = await _sessionStore.load();
+    if (session == null || session.accessToken.isEmpty) {
+      throw AuthApiException(401, "Not authenticated");
+    }
+
+    try {
+      return await action(session.accessToken);
+    } on AuthApiException catch (error) {
+      if (error.statusCode != 401 || session.refreshToken.isEmpty) rethrow;
+      final refreshed = await refreshSessionSingleFlight();
+      if (refreshed == null) rethrow;
+      return action(refreshed.accessToken);
+    }
+  }
+
   Future<void> logout() async {
     final session = await _sessionStore.load();
     if (session != null && session.refreshToken.isNotEmpty) {
@@ -442,8 +504,8 @@ class AuthService {
       return (session: session, citizenProfile: profile);
     } on AuthApiException catch (error) {
       if (error.statusCode != 401 || session.refreshToken.isEmpty) rethrow;
-      final refreshed =
-          await _apiClient.refreshSession(refreshToken: session.refreshToken);
+      final refreshed = await refreshSessionSingleFlight();
+      if (refreshed == null) rethrow;
       final profile = await _apiClient.fetchCitizenProfile(
           accessToken: refreshed.accessToken);
       return (session: refreshed, citizenProfile: profile);
