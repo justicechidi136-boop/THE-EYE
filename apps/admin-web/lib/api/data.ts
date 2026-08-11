@@ -1184,13 +1184,15 @@ export async function cancelFieldDevicePairing(
 export async function fetchFieldPermissionProfiles(
   query: { isActive?: string; operationalRole?: string } = {},
 ): Promise<FieldPermissionProfileView[]> {
-  return withToken(async (token) => {
-    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/admin/field-permission-profiles", {
-      token,
-      query,
-    });
-    return response.data.map(toFieldPermissionProfileView);
-  }, []);
+  // Auth failures must surface — collapsing 401/403 to [] hid "Missing required permission"
+  // behind an empty profile picker in the pre-provision wizard.
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  const response = await apiRequest<{ data: Record<string, unknown>[] }>("/admin/field-permission-profiles", {
+    token,
+    query,
+  });
+  return response.data.map(toFieldPermissionProfileView);
 }
 
 export async function fetchFieldPermissionProfile(id: string): Promise<FieldPermissionProfileView | null> {
@@ -1267,13 +1269,13 @@ export async function fetchFieldPermissionEffectivePreview(query: {
   overrides?: string;
   denies?: string;
 }): Promise<FieldPermissionEffectivePreviewView | null> {
-  return withToken(async (token) => {
-    const response = await apiRequest<{ data: FieldPermissionEffectivePreviewView }>(
-      "/admin/field-permissions/effective-preview",
-      { token, query },
-    );
-    return response.data;
-  }, null);
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  const response = await apiRequest<{ data: FieldPermissionEffectivePreviewView }>(
+    "/admin/field-permissions/effective-preview",
+    { token, query },
+  );
+  return response.data;
 }
 
 export async function publishSmartwatchFirmware(input: {

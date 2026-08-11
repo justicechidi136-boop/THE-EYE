@@ -75,6 +75,7 @@ export function isFieldEligibleAdminRole(adminRoleName: string): boolean {
 
 export function canApproveFieldDevices(adminRoleName: string): boolean {
   return [
+    AdminRoleName.SuperAdmin,
     AdminRoleName.AgencyAdmin,
     AdminRoleName.StateAdmin,
     AdminRoleName.LgaAdmin,
