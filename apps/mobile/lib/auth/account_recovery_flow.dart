@@ -99,9 +99,14 @@ class _AccountRecoveryRequestScreenState
                     Icon(Icons.check_circle, color: semantics.success),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        "If an account matches that email, recovery instructions have been sent.",
-                        style: TextStyle(color: semantics.bodyText),
+                      child: Semantics(
+                        liveRegion: true,
+                        label:
+                            "If an account matches that information, recovery instructions have been sent.",
+                        child: Text(
+                          "If an account matches that information, recovery instructions have been sent.",
+                          style: TextStyle(color: semantics.bodyText),
+                        ),
                       ),
                     ),
                   ],
