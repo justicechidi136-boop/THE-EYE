@@ -262,6 +262,10 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
     final session = BroadcastSession.require(context);
     if (!session.isAuthenticated || session.accessToken == null) {
       if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = "We couldn’t load this broadcast. Try again.";
+      });
       Navigator.of(context).pushReplacementNamed("/login");
       return;
     }
@@ -274,28 +278,38 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
       );
-      final mine = await session.broadcastFeedService.listMine(
-        accessToken: session.accessToken!,
-      );
-      await session.markBroadcastRead(widget.broadcastId);
+      try {
+        await session.markBroadcastRead(widget.broadcastId);
+      } catch (_) {
+        // Non-blocking: detail should still render if read receipt fails.
+      }
       if (!mounted) return;
+      final profileId = session.cachedCitizenProfile?.id;
       setState(() {
         _item = item;
-        _isOwner = mine.any((entry) => entry.id == widget.broadcastId);
+        _isOwner = profileId != null &&
+            profileId.isNotEmpty &&
+            item.creatorUserId == profileId;
         _loading = false;
       });
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.userMessage;
+        _error = error.statusCode == 404
+            ? "This broadcast is unavailable."
+            : "We couldn’t load this broadcast. Try again.";
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = "Unable to load broadcast detail.";
+        _error = "We couldn’t load this broadcast. Try again.";
         _loading = false;
       });
+    } finally {
+      if (mounted && _loading) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -513,6 +527,83 @@ class _BroadcastDetailBody extends StatelessWidget {
     return text.isEmpty ? null : text;
   }
 
+  List<Map<String, dynamic>> get _attachments {
+    final raw = item?.metadata["attachments"];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList(growable: false);
+  }
+
+  List<Widget> _buildEvidenceWidgets(BuildContext context, Color muted) {
+    final attachments = _attachments;
+    if (attachments.isEmpty) {
+      return [
+        Text(
+          "Broadcast evidence will appear here when media is attached.",
+          style: TextStyle(color: muted),
+        ),
+      ];
+    }
+    final widgets = <Widget>[];
+    for (final attachment in attachments) {
+      final label = (attachment["label"] as String?)?.trim().isNotEmpty == true
+          ? attachment["label"] as String
+          : "Attachment";
+      final mediaType = (attachment["mediaType"] as String?) ?? "";
+      final url = (attachment["url"] as String?) ?? "";
+      widgets.add(const SizedBox(height: 8));
+      if (mediaType == "image" && url.isNotEmpty) {
+        widgets.add(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  url,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Text(
+                    "$label could not be loaded.",
+                    style: TextStyle(color: muted),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        widgets.add(
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              mediaType == "audio"
+                  ? Icons.audiotrack
+                  : mediaType == "video"
+                      ? Icons.videocam
+                      : Icons.attach_file,
+            ),
+            title: Text(label),
+            subtitle: Text(
+              url.isEmpty
+                  ? "Media is attached and available after refresh."
+                  : mediaType == "audio"
+                      ? "Audio attachment"
+                      : "Video attachment",
+              style: TextStyle(color: muted),
+            ),
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+
   @override
   Widget build(BuildContext context) {
     final muted = BrandColors.lightTextMuted;
@@ -530,6 +621,14 @@ class _BroadcastDetailBody extends StatelessWidget {
     final isMissingPerson =
         (item?.type.toLowerCase().contains("missing") ?? false) ||
             fullName != null;
+    Map<String, dynamic>? primaryPhoto;
+    for (final attachment in _attachments) {
+      if (attachment["mediaType"] == "image") {
+        primaryPhoto = attachment;
+        break;
+      }
+    }
+    final primaryPhotoUrl = primaryPhoto?["url"] as String?;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -593,19 +692,42 @@ class _BroadcastDetailBody extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: EyeSemanticColors.of(context).border),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.person_search,
-                      size: 56,
-                      color: EyeSemanticColors.of(context).interactiveText),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Main photograph unavailable",
-                    style: TextStyle(color: muted),
-                  ),
-                ],
-              ),
+              clipBehavior: Clip.antiAlias,
+              child: primaryPhotoUrl != null && primaryPhotoUrl.isNotEmpty
+                  ? Image.network(
+                      primaryPhotoUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (_, __, ___) => Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.person_search,
+                              size: 56,
+                              color: EyeSemanticColors.of(context)
+                                  .interactiveText),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Main photograph unavailable",
+                            style: TextStyle(color: muted),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.person_search,
+                            size: 56,
+                            color:
+                                EyeSemanticColors.of(context).interactiveText),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Main photograph unavailable",
+                          style: TextStyle(color: muted),
+                        ),
+                      ],
+                    ),
             ),
           ),
           const SizedBox(height: 16),
@@ -636,11 +758,6 @@ class _BroadcastDetailBody extends StatelessWidget {
               "${CitizenDateTimeFormatter.formatDate(lastSeenAt)} · ${CitizenDateTimeFormatter.formatTime(lastSeenAt)}",
             ),
           if (lastSeenAddress != null) Text(lastSeenAddress),
-          const SizedBox(height: 8),
-          Text(
-            "Status: ${BroadcastExpiryPresenter.present(backendStatus: item?.status, expiresAt: item?.expiresAt).statusLabel}",
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
           if (physical != null) ...[
             const SizedBox(height: 12),
             Text("Physical description",
@@ -660,10 +777,7 @@ class _BroadcastDetailBody extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           Text("Evidence", style: Theme.of(context).textTheme.titleSmall),
-          Text(
-            "Broadcast evidence will appear here when media is attached.",
-            style: TextStyle(color: muted),
-          ),
+          ..._buildEvidenceWidgets(context, muted),
           if ((item?.commentsCount ?? 0) > 0) ...[
             const SizedBox(height: 12),
             Text(

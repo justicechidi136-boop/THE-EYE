@@ -33,6 +33,17 @@ export class BroadcastsController {
     return this.broadcastCitizen.listMine(request.user, status);
   }
 
+  @Post("media/presign")
+  @RateLimit("broadcastCreate")
+  @RequirePermissions("incident:create")
+  presignMedia(
+    @Body()
+    dto: { fileName?: string; contentType?: string; mediaType?: string; sizeBytes?: number },
+    @Req() request: any,
+  ) {
+    return this.broadcastCitizen.presignMedia(request.user, dto);
+  }
+
   @Post("missing-person")
   @RateLimit("broadcastCreate")
   @RequirePermissions("incident:create")

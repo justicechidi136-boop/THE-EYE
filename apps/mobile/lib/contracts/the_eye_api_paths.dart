@@ -94,6 +94,7 @@ abstract final class TheEyeApiPaths {
       "/notifications/$notificationId/read";
   static const broadcastsNearby = "/broadcasts/nearby";
   static const broadcastsMine = "/broadcasts/mine";
+  static const broadcastMediaPresign = "/broadcasts/media/presign";
   static const broadcastMissingPerson = "/broadcasts/missing-person";
   static const broadcastStolenVehicle = "/broadcasts/stolen-vehicle";
   static const policeStations = "/police-stations";

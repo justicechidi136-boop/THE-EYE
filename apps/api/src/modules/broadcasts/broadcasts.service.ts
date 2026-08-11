@@ -10,6 +10,7 @@ import {
   resolvePageLimit,
   type CursorPageQuery,
 } from "../../common/pagination/cursor-pagination";
+import { createS3PresignedGetUrl } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -908,6 +909,7 @@ export class BroadcastsService {
         : adminVerified
           ? "Verified by Admin"
           : "Admin Broadcast";
+    const metadata = this.projectCitizenMetadata(row.metadata);
     return {
       id: String(row.id),
       type: String(row.type),
@@ -921,6 +923,7 @@ export class BroadcastsService {
       state: row.state ? String(row.state) : null,
       authorLabel,
       adminVerified,
+      creatorUserId: row.creator_user_id ? String(row.creator_user_id) : null,
       commentsCount: row.comments_count != null ? Number(row.comments_count) : 0,
       publishedAt: publishedAt?.toISOString() ?? null,
       expiresAt: expiresAt?.toISOString() ?? null,
@@ -928,13 +931,84 @@ export class BroadcastsService {
       read: row.read === true || row.read === "t",
       distanceMeters: row.distance_meters != null ? Number(row.distance_meters) : null,
       deepLink: `/broadcasts/${String(row.id)}`,
+      metadata,
     };
+  }
+
+  private projectCitizenMetadata(raw: unknown): Record<string, unknown> {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const source = raw as Record<string, unknown>;
+    const allowedKeys = [
+      "fullName",
+      "ageOrApproximateAge",
+      "gender",
+      "lastSeenAt",
+      "lastSeenAddress",
+      "clothingDescription",
+      "physicalDescription",
+      "additionalDescription",
+      "vehicleType",
+      "make",
+      "model",
+      "colour",
+      "registrationMasked",
+      "stolenAt",
+      "distinguishingFeatures",
+      "lastKnownLocation",
+    ] as const;
+    const projected: Record<string, unknown> = {};
+    for (const key of allowedKeys) {
+      if (source[key] != null && source[key] !== "") projected[key] = source[key];
+    }
+    const attachmentsRaw = source.attachments;
+    if (Array.isArray(attachmentsRaw)) {
+      const attachments: Array<Record<string, string>> = [];
+      let photoCount = 0;
+      let videoCount = 0;
+      let audioCount = 0;
+      for (const item of attachmentsRaw) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as Record<string, unknown>;
+        const mediaType = String(row.mediaType ?? "").toLowerCase();
+        const objectKey = String(row.objectKey ?? "");
+        if (!objectKey || !["image", "video", "audio"].includes(mediaType)) continue;
+        let label = String(row.label ?? "").trim();
+        if (!label) {
+          if (mediaType === "image") {
+            photoCount += 1;
+            label = `Photo ${photoCount}`;
+          } else if (mediaType === "video") {
+            videoCount += 1;
+            label = `Video ${videoCount}`;
+          } else {
+            audioCount += 1;
+            label = `Audio ${audioCount}`;
+          }
+        }
+        let url = "";
+        try {
+          url = createS3PresignedGetUrl(objectKey, 600);
+        } catch {
+          url = "";
+        }
+        attachments.push({
+          mediaType,
+          objectKey,
+          bucket: String(row.bucket ?? ""),
+          contentType: String(row.contentType ?? ""),
+          label,
+          url,
+        });
+      }
+      if (attachments.length > 0) projected.attachments = attachments;
+    }
+    return projected;
   }
 
   private async findCitizenBroadcastRow(id: string, userId: string) {
     const rows = await this.prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT b.id, b.type, b.title, b.body, b.priority, b.status, b.author_type, b.admin_verified,
-              b.country, b.state, b.published_at, b.expires_at,
+              b.country, b.state, b.published_at, b.expires_at, b.metadata, b.creator_user_id,
               (SELECT COUNT(*)::int FROM broadcast_comments bc WHERE bc.broadcast_id = b.id AND bc.hidden_at IS NULL) AS comments_count,
               CASE
                 WHEN EXISTS (SELECT 1 FROM broadcast_reads br WHERE br.broadcast_id = b.id AND br.user_id = $2::uuid) THEN TRUE
@@ -952,7 +1026,8 @@ export class BroadcastsService {
           AND b.deleted_at IS NULL
           AND (b.expires_at IS NULL OR b.expires_at > NOW())
           AND (
-            EXISTS (SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $2::uuid)
+            b.creator_user_id = $2::uuid
+            OR EXISTS (SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $2::uuid)
             OR (
               p.user_id IS NOT NULL
               AND b.country IS NOT NULL
