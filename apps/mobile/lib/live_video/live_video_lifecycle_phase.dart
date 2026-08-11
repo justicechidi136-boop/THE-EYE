@@ -30,6 +30,7 @@ extension LiveVideoLifecyclePhaseRules on LiveVideoLifecyclePhase {
 
   bool get allowsStart =>
       this == LiveVideoLifecyclePhase.idle ||
+      this == LiveVideoLifecyclePhase.preparing ||
       this == LiveVideoLifecyclePhase.stopped ||
       isTerminalFailure;
 

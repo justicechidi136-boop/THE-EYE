@@ -80,9 +80,7 @@ void main() {
     test(
         "preview does not abort solely because preparing disallows start",
         () async {
-      // Regression: startLocalPreview used to transition to preparing, then
-      // return false because preparing.allowsStart is false — blocking SOS video.
-      expect(LiveVideoLifecyclePhase.preparing.allowsStart, isFalse);
+      expect(LiveVideoLifecyclePhase.preparing.allowsStart, isTrue);
 
       final controller = LiveVideoSessionController(
         permissionService: EvidencePermissionService(

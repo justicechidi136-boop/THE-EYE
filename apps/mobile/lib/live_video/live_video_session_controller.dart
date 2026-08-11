@@ -60,6 +60,19 @@ class LiveVideoSessionController extends ChangeNotifier {
   bool get canStartSession => _lifecycle.phase.allowsStart && !_disposing;
   bool get canStopSession => _lifecycle.phase.allowsStop && !_disposing;
 
+  /// User-facing hint when [canStartSession] is false during preview or connect.
+  String? get startUnavailableReason {
+    switch (_lifecycle.phase) {
+      case LiveVideoLifecyclePhase.preparing:
+        return "Preparing camera...";
+      case LiveVideoLifecyclePhase.connecting:
+      case LiveVideoLifecyclePhase.publishing:
+        return "Starting live video...";
+      default:
+        return null;
+    }
+  }
+
   /// Test-only hooks for lifecycle verification without WebRTC hardware.
   @visibleForTesting
   void debugForceLifecycle(LiveVideoLifecyclePhase phase) {
@@ -229,7 +242,6 @@ class LiveVideoSessionController extends ChangeNotifier {
       );
 
       final permissions = await ensurePermissions();
-      // preparing is mid-flight: do not use allowsStart (it is false while preparing).
       if (_disposing ||
           _lifecycle.phase == LiveVideoLifecyclePhase.stopping) {
         return false;
