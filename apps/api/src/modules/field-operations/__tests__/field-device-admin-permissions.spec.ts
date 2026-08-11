@@ -11,13 +11,15 @@ describe("field device admin permission matrix", () => {
     AdminRoleName.StateAdmin,
     AdminRoleName.LgaAdmin,
     AdminRoleName.AgencyAdmin,
-  ] as const;
+  ];
 
-  it.each(supervisorRoles)("%s can approve field devices and holds manage/approve permissions", (role) => {
-    expect(canApproveFieldDevices(role)).toBe(true);
-    const permissions = adminRolePermissions[role];
-    expect(permissions).toContain("field:device:manage");
-    expect(permissions).toContain("field:device:approve");
+  it("supervisor roles can approve field devices and hold manage/approve permissions", () => {
+    for (const role of supervisorRoles) {
+      expect(canApproveFieldDevices(role)).toBe(true);
+      const permissions = adminRolePermissions[role];
+      expect(permissions).toContain("field:device:manage");
+      expect(permissions).toContain("field:device:approve");
+    }
   });
 
   it("does not grant field device manage to Police/Security Officer", () => {
