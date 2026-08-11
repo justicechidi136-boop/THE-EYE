@@ -118,7 +118,7 @@
 | MOB-AUTH-004 | Auth | OTP verification | Citizen | Mobile | `/otp-verification` | Y | Y | `POST /v1/auth/phone/verify-otp` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P0 | Y | Depends on MOB-AUTH-003 OTP delivery webhook | `auth-delivery.service.ts` | Y | Unit tests cover API error mapping |
 | MOB-AUTH-005 | Auth | Google sign-in | Citizen | Mobile | `/login` | Y | Y | `POST /v1/auth/firebase/exchange` | Y | Y | Y | Y | Y | Y | N | Y | N | **BLOCKED** | P0 | Y | Requires Firebase + reachable API; lifecycle edge cases | `auth.service.ts` | Y | Hardcoded Lagos/Ikeja profile defaults removed |
 | MOB-AUTH-006 | Auth | Apple sign-in | Citizen | Mobile | `/login` | Y | Y | `POST /v1/auth/firebase/exchange` | Y | Y | Y | Y | Y | Y | N | N | N | **BLOCKED** | P1 | Y | Platform availability + Firebase + backend | — | Y | Gated by `SocialAuthService.isAppleSignInSupported` |
-| MOB-AUTH-007 | Auth | Password reset | Citizen | Mobile | `/login` | Y | Y | `POST /v1/auth/password-reset/request` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P0 | Y | `AUTH_PASSWORD_RESET_WEBHOOK_URL` must be set on staging | `auth-delivery.service.ts`, `auth.service.ts` | Y | TODO removed; webhook dispatch implemented |
+| MOB-AUTH-007 | Auth | Password reset | Citizen | Mobile + Admin-web | `/login`, `/reset-password` | Y | Y | `POST /v1/auth/password-reset/request\|confirm` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P0 | Y | AUTH-001/005: code URL contract + confirmation UX fixed; staging TLS E2E pending (no 526) | `auth-recovery-urls.ts`, `auth-delivery.service.ts`, `main.dart`, admin-web `/reset-password` | Y | Anti-enumeration confirmation; centralized HTTPS host; DevOps TLS gate |
 | MOB-AUTH-008 | Auth | Logout | Citizen | Mobile | Profile / Settings | Y | Y | `POST /v1/auth/logout` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P0 | Y | Staging device verify revoke + local clear | `auth_service.dart`, `main.dart` | Y | Calls API logout then clears local session |
 | MOB-AUTH-009 | Auth | Token refresh | Citizen | Mobile | Background | Y | Y | `POST /v1/auth/refresh` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P0 | Y | Refresh on session restore only; no proactive background refresh | `the_eye_api_client.dart`, `auth_service.dart` | Y | `auth_session_restore_test.dart` covers 401→refresh |
 | MOB-AUTH-010 | Auth | Session restoration | Citizen | Mobile | `/` splash | Y | Y | `GET /v1/users/me`, `POST /v1/auth/refresh` | Y | Y | Y | Y | Y | Y | Y | N | N | **PARTIAL** | P0 | Y | Staging cold-start device test pending | `main.dart`, `auth_service.dart` | Y | Splash validates persisted session; routes home/profile/login |
@@ -808,7 +808,10 @@
 | ID | Feature | Status | Root cause |
 |----|---------|--------|------------|
 | MOB-AUTH-003/004 | Phone OTP | PARTIAL | Configure `AUTH_PHONE_OTP_WEBHOOK_URL` on staging |
-| MOB-AUTH-007 | Password reset | PARTIAL | Configure `AUTH_PASSWORD_RESET_WEBHOOK_URL` on staging |
+| MOB-AUTH-007 | Password reset | PARTIAL | AUTH-001/005 code fixed; configure SMTP + approved link bases; DevOps clear Cloudflare 526 on dashboard host |
+| AUTH-001 | Reset link HTTPS page | STAGING TLS PENDING | Must not PASS while Cloudflare 526 |
+| AUTH-005 | Forgot-password confirmation | CODE FIXED | Device QA after APK/deploy |
+| AUTH-006 | Recovery link HTTPS page | STAGING TLS PENDING | Must not PASS while Cloudflare 526 |
 | MOB-AUTH-010 | Session restoration | PARTIAL | Staging cold-start device QA pending |
 | MOB-PROF-009/010 | Profile completion | NOT TESTED | Staging device QA pending |
 | MOB-PROF-004, API-PROF-004 | Emergency contacts | NOT TESTED | Staging device QA pending |
