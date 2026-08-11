@@ -48,3 +48,18 @@ Communication is a **separate** push layer in the artifact; THE EYE keeps the ca
 3. **Communication content** stays on Phase 6 screen (artifact screen 2), not duplicated with fake messages on the hub.
 4. **Live video preview** uses authoritative session chrome; camera surface remains LiveKit via `/live-video` (no second WebRTC stack).
 5. **Unsafe** UI label submits API status `Unsure`.
+
+## Validation snapshot
+
+| Item | Result |
+|---|---|
+| Branch | `feat/active-emergency-ui-redesign` |
+| Commit | `7d7ab9c8` |
+| PR | https://github.com/justicechidi136-boop/THE-EYE/pull/105 |
+| `flutter analyze` (redesign paths) | No issues found |
+| Full mobile `flutter test` | **354/354** passed |
+| Staging APK | `apps/mobile/build/app/outputs/flutter-apk/app-staging-debug.apk` |
+| Package | `com.theeye.app.staging` |
+| SHA-256 | `61AFED8683397E6D27AA2C5E83F3F03CE31F2C092D993DBE95FE7F5FE01530A9` |
+| Physical device visual QA | **PENDING** |
+| Final status | **ACTIVE EMERGENCY UI REDESIGN CODE COMPLETE — DEVICE QA PENDING** |
