@@ -4,6 +4,13 @@ import { formatCitizenEmailTimestamp } from "@the-eye/shared";
 import { SmtpEmailProvider } from "../../common/delivery/smtp-email.provider";
 import { TermiiSmsProvider } from "../../common/delivery/termii-sms.provider";
 import { maskEmail, maskPhone } from "../../common/delivery/safe-delivery-log";
+import {
+  AuthRecoveryUrlError,
+  authLinkHostname,
+  buildAuthActionLink,
+  resolveAccountRecoveryBaseUrl,
+  resolvePasswordResetBaseUrl,
+} from "./auth-recovery-urls";
 
 type AuthDeliveryPayload =
   | {
@@ -36,24 +43,48 @@ export class AuthDeliveryService {
 
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
     if (this.smtp.isConfigured()) {
-      const resetBase = this.config.get<string>("PASSWORD_RESET_LINK_BASE_URL")?.trim()
-        ?? this.config.get<string>("MOBILE_PASSWORD_RESET_URL")?.trim();
+      const resetBase = resolvePasswordResetBaseUrl({
+        PASSWORD_RESET_LINK_BASE_URL: this.config.get<string>("PASSWORD_RESET_LINK_BASE_URL"),
+        MOBILE_PASSWORD_RESET_URL: this.config.get<string>("MOBILE_PASSWORD_RESET_URL"),
+      });
       if (!resetBase) {
         throw new ServiceUnavailableException({
           message: "Password reset email is not configured for this environment.",
           code: "AUTH_PASSWORD_RESET_LINK_BASE_MISSING",
         });
       }
-      this.assertHttpsRecoveryBase(resetBase, "PASSWORD_RESET_LINK_BASE_URL");
-      const resetLink = `${resetBase}${resetBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+      let resetLink: string;
+      try {
+        resetLink = buildAuthActionLink(resetBase, token, "password_reset", process.env);
+      } catch (error) {
+        throw this.toDeliveryConfigException(error);
+      }
+      const host = authLinkHostname(resetBase);
       const result = await this.smtp.send({
         to: email,
         subject: "Reset your THE EYE password",
-        text: `Use this link to reset your password (valid for 30 minutes): ${resetLink}`,
-        html: `<p>Use this link to reset your password (valid for 30 minutes):</p><p><a href="${resetLink}">Reset password</a></p>`,
+        text: [
+          "THE EYE password reset",
+          "",
+          "We received a request to reset your password.",
+          "Open the secure link below. It expires in 30 minutes and can be used once.",
+          resetLink,
+          "",
+          "If you did not request this, you can ignore this email.",
+        ].join("\n"),
+        html: [
+          `<p><strong>THE EYE</strong></p>`,
+          `<p>We received a request to reset your password.</p>`,
+          `<p><a href="${resetLink}" style="display:inline-block;padding:12px 18px;background:#FF9933;color:#0B0F14;text-decoration:none;border-radius:8px;font-weight:700;">Reset password</a></p>`,
+          `<p>Or copy this link:<br/><a href="${resetLink}">${resetLink}</a></p>`,
+          `<p>This link expires in 30 minutes and can be used once.</p>`,
+          `<p>If you did not request this, you can ignore this email.</p>`,
+        ].join(""),
       });
       if (result.status === "ProviderAccepted") {
-        this.logger.log(`Password reset email accepted by SMTP for ${maskEmail(email)}`);
+        this.logger.log(
+          `Password reset email accepted by SMTP for ${maskEmail(email)} host=${host ?? "unknown"}`,
+        );
         return;
       }
       throw new ServiceUnavailableException({
@@ -70,9 +101,11 @@ export class AuthDeliveryService {
   }
 
   async sendAccountRecoveryEmail(email: string, token: string, expiresAt: Date): Promise<void> {
-    const recoveryBase = this.config.get<string>("ACCOUNT_RECOVERY_LINK_BASE_URL")?.trim()
-      ?? this.config.get<string>("MOBILE_ACCOUNT_RECOVERY_URL")?.trim()
-      ?? this.config.get<string>("AUTH_RECOVERY_DEEP_LINK_BASE")?.trim();
+    const recoveryBase = resolveAccountRecoveryBaseUrl({
+      ACCOUNT_RECOVERY_LINK_BASE_URL: this.config.get<string>("ACCOUNT_RECOVERY_LINK_BASE_URL"),
+      MOBILE_ACCOUNT_RECOVERY_URL: this.config.get<string>("MOBILE_ACCOUNT_RECOVERY_URL"),
+      AUTH_RECOVERY_DEEP_LINK_BASE: this.config.get<string>("AUTH_RECOVERY_DEEP_LINK_BASE"),
+    });
     const expiryText = formatCitizenEmailTimestamp(expiresAt);
     const requestedAt = formatCitizenEmailTimestamp(new Date());
     const fromName = this.config.get<string>("SMTP_FROM_NAME") ?? "THE EYE";
@@ -84,28 +117,38 @@ export class AuthDeliveryService {
           code: "AUTH_RECOVERY_LINK_BASE_MISSING",
         });
       }
-      this.assertHttpsRecoveryBase(recoveryBase, "ACCOUNT_RECOVERY_LINK_BASE_URL");
-      const recoveryLink = `${recoveryBase}${recoveryBase.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+      let recoveryLink: string;
+      try {
+        recoveryLink = buildAuthActionLink(recoveryBase, token, "account_recovery", process.env);
+      } catch (error) {
+        throw this.toDeliveryConfigException(error);
+      }
+      const host = authLinkHostname(recoveryBase);
       const result = await this.smtp.send({
         to: email,
         subject: "Recover your THE EYE account",
         text: [
-          `A recovery request was made for your ${fromName} account at ${requestedAt}.`,
+          `${fromName} account recovery`,
+          "",
+          `A recovery request was made for your account at ${requestedAt}.`,
           `Use this secure link before ${expiryText}:`,
           recoveryLink,
           "",
           "If you did not request this, secure your account immediately.",
         ].join("\n"),
         html: [
-          `<p>A recovery request was made for your ${fromName} account at ${requestedAt}.</p>`,
+          `<p><strong>${fromName}</strong></p>`,
+          `<p>A recovery request was made for your account at ${requestedAt}.</p>`,
           `<p><a href="${recoveryLink}" style="display:inline-block;padding:12px 18px;background:#FF9933;color:#0B0F14;text-decoration:none;border-radius:8px;font-weight:700;">Recover account</a></p>`,
-          `<p>Or copy this link: <a href="${recoveryLink}">${recoveryLink}</a></p>`,
+          `<p>Or copy this link:<br/><a href="${recoveryLink}">${recoveryLink}</a></p>`,
           `<p>This link expires at ${expiryText} and can be used once.</p>`,
           `<p>If you did not request this, secure your account immediately.</p>`,
         ].join(""),
       });
       if (result.status === "ProviderAccepted") {
-        this.logger.log(`Account recovery email accepted by SMTP for ${maskEmail(email)}`);
+        this.logger.log(
+          `Account recovery email accepted by SMTP for ${maskEmail(email)} host=${host ?? "unknown"}`,
+        );
         return;
       }
       throw new ServiceUnavailableException({
@@ -152,6 +195,16 @@ export class AuthDeliveryService {
     );
   }
 
+  private toDeliveryConfigException(error: unknown): ServiceUnavailableException {
+    if (error instanceof AuthRecoveryUrlError) {
+      return new ServiceUnavailableException({
+        message: "Password recovery links are misconfigured for this environment.",
+        code: error.code,
+      });
+    }
+    throw error;
+  }
+
   private async dispatchWebhook(
     webhookUrl: string | undefined,
     payload: AuthDeliveryPayload,
@@ -176,24 +229,6 @@ export class AuthDeliveryService {
     });
   }
 
-  private assertHttpsRecoveryBase(baseUrl: string, envKey: string) {
-    let parsed: URL;
-    try {
-      parsed = new URL(baseUrl);
-    } catch {
-      throw new ServiceUnavailableException({
-        message: `${envKey} must be a valid HTTPS URL.`,
-        code: "AUTH_RECOVERY_LINK_BASE_INVALID",
-      });
-    }
-    if (parsed.protocol !== "https:") {
-      throw new ServiceUnavailableException({
-        message: `${envKey} must use HTTPS.`,
-        code: "AUTH_RECOVERY_LINK_BASE_INSECURE",
-      });
-    }
-  }
-
   private assertSecureWebhookUrl(url: string) {
     let parsed: URL;
     try {
@@ -206,7 +241,11 @@ export class AuthDeliveryService {
     }
 
     const appEnv = this.config.get<string>("THE_EYE_APP_ENV") ?? process.env.NODE_ENV ?? "development";
-    const requiresHttps = appEnv === "staging" || appEnv === "production" || process.env.NODE_ENV === "staging" || process.env.NODE_ENV === "production";
+    const requiresHttps =
+      appEnv === "staging" ||
+      appEnv === "production" ||
+      process.env.NODE_ENV === "staging" ||
+      process.env.NODE_ENV === "production";
     if (requiresHttps && parsed.protocol !== "https:") {
       throw new ServiceUnavailableException({
         message: "Auth delivery webhook must use HTTPS in staging and production.",
