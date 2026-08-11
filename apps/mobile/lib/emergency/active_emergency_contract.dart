@@ -27,7 +27,8 @@ class ActiveEmergencyProgressStage {
   factory ActiveEmergencyProgressStage.fromJson(Map<String, dynamic> json) {
     final key = _requiredString(json, "key", field: "progressStages.key");
     final label = _requiredString(json, "label", field: "progressStages.label");
-    final stateRaw = _requiredString(json, "state", field: "progressStages.state");
+    final stateRaw =
+        _requiredString(json, "state", field: "progressStages.state");
     final state = switch (stateRaw) {
       "pending" => ActiveEmergencyProgressStageState.pending,
       "current" => ActiveEmergencyProgressStageState.current,
@@ -83,7 +84,8 @@ class ActiveEmergencyAllowedActions {
       uploadPhoto: _optionalBool(json, "uploadPhoto", addEvidence),
       uploadVideo: _optionalBool(json, "uploadVideo", addEvidence),
       uploadVoice: _optionalBool(json, "uploadVoice", addEvidence),
-      addUpdate: _optionalBool(json, "addUpdate", _optionalBool(json, "addWrittenUpdate", addEvidence)),
+      addUpdate: _optionalBool(json, "addUpdate",
+          _optionalBool(json, "addWrittenUpdate", addEvidence)),
       cancel: _requiredBool(json, "cancel"),
       requestCancellation: _requiredBool(json, "requestCancellation"),
       confirmResolved: _requiredBool(json, "confirmResolved"),
@@ -94,7 +96,8 @@ class ActiveEmergencyAllowedActions {
     );
   }
 
-  static ActiveEmergencyAllowedActions empty() => const ActiveEmergencyAllowedActions(
+  static ActiveEmergencyAllowedActions empty() =>
+      const ActiveEmergencyAllowedActions(
         addEvidence: false,
         uploadPhoto: false,
         uploadVideo: false,
@@ -140,7 +143,8 @@ class ActiveEmergencyLocation {
       address: json["address"]?.toString(),
       manualLocationAdjusted: json["manualLocationAdjusted"] == true,
       source: _requiredString(json, "source", field: "reportedLocation.source"),
-      quality: _requiredString(json, "quality", field: "reportedLocation.quality"),
+      quality:
+          _requiredString(json, "quality", field: "reportedLocation.quality"),
       liveLocationStale: json["liveLocationStale"] == true,
       liveLocationUpdatedAt: _optionalDateTime(json["liveLocationUpdatedAt"]),
       locationLabel: json["locationLabel"]?.toString(),
@@ -164,8 +168,10 @@ class ActiveEmergencyEvidenceItem {
   factory ActiveEmergencyEvidenceItem.fromJson(Map<String, dynamic> json) {
     return ActiveEmergencyEvidenceItem(
       id: _requiredString(json, "id", field: "evidenceItems.id"),
-      mediaType: _requiredString(json, "mediaType", field: "evidenceItems.mediaType"),
-      uploadedAt: _requiredDateTime(json["uploadedAt"], field: "evidenceItems.uploadedAt"),
+      mediaType:
+          _requiredString(json, "mediaType", field: "evidenceItems.mediaType"),
+      uploadedAt: _requiredDateTime(json["uploadedAt"],
+          field: "evidenceItems.uploadedAt"),
       durationSeconds: json["durationSeconds"] == null
           ? null
           : _requiredInt(json, "durationSeconds"),
@@ -212,9 +218,12 @@ class ActiveEmergencyTimelineEntry {
   factory ActiveEmergencyTimelineEntry.fromJson(Map<String, dynamic> json) {
     return ActiveEmergencyTimelineEntry(
       id: _requiredString(json, "id", field: "timelineSummary.id"),
-      eventType: _requiredString(json, "eventType", field: "timelineSummary.eventType"),
-      message: _requiredString(json, "message", field: "timelineSummary.message"),
-      createdAt: _requiredDateTime(json["createdAt"], field: "timelineSummary.createdAt"),
+      eventType: _requiredString(json, "eventType",
+          field: "timelineSummary.eventType"),
+      message:
+          _requiredString(json, "message", field: "timelineSummary.message"),
+      createdAt: _requiredDateTime(json["createdAt"],
+          field: "timelineSummary.createdAt"),
     );
   }
 }
@@ -274,7 +283,9 @@ class ActiveEmergencyLiveVideo {
     return ActiveEmergencyLiveVideo(
       sessionId: json["sessionId"]?.toString(),
       status: _requiredString(json, "status", field: "liveVideo.status"),
-      displayState: json["displayState"]?.toString() ?? json["status"]?.toString() ?? "NotStarted",
+      displayState: json["displayState"]?.toString() ??
+          json["status"]?.toString() ??
+          "NotStarted",
       startedAt: _optionalDateTime(json["startedAt"]),
       endedAt: _optionalDateTime(json["endedAt"]),
       durationSeconds: json["durationSeconds"] == null
@@ -302,7 +313,8 @@ class ActiveEmergencyCancellationSummary {
   final DateTime? requestedAt;
   final DateTime? cancelledAt;
 
-  factory ActiveEmergencyCancellationSummary.fromJson(Map<String, dynamic> json) {
+  factory ActiveEmergencyCancellationSummary.fromJson(
+      Map<String, dynamic> json) {
     return ActiveEmergencyCancellationSummary(
       status: _requiredString(json, "status"),
       reason: json["reason"]?.toString(),
@@ -459,7 +471,8 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
     final assignedAgency = json["assignedAgency"] as Map<String, dynamic>?;
     final assignmentJson = json["assignment"] as Map<String, dynamic>?;
     final liveVideoJson = json["liveVideo"] as Map<String, dynamic>?;
-    final community = json["communityVerificationSummary"] as Map<String, dynamic>?;
+    final community =
+        json["communityVerificationSummary"] as Map<String, dynamic>?;
     final cancellation = json["cancellationSummary"] as Map<String, dynamic>?;
     final resolution = json["resolutionSummary"] as Map<String, dynamic>?;
     final evidenceItemsRaw = json["evidenceItems"];
@@ -500,7 +513,8 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
           .whereType<Map<String, dynamic>>()
           .map(ActiveEmergencyTimelineEntry.fromJson)
           .toList(growable: false),
-      lastUpdatedAt: _requiredDateTime(json["lastUpdatedAt"], field: "lastUpdatedAt"),
+      lastUpdatedAt:
+          _requiredDateTime(json["lastUpdatedAt"], field: "lastUpdatedAt"),
       assignedAgencyName: assignedAgency?["name"]?.toString(),
       assignment: assignmentJson == null
           ? null
@@ -511,7 +525,8 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
       liveVideo: liveVideoJson == null
           ? null
           : ActiveEmergencyLiveVideo.fromJson(liveVideoJson),
-      witnessCount: community == null ? null : _requiredInt(community, "witnessCount"),
+      witnessCount:
+          community == null ? null : _requiredInt(community, "witnessCount"),
       latestConfidence: community?["latestConfidence"]?.toString(),
       witnessSummary: community?["witnessSummary"]?.toString(),
       cancellationSummary: cancellation == null

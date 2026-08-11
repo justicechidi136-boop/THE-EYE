@@ -14,7 +14,8 @@ class IncidentCommunicationService {
   final TheEyeApiClient _client;
   static const _queueKey = "incident_message_offline_queue";
 
-  Future<Map<String, dynamic>> fetchConversation(String incidentId, String accessToken) async {
+  Future<Map<String, dynamic>> fetchConversation(
+      String incidentId, String accessToken) async {
     final response = await _client.getJson(
       TheEyeApiPaths.incidentConversation(incidentId),
       accessToken: accessToken,
@@ -23,7 +24,8 @@ class IncidentCommunicationService {
     return (decoded["data"] as Map<String, dynamic>?) ?? {};
   }
 
-  Future<List<IncidentThreadMessage>> fetchMessages(String incidentId, String accessToken) async {
+  Future<List<IncidentThreadMessage>> fetchMessages(
+      String incidentId, String accessToken) async {
     final response = await _client.getJson(
       TheEyeApiPaths.incidentMessages(incidentId),
       accessToken: accessToken,
@@ -58,10 +60,12 @@ class IncidentCommunicationService {
       accessToken: accessToken,
     );
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    return IncidentThreadMessage.fromJson(decoded["data"] as Map<String, dynamic>);
+    return IncidentThreadMessage.fromJson(
+        decoded["data"] as Map<String, dynamic>);
   }
 
-  Future<void> markRead(String incidentId, String messageId, String accessToken) async {
+  Future<void> markRead(
+      String incidentId, String messageId, String accessToken) async {
     await _client.patchJson(
       TheEyeApiPaths.incidentMessageRead(incidentId, messageId),
       {},
@@ -91,7 +95,8 @@ class IncidentCommunicationService {
 
   Future<void> enqueueOffline(QueuedIncidentMessage message) async {
     final queue = await loadQueue();
-    if (queue.any((item) => item.clientMessageId == message.clientMessageId)) return;
+    if (queue.any((item) => item.clientMessageId == message.clientMessageId))
+      return;
     queue.add(message);
     await saveQueue(queue);
   }
@@ -116,7 +121,8 @@ class IncidentCommunicationService {
             continue;
           }
           item.state = QueuedMessageState.uploading;
-          final attachment = LocalEvidenceAttachment.fromJson(item.localAttachment!);
+          final attachment =
+              LocalEvidenceAttachment.fromJson(item.localAttachment!);
           final uploaded = await uploadService.uploadForIncident(
             incidentId: item.incidentId,
             attachments: [attachment],

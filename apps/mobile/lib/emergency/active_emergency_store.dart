@@ -85,7 +85,8 @@ class ActiveEmergencyStore {
 
   Future<void> saveReferences(List<ActiveIncidentReference> references) async {
     final prefs = await SharedPreferences.getInstance();
-    final payload = references.map((ref) => ref.toJson()).toList(growable: false);
+    final payload =
+        references.map((ref) => ref.toJson()).toList(growable: false);
     await prefs.setString(_referencesKey, jsonEncode(payload));
   }
 
@@ -96,8 +97,9 @@ class ActiveEmergencyStore {
     if (incidentId.isEmpty) return;
     final existing = await readReferences();
     final now = DateTime.now().toUtc();
-    final withoutDuplicate =
-        existing.where((ref) => ref.incidentId != incidentId).toList(growable: true);
+    final withoutDuplicate = existing
+        .where((ref) => ref.incidentId != incidentId)
+        .toList(growable: true);
     withoutDuplicate.insert(
       0,
       ActiveIncidentReference(
@@ -122,7 +124,9 @@ class ActiveEmergencyStore {
   Future<void> removeIncident(String incidentId) async {
     final existing = await readReferences();
     await saveReferences(
-      existing.where((ref) => ref.incidentId != incidentId).toList(growable: false),
+      existing
+          .where((ref) => ref.incidentId != incidentId)
+          .toList(growable: false),
     );
     final lastOpened = await readLastOpenedIncidentId();
     if (lastOpened == incidentId) {
@@ -214,7 +218,9 @@ class ActiveEmergencySnapshot {
         status: contract.status,
         title: contract.title,
         type: contract.category,
-        agencyName: contract.assignedAgencyName ?? contract.assignment?.agencyName ?? "",
+        agencyName: contract.assignedAgencyName ??
+            contract.assignment?.agencyName ??
+            "",
         timeline: contract.timelineSummary
             .map((entry) => {
                   "id": entry.id,

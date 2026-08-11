@@ -82,6 +82,11 @@ String citizenTimelineMessage({String? eventType, String? message}) {
     return "Update received";
   }
   if (raw.contains("LowConfidence")) return "Your report is being verified";
+  if (RegExp(r"verification confidence", caseSensitive: false).hasMatch(raw) ||
+      (RegExp(r"\b\d{1,3}%\b").hasMatch(raw) &&
+          raw.toLowerCase().contains("confidence"))) {
+    return "Your report is being verified";
+  }
   if (raw.contains("Automatic triage completed")) {
     return "Your report has been routed to the appropriate response team";
   }

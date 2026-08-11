@@ -14,13 +14,15 @@ class ActiveEmergencyService {
     ActiveEmergencyRefreshCoordinator? refreshCoordinator,
   })  : _apiClient = apiClient,
         _store = store ?? ActiveEmergencyStore(),
-        _refreshCoordinator = refreshCoordinator ?? ActiveEmergencyRefreshCoordinator();
+        _refreshCoordinator =
+            refreshCoordinator ?? ActiveEmergencyRefreshCoordinator();
 
   final TheEyeApiClient _apiClient;
   final ActiveEmergencyStore _store;
   final ActiveEmergencyRefreshCoordinator _refreshCoordinator;
 
-  ActiveEmergencyRefreshCoordinator get refreshCoordinator => _refreshCoordinator;
+  ActiveEmergencyRefreshCoordinator get refreshCoordinator =>
+      _refreshCoordinator;
 
   Future<List<ActiveIncidentReference>> listActiveReferences() =>
       _store.readReferences();
@@ -157,7 +159,8 @@ class ActiveEmergencyService {
         "Cancellation rejected (${response.statusCode})",
       );
     }
-    final contract = await fetchActiveEmergencyContract(incidentId, accessToken);
+    final contract =
+        await fetchActiveEmergencyContract(incidentId, accessToken);
     if (contract == null) {
       throw ActiveEmergencyContractException(
         ActiveEmergencyErrorCode.contractUnavailable,
@@ -189,7 +192,8 @@ class ActiveEmergencyService {
         "Cancellation request rejected (${response.statusCode})",
       );
     }
-    final contract = await fetchActiveEmergencyContract(incidentId, accessToken);
+    final contract =
+        await fetchActiveEmergencyContract(incidentId, accessToken);
     if (contract == null) {
       throw ActiveEmergencyContractException(
         ActiveEmergencyErrorCode.contractUnavailable,

@@ -1,0 +1,530 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Eye â€” Active Emergency Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#14171b;
+    --panel-2:#1a1e23;
+    --panel-3:#20252b;
+    --border:#242a31;
+    --text:#f3f5f6;
+    --muted:#8a929b;
+    --dim:#565d66;
+    --orange:#f5872e;
+    --orange-soft:rgba(245,135,46,.12);
+    --green:#34c77b;
+    --green-soft:rgba(52,199,123,.12);
+    --red:#e6483a;
+    --red-soft:rgba(230,72,58,.12);
+    --blue:#4a9dff;
+    --blue-soft:rgba(74,157,255,.12);
+    --mono:'IBM Plex Mono',monospace;
+    --head:'Manrope',sans-serif;
+    --body:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:#000;
+    font-family:var(--body);
+    color:var(--text);
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    gap:40px;
+    padding:40px 20px;
+    flex-wrap:wrap;
+  }
+
+  .device{
+    width:390px;
+    height:844px;
+    background:var(--bg);
+    border-radius:40px;
+    overflow:hidden;
+    box-shadow:0 40px 90px rgba(0,0,0,.65);
+    border:1px solid #1c1f24;
+    position:relative;
+  }
+  .stack{
+    position:relative;
+    width:100%;
+    height:100%;
+  }
+  .screen{
+    position:absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+    display:flex;
+    flex-direction:column;
+    background:var(--bg);
+    transition:transform .38s cubic-bezier(.32,.72,0,1);
+  }
+  #screen-hub{ transform:translateX(0); z-index:1; }
+  #screen-comm{ transform:translateX(100%); z-index:2; }
+  .device.comm-open #screen-comm{ transform:translateX(0); }
+  .device.comm-open #screen-hub{ transform:translateX(-16%); filter:brightness(.6); }
+
+  .statusbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:16px 24px 2px; font-size:13px; font-weight:600; flex:none;
+  }
+  .statusbar .icons{display:flex; gap:5px; align-items:center; color:#d8dbde;}
+
+  /* ---------- Live Status Rail (shared signature element) ---------- */
+  .rail-zone{padding:10px 16px 4px; flex:none;}
+  .rail{
+    display:flex; align-items:center; gap:10px;
+    background:linear-gradient(90deg, rgba(245,135,46,.14), rgba(245,135,46,.03));
+    border:1px solid rgba(245,135,46,.35);
+    border-radius:14px;
+    padding:10px 12px;
+  }
+  .rail .pulse{
+    width:9px;height:9px;border-radius:50%;background:var(--orange);flex:none;position:relative;
+  }
+  .rail .pulse::before{
+    content:''; position:absolute; inset:-6px; border-radius:50%;
+    border:1.5px solid var(--orange); opacity:.5;
+    animation:railpulse 1.8s ease-out infinite;
+  }
+  @keyframes railpulse{0%{transform:scale(.5);opacity:.6;}100%{transform:scale(1.6);opacity:0;}}
+  .rail .rail-text{font-size:12.5px; font-weight:700; color:var(--orange); flex:1;}
+  .rail .rail-sub{font-size:11px; color:var(--muted); font-weight:500; margin-top:1px;}
+  .rail .rail-time{font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:500;}
+
+  .topbar{
+    display:flex; align-items:center; gap:10px;
+    padding:14px 16px 4px; flex:none;
+  }
+  .icon-btn{
+    width:32px;height:32px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text); flex:none; background:var(--panel-2); border:1px solid var(--border);
+  }
+  .topbar h1{font-family:var(--head); font-size:18px; margin:0; font-weight:800; letter-spacing:-.01em;}
+  .topbar .sub{font-size:11.5px; color:var(--muted); margin-top:1px;}
+  .topbar .right{margin-left:auto; display:flex; gap:8px;}
+
+  .content{
+    padding:12px 16px 24px;
+    display:flex; flex-direction:column; gap:14px;
+    overflow-y:auto; flex:1;
+    scrollbar-width:none;
+  }
+  .content::-webkit-scrollbar{display:none;}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:16px;
+  }
+  .card-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+  .card-head h2{font-family:var(--head); font-size:14.5px; margin:0; font-weight:700;}
+  .link{color:var(--orange); font-size:12px; font-weight:700; text-decoration:none;}
+
+  /* Incident summary + radial confidence meter (secondary signature) */
+  .incident{display:flex; gap:14px; align-items:center;}
+  .meter{
+    --pct:27;
+    width:56px;height:56px;border-radius:50%;flex:none;
+    background:conic-gradient(var(--orange) calc(var(--pct)*1%), var(--panel-3) 0);
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+  }
+  .meter::before{content:''; position:absolute; inset:5px; border-radius:50%; background:var(--panel);}
+  .meter span{position:relative; font-family:var(--mono); font-size:12px; font-weight:600; color:var(--orange);}
+  .incident-body{flex:1;}
+  .incident-ref{font-family:var(--mono); font-size:16px; font-weight:600; letter-spacing:.02em;}
+  .incident-loc{font-size:12.5px; color:var(--muted); margin-top:4px; display:flex; align-items:center; gap:6px;}
+  .meter-label{font-size:10px; color:var(--muted); text-align:center; margin-top:4px;}
+
+  .divider{height:1px; background:var(--border); margin:14px 0;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .field .label{font-size:10.5px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; font-weight:600;}
+  .field .value{font-size:13px; font-weight:600; margin-top:3px;}
+  .field .value.mono{font-family:var(--mono); font-weight:500;}
+
+  /* Response progress */
+  .steps{display:flex; justify-content:space-between; position:relative; padding:4px 0 0;}
+  .steps .track{position:absolute; top:15px; left:14px; right:14px; height:2px; background:var(--border);}
+  .steps .track-fill{position:absolute; top:15px; left:14px; height:2px; width:20%; background:var(--orange);}
+  .step{display:flex; flex-direction:column; align-items:center; gap:6px; flex:1; position:relative; z-index:1;}
+  .step .node{width:16px;height:16px;border-radius:50%; background:var(--panel-3); border:2px solid var(--border);}
+  .step.done .node{background:var(--orange); border-color:var(--orange);}
+  .step.active .node{background:var(--bg); border-color:var(--orange); box-shadow:0 0 0 3px var(--orange-soft);}
+  .step .lbl{font-size:9.5px; color:var(--dim); font-weight:600; text-align:center; max-width:44px;}
+  .step.done .lbl, .step.active .lbl{color:var(--text);}
+  .progress-note{
+    margin-top:14px; font-size:12px; color:var(--muted);
+    background:var(--panel-2); border-radius:12px; padding:10px 12px;
+    display:flex; gap:8px;
+  }
+
+  /* video */
+  .video{position:relative; border-radius:14px; overflow:hidden; aspect-ratio:16/10; background:#1c2126;}
+  .video img{width:100%;height:100%;object-fit:cover;display:block;}
+  .live-chip{
+    position:absolute; top:10px; left:10px; background:var(--red); color:#fff;
+    font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px;
+    display:flex; align-items:center; gap:4px;
+  }
+  .live-chip .d{width:5px;height:5px;border-radius:50%;background:#fff;}
+  .btn-row{display:flex; gap:10px; margin-top:12px;}
+  .btn{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+    padding:11px 0; border-radius:11px; font-size:12.5px; font-weight:700;
+    border:1px solid var(--border); background:var(--panel-2); color:var(--text);
+  }
+  .btn.danger{background:var(--red-soft); border-color:rgba(230,72,58,.4); color:var(--red);}
+
+  /* quick action grid */
+  .qa-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+  .qa{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:14px;
+    padding:12px 6px; display:flex; flex-direction:column; align-items:center; gap:7px;
+    font-size:10.5px; font-weight:700; text-align:center;
+  }
+  .qa .ic{width:34px;height:34px;border-radius:9px; display:flex; align-items:center; justify-content:center;}
+  .qa.primary{background:var(--orange-soft); border-color:rgba(245,135,46,.4);}
+  .qa.primary .ic{background:var(--orange); color:#1a1206;}
+  .qa .ic.purple{background:#241a3a; color:#a78bfa;}
+  .qa .ic.blue{background:var(--blue-soft); color:var(--blue);}
+  .qa .ic.orange{background:var(--orange-soft); color:var(--orange);}
+
+  /* status segmented control (shared component) */
+  .status-seg{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .seg{
+    border:1.5px solid var(--border); border-radius:13px; padding:12px 6px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center;
+  }
+  .seg .ic{width:26px;height:26px;border-radius:50%; display:flex; align-items:center; justify-content:center;}
+  .seg.sel{border-color:var(--orange); background:var(--orange-soft);}
+  .seg.sel .ic{background:var(--orange); color:#1a1206;}
+  .seg.green .ic{background:var(--green-soft); color:var(--green);}
+  .seg.red .ic{background:var(--red-soft); color:var(--red);}
+  .seg .t1{font-size:11.5px; font-weight:700;}
+  .seg .t2{font-size:9px; color:var(--dim); line-height:1.25;}
+
+  .evidence-row{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .ev{aspect-ratio:1/1; border-radius:10px; overflow:hidden; background:var(--panel-2); position:relative;}
+  .ev img{width:100%;height:100%;object-fit:cover;}
+  .ev.add{border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; color:var(--dim);}
+
+  .timeline{display:flex; flex-direction:column; gap:0;}
+  .t-item{display:flex; gap:10px; position:relative; padding-bottom:16px;}
+  .t-item:last-child{padding-bottom:0;}
+  .t-item::before{content:''; position:absolute; left:4px; top:14px; bottom:0; width:1.5px; background:var(--border);}
+  .t-item:last-child::before{display:none;}
+  .t-dot{width:9px;height:9px;border-radius:50%; margin-top:4px; flex:none; z-index:1;}
+  .t-title{font-size:12.5px; font-weight:600;}
+  .t-time{font-family:var(--mono); font-size:10.5px; color:var(--dim); margin-top:2px;}
+
+  .cancel-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:4px 4px 0;
+  }
+  .cancel-row .t{font-size:12px; color:var(--dim);}
+  .cancel-row button{
+    background:none; border:none; color:var(--red); font-size:12px; font-weight:700;
+  }
+
+  /* ---- Communication screen specifics ---- */
+  .tabs{display:flex; gap:20px; border-bottom:1px solid var(--border); padding:0 2px;}
+  .tab{font-size:13px; font-weight:600; color:var(--dim); padding-bottom:11px; position:relative;}
+  .tab.active{color:var(--orange); font-weight:700;}
+  .tab.active::after{content:''; position:absolute; left:0; right:0; bottom:0; height:2px; background:var(--orange); border-radius:2px;}
+
+  .msg{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:13px;}
+  .m-head{display:flex; align-items:center; gap:9px;}
+  .avatar{width:28px;height:28px;border-radius:50%; background:var(--panel-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; flex:none; color:var(--dim);}
+  .avatar.you{background:var(--green-soft); color:var(--green); border-color:transparent;}
+  .avatar.team{background:var(--blue-soft); color:var(--blue); border-color:transparent;}
+  .m-name{font-size:12.5px; font-weight:700;}
+  .m-time{font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:1px;}
+  .m-tag{font-size:9.5px; font-weight:700; letter-spacing:.04em; margin:8px 0 5px 37px;}
+  .m-text{font-size:12.5px; margin-left:37px; color:#dfe2e5; line-height:1.4;}
+  .m-photo{margin-left:37px; margin-top:5px;}
+  .m-photo img{width:110px;height:82px;object-fit:cover;border-radius:9px;display:block;}
+  .voice-row{display:flex; align-items:center; gap:8px; margin-left:37px; margin-top:5px; background:var(--panel-2); border-radius:9px; padding:8px 10px;}
+  .voice-row .play{width:22px;height:22px;border-radius:50%; background:var(--panel); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; flex:none;}
+  .voice-row .wf{flex:1; height:14px; background:repeating-linear-gradient(90deg, var(--border) 0 2px, transparent 2px 4px); border-radius:4px;}
+  .voice-row .dur{font-family:var(--mono); font-size:10.5px; color:var(--dim);}
+  .m-seen{text-align:right; font-size:10px; color:var(--dim); margin-top:8px;}
+
+  .composer{
+    display:flex; align-items:center; gap:8px;
+    padding:10px 14px 20px; background:var(--bg); border-top:1px solid var(--border); flex:none;
+  }
+  .msg-input{
+    flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:22px;
+    padding:10px 14px; display:flex; align-items:center; gap:9px; color:var(--dim); font-size:13px;
+  }
+  .msg-input .spacer{flex:1;}
+  .send-btn{width:38px;height:38px;border-radius:50%; background:var(--orange); display:flex; align-items:center; justify-content:center; color:#1a1206; flex:none;}
+
+  .caption{
+    width:390px; text-align:center; color:#8a929b; font-size:13px; font-family:var(--body);
+    margin-top:10px;
+  }
+  .caption b{color:#f3f5f6;}
+  .flowlabel{
+    width:390px; text-align:center; font-family:var(--head); font-size:13px; font-weight:800;
+    color:var(--orange); text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px;
+  }
+</style>
+</head>
+<body>
+
+<div>
+  <div class="flowlabel">01 Â· Active Emergency</div>
+  <div class="device" id="device">
+    <div class="stack">
+
+      <!-- SCREEN 1: HUB -->
+      <div class="screen" id="screen-hub">
+        <div class="statusbar">
+          <span>9:41</span>
+          <div class="icons">
+            <svg width="16" height="11" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="4" width="3" height="8"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+            <svg width="22" height="11" viewBox="0 0 24 12" fill="none"><rect x="0.5" y="0.5" width="20" height="11" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/></svg>
+          </div>
+        </div>
+
+        <div class="topbar">
+          <div class="icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div><h1>Active Emergency</h1><div class="sub">Help is on the way</div></div>
+          <div class="right"><div class="icon-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg></div></div>
+        </div>
+
+        <div class="rail-zone">
+          <div class="rail">
+            <div class="pulse"></div>
+            <div>
+              <div class="rail-text">Emergency live</div>
+              <div class="rail-sub">5 responders aware Â· verification in progress</div>
+            </div>
+            <div class="rail-time">39:12</div>
+          </div>
+        </div>
+
+        <div class="content">
+
+          <div class="card">
+            <div class="incident">
+              <div class="meter" style="--pct:27"><span>27%</span></div>
+              <div class="incident-body">
+                <div class="incident-ref">EYE-260811-D1B6</div>
+                <div class="incident-loc">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 1114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                  Trans-Amadi, Port Harcourt
+                </div>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="grid2">
+              <div class="field"><div class="label">Reported</div><div class="value mono">8:23 PM</div></div>
+              <div class="field"><div class="label">Response agency</div><div class="value">Rivers State EMA</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Response progress</h2><a class="link" href="#">Details</a></div>
+            <div class="steps">
+              <div class="track"></div><div class="track-fill"></div>
+              <div class="step done"><div class="node"></div><div class="lbl">Submitted</div></div>
+              <div class="step active"><div class="node"></div><div class="lbl">Verifying</div></div>
+              <div class="step"><div class="node"></div><div class="lbl">Agency</div></div>
+              <div class="step"><div class="node"></div><div class="lbl">Responders</div></div>
+              <div class="step"><div class="node"></div><div class="lbl">Resolved</div></div>
+            </div>
+            <div class="progress-note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;color:var(--muted);margin-top:1px;"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>
+              Nearby users and our monitoring team are verifying your report.
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Live video</h2><span style="font-size:10px;font-weight:800;color:var(--red);">â— STREAMING</span></div>
+            <div class="video">
+              <img src="https://images.unsplash.com/photo-1502877338535-766e1452684a?w=600&q=60" alt="live feed">
+              <div class="live-chip"><span class="d"></span>LIVE</div>
+            </div>
+            <div class="btn-row">
+              <button class="btn danger"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop</button>
+              <button class="btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Switch camera</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="qa-grid">
+              <div class="qa"><div class="ic purple"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1z"/><circle cx="12" cy="13" r="3"/></svg></div>Evidence</div>
+              <div class="qa"><div class="ic blue"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 1114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>Location</div>
+              <div class="qa"><div class="ic orange"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.8 2.8 0 114 4L7 21l-4 1 1-4z"/></svg></div>Note</div>
+              <div class="qa primary" id="open-comm-btn" style="cursor:pointer;">
+                <div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z"/></svg></div>
+                Communicate
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Evidence</h2><a class="link" href="#">All</a></div>
+            <div class="evidence-row">
+              <div class="ev"><img src="https://images.unsplash.com/photo-1502877338535-766e1452684a?w=200&q=60"></div>
+              <div class="ev"><img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&q=60"></div>
+              <div class="ev add">+</div>
+              <div class="ev add">+</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Your status</h2></div>
+            <div class="status-seg">
+              <div class="seg sel"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg></div><div class="t1">Ongoing</div></div>
+              <div class="seg green"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg></div><div class="t1">Resolved</div></div>
+              <div class="seg red"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg></div><div class="t1">Unsafe</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Timeline</h2><a class="link" href="#">All</a></div>
+            <div class="timeline">
+              <div class="t-item"><div class="t-dot" style="background:var(--blue)"></div><div><div class="t-title">Routed to Rivers State EMA</div><div class="t-time">8:45 PM</div></div></div>
+              <div class="t-item"><div class="t-dot" style="background:var(--blue)"></div><div><div class="t-title">Verification confidence: 27%</div><div class="t-time">8:35 PM</div></div></div>
+              <div class="t-item"><div class="t-dot" style="background:var(--orange)"></div><div><div class="t-title">Report received</div><div class="t-time">8:23 PM</div></div></div>
+            </div>
+          </div>
+
+          <div class="cancel-row">
+            <div class="t">No longer an emergency?</div>
+            <button>Cancel report</button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SCREEN 2: COMMUNICATION -->
+      <div class="screen" id="screen-comm">
+        <div class="statusbar">
+          <span>9:41</span>
+          <div class="icons">
+            <svg width="16" height="11" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="4" width="3" height="8"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+            <svg width="22" height="11" viewBox="0 0 24 12" fill="none"><rect x="0.5" y="0.5" width="20" height="11" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/></svg>
+          </div>
+        </div>
+
+        <div class="topbar">
+          <div class="icon-btn" id="close-comm-btn" style="cursor:pointer;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div><h1>Communication</h1><div class="sub">EYE-260811-D1B6 Â· Trans-Amadi</div></div>
+        </div>
+
+        <div class="rail-zone">
+          <div class="rail">
+            <div class="pulse"></div>
+            <div>
+              <div class="rail-text">Emergency live</div>
+              <div class="rail-sub">Overview still updating in the background</div>
+            </div>
+            <div class="rail-time">39:47</div>
+          </div>
+        </div>
+
+        <div class="content" style="gap:12px;">
+
+          <div class="tabs">
+            <div class="tab active">All</div>
+            <div class="tab">Mine</div>
+            <div class="tab">Responders</div>
+          </div>
+
+          <div class="msg">
+            <div class="m-head">
+              <div class="avatar you"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+              <div><div class="m-name">You</div><div class="m-time">8:28 PM</div></div>
+            </div>
+            <div class="m-tag" style="color:var(--green);">TEXT UPDATE</div>
+            <div class="m-text">Heavy traffic building up. Situation is still ongoing.</div>
+            <div class="m-seen">Seen by 5</div>
+          </div>
+
+          <div class="msg">
+            <div class="m-head">
+              <div class="avatar team"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg></div>
+              <div><div class="m-name">Rivers State EMA</div><div class="m-time">8:27 PM</div></div>
+            </div>
+            <div class="m-tag" style="color:var(--blue);">TEXT UPDATE</div>
+            <div class="m-text">Responders are on the way. Please stay safe.</div>
+            <div class="m-seen">Seen by 12</div>
+          </div>
+
+          <div class="msg">
+            <div class="m-head">
+              <div class="avatar you"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+              <div><div class="m-name">You</div><div class="m-time">8:26 PM</div></div>
+            </div>
+            <div class="m-tag" style="color:#a78bfa;">PHOTO</div>
+            <div class="m-photo"><img src="https://images.unsplash.com/photo-1502877338535-766e1452684a?w=260&q=60"></div>
+            <div class="m-seen">Seen by 6</div>
+          </div>
+
+          <div class="msg">
+            <div class="m-head">
+              <div class="avatar"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+              <div><div class="m-name">Local witness</div><div class="m-time">8:25 PM</div></div>
+            </div>
+            <div class="m-tag" style="color:var(--green);">VOICE</div>
+            <div class="voice-row">
+              <div class="play"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+              <div class="wf"></div><span class="dur">0:23</span>
+            </div>
+            <div class="m-seen">Seen by 8</div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Your status</h2></div>
+            <div class="status-seg">
+              <div class="seg sel"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg></div><div class="t1">Ongoing</div></div>
+              <div class="seg green"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg></div><div class="t1">Resolved</div></div>
+              <div class="seg red"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg></div><div class="t1">Unsafe</div></div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="composer">
+          <div class="icon-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="msg-input">
+            Type a message...
+            <div class="spacer"></div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h3l2-3h6l2 3h3a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1z"/><circle cx="12" cy="13" r="3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
+          </div>
+          <div class="send-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="caption">Tap <b>Communicate</b> to open the layer Â· tap back to return</div>
+</div>
+
+<script>
+  const device = document.getElementById('device');
+  document.getElementById('open-comm-btn').addEventListener('click', () => {
+    device.classList.add('comm-open');
+  });
+  document.getElementById('close-comm-btn').addEventListener('click', () => {
+    device.classList.remove('comm-open');
+  });
+</script>
+</body>
+</html>
+
