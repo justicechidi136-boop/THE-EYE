@@ -1,5 +1,6 @@
 import "dart:convert";
 import "dart:io";
+import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
@@ -14,6 +15,7 @@ import "package:the_eye_mobile/evidence/evidence_hash.dart";
 import "package:the_eye_mobile/evidence/evidence_media_source.dart";
 import "package:the_eye_mobile/evidence/evidence_permission_service.dart";
 import "package:the_eye_mobile/evidence/evidence_permission_state.dart";
+import "package:the_eye_mobile/evidence/evidence_upload_coordinator.dart";
 import "package:the_eye_mobile/evidence/evidence_upload_service.dart";
 import "package:the_eye_mobile/evidence/evidence_constants.dart";
 import "package:the_eye_mobile/evidence/evidence_validation.dart";
@@ -192,6 +194,43 @@ void main() {
       expect(result.isSuccess, isFalse);
       expect(result.errorMessage, isNotNull);
     });
+
+    test("ingests gallery bytes without a readable source path", () async {
+      final bytes = Uint8List.fromList([
+        0xFF,
+        0xD8,
+        0xFF,
+        0xE0,
+        0x00,
+        0x10,
+        0x4A,
+        0x46,
+        0x49,
+        0x46,
+        ...List<int>.filled(118, 0xAB),
+      ]);
+      final compressor = InMemoryEvidenceCompressor();
+      final service = EvidenceCaptureService(
+        compressor: compressor,
+        documentsDirectoryProvider: testDocumentsDir,
+      );
+      final result = await service.ingestPickedFile(
+        picked: PickedEvidenceFile(
+          path: "",
+          fileName: "gallery-photo.jpg",
+          mimeType: "image/jpeg",
+          bytes: bytes,
+        ),
+        mediaType: IncidentMediaType.image,
+        lowDataMode: false,
+      );
+
+      expect(result.isSuccess, isTrue);
+      final attachment = result.attachment!;
+      expect(await File(attachment.originalPath).exists(), isTrue);
+      expect(await File(attachment.uploadPath).exists(), isTrue);
+      expect(attachment.fileHash, startsWith("sha256:"));
+    });
   });
 
   group("EvidenceUploadService", () {
@@ -288,6 +327,94 @@ void main() {
 
       expect(uploaded, hasLength(1));
       expect(uploaded.single.objectKey, contains("evidence/incident-1/"));
+    });
+  });
+
+  group("EvidenceUploadCoordinator", () {
+    test("continues batch when one attachment fails", () async {
+      final goodFile = await writeTempJpeg("coord-good.jpg");
+      final badFile = await writeTempJpeg("coord-bad.jpg");
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.method == "POST" &&
+              request.url.path.endsWith("/media/presign")) {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            if (body["fileName"] == "coord-bad.jpg") {
+              return http.Response("Service unavailable", 503);
+            }
+            return http.Response(
+              jsonEncode({
+                "bucket": "the-eye",
+                "objectKey": "evidence/incident-1/good.jpg",
+                "uploadUrl": "https://storage.example/upload/good",
+                "requiredHeaders": {"content-type": "image/jpeg"},
+              }),
+              200,
+            );
+          }
+          if (request.method == "PUT") {
+            return http.Response("", 200);
+          }
+          if (request.method == "POST" &&
+              request.url.path.endsWith("/media/confirm")) {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            return http.Response(
+              jsonEncode({
+                "mediaType": "Image",
+                "bucket": "the-eye",
+                "objectKey": "evidence/incident-1/good.jpg",
+                "contentType": "image/jpeg",
+                "fileHash": "sha256:abc",
+                "clientAttachmentId": body["clientAttachmentId"],
+              }),
+              200,
+            );
+          }
+          return http.Response("not found", 404);
+        }),
+      );
+      final coordinator = EvidenceUploadCoordinator(
+        uploadService: EvidenceUploadService(apiClient: client),
+      );
+      final attachments = [
+        LocalEvidenceAttachment(
+          localId: "local-good",
+          mediaType: IncidentMediaType.image,
+          fileName: "coord-good.jpg",
+          originalPath: goodFile.path,
+          uploadPath: goodFile.path,
+          contentType: "image/jpeg",
+          fileHash: await sha256FileHash(goodFile.path),
+          originalFileHash: await sha256FileHash(goodFile.path),
+          sizeBytes: await goodFile.length(),
+          capturedAt: DateTime.utc(2026, 7, 10, 2, 0),
+        ),
+        LocalEvidenceAttachment(
+          localId: "local-bad",
+          mediaType: IncidentMediaType.image,
+          fileName: "coord-bad.jpg",
+          originalPath: badFile.path,
+          uploadPath: badFile.path,
+          contentType: "image/jpeg",
+          fileHash: await sha256FileHash(badFile.path),
+          originalFileHash: await sha256FileHash(badFile.path),
+          sizeBytes: await badFile.length(),
+          capturedAt: DateTime.utc(2026, 7, 10, 2, 0),
+        ),
+      ];
+
+      final batch = await coordinator.uploadForIncident(
+        incidentId: "incident-1",
+        attachments: attachments,
+        accessToken: "token",
+        fallbackLatitude: 6.6,
+        fallbackLongitude: 3.3,
+      );
+
+      expect(batch.uploaded, hasLength(1));
+      expect(batch.failures, hasLength(1));
+      expect(batch.failures.single.localId, "local-bad");
+      expect(batch.isPartialSuccess, isTrue);
     });
   });
 }

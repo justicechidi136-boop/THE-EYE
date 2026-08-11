@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "package:file_picker/file_picker.dart";
 import "package:image_picker/image_picker.dart";
 
@@ -7,12 +9,16 @@ class PickedEvidenceFile {
     required this.fileName,
     this.mimeType,
     this.durationSeconds,
+    this.bytes,
   });
 
   final String path;
   final String fileName;
   final String? mimeType;
   final int? durationSeconds;
+
+  /// In-memory file contents when the platform path is missing or unreliable.
+  final Uint8List? bytes;
 }
 
 abstract class EvidenceMediaSource {
@@ -67,26 +73,36 @@ class ImagePickerEvidenceSource implements EvidenceMediaSource {
       type: FileType.custom,
       allowedExtensions: const ["mp3", "mpeg", "m4a", "mp4", "webm"],
       withReadStream: false,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return null;
     final picked = result.files.single;
-    final path = picked.path;
-    if (path == null || path.isEmpty) return null;
+    final path = picked.path ?? "";
+    final bytes = picked.bytes;
+    if (path.isEmpty && (bytes == null || bytes.isEmpty)) return null;
     return PickedEvidenceFile(
       path: path,
       fileName: picked.name,
       mimeType: picked.extension == null
           ? null
           : _audioMimeForExtension(picked.extension!),
+      bytes: bytes == null ? null : Uint8List.fromList(bytes),
     );
   }
 
-  PickedEvidenceFile? _mapXFile(XFile? file) {
+  Future<PickedEvidenceFile?> _mapXFile(XFile? file) async {
     if (file == null) return null;
+    Uint8List? bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (_) {
+      // Gallery picks may not expose a readable path; bytes are preferred.
+    }
     return PickedEvidenceFile(
       path: file.path,
       fileName: file.name,
       mimeType: file.mimeType,
+      bytes: bytes,
     );
   }
 

@@ -26,6 +26,70 @@ class EvidenceUploadService {
   final TheEyeApiClient _apiClient;
   final http.Client? _httpClient;
 
+  Future<IncidentMediaReference> uploadSingle({
+    required String incidentId,
+    required LocalEvidenceAttachment attachment,
+    required String accessToken,
+    required double? fallbackLatitude,
+    required double? fallbackLongitude,
+    EvidenceUploadProgress? onProgress,
+  }) async {
+    try {
+      onProgress?.call(attachment.localId, 0.1);
+      final presign = await _apiClient.presignIncidentMedia(
+        incidentId: incidentId,
+        mediaType: attachment.mediaType,
+        contentType: attachment.contentType,
+        fileName: attachment.fileName,
+        sizeBytes: attachment.sizeBytes,
+        accessToken: accessToken,
+      );
+      onProgress?.call(attachment.localId, 0.45);
+
+      await _apiClient.uploadPresignedEvidence(
+        uploadUrl: presign.uploadUrl,
+        filePath: attachment.uploadPath,
+        contentType: attachment.contentType,
+        requiredHeaders: presign.requiredHeaders,
+        httpClient: _httpClient,
+      );
+      onProgress?.call(attachment.localId, 0.8);
+
+      final confirmed = await _apiClient.confirmIncidentMedia(
+        incidentId: incidentId,
+        media: IncidentMediaReference(
+          mediaType: attachment.mediaType,
+          bucket: presign.bucket,
+          objectKey: presign.objectKey,
+          contentType: attachment.contentType,
+          fileHash: attachment.fileHash,
+          sizeBytes: attachment.sizeBytes,
+          capturedAt: attachment.capturedAt.toUtc().toIso8601String(),
+          latitude: attachment.latitude ?? fallbackLatitude,
+          longitude: attachment.longitude ?? fallbackLongitude,
+          durationSeconds: attachment.durationSeconds,
+          selectedLanguage: attachment.metadata["selectedLanguage"] as String?,
+          clientAttachmentId: attachment.localId,
+          metadata: {
+            ...attachment.metadata,
+            "localEvidenceId": attachment.localId,
+            "originalFileHash": attachment.originalFileHash,
+          },
+        ),
+        accessToken: accessToken,
+      );
+      onProgress?.call(attachment.localId, 1);
+      return confirmed;
+    } on IncidentApiException catch (error) {
+      throw EvidenceUploadFailure(
+        error.userMessage.isNotEmpty
+            ? error.userMessage
+            : "Evidence upload failed. Try again.",
+        localId: attachment.localId,
+      );
+    }
+  }
+
   Future<List<IncidentMediaReference>> uploadForIncident({
     required String incidentId,
     required List<LocalEvidenceAttachment> attachments,
@@ -43,51 +107,16 @@ class EvidenceUploadService {
     final uploaded = <IncidentMediaReference>[];
     for (final attachment in attachments) {
       try {
-        onProgress?.call(attachment.localId, 0.1);
-        final presign = await _apiClient.presignIncidentMedia(
-          incidentId: incidentId,
-          mediaType: attachment.mediaType,
-          contentType: attachment.contentType,
-          fileName: attachment.fileName,
-          sizeBytes: attachment.sizeBytes,
-          accessToken: accessToken,
-        );
-        onProgress?.call(attachment.localId, 0.45);
-
-        await _apiClient.uploadPresignedEvidence(
-          uploadUrl: presign.uploadUrl,
-          filePath: attachment.uploadPath,
-          contentType: attachment.contentType,
-          requiredHeaders: presign.requiredHeaders,
-          httpClient: _httpClient,
-        );
-        onProgress?.call(attachment.localId, 0.8);
-
-        final confirmed = await _apiClient.confirmIncidentMedia(
-          incidentId: incidentId,
-          media: IncidentMediaReference(
-            mediaType: attachment.mediaType,
-            bucket: presign.bucket,
-            objectKey: presign.objectKey,
-            contentType: attachment.contentType,
-            fileHash: attachment.fileHash,
-            sizeBytes: attachment.sizeBytes,
-            capturedAt: attachment.capturedAt.toUtc().toIso8601String(),
-            latitude: attachment.latitude ?? fallbackLatitude,
-            longitude: attachment.longitude ?? fallbackLongitude,
-            durationSeconds: attachment.durationSeconds,
-            selectedLanguage: attachment.metadata["selectedLanguage"] as String?,
-            clientAttachmentId: attachment.localId,
-            metadata: {
-              ...attachment.metadata,
-              "localEvidenceId": attachment.localId,
-              "originalFileHash": attachment.originalFileHash,
-            },
+        uploaded.add(
+          await uploadSingle(
+            incidentId: incidentId,
+            attachment: attachment,
+            accessToken: accessToken,
+            fallbackLatitude: fallbackLatitude,
+            fallbackLongitude: fallbackLongitude,
+            onProgress: onProgress,
           ),
-          accessToken: accessToken,
         );
-        uploaded.add(confirmed);
-        onProgress?.call(attachment.localId, 1);
       } on IncidentApiException catch (error) {
         throw EvidenceUploadFailure(
           error.userMessage.isNotEmpty

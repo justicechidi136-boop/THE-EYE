@@ -1,10 +1,12 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
+import "package:flutter/semantics.dart";
 import "package:flutter/services.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../evidence/evidence_attachment_picker.dart";
+import "../evidence/evidence_upload_coordinator.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
 import "active_emergency_contract.dart";
@@ -38,20 +40,49 @@ class _ActiveEmergencyEvidenceActionsState
     extends State<ActiveEmergencyEvidenceActions> {
   final GlobalKey<ManagedEvidenceSectionState> _evidenceKey =
       GlobalKey<ManagedEvidenceSectionState>();
-  late final EvidenceUploadService _uploadService =
-      EvidenceUploadService(apiClient: widget.apiClient);
+  late final EvidenceUploadCoordinator _uploadCoordinator =
+      EvidenceUploadCoordinator(
+    uploadService: EvidenceUploadService(apiClient: widget.apiClient),
+  );
   bool _uploading = false;
   String? _statusMessage;
+  int _attachmentCount = 0;
   final List<LocalEvidenceAttachment> _offlineQueue = [];
 
+  static const _emptyUploadMessage =
+      "Please select at least one piece of evidence to upload.";
+
+  void _onAttachmentsChanged(int count) {
+    if (_attachmentCount == count) return;
+    setState(() => _attachmentCount = count);
+  }
+
+  Future<void> _announceStatus(String message) async {
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      TextDirection.ltr,
+    );
+  }
+
+  Future<void> _handleEmptyUploadAttempt() async {
+    setState(() => _statusMessage = _emptyUploadMessage);
+    await _announceStatus(_emptyUploadMessage);
+  }
+
   Future<void> _uploadAttachments(List<LocalEvidenceAttachment> attachments) async {
-    if (attachments.isEmpty || _uploading) return;
+    if (attachments.isEmpty) {
+      await _handleEmptyUploadAttempt();
+      return;
+    }
+    if (_uploading) return;
     setState(() {
       _uploading = true;
       _statusMessage = "Uploading evidence...";
     });
     try {
-      await _uploadService.uploadForIncident(
+      final batch = await _uploadCoordinator.uploadForIncident(
         incidentId: widget.incidentId,
         attachments: attachments,
         accessToken: widget.accessToken,
@@ -61,15 +92,43 @@ class _ActiveEmergencyEvidenceActionsState
           _evidenceKey.currentState?.markUploading(localId, progress);
         },
       );
-      for (final attachment in attachments) {
-        _evidenceKey.currentState?.markUploaded(attachment.localId);
-        _offlineQueue.removeWhere((item) => item.localId == attachment.localId);
+
+      for (final reference in batch.uploaded) {
+        final localId = reference.clientAttachmentId;
+        if (localId == null || localId.isEmpty) continue;
+        _evidenceKey.currentState?.markUploaded(localId);
+        _offlineQueue.removeWhere((item) => item.localId == localId);
       }
-      HapticFeedback.lightImpact();
+
+      for (final failure in batch.failures) {
+        _evidenceKey.currentState?.markUploadFailed(
+          failure.localId,
+          failure.userMessage ?? "Upload failed.",
+        );
+        if (_offlineQueue.any((item) => item.localId == failure.localId)) {
+          continue;
+        }
+        for (final attachment in attachments) {
+          if (attachment.localId == failure.localId) {
+            _offlineQueue.add(attachment);
+            break;
+          }
+        }
+      }
+
       if (mounted) {
-        setState(() => _statusMessage = "Evidence uploaded.");
+        if (batch.isFullSuccess) {
+          HapticFeedback.lightImpact();
+          setState(() => _statusMessage = "Evidence uploaded.");
+          await widget.onUploaded();
+        } else if (batch.isPartialSuccess) {
+          setState(() => _statusMessage =
+              "${batch.uploaded.length} uploaded, ${batch.failures.length} failed. Retry queued items.");
+        } else {
+          setState(() => _statusMessage =
+              "Upload failed. Will retry when online.");
+        }
       }
-      await widget.onUploaded();
     } catch (error) {
       for (final attachment in attachments) {
         _evidenceKey.currentState?.markUploadFailed(
@@ -149,14 +208,18 @@ class _ActiveEmergencyEvidenceActionsState
     final actions = widget.allowedActions;
     final showEvidence =
         actions.addEvidence || actions.uploadPhoto || actions.uploadVideo;
+    final hasAttachments = _attachmentCount > 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_statusMessage != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(_statusMessage!),
+          Semantics(
+            liveRegion: true,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(_statusMessage!),
+            ),
           ),
         if (showEvidence) ...[
           Text("Add more evidence",
@@ -167,19 +230,19 @@ class _ActiveEmergencyEvidenceActionsState
             child: ManagedEvidenceSection(
               key: _evidenceKey,
               lowDataMode: widget.lowDataMode,
+              onAttachmentsChanged: _onAttachmentsChanged,
             ),
           ),
           const SizedBox(height: 8),
           if (actions.uploadPhoto || actions.uploadVideo)
             FilledButton.tonal(
-              onPressed: _uploading
+              onPressed: _uploading || !hasAttachments
                   ? null
                   : () async {
                       final attachments =
                           _evidenceKey.currentState?.attachments ?? [];
                       if (attachments.isEmpty) {
-                        setState(() => _statusMessage =
-                            "Capture or pick evidence first, then upload.");
+                        await _handleEmptyUploadAttempt();
                         return;
                       }
                       await _uploadAttachments(attachments);
