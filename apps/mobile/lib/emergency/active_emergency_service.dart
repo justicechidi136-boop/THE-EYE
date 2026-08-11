@@ -138,11 +138,17 @@ class ActiveEmergencyService {
   Future<ActiveEmergencyContract> cancelIncident(
     String incidentId,
     String accessToken,
-    String reason,
-  ) async {
+    String reason, {
+    String? reasonCode,
+    String? reasonText,
+  }) async {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.incidentCancel(incidentId),
-      {"reason": reason},
+      {
+        "reason": reason,
+        if (reasonCode != null) "reasonCode": reasonCode,
+        if (reasonText != null) "reasonText": reasonText,
+      },
       accessToken: accessToken,
     );
     if (response.statusCode >= 400) {
@@ -164,11 +170,17 @@ class ActiveEmergencyService {
   Future<ActiveEmergencyContract> requestCancellation(
     String incidentId,
     String accessToken,
-    String reason,
-  ) async {
+    String reason, {
+    String? reasonCode,
+    String? reasonText,
+  }) async {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.incidentRequestCancellation(incidentId),
-      {"reason": reason},
+      {
+        "reason": reason,
+        if (reasonCode != null) "reasonCode": reasonCode,
+        if (reasonText != null) "reasonText": reasonText,
+      },
       accessToken: accessToken,
     );
     if (response.statusCode >= 400) {

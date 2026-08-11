@@ -169,21 +169,50 @@ class EvidenceAttachmentPicker extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         controller.lowDataMode = lowDataMode;
-        final hasVoiceAttachment =
-            controller.attachments.any((attachment) => attachment.isAudio);
+        final voiceReportAttachments = controller.attachments
+            .where(
+              (attachment) =>
+                  attachment.isAudio &&
+                  attachment.metadata["voiceReport"] == true,
+            )
+            .toList(growable: false);
+        final listAttachments = controller.attachments
+            .where(
+              (attachment) =>
+                  !(attachment.isAudio &&
+                      attachment.metadata["voiceReport"] == true),
+            )
+            .toList(growable: false);
+        final voiceUploadProgress = voiceReportAttachments.isEmpty
+            ? null
+            : voiceReportAttachments.first.uploadProgress;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const VoiceConsentBanner(),
-            if (!hasVoiceAttachment) ...[
-              const SizedBox(height: 12),
-              VoiceRecorder(
-                enabled: !controller.busy && controller.canAddMore,
-                onRecordingReady: (result) =>
-                    controller.addVoiceAttachment(result.attachment),
-                onRecordingRemoved: () {},
-              ),
-            ],
+            const SizedBox(height: 12),
+            VoiceRecorder(
+              enabled: !controller.busy &&
+                  (controller.canAddMore || voiceReportAttachments.isNotEmpty),
+              uploadProgress: voiceUploadProgress,
+              onRecordingReady: (result) {
+                for (final existing in voiceReportAttachments) {
+                  controller.remove(existing.localId);
+                }
+                controller.addVoiceAttachment(result.attachment);
+              },
+              onRecordingRemoved: () {
+                for (final existing in [
+                  ...controller.attachments.where(
+                    (attachment) =>
+                        attachment.isAudio &&
+                        attachment.metadata["voiceReport"] == true,
+                  ),
+                ]) {
+                  controller.remove(existing.localId);
+                }
+              },
+            ),
             if (figmaStyle) ...[
               Material(
                 color: EyeSemanticColors.of(context).elevatedSurface,
@@ -268,25 +297,25 @@ class EvidenceAttachmentPicker extends StatelessWidget {
                 padding: EdgeInsets.only(top: 12),
                 child: Text("Low-data mode will compress media before upload."),
               ),
-            if (controller.attachments.isNotEmpty) ...[
+            if (listAttachments.isNotEmpty) ...[
               const SizedBox(height: 14),
               ...() {
                 final presentations =
                     EvidencePresentationMapper.mapLocalAttachments(
-                  controller.attachments,
+                  listAttachments,
                 );
                 return [
                   for (var i = 0; i < presentations.length; i++)
                     EyeEvidenceCard(
                       presentation: presentations[i],
-                      uploadProgress: controller.attachments[i].uploadProgress,
+                      uploadProgress: listAttachments[i].uploadProgress,
                       onView: presentations[i].canView ? () {} : null,
                       onPlay: presentations[i].canPlay ? () {} : null,
                       onRemove: () =>
-                          controller.remove(controller.attachments[i].localId),
+                          controller.remove(listAttachments[i].localId),
                       onRetry: presentations[i].canRetry
                           ? () => controller.retryFailedUpload(
-                                controller.attachments[i].localId,
+                                listAttachments[i].localId,
                               )
                           : null,
                     ),

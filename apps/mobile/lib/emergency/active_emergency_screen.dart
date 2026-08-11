@@ -4,8 +4,12 @@ import "package:flutter/material.dart";
 import "package:flutter/semantics.dart";
 
 import "../contracts/the_eye_api_client.dart";
-import "../presentation/citizen_presentation.dart";
+import "../design_system/components/eye_cancellation_reason_sheet.dart";
+import "../design_system/components/eye_evidence_card.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "../presentation/citizen_date_time.dart";
+import "../presentation/citizen_presentation.dart";
+import "../presentation/evidence_presentation.dart";
 import "active_emergency_contract.dart";
 import "active_emergency_errors.dart";
 import "active_emergency_evidence_actions.dart";
@@ -171,7 +175,8 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
   }
 
   Future<void> _cancelEmergency() async {
-    final reason = await _promptReason(
+    final reason = await showCancellationReasonSheet(
+      context,
       title: "Cancel emergency",
       confirmLabel: "Cancel emergency",
     );
@@ -180,14 +185,17 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
       await widget.service.cancelIncident(
         widget.incidentId,
         widget.accessToken,
-        reason,
+        reason.auditedReason,
+        reasonCode: reason.reasonCode,
+        reasonText: reason.reasonText,
       );
       await widget.onStopLocationTracking?.call();
     });
   }
 
   Future<void> _requestCancellation() async {
-    final reason = await _promptReason(
+    final reason = await showCancellationReasonSheet(
+      context,
       title: "Request cancellation",
       confirmLabel: "Request cancellation",
       helper:
@@ -198,7 +206,9 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
       await widget.service.requestCancellation(
         widget.incidentId,
         widget.accessToken,
-        reason,
+        reason.auditedReason,
+        reasonCode: reason.reasonCode,
+        reasonText: reason.reasonText,
       );
     });
   }
@@ -280,11 +290,86 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
   }
 
   String _formatRelativeTime(DateTime value) {
-    final diff = DateTime.now().toUtc().difference(value.toUtc());
-    if (diff.inMinutes < 1) return "Just now";
-    if (diff.inMinutes < 60) return "${diff.inMinutes} minutes ago";
-    if (diff.inHours < 24) return "${diff.inHours} hours ago";
-    return value.toLocal().toString();
+    return CitizenDateTimeFormatter.formatRelative(value);
+  }
+
+  List<ActiveEmergencyEvidenceItem> _evidenceOfType(
+    ActiveEmergencyActiveContract active,
+    String mediaType,
+  ) {
+    return active.evidenceItems
+        .where((item) => item.mediaType.toLowerCase() == mediaType.toLowerCase())
+        .toList(growable: false);
+  }
+
+  Widget _submittedEvidenceSection(ActiveEmergencyActiveContract active) {
+    final photos = _evidenceOfType(active, "Image");
+    final videos = _evidenceOfType(active, "Video");
+    final voice = _evidenceOfType(active, "Audio");
+    final hasAny = active.evidenceItems.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text("Submitted Evidence",
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          hasAny
+              ? "Photos ${active.evidenceSummary.photos}, "
+                  "Videos ${active.evidenceSummary.videos}, "
+                  "Voice ${active.evidenceSummary.voice}"
+              : "No submitted evidence yet. Use Add More Evidence below if you need to attach media.",
+        ),
+        if (photos.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text("Photos", style: Theme.of(context).textTheme.titleSmall),
+          ...photos.map(_evidenceTile),
+        ],
+        if (videos.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text("Videos", style: Theme.of(context).textTheme.titleSmall),
+          ...videos.map(_evidenceTile),
+        ],
+        if (voice.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text("Voice", style: Theme.of(context).textTheme.titleSmall),
+          ...voice.map(_evidenceTile),
+        ],
+        const SizedBox(height: 12),
+        Text("Written updates", style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          "Reporter updates appear in Updates & Communication after you send them.",
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+
+  Widget _evidenceTile(ActiveEmergencyEvidenceItem item) {
+    final mediaKind = switch (item.mediaType.toLowerCase()) {
+      "video" => EvidenceMediaKind.video,
+      "audio" => EvidenceMediaKind.audio,
+      _ => EvidenceMediaKind.photo,
+    };
+    final displayName = switch (mediaKind) {
+      EvidenceMediaKind.audio => "Voice recording",
+      EvidenceMediaKind.video => "Video evidence",
+      _ => "Photo evidence",
+    };
+    final presentation = EvidencePresentation(
+      id: item.id,
+      displayName: displayName,
+      mediaKind: mediaKind,
+      displayTimestamp: formatCitizenDateTime(item.uploadedAt),
+      state: EvidenceDisplayState.uploaded,
+      semanticsLabel: "$displayName submitted",
+      durationSeconds: item.durationSeconds,
+      statusLine: "Submitted",
+      canPlay: mediaKind == EvidenceMediaKind.audio,
+      canView: mediaKind != EvidenceMediaKind.audio,
+      canRemove: false,
+    );
+    return EyeEvidenceCard(presentation: presentation);
   }
 
   String _liveVideoCitizenState(String? displayState) {
@@ -439,7 +524,7 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
-                                "Last updated ${active.lastUpdatedAt.toLocal()} (may be stale)",
+                                "Last updated ${_formatRelativeTime(active.lastUpdatedAt)} (may be stale)",
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ),
@@ -477,63 +562,40 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                       label: "Location",
                       value: active.reportedLocation.address ??
                           active.reportedLocation.locationLabel ??
-                          citizenLocationQualityLabel(
-                            quality: active.reportedLocation.quality,
-                            latitude: active.reportedLocation.latitude,
-                            longitude: active.reportedLocation.longitude,
-                          ),
+                          (active.reportedLocation.latitude != null
+                              ? "Approximate location recorded"
+                              : "Location recorded"),
                     ),
                     _InfoRow(label: "Status", value: active.displayLabel),
                     _InfoRow(
-                      label: "Progress",
-                      value: "Step ${active.progressStep} of ${active.progressStages.length}",
+                      label: "Verification",
+                      value: active.reporterConfidence != null &&
+                              active.reporterConfidence!
+                                  .toLowerCase()
+                                  .contains("community")
+                          ? "Community verification is in progress"
+                          : "Your report is being verified",
                     ),
-                    if (active.reporterConfidence != null &&
-                        !active.reporterConfidence!.toLowerCase().contains("low"))
-                      _InfoRow(
-                        label: "Verification",
-                        value: "Your report is being verified",
-                      ),
                     _InfoRow(
                       label: "Last updated",
                       value: formatCitizenDateTime(active.lastUpdatedAt),
                     ),
                     const SizedBox(height: 16),
-                    if (active.evidenceItems.isNotEmpty) ...[
-                      Text("Existing evidence",
-                          style: Theme.of(context).textTheme.titleMedium),
-                      ...active.evidenceItems.map(
-                        (item) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            item.mediaType == "Video"
-                                ? Icons.videocam
-                                : item.mediaType == "Audio"
-                                    ? Icons.mic
-                                    : Icons.image,
-                          ),
-                          title: Text(item.mediaType),
-                          subtitle: Text(formatCitizenDateTime(item.uploadedAt)),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    Text("Evidence summary",
+                    _submittedEvidenceSection(active),
+                    const SizedBox(height: 16),
+                    Text("Add More Evidence",
                         style: Theme.of(context).textTheme.titleMedium),
-                    Text(
-                      "Photos ${active.evidenceSummary.photos}, "
-                      "Videos ${active.evidenceSummary.videos}, "
-                      "Voice ${active.evidenceSummary.voice}",
-                    ),
+                    const SizedBox(height: 4),
+                    const Text("Photo · Video · Voice · Written Update"),
                     const SizedBox(height: 16),
                     _buildLiveVideoCard(active),
                     const SizedBox(height: 16),
-                    Text("Communication",
+                    Text("Updates & Communication",
                         style: Theme.of(context).textTheme.titleMedium),
                     if (active.communication.conversationAvailable) ...[
                       Text(
                         active.communication.lastMessagePreview ??
-                            "No messages yet. You can contact dispatch here.",
+                            "No messages yet.\nIf responders need more information, their messages will appear here. You can also send an update about your emergency.",
                       ),
                       if (active.communication.unreadMessageCount > 0)
                         Text(
@@ -545,7 +607,8 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                         button: true,
                         label: "Open emergency communication",
                         child: FilledButton.icon(
-                          onPressed: active.communication.allowedCommunicationActions.openThread
+                          onPressed: active.communication
+                                  .allowedCommunicationActions.openThread
                               ? () {
                                   Navigator.of(context).pushNamed(
                                     "/active-emergency/${active.incidentId}/messages",
@@ -557,14 +620,16 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                         ),
                       ),
                     ] else
-                      const Text("Communication will be available once dispatch connects."),
+                      const Text(
+                        "No messages yet.\nIf responders need more information, their messages will appear here. You can also send an update about your emergency.",
+                      ),
                     const SizedBox(height: 16),
                     Text("Progress",
                         style: Theme.of(context).textTheme.titleMedium),
                     ...active.progressStages.map(
                       (stage) => Semantics(
                         label:
-                            "${stage.label}, ${stage.state.name.replaceAll("_", " ")}",
+                            "${stage.label}, ${citizenProgressStageStateLabel(stage.state.name)}",
                         child: ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(_stageIcon(stage.state)),
