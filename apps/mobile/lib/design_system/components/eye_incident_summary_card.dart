@@ -13,6 +13,7 @@ class EyeIncidentSummaryCard extends StatelessWidget {
     required this.statusLabel,
     required this.reportedAt,
     this.onTap,
+    this.semanticsSuffix,
     this.unreadCount = 0,
     this.leadingIcon = Icons.radar,
     super.key,
@@ -23,6 +24,7 @@ class EyeIncidentSummaryCard extends StatelessWidget {
   final String statusLabel;
   final DateTime? reportedAt;
   final VoidCallback? onTap;
+  final String? semanticsSuffix;
   final int unreadCount;
   final IconData leadingIcon;
 
@@ -34,6 +36,7 @@ class EyeIncidentSummaryCard extends StatelessWidget {
     String? displayStatus,
     String? apiPublicReference,
     VoidCallback? onTap,
+    String? semanticsSuffix,
     int unreadCount = 0,
     Key? key,
   }) {
@@ -57,6 +60,7 @@ class EyeIncidentSummaryCard extends StatelessWidget {
       statusLabel: statusLabel,
       reportedAt: reportedAt,
       onTap: onTap,
+      semanticsSuffix: semanticsSuffix,
       unreadCount: unreadCount,
     );
   }
@@ -72,6 +76,8 @@ class EyeIncidentSummaryCard extends StatelessWidget {
       statusLabel,
       "Reported $reported",
       if (unreadCount > 0) "$unreadCount unread updates",
+      if (semanticsSuffix != null && semanticsSuffix!.trim().isNotEmpty)
+        semanticsSuffix!.trim(),
     ].join(". ");
 
     return Semantics(

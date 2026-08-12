@@ -86,11 +86,11 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: EyePageHeader.secondary(title: "Broadcast detail"),
+            body: EyePageHeader.secondary(title: "Broadcast Detail"),
           ),
         ),
       );
-      expect(find.text("Broadcast detail"), findsOneWidget);
+      expect(find.text("Broadcast Detail"), findsOneWidget);
       expect(find.byTooltip("Back"), findsOneWidget);
     });
   });
@@ -264,6 +264,14 @@ void main() {
         ),
         "Verifying",
       );
+    });
+
+    test("maps canonical citizen incident category titles", () {
+      expect(citizenIncidentCategoryLabel("SuspiciousActivity"),
+          "Suspicious Activity");
+      expect(citizenIncidentCategoryLabel("EmergencyCase"), "Emergency");
+      expect(citizenIncidentCategoryLabel("LiveEmergencyVideo"),
+          "Live Emergency Video");
     });
   });
 }

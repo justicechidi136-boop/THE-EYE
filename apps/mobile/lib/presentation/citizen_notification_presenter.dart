@@ -1,4 +1,5 @@
 import "citizen_date_time.dart";
+import "citizen_presentation.dart";
 import "missing_person_age.dart";
 
 class CitizenNotificationPresentation {
@@ -47,20 +48,17 @@ abstract final class CitizenNotificationPresenter {
       final lastSeenFriendly = lastSeen == null
           ? null
           : CitizenDateTimeFormatter.formatDateTime(lastSeen);
-      final preview = (fullName != null &&
-              age != null &&
-              lastSeenFriendly != null)
-          ? MissingPersonAge.notificationPreview(
-              fullName: fullName,
-              ageOrRange: age,
-              lastSeenFriendly: lastSeenFriendly,
-            )
-          : _sanitizePreview(body);
+      final preview =
+          (fullName != null && age != null && lastSeenFriendly != null)
+              ? MissingPersonAge.notificationPreview(
+                  fullName: fullName,
+                  ageOrRange: age,
+                  lastSeenFriendly: lastSeenFriendly,
+                )
+              : _sanitizePreview(body);
       return CitizenNotificationPresentation(
         category: "Broadcast Alert",
-        title: title.trim().isEmpty
-            ? "Broadcast Alert"
-            : title.trim(),
+        title: title.trim().isEmpty ? "Broadcast Alert" : title.trim(),
         preview: preview,
         timestampLabel: timestamp,
         isUnread: isUnread,
@@ -85,11 +83,24 @@ abstract final class CitizenNotificationPresenter {
     }
 
     if (_isVerifyIncident(normalizedType, title)) {
+      final categoryHint = meta["incidentCategory"]?.toString() ??
+          meta["category"]?.toString() ??
+          "Emergency";
+      final incidentLabel = citizenIncidentCategoryLabel(categoryHint);
+      final defaultTitle = incidentLabel == "Emergency"
+          ? "Can you confirm this emergency?"
+          : "Can you confirm this ${incidentLabel.toLowerCase()}?";
+      final defaultPreview = incidentLabel == "Emergency"
+          ? "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active."
+          : "A ${incidentLabel.toLowerCase()} has been reported near your location. Tap to review the incident and confirm whether it is still active.";
       return CitizenNotificationPresentation(
         category: "Verify Active Incident",
-        title: "Can you confirm this emergency?",
-        preview:
-            "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active.",
+        title: _sanitizeTitle(title).toLowerCase().contains("confirm")
+            ? _sanitizeTitle(title)
+            : defaultTitle,
+        preview: _sanitizePreview(body) == "Open for details."
+            ? defaultPreview
+            : _sanitizePreview(body),
         timestampLabel: timestamp,
         isUnread: isUnread,
         routeHint: "COMMUNITY_VERIFICATION",
@@ -118,7 +129,8 @@ abstract final class CitizenNotificationPresenter {
     final lowered = "$title $body".toLowerCase();
     if (type == "ReportSubmitted") return true;
     return type == "IncidentStatusUpdate" &&
-        (lowered.contains("submitted") || lowered.contains("has been received"));
+        (lowered.contains("submitted") ||
+            lowered.contains("has been received"));
   }
 
   static bool _isVerifyIncident(String type, String title) {
@@ -164,7 +176,8 @@ abstract final class CitizenNotificationPresenter {
   }
 
   static String? _extractReference(String body) {
-    final match = RegExp(r"EYE-[A-Z0-9-]+", caseSensitive: false).firstMatch(body);
+    final match =
+        RegExp(r"EYE-[A-Z0-9-]+", caseSensitive: false).firstMatch(body);
     return match?.group(0)?.toUpperCase();
   }
 }

@@ -5,6 +5,7 @@ import "package:flutter/material.dart";
 import "../design_system/components/eye_incident_summary_card.dart";
 import "../emergency/active_emergency_navigation.dart";
 import "../incidents/incident_submission_service.dart";
+import "../presentation/citizen_presentation.dart";
 import "activity_history_cache.dart";
 import "activity_history_service.dart";
 import "activity_navigation.dart";
@@ -289,6 +290,13 @@ class _ActivityHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final occurred = DateTime.tryParse(item.occurredAt);
+    final shouldForceCanonicalTitle =
+        item.sourceType == "incident" || item.navigation.incidentId != null;
+    final resolvedTitle = shouldForceCanonicalTitle
+        ? citizenIncidentCategoryLabel(item.category)
+        : item.title.trim().isEmpty
+            ? citizenIncidentCategoryLabel(item.category)
+            : item.title.trim();
     final displayStatus = item.statusBadge.trim().isEmpty ||
             item.statusBadge.contains("LowConfidence") ||
             RegExp(r"^[0-9a-f-]{36}$", caseSensitive: false)
@@ -296,7 +304,7 @@ class _ActivityHistoryCard extends StatelessWidget {
         ? null
         : item.statusBadge;
     return EyeIncidentSummaryCard.fromIncidentFields(
-      title: item.title,
+      title: resolvedTitle,
       incidentId: item.id,
       status: item.status,
       reportedAt: occurred,

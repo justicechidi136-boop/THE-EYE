@@ -4,7 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:the_eye_mobile/police/police_stations_screen.dart";
 
 void main() {
-  testWidgets("Nearby police screen shows back header", (tester) async {
+  testWidgets("Nearby Police screen shows back header", (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -31,7 +31,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text("Nearby police"), findsWidgets);
+    expect(find.text("Nearby Police"), findsWidgets);
     expect(find.byTooltip("Back"), findsOneWidget);
 
     await tester.tap(find.byTooltip("Back"));

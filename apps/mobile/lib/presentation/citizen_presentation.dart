@@ -139,9 +139,27 @@ String citizenLocationQualityLabel({
 }
 
 String citizenIncidentCategoryLabel(String type) {
+  final normalizedKey =
+      type.trim().toLowerCase().replaceAll(RegExp(r"[^a-z0-9]"), "");
+  const canonical = <String, String>{
+    "emergency": "Emergency",
+    "emergencycase": "Emergency",
+    "accident": "Accident",
+    "fire": "Fire",
+    "suspiciousactivity": "Suspicious Activity",
+    "abuse": "Abuse",
+    "kidnapping": "Kidnapping",
+    "crime": "Crime",
+    "liveemergencyvideo": "Live Emergency Video",
+    "livevideo": "Live Emergency Video",
+  };
+  final mapped = canonical[normalizedKey];
+  if (mapped != null) return mapped;
   return type
       .replaceAllMapped(
-          RegExp(r"([a-z])([A-Z])"), (match) => "${match[1]} ${match[2]}")
+        RegExp(r"([a-z])([A-Z])"),
+        (match) => "${match[1]} ${match[2]}",
+      )
       .replaceAll("_", " ")
       .trim();
 }

@@ -200,7 +200,7 @@ class _NearbyPoliceStationsScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             EyePageHeader.secondary(
-              title: "Nearby police",
+              title: "Nearby Police",
               onBack: () => _handleBack(context),
               actions: [
                 IconButton(

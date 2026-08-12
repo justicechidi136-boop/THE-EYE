@@ -4,6 +4,7 @@ import "package:the_eye_mobile/live_video/live_video_connection_attempt.dart";
 import "package:the_eye_mobile/live_video/live_video_connection_state.dart";
 import "package:the_eye_mobile/live_video/live_video_lifecycle_phase.dart";
 import "package:the_eye_mobile/live_video/live_video_operation_lock.dart";
+import "package:the_eye_mobile/live_video/live_video_stop_routing.dart";
 
 void main() {
   group("LiveVideoLifecycleStateMachine", () {
@@ -46,7 +47,8 @@ void main() {
       final first = factory.create(incidentId: "inc-1");
       final second = factory.create(incidentId: "inc-1");
       expect(first.connectionAttemptId, isNot(second.connectionAttemptId));
-      expect(second.controllerGeneration, greaterThan(first.controllerGeneration));
+      expect(
+          second.controllerGeneration, greaterThan(first.controllerGeneration));
       expect(factory.controllerGeneration, second.controllerGeneration);
     });
   });
@@ -106,6 +108,40 @@ void main() {
       expect(map["connectionAttemptId"], "lv-test-1");
       expect(map["tokenFingerprint"], "fp-abc");
       expect(map.containsKey("token"), isFalse);
+    });
+  });
+
+  group("LiveVideoStopRoutingDecision", () {
+    test("standalone stop routes to active emergency when incident exists", () {
+      final decision = resolveLiveVideoStopRouting(
+        returnToActiveEmergency: false,
+        activeIncidentId: "inc-123",
+      );
+      expect(
+          decision.destination, LiveVideoStopDestination.openActiveEmergency);
+      expect(decision.incidentId, "inc-123");
+      expect(decision.shouldPreserveIncidentId, isTrue);
+    });
+
+    test("active-emergency stop returns to active emergency route", () {
+      final decision = resolveLiveVideoStopRouting(
+        returnToActiveEmergency: true,
+        activeIncidentId: "inc-456",
+      );
+      expect(decision.destination,
+          LiveVideoStopDestination.returnToActiveEmergency);
+      expect(decision.incidentId, "inc-456");
+      expect(decision.shouldPreserveIncidentId, isTrue);
+    });
+
+    test("standalone stop with no incident stays on live video", () {
+      final decision = resolveLiveVideoStopRouting(
+        returnToActiveEmergency: false,
+        activeIncidentId: " ",
+      );
+      expect(decision.destination, LiveVideoStopDestination.stayOnLiveVideo);
+      expect(decision.incidentId, isNull);
+      expect(decision.shouldPreserveIncidentId, isFalse);
     });
   });
 }

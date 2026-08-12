@@ -24,13 +24,21 @@ import "broadcast_submission_service.dart";
 import "broadcast_ui_helpers.dart";
 import "../incidents/incident_draft_factory.dart";
 
+enum _MyBroadcastsViewState {
+  loading,
+  success,
+  empty,
+  error,
+  refreshing,
+}
+
 class BroadcastCreateHubScreen extends StatelessWidget {
   const BroadcastCreateHubScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return _BroadcastShell(
-      title: "Create broadcast",
+      title: "Create Broadcast",
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
@@ -88,27 +96,50 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
   ];
 
   List<BroadcastFeedItem> _items = const [];
-  bool _loading = true;
+  _MyBroadcastsViewState _viewState = _MyBroadcastsViewState.loading;
   String? _error;
   String _statusFilter = "All";
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_load());
+    });
   }
 
-  Future<void> _load() async {
-    final session = BroadcastSession.require(context);
-    if (!session.isAuthenticated || session.accessToken == null) {
+  Future<void> _load({bool fromRefresh = false}) async {
+    if (!mounted) return;
+    final keepListVisible = fromRefresh && _items.isNotEmpty && _error == null;
+    setState(() {
+      _viewState = keepListVisible
+          ? _MyBroadcastsViewState.refreshing
+          : _MyBroadcastsViewState.loading;
+      _error = null;
+    });
+
+    BroadcastSession session;
+    try {
+      session = BroadcastSession.require(context);
+    } catch (_) {
       if (!mounted) return;
+      setState(() {
+        _viewState = _MyBroadcastsViewState.error;
+        _error = "We couldn't load your broadcasts.";
+      });
       Navigator.of(context).pushReplacementNamed("/login");
       return;
     }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+
+    if (!session.isAuthenticated || session.accessToken == null) {
+      if (!mounted) return;
+      setState(() {
+        _viewState = _MyBroadcastsViewState.error;
+        _error = "We couldn't load your broadcasts.";
+      });
+      Navigator.of(context).pushReplacementNamed("/login");
+      return;
+    }
     try {
       final items = await session.broadcastFeedService.listMine(
         accessToken: session.accessToken!,
@@ -117,19 +148,25 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
       if (!mounted) return;
       setState(() {
         _items = items;
-        _loading = false;
+        _viewState = items.isEmpty
+            ? _MyBroadcastsViewState.empty
+            : _MyBroadcastsViewState.success;
+        _error = null;
       });
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.userMessage;
-        _loading = false;
+        _error = "We couldn't load your broadcasts.";
+        _viewState = _MyBroadcastsViewState.error;
       });
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        Navigator.of(context).pushReplacementNamed("/login");
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = "Unable to load your broadcasts.";
-        _loading = false;
+        _error = "We couldn't load your broadcasts.";
+        _viewState = _MyBroadcastsViewState.error;
       });
     }
   }
@@ -155,7 +192,7 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
                   label: Text(
                       filter == "WithdrawnByAuthor" ? "Withdrawn" : filter),
                   selected: selected,
-                  onSelected: _loading
+                  onSelected: _viewState == _MyBroadcastsViewState.loading
                       ? null
                       : (value) {
                           if (!value) return;
@@ -168,8 +205,8 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _load,
-              child: _loading
+              onRefresh: () => _load(fromRefresh: true),
+              child: _viewState == _MyBroadcastsViewState.loading
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: const [
@@ -177,15 +214,18 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
                         Center(child: CircularProgressIndicator()),
                       ],
                     )
-                  : _error != null
+                  : _viewState == _MyBroadcastsViewState.error
                       ? ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(24),
                           children: [
                             ListTile(
                               leading: const Icon(Icons.cloud_off),
-                              title: const Text("Broadcasts unavailable"),
-                              subtitle: Text(_error!),
+                              title: const Text(
+                                  "We couldn't load your broadcasts."),
+                              subtitle: Text(
+                                _error ?? "Try again in a moment.",
+                              ),
                             ),
                             FilledButton(
                               onPressed: () => unawaited(_load()),
@@ -193,40 +233,62 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
                             ),
                           ],
                         )
-                      : _items.isEmpty
+                      : _viewState == _MyBroadcastsViewState.empty
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.all(16),
-                              children: const [
-                                SectionCard(
+                              children: [
+                                const SectionCard(
                                   title: "No broadcasts yet",
                                   child: Text(
-                                    "Create a missing person or stolen vehicle alert to reach nearby citizens.",
+                                    "You haven't created any broadcasts yet.",
                                   ),
+                                ),
+                                const SizedBox(height: 12),
+                                FilledButton.icon(
+                                  onPressed: () => Navigator.of(context)
+                                      .pushNamed(BroadcastRoutes.create),
+                                  icon: const Icon(Icons.add),
+                                  label: const Text("Create Broadcast"),
                                 ),
                               ],
                             )
-                          : ListView.separated(
-                              padding:
-                                  const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                              itemCount: _items.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final item = _items[index];
-                                return _BroadcastActionTile(
-                                  icon: item.type
-                                          .toLowerCase()
-                                          .contains("vehicle")
-                                      ? Icons.directions_car
-                                      : Icons.person_search,
-                                  title: item.title,
-                                  subtitle: "${item.status} · ${item.type}",
-                                  onTap: () => Navigator.of(context).pushNamed(
-                                    broadcastDetailRoute(item.id)!,
+                          : Stack(
+                              children: [
+                                ListView.separated(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                                  itemCount: _items.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final item = _items[index];
+                                    return _BroadcastActionTile(
+                                      icon: item.type
+                                              .toLowerCase()
+                                              .contains("vehicle")
+                                          ? Icons.directions_car
+                                          : Icons.person_search,
+                                      title: item.title,
+                                      subtitle: "${item.status} · ${item.type}",
+                                      onTap: () =>
+                                          Navigator.of(context).pushNamed(
+                                        broadcastDetailRoute(item.id)!,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (_viewState ==
+                                    _MyBroadcastsViewState.refreshing)
+                                  const Positioned(
+                                    top: 0,
+                                    left: 16,
+                                    right: 16,
+                                    child: LinearProgressIndicator(),
                                   ),
-                                );
-                              },
+                              ],
                             ),
             ),
           ),
@@ -442,93 +504,108 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final item = _item;
-    return _BroadcastShell(
-      title: "Broadcast detail",
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.cloud_off),
-                      title: const Text("Broadcast unavailable"),
-                      subtitle: Text(_error!),
-                    ),
-                    FilledButton(
-                      onPressed: () => unawaited(_loadDetail()),
-                      child: const Text("Retry"),
-                    ),
-                  ],
+    final detailArgs = ModalRoute.of(context)?.settings.arguments;
+    final returnToCenterOnBack = detailArgs is BroadcastDetailNavigationArgs &&
+        detailArgs.returnToCenterOnBack;
+    return PopScope(
+      canPop: !returnToCenterOnBack,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || !returnToCenterOnBack) return;
+        Navigator.of(context).pushReplacementNamed(BroadcastRoutes.center);
+      },
+      child: _BroadcastShell(
+        title: "Broadcast Detail",
+        onBack: returnToCenterOnBack
+            ? () => Navigator.of(context).pushReplacementNamed(
+                  BroadcastRoutes.center,
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                  children: [
-                    SectionCard(
-                      title: item?.title ?? "Safety broadcast",
-                      child: _BroadcastDetailBody(item: item),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: _actionInFlight
-                              ? null
-                              : () => Navigator.of(context).pushNamed(
-                                    "${BroadcastRoutes.center}/${widget.broadcastId}/share",
-                                  ),
-                          icon: const Icon(Icons.share_outlined),
-                          label: const Text("Share"),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _actionInFlight
-                              ? null
-                              : () => Navigator.of(context).pushNamed(
-                                    "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
-                                  ),
-                          icon: const Icon(Icons.visibility_outlined),
-                          label: const Text("Report sighting"),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _actionInFlight
-                              ? null
-                              : () => Navigator.of(context).pushNamed(
-                                    "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
-                                  ),
-                          icon: const Icon(Icons.chat_bubble_outline),
-                          label: const Text("Comments"),
-                        ),
-                        if (!_isOwner)
+            : null,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.cloud_off),
+                        title: const Text("Broadcast unavailable"),
+                        subtitle: Text(_error!),
+                      ),
+                      FilledButton(
+                        onPressed: () => unawaited(_loadDetail()),
+                        child: const Text("Retry"),
+                      ),
+                    ],
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                    children: [
+                      SectionCard(
+                        title: item?.title ?? "Safety broadcast",
+                        child: _BroadcastDetailBody(item: item),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
                           OutlinedButton.icon(
                             onPressed: _actionInFlight
                                 ? null
                                 : () => Navigator.of(context).pushNamed(
-                                      "${BroadcastRoutes.center}/${widget.broadcastId}/report",
+                                      "${BroadcastRoutes.center}/${widget.broadcastId}/share",
                                     ),
-                            icon: const Icon(Icons.flag_outlined),
-                            label: const Text("Report"),
-                          ),
-                        if (_isOwner &&
-                            (item?.status == "Active" ||
-                                item?.status == "Published" ||
-                                item?.status == "Updated")) ...[
-                          FilledButton.icon(
-                            onPressed: _actionInFlight ? null : _resolve,
-                            icon: const Icon(Icons.check_circle_outline),
-                            label: const Text("Resolve"),
+                            icon: const Icon(Icons.share_outlined),
+                            label: const Text("Share"),
                           ),
                           OutlinedButton.icon(
-                            onPressed: _actionInFlight ? null : _withdraw,
-                            icon: const Icon(Icons.unpublished_outlined),
-                            label: const Text("Withdraw"),
+                            onPressed: _actionInFlight
+                                ? null
+                                : () => Navigator.of(context).pushNamed(
+                                      "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
+                                    ),
+                            icon: const Icon(Icons.visibility_outlined),
+                            label: const Text("Report sighting"),
                           ),
+                          OutlinedButton.icon(
+                            onPressed: _actionInFlight
+                                ? null
+                                : () => Navigator.of(context).pushNamed(
+                                      "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
+                                    ),
+                            icon: const Icon(Icons.chat_bubble_outline),
+                            label: const Text("Comments"),
+                          ),
+                          if (!_isOwner)
+                            OutlinedButton.icon(
+                              onPressed: _actionInFlight
+                                  ? null
+                                  : () => Navigator.of(context).pushNamed(
+                                        "${BroadcastRoutes.center}/${widget.broadcastId}/report",
+                                      ),
+                              icon: const Icon(Icons.flag_outlined),
+                              label: const Text("Report"),
+                            ),
+                          if (_isOwner &&
+                              (item?.status == "Active" ||
+                                  item?.status == "Published" ||
+                                  item?.status == "Updated")) ...[
+                            FilledButton.icon(
+                              onPressed: _actionInFlight ? null : _resolve,
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text("Resolve"),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _actionInFlight ? null : _withdraw,
+                              icon: const Icon(Icons.unpublished_outlined),
+                              label: const Text("Withdraw"),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+      ),
     );
   }
 }
@@ -543,6 +620,28 @@ class _BroadcastDetailBody extends StatelessWidget {
     if (value == null) return null;
     final text = value.toString().trim();
     return text.isEmpty ? null : text;
+  }
+
+  String? _metaAny(List<String> keys) {
+    for (final key in keys) {
+      final value = _meta(key);
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  DateTime? _metaDateAny(List<String> keys) {
+    for (final key in keys) {
+      final raw = _meta(key);
+      if (raw == null) continue;
+      final parsed = DateTime.tryParse(raw);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  String _formatDateTimeWithMeridiem(DateTime value) {
+    return "${CitizenDateTimeFormatter.formatDate(value)} · ${CitizenDateTimeFormatter.formatTime(value)}";
   }
 
   List<Map<String, dynamic>> get _attachments {
@@ -628,10 +727,7 @@ class _BroadcastDetailBody extends StatelessWidget {
     final fullName = _meta("fullName");
     final age = _meta("ageOrApproximateAge");
     final gender = _meta("gender");
-    final lastSeenAtRaw = _meta("lastSeenAt");
-    final lastSeenAt = lastSeenAtRaw == null
-        ? null
-        : DateTime.tryParse(lastSeenAtRaw);
+    final lastSeenAt = _metaDateAny(const ["lastSeenAt"]);
     final lastSeenAddress = _meta("lastSeenAddress");
     final physical = _meta("physicalDescription");
     final clothing = _meta("clothingDescription");
@@ -639,6 +735,37 @@ class _BroadcastDetailBody extends StatelessWidget {
     final isMissingPerson =
         (item?.type.toLowerCase().contains("missing") ?? false) ||
             fullName != null;
+    final isStolenVehicle =
+        (item?.type.toLowerCase().contains("vehicle") ?? false) ||
+            _metaAny(const ["make", "vehicleMake"]) != null ||
+            _metaAny(const ["registrationNumber", "plateNumber"]) != null;
+    final vehicleMake = _metaAny(const ["make", "vehicleMake"]);
+    final vehicleModel = _metaAny(const ["model", "vehicleModel"]);
+    final vehicleYear = _metaAny(const ["year", "vehicleYear"]);
+    final vehicleColor = _metaAny(const ["colour", "color", "vehicleColor"]);
+    final vehiclePlate = _metaAny(const [
+      "registrationNumber",
+      "plateNumber",
+      "licensePlate",
+    ]);
+    final vehicleVin = _metaAny(const ["vin", "vinLastFour"]);
+    final vehicleLastSeenAt =
+        _metaDateAny(const ["lastSeenAt", "stolenAt", "theftAt"]);
+    final vehicleLastSeenAddress = _metaAny(
+      const [
+        "lastSeenAddress",
+        "lastKnownLocation",
+        "lastKnownAddress",
+        "lastSeenLocation",
+      ],
+    );
+    final theftDescription = _metaAny(
+      const [
+        "theftDescription",
+        "distinguishingFeatures",
+        "additionalDescription",
+      ],
+    );
     Map<String, dynamic>? primaryPhoto;
     for (final attachment in _attachments) {
       if (attachment["mediaType"] == "image") {
@@ -771,10 +898,7 @@ class _BroadcastDetailBody extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           Text("Last seen", style: Theme.of(context).textTheme.titleSmall),
-          if (lastSeenAt != null)
-            Text(
-              "${CitizenDateTimeFormatter.formatDate(lastSeenAt)} · ${CitizenDateTimeFormatter.formatTime(lastSeenAt)}",
-            ),
+          if (lastSeenAt != null) Text(_formatDateTimeWithMeridiem(lastSeenAt)),
           if (lastSeenAddress != null) Text(lastSeenAddress),
           if (physical != null) ...[
             const SizedBox(height: 12),
@@ -792,6 +916,69 @@ class _BroadcastDetailBody extends StatelessWidget {
             Text("Additional information",
                 style: Theme.of(context).textTheme.titleSmall),
             Text(additional),
+          ],
+          const SizedBox(height: 12),
+          Text("Evidence", style: Theme.of(context).textTheme.titleSmall),
+          ..._buildEvidenceWidgets(context, muted),
+          if ((item?.commentsCount ?? 0) > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              "Comments: ${item!.commentsCount}",
+              style: TextStyle(color: muted),
+            ),
+          ],
+        ] else if (isStolenVehicle) ...[
+          Text(
+            "STOLEN VEHICLE",
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                ),
+          ),
+          const SizedBox(height: 12),
+          if (vehicleMake != null || vehicleModel != null)
+            Text(
+              [vehicleMake, vehicleModel].whereType<String>().join(" "),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          if (vehicleYear != null) ...[
+            const SizedBox(height: 8),
+            Text("Year", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehicleYear),
+          ],
+          if (vehicleColor != null) ...[
+            const SizedBox(height: 8),
+            Text("Color", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehicleColor),
+          ],
+          if (vehiclePlate != null) ...[
+            const SizedBox(height: 8),
+            Text("Plate", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehiclePlate),
+          ],
+          if (vehicleVin != null) ...[
+            const SizedBox(height: 8),
+            Text("VIN", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehicleVin),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            "Last seen",
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          if (vehicleLastSeenAt != null)
+            Text(_formatDateTimeWithMeridiem(vehicleLastSeenAt)),
+          if (vehicleLastSeenAddress != null) Text(vehicleLastSeenAddress),
+          if (theftDescription != null ||
+              (item?.body ?? "").trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              "Theft description",
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(theftDescription ?? item?.body ?? ""),
           ],
           const SizedBox(height: 12),
           Text("Evidence", style: Theme.of(context).textTheme.titleSmall),
@@ -1567,10 +1754,15 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
 }
 
 class _BroadcastShell extends StatelessWidget {
-  const _BroadcastShell({required this.title, required this.child});
+  const _BroadcastShell({
+    required this.title,
+    required this.child,
+    this.onBack,
+  });
 
   final String title;
   final Widget child;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -1582,6 +1774,11 @@ class _BroadcastShell extends StatelessWidget {
           EyePageHeader.secondary(
             title: title,
             onBack: () {
+              final callback = onBack;
+              if (callback != null) {
+                callback();
+                return;
+              }
               if (Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
                 return;
