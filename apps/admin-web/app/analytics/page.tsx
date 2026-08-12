@@ -60,7 +60,7 @@ export default async function AnalyticsPage() {
             <Link href="/verification" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Verification queue</Link>
             <Link href="/dispatch" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Command center</Link>
             <Link href="/audit" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Audit logs</Link>
-            <Link href="/neighborhood-watch/analytics" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">CSOC analytics</Link>
+            <Link href="/neighborhood-watch/analytics" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Community analytics</Link>
           </div>
           <p className="mt-4 text-sm text-muted">
             Metrics aggregate live data from incidents, users, broadcasts, verification, and audit endpoints.

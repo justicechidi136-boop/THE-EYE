@@ -7,6 +7,7 @@ abstract class SessionAccessor extends ChangeNotifier {
   bool get isAuthenticated;
   String? get accessToken;
   bool get lowDataMode;
+  bool get online;
 
   CitizenProfile? get cachedCitizenProfile;
 

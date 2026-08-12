@@ -32,10 +32,21 @@ FCM data also includes legacy `route` / `deepLink` mirroring `destination` for b
 |-----------|-------------|-----|
 | `OWN_ACTIVE_INCIDENT` | `/active-emergency` | Reporter while incident is active |
 | `OWN_INCIDENT_DETAILS` | `/incident-detail` | Terminal states (resolved, cancelled, expired, false report) |
-| `COMMUNITY_VERIFICATION` | `/neighborhood-watch` | Community verification (future phase) |
+| `COMMUNITY_VERIFICATION` | `/neighborhood-watch` | Nearby incident community verification prompts |
 | `BROADCAST_DETAILS` | `/broadcasts/:id` | Public safety broadcasts |
 | `FIELD_DEVICE_STATUS` | `/device-registration` | Field tablet registration refresh |
+| `NW_COMMUNITY_ALERT` | `/neighborhood-watch/alerts` | Official community leadership alerts |
+| `NW_POST_ACTIVITY` | `/neighborhood-watch/post/:postId` | New/updated community feed activity |
+| `NW_POST_COMMENT` | `/neighborhood-watch/post/:postId` | Comment on author's post |
+| `NW_PATROL_INVITATION` | `/neighborhood-watch/patrol/:patrolId` | Patrol assignment / invite |
+| `NW_PATROL_UPDATE` | `/neighborhood-watch/patrol/:patrolId` | Patrol start/pause/complete status |
+| `NW_MEMBERSHIP_APPROVED` | `/neighborhood-watch/private/:communityId/membership` | Private membership approved |
+| `NW_MEMBERSHIP_REJECTED` | `/neighborhood-watch/private/:communityId/membership` | Private membership rejected |
+| `NW_AREA_CHANGED` | `/neighborhood-watch` | Location presence switched public community |
+| `NW_ESCALATION_UPDATE` | `/neighborhood-watch/post/:postId` or incident detail | Post escalated to incident |
 | `SYSTEM` | varies | Broadcasts, SOS entry, settings |
+
+See also `docs/NEIGHBORHOOD_WATCH_NOTIFICATION_CONTRACT.md`.
 
 ---
 

@@ -105,6 +105,136 @@ void main() {
     expect(stats.commentCount, 6);
   });
 
+  test("resolveContext parses confirmed location context", () async {
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.url.path,
+            endsWith(TheEyeApiPaths.neighborhoodWatchContext));
+        expect(request.url.queryParameters["lat"], "6.45");
+        expect(request.url.queryParameters["lng"], "3.39");
+        expect(request.url.queryParameters["accuracy"], "20.0");
+        return http.Response(
+          jsonEncode({
+            "locationStatus": "CONFIRMED",
+            "publicCommunity": {
+              "id": "c1",
+              "name": "Trans-Amadi",
+              "visibility": "Public",
+              "country": "NG",
+              "state": "Rivers",
+              "lga": "Port Harcourt",
+              "label": "Public Safety Community",
+            },
+            "presence": {
+              "mode": "LOCATION_PARTICIPANT",
+              "communityId": "c1",
+              "capturedAt": "2026-08-12T01:00:00.000Z",
+              "expiresAt": "2026-08-12T01:30:00.000Z",
+              "accuracyM": 20,
+              "switchRecommended": true,
+              "switchMessage": "You're now in Trans-Amadi.",
+            },
+            "homeCommunity": null,
+            "privateCommunitiesNearby": [
+              {
+                "id": "p1",
+                "name": "Private Estate",
+                "approximateDistanceMeters": 400,
+                "membershipStatus": null,
+                "accessHint": "Membership required.",
+              },
+            ],
+            "permissions": {
+              "canViewPublicFeed": true,
+              "canPost": true,
+              "canComment": true,
+              "canViewPrivateFeed": false,
+              "canModerate": false,
+              "canManagePatrol": false,
+            },
+            "safetySummary": {
+              "activeAlerts": 2,
+              "recentVerifiedIncidents": 1,
+              "roadHazards": 0,
+              "publicBroadcasts": 0,
+              "communityWarnings": 3,
+            },
+          }),
+          200,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+    final context = await service.resolveContext(
+      accessToken: "token",
+      lat: 6.45,
+      lng: 3.39,
+      accuracy: 20,
+      capturedAt: DateTime.parse("2026-08-12T01:00:00.000Z"),
+    );
+    expect(context.locationStatus, NwLocationStatus.confirmed);
+    expect(context.publicCommunity?.name, "Trans-Amadi");
+    expect(context.presence?.switchMessage, "You're now in Trans-Amadi.");
+    expect(context.safetySummary.activeAlerts, 2);
+    expect(context.privateCommunitiesNearby, hasLength(1));
+    expect(context.permissions.canPost, isTrue);
+  });
+
+  test("resolveContext parses LOCATION_REQUIRED", () async {
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            "locationStatus": "LOCATION_REQUIRED",
+            "publicCommunity": null,
+            "presence": null,
+            "permissions": {
+              "canViewPublicFeed": false,
+              "canPost": false,
+              "canComment": false,
+              "canViewPrivateFeed": false,
+              "canModerate": false,
+              "canManagePatrol": false,
+            },
+            "safetySummary": {
+              "activeAlerts": 0,
+              "recentVerifiedIncidents": 0,
+              "roadHazards": 0,
+              "publicBroadcasts": 0,
+              "communityWarnings": 0,
+            },
+            "privateCommunitiesNearby": [],
+          }),
+          200,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+    final context =
+        await service.resolveContext(accessToken: "token");
+    expect(context.locationStatus, NwLocationStatus.locationRequired);
+    expect(context.publicCommunity, isNull);
+  });
+
+  test("setHomeCommunity patches home community id", () async {
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.method, "PATCH");
+        expect(request.url.path,
+            endsWith(TheEyeApiPaths.neighborhoodWatchHomeCommunity));
+        return http.Response(jsonEncode({"data": {"homeCommunityId": "c1"}}),
+            200);
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+    await service.setHomeCommunity(accessToken: "token", communityId: "c1");
+  });
+
   test("uses configured API client instead of compile-time localhost default",
       () async {
     const stagingBase = "https://staging-api.theeye.com.ng/v1";

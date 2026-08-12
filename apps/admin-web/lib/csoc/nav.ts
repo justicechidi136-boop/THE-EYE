@@ -9,7 +9,7 @@ export type CsocNavItem = {
 
 /** CSOC-only and shared routes. Duplicated capabilities use canonical paths from the registry. */
 const CSOC_ONLY_NAV: CsocNavItem[] = [
-  { label: "Dashboard", href: "/neighborhood-watch", shortcut: "g d" },
+  { label: "Community Safety Dashboard", href: "/neighborhood-watch", shortcut: "g d" },
   { label: "Community Map", href: "/neighborhood-watch/map", shortcut: "g m" },
   { label: "Residents", href: "/neighborhood-watch/residents" },
   { label: "Community Feed", href: "/neighborhood-watch/posts" },

@@ -1,5 +1,7 @@
 import "notification_routing.dart";
 
+import "package:the_eye_mobile/neighborhood_watch/neighborhood_watch_destinations.dart";
+
 abstract final class PushDeepLinkRouter {
   static const allowedRoutes = <String>{
     "/home",
@@ -32,6 +34,11 @@ abstract final class PushDeepLinkRouter {
     }
     if (route.startsWith("/incident-detail/") && route.endsWith("/messages")) {
       return route.length > "/incident-detail/".length + "/messages".length;
+    }
+    if (NeighborhoodWatchDestinations.isPostRoute(route)) return true;
+    if (NeighborhoodWatchDestinations.isPatrolRoute(route)) return true;
+    if (NeighborhoodWatchDestinations.isPrivateCommunityRoute(route)) {
+      return true;
     }
     return route.startsWith("/community-verification/") &&
         route.length > "/community-verification/".length;

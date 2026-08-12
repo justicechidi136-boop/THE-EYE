@@ -204,6 +204,39 @@ enum CommunityPostType {
   CommunityAnnouncement
   SecurityMeeting
   PatrolUpdate
+  SafetyTip
+  Discussion
+  LocalWarning
+  RoadHazard
+  CommunityQuestion
+}
+
+enum CommunityHazardStatus {
+  Open
+  Verified
+  Ongoing
+  Resolved
+  Dismissed
+}
+
+enum CommunityAlertAudience {
+  EntireCommunity
+  SelectedZone
+  Radius500m
+  Radius1km
+  WatchTeamOnly
+}
+
+enum CommunityAlertStatus {
+  Draft
+  Active
+  Expired
+  Cancelled
+}
+
+enum CommunityPresenceMode {
+  LocationParticipant
+  HomePreference
 }
 
 enum CommunityVerificationStatus {
@@ -280,6 +313,7 @@ enum VolunteerType {
 enum PatrolStatus {
   Scheduled
   Active
+  Paused
   Completed
   Cancelled
 }
@@ -428,6 +462,8 @@ model User {
   communityMessages         CommunityMessage[]
   communityRequests         CommunityRequest[]
   communityContentReports   CommunityContentReport[]
+  communityPresence         CommunityPresence[]
+  communityAlertsCreated    CommunityAlert[]
   volunteerProfile          VolunteerProfile?
   patrolAssignments         PatrolAssignment[]
   patrolCheckpoints         PatrolCheckpoint[]
@@ -462,22 +498,25 @@ model AuthAccount {
 }
 
 model Profile {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @unique @map("user_id") @db.Uuid
-  firstName   String    @map("first_name")
-  lastName    String    @map("last_name")
-  dateOfBirth DateTime? @map("date_of_birth") @db.Date
-  gender      String?
-  address     String?
-  country     String
-  state       String
-  lga         String
-  avatarUrl   String?   @map("avatar_url")
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String     @id @default(uuid()) @db.Uuid
+  userId          String     @unique @map("user_id") @db.Uuid
+  firstName       String     @map("first_name")
+  lastName        String     @map("last_name")
+  dateOfBirth     DateTime?  @map("date_of_birth") @db.Date
+  gender          String?
+  address         String?
+  country         String
+  state           String
+  lga             String
+  avatarUrl       String?    @map("avatar_url")
+  homeCommunityId String?    @map("home_community_id") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  homeCommunity   Community? @relation("ProfileHomeCommunity", fields: [homeCommunityId], references: [id], onDelete: SetNull)
 
   @@index([country, state, lga])
+  @@index([homeCommunityId])
   @@map("profiles")
 }
 
@@ -1368,6 +1407,10 @@ model Community {
   requests             CommunityRequest[]
   contentReports       CommunityContentReport[]
   policyConfigurations PolicyConfiguration[]
+  presenceSessions     CommunityPresence[]
+  alerts               CommunityAlert[]
+  pinnedSafetyInfo     CommunityPinnedSafetyInfo[]
+  homeProfiles         Profile[]                   @relation("ProfileHomeCommunity")
 
   @@index([parentId])
   @@index([country, state, lga, ward])
@@ -1424,10 +1467,14 @@ model CommunityPost {
   body               String
   verificationStatus CommunityVerificationStatus           @default(PendingVerification) @map("verification_status")
   confidenceScore    Decimal                               @default(0.00) @map("confidence_score") @db.Decimal(5, 2)
+  hazardStatus       CommunityHazardStatus?                @map("hazard_status")
   latitude           Decimal?                              @db.Decimal(9, 6)
   longitude          Decimal?                              @db.Decimal(9, 6)
   gpsLocation        Unsupported("geography(Point,4326)")? @map("gps_location")
   isEscalated        Boolean                               @default(false) @map("is_escalated")
+  escalatedAt        DateTime?                             @map("escalated_at") @db.Timestamptz(6)
+  escalatedById      String?                               @map("escalated_by_id") @db.Uuid
+  hiddenAt           DateTime?                             @map("hidden_at") @db.Timestamptz(6)
   createdAt          DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   community          Community                             @relation(fields: [communityId], references: [id], onDelete: Cascade)
@@ -1440,7 +1487,9 @@ model CommunityPost {
   verifications      CommunityVerification[]
 
   @@index([communityId, createdAt])
+  @@index([communityId, type, createdAt])
   @@index([verificationStatus, confidenceScore])
+  @@index([hazardStatus])
   @@index([incidentId])
   @@index([broadcastId])
   @@map("community_posts")
@@ -1482,16 +1531,80 @@ model CommunityPostMedia {
 }
 
 model CommunityPostComment {
-  id        String        @id @default(uuid()) @db.Uuid
-  postId    String        @map("post_id") @db.Uuid
-  authorId  String        @map("author_id") @db.Uuid
-  body      String
-  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author    User          @relation(fields: [authorId], references: [id])
+  id              String    @id @default(uuid()) @db.Uuid
+  postId          String    @map("post_id") @db.Uuid
+  authorId        String    @map("author_id") @db.Uuid
+  body            String    @default("")
+  mediaType       String?   @map("media_type")
+  bucket          String?
+  objectKey       String?   @map("object_key")
+  contentType     String?   @map("content_type")
+  durationSeconds Int?      @map("duration_seconds")
+  hiddenAt        DateTime? @map("hidden_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  post            CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author          User          @relation(fields: [authorId], references: [id])
 
   @@index([postId, createdAt])
   @@map("community_post_comments")
+}
+
+model CommunityPresence {
+  id          String                @id @default(uuid()) @db.Uuid
+  userId      String                @map("user_id") @db.Uuid
+  communityId String                @map("community_id") @db.Uuid
+  mode        CommunityPresenceMode @default(LocationParticipant)
+  latitude    Decimal               @db.Decimal(9, 6)
+  longitude   Decimal               @db.Decimal(9, 6)
+  accuracyM   Decimal?              @map("accuracy_m") @db.Decimal(8, 2)
+  capturedAt  DateTime              @map("captured_at") @db.Timestamptz(6)
+  expiresAt   DateTime              @map("expires_at") @db.Timestamptz(6)
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community   Community             @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, communityId, mode])
+  @@index([communityId, expiresAt])
+  @@index([userId, updatedAt])
+  @@map("community_presence")
+}
+
+model CommunityAlert {
+  id          String                 @id @default(uuid()) @db.Uuid
+  communityId String                 @map("community_id") @db.Uuid
+  createdById String                 @map("created_by_id") @db.Uuid
+  title       String
+  body        String
+  audience    CommunityAlertAudience @default(EntireCommunity)
+  status      CommunityAlertStatus   @default(Active)
+  radiusM     Int?                   @map("radius_m")
+  latitude    Decimal?               @db.Decimal(9, 6)
+  longitude   Decimal?               @db.Decimal(9, 6)
+  expiresAt   DateTime?              @map("expires_at") @db.Timestamptz(6)
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  community   Community              @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  createdBy   User                   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([communityId, status, createdAt])
+  @@map("community_alerts")
+}
+
+model CommunityPinnedSafetyInfo {
+  id          String    @id @default(uuid()) @db.Uuid
+  communityId String    @map("community_id") @db.Uuid
+  title       String
+  body        String
+  category    String
+  sortOrder   Int       @default(0) @map("sort_order")
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@index([communityId, active, sortOrder])
+  @@map("community_pinned_safety_info")
 }
 
 model CommunityPostReaction {

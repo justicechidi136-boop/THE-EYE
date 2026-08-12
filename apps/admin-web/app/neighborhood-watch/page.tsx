@@ -14,7 +14,7 @@ export default async function CsocDashboardPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Community Security Operations Center"
+        eyebrow="Community Safety Dashboard"
         title="Dashboard"
         action={<StatusBadge tone="success">Safety score {metrics.safetyScore}%</StatusBadge>}
       />
@@ -31,7 +31,6 @@ export default async function CsocDashboardPage() {
           { label: "Stolen Vehicles", value: String(metrics.stolenVehicles), href: "/stolen-vehicles" },
           { label: "Volunteers Available", value: String(metrics.volunteersAvailable), accent: "eye", href: "/neighborhood-watch/volunteers" },
           { label: "Patrols Active", value: String(metrics.patrolsActive), href: "/neighborhood-watch/patrols" },
-          { label: "Avg Response Time", value: metrics.avgResponseMinutes ? `${metrics.avgResponseMinutes}m` : "—", href: "/neighborhood-watch/analytics" },
           { label: "False Report Rate", value: `${metrics.falseReportRate}%`, href: "/neighborhood-watch/reports" },
         ]}
       />

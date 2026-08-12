@@ -30,11 +30,17 @@ export type CreateCommunityPostDto = {
     | "FloodWarning"
     | "CommunityAnnouncement"
     | "SecurityMeeting"
-    | "PatrolUpdate";
+    | "PatrolUpdate"
+    | "SafetyTip"
+    | "Discussion"
+    | "LocalWarning"
+    | "RoadHazard"
+    | "CommunityQuestion";
   title: string;
   body: string;
   latitude?: number;
   longitude?: number;
+  hazardStatus?: "Open" | "Verified" | "Ongoing" | "Resolved" | "Dismissed";
   media?: Array<{ mediaType: "Image" | "Video" | "Audio" | "Document"; bucket: string; objectKey: string; contentType: string; fileHash: string }>;
 };
 
@@ -111,7 +117,12 @@ export type ReviewCommunityRequestDto = {
 };
 
 export type CreateCommunityCommentDto = {
-  body: string;
+  body?: string;
+  mediaType?: "Audio" | "Image";
+  bucket?: string;
+  objectKey?: string;
+  contentType?: string;
+  durationSeconds?: number;
 };
 
 export type UpdateCommunityCommentDto = {
@@ -119,7 +130,47 @@ export type UpdateCommunityCommentDto = {
 };
 
 export type CreateCommunityReactionDto = {
-  type: "Confirm" | "Dispute" | "Support" | "Concern";
+  type: "Confirm" | "Helpful" | "Praying" | "Dispute" | "Seen";
+};
+
+export type CreateCommunityAlertDto = {
+  title: string;
+  body: string;
+  audience?: "EntireCommunity" | "SelectedZone" | "Radius500m" | "Radius1km" | "WatchTeamOnly";
+  radiusM?: number;
+  latitude?: number;
+  longitude?: number;
+  expiresAt?: string;
+};
+
+export type UpdateCommunityAlertDto = {
+  title?: string;
+  body?: string;
+  audience?: CreateCommunityAlertDto["audience"];
+  radiusM?: number;
+  latitude?: number;
+  longitude?: number;
+  expiresAt?: string | null;
+  status?: "Active" | "Cancelled" | "Expired";
+};
+
+export type SetHomeCommunityDto = {
+  communityId?: string | null;
+};
+
+export type CreatePinnedSafetyInfoDto = {
+  title: string;
+  body: string;
+  category: string;
+  sortOrder?: number;
+};
+
+export type UpdatePinnedSafetyInfoDto = {
+  title?: string;
+  body?: string;
+  category?: string;
+  sortOrder?: number;
+  active?: boolean;
 };
 
 export type CreateCommunityContentReportDto = {
@@ -179,10 +230,16 @@ export type UpdateVolunteerAdminDto = {
 };
 
 export type UpdatePatrolScheduleDto = {
-  status?: "Scheduled" | "Active" | "Completed" | "Cancelled";
+  status?: "Scheduled" | "Active" | "Paused" | "Completed" | "Cancelled";
   title?: string;
   startsAt?: string;
   endsAt?: string;
+};
+
+export type CreatePatrolObservationDto = {
+  note: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export const COMMUNITY_REPORT_REASONS = [

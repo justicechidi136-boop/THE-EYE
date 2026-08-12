@@ -10,6 +10,15 @@ export type NotificationRouteType =
   | "BROADCAST_DETAILS"
   | "FIELD_DEVICE_STATUS"
   | "FIELD_OPERATIONAL"
+  | "NW_COMMUNITY_ALERT"
+  | "NW_POST_ACTIVITY"
+  | "NW_POST_COMMENT"
+  | "NW_PATROL_INVITATION"
+  | "NW_PATROL_UPDATE"
+  | "NW_MEMBERSHIP_APPROVED"
+  | "NW_MEMBERSHIP_REJECTED"
+  | "NW_AREA_CHANGED"
+  | "NW_ESCALATION_UPDATE"
   | "SYSTEM";
 
 export interface NotificationRoutingV1 {
@@ -32,6 +41,9 @@ export interface NotificationRoutingV1 {
   backupRequestId?: string;
   safetyAlertId?: string;
   fieldDeviceId?: string;
+  communityId?: string;
+  postId?: string;
+  patrolId?: string;
 }
 
 const TERMINAL_REPORTER_STATUSES = new Set<IncidentStatus>([
@@ -372,5 +384,53 @@ export function buildFieldOperationalNotificationMetadata(input: {
     silent: false,
     issuedAt: new Date().toISOString(),
     ...(input.status ? { status: input.status } : {}),
+  };
+}
+
+export function buildNeighborhoodWatchNotificationMetadata(input: {
+  routeType: Extract<
+    NotificationRouteType,
+    | "NW_COMMUNITY_ALERT"
+    | "NW_POST_ACTIVITY"
+    | "NW_POST_COMMENT"
+    | "NW_PATROL_INVITATION"
+    | "NW_PATROL_UPDATE"
+    | "NW_MEMBERSHIP_APPROVED"
+    | "NW_MEMBERSHIP_REJECTED"
+    | "NW_AREA_CHANGED"
+    | "NW_ESCALATION_UPDATE"
+  >;
+  communityId: string;
+  postId?: string;
+  patrolId?: string;
+  notificationType: string;
+}): Record<string, unknown> {
+  const destination =
+    input.routeType === "NW_AREA_CHANGED"
+      ? "/neighborhood-watch"
+      : input.routeType === "NW_COMMUNITY_ALERT"
+        ? "/neighborhood-watch/alerts"
+        : input.postId
+          ? `/neighborhood-watch/post/${input.postId}`
+          : input.patrolId
+            ? `/neighborhood-watch/patrol/${input.patrolId}`
+            : input.routeType.startsWith("NW_MEMBERSHIP")
+              ? `/neighborhood-watch/private/${input.communityId}/membership`
+              : "/neighborhood-watch";
+  const routing: NotificationRoutingV1 = {
+    schemaVersion: NOTIFICATION_SCHEMA_VERSION,
+    routeType: input.routeType,
+    notificationType: input.notificationType,
+    destination,
+    communityId: input.communityId,
+    postId: input.postId,
+    patrolId: input.patrolId,
+  };
+  return {
+    ...routing,
+    route: destination,
+    deepLink: destination,
+    silent: false,
+    issuedAt: new Date().toISOString(),
   };
 }

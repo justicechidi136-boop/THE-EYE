@@ -138,6 +138,13 @@ async function withToken<T>(fn: (token: string) => Promise<T>, fallback: T): Pro
   }
 }
 
+/** Neighborhood-watch fetches must not silently collapse auth failures to empty data. */
+async function withNwToken<T>(fn: (token: string) => Promise<T>): Promise<T> {
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  return fn(token);
+}
+
 export async function fetchIncidents(filters: { status?: string; priority?: string; type?: string } = {}): Promise<Incident[]> {
   return withToken(async (token) => {
     const rows = await fetchAllPages<Record<string, unknown>>("/incidents", token, {
@@ -438,16 +445,16 @@ export async function fetchAuditLogs(filters?: {
 }
 
 export async function fetchCommunities(): Promise<CommunityView[]> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const rows = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token, { status: "all" });
     return rows.map(toCommunityView);
-  }, []);
+  });
 }
 
 export async function fetchCommunitiesPage(
   query: Record<string, string | undefined> = {},
 ): Promise<PaginatedResponse<CommunityView>> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/neighborhood-watch/communities", {
       token,
       query: { ...query, status: query.status ?? "all", limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
@@ -456,23 +463,23 @@ export async function fetchCommunitiesPage(
       ...response,
       data: response.data.map(toCommunityView),
     };
-  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+  });
 }
 
 export async function fetchCommunityBoundary(communityId: string) {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const response = await apiRequest<{ data: { wkt: string | null; areaSqM: number | null } }>(
       `/neighborhood-watch/communities/${communityId}/boundary`,
       { token },
     );
     return response.data;
-  }, null);
+  });
 }
 
 export async function fetchAdminMembershipsPage(
   query: Record<string, string | undefined> = {},
 ): Promise<PaginatedResponse<ResidentView>> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/neighborhood-watch/admin/memberships", {
       token,
       query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
@@ -487,18 +494,18 @@ export async function fetchAdminMembershipsPage(
         });
       }),
     };
-  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+  });
 }
 
 export async function fetchPatrolDetail(scheduleId: string) {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const response = await apiRequest<{ data: Record<string, unknown> }>(`/neighborhood-watch/patrols/${scheduleId}`, { token });
     return toPatrolScheduleView(response.data);
-  }, null);
+  });
 }
 
 export async function fetchRawCommunities(): Promise<Record<string, unknown>[]> {
-  return withToken(async (token) => fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token), []);
+  return withNwToken(async (token) => fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token));
 }
 
 export async function fetchVerificationDashboard(): Promise<VerificationDashboardView> {
@@ -518,15 +525,11 @@ export async function fetchCommunityVerificationAnalytics(): Promise<{
   suspiciousResponses: number;
   responseDistribution: Record<string, number>;
 }> {
-  return withToken(
-    (token) =>
-      apiRequest("/admin/community-verifications/analytics", { token }),
-    { requestsIssued: 0, responsesReceived: 0, suspiciousResponses: 0, responseDistribution: {} },
-  );
+  return withNwToken((token) => apiRequest("/admin/community-verifications/analytics", { token }));
 }
 
 export async function fetchCommunityChannels(limit = 20): Promise<CommunityChannelView[]> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const communities = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token);
     const channelGroups = await Promise.all(
       communities.slice(0, limit).map(async (community) => {
@@ -547,21 +550,21 @@ export async function fetchCommunityChannels(limit = 20): Promise<CommunityChann
       }),
     );
     return channelGroups.flat();
-  }, []);
+  });
 }
 
 export async function fetchChannelMessages(channelId: string): Promise<ChannelMessageView[]> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const response = await apiRequest<{ data: Record<string, unknown>[] }>(
       `/neighborhood-watch/channels/${encodeURIComponent(channelId)}/messages`,
       { token },
     );
     return response.data.map(toChannelMessageView);
-  }, []);
+  });
 }
 
 export async function fetchContentReports(): Promise<ContentReportView[]> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const [reportsResponse, communities] = await Promise.all([
       apiRequest<{ data: Record<string, unknown>[] }>("/neighborhood-watch/reports", { token }),
       fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token),
@@ -570,7 +573,7 @@ export async function fetchContentReports(): Promise<ContentReportView[]> {
     return reportsResponse.data.map((report) =>
       toContentReportView(report, communityNames.get(String(report.communityId)) ?? "Community"),
     );
-  }, []);
+  });
 }
 
 export async function fetchJurisdictionRows(): Promise<JurisdictionRowView[]> {
@@ -603,17 +606,17 @@ export async function fetchJurisdictionRows(): Promise<JurisdictionRowView[]> {
 }
 
 export async function fetchCommunityPosts(communityId?: string): Promise<CommunityPostView[]> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const path = communityId
       ? `/neighborhood-watch/communities/${communityId}/feed`
       : "/neighborhood-watch/posts";
     const rows = await fetchAllPages<Record<string, unknown>>(path, token);
     return rows.map(toCommunityPostView);
-  }, []);
+  });
 }
 
 export async function fetchCommunityDetail(communityId: string) {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const [communityResponse, posts, map, statisticsResponse] = await Promise.all([
       apiRequest<{ data: Record<string, unknown> }>(`/neighborhood-watch/communities/${communityId}`, { token }),
       fetchAllPages<Record<string, unknown>>(`/neighborhood-watch/communities/${communityId}/feed`, token),
@@ -630,28 +633,29 @@ export async function fetchCommunityDetail(communityId: string) {
       patrols: (Array.isArray(mapData.patrols) ? mapData.patrols : []).map(toPatrolScheduleView),
       statistics,
     };
-  }, null);
+  });
 }
 
 export async function fetchVolunteers(): Promise<VolunteerView[]> {
-  const communities = await fetchCommunities();
-  const token = await getAccessToken();
-  if (!token || !communities.length) return [];
-  const results = await Promise.all(
-    communities.slice(0, 10).map(async (community) => {
-      const map = await apiRequest<{ data: Record<string, unknown> }>(
-        `/neighborhood-watch/communities/${community.id}/map`,
-        { token },
-      );
-      const volunteers = Array.isArray(map.data.volunteers) ? map.data.volunteers : [];
-      return volunteers.map(toVolunteerView);
-    }),
-  );
-  return results.flat();
+  return withNwToken(async (token) => {
+    const communities = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token, { status: "all" });
+    if (!communities.length) return [];
+    const results = await Promise.all(
+      communities.slice(0, 10).map(async (community) => {
+        const map = await apiRequest<{ data: Record<string, unknown> }>(
+          `/neighborhood-watch/communities/${String(community.id)}/map`,
+          { token },
+        );
+        const volunteers = Array.isArray(map.data.volunteers) ? map.data.volunteers : [];
+        return volunteers.map(toVolunteerView);
+      }),
+    );
+    return results.flat();
+  });
 }
 
 export async function fetchCommunityResidents(): Promise<ResidentView[]> {
-  return withToken(async (token) => {
+  return withNwToken(async (token) => {
     const communities = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token);
     const residents: ResidentView[] = [];
     for (const community of communities) {
@@ -662,7 +666,7 @@ export async function fetchCommunityResidents(): Promise<ResidentView[]> {
       }
     }
     return residents;
-  }, []);
+  });
 }
 
 export async function fetchPendingMemberships(): Promise<ResidentView[]> {
@@ -686,28 +690,34 @@ export async function fetchCsocMapMarkers() {
 }
 
 export async function fetchPatrols(): Promise<PatrolScheduleView[]> {
-  const communities = await fetchCommunities();
-  const token = await getAccessToken();
-  if (!token || !communities.length) return [];
-  const results = await Promise.all(
-    communities.slice(0, 20).map(async (community) => {
-      try {
-        const response = await apiRequest<{ data: Record<string, unknown>[] }>(
-          `/neighborhood-watch/communities/${community.id}/patrols`,
-          { token },
-        );
-        return response.data.map((patrol) => toPatrolScheduleView({ ...patrol, communityId: community.id, community: { name: community.name } }));
-      } catch {
-        const map = await apiRequest<{ data: Record<string, unknown> }>(
-          `/neighborhood-watch/communities/${community.id}/map`,
-          { token },
-        );
-        const patrols = Array.isArray(map.data.patrols) ? map.data.patrols : [];
-        return patrols.map(toPatrolScheduleView);
-      }
-    }),
-  );
-  return results.flat();
+  return withNwToken(async (token) => {
+    const communities = await fetchAllPages<Record<string, unknown>>("/neighborhood-watch/communities", token, { status: "all" });
+    if (!communities.length) return [];
+    const results = await Promise.all(
+      communities.slice(0, 20).map(async (community) => {
+        const communityId = String(community.id);
+        const communityName = String(community.name ?? "Community");
+        try {
+          const response = await apiRequest<{ data: Record<string, unknown>[] }>(
+            `/neighborhood-watch/communities/${communityId}/patrols`,
+            { token },
+          );
+          return response.data.map((patrol) =>
+            toPatrolScheduleView({ ...patrol, communityId, community: { name: communityName } }),
+          );
+        } catch (error) {
+          if (error instanceof ApiError && (error.status === 401 || error.status === 403)) throw error;
+          const map = await apiRequest<{ data: Record<string, unknown> }>(
+            `/neighborhood-watch/communities/${communityId}/map`,
+            { token },
+          );
+          const patrols = Array.isArray(map.data.patrols) ? map.data.patrols : [];
+          return patrols.map(toPatrolScheduleView);
+        }
+      }),
+    );
+    return results.flat();
+  });
 }
 
 export async function fetchSmartwatchDevices(): Promise<SmartwatchDeviceView[]> {

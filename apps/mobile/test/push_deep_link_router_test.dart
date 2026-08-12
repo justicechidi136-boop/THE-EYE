@@ -22,5 +22,20 @@ void main() {
       PushDeepLinkRouter.resolveRoute({"route": "/neighborhood-watch/alerts"}),
       "/neighborhood-watch/alerts",
     );
+    expect(
+      PushDeepLinkRouter.isAllowedDestination(
+          "/neighborhood-watch/post/post-123"),
+      isTrue,
+    );
+    expect(
+      PushDeepLinkRouter.isAllowedDestination(
+          "/neighborhood-watch/patrol/sched-123"),
+      isTrue,
+    );
+    expect(
+      PushDeepLinkRouter.isAllowedDestination(
+          "/neighborhood-watch/private/community-123/membership"),
+      isTrue,
+    );
   });
 }

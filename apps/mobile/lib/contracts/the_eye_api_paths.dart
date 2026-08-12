@@ -123,6 +123,9 @@ abstract final class TheEyeApiPaths {
   static String incidentsMediaConfirm(String incidentId) =>
       "/incidents/$incidentId/media/confirm";
 
+  static const neighborhoodWatchContext = "/neighborhood-watch/context";
+  static const neighborhoodWatchHomeCommunity =
+      "/neighborhood-watch/home-community";
   static const neighborhoodWatchCommunities = "/neighborhood-watch/communities";
   static const neighborhoodWatchCommunityRequests =
       "/neighborhood-watch/community-requests";
@@ -162,6 +165,14 @@ abstract final class TheEyeApiPaths {
       "/neighborhood-watch/communities/$communityId/posts/media/presign";
   static String neighborhoodWatchPost(String postId) =>
       "/neighborhood-watch/posts/$postId";
+  static String neighborhoodWatchPostRestore(String postId) =>
+      "/neighborhood-watch/posts/$postId/restore";
+  static String neighborhoodWatchPatrolJoin(String scheduleId) =>
+      "/neighborhood-watch/patrols/$scheduleId/join";
+  static String neighborhoodWatchPatrolObservations(String scheduleId) =>
+      "/neighborhood-watch/patrols/$scheduleId/observations";
+  static String neighborhoodWatchCommunityOfficialAlerts(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/official-alerts";
 
   static String communityVerification(String requestId) =>
       "/community-verifications/$requestId";

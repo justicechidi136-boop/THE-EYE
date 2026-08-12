@@ -24,7 +24,6 @@ export type CsocDashboardMetrics = {
   stolenVehicles: number;
   volunteersAvailable: number;
   patrolsActive: number;
-  avgResponseMinutes: number;
   falseReportRate: number;
   recentActivity: AuditLogView[];
 };
@@ -54,7 +53,6 @@ export async function fetchCsocDashboardMetrics(): Promise<CsocDashboardMetrics>
     fetchAuditLogs({ entityType: "community_posts" }),
   ]);
 
-  const communityIncidents = incidents.filter((i) => i.type === "CommunitySafety");
   const liveStatuses = new Set(["Submitted", "Received", "Verifying", "Verified", "Assigned", "InProgress"]);
   const liveIncidents = incidents.filter((i) => liveStatuses.has(i.status)).length;
   const pendingPosts = posts.filter((p) => p.status === "Pending Verification" || p.status === "Pending").length;
@@ -88,7 +86,6 @@ export async function fetchCsocDashboardMetrics(): Promise<CsocDashboardMetrics>
     stolenVehicles,
     volunteersAvailable,
     patrolsActive,
-    avgResponseMinutes: communityIncidents.length ? 18 : 0,
     falseReportRate,
     recentActivity: communityActivity.length ? communityActivity : audit.logs.slice(0, 12),
   };
