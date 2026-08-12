@@ -101,6 +101,7 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
     final semantics = EyeSemanticColors.of(context);
     return EyeScaffold(
       title: "${widget.communityName} members",
+      useNavigateBackOrHome: true,
       body: RefreshIndicator(
         onRefresh: () => _load(refresh: true),
         child: ListView(

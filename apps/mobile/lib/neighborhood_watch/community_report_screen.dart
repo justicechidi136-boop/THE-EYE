@@ -107,6 +107,7 @@ class _CommunityReportScreenState extends State<CommunityReportScreen> {
   Widget build(BuildContext context) {
     return EyeScaffold(
       title: "Report content",
+      useNavigateBackOrHome: true,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
