@@ -14,8 +14,10 @@ import { BroadcastsService } from "../broadcasts/broadcasts.service";
 import { AuditService } from "../audit/audit.service";
 import { assertEvidenceObjectKey, createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
 import { communityRoleCan, isCommunityAdminRole, isModeratorRole, platformAdminCan } from "./community-permissions";
+import { DangerZoneGeoService } from "../danger-zones/danger-zone-geo.service";
 import { IncidentsService } from "../incidents/incidents.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { buildNeighborhoodWatchNotificationMetadata } from "../notifications/notification-routing.schema";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateCommunityDto,
@@ -34,7 +36,9 @@ import {
   RegisterVolunteerDto,
   ReviewCommunityRequestDto,
   SendCommunityMessageDto,
+  UpdateCommunityAlertDto,
   UpdateCommunityCommentDto,
+  UpdatePinnedSafetyInfoDto,
   VerifyCommunityPostDto,
   UpdateCommunityDto,
   ListAdminMembershipsQuery,
@@ -55,6 +59,7 @@ export class NeighborhoodWatchService {
     private readonly broadcasts: BroadcastsService,
     private readonly notifications: NotificationsService,
     private readonly auditService: AuditService,
+    private readonly dangerZoneGeo: DangerZoneGeoService,
   ) {}
 
   async listCommunities(actor: JwtPayload, query: ListCommunitiesQuery = {}) {
@@ -400,7 +405,16 @@ export class NeighborhoodWatchService {
       data: { status: "Rejected" as never } as never,
     });
     await this.audit(actor, "community.member_rejected", "community_memberships", membership.id, { communityId, note });
-    await this.notifyUser(membership.userId, "Join request declined", note ?? "Your community join request was declined", { communityId });
+    await this.notifyUser(
+      membership.userId,
+      "Join request declined",
+      note ?? "Your community join request was declined",
+      buildNeighborhoodWatchNotificationMetadata({
+        routeType: "NW_MEMBERSHIP_REJECTED",
+        communityId,
+        notificationType: "NwMembershipRejected",
+      }),
+    );
     return { data: updated };
   }
 
@@ -554,14 +568,29 @@ export class NeighborhoodWatchService {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
     await this.assertModerator(post.communityId, actor);
-    await this.prisma.communityPost.delete({ where: { id: postId } });
+    await this.prisma.communityPost.update({
+      where: { id: postId },
+      data: { hiddenAt: new Date() } as never,
+    });
     await this.audit(actor, "community.post_removed", "community_posts", postId, { communityId: post.communityId, note });
-    return { data: { id: postId, removed: true } };
+    return { data: { id: postId, removed: true, softDeleted: true } };
+  }
+
+  async restorePost(postId: string, actor: JwtPayload) {
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
+    if (!post) throw new NotFoundException("Community post not found");
+    await this.assertModerator(post.communityId, actor);
+    await this.prisma.communityPost.update({
+      where: { id: postId },
+      data: { hiddenAt: null } as never,
+    });
+    await this.audit(actor, "community.post_restored", "community_posts", postId, { communityId: post.communityId });
+    return { data: { id: postId, restored: true } };
   }
 
   async presignPostMedia(communityId: string, dto: PresignCommunityMediaDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can upload community media");
-    await this.assertApprovedMember(communityId, actor.sub);
+    await this.assertCanParticipate(communityId, actor);
     if (!dto.fileName || !dto.contentType || !dto.mediaType) throw new BadRequestException("fileName, contentType, and mediaType are required");
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const prefix = `community-${communityId}`;
@@ -600,7 +629,16 @@ export class NeighborhoodWatchService {
       data: { status: "Approved" as never, approvedById: actor.sub, approvedAt: new Date() } as never,
     });
     await this.audit(actor, "community.member_approved", "community_memberships", membership.id, { communityId });
-    await this.notifyUser(membership.userId, "Join request approved", "You can now participate in your community", { communityId });
+    await this.notifyUser(
+      membership.userId,
+      "Join request approved",
+      "You can now participate in your community",
+      buildNeighborhoodWatchNotificationMetadata({
+        routeType: "NW_MEMBERSHIP_APPROVED",
+        communityId,
+        notificationType: "NwMembershipApproved",
+      }),
+    );
     return { data: membership };
   }
 
@@ -637,12 +675,16 @@ export class NeighborhoodWatchService {
   async createPost(communityId: string, dto: CreateCommunityPostDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can create community posts");
     validatePost(dto);
-    await this.assertApprovedMember(communityId, actor.sub);
+    await this.assertCanParticipate(communityId, actor);
     if (dto.media?.length) {
       for (const media of dto.media) {
         assertEvidenceObjectKey(`community-${communityId}`, media.objectKey, media.bucket, media.contentType);
       }
     }
+    const hazardStatus =
+      dto.type === "RoadHazard" || dto.type === "LocalWarning"
+        ? (dto.hazardStatus ?? "Open")
+        : undefined;
     const post = await this.prisma.communityPost.create({
       data: {
         communityId,
@@ -652,6 +694,7 @@ export class NeighborhoodWatchService {
         body: dto.body,
         latitude: dto.latitude,
         longitude: dto.longitude,
+        hazardStatus: hazardStatus as never,
         media: dto.media?.length
           ? {
               create: dto.media.map((media) => ({
@@ -680,9 +723,28 @@ export class NeighborhoodWatchService {
         : {};
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
+    const visibilityFilter =
+      actor.typ === "admin"
+        ? {}
+        : {
+            OR: [
+              { community: { visibility: "Public" as const, status: "Active" as const } },
+              {
+                community: {
+                  visibility: "Private" as const,
+                  status: "Active" as const,
+                  memberships: {
+                    some: { userId: actor.sub, status: "Approved" as const },
+                  },
+                },
+              },
+            ],
+          };
     const rows = await this.prisma.communityPost.findMany({
       where: {
+        hiddenAt: null,
         ...(Object.keys(communityWhere).length ? { community: communityWhere } : {}),
+        ...visibilityFilter,
         ...dateIdCursorWhere(cursor),
       } as never,
       include: { community: true, media: true, comments: true, reactions: true, verifications: true, incident: true, broadcast: true },
@@ -697,7 +759,7 @@ export class NeighborhoodWatchService {
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
     const rows = await this.prisma.communityPost.findMany({
-      where: { communityId, ...dateIdCursorWhere(cursor) },
+      where: { communityId, hiddenAt: null, ...dateIdCursorWhere(cursor) },
       include: { media: true, comments: true, reactions: true, verifications: true, incident: true, broadcast: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
@@ -726,6 +788,17 @@ export class NeighborhoodWatchService {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId }, include: { community: true } });
     if (!post) throw new NotFoundException("Community post not found");
     await this.assertModerator(post.communityId, actor);
+    if (post.isEscalated && post.incidentId) {
+      return {
+        data: {
+          id: post.incidentId,
+          duplicate: true,
+          sourceCommunityId: post.communityId,
+          sourceCommunityPostId: post.id,
+          resultingIncidentId: post.incidentId,
+        },
+      };
+    }
     if (!Number.isFinite(Number(post.latitude)) || !Number.isFinite(Number(post.longitude))) {
       throw new BadRequestException("Post location is required before converting to incident");
     }
@@ -740,9 +813,31 @@ export class NeighborhoodWatchService {
       anonymous: false,
     }, actor);
     const incidentData = ("data" in incident ? incident.data : incident) as { id: string };
-    await this.prisma.communityPost.update({ where: { id: postId }, data: { incidentId: incidentData.id, isEscalated: true } as never });
-    await this.audit(actor, "community.post_converted_to_incident", "community_posts", postId, { incidentId: incidentData.id });
-    return { data: incidentData };
+    await this.prisma.communityPost.update({
+      where: { id: postId },
+      data: {
+        incidentId: incidentData.id,
+        isEscalated: true,
+        escalatedAt: new Date(),
+        escalatedById: actor.sub,
+      } as never,
+    });
+    await this.audit(actor, "community.post_converted_to_incident", "community_posts", postId, {
+      incidentId: incidentData.id,
+      sourceCommunityId: post.communityId,
+      sourceCommunityPostId: postId,
+      escalatedBy: actor.sub,
+    });
+    return {
+      data: {
+        id: incidentData.id,
+        sourceCommunityId: post.communityId,
+        sourceCommunityPostId: post.id,
+        resultingIncidentId: incidentData.id,
+        escalatedAt: new Date().toISOString(),
+        escalatedBy: actor.sub,
+      },
+    };
   }
 
   async broadcastVerifiedPost(postId: string, scope: "Neighborhood" | "LGA" | "State" | "Emergency", actor: JwtPayload) {
@@ -768,13 +863,60 @@ export class NeighborhoodWatchService {
 
   async map(communityId: string, actor: JwtPayload) {
     await this.assertCommunityVisible(communityId, actor);
-    const [posts, policeStations, volunteers, patrols] = await Promise.all([
-      this.prisma.communityPost.findMany({ where: { communityId }, take: DEFAULT_PAGE_LIMIT, orderBy: { createdAt: "desc" } }),
+    const centerRows = await this.prisma.$queryRawUnsafe<Array<{ lng: number; lat: number }>>(
+      `SELECT ST_X(center::geometry) AS lng, ST_Y(center::geometry) AS lat
+         FROM communities
+        WHERE id = $1::uuid AND center IS NOT NULL
+        LIMIT 1`,
+      communityId,
+    );
+    const [posts, policeStations, volunteers, patrols, alerts, pinned] = await Promise.all([
+      this.prisma.communityPost.findMany({
+        where: { communityId, hiddenAt: null },
+        take: DEFAULT_PAGE_LIMIT,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          latitude: true,
+          longitude: true,
+          verificationStatus: true,
+          hazardStatus: true,
+          createdAt: true,
+        },
+      }),
       this.prisma.policeStation.findMany({ take: 50 }),
       this.prisma.volunteerProfile.findMany({ where: { communityId, available: true }, take: 50 }),
       this.prisma.patrolSchedule.findMany({ where: { communityId }, include: { checkpoints: true }, take: 20 }),
+      this.prisma.communityAlert.findMany({
+        where: { communityId, status: "Active" },
+        take: 20,
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.communityPinnedSafetyInfo.findMany({
+        where: { communityId, active: true },
+        orderBy: { sortOrder: "asc" },
+        take: 20,
+      }),
     ]);
-    return { data: { posts, policeStations, volunteers, patrols, safePoints: [], hospitals: [], dangerZones: [] } };
+    const dangerZones = await this.citizenSafeDangerZones(
+      centerRows[0]?.lat != null ? Number(centerRows[0].lat) : null,
+      centerRows[0]?.lng != null ? Number(centerRows[0].lng) : null,
+    );
+    return {
+      data: {
+        posts,
+        policeStations,
+        volunteers,
+        patrols,
+        alerts,
+        pinnedSafetyInfo: pinned,
+        safePoints: [],
+        hospitals: [],
+        dangerZones,
+      },
+    };
   }
 
   async registerVolunteer(dto: RegisterVolunteerDto, actor: JwtPayload) {
@@ -797,8 +939,270 @@ export class NeighborhoodWatchService {
     const schedule = await this.prisma.patrolSchedule.create({
       data: { communityId, title: dto.title, startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt), createdById: actor.sub } as never,
     });
-    await this.audit(actor, "community.patrol_created", "patrol_schedules", schedule.id, { communityId });
+    const volunteerIds = Array.from(new Set((dto.volunteerUserIds ?? []).filter(Boolean)));
+    for (const userId of volunteerIds) {
+      await this.assertApprovedMember(communityId, userId);
+      const volunteer = await this.prisma.volunteerProfile.findFirst({ where: { userId, communityId } });
+      if (!volunteer) continue;
+      await this.prisma.patrolAssignment.create({
+        data: {
+          scheduleId: schedule.id,
+          volunteerId: volunteer.id,
+          userId,
+        } as never,
+      });
+    }
+    await this.audit(actor, "community.patrol_created", "patrol_schedules", schedule.id, {
+      communityId,
+      assigned: volunteerIds.length,
+    });
     return { data: schedule };
+  }
+
+  async joinPatrol(scheduleId: string, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can join patrols");
+    const schedule = await this.prisma.patrolSchedule.findUnique({ where: { id: scheduleId } });
+    if (!schedule) throw new NotFoundException("Patrol not found");
+    await this.assertApprovedMember(schedule.communityId, actor.sub);
+    if (!["Scheduled", "Active"].includes(String(schedule.status))) {
+      throw new BadRequestException("Patrol is not open for joining");
+    }
+    let volunteer = await this.prisma.volunteerProfile.findFirst({
+      where: { userId: actor.sub, communityId: schedule.communityId },
+    });
+    if (!volunteer) {
+      volunteer = await this.prisma.volunteerProfile.create({
+        data: {
+          userId: actor.sub,
+          communityId: schedule.communityId,
+          types: ["SecurityVolunteer"] as never,
+        } as never,
+      });
+    }
+    const assignment = await this.prisma.patrolAssignment.upsert({
+      where: { scheduleId_userId: { scheduleId, userId: actor.sub } } as never,
+      update: {},
+      create: {
+        scheduleId,
+        volunteerId: volunteer.id,
+        userId: actor.sub,
+      } as never,
+    }).catch(async () => {
+      const existing = await this.prisma.patrolAssignment.findFirst({
+        where: { scheduleId, userId: actor.sub },
+      });
+      if (existing) return existing;
+      return this.prisma.patrolAssignment.create({
+        data: { scheduleId, volunteerId: volunteer!.id, userId: actor.sub } as never,
+      });
+    });
+    await this.audit(actor, "community.patrol_joined", "patrol_assignments", assignment.id, { scheduleId });
+    return { data: assignment };
+  }
+
+  async createPatrolObservation(scheduleId: string, dto: { note: string; latitude?: number; longitude?: number }, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can report patrol observations");
+    const schedule = await this.prisma.patrolSchedule.findUnique({ where: { id: scheduleId } });
+    if (!schedule) throw new NotFoundException("Patrol not found");
+    const assignment = await this.prisma.patrolAssignment.findFirst({ where: { scheduleId, userId: actor.sub } });
+    if (!assignment) throw new ForbiddenException("Patrol assignment required");
+    if (String(schedule.status) !== "Active") throw new BadRequestException("Patrol must be active");
+    const report = await this.prisma.patrolReport.create({
+      data: {
+        scheduleId,
+        submittedById: actor.sub,
+        summary: dto.note.trim(),
+        issuesFound: false,
+      } as never,
+    });
+    await this.audit(actor, "community.patrol_observation", "patrol_reports", report.id, {
+      scheduleId,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+    });
+    return { data: report };
+  }
+
+  async createCommunityAlert(
+    communityId: string,
+    dto: {
+      title: string;
+      body: string;
+      audience?: string;
+      radiusM?: number;
+      latitude?: number;
+      longitude?: number;
+      expiresAt?: string;
+    },
+    actor: JwtPayload,
+  ) {
+    await this.assertModerator(communityId, actor);
+    if (!dto.title?.trim() || !dto.body?.trim()) throw new BadRequestException("Alert title and body are required");
+    const alert = await this.prisma.communityAlert.create({
+      data: {
+        communityId,
+        createdById: actor.sub,
+        title: dto.title.trim(),
+        body: dto.body.trim(),
+        audience: (dto.audience ?? "EntireCommunity") as never,
+        radiusM: dto.radiusM,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+        status: "Active",
+      } as never,
+    });
+    await this.notifyCommunity(communityId, alert.id, alert.title, alert.body.slice(0, 160), "NW_COMMUNITY_ALERT");
+    await this.audit(actor, "community.alert_created", "community_alerts", alert.id, { communityId });
+    return { data: alert };
+  }
+
+  async listCommunityAlerts(communityId: string, actor: JwtPayload) {
+    await this.assertCommunityVisible(communityId, actor);
+    const rows = await this.prisma.communityAlert.findMany({
+      where: {
+        communityId,
+        status: "Active",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    return { data: rows };
+  }
+
+  async updateCommunityAlert(communityId: string, alertId: string, dto: UpdateCommunityAlertDto, actor: JwtPayload) {
+    await this.assertModerator(communityId, actor);
+    const existing = await this.prisma.communityAlert.findFirst({ where: { id: alertId, communityId } });
+    if (!existing) throw new NotFoundException("Community alert not found");
+    const updated = await this.prisma.communityAlert.update({
+      where: { id: alertId },
+      data: {
+        ...(dto.title?.trim() ? { title: dto.title.trim() } : {}),
+        ...(dto.body?.trim() ? { body: dto.body.trim() } : {}),
+        ...(dto.audience ? { audience: dto.audience as never } : {}),
+        ...(dto.radiusM !== undefined ? { radiusM: dto.radiusM } : {}),
+        ...(dto.latitude !== undefined ? { latitude: dto.latitude } : {}),
+        ...(dto.longitude !== undefined ? { longitude: dto.longitude } : {}),
+        ...(dto.expiresAt !== undefined
+          ? { expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null }
+          : {}),
+        ...(dto.status ? { status: dto.status as never } : {}),
+      },
+    });
+    await this.audit(actor, "community.alert_updated", "community_alerts", alertId, {
+      communityId,
+      status: updated.status,
+    });
+    return { data: updated };
+  }
+
+  async cancelCommunityAlert(communityId: string, alertId: string, actor: JwtPayload) {
+    return this.updateCommunityAlert(communityId, alertId, { status: "Cancelled" }, actor);
+  }
+
+  async createPinnedSafetyInfo(
+    communityId: string,
+    dto: { title: string; body: string; category: string; sortOrder?: number },
+    actor: JwtPayload,
+  ) {
+    await this.assertModerator(communityId, actor);
+    const row = await this.prisma.communityPinnedSafetyInfo.create({
+      data: {
+        communityId,
+        title: dto.title.trim(),
+        body: dto.body.trim(),
+        category: dto.category.trim(),
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+    return { data: row };
+  }
+
+  async listPinnedSafetyInfo(communityId: string, actor: JwtPayload) {
+    await this.assertCommunityVisible(communityId, actor);
+    const rows = await this.prisma.communityPinnedSafetyInfo.findMany({
+      where: { communityId, active: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      take: 50,
+    });
+    return { data: rows };
+  }
+
+  async updatePinnedSafetyInfo(
+    communityId: string,
+    pinnedId: string,
+    dto: UpdatePinnedSafetyInfoDto,
+    actor: JwtPayload,
+  ) {
+    await this.assertModerator(communityId, actor);
+    const existing = await this.prisma.communityPinnedSafetyInfo.findFirst({
+      where: { id: pinnedId, communityId },
+    });
+    if (!existing) throw new NotFoundException("Pinned safety info not found");
+    const updated = await this.prisma.communityPinnedSafetyInfo.update({
+      where: { id: pinnedId },
+      data: {
+        ...(dto.title?.trim() ? { title: dto.title.trim() } : {}),
+        ...(dto.body?.trim() ? { body: dto.body.trim() } : {}),
+        ...(dto.category?.trim() ? { category: dto.category.trim() } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.active !== undefined ? { active: dto.active } : {}),
+      },
+    });
+    await this.audit(actor, "community.pinned_safety_updated", "community_pinned_safety_info", pinnedId, {
+      communityId,
+      active: updated.active,
+    });
+    return { data: updated };
+  }
+
+  async deactivatePinnedSafetyInfo(communityId: string, pinnedId: string, actor: JwtPayload) {
+    return this.updatePinnedSafetyInfo(communityId, pinnedId, { active: false }, actor);
+  }
+
+  async transitionPatrol(
+    scheduleId: string,
+    status: "Active" | "Paused" | "Completed" | "Cancelled",
+    actor: JwtPayload,
+  ) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can transition citizen patrols");
+    const schedule = await this.prisma.patrolSchedule.findUnique({ where: { id: scheduleId } });
+    if (!schedule) throw new NotFoundException("Patrol not found");
+    await this.assertApprovedMember(schedule.communityId, actor.sub);
+    const assignment = await this.prisma.patrolAssignment.findFirst({
+      where: { scheduleId, userId: actor.sub },
+    });
+    const canManage = await this.canManagePatrol(schedule.communityId, actor.sub);
+    if (!assignment && !canManage) throw new ForbiddenException("Patrol assignment or coordinator role required");
+
+    const current = String(schedule.status);
+    const allowed: Record<string, string[]> = {
+      Active: ["Scheduled", "Paused"],
+      Paused: ["Active"],
+      Completed: ["Active", "Paused"],
+      Cancelled: ["Scheduled", "Active", "Paused"],
+    };
+    if (!allowed[status]?.includes(current)) {
+      throw new BadRequestException(`Cannot move patrol from ${current} to ${status}`);
+    }
+    const updated = await this.prisma.patrolSchedule.update({
+      where: { id: scheduleId },
+      data: { status: status as never },
+    });
+    await this.audit(actor, "community.patrol_transitioned", "patrol_schedules", scheduleId, {
+      from: current,
+      to: status,
+    });
+    await this.notifyCommunity(
+      schedule.communityId,
+      scheduleId,
+      `Patrol ${status.toLowerCase()}`,
+      schedule.title,
+      "NW_PATROL_UPDATE",
+      { patrolId: scheduleId },
+    );
+    return { data: updated };
   }
 
   async logCheckpoint(scheduleId: string, dto: PatrolCheckpointDto, actor: JwtPayload) {
@@ -930,6 +1334,9 @@ export class NeighborhoodWatchService {
       data: page.data.map((comment) => ({
         id: comment.id,
         body: comment.body,
+        hasVoice: Boolean(comment.objectKey && comment.mediaType === "Audio"),
+        durationSeconds: comment.durationSeconds,
+        mediaType: comment.mediaType,
         createdAt: comment.createdAt,
         author: {
           id: comment.author.id,
@@ -941,18 +1348,52 @@ export class NeighborhoodWatchService {
 
   async createPostComment(postId: string, dto: CreateCommunityCommentDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can comment");
-    if (!dto.body?.trim()) throw new BadRequestException("Comment body is required");
+    const hasVoice = Boolean(dto.objectKey && dto.bucket && dto.mediaType === "Audio");
+    if (!dto.body?.trim() && !hasVoice) {
+      throw new BadRequestException("Comment body or voice attachment is required");
+    }
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertApprovedMember(post.communityId, actor.sub);
+    await this.assertCanParticipate(post.communityId, actor);
     const comment = await this.prisma.communityPostComment.create({
-      data: { postId, authorId: actor.sub, body: dto.body.trim() },
+      data: {
+        postId,
+        authorId: actor.sub,
+        body: dto.body?.trim() ?? "",
+        mediaType: hasVoice ? dto.mediaType : undefined,
+        bucket: hasVoice ? dto.bucket : undefined,
+        objectKey: hasVoice ? dto.objectKey : undefined,
+        contentType: hasVoice ? dto.contentType : undefined,
+        durationSeconds: hasVoice ? dto.durationSeconds : undefined,
+      },
     });
-    await this.audit(actor, "community.comment_created", "community_post_comments", comment.id, { postId });
+    await this.audit(actor, "community.comment_created", "community_post_comments", comment.id, {
+      postId,
+      hasVoice,
+    });
     if (post.authorId !== actor.sub) {
-      await this.notifyUser(post.authorId, "New comment on your post", dto.body.trim().slice(0, 120), { postId, communityId: post.communityId });
+      await this.notifyUser(
+        post.authorId,
+        "New comment on your post",
+        (dto.body?.trim() || "Voice comment").slice(0, 120),
+        buildNeighborhoodWatchNotificationMetadata({
+          routeType: "NW_POST_COMMENT",
+          communityId: post.communityId,
+          postId,
+          notificationType: "NwPostComment",
+        }),
+      );
     }
-    return { data: comment };
+    return {
+      data: {
+        id: comment.id,
+        body: comment.body,
+        hasVoice,
+        durationSeconds: comment.durationSeconds,
+        createdAt: comment.createdAt,
+        authorLabel: "Community member",
+      },
+    };
   }
 
   async updatePostComment(commentId: string, dto: UpdateCommunityCommentDto, actor: JwtPayload) {
@@ -1108,6 +1549,35 @@ export class NeighborhoodWatchService {
     if (community.status !== "Active") throw new ForbiddenException("Community is not active");
     if (community.visibility === "Public" || actor.typ === "admin") return;
     await this.assertApprovedMember(communityId, actor.sub);
+  }
+
+  /** Public: approved member OR active location presence. Private: approved membership only. */
+  private async assertCanParticipate(communityId: string, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    const community = await this.prisma.community.findUnique({ where: { id: communityId } });
+    if (!community || community.status !== "Active") throw new NotFoundException("Community not found");
+    if (community.visibility === "Private") {
+      await this.assertApprovedMember(communityId, actor.sub);
+      return;
+    }
+    const membership = await this.prisma.communityMembership.findUnique({
+      where: { communityId_userId: { communityId, userId: actor.sub } },
+    });
+    if (membership?.status === "Approved") return;
+    if (membership?.status === "Suspended" || membership?.status === "Banned") {
+      throw new ForbiddenException("Suspended or banned members cannot perform this action");
+    }
+    const presence = await this.prisma.communityPresence.findFirst({
+      where: {
+        userId: actor.sub,
+        communityId,
+        mode: "LocationParticipant",
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (!presence) {
+      throw new ForbiddenException("Resolve current location context before participating in this public community");
+    }
   }
 
   private async assertApprovedMember(communityId: string, userId: string) {
@@ -1296,13 +1766,84 @@ export class NeighborhoodWatchService {
     return "Community safety alert";
   }
 
-  private async notifyCommunity(communityId: string, postId: string, title: string, body: string) {
-    const members = await this.prisma.communityMembership.findMany({ where: { communityId, status: "Approved" as never }, take: 500 });
+  private async citizenSafeDangerZones(latitude: number | null, longitude: number | null) {
+    if (latitude == null || longitude == null || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return [];
+    }
+    const zones = await this.dangerZoneGeo.findActiveZonesNearPoint(longitude, latitude, 8000);
+    return zones.map((zone) => ({
+      id: String(zone.id),
+      status: String(zone.status ?? ""),
+      severity: zone.severity != null ? String(zone.severity) : null,
+      distanceMeters: zone.distance_meters != null ? Number(zone.distance_meters) : null,
+      publicMessage: zone.public_message != null ? String(zone.public_message) : null,
+      avoidanceInstruction:
+        zone.avoidance_instruction != null ? String(zone.avoidance_instruction) : null,
+      innerRadiusMeters: zone.inner_radius_meters != null ? Number(zone.inner_radius_meters) : null,
+      warningRadiusMeters:
+        zone.warning_radius_meters != null ? Number(zone.warning_radius_meters) : null,
+      outerAwarenessRadiusMeters:
+        zone.outer_awareness_radius_meters != null
+          ? Number(zone.outer_awareness_radius_meters)
+          : null,
+    }));
+  }
+
+  private async canManagePatrol(communityId: string, userId: string) {
+    const membership = await this.prisma.communityMembership.findUnique({
+      where: { communityId_userId: { communityId, userId } },
+      include: { role: true },
+    });
+    const roleName = membership?.role?.name ? String(membership.role.name) : null;
+    return Boolean(
+      membership?.status === "Approved" &&
+        roleName &&
+        ["CommunityModerator", "EstateAdmin", "VolunteerCoordinator"].includes(roleName),
+    );
+  }
+
+  private async notifyCommunity(
+    communityId: string,
+    entityId: string,
+    title: string,
+    body: string,
+    routeType:
+      | "NW_COMMUNITY_ALERT"
+      | "NW_POST_ACTIVITY"
+      | "NW_PATROL_UPDATE" = "NW_POST_ACTIVITY",
+    extras?: { patrolId?: string; postId?: string },
+  ) {
+    const metadata = buildNeighborhoodWatchNotificationMetadata({
+      routeType,
+      communityId,
+      postId: extras?.postId ?? (routeType === "NW_POST_ACTIVITY" ? entityId : undefined),
+      patrolId: extras?.patrolId,
+      notificationType: routeType,
+    });
+    const members = await this.prisma.communityMembership.findMany({
+      where: { communityId, status: "Approved" as never },
+      take: 500,
+    });
     for (const member of members) {
       const notification = await this.prisma.notification.create({
-        data: { userId: member.userId, communityId, channel: "push", title, body, status: "Pending" as never, provider: "fcm" } as never,
+        data: {
+          userId: member.userId,
+          communityId,
+          channel: "push",
+          title,
+          body,
+          status: "Pending" as never,
+          provider: "fcm",
+        } as never,
       });
-      await this.notifications.enqueue({ userId: member.userId, notificationId: notification.id, communityId, postId, title, body });
+      await this.notifications.enqueue({
+        userId: member.userId,
+        notificationId: notification.id,
+        communityId,
+        title,
+        body,
+        ...metadata,
+      });
     }
   }
 
