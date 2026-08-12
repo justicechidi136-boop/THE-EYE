@@ -16,6 +16,14 @@ class BroadcastRouteArgs {
   final String broadcastId;
 }
 
+class BroadcastDetailNavigationArgs {
+  const BroadcastDetailNavigationArgs({
+    this.returnToCenterOnBack = false,
+  });
+
+  final bool returnToCenterOnBack;
+}
+
 class ParsedBroadcastRoute {
   const ParsedBroadcastRoute._({
     required this.kind,

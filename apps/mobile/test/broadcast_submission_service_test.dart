@@ -103,6 +103,40 @@ void main() {
     );
   });
 
+  test("createStolenVehicle forwards year in payload", () async {
+    Map<String, dynamic>? requestBody;
+    final client = TheEyeApiClient(
+      baseUrl: "http://localhost:4000/v1",
+      httpClient: MockClient((request) async {
+        requestBody = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(request.url.path, endsWith("/broadcasts/stolen-vehicle"));
+        return http.Response(
+          jsonEncode({
+            "data": {"id": "vehicle-1", "status": "Active"}
+          }),
+          201,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final service = BroadcastSubmissionService(apiClient: client);
+
+    final result = await service.createStolenVehicle(
+      accessToken: "token",
+      payload: {
+        "clientBroadcastId": "broadcast-123",
+        "vehicleType": "Car",
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2021,
+        "registrationNumber": "ABC-123",
+      },
+    );
+
+    expect(result.id, "vehicle-1");
+    expect(requestBody?["year"], 2021);
+  });
+
   test("addComment rejects duplicate submission within five seconds", () async {
     var postCount = 0;
     final client = TheEyeApiClient(
