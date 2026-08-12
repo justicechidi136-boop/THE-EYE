@@ -183,7 +183,7 @@ AppController _testController(ThemeProvider themeProvider) {
     ),
     authSessionStore: InMemoryAuthSessionStore(),
     themeProvider: themeProvider,
-    carProfileStore: InMemoryCarProfileStore(),
+    vehicleGarageStore: InMemoryVehicleGarageStore(),
   );
 }
 

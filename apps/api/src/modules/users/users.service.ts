@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "crypto";
 import { AdminRoleName, UserRole } from "@the-eye/shared";
+import type { CitizenVehicle, Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
   buildCursorPage,
@@ -33,7 +34,9 @@ import type {
   ReviewKycDto,
   SubmitKycDto,
   UpdateCitizenProfileDto,
+  UpdateCitizenVehicleDto,
   UpsertEmergencyContactDto,
+  CreateCitizenVehicleDto,
 } from "./dto/users.dto";
 import { incompleteProfileLocation, isCitizenProfileComplete } from "./profile-complete";
 
@@ -271,6 +274,141 @@ export class UsersService {
       metadata: {},
     });
     return { ok: true };
+  }
+
+  async listMyVehicles(actor: JwtPayload) {
+    this.assertCitizen(actor);
+    const vehicles = await this.prisma.citizenVehicle.findMany({
+      where: { userId: actor.sub },
+      orderBy: [{ isPrimary: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+    return { data: vehicles.map((vehicle) => this.mapCitizenVehicle(vehicle)) };
+  }
+
+  async createMyVehicle(actor: JwtPayload, dto: CreateCitizenVehicleDto) {
+    this.assertCitizen(actor);
+    const payload = this.toCitizenVehicleCreateInput(dto);
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const existingCount = await tx.citizenVehicle.count({
+          where: { userId: actor.sub },
+        });
+        const wantsPrimary = dto.isPrimary === true || existingCount === 0;
+        const vehicle = await tx.citizenVehicle.create({
+          data: {
+            ...payload,
+            userId: actor.sub,
+            isPrimary: wantsPrimary,
+          },
+        });
+        if (wantsPrimary) {
+          await tx.citizenVehicle.updateMany({
+            where: { userId: actor.sub, NOT: { id: vehicle.id } },
+            data: { isPrimary: false },
+          });
+        }
+        return vehicle;
+      });
+      return this.mapCitizenVehicle(created);
+    } catch (error) {
+      this.rethrowCitizenVehicleWriteError(error);
+    }
+  }
+
+  async getMyVehicle(actor: JwtPayload, vehicleId: string) {
+    this.assertCitizen(actor);
+    const vehicle = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+    });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+    return this.mapCitizenVehicle(vehicle);
+  }
+
+  async updateMyVehicle(actor: JwtPayload, vehicleId: string, dto: UpdateCitizenVehicleDto) {
+    this.assertCitizen(actor);
+    const existing = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+    });
+    if (!existing) throw new NotFoundException("Vehicle not found");
+
+    const data = this.toCitizenVehicleUpdateInput(dto);
+    const hasDataFields = Object.keys(data).length > 0;
+    const hasPrimaryToggle = dto.isPrimary !== undefined;
+    if (!hasDataFields && !hasPrimaryToggle) {
+      throw new BadRequestException("No vehicle changes provided");
+    }
+
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        if (dto.isPrimary === true) {
+          await tx.citizenVehicle.updateMany({
+            where: { userId: actor.sub },
+            data: { isPrimary: false },
+          });
+        }
+        const vehicle = await tx.citizenVehicle.update({
+          where: { id: vehicleId },
+          data: {
+            ...data,
+            ...(dto.isPrimary !== undefined ? { isPrimary: dto.isPrimary } : {}),
+          },
+        });
+        return vehicle;
+      });
+      return this.mapCitizenVehicle(updated);
+    } catch (error) {
+      this.rethrowCitizenVehicleWriteError(error);
+    }
+  }
+
+  async deleteMyVehicle(actor: JwtPayload, vehicleId: string) {
+    this.assertCitizen(actor);
+    const existing = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+    });
+    if (!existing) throw new NotFoundException("Vehicle not found");
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.citizenVehicle.delete({ where: { id: vehicleId } });
+      if (!existing.isPrimary) return;
+
+      // Primary delete rule: when the primary is deleted, promote the most
+      // recently updated remaining vehicle. If none remain, zero primary is valid.
+      const promote = await tx.citizenVehicle.findFirst({
+        where: { userId: actor.sub },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (!promote) return;
+      await tx.citizenVehicle.update({
+        where: { id: promote.id },
+        data: { isPrimary: true },
+      });
+    });
+
+    return { ok: true };
+  }
+
+  async setMyVehiclePrimary(actor: JwtPayload, vehicleId: string, isPrimary: boolean) {
+    this.assertCitizen(actor);
+    if (!isPrimary) {
+      throw new BadRequestException("Use vehicle update to clear primary status");
+    }
+    const existing = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+    });
+    if (!existing) throw new NotFoundException("Vehicle not found");
+
+    const vehicle = await this.prisma.$transaction(async (tx) => {
+      await tx.citizenVehicle.updateMany({
+        where: { userId: actor.sub },
+        data: { isPrimary: false },
+      });
+      return tx.citizenVehicle.update({
+        where: { id: vehicleId },
+        data: { isPrimary: true },
+      });
+    });
+    return this.mapCitizenVehicle(vehicle);
   }
 
   async presignAvatar(actor: JwtPayload, dto: AvatarPresignDto) {
@@ -740,6 +878,65 @@ export class UsersService {
       relationship: contact.relationship,
       priority: contact.priority,
     };
+  }
+
+  private mapCitizenVehicle(vehicle: CitizenVehicle) {
+    return {
+      id: vehicle.id,
+      userId: vehicle.userId,
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year,
+      color: vehicle.color,
+      plateNumber: vehicle.plateNumber,
+      vin: vehicle.vin,
+      isPrimary: vehicle.isPrimary,
+      createdAt: vehicle.createdAt.toISOString(),
+      updatedAt: vehicle.updatedAt.toISOString(),
+    };
+  }
+
+  private toCitizenVehicleCreateInput(dto: CreateCitizenVehicleDto): Prisma.CitizenVehicleUncheckedCreateInput {
+    return {
+      make: this.normalizeRequiredVehicleText(dto.make, "Make is required"),
+      model: this.normalizeRequiredVehicleText(dto.model, "Model is required"),
+      plateNumber: this.normalizePlateNumber(dto.plateNumber),
+      year: dto.year ?? null,
+      color: dto.color?.trim() || null,
+      vin: dto.vin?.trim() || null,
+      isPrimary: dto.isPrimary ?? false,
+    };
+  }
+
+  private toCitizenVehicleUpdateInput(dto: UpdateCitizenVehicleDto): Prisma.CitizenVehicleUncheckedUpdateInput {
+    const data: Prisma.CitizenVehicleUncheckedUpdateInput = {};
+    if (dto.make !== undefined) data.make = this.normalizeRequiredVehicleText(dto.make, "Make is required");
+    if (dto.model !== undefined) data.model = this.normalizeRequiredVehicleText(dto.model, "Model is required");
+    if (dto.plateNumber !== undefined) data.plateNumber = this.normalizePlateNumber(dto.plateNumber);
+    if (dto.year !== undefined) data.year = dto.year;
+    if (dto.color !== undefined) data.color = dto.color?.trim() || null;
+    if (dto.vin !== undefined) data.vin = dto.vin?.trim() || null;
+    return data;
+  }
+
+  private normalizePlateNumber(value: string) {
+    const normalized = value.trim().toUpperCase();
+    if (!normalized) throw new BadRequestException("Plate number is required");
+    return normalized;
+  }
+
+  private normalizeRequiredVehicleText(value: string, message: string) {
+    const normalized = value.trim();
+    if (!normalized) throw new BadRequestException(message);
+    return normalized;
+  }
+
+  private rethrowCitizenVehicleWriteError(error: unknown): never {
+    const code = (error as { code?: string })?.code;
+    if (code === "P2002") {
+      throw new ConflictException("A vehicle with this plate number already exists in your garage");
+    }
+    throw error;
   }
 
   private assertCitizen(actor: JwtPayload) {

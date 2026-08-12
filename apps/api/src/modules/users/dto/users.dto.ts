@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Max,
   Min,
   MinLength,
   ValidateIf,
@@ -185,3 +186,110 @@ export class RequestAccountDeletionDto {
   @IsBoolean()
   confirm!: boolean;
 }
+
+export class CreateCitizenVehicleDto {
+  @ApiProperty({ example: "Toyota" })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  make!: string;
+
+  @ApiProperty({ example: "Corolla" })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  model!: string;
+
+  @ApiProperty({ example: "LAG-123-EYE" })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  plateNumber!: string;
+
+  @ApiPropertyOptional({ example: 2021 })
+  @IsOptional()
+  @IsInt()
+  @Min(1900)
+  @Max(2100)
+  year?: number;
+
+  @ApiPropertyOptional({ example: "Silver" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  color?: string;
+
+  @ApiPropertyOptional({ example: "1HGCM82633A123456" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  vin?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: "Optional on create; if true, this vehicle becomes the only primary vehicle for the user",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+}
+
+export class UpdateCitizenVehicleDto {
+  @ApiPropertyOptional({ example: "Toyota" })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  make?: string;
+
+  @ApiPropertyOptional({ example: "Corolla" })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  model?: string;
+
+  @ApiPropertyOptional({ example: "LAG-123-EYE" })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  plateNumber?: string;
+
+  @ApiPropertyOptional({ example: 2021, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1900)
+  @Max(2100)
+  year?: number | null;
+
+  @ApiPropertyOptional({ example: "Silver", nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  color?: string | null;
+
+  @ApiPropertyOptional({ example: "1HGCM82633A123456", nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  vin?: string | null;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: "When true, this vehicle becomes the only primary vehicle for the user",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+}
+
+export class SetPrimaryCitizenVehicleDto {
+  @ApiProperty({
+    description: "Explicitly set this vehicle as primary",
+    example: true,
+  })
+  @IsBoolean()
+  isPrimary!: boolean;
+}
+

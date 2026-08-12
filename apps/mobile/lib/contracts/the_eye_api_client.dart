@@ -97,6 +97,51 @@ class EmergencyContact {
   }
 }
 
+class CitizenVehicleRecord {
+  const CitizenVehicleRecord({
+    required this.id,
+    required this.userId,
+    required this.make,
+    required this.model,
+    required this.plateNumber,
+    required this.isPrimary,
+    this.year,
+    this.color,
+    this.vin,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String userId;
+  final String make;
+  final String model;
+  final String plateNumber;
+  final int? year;
+  final String? color;
+  final String? vin;
+  final bool isPrimary;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  factory CitizenVehicleRecord.fromJson(Map<String, dynamic> json) {
+    final yearRaw = json["year"];
+    return CitizenVehicleRecord(
+      id: (json["id"] as String?) ?? "",
+      userId: (json["userId"] as String?) ?? "",
+      make: (json["make"] as String?) ?? "",
+      model: (json["model"] as String?) ?? "",
+      plateNumber: (json["plateNumber"] as String?) ?? "",
+      year: yearRaw is num ? yearRaw.toInt() : int.tryParse("$yearRaw"),
+      color: json["color"] as String?,
+      vin: json["vin"] as String?,
+      isPrimary: json["isPrimary"] == true,
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      updatedAt: DateTime.tryParse((json["updatedAt"] as String?) ?? ""),
+    );
+  }
+}
+
 class SmartwatchDeviceRecord {
   const SmartwatchDeviceRecord({
     required this.id,
@@ -855,6 +900,112 @@ class TheEyeApiClient {
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return _decodeMap(response.body);
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<List<CitizenVehicleRecord>> listMyVehicles({
+    required String accessToken,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await getJson(
+      TheEyeApiPaths.usersMeVehicles,
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      final rows = decoded is Map ? decoded["data"] : null;
+      if (rows is! List) return const [];
+      return rows
+          .whereType<Map>()
+          .map((item) =>
+              CitizenVehicleRecord.fromJson(Map<String, dynamic>.from(item)))
+          .toList(growable: false);
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> createMyVehicle({
+    required String accessToken,
+    required Map<String, Object?> payload,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehicles,
+      payload,
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> getMyVehicle({
+    required String accessToken,
+    required String vehicleId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await getJson(
+      TheEyeApiPaths.usersMeVehicle(vehicleId),
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> updateMyVehicle({
+    required String accessToken,
+    required String vehicleId,
+    required Map<String, Object?> payload,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await patchJson(
+      TheEyeApiPaths.usersMeVehicle(vehicleId),
+      payload,
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<void> deleteMyVehicle({
+    required String accessToken,
+    required String vehicleId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await deleteJson(
+      TheEyeApiPaths.usersMeVehicle(vehicleId),
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> setMyVehiclePrimary({
+    required String accessToken,
+    required String vehicleId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehiclePrimary(vehicleId),
+      const {"isPrimary": true},
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
     }
     throw AuthApiException.fromResponse(response);
   }

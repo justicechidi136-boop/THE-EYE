@@ -23,6 +23,15 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    citizenVehicle: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      delete: jest.fn(),
+    },
     kycRecord: {
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
@@ -252,6 +261,248 @@ describe("UsersService emergency contacts", () => {
     } catch (error) {
       expect(String(error)).toContain("Emergency contact not found");
     }
+  });
+});
+
+describe("UsersService vehicle garage", () => {
+  it("lists zero vehicles", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehicle.findMany.mockResolvedValue([]);
+    const result = await service.listMyVehicles({
+      sub: "user-1",
+      typ: "user",
+      role: "Citizen",
+      permissions: [],
+    } as never);
+    expect(result).toEqual({ data: [] });
+  });
+
+  it("lists one two three vehicles without overwriting earlier entries", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehicle.findMany.mockResolvedValue([
+      {
+        id: "v1",
+        userId: "user-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2020,
+        color: "Silver",
+        plateNumber: "ABC-111",
+        vin: null,
+        isPrimary: true,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+      },
+      {
+        id: "v2",
+        userId: "user-1",
+        make: "Honda",
+        model: "Civic",
+        year: 2021,
+        color: "Black",
+        plateNumber: "ABC-222",
+        vin: null,
+        isPrimary: false,
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+      },
+      {
+        id: "v3",
+        userId: "user-1",
+        make: "Lexus",
+        model: "RX",
+        year: 2022,
+        color: "Blue",
+        plateNumber: "ABC-333",
+        vin: null,
+        isPrimary: false,
+        createdAt: new Date("2026-01-03T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    ]);
+
+    const result = await service.listMyVehicles({
+      sub: "user-1",
+      typ: "user",
+      role: "Citizen",
+      permissions: [],
+    } as never);
+
+    expect(result.data).toHaveLength(3);
+    expect(result.data[0].plateNumber).toBe("ABC-111");
+    expect(result.data[1].plateNumber).toBe("ABC-222");
+    expect(result.data[2].plateNumber).toBe("ABC-333");
+  });
+
+  it("creates first vehicle as primary and does not overwrite subsequent vehicles", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehicle.create.mockImplementation(async ({ data }: { data: any }) => ({
+      id: "v-1",
+      userId: data.userId,
+      make: data.make,
+      model: data.model,
+      year: data.year ?? null,
+      color: data.color ?? null,
+      plateNumber: data.plateNumber,
+      vin: data.vin ?? null,
+      isPrimary: data.isPrimary ?? false,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    }));
+    prisma.citizenVehicle.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+
+    const first = await service.createMyVehicle(
+      { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      { make: "Toyota", model: "Corolla", plateNumber: "abc-111" },
+    );
+    const second = await service.createMyVehicle(
+      { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      { make: "Honda", model: "Civic", plateNumber: "abc-222", isPrimary: false },
+    );
+
+    expect(first.isPrimary).toBe(true);
+    expect(first.plateNumber).toBe("ABC-111");
+    expect(second.isPrimary).toBe(false);
+    expect(second.plateNumber).toBe("ABC-222");
+    expect(prisma.citizenVehicle.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("enforces single primary when setting a vehicle as primary", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehicle.findFirst.mockResolvedValue({
+      id: "v-2",
+      userId: "user-1",
+      make: "Honda",
+      model: "Civic",
+      year: 2020,
+      color: "Black",
+      plateNumber: "ABC-222",
+      vin: null,
+      isPrimary: false,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    prisma.citizenVehicle.update.mockResolvedValue({
+      id: "v-2",
+      userId: "user-1",
+      make: "Honda",
+      model: "Civic",
+      year: 2020,
+      color: "Black",
+      plateNumber: "ABC-222",
+      vin: null,
+      isPrimary: true,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+    });
+
+    const result = await service.setMyVehiclePrimary(
+      { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      "v-2",
+      true,
+    );
+
+    expect(prisma.citizenVehicle.updateMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      data: { isPrimary: false },
+    });
+    expect(result.isPrimary).toBe(true);
+  });
+
+  it("deletes non-primary vehicle without promoting another", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehicle.findFirst.mockResolvedValue({
+      id: "v-2",
+      userId: "user-1",
+      make: "Honda",
+      model: "Civic",
+      year: 2020,
+      color: "Black",
+      plateNumber: "ABC-222",
+      vin: null,
+      isPrimary: false,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+    });
+
+    const result = await service.deleteMyVehicle(
+      { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      "v-2",
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.citizenVehicle.delete).toHaveBeenCalledWith({ where: { id: "v-2" } });
+    expect(prisma.citizenVehicle.update).not.toHaveBeenCalled();
+  });
+
+  it("deletes primary vehicle and promotes the most recently updated remaining one", async () => {
+    const { service, prisma } = createUsersService();
+    const calls: Array<string> = [];
+    prisma.citizenVehicle.findFirst
+      .mockImplementationOnce(async () => ({
+        id: "v-primary",
+        userId: "user-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2021,
+        color: "Silver",
+        plateNumber: "ABC-111",
+        vin: null,
+        isPrimary: true,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+      }))
+      .mockImplementationOnce(async () => {
+        calls.push("promotionLookup");
+        return {
+          id: "v-recent",
+          userId: "user-1",
+          make: "Lexus",
+          model: "RX",
+          year: 2022,
+          color: "Blue",
+          plateNumber: "ABC-333",
+          vin: null,
+          isPrimary: false,
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+          updatedAt: new Date("2026-01-04T00:00:00.000Z"),
+        };
+      });
+
+    await service.deleteMyVehicle(
+      { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      "v-primary",
+    );
+
+    expect(calls).toContain("promotionLookup");
+    expect(prisma.citizenVehicle.update).toHaveBeenCalledWith({
+      where: { id: "v-recent" },
+      data: { isPrimary: true },
+    });
+  });
+
+  it("enforces ownership for get/update/delete", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehicle.findFirst.mockResolvedValue(null);
+    await expect(
+      service.getMyVehicle(
+        { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+        "missing",
+      ),
+    ).rejects.toThrow("Vehicle not found");
+    await expect(
+      service.updateMyVehicle(
+        { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+        "missing",
+        { make: "Toyota" },
+      ),
+    ).rejects.toThrow("Vehicle not found");
+    await expect(
+      service.deleteMyVehicle(
+        { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+        "missing",
+      ),
+    ).rejects.toThrow("Vehicle not found");
   });
 });
 

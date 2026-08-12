@@ -538,7 +538,7 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
         .timeout(const Duration(seconds: 5));
     final authSessionStore = await SharedPreferencesAuthSessionStore.create()
         .timeout(const Duration(seconds: 5));
-    final carProfileStore = await SharedPreferencesCarProfileStore.create()
+    final vehicleGarageStore = await SharedPreferencesVehicleGarageStore.create()
         .timeout(const Duration(seconds: 5));
 
     AuthService? authService;
@@ -582,7 +582,7 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       ),
       authSessionStore: authSessionStore,
       themeProvider: themeProvider,
-      carProfileStore: carProfileStore,
+      vehicleGarageStore: vehicleGarageStore,
     );
     await controller.loadPersistedSession().timeout(const Duration(seconds: 5));
 
@@ -1156,6 +1156,14 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 );
               },
               "/your-car": (_) => const YourCarScreen(),
+              "/your-car/detail": (context) {
+                final args = ModalRoute.of(context)?.settings.arguments;
+                return VehicleDetailScreen(
+                  args: args is _VehicleEditorArgs
+                      ? args
+                      : const _VehicleEditorArgs(),
+                );
+              },
               "/account-status": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments
                     as AccountStatusArgs?;
@@ -1353,17 +1361,17 @@ class AppController extends SessionAccessor
     required SocialAuthService socialAuthService,
     required AuthSessionStore authSessionStore,
     required ThemeProvider themeProvider,
-    required CarProfileStore carProfileStore,
+    required VehicleGarageStore vehicleGarageStore,
   })  : _submissionService = submissionService,
         _connectivity = connectivity,
         _authService = authService,
         _socialAuthService = socialAuthService,
         _authSessionStore = authSessionStore,
         _themeProvider = themeProvider,
-        _carProfileStore = carProfileStore {
+        _vehicleGarageStore = vehicleGarageStore {
     _connectivity.addListener(_onConnectivityChanged);
     _themeProvider.addListener(_onThemeChanged);
-    unawaited(_loadCarProfile());
+    unawaited(_loadVehicleGarageCache());
   }
 
   final IncidentSubmissionService _submissionService;
@@ -1386,7 +1394,7 @@ class AppController extends SessionAccessor
   final SocialAuthService _socialAuthService;
   final AuthSessionStore _authSessionStore;
   final ThemeProvider _themeProvider;
-  final CarProfileStore _carProfileStore;
+  final VehicleGarageStore _vehicleGarageStore;
   PushNotificationService? _pushNotifications;
   AuthSession? _cachedSession;
   String? _sessionAccessToken;
@@ -1472,6 +1480,7 @@ class AppController extends SessionAccessor
         apiBaseUrl: theEyeApiUrl,
       );
       await _pushNotifications?.syncTokenWithBackend();
+      unawaited(loadVehicleGarage(refresh: true));
       unawaited(loadNotificationsFromApi());
     }
   }
@@ -1487,6 +1496,7 @@ class AppController extends SessionAccessor
       apiBaseUrl: theEyeApiUrl,
     );
     await _pushNotifications?.syncTokenWithBackend();
+    unawaited(loadVehicleGarage(refresh: true));
     unawaited(loadIncidentsFromApi());
     unawaited(loadNotificationsFromApi());
   }
@@ -1517,6 +1527,7 @@ class AppController extends SessionAccessor
     _cachedSession = null;
     _sessionAccessToken = null;
     clearCitizenProfileCache();
+    vehicles = const [];
     notifications.clear();
     notificationLoadError = null;
     notificationNextCursor = null;
@@ -2307,6 +2318,7 @@ class AppController extends SessionAccessor
         apiBaseUrl: theEyeApiUrl,
       );
       await _pushNotifications?.syncTokenWithBackend();
+      unawaited(loadVehicleGarage(refresh: true));
       unawaited(loadIncidentsFromApi());
       unawaited(loadNotificationsFromApi(refresh: true));
       unawaited(refreshComposeDrafts());
@@ -2362,7 +2374,14 @@ class AppController extends SessionAccessor
   bool highContrastMode = false;
   @override
   bool lowDataMode = false;
-  CarProfile? carProfile;
+  List<CarProfile> vehicles = const [];
+  CarProfile? get carProfile => primaryVehicle;
+  CarProfile? get primaryVehicle {
+    for (final vehicle in vehicles) {
+      if (vehicle.isPrimary) return vehicle;
+    }
+    return vehicles.isNotEmpty ? vehicles.first : null;
+  }
 
   ThemeMode get themeMode => _themeProvider.themeMode;
   ThemePreference get themePreference => _themeProvider.preference;
@@ -2372,20 +2391,235 @@ class AppController extends SessionAccessor
     notifyListeners();
   }
 
-  Future<void> _loadCarProfile() async {
-    carProfile = await _carProfileStore.load();
+  Future<void> _loadVehicleGarageCache() async {
+    vehicles = await _vehicleGarageStore.loadVehicles();
     notifyListeners();
+  }
+
+  Future<void> loadVehicleGarage({bool refresh = false}) async {
+    if (!refresh && vehicles.isEmpty) {
+      vehicles = await _vehicleGarageStore.loadVehicles();
+      notifyListeners();
+    }
+    final token = accessToken;
+    if (token == null || token.isEmpty) return;
+
+    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    try {
+      var remote = await api.listMyVehicles(accessToken: token);
+      if (remote.isEmpty) {
+        final legacy = await _vehicleGarageStore.loadLegacyCarProfile();
+        if (legacy != null && legacy.hasRequiredFields) {
+          final created = await api.createMyVehicle(
+            accessToken: token,
+            payload: {
+              "make": legacy.make,
+              "model": legacy.model,
+              "plateNumber": legacy.plateNumber,
+              if (legacy.year != null) "year": legacy.year,
+              if ((legacy.color ?? "").trim().isNotEmpty) "color": legacy.color,
+              if ((legacy.vin ?? "").trim().isNotEmpty) "vin": legacy.vin,
+              "isPrimary": true,
+            },
+          );
+          remote = [created];
+          await _vehicleGarageStore.clearLegacyCarProfile();
+        }
+      }
+      final merged = _mergeRemoteVehicles(
+        remote,
+        previous: vehicles,
+      );
+      vehicles = merged;
+      await _vehicleGarageStore.saveVehicles(vehicles);
+      notifyListeners();
+    } catch (_) {
+      // Keep cached vehicles for offline display when garage sync fails.
+    }
+  }
+
+  Future<CarProfile> addVehicle(CarProfile profile) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw StateError("Sign in to add vehicles");
+    }
+    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final created = await api.createMyVehicle(
+      accessToken: token,
+      payload: {
+        "make": profile.make,
+        "model": profile.model,
+        "plateNumber": profile.plateNumber,
+        if (profile.year != null) "year": profile.year,
+        if ((profile.color ?? "").trim().isNotEmpty) "color": profile.color,
+        if ((profile.vin ?? "").trim().isNotEmpty) "vin": profile.vin,
+        if (profile.isPrimary) "isPrimary": true,
+      },
+    );
+    final merged = _mergeRemoteVehicles([created], previous: vehicles, replace: false);
+    vehicles = _upsertVehicle(merged, _fromApiVehicle(created).copyWith(
+      imagePath: profile.imagePath,
+      notes: profile.notes,
+    ));
+    await _vehicleGarageStore.saveVehicles(vehicles);
+    notifyListeners();
+    return vehicles.firstWhere((item) => item.id == created.id);
+  }
+
+  Future<CarProfile> updateVehicle(CarProfile profile) async {
+    final token = accessToken;
+    final vehicleId = profile.id;
+    if (token == null || token.isEmpty || vehicleId == null || vehicleId.isEmpty) {
+      throw StateError("Sign in and select a valid vehicle");
+    }
+    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final updated = await api.updateMyVehicle(
+      accessToken: token,
+      vehicleId: vehicleId,
+      payload: {
+        "make": profile.make,
+        "model": profile.model,
+        "plateNumber": profile.plateNumber,
+        "year": profile.year,
+        "color": profile.color,
+        "vin": profile.vin,
+        "isPrimary": profile.isPrimary,
+      },
+    );
+    vehicles = _upsertVehicle(
+      _mergeRemoteVehicles([updated], previous: vehicles, replace: false),
+      _fromApiVehicle(updated).copyWith(
+        imagePath: profile.imagePath,
+        notes: profile.notes,
+      ),
+    );
+    await _vehicleGarageStore.saveVehicles(vehicles);
+    notifyListeners();
+    return vehicles.firstWhere((item) => item.id == updated.id);
+  }
+
+  Future<void> setPrimaryVehicle(String vehicleId) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw StateError("Sign in to update primary vehicle");
+    }
+    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final updated = await api.setMyVehiclePrimary(
+      accessToken: token,
+      vehicleId: vehicleId,
+    );
+    vehicles = _mergeRemoteVehicles([updated], previous: vehicles, replace: false);
+    await loadVehicleGarage(refresh: true);
+  }
+
+  Future<void> deleteVehicle(String vehicleId) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw StateError("Sign in to delete vehicles");
+    }
+    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    await api.deleteMyVehicle(accessToken: token, vehicleId: vehicleId);
+    vehicles = vehicles.where((item) => item.id != vehicleId).toList(growable: false);
+    await _vehicleGarageStore.saveVehicles(vehicles);
+    notifyListeners();
+    await loadVehicleGarage(refresh: true);
+  }
+
+  List<CarProfile> _mergeRemoteVehicles(
+    List<CitizenVehicleRecord> remote, {
+    required List<CarProfile> previous,
+    bool replace = true,
+  }) {
+    final previousById = {
+      for (final item in previous)
+        if (item.id != null && item.id!.isNotEmpty) item.id!: item
+    };
+    final previousByPlate = {
+      for (final item in previous) item.plateNumber.trim().toUpperCase(): item
+    };
+    final remoteMapped = remote
+        .map((item) {
+          final byId = previousById[item.id];
+          final byPlate = previousByPlate[item.plateNumber.trim().toUpperCase()];
+          return _fromApiVehicle(item).copyWith(
+            imagePath: byId?.imagePath ?? byPlate?.imagePath,
+            notes: byId?.notes ?? byPlate?.notes,
+          );
+        })
+        .toList(growable: false);
+    if (replace) return remoteMapped;
+
+    final next = previous.toList(growable: true);
+    for (final remoteVehicle in remoteMapped) {
+      final index = next.indexWhere((item) => item.id == remoteVehicle.id);
+      if (index >= 0) {
+        next[index] = remoteVehicle;
+      } else {
+        next.add(remoteVehicle);
+      }
+    }
+    return _reconcilePrimary(next);
+  }
+
+  CarProfile _fromApiVehicle(CitizenVehicleRecord record) {
+    return CarProfile(
+      id: record.id,
+      make: record.make,
+      model: record.model,
+      plateNumber: record.plateNumber,
+      year: record.year,
+      color: record.color,
+      vin: record.vin,
+      isPrimary: record.isPrimary,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    );
+  }
+
+  List<CarProfile> _upsertVehicle(List<CarProfile> source, CarProfile updated) {
+    final next = source.toList(growable: true);
+    final index = next.indexWhere((item) => item.id == updated.id);
+    if (index >= 0) {
+      next[index] = updated;
+    } else {
+      next.insert(0, updated);
+    }
+    return _reconcilePrimary(next);
+  }
+
+  List<CarProfile> _reconcilePrimary(List<CarProfile> source) {
+    final next = source.toList(growable: false);
+    final primaryCount = next.where((item) => item.isPrimary).length;
+    if (primaryCount <= 1) return next;
+    var found = false;
+    return next
+        .map((item) {
+          if (!item.isPrimary) return item;
+          if (!found) {
+            found = true;
+            return item;
+          }
+          return item.copyWith(isPrimary: false);
+        })
+        .toList(growable: false);
   }
 
   Future<void> saveCarProfile(CarProfile profile) async {
-    await _carProfileStore.save(profile);
-    carProfile = profile;
-    notifyListeners();
+    if (profile.id != null && profile.id!.isNotEmpty) {
+      await updateVehicle(profile);
+      return;
+    }
+    await addVehicle(profile);
   }
 
   Future<void> clearCarProfile() async {
-    await _carProfileStore.clear();
-    carProfile = null;
+    final primary = primaryVehicle;
+    if (primary?.id != null && primary!.id!.isNotEmpty) {
+      await deleteVehicle(primary.id!);
+      return;
+    }
+    await _vehicleGarageStore.clear();
+    vehicles = const [];
     notifyListeners();
   }
 
@@ -5933,17 +6167,19 @@ class _StolenVehicleBroadcastScreenState
   bool usedSavedCar = false;
   bool prefilledFromSavedCar = false;
   String? savedCarImagePath;
+  String? selectedVehicleId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (prefilledFromSavedCar) return;
     prefilledFromSavedCar = true;
-    _applySavedCarProfile(appOf(context).carProfile, notify: false);
+    _applySavedCarProfile(appOf(context).primaryVehicle, notify: false);
   }
 
   void _applySavedCarProfile(CarProfile? profile, {bool notify = true}) {
     if (profile == null || !profile.hasRequiredFields) return;
+    selectedVehicleId = profile.id;
     plateController.text = profile.plateNumber;
     makeController.text = profile.make;
     modelController.text = profile.model;
@@ -5981,6 +6217,7 @@ class _StolenVehicleBroadcastScreenState
     _evidenceSectionKey.currentState?.clearAttachments();
     usedSavedCar = false;
     savedCarImagePath = null;
+    selectedVehicleId = null;
   }
 
   Future<void> _submit() async {
@@ -6090,8 +6327,17 @@ class _StolenVehicleBroadcastScreenState
 
   @override
   Widget build(BuildContext context) {
-    final savedCar = appOf(context).carProfile;
-    final hasSavedCar = savedCar?.hasRequiredFields ?? false;
+    final garageVehicles = appOf(context).vehicles
+        .where((vehicle) => vehicle.hasRequiredFields)
+        .toList(growable: false);
+    CarProfile? selectedVehicle;
+    for (final vehicle in garageVehicles) {
+      if (vehicle.id == selectedVehicleId) {
+        selectedVehicle = vehicle;
+        break;
+      }
+    }
+    final hasSavedCar = garageVehicles.isNotEmpty;
     return SafetyScaffold(
       title: "Stolen vehicle",
       body: ListView(
@@ -6105,16 +6351,35 @@ class _StolenVehicleBroadcastScreenState
                     size: 52, color: BrandColors.green),
                 const SizedBox(height: 16),
                 if (hasSavedCar)
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      _applySavedCarProfile(savedCar);
-                      showAppSnackBar(
-                          context, "Loaded your saved car details.");
+                  DropdownButtonFormField<String>(
+                    value: selectedVehicle?.id,
+                    decoration: const InputDecoration(
+                      labelText: "Select from My Cars (optional)",
+                    ),
+                    items: garageVehicles
+                        .map(
+                          (vehicle) => DropdownMenuItem<String>(
+                            value: vehicle.id,
+                            child: Text(
+                              "${vehicle.make} ${vehicle.model} • ${vehicle.plateNumber}",
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      setState(() => selectedVehicleId = value);
+                      CarProfile? selected;
+                      for (final vehicle in garageVehicles) {
+                        if (vehicle.id == value) {
+                          selected = vehicle;
+                          break;
+                        }
+                      }
+                      if (selected != null) {
+                        _applySavedCarProfile(selected);
+                        showAppSnackBar(context, "Loaded selected vehicle details.");
+                      }
                     },
-                    icon: const Icon(Icons.directions_car_filled_outlined),
-                    label: Text(usedSavedCar
-                        ? "Reload my saved car"
-                        : "Use my saved car"),
                   ),
                 if (hasSavedCar) const SizedBox(height: 12),
                 if (savedCarImagePath != null &&
@@ -8129,6 +8394,112 @@ class YourCarScreen extends StatefulWidget {
 }
 
 class _YourCarScreenState extends State<YourCarScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(appOf(context).loadVehicleGarage(refresh: true));
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = appOf(context);
+    final vehicles = controller.vehicles;
+    return SafetyScaffold(
+      title: "My Cars",
+      useFigmaShell: true,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: [
+          SectionCard(
+            title: "My Cars",
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (vehicles.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      "No vehicles added yet. Add a vehicle to speed up stolen vehicle broadcasts.",
+                    ),
+                  ),
+                ...vehicles.map((vehicle) {
+                  final label = "${vehicle.make} ${vehicle.model}".trim();
+                  final subtitle = [
+                    if ((vehicle.color ?? "").trim().isNotEmpty) vehicle.color!.trim(),
+                    vehicle.plateNumber,
+                  ].join(" • ");
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      leading: const Icon(Icons.directions_car),
+                      title: Row(
+                        children: [
+                          Expanded(child: Text(label.isEmpty ? "Vehicle" : label)),
+                          if (vehicle.isPrimary)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: BrandColors.green.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Text(
+                                "PRIMARY",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      subtitle: Text("$subtitle\nView details"),
+                      isThreeLine: true,
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).pushNamed(
+                        "/your-car/detail",
+                        arguments: _VehicleEditorArgs(vehicleId: vehicle.id),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pushNamed(
+                    "/your-car/detail",
+                    arguments: const _VehicleEditorArgs(),
+                  ),
+                  icon: const Icon(Icons.add),
+                  label: const Text("Add Vehicle"),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VehicleEditorArgs {
+  const _VehicleEditorArgs({this.vehicleId});
+
+  final String? vehicleId;
+}
+
+class VehicleDetailScreen extends StatefulWidget {
+  const VehicleDetailScreen({super.key, this.args = const _VehicleEditorArgs()});
+
+  final _VehicleEditorArgs args;
+
+  @override
+  State<VehicleDetailScreen> createState() => _VehicleDetailScreenState();
+}
+
+class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   final makeController = TextEditingController();
   final modelController = TextEditingController();
   final yearController = TextEditingController();
@@ -8137,6 +8508,8 @@ class _YourCarScreenState extends State<YourCarScreen> {
   final vinController = TextEditingController();
   final notesController = TextEditingController();
   String? imagePath;
+  String? vehicleId;
+  bool isPrimary = false;
   bool saving = false;
   bool initialized = false;
 
@@ -8145,8 +8518,16 @@ class _YourCarScreenState extends State<YourCarScreen> {
     super.didChangeDependencies();
     if (initialized) return;
     initialized = true;
-    final profile = appOf(context).carProfile;
+    final targetId = widget.args.vehicleId;
+    CarProfile? profile;
+    for (final candidate in appOf(context).vehicles) {
+      if (candidate.id == targetId) {
+        profile = candidate;
+        break;
+      }
+    }
     if (profile != null) {
+      vehicleId = profile.id;
       makeController.text = profile.make;
       modelController.text = profile.model;
       yearController.text = profile.year?.toString() ?? "";
@@ -8155,6 +8536,7 @@ class _YourCarScreenState extends State<YourCarScreen> {
       vinController.text = profile.vin ?? "";
       notesController.text = profile.notes ?? "";
       imagePath = profile.imagePath;
+      isPrimary = profile.isPrimary;
     }
   }
 
@@ -8223,6 +8605,7 @@ class _YourCarScreenState extends State<YourCarScreen> {
 
     setState(() => saving = true);
     final profile = CarProfile(
+      id: vehicleId,
       make: makeController.text.trim(),
       model: modelController.text.trim(),
       plateNumber: plateController.text.trim(),
@@ -8235,22 +8618,39 @@ class _YourCarScreenState extends State<YourCarScreen> {
           ? null
           : notesController.text.trim(),
       imagePath: imagePath,
+      isPrimary: isPrimary,
     );
 
-    await appOf(context).saveCarProfile(profile);
-    if (!mounted) return;
-    setState(() => saving = false);
-    showAppSnackBar(context, "Your car details were saved.");
-    Navigator.of(context).pop();
+    try {
+      if (vehicleId == null || vehicleId!.isEmpty) {
+        final created = await appOf(context).addVehicle(profile);
+        vehicleId = created.id;
+        isPrimary = created.isPrimary;
+      } else {
+        final updated = await appOf(context).updateVehicle(profile);
+        vehicleId = updated.id;
+        isPrimary = updated.isPrimary;
+      }
+      if (!mounted) return;
+      setState(() => saving = false);
+      showAppSnackBar(context, "Vehicle details were saved.");
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => saving = false);
+      showAppSnackBar(context, "Unable to save vehicle details.", isError: true);
+    }
   }
 
   Future<void> _removeCar() async {
+    final id = vehicleId;
+    if (id == null || id.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Remove saved car?"),
+        title: const Text("Delete this vehicle?"),
         content: const Text(
-            "This clears your saved vehicle details from this device."),
+            "If this is your primary vehicle, the most recently updated remaining vehicle becomes primary automatically."),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -8262,17 +8662,36 @@ class _YourCarScreenState extends State<YourCarScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await appOf(context).clearCarProfile();
+    await appOf(context).deleteVehicle(id);
     if (!mounted) return;
-    showAppSnackBar(context, "Saved car removed.");
+    showAppSnackBar(context, "Vehicle deleted.");
     Navigator.of(context).pop();
+  }
+
+  Future<void> _setPrimary() async {
+    final id = vehicleId;
+    if (id == null || id.isEmpty) return;
+    setState(() => saving = true);
+    try {
+      await appOf(context).setPrimaryVehicle(id);
+      if (!mounted) return;
+      setState(() {
+        isPrimary = true;
+        saving = false;
+      });
+      showAppSnackBar(context, "Primary vehicle updated.");
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => saving = false);
+      showAppSnackBar(context, "Unable to set primary vehicle.", isError: true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasSavedCar = appOf(context).carProfile != null;
+    final editingExisting = vehicleId != null && vehicleId!.isNotEmpty;
     return SafetyScaffold(
-      title: hasSavedCar ? "Your car" : "Add your car",
+      title: editingExisting ? "Vehicle details" : "Add vehicle",
       useFigmaShell: true,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
@@ -8368,13 +8787,20 @@ class _YourCarScreenState extends State<YourCarScreen> {
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text(hasSavedCar ? "Save changes" : "Save your car"),
+                      : Text(editingExisting ? "Save changes" : "Save vehicle"),
                 ),
-                if (hasSavedCar) ...[
+                if (editingExisting && !isPrimary) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: saving ? null : _setPrimary,
+                    child: const Text("Set as primary"),
+                  ),
+                ],
+                if (editingExisting) ...[
                   const SizedBox(height: 12),
                   OutlinedButton(
                     onPressed: saving ? null : _removeCar,
-                    child: const Text("Remove saved car"),
+                    child: const Text("Delete vehicle"),
                   ),
                 ],
               ],
@@ -8521,7 +8947,7 @@ class SettingsScreen extends StatelessWidget {
           const LocationPermissionSettingsSection(),
           const SizedBox(height: 16),
           SectionCard(
-            title: "Your car",
+            title: "My Cars",
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(
@@ -8529,12 +8955,12 @@ class SettingsScreen extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primary,
               ),
               title: Text(
-                controller.carProfile == null ? "Add your car" : "Your car",
+                controller.vehicles.isEmpty ? "Add vehicle" : "Manage my vehicles",
               ),
               subtitle: Text(
-                controller.carProfile == null
-                    ? "Save vehicle details for faster stolen car reports"
-                    : controller.carProfile!.displayLabel,
+                controller.vehicles.isEmpty
+                    ? "Save vehicles for faster stolen vehicle reports"
+                    : "${controller.vehicles.length} saved vehicle${controller.vehicles.length == 1 ? "" : "s"}",
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).pushNamed("/your-car"),

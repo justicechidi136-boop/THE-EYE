@@ -75,6 +75,9 @@ abstract final class TheEyeApiPaths {
   static const usersMeAvatarConfirm = "/users/me/avatar/confirm";
   static const usersMeKyc = "/users/me/kyc";
   static const usersMeDeletionRequest = "/users/me/deletion-request";
+  static const usersMeVehicles = "/me/vehicles";
+  static String usersMeVehicle(String id) => "/me/vehicles/$id";
+  static String usersMeVehiclePrimary(String id) => "/me/vehicles/$id/primary";
   static const notificationsPushTokens = "/notifications/push-tokens";
   static const notificationsPushTokensDeactivate =
       "/notifications/push-tokens/deactivate";

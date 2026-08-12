@@ -2,6 +2,7 @@ import "dart:convert";
 
 class CarProfile {
   const CarProfile({
+    this.id,
     required this.make,
     required this.model,
     required this.plateNumber,
@@ -10,8 +11,12 @@ class CarProfile {
     this.vin,
     this.notes,
     this.imagePath,
+    this.isPrimary = false,
+    this.createdAt,
+    this.updatedAt,
   });
 
+  final String? id;
   final String make;
   final String model;
   final String plateNumber;
@@ -20,6 +25,9 @@ class CarProfile {
   final String? vin;
   final String? notes;
   final String? imagePath;
+  final bool isPrimary;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   bool get hasRequiredFields =>
       make.trim().isNotEmpty &&
@@ -36,6 +44,7 @@ class CarProfile {
   }
 
   Map<String, Object?> toJson() => {
+        if (id != null && id!.isNotEmpty) "id": id,
         "make": make,
         "model": model,
         "plateNumber": plateNumber,
@@ -44,10 +53,14 @@ class CarProfile {
         if (vin != null && vin!.isNotEmpty) "vin": vin,
         if (notes != null && notes!.isNotEmpty) "notes": notes,
         if (imagePath != null && imagePath!.isNotEmpty) "imagePath": imagePath,
+        "isPrimary": isPrimary,
+        if (createdAt != null) "createdAt": createdAt!.toUtc().toIso8601String(),
+        if (updatedAt != null) "updatedAt": updatedAt!.toUtc().toIso8601String(),
       };
 
   factory CarProfile.fromJson(Map<String, dynamic> json) {
     return CarProfile(
+      id: json["id"] as String?,
       make: json["make"] as String? ?? "",
       model: json["model"] as String? ?? "",
       plateNumber: json["plateNumber"] as String? ?? "",
@@ -56,6 +69,9 @@ class CarProfile {
       vin: json["vin"] as String?,
       notes: json["notes"] as String?,
       imagePath: json["imagePath"] as String?,
+      isPrimary: json["isPrimary"] == true,
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      updatedAt: DateTime.tryParse((json["updatedAt"] as String?) ?? ""),
     );
   }
 
@@ -69,6 +85,7 @@ class CarProfile {
   }
 
   CarProfile copyWith({
+    String? id,
     String? make,
     String? model,
     String? plateNumber,
@@ -79,8 +96,12 @@ class CarProfile {
     String? notes,
     String? imagePath,
     bool clearImagePath = false,
+    bool? isPrimary,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return CarProfile(
+      id: id ?? this.id,
       make: make ?? this.make,
       model: model ?? this.model,
       plateNumber: plateNumber ?? this.plateNumber,
@@ -89,6 +110,9 @@ class CarProfile {
       vin: vin ?? this.vin,
       notes: notes ?? this.notes,
       imagePath: clearImagePath ? null : (imagePath ?? this.imagePath),
+      isPrimary: isPrimary ?? this.isPrimary,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }
