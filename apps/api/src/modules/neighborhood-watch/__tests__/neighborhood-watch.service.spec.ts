@@ -39,7 +39,21 @@ function buildService(overrides: Record<string, unknown> = {}) {
     patrolCheckpoint: { create: jest.fn().mockResolvedValue({ id: "checkpoint-1" }) },
     policeStation: { findMany: jest.fn().mockResolvedValue([]) },
     communityRequest: { create: jest.fn().mockResolvedValue({ id: "request-1", status: "Pending" }) },
-    communityPostComment: { create: jest.fn().mockResolvedValue({ id: "comment-1", body: "Thanks" }) },
+    communityPostComment: {
+      create: jest.fn().mockResolvedValue({ id: "comment-1", body: "Thanks", createdAt: new Date() }),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    communityPresence: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    communityPostReaction: {
+      upsert: jest.fn().mockResolvedValue({ id: "reaction-1" }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    communityContentReport: {
+      create: jest.fn().mockResolvedValue({ id: "report-1" }),
+    },
     profile: { findUnique: jest.fn().mockResolvedValue({ userId: "user-1", country: "NG", state: "LA", lga: "Ikeja" }) },
     $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -148,7 +162,10 @@ describe("NeighborhoodWatchService", () => {
 
   it("creates a post comment for approved members", async () => {
     const { service, prisma } = buildService({
-      communityPostComment: { create: jest.fn().mockResolvedValue({ id: "comment-1", body: "Thanks" }) },
+      communityPostComment: {
+        create: jest.fn().mockResolvedValue({ id: "comment-1", body: "Thanks", createdAt: new Date() }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
     });
     await service.createPostComment("post-1", { body: "Thanks for the update" }, userActor);
     expect(prisma.communityPostComment.create).toHaveBeenCalled();

@@ -37,7 +37,9 @@ FCM data also includes legacy `route` / `deepLink` mirroring `destination` for b
 | `FIELD_DEVICE_STATUS` | `/device-registration` | Field tablet registration refresh |
 | `NW_COMMUNITY_ALERT` | `/neighborhood-watch/alerts` | Official community leadership alerts |
 | `NW_POST_ACTIVITY` | `/neighborhood-watch/post/:postId` | New/updated community feed activity |
+| `NW_NEW_DISCUSSION` | `/neighborhood-watch/post/:postId` | User-started public community discussion thread |
 | `NW_POST_COMMENT` | `/neighborhood-watch/post/:postId` | Comment on author's post |
+| `NW_POST_REPLY` | `/neighborhood-watch/post/:postId` | Reply activity for prior thread commenters |
 | `NW_PATROL_INVITATION` | `/neighborhood-watch/patrol/:patrolId` | Patrol assignment / invite |
 | `NW_PATROL_UPDATE` | `/neighborhood-watch/patrol/:patrolId` | Patrol start/pause/complete status |
 | `NW_MEMBERSHIP_APPROVED` | `/neighborhood-watch/private/:communityId/membership` | Private membership approved |

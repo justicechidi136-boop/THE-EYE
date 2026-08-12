@@ -1,8 +1,8 @@
 # Neighborhood Watch — Architecture (E2E)
 
-**Branch:** `feature/neighborhood-watch-e2e`  
+**Branch:** `feature/nw-public-user-conversations`  
 **Baseline:** `staging`  
-**Status:** CODE COMPLETE — STAGING DEPLOYMENT PENDING
+**Status:** PUBLIC USER-INITIATED CONVERSATIONS — CODE COMPLETE — STAGING DEPLOYMENT PENDING
 
 ## Principle
 
@@ -21,6 +21,18 @@ Neighborhood Watch extends the existing Sprint 5 community platform. It does **n
 - **Public community:** GPS resolves an Active Public community via PostGIS. User becomes a **LOCATION_PARTICIPANT** via ephemeral `CommunityPresence`. No automatic `CommunityMembership` row.
 - **Private community:** Physical presence never grants access. Approved `CommunityMembership` required.
 - **Home community:** Optional preference on Profile. Never falsifies current location.
+
+## Public community — user-initiated conversations
+
+A public community must **never** depend on an administrator or existing posts before users can participate.
+
+- Any authenticated user with **fresh** GPS resolved into an active **Public** community may **Start Conversation** (create a `CommunityPost` thread).
+- Permanent membership is **not** required for public participation (residents, travelers, visitors, temporary presence).
+- Architecture is **post/thread-based** (not one endless public chat room).
+- Server must authorize posting from membership **or** fresh `CommunityPresence` for that `communityId` — never trust client-supplied geography alone.
+- Presence-only authors are labeled **Current Area Visitor** where policy requires.
+- Voice-first create is supported (text / voice / photo / short video).
+- Immediate danger uses canonical **Report Emergency**; suspicious-activity escalation reuses `convert-to-incident`.
 
 ## Context resolution
 

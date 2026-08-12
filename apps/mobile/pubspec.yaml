@@ -1,4 +1,4 @@
-﻿name: the_eye_mobile
+name: the_eye_mobile
 description: Citizen mobile app for THE EYE public safety platform.
 publish_to: "none"
 version: 0.1.0+1
@@ -20,7 +20,7 @@ dependencies:
   http: ^1.2.2
   shared_preferences: ^2.3.3
   url_launcher: ^6.3.1
-  connectivity_plus: ^6.1.4
+  connectivity_plus: ^7.3.1
   image_picker: ^1.1.2
   file_picker: ^8.1.7
   permission_handler: ^11.3.1
@@ -32,7 +32,8 @@ dependencies:
   record: ^6.1.0
   just_audio: ^0.9.46
   google_fonts: ^6.2.1
-  livekit_client: ^2.3.6
+  # 2.10.0+ fixes Dart 3.13 null-promotion compile errors in publishOptions
+  livekit_client: ^2.10.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

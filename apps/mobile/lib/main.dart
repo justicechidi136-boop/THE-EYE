@@ -23,6 +23,9 @@ import "contracts/the_eye_api_paths.dart";
 import "contracts/the_eye_enums.dart";
 import "contracts/the_eye_payloads.dart";
 import "voice/voice_report_validation.dart";
+import "voice/voice_recorder.dart";
+import "neighborhood_watch/community_conversation_eligibility.dart";
+import "neighborhood_watch/community_post_route_args.dart";
 import "evidence/evidence_attachment_picker.dart";
 import "evidence/local_evidence_attachment.dart";
 import "evidence/evidence_capture_service.dart";
@@ -209,8 +212,9 @@ Widget _buildActiveEmergencyRoute(BuildContext context,
 Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? "";
   if (name.startsWith("/incident-detail/") && name.endsWith("/messages")) {
-    final incidentId =
-        name.substring("/incident-detail/".length, name.length - "/messages".length).trim();
+    final incidentId = name
+        .substring("/incident-detail/".length, name.length - "/messages".length)
+        .trim();
     if (incidentId.isEmpty) return null;
     final detailArgs = settings.arguments is Map
         ? Map<String, dynamic>.from(settings.arguments as Map)
@@ -255,7 +259,8 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
             locationLabel: messageArgs["locationLabel"]?.toString(),
             reportedAt: messageArgs["reportedAt"] is DateTime
                 ? messageArgs["reportedAt"] as DateTime
-                : DateTime.tryParse(messageArgs["reportedAt"]?.toString() ?? ""),
+                : DateTime.tryParse(
+                    messageArgs["reportedAt"]?.toString() ?? ""),
             confirmStillOngoing: messageArgs["confirmStillOngoing"] == true,
             confirmResolved: messageArgs["confirmResolved"] == true,
           );
@@ -292,7 +297,8 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
         final app = appOf(context);
         return CommunityVerificationScreen(
           requestId: requestId,
-          service: CommunityVerificationService(TheEyeApiClient(baseUrl: theEyeApiUrl)),
+          service: CommunityVerificationService(
+              TheEyeApiClient(baseUrl: theEyeApiUrl)),
           accessToken: app.accessToken ?? "",
           highContrast: app.highContrastMode,
         );
@@ -330,10 +336,10 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
         final controller = appOf(context);
         return CommunityPostDetailScreen(
           accessToken: controller.accessToken ?? "",
-          args: CommunityPostDetailRouteArgs(
-            postId: postId,
-            postTitle: "Community post",
-            communityId: controller.selectedCommunity?.id ?? "",
+          args: resolveCommunityPostRouteArgs(
+            pathPostId: postId,
+            settingsArguments: settings.arguments,
+            selectedCommunityId: controller.selectedCommunity?.id,
             currentUserId: controller.cachedCitizenProfile?.id,
           ),
           isOnline: controller.online,
@@ -829,7 +835,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
     if (request.route.startsWith("/active-emergency/") &&
         request.route.endsWith("/messages")) {
       final incidentId = request.route
-          .substring("/active-emergency/".length, request.route.length - "/messages".length)
+          .substring("/active-emergency/".length,
+              request.route.length - "/messages".length)
           .trim();
       if (incidentId.isEmpty) return;
       navigator.pushNamed("/active-emergency/$incidentId/messages");
@@ -839,7 +846,8 @@ class _TheEyeAppState extends State<TheEyeApp> {
     if (request.route.startsWith("/incident-detail/") &&
         request.route.endsWith("/messages")) {
       final incidentId = request.route
-          .substring("/incident-detail/".length, request.route.length - "/messages".length)
+          .substring("/incident-detail/".length,
+              request.route.length - "/messages".length)
           .trim();
       if (incidentId.isEmpty) return;
       navigator.pushNamed("/incident-detail/$incidentId/messages");
@@ -1818,6 +1826,8 @@ class AppController extends SessionAccessor
     broadcastUnreadCount = 0;
     communities.clear();
     selectedCommunity = null;
+    nwContextCommunityId = null;
+    nwContextCanPost = false;
     communityLoadError = null;
     communityFeed.clear();
     communityFeedError = null;
@@ -1872,6 +1882,24 @@ class AppController extends SessionAccessor
 
   void selectCommunity(CommunitySummary community) {
     selectedCommunity = community;
+    notifyListeners();
+  }
+
+  @override
+  void applyNeighborhoodWatchContext({
+    required CommunitySummary community,
+    required bool canPost,
+  }) {
+    selectedCommunity = community;
+    nwContextCommunityId = community.id;
+    nwContextCanPost = canPost;
+    notifyListeners();
+  }
+
+  @override
+  void clearNeighborhoodWatchParticipationContext() {
+    nwContextCommunityId = null;
+    nwContextCanPost = false;
     notifyListeners();
   }
 
@@ -2011,6 +2039,20 @@ class AppController extends SessionAccessor
     }
   }
 
+  /// Community id last confirmed via NW `/context` with posting permission.
+  String? nwContextCommunityId;
+  bool nwContextCanPost = false;
+
+  /// Public: approved members, or presence participants confirmed by context.
+  /// Private: approved membership still required.
+  bool get canStartCommunityConversation =>
+      evaluateCanStartCommunityConversation(
+        isAuthenticated: isAuthenticated,
+        community: selectedCommunity,
+        nwContextCanPost: nwContextCanPost,
+        nwContextCommunityId: nwContextCommunityId,
+      );
+
   Future<String?> createCommunityPost({
     required String type,
     required String title,
@@ -2019,8 +2061,14 @@ class AppController extends SessionAccessor
     CommunityMediaUploadProgress? onMediaProgress,
   }) async {
     final community = selectedCommunity;
-    if (community == null || !community.isMember) {
+    if (community == null) {
+      return "Resolve your current public community before starting a conversation";
+    }
+    if (community.visibility == "Private" && !community.isMember) {
       return "Approved community membership is required";
+    }
+    if (!canStartCommunityConversation) {
+      return "You cannot start a conversation in this community right now";
     }
     if (!isAuthenticated || accessToken == null) return "Sign in required";
     try {
@@ -2810,8 +2858,8 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
             "If an account matches that email, password-reset instructions have been sent.";
         formError = null;
       } else {
-        formError = result.userMessage ??
-            "We couldn’t process your request right now.";
+        formError =
+            result.userMessage ?? "We couldn’t process your request right now.";
         formSuccess = null;
       }
     });
@@ -3839,181 +3887,185 @@ class HomeScreen extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         child: ListView(
-        padding:
-            const EdgeInsets.only(bottom: EyeTokens.contentBottomClearance),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: "Incident history",
-                  onPressed: () => Navigator.of(context).pushNamed("/tracking"),
-                  icon: Icon(
-                    Icons.history,
-                    color: EyeSemanticColors.of(context).interactiveText,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: "Notifications",
-                  onPressed: () =>
-                      Navigator.of(context).pushNamed("/notifications"),
-                  icon: Icon(
-                    Icons.notifications_none,
-                    color: EyeSemanticColors.of(context).interactiveText,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: StatusStrip(controller: controller),
-          ),
-          const EyeHeroCarousel(slides: _heroSlides),
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: EyeTokens.cardGap,
-              crossAxisSpacing: EyeTokens.cardGap,
-              childAspectRatio: 0.92,
-              children: [
-                EyeServiceCard(
-                  title: "Emergency Case",
-                  description:
-                      "Ensure fast and accurate information during urgent situations",
-                  icon: Icons.emergency_share,
-                  onTap: () =>
-                      Navigator.of(context).pushNamed("/report/emergency"),
-                ),
-                EyeServiceCard(
-                  title: "Accident Reporting",
-                  description:
-                      "Report accidents swiftly and accurately with our intuitive platform",
-                  icon: Icons.car_crash_outlined,
-                  onTap: () =>
-                      Navigator.of(context).pushNamed("/report/accident"),
-                ),
-                EyeServiceCard(
-                  title: "Nearest Police Station",
-                  description:
-                      "Locate the nearest police station quickly in case of emergencies",
-                  icon: Icons.local_police_outlined,
-                  onTap: () =>
-                      Navigator.of(context).pushNamed("/police-stations"),
-                ),
-                EyeServiceCard(
-                  title: "Safety broadcasts",
-                  description:
-                      "Create or manage missing person and stolen vehicle alerts",
-                  icon: Icons.campaign_outlined,
-                  onTap: () =>
-                      Navigator.of(context).pushNamed(BroadcastRoutes.create),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SectionCard(
-              title: "All services",
-              child: GridView.count(
-                crossAxisCount: MediaQuery.sizeOf(context).width > 640 ? 3 : 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.15,
+          padding:
+              const EdgeInsets.only(bottom: EyeTokens.contentBottomClearance),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Row(
                 children: [
-                  ActionTile(
-                      "Live emergency video",
-                      Icons.videocam,
-                      Colors.red.shade900,
-                      () => Navigator.of(context).pushNamed("/live-video")),
-                  ActionTile(
-                      "Report crime",
-                      Icons.local_police,
-                      Colors.indigo.shade700,
-                      () => Navigator.of(context).pushNamed("/report/crime")),
-                  ActionTile(
-                      "Fire report",
-                      Icons.local_fire_department,
-                      Colors.deepOrange.shade700,
-                      () => Navigator.of(context).pushNamed("/report/fire")),
-                  ActionTile(
-                      "Kidnapping report",
-                      Icons.report,
-                      Colors.red.shade900,
-                      () => Navigator.of(context)
-                          .pushNamed("/report/kidnapping")),
-                  ActionTile(
-                      "Abuse report",
-                      Icons.health_and_safety,
-                      Colors.pink.shade700,
-                      () => Navigator.of(context).pushNamed("/report/abuse")),
-                  ActionTile(
-                      "Suspicious activity",
-                      Icons.visibility,
-                      Colors.amber.shade900,
-                      () => Navigator.of(context)
-                          .pushNamed("/report/suspicious-activity")),
-                  ActionTile(
-                      "Missing person",
-                      Icons.person_search,
-                      Colors.teal.shade700,
-                      () => Navigator.of(context).pushNamed("/missing-person")),
-                  ActionTile(
-                      "Stolen vehicle",
-                      Icons.directions_car,
-                      Colors.blueGrey.shade700,
-                      () => Navigator.of(context).pushNamed("/stolen-vehicle")),
-                  ActionTile("SOS device", Icons.watch, Colors.red.shade800,
-                      () => Navigator.of(context).pushNamed("/smartwatch")),
-                  ActionTile(
-                      "Neighborhood Watch",
-                      Icons.groups,
-                      Colors.teal.shade800,
-                      () => Navigator.of(context)
-                          .pushNamed("/neighborhood-watch")),
-                  ActionTile(
-                      "Safety broadcasts",
-                      Icons.campaign,
-                      Colors.purple.shade700,
-                      () => Navigator.of(context).pushNamed("/broadcasts")),
-                  ActionTile(
-                      "Incident status",
-                      Icons.radar,
-                      Colors.cyan.shade800,
-                      () => Navigator.of(context).pushNamed("/tracking")),
-                  ActionTile(
-                      "Help & Support",
-                      Icons.support_agent,
-                      Colors.blue.shade800,
-                      () => Navigator.of(context).pushNamed("/support")),
+                  IconButton(
+                    tooltip: "Incident history",
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed("/tracking"),
+                    icon: Icon(
+                      Icons.history,
+                      color: EyeSemanticColors.of(context).interactiveText,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: "Notifications",
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed("/notifications"),
+                    icon: Icon(
+                      Icons.notifications_none,
+                      color: EyeSemanticColors.of(context).interactiveText,
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SectionCard(
-              title: "Active incidents",
-              child: Column(
-                children: controller.incidents
-                    .take(2)
-                    .map((incident) => IncidentStatusTile(incident: incident))
-                    .toList(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: StatusStrip(controller: controller),
+            ),
+            const EyeHeroCarousel(slides: _heroSlides),
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: EyeTokens.cardGap,
+                crossAxisSpacing: EyeTokens.cardGap,
+                childAspectRatio: 0.92,
+                children: [
+                  EyeServiceCard(
+                    title: "Emergency Case",
+                    description:
+                        "Ensure fast and accurate information during urgent situations",
+                    icon: Icons.emergency_share,
+                    onTap: () =>
+                        Navigator.of(context).pushNamed("/report/emergency"),
+                  ),
+                  EyeServiceCard(
+                    title: "Accident Reporting",
+                    description:
+                        "Report accidents swiftly and accurately with our intuitive platform",
+                    icon: Icons.car_crash_outlined,
+                    onTap: () =>
+                        Navigator.of(context).pushNamed("/report/accident"),
+                  ),
+                  EyeServiceCard(
+                    title: "Nearest Police Station",
+                    description:
+                        "Locate the nearest police station quickly in case of emergencies",
+                    icon: Icons.local_police_outlined,
+                    onTap: () =>
+                        Navigator.of(context).pushNamed("/police-stations"),
+                  ),
+                  EyeServiceCard(
+                    title: "Safety broadcasts",
+                    description:
+                        "Create or manage missing person and stolen vehicle alerts",
+                    icon: Icons.campaign_outlined,
+                    onTap: () =>
+                        Navigator.of(context).pushNamed(BroadcastRoutes.create),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SectionCard(
+                title: "All services",
+                child: GridView.count(
+                  crossAxisCount:
+                      MediaQuery.sizeOf(context).width > 640 ? 3 : 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.15,
+                  children: [
+                    ActionTile(
+                        "Live emergency video",
+                        Icons.videocam,
+                        Colors.red.shade900,
+                        () => Navigator.of(context).pushNamed("/live-video")),
+                    ActionTile(
+                        "Report crime",
+                        Icons.local_police,
+                        Colors.indigo.shade700,
+                        () => Navigator.of(context).pushNamed("/report/crime")),
+                    ActionTile(
+                        "Fire report",
+                        Icons.local_fire_department,
+                        Colors.deepOrange.shade700,
+                        () => Navigator.of(context).pushNamed("/report/fire")),
+                    ActionTile(
+                        "Kidnapping report",
+                        Icons.report,
+                        Colors.red.shade900,
+                        () => Navigator.of(context)
+                            .pushNamed("/report/kidnapping")),
+                    ActionTile(
+                        "Abuse report",
+                        Icons.health_and_safety,
+                        Colors.pink.shade700,
+                        () => Navigator.of(context).pushNamed("/report/abuse")),
+                    ActionTile(
+                        "Suspicious activity",
+                        Icons.visibility,
+                        Colors.amber.shade900,
+                        () => Navigator.of(context)
+                            .pushNamed("/report/suspicious-activity")),
+                    ActionTile(
+                        "Missing person",
+                        Icons.person_search,
+                        Colors.teal.shade700,
+                        () =>
+                            Navigator.of(context).pushNamed("/missing-person")),
+                    ActionTile(
+                        "Stolen vehicle",
+                        Icons.directions_car,
+                        Colors.blueGrey.shade700,
+                        () =>
+                            Navigator.of(context).pushNamed("/stolen-vehicle")),
+                    ActionTile("SOS device", Icons.watch, Colors.red.shade800,
+                        () => Navigator.of(context).pushNamed("/smartwatch")),
+                    ActionTile(
+                        "Neighborhood Watch",
+                        Icons.groups,
+                        Colors.teal.shade800,
+                        () => Navigator.of(context)
+                            .pushNamed("/neighborhood-watch")),
+                    ActionTile(
+                        "Safety broadcasts",
+                        Icons.campaign,
+                        Colors.purple.shade700,
+                        () => Navigator.of(context).pushNamed("/broadcasts")),
+                    ActionTile(
+                        "Incident status",
+                        Icons.radar,
+                        Colors.cyan.shade800,
+                        () => Navigator.of(context).pushNamed("/tracking")),
+                    ActionTile(
+                        "Help & Support",
+                        Icons.support_agent,
+                        Colors.blue.shade800,
+                        () => Navigator.of(context).pushNamed("/support")),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SectionCard(
+                title: "Active incidents",
+                child: Column(
+                  children: controller.incidents
+                      .take(2)
+                      .map((incident) => IncidentStatusTile(incident: incident))
+                      .toList(),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -4181,181 +4233,179 @@ class _ReportScreenState extends State<ReportScreen> {
     return Scaffold(
       backgroundColor: EyeSemanticColors.of(context).background,
       body: Column(
-          children: [
-            EyePageHeader.secondary(title: widget.type.figmaTitle),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                children: [
-                  if (controller.showConnectivityBanner)
-                    OfflineStatusBanner(state: controller.connectivityState),
-                  if (controller.showConnectivityBanner)
-                    const SizedBox(height: 12),
-                  if (isEmergency) ...[
-                    EyeOutlinedButton(
-                      label: "Start live emergency video",
-                      icon: const Icon(Icons.videocam, size: 20),
-                      onPressed: () =>
-                          Navigator.of(context).pushNamed("/live-video"),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  Text("Location of the incident",
-                      style: EyeInputTheme.labelStyle(context)),
-                  const SizedBox(height: 8),
-                  if (locationError != null) ...[
-                    LocationDeniedBanner(
-                      message: locationError!,
-                      onOpenSettings: () => openAppSettings(),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: manualLocation,
-                    onChanged: (value) =>
-                        setState(() => manualLocation = value),
-                    title: Text(
-                      "Manual location adjustment",
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    subtitle: Text(
-                      "GPS is captured automatically",
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  if (manualLocation) ...[
-                    const SizedBox(height: 8),
-                    EyeTextField(
-                      label: "Adjusted location",
-                      controller: manualAddressController,
-                      hint: "Enter the specific address",
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Text(
-                    isEmergency
-                        ? "Injuries or fatalities"
-                        : "${widget.type.label} description",
-                    style: EyeInputTheme.labelStyle(context),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: descriptionController,
-                    maxLines: isEmergency ? 5 : 4,
-                    style: EyeInputTheme.textStyle(context),
-                    cursorColor: EyeInputTheme.focusBorderColor(context),
-                    decoration: EyeInputTheme.decoration(
-                      context,
-                      hintText: isEmergency
-                          ? "Enter information about the injuries"
-                          : "Describe what happened",
-                      errorText: descriptionError,
-                      radius: EyeTokens.radiusSm,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 12,
-                      ),
-                    ),
-                    onChanged: (_) {
-                      if (descriptionError != null) {
-                        setState(() => descriptionError = null);
-                      }
-                    },
+        children: [
+          EyePageHeader.secondary(title: widget.type.figmaTitle),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              children: [
+                if (controller.showConnectivityBanner)
+                  OfflineStatusBanner(state: controller.connectivityState),
+                if (controller.showConnectivityBanner)
+                  const SizedBox(height: 12),
+                if (isEmergency) ...[
+                  EyeOutlinedButton(
+                    label: "Start live emergency video",
+                    icon: const Icon(Icons.videocam, size: 20),
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed("/live-video"),
                   ),
                   const SizedBox(height: 16),
-                  ManagedEvidenceSection(
-                    key: _evidenceSectionKey,
-                    lowDataMode: controller.lowDataMode,
-                    figmaStyle: true,
+                ],
+                Text("Location of the incident",
+                    style: EyeInputTheme.labelStyle(context)),
+                const SizedBox(height: 8),
+                if (locationError != null) ...[
+                  LocationDeniedBanner(
+                    message: locationError!,
+                    onOpenSettings: () => openAppSettings(),
                   ),
                   const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: anonymous,
-                    onChanged: (value) => setState(() => anonymous = value),
-                    title: Text(
-                      "Report anonymously",
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
+                ],
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: manualLocation,
+                  onChanged: (value) => setState(() => manualLocation = value),
+                  title: Text(
+                    "Manual location adjustment",
+                    style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: notifyEmergencyContact,
-                    onChanged: (value) {
-                      setState(() => notifyEmergencyContact = value);
-                      if (value) unawaited(_loadEmergencyContacts());
-                      _scheduleComposeDraftSave();
-                    },
-                    title: Text(
-                      "Notify emergency contact",
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
+                  subtitle: Text(
+                    "GPS is captured automatically",
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  if (notifyEmergencyContact) ...[
-                    if (loadingEmergencyContacts)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: LinearProgressIndicator(),
-                      )
-                    else if (emergencyContacts.isEmpty)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          "No saved emergency contacts",
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                        subtitle: Text(
-                          "Add contacts from your profile",
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      )
-                    else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: emergencyContacts
-                            .map(
-                              (contact) => FilterChip(
-                                label: Text(contact.name),
-                                selected: selectedEmergencyContactIds
-                                    .contains(contact.id),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      selectedEmergencyContactIds
-                                          .add(contact.id);
-                                    } else {
-                                      selectedEmergencyContactIds
-                                          .remove(contact.id);
-                                    }
-                                  });
-                                  _scheduleComposeDraftSave();
-                                },
-                              ),
-                            )
-                            .toList(),
-                      ),
-                  ],
-                  if (submissionError != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      submissionError!,
-                      style: const TextStyle(color: BrandColors.danger),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  EyePrimaryButton(
-                    label: "Submit",
-                    loading: submitting,
-                    enabled: !submitting,
-                    onPressed: submitting ? null : () => _submit(context),
+                ),
+                if (manualLocation) ...[
+                  const SizedBox(height: 8),
+                  EyeTextField(
+                    label: "Adjusted location",
+                    controller: manualAddressController,
+                    hint: "Enter the specific address",
                   ),
                 ],
-              ),
+                const SizedBox(height: 16),
+                Text(
+                  isEmergency
+                      ? "Injuries or fatalities"
+                      : "${widget.type.label} description",
+                  style: EyeInputTheme.labelStyle(context),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descriptionController,
+                  maxLines: isEmergency ? 5 : 4,
+                  style: EyeInputTheme.textStyle(context),
+                  cursorColor: EyeInputTheme.focusBorderColor(context),
+                  decoration: EyeInputTheme.decoration(
+                    context,
+                    hintText: isEmergency
+                        ? "Enter information about the injuries"
+                        : "Describe what happened",
+                    errorText: descriptionError,
+                    radius: EyeTokens.radiusSm,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
+                    ),
+                  ),
+                  onChanged: (_) {
+                    if (descriptionError != null) {
+                      setState(() => descriptionError = null);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                ManagedEvidenceSection(
+                  key: _evidenceSectionKey,
+                  lowDataMode: controller.lowDataMode,
+                  figmaStyle: true,
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: anonymous,
+                  onChanged: (value) => setState(() => anonymous = value),
+                  title: Text(
+                    "Report anonymously",
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: notifyEmergencyContact,
+                  onChanged: (value) {
+                    setState(() => notifyEmergencyContact = value);
+                    if (value) unawaited(_loadEmergencyContacts());
+                    _scheduleComposeDraftSave();
+                  },
+                  title: Text(
+                    "Notify emergency contact",
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+                if (notifyEmergencyContact) ...[
+                  if (loadingEmergencyContacts)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: LinearProgressIndicator(),
+                    )
+                  else if (emergencyContacts.isEmpty)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        "No saved emergency contacts",
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      subtitle: Text(
+                        "Add contacts from your profile",
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: emergencyContacts
+                          .map(
+                            (contact) => FilterChip(
+                              label: Text(contact.name),
+                              selected: selectedEmergencyContactIds
+                                  .contains(contact.id),
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    selectedEmergencyContactIds.add(contact.id);
+                                  } else {
+                                    selectedEmergencyContactIds
+                                        .remove(contact.id);
+                                  }
+                                });
+                                _scheduleComposeDraftSave();
+                              },
+                            ),
+                          )
+                          .toList(),
+                    ),
+                ],
+                if (submissionError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    submissionError!,
+                    style: const TextStyle(color: BrandColors.danger),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                EyePrimaryButton(
+                  label: "Submit",
+                  loading: submitting,
+                  enabled: !submitting,
+                  onPressed: submitting ? null : () => _submit(context),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -4660,8 +4710,7 @@ class _MissingPersonBroadcastScreenState
         payload: {
           "clientBroadcastId": createClientSubmissionId(),
           "fullName": fullNameController.text.trim(),
-          "ageOrApproximateAge":
-              MissingPersonAge.normalizeForApi(ageValue),
+          "ageOrApproximateAge": MissingPersonAge.normalizeForApi(ageValue),
           if (_gender != null) "gender": _gender,
           "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
           "lastSeenLatitude": outcome.position!.latitude,
@@ -4718,8 +4767,7 @@ class _MissingPersonBroadcastScreenState
                 const SizedBox(height: 16),
                 TextField(
                   controller: fullNameController,
-                  decoration:
-                      const InputDecoration(labelText: "Full name"),
+                  decoration: const InputDecoration(labelText: "Full name"),
                 ),
                 const SizedBox(height: 12),
                 SegmentedButton<String>(
@@ -5115,10 +5163,10 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(48),
                     ),
-                    onPressed: (startingStream ||
-                            !liveVideoController.canStartSession)
-                        ? null
-                        : () => _startStream(context),
+                    onPressed:
+                        (startingStream || !liveVideoController.canStartSession)
+                            ? null
+                            : () => _startStream(context),
                     icon: startingStream
                         ? const SizedBox(
                             width: 20,
@@ -6975,7 +7023,6 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   }
 }
 
-
 class MyCommunitiesScreen extends StatefulWidget {
   const MyCommunitiesScreen({super.key});
 
@@ -7202,11 +7249,47 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     });
   }
 
+  String _conversationTypeLabel(String type) {
+    return switch (type) {
+      "Discussion" => "Safety Discussion",
+      "SafetyTip" => "Security Tip",
+      "CommunityQuestion" => "Community Question",
+      "LocalWarning" => "Local Warning",
+      "RoadHazard" => "Road / Environmental Hazard",
+      "SuspiciousActivity" => "Suspicious Activity",
+      _ => type,
+    };
+  }
+
+  String _formatPostTime(DateTime? createdAt) {
+    if (createdAt == null) return "";
+    final local = createdAt.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, "0");
+    final suffix = local.hour >= 12 ? "PM" : "AM";
+    return "$hour:$minute $suffix";
+  }
+
+  void _openDiscussion(AppController controller, CommunityPostItem post) {
+    final community = controller.selectedCommunity;
+    if (community == null) return;
+    Navigator.of(context).pushNamed(
+      NeighborhoodWatchDestinations.post(post.id),
+      arguments: CommunityPostDetailRouteArgs(
+        postId: post.id,
+        postTitle: post.title,
+        communityId: community.id,
+        currentUserId: controller.cachedCitizenProfile?.id,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
+    final canStart = controller.canStartCommunityConversation;
     return SafetyScaffold(
-      title: "Community Feed",
+      title: "Community Discussions",
       selectedIndex: 3,
       body: RefreshIndicator(
         onRefresh: () => controller.loadCommunityFeed(refresh: true),
@@ -7214,13 +7297,26 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            FilledButton.icon(
-              onPressed: controller.selectedCommunity?.isMember == true
-                  ? () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/create")
-                  : null,
-              icon: const Icon(Icons.edit),
-              label: const Text("Create community post"),
+            if (canStart)
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context)
+                    .pushNamed(NeighborhoodWatchDestinations.create),
+                icon: const Icon(Icons.forum_outlined),
+                label: const Text("Start Conversation"),
+              )
+            else
+              const ListTileCard(
+                leading: Icon(Icons.lock_outline),
+                title: "Start Conversation unavailable",
+                subtitle:
+                    "Sign in and confirm your current public community to participate.",
+              ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Navigator.of(context).pushNamed("/report/emergency"),
+              icon: const Icon(Icons.emergency),
+              label: const Text("Report Emergency"),
             ),
             const SizedBox(height: 16),
             if (controller.loadingCommunityFeed &&
@@ -7234,31 +7330,37 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                 subtitle: controller.communityFeedError ?? "Unknown error",
               )
             else if (controller.communityFeed.isEmpty)
-              const ListTileCard(
-                leading: Icon(Icons.dynamic_feed),
-                title: "No posts yet",
-                subtitle: "Verified community posts will appear here.",
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const ListTileCard(
+                    leading: Icon(Icons.forum_outlined),
+                    title: "No community discussions yet",
+                    subtitle:
+                        "Be the first to start a safety conversation in this area.",
+                  ),
+                  if (canStart) ...[
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context)
+                          .pushNamed(NeighborhoodWatchDestinations.create),
+                      child: const Text("Start Conversation"),
+                    ),
+                  ],
+                ],
               )
             else
-              ...controller.communityFeed.map((post) => ListTileCard(
-                    leading: const Icon(Icons.report),
-                    title: "${post.type}: ${post.title}",
-                    subtitle:
-                        "${post.verificationStatus} • ${post.confidenceScore.round()}%",
-                    onTap: () {
-                      final community = controller.selectedCommunity;
-                      if (community == null) return;
-                      Navigator.of(context).pushNamed(
-                        "/neighborhood-watch/post",
-                        arguments: CommunityPostDetailRouteArgs(
-                          postId: post.id,
-                          postTitle: post.title,
-                          communityId: community.id,
-                          currentUserId: controller.cachedCitizenProfile?.id,
-                        ),
-                      );
-                    },
-                  )),
+              ...controller.communityFeed.map((post) {
+                final time = _formatPostTime(post.createdAt);
+                final comments = post.commentCount;
+                return ListTileCard(
+                  leading: const Icon(Icons.forum_outlined),
+                  title: "${_conversationTypeLabel(post.type)}\n${post.title}",
+                  subtitle:
+                      "${post.body.isEmpty ? "Voice discussion" : post.body}\n${post.displayAuthor}${time.isEmpty ? "" : " · $time"}\n$comments comment${comments == 1 ? "" : "s"} · View Discussion",
+                  onTap: () => _openDiscussion(controller, post),
+                );
+              }),
           ],
         ),
       ),
@@ -7275,28 +7377,21 @@ class CreateCommunityPostScreen extends StatefulWidget {
 }
 
 class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
+  /// User-facing conversation categories mapped to existing CommunityPost types.
   static const _typeMap = {
-    "Suspicious activity": "SuspiciousActivity",
-    "Lost child": "LostChild",
-    "Missing person": "MissingPerson",
-    "Crime alert": "CrimeAlert",
-    "Accident alert": "AccidentAlert",
-    "Fire alert": "FireAlert",
-    "Flood warning": "FloodWarning",
-    "Community announcement": "CommunityAnnouncement",
-    "Security meeting": "SecurityMeeting",
-    "Patrol update": "PatrolUpdate",
-    "Safety tip": "SafetyTip",
-    "Discussion": "Discussion",
-    "Local warning": "LocalWarning",
-    "Road hazard": "RoadHazard",
-    "Community question": "CommunityQuestion",
+    "Safety Discussion": "Discussion",
+    "Security Tip": "SafetyTip",
+    "Community Question": "CommunityQuestion",
+    "Local Warning": "LocalWarning",
+    "Road / Environmental Hazard": "RoadHazard",
+    "Suspicious Activity": "SuspiciousActivity",
   };
 
-  String _selectedType = "Suspicious activity";
+  String _selectedType = "Safety Discussion";
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
+  VoiceRecordingResult? _voiceDraft;
   bool _submitting = false;
 
   @override
@@ -7307,13 +7402,31 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
   }
 
   Future<void> _submit() async {
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
+    final evidence = _evidenceSectionKey.currentState?.attachments ?? const [];
+    final voice = _voiceDraft?.attachment;
+    final attachments = <LocalEvidenceAttachment>[
+      ...evidence,
+      if (voice != null) voice,
+    ];
+    if (title.length < 4) {
+      showAppSnackBar(context, "Add a short conversation title", isError: true);
+      return;
+    }
+    if (!hasValidReportNarrative(description: body, localMedia: attachments)) {
+      showAppSnackBar(
+        context,
+        "Add text, a voice note, or a photo/video before posting",
+        isError: true,
+      );
+      return;
+    }
     setState(() => _submitting = true);
-    final attachments =
-        _evidenceSectionKey.currentState?.attachments ?? const [];
     final error = await appOf(context).createCommunityPost(
-      type: _typeMap[_selectedType] ?? "SuspiciousActivity",
-      title: _titleController.text.trim(),
-      body: _bodyController.text.trim(),
+      type: _typeMap[_selectedType] ?? "Discussion",
+      title: title,
+      body: body,
       attachments: attachments,
       onMediaProgress: (localId, progress) =>
           _evidenceSectionKey.currentState?.markUploading(localId, progress),
@@ -7324,19 +7437,28 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
       showAppSnackBar(context, error, isError: true);
       return;
     }
-    showAppSnackBar(context, "Post submitted for verification");
-    Navigator.of(context).pushReplacementNamed("/neighborhood-watch/feed");
+    showAppSnackBar(context, "Conversation posted to this community");
+    Navigator.of(context)
+        .pushReplacementNamed(NeighborhoodWatchDestinations.feed);
   }
 
   @override
   Widget build(BuildContext context) {
     final types = _typeMap.keys.toList();
+    final voice = _voiceDraft;
     return SafetyScaffold(
-      title: "Create Post",
+      title: "Start Conversation",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
+          OutlinedButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pushNamed("/report/emergency"),
+            icon: const Icon(Icons.emergency),
+            label: const Text("Report Emergency"),
+          ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: _selectedType,
             items: types
@@ -7344,7 +7466,7 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                 .toList(),
             onChanged: (value) =>
                 setState(() => _selectedType = value ?? _selectedType),
-            decoration: const InputDecoration(labelText: "Post type"),
+            decoration: const InputDecoration(labelText: "Conversation type"),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -7355,8 +7477,36 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
           TextField(
             controller: _bodyController,
             maxLines: 4,
-            decoration: const InputDecoration(labelText: "Details"),
+            decoration: const InputDecoration(
+              labelText: "Details (optional if you add voice)",
+            ),
           ),
+          const SizedBox(height: 16),
+          Text(
+            "Voice note",
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Record → Stop → Preview → Play → Delete/Re-record → Post",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          VoiceRecorder(
+            onRecordingReady: (result) {
+              setState(() => _voiceDraft = result);
+            },
+            onRecordingRemoved: () {
+              setState(() => _voiceDraft = null);
+            },
+          ),
+          if (voice != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              "Voice note ready (${formatVoiceDuration(voice.durationSeconds)}) — preview above, then post.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 12),
           ManagedEvidenceSection(
             key: _evidenceSectionKey,
@@ -7370,7 +7520,7 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Post to community"),
+                : const Text("Post conversation"),
           ),
         ],
       ),
@@ -7709,15 +7859,16 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
                       "Upcoming patrols are listed below. Checkpoints can only be logged during an active patrol you are authorized for.",
                 ),
               ...controller.communityPatrols.map((patrol) {
-                final highlighted =
-                    widget.highlightScheduleId != null &&
-                        widget.highlightScheduleId == patrol.id;
+                final highlighted = widget.highlightScheduleId != null &&
+                    widget.highlightScheduleId == patrol.id;
                 return ListTileCard(
                   leading: Icon(
                     patrol.status.toLowerCase() == "active"
                         ? Icons.play_circle
                         : Icons.route,
-                    color: highlighted ? Theme.of(context).colorScheme.primary : null,
+                    color: highlighted
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
                   ),
                   title: patrol.title,
                   subtitle: highlighted
