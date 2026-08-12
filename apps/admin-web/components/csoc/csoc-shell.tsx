@@ -29,18 +29,18 @@ export function CsocShell({
         aria-label="Neighborhood Watch console navigation"
       >
         <div className="mb-4 flex items-center justify-between gap-3">
-          <Link href="/neighborhood-watch" className="block max-w-[180px]" aria-label="CSOC home">
+          <Link href="/neighborhood-watch" className="block max-w-[180px]" aria-label="Neighborhood Watch Management home">
             <Image src={BRAND_ASSETS.lockupDarkBg} alt="The Eye" width={180} height={48} priority className="h-auto w-full" />
           </Link>
         </div>
-        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-eye">Community Security Operations</p>
+        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-eye">Neighborhood Watch Management</p>
         <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-3">
           <p className="text-xs uppercase text-white/50">Active role</p>
           <p className="mt-1 font-semibold">{activeRole}</p>
           <p className="mt-2 text-sm leading-5 text-white/60">{scope}</p>
           {session?.email ? <p className="mt-2 text-xs text-white/50">{session.email}</p> : null}
         </div>
-        <nav className="grid gap-1" aria-label="CSOC primary">
+        <nav className="grid gap-1" aria-label="Neighborhood Watch primary">
           {navItems.map((item) => (
             <ShellNavLink key={item.href} href={item.href} label={item.label} />
           ))}

@@ -30,7 +30,7 @@ export default async function CsocSettingsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="CSOC configuration"
+        eyebrow="Neighborhood Watch configuration"
         title="Settings"
         action={<StatusBadge tone="success">Live policy sync</StatusBadge>}
       />
