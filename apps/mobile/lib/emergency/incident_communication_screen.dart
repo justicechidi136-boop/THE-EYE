@@ -9,6 +9,7 @@ import "../design_system/eye_semantic_colors.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
+import "../navigation/navigate_back_or_home.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
 import "active_emergency_contract.dart";
@@ -482,7 +483,7 @@ class _IncidentCommunicationScreenState
           CommunicationHeader(
             title: "Communication",
             subtitle: _subtitle,
-            onBack: () => Navigator.of(context).maybePop(),
+            onBack: () => navigateBackOrHome(context),
           ),
           CommunicationLiveRail(reportedAt: widget.reportedAt),
           if (readOnly)

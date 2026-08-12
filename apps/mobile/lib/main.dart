@@ -3693,14 +3693,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 }
 
-void navigateBackOrHome(BuildContext context) {
-  if (Navigator.of(context).canPop()) {
-    Navigator.of(context).pop();
-    return;
-  }
-  Navigator.of(context).pushReplacementNamed("/home");
-}
-
 class ServicesHubScreen extends StatelessWidget {
   const ServicesHubScreen({super.key});
 

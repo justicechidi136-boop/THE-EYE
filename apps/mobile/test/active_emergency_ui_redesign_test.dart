@@ -146,6 +146,22 @@ void main() {
     expect(find.byTooltip("Refresh"), findsOneWidget);
   });
 
+  testWidgets("header back control invokes onBack", (tester) async {
+    var tapped = false;
+    await tester.pumpWidget(
+      _wrap(
+        ActiveEmergencyHeader(
+          title: "Active Emergency",
+          onBack: () => tapped = true,
+          onRefresh: () {},
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip("Back"));
+    await tester.pump();
+    expect(tapped, isTrue);
+  });
+
   testWidgets("live banner is factual for non-streaming video", (tester) async {
     await tester.pumpWidget(
       _wrap(EmergencyLiveBanner(active: _active())),
