@@ -34,6 +34,8 @@ void main() {
       bool canStart({
         required bool authenticated,
         required CommunitySummary? community,
+        bool nwContextCanPost = false,
+        String? nwContextCommunityId,
       }) {
         if (!authenticated) return false;
         if (community == null || community.id.isEmpty) return false;
@@ -42,12 +44,22 @@ void main() {
             community.membershipStatus == "Banned") {
           return false;
         }
-        return true;
+        if (community.isMember) return true;
+        return nwContextCanPost && nwContextCommunityId == community.id;
       }
 
       expect(
-        canStart(authenticated: true, community: travelerCommunity),
+        canStart(
+          authenticated: true,
+          community: travelerCommunity,
+          nwContextCanPost: true,
+          nwContextCommunityId: "lagos-1",
+        ),
         isTrue,
+      );
+      expect(
+        canStart(authenticated: true, community: travelerCommunity),
+        isFalse,
       );
       expect(canStart(authenticated: true, community: privateLocked), isFalse);
       expect(canStart(authenticated: true, community: privateMember), isTrue);

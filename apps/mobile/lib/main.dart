@@ -329,13 +329,21 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
       settings: settings,
       builder: (context) {
         final controller = appOf(context);
+        final passed = settings.arguments is CommunityPostDetailRouteArgs
+            ? settings.arguments as CommunityPostDetailRouteArgs
+            : null;
         return CommunityPostDetailScreen(
           accessToken: controller.accessToken ?? "",
           args: CommunityPostDetailRouteArgs(
-            postId: postId,
-            postTitle: "Community post",
-            communityId: controller.selectedCommunity?.id ?? "",
-            currentUserId: controller.cachedCitizenProfile?.id,
+            postId: passed?.postId.isNotEmpty == true ? passed!.postId : postId,
+            postTitle: (passed?.postTitle.isNotEmpty == true)
+                ? passed!.postTitle
+                : "Community post",
+            communityId: (passed?.communityId.isNotEmpty == true)
+                ? passed!.communityId
+                : (controller.selectedCommunity?.id ?? ""),
+            currentUserId:
+                passed?.currentUserId ?? controller.cachedCitizenProfile?.id,
           ),
           isOnline: controller.online,
         );
@@ -1819,6 +1827,8 @@ class AppController extends SessionAccessor
     broadcastUnreadCount = 0;
     communities.clear();
     selectedCommunity = null;
+    nwContextCommunityId = null;
+    nwContextCanPost = false;
     communityLoadError = null;
     communityFeed.clear();
     communityFeedError = null;
@@ -1873,6 +1883,17 @@ class AppController extends SessionAccessor
 
   void selectCommunity(CommunitySummary community) {
     selectedCommunity = community;
+    notifyListeners();
+  }
+
+  @override
+  void applyNeighborhoodWatchContext({
+    required CommunitySummary community,
+    required bool canPost,
+  }) {
+    selectedCommunity = community;
+    nwContextCommunityId = community.id;
+    nwContextCanPost = canPost;
     notifyListeners();
   }
 
@@ -2012,7 +2033,11 @@ class AppController extends SessionAccessor
     }
   }
 
-  /// Public: presence participants may start conversations (server re-checks GPS).
+  /// Community id last confirmed via NW `/context` with posting permission.
+  String? nwContextCommunityId;
+  bool nwContextCanPost = false;
+
+  /// Public: approved members, or presence participants confirmed by context.
   /// Private: approved membership still required.
   bool get canStartCommunityConversation {
     if (!isAuthenticated) return false;
@@ -2023,7 +2048,8 @@ class AppController extends SessionAccessor
         community.membershipStatus == "Banned") {
       return false;
     }
-    return true;
+    if (community.isMember) return true;
+    return nwContextCanPost && nwContextCommunityId == community.id;
   }
 
   Future<String?> createCommunityPost({

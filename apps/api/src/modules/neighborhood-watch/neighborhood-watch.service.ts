@@ -1595,8 +1595,11 @@ export class NeighborhoodWatchService {
     });
     if (!post) throw new NotFoundException("Community post not found");
     await this.assertCommunityVisible(post.communityId, actor);
-    const authorLabel = await this.resolveAuthorLabel(post.communityId, post.authorId);
-    return { data: { ...post, authorLabel, commentCount: post.comments?.length ?? 0 } };
+    const [authorLabel, commentCount] = await Promise.all([
+      this.resolveAuthorLabel(post.communityId, post.authorId),
+      this.prisma.communityPostComment.count({ where: { postId } }),
+    ]);
+    return { data: { ...post, authorLabel, commentCount } };
   }
 
   private async scorePost(postId: string, reporterId: string, moderatorConfirmed: boolean) {
@@ -1664,31 +1667,15 @@ export class NeighborhoodWatchService {
     const unique = Array.from(new Set(userIds.filter(Boolean)));
     const result = new Map<string, string>();
     if (!unique.length) return result;
-    const [memberships, presenceRows] = await Promise.all([
-      this.prisma.communityMembership.findMany({
-        where: { communityId, userId: { in: unique }, status: "Approved" as never },
-        select: { userId: true },
-      }),
-      this.prisma.communityPresence.findMany({
-        where: {
-          communityId,
-          userId: { in: unique },
-          mode: "LocationParticipant",
-          expiresAt: { gt: new Date() },
-        },
-        select: { userId: true },
-      }),
-    ]);
+    // Label by membership, not live presence: travelers keep "Current Area Visitor"
+    // on historical posts after they leave the geofence.
+    const memberships = await this.prisma.communityMembership.findMany({
+      where: { communityId, userId: { in: unique }, status: "Approved" as never },
+      select: { userId: true },
+    });
     const members = new Set(memberships.map((row) => row.userId));
-    const visitors = new Set(presenceRows.map((row) => row.userId));
     for (const userId of unique) {
-      if (members.has(userId)) {
-        result.set(userId, "Community member");
-      } else if (visitors.has(userId)) {
-        result.set(userId, "Current Area Visitor");
-      } else {
-        result.set(userId, "Community member");
-      }
+      result.set(userId, members.has(userId) ? "Community member" : "Current Area Visitor");
     }
     return result;
   }

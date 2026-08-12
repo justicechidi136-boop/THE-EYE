@@ -149,6 +149,41 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
     );
   });
 
+  it("keeps Current Area Visitor label after presence expires", async () => {
+    const { service } = buildService({
+      communityMembership: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      communityPresence: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      communityPost: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "post-1",
+          communityId: "community-a",
+          authorId: "traveler-1",
+          media: [],
+          comments: Array.from({ length: 5 }, (_, i) => ({ id: `c-${i}` })),
+          reactions: [],
+          author: { id: "traveler-1", profile: { firstName: "Ada", lastName: "Traveler" } },
+        }),
+        create: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      communityPostComment: {
+        create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(42),
+      },
+    });
+    const result = await service.getPost("post-1", traveler);
+    expect(result.data.authorLabel).toBe("Current Area Visitor");
+    expect(result.data.commentCount).toBe(42);
+  });
+
   it("4) resident member creates a conversation without presence", async () => {
     const { service, prisma } = buildService({
       communityMembership: {

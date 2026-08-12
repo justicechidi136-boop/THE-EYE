@@ -207,10 +207,11 @@ class _NeighborhoodWatchHomeScreenState
     final session = AppScope.of(context);
     final nwSession =
         session is NeighborhoodWatchSession ? session as NeighborhoodWatchSession : null;
-    nwSession?.selectCommunity(
-      community.toCommunitySummary(
+    nwSession?.applyNeighborhoodWatchContext(
+      community: community.toCommunitySummary(
         activeAlertsCount: contextResponse.safetySummary.activeAlerts,
       ),
+      canPost: contextResponse.permissions.canPost,
     );
   }
   @override
