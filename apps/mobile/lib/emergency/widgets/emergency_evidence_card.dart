@@ -27,6 +27,14 @@ class EmergencyEvidenceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = EyeSemanticColors.of(context);
     final items = active.evidenceItems.take(3).toList(growable: false);
+    final indexedItems = <({ActiveEmergencyEvidenceItem item, int index})>[];
+    final counters = <String, int>{};
+    for (final item in items) {
+      final key = item.mediaType.toLowerCase();
+      final index = (counters[key] ?? 0) + 1;
+      counters[key] = index;
+      indexedItems.add((item: item, index: index));
+    }
 
     return ActiveEmergencyCard(
       child: Column(
@@ -66,8 +74,13 @@ class EmergencyEvidenceCard extends StatelessWidget {
               height: 78,
               child: Row(
                 children: [
-                  for (final item in items) ...[
-                    Expanded(child: _EvidenceTile(item: item)),
+                  for (final indexed in indexedItems) ...[
+                    Expanded(
+                      child: _EvidenceTile(
+                        item: indexed.item,
+                        indexWithinType: indexed.index,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                   ],
                   if (_canAdd)
@@ -99,21 +112,26 @@ class EmergencyEvidenceCard extends StatelessWidget {
 }
 
 class _EvidenceTile extends StatelessWidget {
-  const _EvidenceTile({required this.item});
+  const _EvidenceTile({
+    required this.item,
+    required this.indexWithinType,
+  });
 
   final ActiveEmergencyEvidenceItem item;
+  final int indexWithinType;
 
   @override
   Widget build(BuildContext context) {
     final colors = EyeSemanticColors.of(context);
     final kind = item.mediaType.toLowerCase();
-    final label = switch (kind) {
-      "video" => "Video",
-      "audio" => item.durationSeconds != null
-          ? "Audio ${_formatDuration(item.durationSeconds!)}"
-          : "Audio",
-      _ => "Photo",
+    final base = switch (kind) {
+      "video" => "Video $indexWithinType",
+      "audio" => "Audio $indexWithinType",
+      _ => "Photo $indexWithinType",
     };
+    final label = item.durationSeconds == null
+        ? base
+        : "$base · ${_formatDuration(item.durationSeconds!)}";
     final icon = switch (kind) {
       "video" => Icons.play_circle_outline,
       "audio" => Icons.graphic_eq,

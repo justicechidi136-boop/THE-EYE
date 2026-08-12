@@ -58,6 +58,12 @@ abstract final class EvidencePresentationMapper {
         EvidenceMediaKind.document => "Document",
       };
 
+  static String _clock(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, "0");
+    final s = (seconds % 60).toString().padLeft(2, "0");
+    return "$m:$s";
+  }
+
   /// Deterministic per-type numbering: Photo 1, Photo 2, Video 1, …
   static List<EvidencePresentation> mapLocalAttachments(
     List<LocalEvidenceAttachment> attachments, {
@@ -81,7 +87,13 @@ abstract final class EvidencePresentationMapper {
     DateTime? now,
   }) {
     final kind = kindForMediaType(attachment.mediaType);
-    final displayName = "${_prefix(kind)} $indexWithinKind";
+    final duration = attachment.durationSeconds;
+    final durationSuffix = (kind == EvidenceMediaKind.video ||
+            kind == EvidenceMediaKind.audio) &&
+        duration != null
+        ? " · ${_clock(duration)}"
+        : "";
+    final displayName = "${_prefix(kind)} $indexWithinKind$durationSuffix";
     final state = switch (attachment.state) {
       LocalEvidenceState.captured => EvidenceDisplayState.ready,
       LocalEvidenceState.uploading => EvidenceDisplayState.uploading,
@@ -96,7 +108,6 @@ abstract final class EvidencePresentationMapper {
         "Uploaded ${CitizenDateTimeFormatter.formatReportedAt(attachment.capturedAt, now: now)}",
       EvidenceDisplayState.failed => "Upload failed",
     };
-    final duration = attachment.durationSeconds;
     final durationLabel = duration == null
         ? null
         : duration >= 60

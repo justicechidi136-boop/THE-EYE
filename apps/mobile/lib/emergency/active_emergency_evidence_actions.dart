@@ -210,7 +210,10 @@ class _ActiveEmergencyEvidenceActionsState
   Widget build(BuildContext context) {
     final actions = widget.allowedActions;
     final showEvidence =
-        actions.addEvidence || actions.uploadPhoto || actions.uploadVideo;
+        actions.addEvidence ||
+        actions.uploadPhoto ||
+        actions.uploadVideo ||
+        actions.uploadVoice;
     final hasAttachments = _attachmentCount > 0;
 
     return Column(
@@ -229,7 +232,7 @@ class _ActiveEmergencyEvidenceActionsState
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Semantics(
-            label: "Add photo or video evidence",
+            label: "Add photo, video, or audio evidence",
             child: ManagedEvidenceSection(
               key: _evidenceKey,
               lowDataMode: widget.lowDataMode,

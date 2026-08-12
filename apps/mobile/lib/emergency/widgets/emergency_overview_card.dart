@@ -139,6 +139,13 @@ class EmergencyOverviewCard extends StatelessWidget {
               ),
             ],
           ),
+          if (active.description?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 12),
+            _Field(
+              label: "Description",
+              value: active.description!.trim(),
+            ),
+          ],
           if (onViewMap != null) ...[
             const SizedBox(height: 12),
             Align(

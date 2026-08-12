@@ -10,6 +10,28 @@ import {
 
 const allowedIncidentTypes = new Set<string>(Object.values(IncidentType));
 const allowedPriorities = new Set<string>(Object.values(IncidentPriority));
+const supportedEvidenceContentTypes = new Set<string>([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/webm",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/webm",
+  "audio/aac",
+  "audio/x-m4a",
+  "application/pdf",
+]);
+
+const incidentEvidencePolicy = {
+  maxPhotos: 6,
+  maxVideos: 2,
+  maxAudio: 2,
+  maxFiles: 10,
+  maxFileSize: 100 * 1024 * 1024,
+  maxTotalBytes: 300 * 1024 * 1024,
+} as const;
 
 export type IncidentMediaDraft = {
   mediaType: "Image" | "Video" | "Audio" | "Document" | "LiveVideoRecording";
@@ -150,7 +172,7 @@ export function validateReportIncidentDto(dto: ReportIncidentDto) {
   }
 
   if (dto.priority && !allowedPriorities.has(dto.priority)) throw new BadRequestException("Unsupported incident priority");
-  if (dto.media && dto.media.length > 10) throw new BadRequestException("At most 10 media files can be attached at submission");
+  validateIncidentMediaPolicy(dto.media ?? []);
   if (dto.emergencyContactIds && dto.emergencyContactIds.length > 5) throw new BadRequestException("At most 5 emergency contacts can be notified");
   if (dto.type === IncidentType.MissingPerson && !dto.missingPerson?.fullName) throw new BadRequestException("Missing person fullName is required");
   if (dto.type === IncidentType.StolenVehicle && !dto.stolenVehicle?.plateNumber) throw new BadRequestException("Stolen vehicle plateNumber is required");
@@ -159,6 +181,20 @@ export function validateReportIncidentDto(dto: ReportIncidentDto) {
 export function validateMediaDraft(dto: IncidentMediaDraft) {
   if (!dto.bucket || !dto.objectKey || !dto.contentType || !dto.fileHash) throw new BadRequestException("Media bucket, objectKey, contentType, and fileHash are required");
   if (!dto.mediaType || !["Image", "Video", "Audio", "Document", "LiveVideoRecording"].includes(dto.mediaType)) throw new BadRequestException("Unsupported media type");
+  if (!supportedEvidenceContentTypes.has(dto.contentType)) {
+    throw new BadRequestException("Unsupported evidence content type");
+  }
+  if (
+    dto.sizeBytes !== undefined &&
+    (!Number.isInteger(dto.sizeBytes) || dto.sizeBytes <= 0 || dto.sizeBytes > incidentEvidencePolicy.maxFileSize)
+  ) {
+    throw new BadRequestException("Evidence file size must be between 1 byte and 100 MB");
+  }
+  if (dto.mediaType === "Video" && dto.durationSeconds !== undefined) {
+    if (!Number.isInteger(dto.durationSeconds) || dto.durationSeconds <= 0 || dto.durationSeconds > 120) {
+      throw new BadRequestException("Video duration must be between 1 and 120 seconds");
+    }
+  }
   if (dto.mediaType === "Audio" && dto.durationSeconds !== undefined) {
     if (!Number.isInteger(dto.durationSeconds) || dto.durationSeconds <= 0 || dto.durationSeconds > 300) {
       throw new BadRequestException("Voice duration must be between 1 and 300 seconds");
@@ -183,5 +219,47 @@ export function validateIncidentLocationDto(dto: UpdateIncidentLocationDto) {
   }
   if (dto.quality && !ALLOWED_LOCATION_QUALITIES.has(dto.quality)) {
     throw new BadRequestException("Unsupported location quality");
+  }
+}
+
+function validateIncidentMediaPolicy(media: IncidentMediaDraft[]) {
+  if (media.length > incidentEvidencePolicy.maxFiles) {
+    throw new BadRequestException(
+      `At most ${incidentEvidencePolicy.maxFiles} media files can be attached at submission`,
+    );
+  }
+  const photoCount = media.filter((item) => item.mediaType === "Image").length;
+  if (photoCount > incidentEvidencePolicy.maxPhotos) {
+    throw new BadRequestException(`At most ${incidentEvidencePolicy.maxPhotos} photos can be attached`);
+  }
+  const videoCount = media.filter(
+    (item) => item.mediaType === "Video" || item.mediaType === "LiveVideoRecording",
+  ).length;
+  if (videoCount > incidentEvidencePolicy.maxVideos) {
+    throw new BadRequestException(`At most ${incidentEvidencePolicy.maxVideos} videos can be attached`);
+  }
+  const audioCount = media.filter((item) => item.mediaType === "Audio").length;
+  if (audioCount > incidentEvidencePolicy.maxAudio) {
+    throw new BadRequestException(`At most ${incidentEvidencePolicy.maxAudio} audio files can be attached`);
+  }
+
+  let totalSize = 0;
+  for (const item of media) {
+    if (item.sizeBytes !== undefined) {
+      if (
+        !Number.isInteger(item.sizeBytes) ||
+        item.sizeBytes <= 0 ||
+        item.sizeBytes > incidentEvidencePolicy.maxFileSize
+      ) {
+        throw new BadRequestException("Evidence file size must be between 1 byte and 100 MB");
+      }
+      totalSize += item.sizeBytes;
+      if (totalSize > incidentEvidencePolicy.maxTotalBytes) {
+        throw new BadRequestException("Attached evidence exceeds total upload allowance");
+      }
+    }
+    if (!supportedEvidenceContentTypes.has(item.contentType)) {
+      throw new BadRequestException("Unsupported evidence content type");
+    }
   }
 }
