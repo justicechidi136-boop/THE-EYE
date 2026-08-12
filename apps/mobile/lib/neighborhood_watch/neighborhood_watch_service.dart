@@ -93,6 +93,8 @@ class CommunityPostItem {
     required this.confidenceScore,
     required this.createdAt,
     this.authorName,
+    this.authorLabel,
+    this.commentCount = 0,
   });
 
   final String id;
@@ -103,16 +105,29 @@ class CommunityPostItem {
   final double confidenceScore;
   final DateTime? createdAt;
   final String? authorName;
+  final String? authorLabel;
+  final int commentCount;
+
+  String get displayAuthor {
+    final label = authorLabel?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    final name = authorName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    return "Community member";
+  }
 
   factory CommunityPostItem.fromJson(Map<String, dynamic> json) {
     final author = json["author"] as Map<String, dynamic>?;
     final profile = author?["profile"] as Map<String, dynamic>?;
     final authorName = profile == null
-        ? null
+        ? (author?["displayName"] as String?)
         : [profile["firstName"], profile["lastName"]]
             .whereType<String>()
             .where((part) => part.isNotEmpty)
             .join(" ");
+    final comments = json["comments"];
+    final commentCount = (json["commentCount"] as num?)?.toInt() ??
+        (comments is List ? comments.length : 0);
     return CommunityPostItem(
       id: (json["id"] as String?) ?? "",
       title: (json["title"] as String?) ?? "",
@@ -123,6 +138,8 @@ class CommunityPostItem {
       confidenceScore: double.tryParse("${json["confidenceScore"]}") ?? 0,
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
       authorName: authorName,
+      authorLabel: json["authorLabel"] as String?,
+      commentCount: commentCount,
     );
   }
 }
@@ -227,11 +244,14 @@ class CommunityCommentItem {
     final mediaType = json["mediaType"] as String?;
     final hasVoice = json["hasVoice"] == true ||
         mediaType == IncidentMediaType.audio;
+    final authorLabel = json["authorLabel"] as String?;
     return CommunityCommentItem(
       id: (json["id"] as String?) ?? "",
       body: (json["body"] as String?) ?? "",
       authorId: (author?["id"] as String?) ?? "",
-      authorName: (author?["displayName"] as String?) ?? "Member",
+      authorName: authorLabel?.trim().isNotEmpty == true
+          ? authorLabel!
+          : (author?["displayName"] as String?) ?? "Member",
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
       hasVoice: hasVoice,
       durationSeconds: (json["durationSeconds"] as num?)?.toInt(),

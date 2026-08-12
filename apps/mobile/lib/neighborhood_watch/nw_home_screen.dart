@@ -464,11 +464,18 @@ class _NeighborhoodWatchHomeScreenState
       ),
       if (ctx.permissions.canPost) ...[
         const SizedBox(height: 12),
-        OutlinedButton.icon(
+        FilledButton.icon(
           onPressed: () => Navigator.of(context)
               .pushNamed(NeighborhoodWatchDestinations.create),
-          icon: const Icon(Icons.add_alert),
-          label: const Text("Post safety update"),
+          icon: const Icon(Icons.forum_outlined),
+          label: const Text("Start Conversation"),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () =>
+              Navigator.of(context).pushNamed("/report/emergency"),
+          icon: const Icon(Icons.emergency),
+          label: const Text("Report Emergency"),
         ),
       ],
       if (ctx.privateCommunitiesNearby.isNotEmpty) ...[

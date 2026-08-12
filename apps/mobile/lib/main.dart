@@ -23,6 +23,7 @@ import "contracts/the_eye_api_paths.dart";
 import "contracts/the_eye_enums.dart";
 import "contracts/the_eye_payloads.dart";
 import "voice/voice_report_validation.dart";
+import "voice/voice_recorder.dart";
 import "evidence/evidence_attachment_picker.dart";
 import "evidence/local_evidence_attachment.dart";
 import "evidence/evidence_capture_service.dart";
@@ -2011,6 +2012,20 @@ class AppController extends SessionAccessor
     }
   }
 
+  /// Public: presence participants may start conversations (server re-checks GPS).
+  /// Private: approved membership still required.
+  bool get canStartCommunityConversation {
+    if (!isAuthenticated) return false;
+    final community = selectedCommunity;
+    if (community == null || community.id.isEmpty) return false;
+    if (community.visibility == "Private") return community.isMember;
+    if (community.membershipStatus == "Suspended" ||
+        community.membershipStatus == "Banned") {
+      return false;
+    }
+    return true;
+  }
+
   Future<String?> createCommunityPost({
     required String type,
     required String title,
@@ -2019,8 +2034,14 @@ class AppController extends SessionAccessor
     CommunityMediaUploadProgress? onMediaProgress,
   }) async {
     final community = selectedCommunity;
-    if (community == null || !community.isMember) {
+    if (community == null) {
+      return "Resolve your current public community before starting a conversation";
+    }
+    if (community.visibility == "Private" && !community.isMember) {
       return "Approved community membership is required";
+    }
+    if (!canStartCommunityConversation) {
+      return "You cannot start a conversation in this community right now";
     }
     if (!isAuthenticated || accessToken == null) return "Sign in required";
     try {
@@ -7202,11 +7223,47 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     });
   }
 
+  String _conversationTypeLabel(String type) {
+    return switch (type) {
+      "Discussion" => "Safety Discussion",
+      "SafetyTip" => "Security Tip",
+      "CommunityQuestion" => "Community Question",
+      "LocalWarning" => "Local Warning",
+      "RoadHazard" => "Road / Environmental Hazard",
+      "SuspiciousActivity" => "Suspicious Activity",
+      _ => type,
+    };
+  }
+
+  String _formatPostTime(DateTime? createdAt) {
+    if (createdAt == null) return "";
+    final local = createdAt.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, "0");
+    final suffix = local.hour >= 12 ? "PM" : "AM";
+    return "$hour:$minute $suffix";
+  }
+
+  void _openDiscussion(AppController controller, CommunityPostItem post) {
+    final community = controller.selectedCommunity;
+    if (community == null) return;
+    Navigator.of(context).pushNamed(
+      NeighborhoodWatchDestinations.post(post.id),
+      arguments: CommunityPostDetailRouteArgs(
+        postId: post.id,
+        postTitle: post.title,
+        communityId: community.id,
+        currentUserId: controller.cachedCitizenProfile?.id,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
+    final canStart = controller.canStartCommunityConversation;
     return SafetyScaffold(
-      title: "Community Feed",
+      title: "Community Discussions",
       selectedIndex: 3,
       body: RefreshIndicator(
         onRefresh: () => controller.loadCommunityFeed(refresh: true),
@@ -7214,13 +7271,26 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            FilledButton.icon(
-              onPressed: controller.selectedCommunity?.isMember == true
-                  ? () => Navigator.of(context)
-                      .pushNamed("/neighborhood-watch/create")
-                  : null,
-              icon: const Icon(Icons.edit),
-              label: const Text("Create community post"),
+            if (canStart)
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context)
+                    .pushNamed(NeighborhoodWatchDestinations.create),
+                icon: const Icon(Icons.forum_outlined),
+                label: const Text("Start Conversation"),
+              )
+            else
+              const ListTileCard(
+                leading: Icon(Icons.lock_outline),
+                title: "Start Conversation unavailable",
+                subtitle:
+                    "Sign in and confirm your current public community to participate.",
+              ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Navigator.of(context).pushNamed("/report/emergency"),
+              icon: const Icon(Icons.emergency),
+              label: const Text("Report Emergency"),
             ),
             const SizedBox(height: 16),
             if (controller.loadingCommunityFeed &&
@@ -7234,31 +7304,37 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                 subtitle: controller.communityFeedError ?? "Unknown error",
               )
             else if (controller.communityFeed.isEmpty)
-              const ListTileCard(
-                leading: Icon(Icons.dynamic_feed),
-                title: "No posts yet",
-                subtitle: "Verified community posts will appear here.",
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const ListTileCard(
+                    leading: Icon(Icons.forum_outlined),
+                    title: "No community discussions yet",
+                    subtitle:
+                        "Be the first to start a safety conversation in this area.",
+                  ),
+                  if (canStart) ...[
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context)
+                          .pushNamed(NeighborhoodWatchDestinations.create),
+                      child: const Text("Start Conversation"),
+                    ),
+                  ],
+                ],
               )
             else
-              ...controller.communityFeed.map((post) => ListTileCard(
-                    leading: const Icon(Icons.report),
-                    title: "${post.type}: ${post.title}",
-                    subtitle:
-                        "${post.verificationStatus} • ${post.confidenceScore.round()}%",
-                    onTap: () {
-                      final community = controller.selectedCommunity;
-                      if (community == null) return;
-                      Navigator.of(context).pushNamed(
-                        "/neighborhood-watch/post",
-                        arguments: CommunityPostDetailRouteArgs(
-                          postId: post.id,
-                          postTitle: post.title,
-                          communityId: community.id,
-                          currentUserId: controller.cachedCitizenProfile?.id,
-                        ),
-                      );
-                    },
-                  )),
+              ...controller.communityFeed.map((post) {
+                final time = _formatPostTime(post.createdAt);
+                final comments = post.commentCount;
+                return ListTileCard(
+                  leading: const Icon(Icons.forum_outlined),
+                  title: "${_conversationTypeLabel(post.type)}\n${post.title}",
+                  subtitle:
+                      "${post.body.isEmpty ? "Voice discussion" : post.body}\n${post.displayAuthor}${time.isEmpty ? "" : " · $time"}\n$comments comment${comments == 1 ? "" : "s"} · View Discussion",
+                  onTap: () => _openDiscussion(controller, post),
+                );
+              }),
           ],
         ),
       ),
@@ -7275,28 +7351,21 @@ class CreateCommunityPostScreen extends StatefulWidget {
 }
 
 class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
+  /// User-facing conversation categories mapped to existing CommunityPost types.
   static const _typeMap = {
-    "Suspicious activity": "SuspiciousActivity",
-    "Lost child": "LostChild",
-    "Missing person": "MissingPerson",
-    "Crime alert": "CrimeAlert",
-    "Accident alert": "AccidentAlert",
-    "Fire alert": "FireAlert",
-    "Flood warning": "FloodWarning",
-    "Community announcement": "CommunityAnnouncement",
-    "Security meeting": "SecurityMeeting",
-    "Patrol update": "PatrolUpdate",
-    "Safety tip": "SafetyTip",
-    "Discussion": "Discussion",
-    "Local warning": "LocalWarning",
-    "Road hazard": "RoadHazard",
-    "Community question": "CommunityQuestion",
+    "Safety Discussion": "Discussion",
+    "Security Tip": "SafetyTip",
+    "Community Question": "CommunityQuestion",
+    "Local Warning": "LocalWarning",
+    "Road / Environmental Hazard": "RoadHazard",
+    "Suspicious Activity": "SuspiciousActivity",
   };
 
-  String _selectedType = "Suspicious activity";
+  String _selectedType = "Safety Discussion";
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
+  VoiceRecordingResult? _voiceDraft;
   bool _submitting = false;
 
   @override
@@ -7307,13 +7376,32 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
   }
 
   Future<void> _submit() async {
-    setState(() => _submitting = true);
-    final attachments =
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
+    final evidence =
         _evidenceSectionKey.currentState?.attachments ?? const [];
+    final voice = _voiceDraft?.attachment;
+    final attachments = <LocalEvidenceAttachment>[
+      ...evidence,
+      if (voice != null) voice,
+    ];
+    if (title.length < 4) {
+      showAppSnackBar(context, "Add a short conversation title", isError: true);
+      return;
+    }
+    if (!hasValidReportNarrative(description: body, localMedia: attachments)) {
+      showAppSnackBar(
+        context,
+        "Add text, a voice note, or a photo/video before posting",
+        isError: true,
+      );
+      return;
+    }
+    setState(() => _submitting = true);
     final error = await appOf(context).createCommunityPost(
-      type: _typeMap[_selectedType] ?? "SuspiciousActivity",
-      title: _titleController.text.trim(),
-      body: _bodyController.text.trim(),
+      type: _typeMap[_selectedType] ?? "Discussion",
+      title: title,
+      body: body,
       attachments: attachments,
       onMediaProgress: (localId, progress) =>
           _evidenceSectionKey.currentState?.markUploading(localId, progress),
@@ -7324,19 +7412,28 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
       showAppSnackBar(context, error, isError: true);
       return;
     }
-    showAppSnackBar(context, "Post submitted for verification");
-    Navigator.of(context).pushReplacementNamed("/neighborhood-watch/feed");
+    showAppSnackBar(context, "Conversation posted to this community");
+    Navigator.of(context)
+        .pushReplacementNamed(NeighborhoodWatchDestinations.feed);
   }
 
   @override
   Widget build(BuildContext context) {
     final types = _typeMap.keys.toList();
+    final voice = _voiceDraft;
     return SafetyScaffold(
-      title: "Create Post",
+      title: "Start Conversation",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
+          OutlinedButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pushNamed("/report/emergency"),
+            icon: const Icon(Icons.emergency),
+            label: const Text("Report Emergency"),
+          ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: _selectedType,
             items: types
@@ -7344,7 +7441,8 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                 .toList(),
             onChanged: (value) =>
                 setState(() => _selectedType = value ?? _selectedType),
-            decoration: const InputDecoration(labelText: "Post type"),
+            decoration:
+                const InputDecoration(labelText: "Conversation type"),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -7355,8 +7453,36 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
           TextField(
             controller: _bodyController,
             maxLines: 4,
-            decoration: const InputDecoration(labelText: "Details"),
+            decoration: const InputDecoration(
+              labelText: "Details (optional if you add voice)",
+            ),
           ),
+          const SizedBox(height: 16),
+          Text(
+            "Voice note",
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Record → Stop → Preview → Play → Delete/Re-record → Post",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          VoiceRecorder(
+            onRecordingReady: (result) {
+              setState(() => _voiceDraft = result);
+            },
+            onRecordingRemoved: () {
+              setState(() => _voiceDraft = null);
+            },
+          ),
+          if (voice != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              "Voice note ready (${formatVoiceDuration(voice.durationSeconds)}) — preview above, then post.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 12),
           ManagedEvidenceSection(
             key: _evidenceSectionKey,
@@ -7370,7 +7496,7 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Post to community"),
+                : const Text("Post conversation"),
           ),
         ],
       ),

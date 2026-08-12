@@ -293,10 +293,25 @@ export function validateCommunity(dto: CreateCommunityDto) {
 
 export function validatePost(dto: CreateCommunityPostDto) {
   if (!dto.title || dto.title.trim().length < 4) throw new BadRequestException("Post title is required");
-  if (!dto.body || dto.body.trim().length < 5) throw new BadRequestException("Post body is required");
+  const hasMediaBody =
+    Array.isArray(dto.media) &&
+    dto.media.some((item) => item.mediaType === "Audio" || item.mediaType === "Image" || item.mediaType === "Video");
+  if ((!dto.body || dto.body.trim().length < 5) && !hasMediaBody) {
+    throw new BadRequestException("Post body or voice/photo/video attachment is required");
+  }
   if (dto.latitude !== undefined) assertCoordinate(dto.latitude, "latitude", -90, 90);
   if (dto.longitude !== undefined) assertCoordinate(dto.longitude, "longitude", -180, 180);
 }
+
+/** Conversation-family types that emit NW_NEW_DISCUSSION. */
+export const NW_DISCUSSION_POST_TYPES = new Set<CreateCommunityPostDto["type"]>([
+  "Discussion",
+  "SafetyTip",
+  "CommunityQuestion",
+  "LocalWarning",
+  "RoadHazard",
+  "SuspiciousActivity",
+]);
 
 export function validateRegisterVolunteer(dto: RegisterVolunteerDto) {
   if (!dto.types?.length) throw new BadRequestException("At least one volunteer category is required");

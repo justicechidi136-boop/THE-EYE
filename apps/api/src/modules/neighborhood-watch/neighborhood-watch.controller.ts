@@ -200,6 +200,18 @@ export class NeighborhoodWatchController {
     return this.neighborhoodWatch.feed(communityId, request.user, { cursor, limit });
   }
 
+  /** Alias for feed — public conversation list contract. */
+  @Get("communities/:communityId/posts")
+  @RequirePermissions("community:read")
+  listCommunityPosts(
+    @Param("communityId") communityId: string,
+    @Req() request: any,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.neighborhoodWatch.feed(communityId, request.user, { cursor, limit });
+  }
+
   @Get("communities/:communityId/alerts")
   @RequirePermissions("community:read")
   listAlerts(

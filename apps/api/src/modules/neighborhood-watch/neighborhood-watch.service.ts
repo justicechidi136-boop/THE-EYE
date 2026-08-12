@@ -49,7 +49,9 @@ import {
   validatePost,
   validateRegisterVolunteer,
   COMMUNITY_REPORT_REASONS,
+  NW_DISCUSSION_POST_TYPES,
 } from "./dto/neighborhood-watch.dto";
+import { MAX_LOCATION_AGE_MS } from "./neighborhood-watch-context.service";
 
 @Injectable()
 export class NeighborhoodWatchService {
@@ -690,8 +692,8 @@ export class NeighborhoodWatchService {
         communityId,
         authorId: actor.sub,
         type: dto.type as never,
-        title: dto.title,
-        body: dto.body,
+        title: dto.title.trim(),
+        body: dto.body?.trim() ?? "",
         latitude: dto.latitude,
         longitude: dto.longitude,
         hazardStatus: hazardStatus as never,
@@ -711,9 +713,18 @@ export class NeighborhoodWatchService {
     });
     if (dto.latitude !== undefined && dto.longitude !== undefined) await this.writePostLocation(post.id, dto.latitude, dto.longitude);
     const scored = await this.scorePost(post.id, actor.sub, false);
-    await this.notifyCommunity(communityId, post.id, scored.title, this.notificationBody(scored.type as string));
+    const authorLabel = await this.resolveAuthorLabel(communityId, actor.sub);
+    const routeType = NW_DISCUSSION_POST_TYPES.has(dto.type) ? "NW_NEW_DISCUSSION" : "NW_POST_ACTIVITY";
+    await this.notifyCommunity(
+      communityId,
+      post.id,
+      scored.title,
+      this.notificationBody(scored.type as string),
+      routeType,
+      { postId: post.id },
+    );
     await this.audit(actor, "community.post_created", "community_posts", post.id, { communityId, type: dto.type });
-    return { data: scored };
+    return { data: { ...scored, authorLabel } };
   }
 
   async listPosts(actor: JwtPayload, query: CursorPageQuery = {}) {
@@ -760,11 +771,31 @@ export class NeighborhoodWatchService {
     const cursor = decodeDateIdCursor(query.cursor);
     const rows = await this.prisma.communityPost.findMany({
       where: { communityId, hiddenAt: null, ...dateIdCursorWhere(cursor) },
-      include: { media: true, comments: true, reactions: true, verifications: true, incident: true, broadcast: true },
+      include: {
+        media: true,
+        comments: true,
+        reactions: true,
+        verifications: true,
+        incident: true,
+        broadcast: true,
+        author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
-    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    const labels = await this.resolveAuthorLabels(
+      communityId,
+      page.data.map((row) => row.authorId),
+    );
+    return {
+      ...page,
+      data: page.data.map((row) => ({
+        ...row,
+        authorLabel: labels.get(row.authorId) ?? "Community member",
+        commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
+      })),
+    };
   }
 
   async verifyPost(postId: string, dto: VerifyCommunityPostDto, actor: JwtPayload) {
@@ -1329,20 +1360,30 @@ export class NeighborhoodWatchService {
       take: limit + 1,
     });
     const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    const labels = await this.resolveAuthorLabels(
+      post.communityId,
+      page.data.map((comment) => comment.author.id),
+    );
     return {
       ...page,
-      data: page.data.map((comment) => ({
-        id: comment.id,
-        body: comment.body,
-        hasVoice: Boolean(comment.objectKey && comment.mediaType === "Audio"),
-        durationSeconds: comment.durationSeconds,
-        mediaType: comment.mediaType,
-        createdAt: comment.createdAt,
-        author: {
-          id: comment.author.id,
-          displayName: [comment.author.profile?.firstName, comment.author.profile?.lastName].filter(Boolean).join(" ") || "Member",
-        },
-      })),
+      data: page.data.map((comment) => {
+        const displayName =
+          [comment.author.profile?.firstName, comment.author.profile?.lastName].filter(Boolean).join(" ") || "Member";
+        const authorLabel = labels.get(comment.author.id) ?? "Community member";
+        return {
+          id: comment.id,
+          body: comment.body,
+          hasVoice: Boolean(comment.objectKey && comment.mediaType === "Audio"),
+          durationSeconds: comment.durationSeconds,
+          mediaType: comment.mediaType,
+          createdAt: comment.createdAt,
+          authorLabel,
+          author: {
+            id: comment.author.id,
+            displayName: authorLabel === "Current Area Visitor" ? "Current Area Visitor" : displayName,
+          },
+        };
+      }),
     };
   }
 
@@ -1355,6 +1396,12 @@ export class NeighborhoodWatchService {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
     await this.assertCanParticipate(post.communityId, actor);
+    const priorCommenters = await this.prisma.communityPostComment.findMany({
+      where: { postId, authorId: { not: actor.sub } },
+      select: { authorId: true },
+      distinct: ["authorId"],
+      take: 100,
+    });
     const comment = await this.prisma.communityPostComment.create({
       data: {
         postId,
@@ -1371,11 +1418,12 @@ export class NeighborhoodWatchService {
       postId,
       hasVoice,
     });
+    const snippet = (dto.body?.trim() || "Voice comment").slice(0, 120);
     if (post.authorId !== actor.sub) {
       await this.notifyUser(
         post.authorId,
         "New comment on your post",
-        (dto.body?.trim() || "Voice comment").slice(0, 120),
+        snippet,
         buildNeighborhoodWatchNotificationMetadata({
           routeType: "NW_POST_COMMENT",
           communityId: post.communityId,
@@ -1384,6 +1432,23 @@ export class NeighborhoodWatchService {
         }),
       );
     }
+    const replyTargets = priorCommenters
+      .map((row) => row.authorId)
+      .filter((userId) => userId !== post.authorId);
+    for (const userId of replyTargets) {
+      await this.notifyUser(
+        userId,
+        "New reply in a discussion",
+        snippet,
+        buildNeighborhoodWatchNotificationMetadata({
+          routeType: "NW_POST_REPLY",
+          communityId: post.communityId,
+          postId,
+          notificationType: "NwPostReply",
+        }),
+      );
+    }
+    const authorLabel = await this.resolveAuthorLabel(post.communityId, actor.sub);
     return {
       data: {
         id: comment.id,
@@ -1391,7 +1456,11 @@ export class NeighborhoodWatchService {
         hasVoice,
         durationSeconds: comment.durationSeconds,
         createdAt: comment.createdAt,
-        authorLabel: "Community member",
+        authorLabel,
+        author: {
+          id: actor.sub,
+          displayName: authorLabel === "Current Area Visitor" ? "Current Area Visitor" : "Member",
+        },
       },
     };
   }
@@ -1418,7 +1487,7 @@ export class NeighborhoodWatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can react");
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertApprovedMember(post.communityId, actor.sub);
+    await this.assertCanParticipate(post.communityId, actor);
     const reaction = await this.prisma.communityPostReaction.upsert({
       where: { postId_userId_type: { postId, userId: actor.sub, type: dto.type as never } },
       update: {},
@@ -1432,7 +1501,7 @@ export class NeighborhoodWatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can remove reactions");
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertApprovedMember(post.communityId, actor.sub);
+    await this.assertCanParticipate(post.communityId, actor);
     await this.prisma.communityPostReaction.deleteMany({ where: { postId, userId: actor.sub, type: type as never } });
     await this.audit(actor, "community.reaction_deleted", "community_post_reactions", postId, { type });
     return { data: { postId, type, deleted: true } };
@@ -1440,7 +1509,7 @@ export class NeighborhoodWatchService {
 
   async createContentReport(communityId: string, dto: CreateCommunityContentReportDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can submit reports");
-    await this.assertApprovedMember(communityId, actor.sub);
+    await this.assertCanParticipate(communityId, actor);
     if (!COMMUNITY_REPORT_REASONS.includes(dto.reasonCode as never) && dto.reasonCode !== "Other") {
       throw new BadRequestException("Invalid report reason code");
     }
@@ -1526,7 +1595,8 @@ export class NeighborhoodWatchService {
     });
     if (!post) throw new NotFoundException("Community post not found");
     await this.assertCommunityVisible(post.communityId, actor);
-    return { data: post };
+    const authorLabel = await this.resolveAuthorLabel(post.communityId, post.authorId);
+    return { data: { ...post, authorLabel, commentCount: post.comments?.length ?? 0 } };
   }
 
   private async scorePost(postId: string, reporterId: string, moderatorConfirmed: boolean) {
@@ -1551,7 +1621,7 @@ export class NeighborhoodWatchService {
     await this.assertApprovedMember(communityId, actor.sub);
   }
 
-  /** Public: approved member OR active location presence. Private: approved membership only. */
+  /** Public: approved member OR fresh location presence. Private: approved membership only. */
   private async assertCanParticipate(communityId: string, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
     const community = await this.prisma.community.findUnique({ where: { id: communityId } });
@@ -1574,10 +1644,53 @@ export class NeighborhoodWatchService {
         mode: "LocationParticipant",
         expiresAt: { gt: new Date() },
       },
+      orderBy: { capturedAt: "desc" },
     });
     if (!presence) {
       throw new ForbiddenException("Resolve current location context before participating in this public community");
     }
+    const ageMs = Date.now() - new Date(presence.capturedAt).getTime();
+    if (ageMs > MAX_LOCATION_AGE_MS || ageMs < -60_000) {
+      throw new ForbiddenException("Location proof is stale; refresh Neighborhood Watch context before posting");
+    }
+  }
+
+  private async resolveAuthorLabel(communityId: string, userId: string): Promise<string> {
+    const labels = await this.resolveAuthorLabels(communityId, [userId]);
+    return labels.get(userId) ?? "Community member";
+  }
+
+  private async resolveAuthorLabels(communityId: string, userIds: string[]): Promise<Map<string, string>> {
+    const unique = Array.from(new Set(userIds.filter(Boolean)));
+    const result = new Map<string, string>();
+    if (!unique.length) return result;
+    const [memberships, presenceRows] = await Promise.all([
+      this.prisma.communityMembership.findMany({
+        where: { communityId, userId: { in: unique }, status: "Approved" as never },
+        select: { userId: true },
+      }),
+      this.prisma.communityPresence.findMany({
+        where: {
+          communityId,
+          userId: { in: unique },
+          mode: "LocationParticipant",
+          expiresAt: { gt: new Date() },
+        },
+        select: { userId: true },
+      }),
+    ]);
+    const members = new Set(memberships.map((row) => row.userId));
+    const visitors = new Set(presenceRows.map((row) => row.userId));
+    for (const userId of unique) {
+      if (members.has(userId)) {
+        result.set(userId, "Community member");
+      } else if (visitors.has(userId)) {
+        result.set(userId, "Current Area Visitor");
+      } else {
+        result.set(userId, "Community member");
+      }
+    }
+    return result;
   }
 
   private async assertApprovedMember(communityId: string, userId: string) {
@@ -1810,13 +1923,16 @@ export class NeighborhoodWatchService {
     routeType:
       | "NW_COMMUNITY_ALERT"
       | "NW_POST_ACTIVITY"
+      | "NW_NEW_DISCUSSION"
       | "NW_PATROL_UPDATE" = "NW_POST_ACTIVITY",
     extras?: { patrolId?: string; postId?: string },
   ) {
+    const postBound =
+      routeType === "NW_POST_ACTIVITY" || routeType === "NW_NEW_DISCUSSION";
     const metadata = buildNeighborhoodWatchNotificationMetadata({
       routeType,
       communityId,
-      postId: extras?.postId ?? (routeType === "NW_POST_ACTIVITY" ? entityId : undefined),
+      postId: extras?.postId ?? (postBound ? entityId : undefined),
       patrolId: extras?.patrolId,
       notificationType: routeType,
     });

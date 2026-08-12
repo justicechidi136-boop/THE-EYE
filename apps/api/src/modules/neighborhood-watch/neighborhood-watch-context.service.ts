@@ -10,7 +10,8 @@ export type NwLocationStatus =
   | "LOCATION_LOW_ACCURACY"
   | "NO_PUBLIC_COMMUNITY";
 
-const MAX_LOCATION_AGE_MS = 5 * 60 * 1000;
+/** Fresh GPS window for context resolution and public presence-based posting. */
+export const MAX_LOCATION_AGE_MS = 5 * 60 * 1000;
 const MAX_ACCURACY_M = 100;
 const PRESENCE_TTL_MS = 30 * 60 * 1000;
 const MIN_SWITCH_DISPLACEMENT_M = 120;
