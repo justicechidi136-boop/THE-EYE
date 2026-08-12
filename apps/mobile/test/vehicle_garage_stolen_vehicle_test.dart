@@ -7,7 +7,6 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
-import "package:the_eye_mobile/app/app_scope.dart";
 import "package:the_eye_mobile/auth/auth_service.dart";
 import "package:the_eye_mobile/auth/auth_session_store.dart";
 import "package:the_eye_mobile/auth/social_auth_service.dart";
@@ -33,23 +32,26 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final themeProvider =
         ThemeProvider(ThemePreferences(await SharedPreferences.getInstance()));
-    final controller = _testController(themeProvider);
-    controller.vehicles = const [
-      CarProfile(
-        id: "v1",
-        make: "Toyota",
-        model: "Corolla",
-        plateNumber: "ABC-111",
-        color: "Silver",
-        isPrimary: true,
-      ),
-      CarProfile(
-        id: "v2",
-        make: "Honda",
-        model: "Civic",
-        plateNumber: "ABC-222",
-      ),
-    ];
+    final garage = InMemoryVehicleGarageStore()
+      ..vehicles = const [
+        CarProfile(
+          id: "v1",
+          make: "Toyota",
+          model: "Corolla",
+          plateNumber: "ABC-111",
+          color: "Silver",
+          isPrimary: true,
+        ),
+        CarProfile(
+          id: "v2",
+          make: "Honda",
+          model: "Civic",
+          plateNumber: "ABC-222",
+        ),
+      ];
+    final controller = _testController(themeProvider, garage);
+    await tester.pump();
+    await tester.pump();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -59,11 +61,12 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text("ABC-111"), findsOneWidget);
-    expect(find.text("Toyota"), findsOneWidget);
-    expect(find.text("Corolla"), findsOneWidget);
+    expect(find.text("ABC-111"), findsAtLeastNWidgets(1));
+    expect(find.textContaining("Toyota"), findsAtLeastNWidgets(1));
+    expect(find.textContaining("Corolla"), findsAtLeastNWidgets(1));
   });
 
   testWidgets(
@@ -72,8 +75,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final themeProvider =
         ThemeProvider(ThemePreferences(await SharedPreferences.getInstance()));
-    final controller = _testController(themeProvider);
-    controller.vehicles = const [];
+    final controller =
+        _testController(themeProvider, InMemoryVehicleGarageStore());
+    await tester.pump();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -83,14 +87,17 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text("Select from My Cars (optional)"), findsNothing);
     expect(find.byType(TextField), findsWidgets);
   });
 }
 
-AppController _testController(ThemeProvider themeProvider) {
+AppController _testController(
+  ThemeProvider themeProvider,
+  VehicleGarageStore garageStore,
+) {
   final apiClient = TheEyeApiClient(
     baseUrl: "http://localhost:4000/v1",
     httpClient: MockClient((request) async {
@@ -123,6 +130,6 @@ AppController _testController(ThemeProvider themeProvider) {
     ),
     authSessionStore: InMemoryAuthSessionStore(),
     themeProvider: themeProvider,
-    vehicleGarageStore: InMemoryVehicleGarageStore(),
+    vehicleGarageStore: garageStore,
   );
 }

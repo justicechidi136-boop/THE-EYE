@@ -896,7 +896,15 @@ export class UsersService {
     };
   }
 
-  private toCitizenVehicleCreateInput(dto: CreateCitizenVehicleDto): Prisma.CitizenVehicleUncheckedCreateInput {
+  private toCitizenVehicleCreateInput(dto: CreateCitizenVehicleDto): {
+    make: string;
+    model: string;
+    plateNumber: string;
+    year: number | null;
+    color: string | null;
+    vin: string | null;
+    isPrimary: boolean;
+  } {
     return {
       make: this.normalizeRequiredVehicleText(dto.make, "Make is required"),
       model: this.normalizeRequiredVehicleText(dto.model, "Model is required"),

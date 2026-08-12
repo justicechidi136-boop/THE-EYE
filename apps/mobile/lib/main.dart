@@ -538,8 +538,9 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
         .timeout(const Duration(seconds: 5));
     final authSessionStore = await SharedPreferencesAuthSessionStore.create()
         .timeout(const Duration(seconds: 5));
-    final vehicleGarageStore = await SharedPreferencesVehicleGarageStore.create()
-        .timeout(const Duration(seconds: 5));
+    final vehicleGarageStore =
+        await SharedPreferencesVehicleGarageStore.create()
+            .timeout(const Duration(seconds: 5));
 
     AuthService? authService;
     AppController? controller;
@@ -585,24 +586,25 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       vehicleGarageStore: vehicleGarageStore,
     );
     await controller.loadPersistedSession().timeout(const Duration(seconds: 5));
+    final appController = controller!;
 
     final pushNotifications = PushNotificationService(
       apiClient: apiClient,
-      accessTokenProvider: () => controller.accessToken,
+      accessTokenProvider: () => appController.accessToken,
     );
-    controller.bindPushNotifications(pushNotifications);
+    appController.bindPushNotifications(pushNotifications);
 
     final retryCoordinator = PendingRetryCoordinator(
       connectivity: connectivity,
       submissionService: submissionService,
-      accessTokenProvider: () => controller.accessToken,
+      accessTokenProvider: () => appController.accessToken,
     );
-    retryCoordinator.onSyncComplete = controller.handleRetryResults;
-    controller.attachRetryCoordinator(retryCoordinator);
+    retryCoordinator.onSyncComplete = appController.handleRetryResults;
+    appController.attachRetryCoordinator(retryCoordinator);
 
     StartupDiagnostics.checkpoint("critical dependencies ready");
     return TheEyeAppDependencies(
-      controller: controller,
+      controller: appController,
       pushNotifications: pushNotifications,
       retryCoordinator: retryCoordinator,
       connectivity: connectivity,
@@ -2456,11 +2458,14 @@ class AppController extends SessionAccessor
         if (profile.isPrimary) "isPrimary": true,
       },
     );
-    final merged = _mergeRemoteVehicles([created], previous: vehicles, replace: false);
-    vehicles = _upsertVehicle(merged, _fromApiVehicle(created).copyWith(
-      imagePath: profile.imagePath,
-      notes: profile.notes,
-    ));
+    final merged =
+        _mergeRemoteVehicles([created], previous: vehicles, replace: false);
+    vehicles = _upsertVehicle(
+        merged,
+        _fromApiVehicle(created).copyWith(
+          imagePath: profile.imagePath,
+          notes: profile.notes,
+        ));
     await _vehicleGarageStore.saveVehicles(vehicles);
     notifyListeners();
     return vehicles.firstWhere((item) => item.id == created.id);
@@ -2469,7 +2474,10 @@ class AppController extends SessionAccessor
   Future<CarProfile> updateVehicle(CarProfile profile) async {
     final token = accessToken;
     final vehicleId = profile.id;
-    if (token == null || token.isEmpty || vehicleId == null || vehicleId.isEmpty) {
+    if (token == null ||
+        token.isEmpty ||
+        vehicleId == null ||
+        vehicleId.isEmpty) {
       throw StateError("Sign in and select a valid vehicle");
     }
     final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
@@ -2508,7 +2516,8 @@ class AppController extends SessionAccessor
       accessToken: token,
       vehicleId: vehicleId,
     );
-    vehicles = _mergeRemoteVehicles([updated], previous: vehicles, replace: false);
+    vehicles =
+        _mergeRemoteVehicles([updated], previous: vehicles, replace: false);
     await loadVehicleGarage(refresh: true);
   }
 
@@ -2519,7 +2528,8 @@ class AppController extends SessionAccessor
     }
     final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
     await api.deleteMyVehicle(accessToken: token, vehicleId: vehicleId);
-    vehicles = vehicles.where((item) => item.id != vehicleId).toList(growable: false);
+    vehicles =
+        vehicles.where((item) => item.id != vehicleId).toList(growable: false);
     await _vehicleGarageStore.saveVehicles(vehicles);
     notifyListeners();
     await loadVehicleGarage(refresh: true);
@@ -2537,16 +2547,14 @@ class AppController extends SessionAccessor
     final previousByPlate = {
       for (final item in previous) item.plateNumber.trim().toUpperCase(): item
     };
-    final remoteMapped = remote
-        .map((item) {
-          final byId = previousById[item.id];
-          final byPlate = previousByPlate[item.plateNumber.trim().toUpperCase()];
-          return _fromApiVehicle(item).copyWith(
-            imagePath: byId?.imagePath ?? byPlate?.imagePath,
-            notes: byId?.notes ?? byPlate?.notes,
-          );
-        })
-        .toList(growable: false);
+    final remoteMapped = remote.map((item) {
+      final byId = previousById[item.id];
+      final byPlate = previousByPlate[item.plateNumber.trim().toUpperCase()];
+      return _fromApiVehicle(item).copyWith(
+        imagePath: byId?.imagePath ?? byPlate?.imagePath,
+        notes: byId?.notes ?? byPlate?.notes,
+      );
+    }).toList(growable: false);
     if (replace) return remoteMapped;
 
     final next = previous.toList(growable: true);
@@ -2592,16 +2600,14 @@ class AppController extends SessionAccessor
     final primaryCount = next.where((item) => item.isPrimary).length;
     if (primaryCount <= 1) return next;
     var found = false;
-    return next
-        .map((item) {
-          if (!item.isPrimary) return item;
-          if (!found) {
-            found = true;
-            return item;
-          }
-          return item.copyWith(isPrimary: false);
-        })
-        .toList(growable: false);
+    return next.map((item) {
+      if (!item.isPrimary) return item;
+      if (!found) {
+        found = true;
+        return item;
+      }
+      return item.copyWith(isPrimary: false);
+    }).toList(growable: false);
   }
 
   Future<void> saveCarProfile(CarProfile profile) async {
@@ -6174,7 +6180,7 @@ class _StolenVehicleBroadcastScreenState
     super.didChangeDependencies();
     if (prefilledFromSavedCar) return;
     prefilledFromSavedCar = true;
-    _applySavedCarProfile(appOf(context).primaryVehicle, notify: false);
+    _applySavedCarProfile(appOf(context).primaryVehicle, notify: true);
   }
 
   void _applySavedCarProfile(CarProfile? profile, {bool notify = true}) {
@@ -6327,7 +6333,8 @@ class _StolenVehicleBroadcastScreenState
 
   @override
   Widget build(BuildContext context) {
-    final garageVehicles = appOf(context).vehicles
+    final garageVehicles = appOf(context)
+        .vehicles
         .where((vehicle) => vehicle.hasRequiredFields)
         .toList(growable: false);
     CarProfile? selectedVehicle;
@@ -6377,7 +6384,8 @@ class _StolenVehicleBroadcastScreenState
                       }
                       if (selected != null) {
                         _applySavedCarProfile(selected);
-                        showAppSnackBar(context, "Loaded selected vehicle details.");
+                        showAppSnackBar(
+                            context, "Loaded selected vehicle details.");
                       }
                     },
                   ),
@@ -8429,7 +8437,8 @@ class _YourCarScreenState extends State<YourCarScreen> {
                 ...vehicles.map((vehicle) {
                   final label = "${vehicle.make} ${vehicle.model}".trim();
                   final subtitle = [
-                    if ((vehicle.color ?? "").trim().isNotEmpty) vehicle.color!.trim(),
+                    if ((vehicle.color ?? "").trim().isNotEmpty)
+                      vehicle.color!.trim(),
                     vehicle.plateNumber,
                   ].join(" • ");
                   return Card(
@@ -8438,12 +8447,15 @@ class _YourCarScreenState extends State<YourCarScreen> {
                       leading: const Icon(Icons.directions_car),
                       title: Row(
                         children: [
-                          Expanded(child: Text(label.isEmpty ? "Vehicle" : label)),
+                          Expanded(
+                              child: Text(label.isEmpty ? "Vehicle" : label)),
                           if (vehicle.isPrimary)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: BrandColors.green.withValues(alpha: 0.16),
+                                color:
+                                    BrandColors.green.withValues(alpha: 0.16),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: const Text(
@@ -8491,7 +8503,8 @@ class _VehicleEditorArgs {
 }
 
 class VehicleDetailScreen extends StatefulWidget {
-  const VehicleDetailScreen({super.key, this.args = const _VehicleEditorArgs()});
+  const VehicleDetailScreen(
+      {super.key, this.args = const _VehicleEditorArgs()});
 
   final _VehicleEditorArgs args;
 
@@ -8638,7 +8651,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => saving = false);
-      showAppSnackBar(context, "Unable to save vehicle details.", isError: true);
+      showAppSnackBar(context, "Unable to save vehicle details.",
+          isError: true);
     }
   }
 
@@ -8955,7 +8969,9 @@ class SettingsScreen extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primary,
               ),
               title: Text(
-                controller.vehicles.isEmpty ? "Add vehicle" : "Manage my vehicles",
+                controller.vehicles.isEmpty
+                    ? "Add vehicle"
+                    : "Manage my vehicles",
               ),
               subtitle: Text(
                 controller.vehicles.isEmpty

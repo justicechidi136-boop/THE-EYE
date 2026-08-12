@@ -117,7 +117,7 @@ export function resolveCitizenIncidentTypeLabel(incidentType: string): string {
     case "livevideo":
       return "Live Emergency Video";
     default:
-      return incidentType.trim().isEmpty ? "Emergency" : incidentType.trim();
+      return incidentType.trim().length === 0 ? "Emergency" : incidentType.trim();
   }
 }
 

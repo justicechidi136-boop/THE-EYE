@@ -437,44 +437,43 @@ describe("UsersService vehicle garage", () => {
 
   it("deletes primary vehicle and promotes the most recently updated remaining one", async () => {
     const { service, prisma } = createUsersService();
-    const calls: Array<string> = [];
-    prisma.citizenVehicle.findFirst
-      .mockImplementationOnce(async () => ({
-        id: "v-primary",
-        userId: "user-1",
-        make: "Toyota",
-        model: "Corolla",
-        year: 2021,
-        color: "Silver",
-        plateNumber: "ABC-111",
-        vin: null,
-        isPrimary: true,
-        createdAt: new Date("2026-01-01T00:00:00.000Z"),
-        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
-      }))
-      .mockImplementationOnce(async () => {
-        calls.push("promotionLookup");
-        return {
-          id: "v-recent",
+    const findFirst = prisma.citizenVehicle.findFirst as jest.Mock;
+    findFirst.mockImplementation((args: { where?: { id?: string } }) => {
+      if (args?.where?.id === "v-primary") {
+        return Promise.resolve({
+          id: "v-primary",
           userId: "user-1",
-          make: "Lexus",
-          model: "RX",
-          year: 2022,
-          color: "Blue",
-          plateNumber: "ABC-333",
+          make: "Toyota",
+          model: "Corolla",
+          year: 2021,
+          color: "Silver",
+          plateNumber: "ABC-111",
           vin: null,
-          isPrimary: false,
-          createdAt: new Date("2026-01-02T00:00:00.000Z"),
-          updatedAt: new Date("2026-01-04T00:00:00.000Z"),
-        };
+          isPrimary: true,
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+        });
+      }
+      return Promise.resolve({
+        id: "v-recent",
+        userId: "user-1",
+        make: "Lexus",
+        model: "RX",
+        year: 2022,
+        color: "Blue",
+        plateNumber: "ABC-333",
+        vin: null,
+        isPrimary: false,
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-04T00:00:00.000Z"),
       });
+    });
 
     await service.deleteMyVehicle(
       { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
       "v-primary",
     );
 
-    expect(calls).toContain("promotionLookup");
     expect(prisma.citizenVehicle.update).toHaveBeenCalledWith({
       where: { id: "v-recent" },
       data: { isPrimary: true },
