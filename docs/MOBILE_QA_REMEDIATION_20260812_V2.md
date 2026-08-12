@@ -2,7 +2,9 @@
 
 **Branch:** `fix/mobile-qa-remediation-20260812-v2`  
 **Base staging SHA:** `2aea0fb0c3b98abf2949ba5086d6fb57cf9c1224`  
-**Status:** CODE COMPLETE — CI PENDING → then PHYSICAL DEVICE QA PENDING  
+**Status:** CODE COMPLETE — CI GREEN — PHYSICAL DEVICE QA PENDING  
+**PR:** https://github.com/justicechidi136-boop/THE-EYE/pull/110  
+**Head:** `b4c2e931`  
 
 Source of truth: updated physical-device QA list in the remediation sprint brief (IDs below only).
 
@@ -36,9 +38,9 @@ Do **not** mark `DEVICE_QA_PASS` without physical Android evidence.
 | FUNC-023 | P0 | Code audit | My Broadcasts spinner stuck | Y | Y | N | Explicit LOADING/EMPTY/ERROR states | My Broadcasts tests | Empty/error/retry | AUTOMATED_TEST_PASS |
 | FUNC-024 | P0 | Code audit | SV detail not structured | Y | Y | N | Structured detail hierarchy + year payload | SV detail tests | Detail sections | AUTOMATED_TEST_PASS |
 | FUNC-025 | P0 | Code audit | Single local car | Y | Y | Y | CitizenVehicle garage + `/me/vehicles` | Garage suite | Add 2+ vehicles | AUTOMATED_TEST_PASS |
-| FUNC-026 | P0 | Device QA | Garage allowed only one photo | Y | Y | Y | CitizenVehiclePhoto + multi-select upload (max 8) | Vehicle photo suite | Multi photo add/edit/retry | CODE_FIXED |
-| FUNC-027 | P0 | Device QA | Auto-prefill primary no longer valid | Y | Y | N | Explicit Use Saved / Manual + snapshot metadata | Selector + draft tests | Multi-vehicle select + return | CODE_FIXED |
-| FUNC-028 | P0 | Device QA | Sighting stubs / incomplete workflow | Y | Y | Y | Full BroadcastSighting + evidence + notify + list | Sighting API/mobile tests | Active SV report sighting | CODE_FIXED |
+| FUNC-026 | P0 | Device QA | Garage allowed only one photo | Y | Y | Y | CitizenVehiclePhoto + multi-select upload (max 8) | Vehicle photo suite | Multi photo add/edit/retry | CI_PASS |
+| FUNC-027 | P0 | Device QA | Auto-prefill primary no longer valid | Y | Y | N | Explicit Use Saved / Manual + snapshot metadata | Selector + draft tests | Multi-vehicle select + return | CI_PASS |
+| FUNC-028 | P0 | Device QA | Sighting stubs / incomplete workflow | Y | Y | Y | Full BroadcastSighting + evidence + notify + list | Sighting API/mobile tests | Active SV report sighting | CI_PASS |
 | NAV-002 | P0 | Code audit | Same as FUNC-022 | Y | N | N | Replace nav after publish | Nav regression | Back to center | AUTOMATED_TEST_PASS |
 
 ### ID normalization note (original QA wording preserved)
