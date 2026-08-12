@@ -49,7 +49,7 @@ const navGroups = [
   {
     label: "Neighborhood Watch",
     items: [
-      ["CSOC Console", "/neighborhood-watch"],
+      ["Community Safety Dashboard", "/neighborhood-watch"],
       ["Communities", "/neighborhood-watch/communities"],
       ["Community Map", "/neighborhood-watch/map"],
       ["Verification", "/neighborhood-watch/verification"],

@@ -14,9 +14,20 @@ describe("nav-access", () => {
     expect(filterNavItems(AdminRoleName.AgencyAdmin, [["Command Center", "/dispatch"]]).length).toBe(1);
   });
 
-  it("allows community moderators to reach CSOC chat and settings", () => {
+  it("allows community moderators to reach neighborhood watch chat and settings", () => {
     expect(canAccessRoute(AdminRoleName.CommunityModerator, "/neighborhood-watch/chat")).toBe(true);
     expect(canAccessRoute(AdminRoleName.CommunityModerator, "/settings")).toBe(true);
     expect(canAccessRoute(AdminRoleName.CommunityModerator, "/dispatch")).toBe(false);
+  });
+
+  it("exposes rebranded Neighborhood Watch nav labels under /neighborhood-watch paths", () => {
+    const items = filterNavItems(AdminRoleName.StateAdmin, [
+      ["Community Safety Dashboard", "/neighborhood-watch"],
+      ["Communities", "/neighborhood-watch/communities"],
+    ]);
+    expect(items).toEqual([
+      ["Community Safety Dashboard", "/neighborhood-watch"],
+      ["Communities", "/neighborhood-watch/communities"],
+    ]);
   });
 });

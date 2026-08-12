@@ -61,7 +61,7 @@ export default async function SettingsPage() {
           <Link href="/dispatch" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Emergency command center</Link>
           <Link href="/verification" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Verification queue</Link>
           <Link href="/neighborhood-watch/chat" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Community chat</Link>
-          <Link href="/neighborhood-watch/settings" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">CSOC settings</Link>
+          <Link href="/neighborhood-watch/settings" className="rounded-lg border border-line bg-surfaceMuted px-3 py-2 text-sm font-semibold transition-colors hover:border-eye">Neighborhood Watch settings</Link>
         </div>
       </Panel>
       <Panel title="Policy configuration">

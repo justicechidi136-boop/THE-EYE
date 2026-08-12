@@ -10,6 +10,7 @@ import {
   routeAllowedForRole,
   routeRequiresPermission,
 } from "../admin/admin-route-registry";
+import { CSOC_NAV_ITEMS } from "../csoc/nav";
 import { AdminRoleName } from "@the-eye/shared";
 
 describe("admin route registry", () => {
@@ -62,6 +63,15 @@ describe("admin route registry", () => {
     const csocItems = csocNavItems();
     expect(csocItems.find((item) => item.routeId === "incident-centre")?.href).toBe("/incidents");
     expect(csocItems.find((item) => item.routeId === "community-chat")?.href).toBe("/neighborhood-watch/chat");
+  });
+
+  it("registers Neighborhood Watch shell with rebranded dashboard label", () => {
+    expect(CSOC_NAV_ITEMS.find((item) => item.href === "/neighborhood-watch")?.label).toBe(
+      "Community Safety Dashboard",
+    );
+    for (const id of ["community-registry", "membership-approval", "patrol", "volunteers", "community-chat"]) {
+      expect(getRouteById(id)?.canonicalPath.startsWith("/neighborhood-watch")).toBe(true);
+    }
   });
 
   it("uses consistent permissions between shells for shared routes", () => {
