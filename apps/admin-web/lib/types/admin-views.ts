@@ -206,6 +206,7 @@ export type BroadcastView = {
   autoDispatchStatus: string;
   adminVerified: boolean;
   reportCount: number;
+  sightingsCount: number;
   commentCount: number;
   country: string | null;
   state: string | null;
@@ -219,6 +220,14 @@ export type BroadcastDetailView = BroadcastView & {
   publishedAt: string | null;
   resolvedAt: string | null;
   suspendedAt: string | null;
+  sightings?: Array<{
+    id: string;
+    observedAt: string | null;
+    approximateArea: string | null;
+    description: string;
+    locationMode: string;
+    attachmentsCount: number;
+  }>;
 };
 
 export type BroadcastReportView = {

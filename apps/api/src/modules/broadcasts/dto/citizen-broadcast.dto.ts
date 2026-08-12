@@ -32,6 +32,7 @@ export type CreateStolenVehicleBroadcastDto = {
   vehicleType: string;
   make: string;
   model: string;
+  year?: number | string;
   colour: string;
   registrationNumber: string;
   country?: string;
@@ -73,6 +74,7 @@ export type WithdrawBroadcastDto = {
 export type SubmitBroadcastSightingDto = {
   clientSightingId?: string;
   observedAt?: string;
+  locationMode?: "CURRENT_GPS" | "MANUAL" | "NOT_PROVIDED";
   latitude?: number;
   longitude?: number;
   approximateArea?: string;
@@ -80,6 +82,7 @@ export type SubmitBroadcastSightingDto = {
   confidence?: string;
   anonymousPublic?: boolean;
   directionOfTravel?: string;
+  attachments?: unknown;
 };
 
 export const BROADCAST_REPORT_REASONS = [
@@ -141,6 +144,12 @@ export function validateStolenVehicleBroadcastDto(dto: CreateStolenVehicleBroadc
   if (!dto.stolenAt) throw new BadRequestException("stolenAt is required");
   if (!dto.distinguishingFeatures?.trim()) throw new BadRequestException("distinguishingFeatures is required");
   if (!dto.contactMethod?.trim()) throw new BadRequestException("contactMethod is required");
+  if (dto.year !== undefined && dto.year !== null && `${dto.year}`.trim().length > 0) {
+    const parsedYear = Number.parseInt(`${dto.year}`, 10);
+    if (!Number.isFinite(parsedYear) || parsedYear < 1886 || parsedYear > 3000) {
+      throw new BadRequestException("year must be a valid vehicle year");
+    }
+  }
   if (dto.lastKnownLatitude !== undefined) {
     assertCoordinate(dto.lastKnownLatitude, "lastKnownLatitude", -90, 90);
   }

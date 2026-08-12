@@ -32,6 +32,12 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       delete: jest.fn(),
     },
+    citizenVehiclePhoto: {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+    },
     kycRecord: {
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
@@ -334,6 +340,44 @@ describe("UsersService vehicle garage", () => {
     expect(result.data[2].plateNumber).toBe("ABC-333");
   });
 
+  it("includes vehicle photos in vehicle list response", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehicle.findMany.mockResolvedValue([
+      {
+        id: "v1",
+        userId: "user-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2020,
+        color: "Silver",
+        plateNumber: "ABC-111",
+        vin: null,
+        isPrimary: true,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+        photos: [
+          {
+            id: "p1",
+            vehicleId: "v1",
+            objectKey: "vehicles/user-1/v1/photo.jpg",
+            contentType: "image/jpeg",
+            sizeBytes: 1400,
+            sortOrder: 0,
+            createdAt: new Date("2026-01-04T00:00:00.000Z"),
+          },
+        ],
+      },
+    ]);
+    const result = await service.listMyVehicles({
+      sub: "user-1",
+      typ: "user",
+      role: "Citizen",
+      permissions: [],
+    } as never);
+    expect(result.data[0].photos).toHaveLength(1);
+    expect(result.data[0].photos[0].objectKey).toContain("vehicles/user-1/v1");
+  });
+
   it("creates first vehicle as primary and does not overwrite subsequent vehicles", async () => {
     const { service, prisma } = createUsersService();
     prisma.citizenVehicle.create.mockImplementation(async ({ data }: { data: any }) => ({
@@ -502,6 +546,86 @@ describe("UsersService vehicle garage", () => {
         "missing",
       ),
     ).rejects.toThrow("Vehicle not found");
+  });
+
+  it("presigns vehicle photo upload for owned vehicle", async () => {
+    const { service, prisma } = createUsersService();
+    const vehicleId = "4f8ca2f6-3db5-4fd8-bf3b-bf2d66b92f8f";
+    prisma.citizenVehicle.findFirst.mockResolvedValue({ id: vehicleId });
+    prisma.citizenVehiclePhoto.count.mockResolvedValue(0);
+    process.env.S3_ENDPOINT = "https://storage.example.com";
+    process.env.S3_BUCKET = "the-eye";
+    process.env.S3_ACCESS_KEY = "access-key";
+    process.env.S3_SECRET_KEY = "secret-key";
+    process.env.S3_REGION = "us-east-1";
+
+    const result = await service.presignMyVehiclePhoto(
+      { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      vehicleId,
+      { fileName: "front.jpg", contentType: "image/jpeg", sizeBytes: 320000 },
+    );
+
+    expect(result.objectKey).toMatch(
+      /^vehicles\/user-1\/4f8ca2f6-3db5-4fd8-bf3b-bf2d66b92f8f\//,
+    );
+    expect(result.requiredHeaders).toEqual({ "content-type": "image/jpeg" });
+  });
+
+  it("rejects vehicle photo uploads after reaching the max of 8", async () => {
+    const { service, prisma } = createUsersService();
+    const vehicleId = "4f8ca2f6-3db5-4fd8-bf3b-bf2d66b92f8f";
+    prisma.citizenVehicle.findFirst.mockResolvedValue({ id: vehicleId });
+    prisma.citizenVehiclePhoto.count.mockResolvedValue(8);
+
+    await expect(
+      service.presignMyVehiclePhoto(
+        { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+        vehicleId,
+        { fileName: "front.jpg", contentType: "image/jpeg", sizeBytes: 320000 },
+      ),
+    ).rejects.toThrow("You can add up to 8 photos for each vehicle.");
+  });
+
+  it("confirms a vehicle photo and assigns sort order", async () => {
+    const { service, prisma } = createUsersService();
+    const vehicleId = "4f8ca2f6-3db5-4fd8-bf3b-bf2d66b92f8f";
+    prisma.citizenVehicle.findFirst.mockResolvedValue({ id: vehicleId });
+    prisma.citizenVehiclePhoto.count.mockResolvedValue(2);
+    prisma.citizenVehiclePhoto.create.mockResolvedValue({
+      id: "p-1",
+      vehicleId,
+      objectKey: `vehicles/user-1/${vehicleId}/photo.jpg`,
+      contentType: "image/jpeg",
+      sizeBytes: 1234,
+      sortOrder: 2,
+      createdAt: new Date("2026-01-04T00:00:00.000Z"),
+    });
+
+    const result = await service.confirmMyVehiclePhoto(
+      { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+      vehicleId,
+      {
+        objectKey: `vehicles/user-1/${vehicleId}/4f8ca2f6-3db5-4fd8-bf3b-bf2d66b92f8f.jpg`,
+        contentType: "image/jpeg",
+        sizeBytes: 1234,
+      },
+    );
+
+    expect(result.sortOrder).toBe(2);
+    expect(prisma.citizenVehiclePhoto.create).toHaveBeenCalled();
+  });
+
+  it("enforces ownership when deleting a vehicle photo", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.citizenVehiclePhoto.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.deleteMyVehiclePhoto(
+        { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+        "4f8ca2f6-3db5-4fd8-bf3b-bf2d66b92f8f",
+        "photo-1",
+      ),
+    ).rejects.toThrow("Vehicle photo not found");
   });
 });
 

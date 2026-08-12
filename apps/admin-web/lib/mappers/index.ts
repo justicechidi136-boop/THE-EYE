@@ -139,6 +139,12 @@ function broadcastCommentCount(record: Record<string, unknown>) {
   return Array.isArray(record.comments) ? record.comments.length : 0;
 }
 
+function broadcastSightingsCount(record: Record<string, unknown>) {
+  const count = record._count as { sightings?: number } | undefined;
+  if (typeof count?.sightings === "number") return count.sightings;
+  return Array.isArray(record.sightings) ? record.sightings.length : 0;
+}
+
 function broadcastRecipientCount(record: Record<string, unknown>) {
   const count = record._count as { deliveries?: number } | undefined;
   if (typeof count?.deliveries === "number") return count.deliveries;
@@ -201,6 +207,7 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
     autoDispatchStatus,
     adminVerified: Boolean(record.adminVerified),
     reportCount: broadcastReportCount(record),
+    sightingsCount: broadcastSightingsCount(record),
     commentCount: broadcastCommentCount(record),
     country: record.country ? String(record.country) : null,
     state: record.state ? String(record.state) : null,
@@ -210,6 +217,7 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
 }
 
 export function toBroadcastDetailView(record: Record<string, unknown>): BroadcastDetailView {
+  const sightingsRaw = Array.isArray(record.sightings) ? record.sightings : [];
   return {
     ...toBroadcastView(record),
     body: String(record.body ?? ""),
@@ -217,6 +225,19 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
     publishedAt: record.publishedAt ? String(record.publishedAt) : null,
     resolvedAt: record.resolvedAt ? String(record.resolvedAt) : null,
     suspendedAt: record.suspendedAt ? String(record.suspendedAt) : null,
+    sightings: sightingsRaw.map((entry) => {
+      const row = entry as Record<string, unknown>;
+      const metadata = (row.metadata as Record<string, unknown> | undefined) ?? {};
+      const attachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+      return {
+        id: String(row.id ?? ""),
+        observedAt: row.observedAt ? String(row.observedAt) : null,
+        approximateArea: row.approximateArea ? String(row.approximateArea) : null,
+        description: String(row.description ?? ""),
+        locationMode: String(metadata.locationMode ?? "NOT_PROVIDED"),
+        attachmentsCount: attachments.length,
+      };
+    }),
   };
 }
 

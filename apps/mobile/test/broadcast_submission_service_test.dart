@@ -36,6 +36,7 @@ void main() {
       broadcastId: "b1",
       clientActionId: "action-1",
       description: "Seen near the market.",
+      locationMode: "NOT_PROVIDED",
     );
 
     expect(result.id, "sighting-1");
@@ -44,6 +45,47 @@ void main() {
       requests.single.path.endsWith("/comments"),
       isFalse,
     );
+  });
+
+  test("submitSighting forwards location mode and attachments", () async {
+    Map<String, dynamic>? requestBody;
+    final client = TheEyeApiClient(
+      baseUrl: "http://localhost:4000/v1",
+      httpClient: MockClient((request) async {
+        requestBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({
+            "data": {"id": "sighting-2"}
+          }),
+          201,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final service = BroadcastSubmissionService(apiClient: client);
+
+    await service.submitSighting(
+      accessToken: "token",
+      broadcastId: "b2",
+      clientActionId: "action-9",
+      description: "Observed near expressway",
+      locationMode: "CURRENT_GPS",
+      latitude: 6.5,
+      longitude: 3.4,
+      attachments: const [
+        {
+          "mediaType": "image",
+          "bucket": "the-eye",
+          "objectKey": "evidence/broadcast-user-1/photo.jpg",
+          "contentType": "image/jpeg",
+          "fileName": "photo.jpg",
+        },
+      ],
+    );
+
+    expect(requestBody?["locationMode"], "CURRENT_GPS");
+    expect(requestBody?["attachments"], isA<List<dynamic>>());
+    expect((requestBody?["attachments"] as List).length, 1);
   });
 
   test(
@@ -72,6 +114,7 @@ void main() {
         broadcastId: "b1",
         clientActionId: "action-2",
         description: "Blue shirt heading north.",
+        locationMode: "NOT_PROVIDED",
       ),
       throwsA(isA<BroadcastSightingUnavailableException>()),
     );
@@ -94,6 +137,7 @@ void main() {
         broadcastId: "b1",
         clientActionId: "action-3",
         description: "Possible match.",
+        locationMode: "NOT_PROVIDED",
       ),
       throwsA(
         predicate((Object error) =>
@@ -103,7 +147,7 @@ void main() {
     );
   });
 
-  test("createStolenVehicle forwards year in payload", () async {
+  test("createStolenVehicle forwards source vehicle snapshot metadata", () async {
     Map<String, dynamic>? requestBody;
     final client = TheEyeApiClient(
       baseUrl: "http://localhost:4000/v1",
@@ -130,11 +174,24 @@ void main() {
         "model": "Corolla",
         "year": 2021,
         "registrationNumber": "ABC-123",
+        "colour": "Red",
+        "metadata": {
+          "sourceVehicleId": "vehicle-2",
+          "make": "Toyota",
+          "model": "Corolla",
+          "year": 2021,
+          "colour": "Red",
+          "registrationNumber": "ABC-123",
+          "vinLastFour": "1A2B",
+        },
       },
     );
 
     expect(result.id, "vehicle-1");
     expect(requestBody?["year"], 2021);
+    expect(requestBody?["metadata"]?["sourceVehicleId"], "vehicle-2");
+    expect(requestBody?["metadata"]?["year"], 2021);
+    expect(requestBody?["metadata"]?["vinLastFour"], "1A2B");
   });
 
   test("addComment rejects duplicate submission within five seconds", () async {

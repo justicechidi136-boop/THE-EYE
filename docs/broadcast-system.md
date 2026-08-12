@@ -55,6 +55,13 @@ Broadcasts support emergency, crime, accident, missing person, stolen vehicle, g
 - Feed excludes draft, cancelled, rejected, expired, and undispatched broadcasts.
 - Mobile caches feed per session scope and clears on logout/account change.
 
+## Citizen Sightings
+
+- Citizen sightings are stored in `broadcast_sightings` and are linked to other systems by `broadcastId` only.
+- Sightings do not merge into Field Ops operational sighting records; projections require authorized services/roles.
+- Owner-facing views are privacy-redacted (anonymous citizen sighting summary, approximate area, observed time, description, attachment summaries).
+- Exact reporter identity and exact coordinates are restricted to admin/authorized roles.
+
 ## Audit
 
 Every create, approve, reject, schedule, cancel, dispatch, auto-dispatch, and read action writes to `audit_logs` with actor type `admin`, `system`, or `user` in metadata.

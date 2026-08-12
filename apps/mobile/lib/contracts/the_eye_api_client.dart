@@ -105,6 +105,7 @@ class CitizenVehicleRecord {
     required this.model,
     required this.plateNumber,
     required this.isPrimary,
+    this.photos = const [],
     this.year,
     this.color,
     this.vin,
@@ -121,6 +122,7 @@ class CitizenVehicleRecord {
   final String? color;
   final String? vin;
   final bool isPrimary;
+  final List<CitizenVehiclePhotoRecord> photos;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -136,8 +138,47 @@ class CitizenVehicleRecord {
       color: json["color"] as String?,
       vin: json["vin"] as String?,
       isPrimary: json["isPrimary"] == true,
+      photos: (json["photos"] is List)
+          ? (json["photos"] as List)
+              .whereType<Map>()
+              .map((item) => CitizenVehiclePhotoRecord.fromJson(
+                  Map<String, dynamic>.from(item)))
+              .toList(growable: false)
+          : const [],
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
       updatedAt: DateTime.tryParse((json["updatedAt"] as String?) ?? ""),
+    );
+  }
+}
+
+class CitizenVehiclePhotoRecord {
+  const CitizenVehiclePhotoRecord({
+    required this.id,
+    required this.objectKey,
+    required this.contentType,
+    required this.sortOrder,
+    this.sizeBytes,
+    this.createdAt,
+    this.signedGetUrl,
+  });
+
+  final String id;
+  final String objectKey;
+  final String contentType;
+  final int sortOrder;
+  final int? sizeBytes;
+  final DateTime? createdAt;
+  final String? signedGetUrl;
+
+  factory CitizenVehiclePhotoRecord.fromJson(Map<String, dynamic> json) {
+    return CitizenVehiclePhotoRecord(
+      id: (json["id"] as String?) ?? "",
+      objectKey: (json["objectKey"] as String?) ?? "",
+      contentType: (json["contentType"] as String?) ?? "",
+      sortOrder: (json["sortOrder"] as num?)?.toInt() ?? 0,
+      sizeBytes: (json["sizeBytes"] as num?)?.toInt(),
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      signedGetUrl: json["signedGetUrl"] as String?,
     );
   }
 }
@@ -226,6 +267,20 @@ class KycSubmissionResult {
 
 class PresignedAvatarTarget {
   const PresignedAvatarTarget({
+    required this.bucket,
+    required this.objectKey,
+    required this.uploadUrl,
+    required this.requiredHeaders,
+  });
+
+  final String bucket;
+  final String objectKey;
+  final String uploadUrl;
+  final Map<String, String> requiredHeaders;
+}
+
+class PresignedVehiclePhotoTarget {
+  const PresignedVehiclePhotoTarget({
     required this.bucket,
     required this.objectKey,
     required this.uploadUrl,
@@ -1006,6 +1061,83 @@ class TheEyeApiClient {
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<PresignedVehiclePhotoTarget> presignVehiclePhoto({
+    required String accessToken,
+    required String vehicleId,
+    required String contentType,
+    required String fileName,
+    int? sizeBytes,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehiclePhotosPresign(vehicleId),
+      {
+        "contentType": contentType,
+        "fileName": fileName,
+        if (sizeBytes != null) "sizeBytes": sizeBytes,
+      },
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final map = _decodeMap(response.body);
+      final headers = map["requiredHeaders"];
+      return PresignedVehiclePhotoTarget(
+        bucket: map["bucket"] as String,
+        objectKey: map["objectKey"] as String,
+        uploadUrl: map["uploadUrl"] as String,
+        requiredHeaders: headers is Map
+            ? Map<String, String>.from(
+                headers.map((key, value) => MapEntry("$key", "$value")))
+            : const {},
+      );
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehiclePhotoRecord> confirmVehiclePhoto({
+    required String accessToken,
+    required String vehicleId,
+    required String objectKey,
+    required String contentType,
+    int? sizeBytes,
+    int? sortOrder,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehiclePhotosConfirm(vehicleId),
+      {
+        "objectKey": objectKey,
+        "contentType": contentType,
+        if (sizeBytes != null) "sizeBytes": sizeBytes,
+        if (sortOrder != null) "sortOrder": sortOrder,
+      },
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehiclePhotoRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<void> deleteVehiclePhoto({
+    required String accessToken,
+    required String vehicleId,
+    required String photoId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await deleteJson(
+      TheEyeApiPaths.usersMeVehiclePhoto(vehicleId, photoId),
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
     }
     throw AuthApiException.fromResponse(response);
   }

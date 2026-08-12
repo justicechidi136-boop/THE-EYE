@@ -17,9 +17,10 @@ import {
   validateEvidenceUpload,
 } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { BroadcastQueueService } from "./broadcast-queue.service";
-import { BroadcastLifecycleService, type BroadcastLifecycleEvent } from "./broadcast-lifecycle.service";
+import { BroadcastLifecycleService } from "./broadcast-lifecycle.service";
 import { BroadcastShareService } from "./broadcast-share.service";
 import { BroadcastsService, LIVE_BROADCAST_STATUSES } from "./broadcasts.service";
 import { buildMissingPersonBroadcastPreview } from "../notifications/citizen-notification-copy";
@@ -40,6 +41,7 @@ import {
 const DEFAULT_EXPIRY_DAYS = 30;
 
 const BROADCAST_MEDIA_TYPES = new Set(["image", "video", "audio"]);
+const SIGHTING_LOCATION_MODES = new Set(["CURRENT_GPS", "MANUAL", "NOT_PROVIDED"]);
 
 function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string>> {
   if (!Array.isArray(raw)) return [];
@@ -67,11 +69,31 @@ function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string
   return attachments;
 }
 
+function normalizeVehicleYear(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const parsed = Number.parseInt(`${value}`, 10);
+  if (!Number.isFinite(parsed) || parsed < 1886 || parsed > 3000) return undefined;
+  return parsed;
+}
+
+function sanitizeVehiclePhotoObjectKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const keys: string[] = [];
+  for (const candidate of raw) {
+    const key = String(candidate ?? "").trim();
+    if (!key || key.includes("..") || key.length > 512) continue;
+    keys.push(key);
+    if (keys.length >= 8) break;
+  }
+  return keys;
+}
+
 @Injectable()
 export class BroadcastCitizenService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notificationsService: NotificationsService,
     private readonly broadcastsService: BroadcastsService,
     private readonly broadcastQueue: BroadcastQueueService,
     private readonly lifecycle: BroadcastLifecycleService,
@@ -134,6 +156,15 @@ export class BroadcastCitizenService {
     validateStolenVehicleBroadcastDto(dto);
     const attachments = sanitizeBroadcastAttachments(dto.metadata?.attachments);
     const { attachments: _ignoredAttachments, ...safeMetadata } = (dto.metadata ?? {}) as Record<string, unknown>;
+    const sourceVehicleId =
+      typeof safeMetadata.sourceVehicleId === "string" && safeMetadata.sourceVehicleId.trim().length > 0
+        ? safeMetadata.sourceVehicleId.trim()
+        : undefined;
+    const vehiclePhotoObjectKeys = sanitizeVehiclePhotoObjectKeys(safeMetadata.vehiclePhotoObjectKeys);
+    const normalizedYear = normalizeVehicleYear(dto.year ?? safeMetadata.year);
+    const vinLastFour = dto.vinLastFour?.trim() || (typeof safeMetadata.vinLastFour === "string"
+      ? safeMetadata.vinLastFour.trim()
+      : undefined);
     return this.createCitizenBroadcast(BroadcastType.StolenVehicle, dto, actor, {
       title: `Stolen vehicle: ${dto.make.trim()} ${dto.model.trim()} (${maskRegistrationNumber(dto.registrationNumber)})`,
       body: this.buildStolenVehicleBody(dto),
@@ -142,13 +173,16 @@ export class BroadcastCitizenService {
         vehicleType: dto.vehicleType,
         make: dto.make,
         model: dto.model,
+        ...(normalizedYear !== undefined ? { year: normalizedYear } : {}),
         colour: dto.colour,
         registrationMasked: maskRegistrationNumber(dto.registrationNumber),
         registrationNumber: dto.registrationNumber.trim(),
         stolenAt: dto.stolenAt,
         distinguishingFeatures: dto.distinguishingFeatures,
         policeReportReference: dto.policeReportReference,
-        vinLastFour: dto.vinLastFour,
+        ...(vinLastFour ? { vinLastFour } : {}),
+        ...(sourceVehicleId ? { sourceVehicleId } : {}),
+        ...(vehiclePhotoObjectKeys.length > 0 ? { vehiclePhotoObjectKeys } : {}),
         directionOfTravel: dto.directionOfTravel,
         rewardNotice: dto.rewardNotice,
         ...(attachments.length > 0 ? { attachments } : {}),
@@ -285,23 +319,51 @@ export class BroadcastCitizenService {
   async submitSighting(id: string, dto: SubmitBroadcastSightingDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
     if (!dto.description?.trim()) throw new BadRequestException("Sighting description is required");
+    const locationMode = String(dto.locationMode ?? "NOT_PROVIDED").trim().toUpperCase();
+    if (!SIGHTING_LOCATION_MODES.has(locationMode)) {
+      throw new BadRequestException("locationMode must be CURRENT_GPS, MANUAL, or NOT_PROVIDED");
+    }
+    if ((dto.latitude === undefined) !== (dto.longitude === undefined)) {
+      throw new BadRequestException("latitude and longitude must be supplied together");
+    }
+    if (locationMode === "CURRENT_GPS" && (dto.latitude === undefined || dto.longitude === undefined)) {
+      throw new BadRequestException("Current GPS location mode requires latitude and longitude");
+    }
+    if (locationMode === "NOT_PROVIDED" && (dto.latitude !== undefined || dto.longitude !== undefined)) {
+      throw new BadRequestException("Do not send coordinates when locationMode is NOT_PROVIDED");
+    }
+    if (dto.latitude !== undefined && (Number.isNaN(dto.latitude) || dto.latitude < -90 || dto.latitude > 90)) {
+      throw new BadRequestException("latitude must be between -90 and 90");
+    }
+    if (dto.longitude !== undefined && (Number.isNaN(dto.longitude) || dto.longitude < -180 || dto.longitude > 180)) {
+      throw new BadRequestException("longitude must be between -180 and 180");
+    }
+    const observedAt = dto.observedAt ? new Date(dto.observedAt) : new Date();
+    if (Number.isNaN(observedAt.getTime())) {
+      throw new BadRequestException("observedAt must be a valid date-time");
+    }
+    const attachments = sanitizeBroadcastAttachments(dto.attachments);
     const broadcast = await this.prisma.broadcast.findFirst({
       where: { id, deletedAt: null, commentsLocked: false },
+      include: { incident: { select: { assignedAgencyId: true } } },
     });
-    if (!broadcast || !LIVE_BROADCAST_STATUSES.has(String(broadcast.status))) {
-      throw new NotFoundException("Broadcast not available for sightings");
+    if (!broadcast) {
+      throw new NotFoundException("Broadcast not found");
+    }
+    if (!LIVE_BROADCAST_STATUSES.has(String(broadcast.status))) {
+      throw new BadRequestException(`Sightings can only be submitted to live broadcasts. Current status: ${String(broadcast.status)}`);
     }
     if (dto.clientSightingId) {
       const existing = await this.prisma.broadcastSighting.findFirst({
         where: { broadcastId: id, reporterUserId: actor.sub, metadata: { path: ["clientSightingId"], equals: dto.clientSightingId } },
       });
-      if (existing) return { data: existing, duplicate: true };
+      if (existing) return { data: { id: existing.id, status: "Received" }, duplicate: true };
     }
     const sighting = await this.prisma.broadcastSighting.create({
       data: {
         broadcastId: id,
         reporterUserId: actor.sub,
-        observedAt: dto.observedAt ? new Date(dto.observedAt) : new Date(),
+        observedAt,
         latitude: dto.latitude,
         longitude: dto.longitude,
         approximateArea: dto.approximateArea?.trim(),
@@ -309,11 +371,47 @@ export class BroadcastCitizenService {
         confidence: dto.confidence,
         anonymousPublic: dto.anonymousPublic === true,
         directionOfTravel: dto.directionOfTravel,
-        metadata: dto.clientSightingId ? { clientSightingId: dto.clientSightingId } : {},
+        metadata: {
+          ...(dto.clientSightingId ? { clientSightingId: dto.clientSightingId } : {}),
+          locationMode,
+          ...(attachments.length > 0 ? { attachments } : {}),
+        },
       } as never,
     });
     await this.recordAudit(actor, "broadcast.sighting_submitted", id, { sightingId: sighting.id });
+    await this.notifyBroadcastOwnerOfSighting(broadcast, sighting.id);
+    await this.recordAudit(actor, "broadcast.sighting_authority_routed", id, {
+      sightingId: sighting.id,
+      jurisdictionId: broadcast.jurisdictionId,
+      country: broadcast.country,
+      state: broadcast.state,
+      lga: broadcast.lga,
+      assignedAgencyId: broadcast.incident?.assignedAgencyId ?? null,
+      authorityRouting: "owner_notified_and_audited",
+    });
     return { data: { id: sighting.id, status: "Received" } };
+  }
+
+  async listSightings(id: string, actor: JwtPayload) {
+    const broadcast = await this.prisma.broadcast.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, creatorUserId: true },
+    });
+    if (!broadcast) throw new NotFoundException("Broadcast not found");
+    const isAdmin = actor.typ === "admin";
+    const isOwner = actor.typ === "user" && actor.sub === broadcast.creatorUserId;
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException("You are not allowed to view sightings for this broadcast");
+    }
+
+    const sightings = await this.prisma.broadcastSighting.findMany({
+      where: { broadcastId: id },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    return {
+      data: sightings.map((sighting) => this.toSightingProjection(sighting as unknown as Record<string, unknown>, { isAdmin })),
+    };
   }
 
   private toPublicComment(comment: Record<string, unknown>) {
@@ -550,6 +648,63 @@ export class BroadcastCitizenService {
       adminVerified,
       deepLink: `/broadcasts/${broadcast.id}`,
     };
+  }
+
+  private toSightingProjection(
+    sighting: Record<string, unknown>,
+    options: { isAdmin: boolean },
+  ) {
+    const metadata = (sighting.metadata as Record<string, unknown> | null) ?? {};
+    const rawAttachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+    const attachmentSummaries = rawAttachments
+      .filter((item) => item && typeof item === "object")
+      .map((item) => {
+        const row = item as Record<string, unknown>;
+        return {
+          mediaType: String(row.mediaType ?? ""),
+          label: String(row.label ?? "").trim() || "Attachment",
+          fileName: String(row.fileName ?? "").trim() || null,
+        };
+      });
+
+    return {
+      id: sighting.id,
+      observedAt: sighting.observedAt,
+      locationMode: String(metadata.locationMode ?? "NOT_PROVIDED"),
+      approximateArea: sighting.approximateArea ?? null,
+      description: sighting.description,
+      confidence: sighting.confidence ?? null,
+      directionOfTravel: sighting.directionOfTravel ?? null,
+      attachments: attachmentSummaries,
+      reporter: options.isAdmin ? { reporterUserId: sighting.reporterUserId } : { label: "Citizen sighting" },
+      ...(options.isAdmin ? { latitude: sighting.latitude ?? null, longitude: sighting.longitude ?? null } : {}),
+    };
+  }
+
+  private async notifyBroadcastOwnerOfSighting(
+    broadcast: Record<string, unknown>,
+    sightingId: string,
+  ) {
+    const ownerUserId = typeof broadcast.creatorUserId === "string" ? broadcast.creatorUserId : "";
+    if (!ownerUserId) return;
+    const metadata = (broadcast.metadata as Record<string, unknown> | null) ?? {};
+    const make = String(metadata.make ?? "").trim();
+    const model = String(metadata.model ?? "").trim();
+    const vehicleName = [make, model].filter(Boolean).join(" ").trim() || "vehicle";
+    await this.notificationsService.create({
+      userId: ownerUserId,
+      broadcastId: String(broadcast.id),
+      type: "BroadcastSightingAlert",
+      priority: "High",
+      channels: ["push", "in_app"],
+      title: "New Sighting Report",
+      body: `Someone reported a possible sighting of your stolen ${vehicleName}.`,
+      metadata: {
+        broadcastId: String(broadcast.id),
+        sightingId,
+        deepLink: `/broadcasts/${String(broadcast.id)}`,
+      },
+    });
   }
 
   private recordAudit(actor: JwtPayload, action: string, entityId: string, metadata: Record<string, unknown>) {

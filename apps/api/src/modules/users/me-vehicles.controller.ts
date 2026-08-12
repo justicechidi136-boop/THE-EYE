@@ -17,6 +17,8 @@ import {
   CreateCitizenVehicleDto,
   SetPrimaryCitizenVehicleDto,
   UpdateCitizenVehicleDto,
+  VehiclePhotoConfirmDto,
+  VehiclePhotoPresignDto,
 } from "./dto/users.dto";
 import { UsersService } from "./users.service";
 
@@ -75,5 +77,32 @@ export class MeVehiclesController {
     @Body() dto: SetPrimaryCitizenVehicleDto,
   ) {
     return this.users.setMyVehiclePrimary(request.user, id, dto.isPrimary);
+  }
+
+  @Post(":id/photos/presign")
+  presignMyVehiclePhoto(
+    @Req() request: { user: Parameters<UsersService["presignMyVehiclePhoto"]>[0] },
+    @Param("id") id: string,
+    @Body() dto: VehiclePhotoPresignDto,
+  ) {
+    return this.users.presignMyVehiclePhoto(request.user, id, dto);
+  }
+
+  @Post(":id/photos/confirm")
+  confirmMyVehiclePhoto(
+    @Req() request: { user: Parameters<UsersService["confirmMyVehiclePhoto"]>[0] },
+    @Param("id") id: string,
+    @Body() dto: VehiclePhotoConfirmDto,
+  ) {
+    return this.users.confirmMyVehiclePhoto(request.user, id, dto);
+  }
+
+  @Delete(":id/photos/:photoId")
+  deleteMyVehiclePhoto(
+    @Req() request: { user: Parameters<UsersService["deleteMyVehiclePhoto"]>[0] },
+    @Param("id") id: string,
+    @Param("photoId") photoId: string,
+  ) {
+    return this.users.deleteMyVehiclePhoto(request.user, id, photoId);
   }
 }

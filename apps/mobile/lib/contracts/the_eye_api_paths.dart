@@ -78,6 +78,12 @@ abstract final class TheEyeApiPaths {
   static const usersMeVehicles = "/me/vehicles";
   static String usersMeVehicle(String id) => "/me/vehicles/$id";
   static String usersMeVehiclePrimary(String id) => "/me/vehicles/$id/primary";
+  static String usersMeVehiclePhotosPresign(String id) =>
+      "/me/vehicles/$id/photos/presign";
+  static String usersMeVehiclePhotosConfirm(String id) =>
+      "/me/vehicles/$id/photos/confirm";
+  static String usersMeVehiclePhoto(String id, String photoId) =>
+      "/me/vehicles/$id/photos/$photoId";
   static const notificationsPushTokens = "/notifications/push-tokens";
   static const notificationsPushTokensDeactivate =
       "/notifications/push-tokens/deactivate";
@@ -89,8 +95,10 @@ abstract final class TheEyeApiPaths {
   static const notificationsUnreadCount = "/notifications/unread-count";
   static const notificationsReadAll = "/notifications/read-all";
   static const usersMeActivityHistory = "/users/me/activity-history";
-  static String incidentArchive(String incidentId) => "/incidents/$incidentId/archive";
-  static String broadcastArchive(String broadcastId) => "/broadcasts/$broadcastId/archive";
+  static String incidentArchive(String incidentId) =>
+      "/incidents/$incidentId/archive";
+  static String broadcastArchive(String broadcastId) =>
+      "/broadcasts/$broadcastId/archive";
   static String notificationDetail(String notificationId) =>
       "/notifications/$notificationId";
   static String notificationRead(String notificationId) =>
@@ -185,5 +193,6 @@ abstract final class TheEyeApiPaths {
       "/community-verifications/$requestId/respond";
   static String communityVerificationSkip(String requestId) =>
       "/community-verifications/$requestId/skip";
-  static const communityVerificationsPending = "/community-verifications/pending";
+  static const communityVerificationsPending =
+      "/community-verifications/pending";
 }

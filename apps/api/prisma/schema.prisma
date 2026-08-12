@@ -1196,11 +1196,26 @@ model CitizenVehicle {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos       CitizenVehiclePhoto[]
 
   @@unique([userId, plateNumber])
   @@index([userId, isPrimary])
   @@index([userId, updatedAt])
   @@map("citizen_vehicles")
+}
+
+model CitizenVehiclePhoto {
+  id          String         @id @default(uuid()) @db.Uuid
+  vehicleId   String         @map("vehicle_id") @db.Uuid
+  objectKey   String         @map("object_key")
+  contentType String         @map("content_type")
+  sizeBytes   Int?           @map("size_bytes")
+  sortOrder   Int            @default(0) @map("sort_order")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  vehicle     CitizenVehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, sortOrder])
+  @@map("citizen_vehicle_photos")
 }
 
 model StolenVehicleReport {

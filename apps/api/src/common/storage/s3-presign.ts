@@ -9,14 +9,18 @@ const allowedContentTypes = new Set([
 ]);
 
 const avatarContentTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const vehiclePhotoContentTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const evidenceKeyPattern = /^evidence\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const avatarKeyPattern = /^avatars\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const kycKeyPattern = /^kyc\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const droneOperatorDocKeyPattern = /^drone-operators\/[0-9a-f-]{36}\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const supportKeyPattern = /^support\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
+const vehiclePhotoKeyPattern =
+  /^vehicles\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+const VEHICLE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 function hmac(key: Buffer | string, value: string) {
   return createHmac("sha256", key).update(value).digest();
@@ -50,6 +54,43 @@ export function validateAvatarUpload(contentType: string, sizeBytes?: number) {
 export function avatarObjectKey(userId: string, fileName: string) {
   const extension = fileName.toLowerCase().match(/\.[a-z0-9]{1,8}$/)?.[0] ?? ".jpg";
   return `avatars/${userId}/${randomUUID()}${extension}`;
+}
+
+export function validateVehiclePhotoUpload(contentType: string, sizeBytes?: number) {
+  if (!vehiclePhotoContentTypes.has(contentType)) {
+    throw new BadRequestException("Vehicle photo must be JPEG, PNG, or WebP");
+  }
+  if (
+    sizeBytes !== undefined &&
+    (!Number.isInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > VEHICLE_PHOTO_MAX_BYTES)
+  ) {
+    throw new BadRequestException("Vehicle photo file size must be between 1 byte and 5 MB");
+  }
+}
+
+export function vehiclePhotoObjectKey(userId: string, vehicleId: string, fileName: string) {
+  const extension = fileName.toLowerCase().match(/\.[a-z0-9]{1,8}$/)?.[0] ?? ".jpg";
+  return `vehicles/${userId}/${vehicleId}/${randomUUID()}${extension}`;
+}
+
+export function assertVehiclePhotoObjectKey(
+  userId: string,
+  vehicleId: string,
+  objectKey: string,
+  contentType?: string,
+) {
+  if (
+    !userId ||
+    !vehicleId ||
+    objectKey.includes("..") ||
+    !objectKey.startsWith(`vehicles/${userId}/${vehicleId}/`)
+  ) {
+    throw new BadRequestException("Vehicle photo objectKey must remain under the vehicle photo prefix");
+  }
+  if (!vehiclePhotoKeyPattern.test(objectKey)) {
+    throw new BadRequestException("Invalid vehicle photo object key format");
+  }
+  if (contentType) validateVehiclePhotoUpload(contentType);
 }
 
 export function assertAvatarObjectKey(userId: string, objectKey: string, bucket: string, contentType?: string) {
@@ -126,6 +167,8 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900,
   if (contentType) {
     if (objectKey.startsWith("avatars/")) {
       validateAvatarUpload(contentType);
+    } else if (objectKey.startsWith("vehicles/")) {
+      validateVehiclePhotoUpload(contentType);
     } else {
       validateEvidenceUpload(contentType);
     }

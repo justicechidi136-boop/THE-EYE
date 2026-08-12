@@ -566,7 +566,7 @@ export class NotificationsService {
 
   private defaultPriority(type: string) {
     if (["EmergencyAlert", "FamilySosAlert", "NearbyDangerWarning"].includes(type)) return "Critical";
-    if (["MissingPersonAlert", "StolenVehicleAlert", "AdminAssignmentAlert"].includes(type)) return "High";
+    if (["MissingPersonAlert", "StolenVehicleAlert", "AdminAssignmentAlert", "BroadcastSightingAlert"].includes(type)) return "High";
     return "Normal";
   }
 

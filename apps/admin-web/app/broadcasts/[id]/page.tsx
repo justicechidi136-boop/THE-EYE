@@ -90,6 +90,30 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
               </div>
             )}
           </article>
+
+          <article className="rounded-lg border border-line bg-surface p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-ink">Sightings</h2>
+              <StatusBadge tone={broadcast.sightingsCount ? "info" : "neutral"}>{broadcast.sightingsCount}</StatusBadge>
+            </div>
+            {!broadcast.sightings?.length ? (
+              <div className="mt-4">
+                <ConsoleEmptyState title="No sightings yet" detail="Citizen sightings will appear here for authorized administrators." />
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                {broadcast.sightings.map((sighting) => (
+                  <div key={sighting.id} className="rounded-lg border border-line bg-surfaceMuted p-4 text-sm">
+                    <p className="font-semibold text-ink">{sighting.approximateArea ?? "Area not provided"}</p>
+                    <p className="mt-1 text-muted">{sighting.description}</p>
+                    <p className="mt-2 text-xs text-muted">
+                      {sighting.observedAt ? new Date(sighting.observedAt).toLocaleString() : "Observed time not provided"} · {sighting.locationMode} · {sighting.attachmentsCount} attachment{sighting.attachmentsCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
         </section>
 
         <aside className="grid gap-5">
@@ -126,6 +150,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
               <div className="flex justify-between gap-3"><dt className="text-muted">Recipients</dt><dd>{broadcast.recipients}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted">Comments</dt><dd>{broadcast.commentCount}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted">Reports</dt><dd>{broadcast.reportCount}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-muted">Sightings</dt><dd>{broadcast.sightingsCount}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted">Delivery</dt><dd>{broadcast.delivery}</dd></div>
             </dl>
             <Link href="/broadcasts" className="mt-4 inline-flex rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-accent">

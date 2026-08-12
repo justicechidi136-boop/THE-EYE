@@ -36,7 +36,22 @@ Do **not** mark `DEVICE_QA_PASS` without physical Android evidence.
 | FUNC-023 | P0 | Code audit | My Broadcasts spinner stuck | Y | Y | N | Explicit LOADING/EMPTY/ERROR states | My Broadcasts tests | Empty/error/retry | AUTOMATED_TEST_PASS |
 | FUNC-024 | P0 | Code audit | SV detail not structured | Y | Y | N | Structured detail hierarchy + year payload | SV detail tests | Detail sections | AUTOMATED_TEST_PASS |
 | FUNC-025 | P0 | Code audit | Single local car | Y | Y | Y | CitizenVehicle garage + `/me/vehicles` | Garage suite | Add 2+ vehicles | AUTOMATED_TEST_PASS |
+| FUNC-026 | P0 | Device QA | Garage allowed only one photo | Y | Y | Y | CitizenVehiclePhoto + multi-select upload (max 8) | Vehicle photo suite | Multi photo add/edit/retry | CODE_FIXED |
+| FUNC-027 | P0 | Device QA | Auto-prefill primary no longer valid | Y | Y | N | Explicit Use Saved / Manual + snapshot metadata | Selector + draft tests | Multi-vehicle select + return | CODE_FIXED |
+| FUNC-028 | P0 | Device QA | Sighting stubs / incomplete workflow | Y | Y | Y | Full BroadcastSighting + evidence + notify + list | Sighting API/mobile tests | Active SV report sighting | CODE_FIXED |
 | NAV-002 | P0 | Code audit | Same as FUNC-022 | Y | N | N | Replace nav after publish | Nav regression | Back to center | AUTOMATED_TEST_PASS |
+
+### ID normalization note (original QA wording preserved)
+
+The physical QA packet accidentally reused `FUNC-026` for two distinct requirements (multi vehicle photos **and** saved-vehicle selection). This tracker normalizes:
+
+| Tracker ID | Original QA wording |
+| ---------- | ------------------- |
+| FUNC-026 | My Vehicles supports multiple vehicle photo selection/upload |
+| FUNC-027 | Stolen Vehicle supports explicit selection from multiple saved vehicles |
+| FUNC-028 | Complete Report Sighting workflow |
+
+Original QA prose for both photo and selector requirements remains the product source of truth; only the tracker IDs are disambiguated.
 
 ## Primary vehicle delete rule
 
@@ -44,7 +59,15 @@ When the primary `CitizenVehicle` is deleted, promote the most recently updated 
 
 ## Staging migration
 
-`20260812223000_func025_citizen_vehicle_garage` must be applied on staging before garage APIs work. DevOps owns deploy — do not run destructive resets.
+Apply in order (DevOps owns deploy — do not run destructive resets):
+
+1. `20260812223000_func025_citizen_vehicle_garage`
+2. `20260812233000_func026_citizen_vehicle_photos`
+
+### FUNC-026 / FUNC-027 / FUNC-028 physical retest
+1. My Vehicles: add vehicle with 3–5 photos; remove one; retry a failed upload; edit and add more (max 8).  
+2. Stolen Vehicle: no auto-select; Use Saved Vehicle → pick second car; Add Vehicle empty-state return preserves draft.  
+3. Active Stolen Vehicle: Report Sighting with GPS/manual/skip, mixed evidence, success → detail; owner notification.
 
 ## Physical retest steps (summary)
 

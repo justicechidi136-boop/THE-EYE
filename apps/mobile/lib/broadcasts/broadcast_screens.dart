@@ -8,18 +8,19 @@ import "../brand.dart";
 import "../design_system/components/eye_page_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../design_system/tokens.dart";
+import "../evidence/evidence_attachment_picker.dart";
+import "../evidence/evidence_policy.dart";
 import "../incidents/incident_submission_service.dart";
 import "../location/location_permission_service.dart";
 import "../presentation/broadcast_expiry_presenter.dart";
 import "../presentation/citizen_date_time.dart";
 import "../presentation/citizen_presentation.dart";
 import "../theme/the_eye_theme.dart";
-import "../voice/voice_recorder.dart";
 import "../widgets/section_card.dart";
 import "broadcast_feed_service.dart";
+import "broadcast_media_upload_service.dart";
 import "broadcast_navigation.dart";
 import "broadcast_session.dart";
-import "broadcast_sighting_draft_store.dart";
 import "broadcast_submission_service.dart";
 import "broadcast_ui_helpers.dart";
 import "../incidents/incident_draft_factory.dart";
@@ -505,6 +506,11 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   Widget build(BuildContext context) {
     final item = _item;
     final detailArgs = ModalRoute.of(context)?.settings.arguments;
+    final isLiveStatus =
+        item?.status == "Active" || item?.status == "Published" || item?.status == "Updated";
+    final isStolenVehicle = item?.type.toLowerCase().contains("stolenvehicle") == true ||
+        item?.type.toLowerCase().contains("vehicle") == true;
+    final canReportSighting = isLiveStatus && isStolenVehicle;
     final returnToCenterOnBack = detailArgs is BroadcastDetailNavigationArgs &&
         detailArgs.returnToCenterOnBack;
     return PopScope(
@@ -558,15 +564,17 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                             icon: const Icon(Icons.share_outlined),
                             label: const Text("Share"),
                           ),
-                          OutlinedButton.icon(
-                            onPressed: _actionInFlight
-                                ? null
-                                : () => Navigator.of(context).pushNamed(
-                                      "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
-                                    ),
-                            icon: const Icon(Icons.visibility_outlined),
-                            label: const Text("Report sighting"),
-                          ),
+                          if (canReportSighting)
+                            OutlinedButton.icon(
+                              onPressed: _actionInFlight
+                                  ? null
+                                  : () => Navigator.of(context).pushNamed(
+                                        "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
+                                        arguments: item,
+                                      ),
+                              icon: const Icon(Icons.visibility_outlined),
+                              label: const Text("Report sighting"),
+                            ),
                           OutlinedButton.icon(
                             onPressed: _actionInFlight
                                 ? null
@@ -1457,101 +1465,36 @@ class SubmitSightingScreen extends StatefulWidget {
 }
 
 class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
+  final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _descriptionController = TextEditingController();
   final _areaController = TextEditingController();
-  final _directionController = TextEditingController();
-  final _draftStore = BroadcastSightingDraftStore();
+  final _uploadService = BroadcastMediaUploadService();
   String _clientActionId = createClientSubmissionId();
-  bool _anonymousToReviewers = false;
+  DateTime _observedAt = DateTime.now();
+  _SightingLocationMode _locationMode = _SightingLocationMode.notProvided;
   bool _submitting = false;
-  bool _hasPendingDraft = false;
-  String? _pendingDraftMessage;
-  Position? _position;
-  double? _draftLatitude;
-  double? _draftLongitude;
+  BroadcastFeedItem? _headerItem;
+  double? _manualLatitude;
+  double? _manualLongitude;
   String? _locationStatus;
-  String? _photoReference;
-  String? _videoReference;
-  String? _voiceReference;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_restoreDraft());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is BroadcastFeedItem) {
+        setState(() => _headerItem = args);
+      }
+    });
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
     _areaController.dispose();
-    _directionController.dispose();
     super.dispose();
-  }
-
-  String _userScope(BroadcastSession session) =>
-      session.accessToken ?? "anonymous";
-
-  Future<void> _restoreDraft() async {
-    final session = BroadcastSession.require(context);
-    final draft = await _draftStore.load(
-      userScope: _userScope(session),
-      broadcastId: widget.broadcastId,
-    );
-    if (!mounted || draft == null) return;
-    setState(() {
-      _clientActionId = draft.clientActionId.isNotEmpty
-          ? draft.clientActionId
-          : _clientActionId;
-      _descriptionController.text = draft.description;
-      _areaController.text = draft.approximateArea ?? "";
-      _directionController.text = draft.directionOfTravel ?? "";
-      _anonymousToReviewers = draft.anonymousToReviewers;
-      _photoReference = draft.photoReference;
-      _videoReference = draft.videoReference;
-      _voiceReference = draft.voiceReference;
-      _draftLatitude = draft.latitude;
-      _draftLongitude = draft.longitude;
-      if (draft.latitude != null && draft.longitude != null) {
-        _position = null;
-      }
-      _hasPendingDraft = true;
-      _pendingDraftMessage =
-          "A saved sighting draft is ready to retry. Exact coordinates remain private.";
-    });
-  }
-
-  Future<void> _persistDraft() async {
-    final session = BroadcastSession.require(context);
-    final draft = BroadcastSightingDraft(
-      broadcastId: widget.broadcastId,
-      clientActionId: _clientActionId,
-      description: _descriptionController.text.trim(),
-      observedAt: DateTime.now().toUtc().toIso8601String(),
-      latitude: _position?.latitude ?? _draftLatitude,
-      longitude: _position?.longitude ?? _draftLongitude,
-      approximateArea: _areaController.text.trim().isEmpty
-          ? null
-          : _areaController.text.trim(),
-      directionOfTravel: _directionController.text.trim().isEmpty
-          ? null
-          : _directionController.text.trim(),
-      confidence: "ReporterProvided",
-      anonymousToReviewers: _anonymousToReviewers,
-      photoReference: _photoReference,
-      videoReference: _videoReference,
-      voiceReference: _voiceReference,
-      updatedAt: DateTime.now().toUtc(),
-    );
-    await _draftStore.save(
-      userScope: _userScope(session),
-      draft: draft,
-    );
-    if (!mounted) return;
-    setState(() {
-      _hasPendingDraft = true;
-      _pendingDraftMessage =
-          BroadcastSightingUnavailableException.temporaryUnavailableMessage;
-    });
   }
 
   Future<void> _captureLocation() async {
@@ -1565,11 +1508,45 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       return;
     }
     setState(() {
-      _position = outcome.position;
-      _draftLatitude = outcome.position?.latitude;
-      _draftLongitude = outcome.position?.longitude;
-      _locationStatus =
-          "Approximate location captured for authorized review only.";
+      _manualLatitude = outcome.position?.latitude;
+      _manualLongitude = outcome.position?.longitude;
+      _locationStatus = "Current location captured.";
+    });
+  }
+
+  Future<void> _pickObservedDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDate: _observedAt,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _observedAt = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        _observedAt.hour,
+        _observedAt.minute,
+      );
+    });
+  }
+
+  Future<void> _pickObservedTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_observedAt),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _observedAt = DateTime(
+        _observedAt.year,
+        _observedAt.month,
+        _observedAt.day,
+        picked.hour,
+        picked.minute,
+      );
     });
   }
 
@@ -1579,44 +1556,54 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       showBroadcastSnackBar(context, "Describe what you saw.", isError: true);
       return;
     }
+    if (_locationMode == _SightingLocationMode.currentGps &&
+        (_manualLatitude == null || _manualLongitude == null)) {
+      showBroadcastSnackBar(
+        context,
+        "Capture your current location or choose another location mode.",
+        isError: true,
+      );
+      return;
+    }
     final session = BroadcastSession.require(context);
     if (session.accessToken == null) return;
     setState(() => _submitting = true);
     try {
+      final attachments = await _uploadService.uploadAttachments(
+        attachments: _evidenceSectionKey.currentState?.attachments ?? const [],
+        accessToken: session.accessToken!,
+      );
       await session.broadcastSubmissionService.submitSighting(
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
         clientActionId: _clientActionId,
         description: description,
-        observedAt: DateTime.now().toUtc().toIso8601String(),
-        latitude: _position?.latitude ?? _draftLatitude,
-        longitude: _position?.longitude ?? _draftLongitude,
+        observedAt: _observedAt.toUtc().toIso8601String(),
+        locationMode: _locationMode.apiValue,
+        latitude: _locationMode == _SightingLocationMode.currentGps || _locationMode == _SightingLocationMode.manual
+            ? _manualLatitude
+            : null,
+        longitude: _locationMode == _SightingLocationMode.currentGps || _locationMode == _SightingLocationMode.manual
+            ? _manualLongitude
+            : null,
         approximateArea: _areaController.text.trim().isEmpty
             ? null
             : _areaController.text.trim(),
-        directionOfTravel: _directionController.text.trim().isEmpty
-            ? null
-            : _directionController.text.trim(),
-        anonymousToReviewers: _anonymousToReviewers,
         confidence: "ReporterProvided",
-        photoReference: _photoReference,
-        videoReference: _videoReference,
-        voiceReference: _voiceReference,
-      );
-      await _draftStore.clear(
-        userScope: _userScope(session),
-        broadcastId: widget.broadcastId,
+        attachments: attachments,
       );
       if (!mounted) return;
-      showBroadcastSnackBar(context, "Sighting submitted securely. Thank you.");
-      Navigator.of(context).pop();
-    } on BroadcastSightingUnavailableException catch (error) {
-      await _persistDraft();
-      if (!mounted) return;
-      showBroadcastSnackBar(context, error.userMessage, isError: true);
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => _SightingSubmittedScreen(broadcastId: widget.broadcastId),
+        ),
+      );
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       showBroadcastSnackBar(context, error.userMessage, isError: true);
+    } on BroadcastMediaUploadFailure catch (error) {
+      if (!mounted) return;
+      showBroadcastSnackBar(context, error.message, isError: true);
     } catch (_) {
       if (!mounted) return;
       showBroadcastSnackBar(context, "Unable to submit sighting.",
@@ -1628,28 +1615,99 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final headerTitle = _headerItem == null
+        ? "Report Sighting"
+        : [
+            _headerItem!.metadata["make"],
+            _headerItem!.metadata["model"],
+          ].whereType<String>().join(" ").trim().isEmpty
+            ? _headerItem!.title
+            : [
+                _headerItem!.metadata["make"],
+                _headerItem!.metadata["model"],
+              ].whereType<String>().join(" ");
     return _BroadcastShell(
       title: "Report sighting",
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
+          SectionCard(title: "Vehicle", child: Text(headerTitle)),
+          const SizedBox(height: 16),
           SectionCard(
-            title: "Submit a private sighting",
-            child: Text(
-              _hasPendingDraft && _pendingDraftMessage != null
-                  ? _pendingDraftMessage!
-                  : "Sightings are sent only to authorized reviewers and the broadcast author. They are never posted as public comments.",
-              style: TextStyle(
-                color: EyeSemanticColors.of(context).mutedText,
-              ),
+            title: "WHEN",
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _submitting ? null : _pickObservedDate,
+                      icon: const Icon(Icons.event_outlined),
+                      label: Text(CitizenDateTimeFormatter.formatDate(_observedAt)),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _submitting ? null : _pickObservedTime,
+                      icon: const Icon(Icons.schedule_outlined),
+                      label: Text(CitizenDateTimeFormatter.formatTime(_observedAt)),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
+          SectionCard(
+            title: "WHERE",
+            child: Column(
+              children: [
+                RadioListTile<_SightingLocationMode>(
+                  value: _SightingLocationMode.currentGps,
+                  groupValue: _locationMode,
+                  onChanged: _submitting
+                      ? null
+                      : (value) async {
+                          setState(() => _locationMode = value ?? _locationMode);
+                          await _captureLocation();
+                        },
+                  title: const Text("Use current location"),
+                ),
+                RadioListTile<_SightingLocationMode>(
+                  value: _SightingLocationMode.manual,
+                  groupValue: _locationMode,
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _locationMode = value ?? _locationMode),
+                  title: const Text("Enter manually"),
+                ),
+                RadioListTile<_SightingLocationMode>(
+                  value: _SightingLocationMode.notProvided,
+                  groupValue: _locationMode,
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _locationMode = value ?? _locationMode),
+                  title: const Text("Skip"),
+                ),
+                if (_locationStatus != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _locationStatus!,
+                      style: TextStyle(color: EyeSemanticColors.of(context).mutedText),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text("DETAILS", style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
           TextField(
             controller: _descriptionController,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: "What did you see?",
+              labelText: "What did you observe?",
             ),
           ),
           const SizedBox(height: 12),
@@ -1659,80 +1717,21 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
               labelText: "Approximate area (optional)",
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _directionController,
-            decoration: const InputDecoration(
-              labelText: "Direction of travel (optional)",
+          const SizedBox(height: 16),
+          const Text("EVIDENCE", style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          ManagedEvidenceSection(
+            key: _evidenceSectionKey,
+            lowDataMode: false,
+            policy: EvidencePolicy.incident,
+          ),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: "Safety notice",
+            child: Text(
+              "Do not approach suspects. Share only what you observed and stay in a safe location.",
+              style: TextStyle(color: EyeSemanticColors.of(context).mutedText),
             ),
-          ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            value: _anonymousToReviewers,
-            onChanged: _submitting
-                ? null
-                : (value) => setState(() => _anonymousToReviewers = value),
-            title: const Text("Keep my identity private on authorized review"),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed:
-                  _submitting ? null : () => unawaited(_captureLocation()),
-              icon: const Icon(Icons.my_location),
-              label: const Text("Use current location"),
-            ),
-          ),
-          if (_locationStatus != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _locationStatus!,
-              style: TextStyle(
-                color: EyeSemanticColors.of(context).mutedText,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          VoiceRecorder(
-            enabled: !_submitting,
-            onRecordingReady: (result) {
-              setState(() {
-                _voiceReference = "voice:${result.durationSeconds}s";
-              });
-              final note = "Voice note attached (${result.durationSeconds}s).";
-              final current = _descriptionController.text.trim();
-              _descriptionController.text =
-                  current.isEmpty ? note : "$current\n\n$note";
-            },
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _submitting
-                    ? null
-                    : () => setState(
-                          () => _photoReference = "photo:attached",
-                        ),
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: Text(_photoReference == null
-                    ? "Attach photo"
-                    : "Photo attached"),
-              ),
-              OutlinedButton.icon(
-                onPressed: _submitting
-                    ? null
-                    : () => setState(
-                          () => _videoReference = "video:attached",
-                        ),
-                icon: const Icon(Icons.videocam_outlined),
-                label: Text(_videoReference == null
-                    ? "Attach video"
-                    : "Video attached"),
-              ),
-            ],
           ),
           const SizedBox(height: 16),
           FilledButton(
@@ -1743,11 +1742,54 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(_hasPendingDraft
-                    ? "Retry sighting submission"
-                    : "Submit sighting"),
+                : const Text("Submit sighting"),
           ),
         ],
+      ),
+    );
+  }
+}
+
+enum _SightingLocationMode {
+  currentGps("CURRENT_GPS"),
+  manual("MANUAL"),
+  notProvided("NOT_PROVIDED");
+
+  const _SightingLocationMode(this.apiValue);
+  final String apiValue;
+}
+
+class _SightingSubmittedScreen extends StatelessWidget {
+  const _SightingSubmittedScreen({required this.broadcastId});
+
+  final String broadcastId;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BroadcastShell(
+      title: "Sighting submitted",
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_outline, size: 56),
+              const SizedBox(height: 16),
+              const Text(
+                "Thanks for reporting this sighting.",
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pushReplacementNamed(
+                  broadcastDetailRoute(broadcastId)!,
+                ),
+                child: const Text("Back to broadcast"),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

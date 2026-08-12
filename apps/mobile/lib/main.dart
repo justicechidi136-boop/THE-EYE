@@ -29,7 +29,9 @@ import "neighborhood_watch/community_post_route_args.dart";
 import "evidence/evidence_attachment_picker.dart";
 import "evidence/local_evidence_attachment.dart";
 import "evidence/evidence_capture_service.dart";
+import "evidence/evidence_policy.dart";
 import "evidence/evidence_upload_service.dart";
+import "evidence/evidence_validation.dart";
 import "connectivity/connectivity_service.dart";
 import "connectivity/connectivity_state.dart";
 import "connectivity/network_interface_reader.dart";
@@ -87,6 +89,7 @@ import "broadcasts/broadcast_media_upload_service.dart";
 import "broadcasts/broadcast_navigation.dart";
 import "broadcasts/broadcast_screens.dart";
 import "broadcasts/broadcast_session.dart";
+import "broadcasts/stolen_vehicle_broadcast_draft_store.dart";
 import "broadcasts/broadcast_submission_service.dart";
 import "community_verification/community_verification_screen.dart";
 import "community_verification/community_verification_service.dart";
@@ -2463,7 +2466,10 @@ class AppController extends SessionAccessor
     vehicles = _upsertVehicle(
         merged,
         _fromApiVehicle(created).copyWith(
-          imagePath: profile.imagePath,
+          imagePath: profile.photos.isNotEmpty
+              ? profile.photos.first.previewUrl
+              : profile.imagePath,
+          photos: profile.photos,
           notes: profile.notes,
         ));
     await _vehicleGarageStore.saveVehicles(vehicles);
@@ -2497,7 +2503,10 @@ class AppController extends SessionAccessor
     vehicles = _upsertVehicle(
       _mergeRemoteVehicles([updated], previous: vehicles, replace: false),
       _fromApiVehicle(updated).copyWith(
-        imagePath: profile.imagePath,
+        imagePath: profile.photos.isNotEmpty
+            ? profile.photos.first.previewUrl
+            : profile.imagePath,
+        photos: profile.photos,
         notes: profile.notes,
       ),
     );
@@ -2550,8 +2559,26 @@ class AppController extends SessionAccessor
     final remoteMapped = remote.map((item) {
       final byId = previousById[item.id];
       final byPlate = previousByPlate[item.plateNumber.trim().toUpperCase()];
+      final photos = item.photos
+          .map(
+            (photo) => CarPhotoRef(
+              id: photo.id,
+              objectKey: photo.objectKey,
+              contentType: photo.contentType,
+              sizeBytes: photo.sizeBytes,
+              sortOrder: photo.sortOrder,
+              createdAt: photo.createdAt,
+              previewUrl: photo.signedGetUrl,
+            ),
+          )
+          .toList(growable: false);
+      final resolvedPhotos = photos.isNotEmpty
+          ? photos
+          : (byId?.photos ?? byPlate?.photos ?? const <CarPhotoRef>[]);
+      final firstPhotoPreview = resolvedPhotos.isNotEmpty ? resolvedPhotos.first.previewUrl : null;
       return _fromApiVehicle(item).copyWith(
-        imagePath: byId?.imagePath ?? byPlate?.imagePath,
+        imagePath: firstPhotoPreview ?? byId?.imagePath ?? byPlate?.imagePath,
+        photos: resolvedPhotos,
         notes: byId?.notes ?? byPlate?.notes,
       );
     }).toList(growable: false);
@@ -2570,6 +2597,19 @@ class AppController extends SessionAccessor
   }
 
   CarProfile _fromApiVehicle(CitizenVehicleRecord record) {
+    final photos = record.photos
+        .map(
+          (photo) => CarPhotoRef(
+            id: photo.id,
+            objectKey: photo.objectKey,
+            contentType: photo.contentType,
+            sizeBytes: photo.sizeBytes,
+            sortOrder: photo.sortOrder,
+            createdAt: photo.createdAt,
+            previewUrl: photo.signedGetUrl,
+          ),
+        )
+        .toList(growable: false);
     return CarProfile(
       id: record.id,
       make: record.make,
@@ -2578,6 +2618,8 @@ class AppController extends SessionAccessor
       year: record.year,
       color: record.color,
       vin: record.vin,
+      imagePath: photos.isNotEmpty ? photos.first.previewUrl : null,
+      photos: photos,
       isPrimary: record.isPrimary,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -6159,6 +6201,8 @@ class StolenVehicleBroadcastScreen extends StatefulWidget {
       _StolenVehicleBroadcastScreenState();
 }
 
+enum _StolenVehicleEntryMode { choice, savedVehicle, manualEntry }
+
 class _StolenVehicleBroadcastScreenState
     extends State<StolenVehicleBroadcastScreen> {
   final plateController = TextEditingController();
@@ -6169,18 +6213,110 @@ class _StolenVehicleBroadcastScreenState
   final vinController = TextEditingController();
   final descriptionController = TextEditingController();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
+  final _draftStore = StolenVehicleBroadcastDraftStore();
   bool submitting = false;
+  bool _restoringDraft = false;
+  bool _draftLoaded = false;
+  _StolenVehicleEntryMode _entryMode = _StolenVehicleEntryMode.choice;
   bool usedSavedCar = false;
-  bool prefilledFromSavedCar = false;
   String? savedCarImagePath;
   String? selectedVehicleId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (prefilledFromSavedCar) return;
-    prefilledFromSavedCar = true;
-    _applySavedCarProfile(appOf(context).primaryVehicle, notify: true);
+    if (_draftLoaded) return;
+    _draftLoaded = true;
+    unawaited(_restoreDraft());
+  }
+
+  String get _draftUserScope {
+    final controller = appOf(context);
+    final profileId = controller.cachedCitizenProfile?.id?.trim();
+    if (profileId != null && profileId.isNotEmpty) {
+      return profileId;
+    }
+    return "local-user";
+  }
+
+  _StolenVehicleEntryMode _parseEntryMode(String? raw) {
+    switch (raw) {
+      case "savedVehicle":
+        return _StolenVehicleEntryMode.savedVehicle;
+      case "manualEntry":
+        return _StolenVehicleEntryMode.manualEntry;
+      default:
+        return _StolenVehicleEntryMode.choice;
+    }
+  }
+
+  String _entryModeStorageValue(_StolenVehicleEntryMode mode) {
+    switch (mode) {
+      case _StolenVehicleEntryMode.choice:
+        return "choice";
+      case _StolenVehicleEntryMode.savedVehicle:
+        return "savedVehicle";
+      case _StolenVehicleEntryMode.manualEntry:
+        return "manualEntry";
+    }
+  }
+
+  Future<void> _restoreDraft() async {
+    setState(() => _restoringDraft = true);
+    final draft = await _draftStore.load(userScope: _draftUserScope);
+    if (!mounted) return;
+
+    final restoredEntryMode = draft == null
+        ? _StolenVehicleEntryMode.choice
+        : _parseEntryMode(draft.entryMode);
+    final restoredVehicleId = draft?.selectedVehicleId;
+    setState(() {
+      _entryMode = restoredEntryMode;
+      selectedVehicleId = restoredVehicleId;
+      usedSavedCar = draft?.usedSavedVehicle ?? false;
+      _restoringDraft = false;
+    });
+    if (draft != null) {
+      plateController.text = draft.plateNumber ?? "";
+      makeController.text = draft.make ?? "";
+      modelController.text = draft.model ?? "";
+      yearController.text = draft.year ?? "";
+      colorController.text = draft.color ?? "";
+      vinController.text = draft.vin ?? "";
+      descriptionController.text = draft.description ?? "";
+    }
+    if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
+      final vehicle = _findGarageVehicleById(selectedVehicleId!);
+      if (vehicle != null) {
+        _applySavedCarProfile(vehicle, notify: true);
+      }
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    await _draftStore.save(
+      userScope: _draftUserScope,
+      draft: StolenVehicleBroadcastDraft(
+        entryMode: _entryModeStorageValue(_entryMode),
+        selectedVehicleId: selectedVehicleId,
+        usedSavedVehicle: usedSavedCar,
+        plateNumber: plateController.text,
+        make: makeController.text,
+        model: modelController.text,
+        year: yearController.text,
+        color: colorController.text,
+        vin: vinController.text,
+        description: descriptionController.text,
+        updatedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  CarProfile? _findGarageVehicleById(String id) {
+    for (final vehicle in appOf(context).vehicles) {
+      if (vehicle.id == id) return vehicle;
+    }
+    return null;
   }
 
   void _applySavedCarProfile(CarProfile? profile, {bool notify = true}) {
@@ -6198,6 +6334,31 @@ class _StolenVehicleBroadcastScreenState
     savedCarImagePath = profile.imagePath;
     usedSavedCar = true;
     if (notify && mounted) setState(() {});
+  }
+
+  List<String> _extractVehiclePhotoObjectKeys(CarProfile? profile) {
+    final imagePath = profile?.imagePath?.trim() ?? "";
+    if (imagePath.isEmpty) return const [];
+    final looksLikeLocalPath = imagePath.contains("\\") || imagePath.contains(":");
+    if (looksLikeLocalPath) return const [];
+    return [imagePath];
+  }
+
+  Future<void> _openAddVehicleFlow() async {
+    await _saveDraft();
+    if (!mounted) return;
+    await Navigator.of(context).pushNamed(
+      "/your-car/detail",
+      arguments: const _VehicleEditorArgs(returnToStolenVehicle: true),
+    );
+    if (!mounted) return;
+    await appOf(context).loadVehicleGarage(refresh: true);
+    if (!mounted) return;
+    await _restoreDraft();
+    if (!mounted) return;
+    setState(() {
+      _entryMode = _StolenVehicleEntryMode.savedVehicle;
+    });
   }
 
   @override
@@ -6224,6 +6385,8 @@ class _StolenVehicleBroadcastScreenState
     usedSavedCar = false;
     savedCarImagePath = null;
     selectedVehicleId = null;
+    _entryMode = _StolenVehicleEntryMode.choice;
+    unawaited(_draftStore.clear(userScope: _draftUserScope));
   }
 
   Future<void> _submit() async {
@@ -6257,6 +6420,13 @@ class _StolenVehicleBroadcastScreenState
     final year = yearController.text.trim();
     final parsedYear = int.tryParse(year);
     final vin = vinController.text.trim();
+    final normalizedColor = colorController.text.trim().isEmpty
+        ? "Unknown"
+        : colorController.text.trim();
+    final sourceVehicle = selectedVehicleId == null || selectedVehicleId!.isEmpty
+        ? null
+        : _findGarageVehicleById(selectedVehicleId!);
+    final vehiclePhotoObjectKeys = _extractVehiclePhotoObjectKeys(sourceVehicle);
     try {
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
@@ -6283,9 +6453,7 @@ class _StolenVehicleBroadcastScreenState
           "vehicleType": "Car",
           "make": makeController.text.trim(),
           "model": modelController.text.trim(),
-          "colour": colorController.text.trim().isEmpty
-              ? "Unknown"
-              : colorController.text.trim(),
+          "colour": normalizedColor,
           if (year.isNotEmpty) "year": parsedYear ?? year,
           "registrationNumber": plateController.text.trim(),
           "stolenAt": DateTime.now().toUtc().toIso8601String(),
@@ -6296,8 +6464,19 @@ class _StolenVehicleBroadcastScreenState
           "contactMethod": "in_app",
           if (description.isNotEmpty) "lastKnownLocation": description,
           if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
-          if (uploadedEvidence.isNotEmpty)
-            "metadata": {"attachments": uploadedEvidence},
+          "metadata": {
+            if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty)
+              "sourceVehicleId": selectedVehicleId,
+            "make": makeController.text.trim(),
+            "model": modelController.text.trim(),
+            if (year.isNotEmpty) "year": parsedYear ?? year,
+            "colour": normalizedColor,
+            "registrationNumber": plateController.text.trim(),
+            if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
+            if (vehiclePhotoObjectKeys.isNotEmpty)
+              "vehiclePhotoObjectKeys": vehiclePhotoObjectKeys,
+            if (uploadedEvidence.isNotEmpty) "attachments": uploadedEvidence,
+          },
         },
       ).timeout(kSosSubmissionTimeout);
       if (!mounted) return;
@@ -6333,6 +6512,12 @@ class _StolenVehicleBroadcastScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_restoringDraft) {
+      return const SafetyScaffold(
+        title: "Stolen vehicle",
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     final garageVehicles = appOf(context)
         .vehicles
         .where((vehicle) => vehicle.hasRequiredFields)
@@ -6345,6 +6530,9 @@ class _StolenVehicleBroadcastScreenState
       }
     }
     final hasSavedCar = garageVehicles.isNotEmpty;
+    final showVehicleForm = _entryMode == _StolenVehicleEntryMode.manualEntry ||
+        (_entryMode == _StolenVehicleEntryMode.savedVehicle &&
+            selectedVehicle != null);
     return SafetyScaffold(
       title: "Stolen vehicle",
       body: ListView(
@@ -6357,53 +6545,75 @@ class _StolenVehicleBroadcastScreenState
                 const Icon(Icons.directions_car,
                     size: 52, color: BrandColors.green),
                 const SizedBox(height: 16),
-                if (hasSavedCar)
-                  DropdownButtonFormField<String>(
-                    value: selectedVehicle?.id,
-                    decoration: const InputDecoration(
-                      labelText: "Select from My Cars (optional)",
-                    ),
-                    items: garageVehicles
-                        .map(
-                          (vehicle) => DropdownMenuItem<String>(
-                            value: vehicle.id,
-                            child: Text(
-                              "${vehicle.make} ${vehicle.model} • ${vehicle.plateNumber}",
-                            ),
-                          ),
-                        )
-                        .toList(growable: false),
-                    onChanged: (value) {
-                      setState(() => selectedVehicleId = value);
-                      CarProfile? selected;
-                      for (final vehicle in garageVehicles) {
-                        if (vehicle.id == value) {
-                          selected = vehicle;
-                          break;
-                        }
-                      }
-                      if (selected != null) {
-                        _applySavedCarProfile(selected);
-                        showAppSnackBar(
-                            context, "Loaded selected vehicle details.");
-                      }
+                if (_entryMode == _StolenVehicleEntryMode.choice) ...[
+                  FilledButton(
+                    onPressed: () {
+                      setState(() {
+                        _entryMode = _StolenVehicleEntryMode.savedVehicle;
+                        selectedVehicleId = null;
+                      });
                     },
+                    child: const Text("Use Saved Vehicle"),
                   ),
-                if (hasSavedCar) const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _entryMode = _StolenVehicleEntryMode.manualEntry;
+                        usedSavedCar = false;
+                      });
+                    },
+                    child: const Text("Enter Vehicle Manually"),
+                  ),
+                ],
+                if (_entryMode == _StolenVehicleEntryMode.savedVehicle) ...[
+                  if (!hasSavedCar)
+                    _buildNoSavedVehicleState()
+                  else
+                    _buildSavedVehicleSelector(garageVehicles, selectedVehicle),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () {
+                      setState(() => _entryMode = _StolenVehicleEntryMode.manualEntry);
+                    },
+                    child: const Text("Enter Vehicle Manually"),
+                  ),
+                ],
+                if (_entryMode == _StolenVehicleEntryMode.manualEntry &&
+                    hasSavedCar) ...[
+                  OutlinedButton(
+                    onPressed: () {
+                      setState(() => _entryMode = _StolenVehicleEntryMode.savedVehicle);
+                    },
+                    child: const Text("Use Saved Vehicle"),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (showVehicleForm) ...[
                 if (savedCarImagePath != null &&
-                    File(savedCarImagePath!).existsSync())
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: Image.file(
-                        File(savedCarImagePath!),
-                        height: 140,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
+                    (savedCarImagePath!.startsWith("http://") ||
+                        savedCarImagePath!.startsWith("https://") ||
+                        File(savedCarImagePath!).existsSync()))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                      child: savedCarImagePath!.startsWith("http://") ||
+                              savedCarImagePath!.startsWith("https://")
+                          ? Image.network(
+                              savedCarImagePath!,
+                              height: 140,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            )
+                          : Image.file(
+                              File(savedCarImagePath!),
+                              height: 140,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
                       ),
                     ),
-                  ),
                 TextField(
                     controller: plateController,
                     decoration:
@@ -6450,11 +6660,136 @@ class _StolenVehicleBroadcastScreenState
                           child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text("Submit broadcast"),
                 ),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNoSavedVehicleState() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          "NO SAVED VEHICLES",
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        const Text("You haven't added any vehicles yet."),
+        const Text(
+            "Add your vehicle first, then return here to report it stolen."),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton(
+                onPressed: _openAddVehicleFlow,
+                child: const Text("Add Vehicle"),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSavedVehicleSelector(
+    List<CarProfile> vehicles,
+    CarProfile? selectedVehicle,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            "Select Vehicle",
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...vehicles.map((vehicle) {
+          final selected = vehicle.id == selectedVehicle?.id;
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: _buildVehicleThumb(vehicle),
+              title: Text("${vehicle.make} ${vehicle.model}".trim()),
+              subtitle: Text(
+                [
+                  if ((vehicle.color ?? "").trim().isNotEmpty)
+                    vehicle.color!.trim(),
+                  vehicle.plateNumber,
+                ].join(" • "),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (vehicle.isPrimary)
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: BrandColors.green.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        "PRIMARY",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                  ),
+                ],
+              ),
+              onTap: () {
+                setState(() => selectedVehicleId = vehicle.id);
+                _applySavedCarProfile(vehicle);
+                showAppSnackBar(context, "Loaded selected vehicle details.");
+              },
+            ),
+          );
+        }),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _openAddVehicleFlow,
+          child: const Text("Add Vehicle"),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVehicleThumb(CarProfile vehicle) {
+    final imagePath = vehicle.imagePath;
+    if (imagePath != null && imagePath.isNotEmpty && File(imagePath).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          File(imagePath),
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: context.eyeSurfaceMuted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(Icons.directions_car, color: context.eyeMutedText),
     );
   }
 }
@@ -8497,9 +8832,10 @@ class _YourCarScreenState extends State<YourCarScreen> {
 }
 
 class _VehicleEditorArgs {
-  const _VehicleEditorArgs({this.vehicleId});
+  const _VehicleEditorArgs({this.vehicleId, this.returnToStolenVehicle = false});
 
   final String? vehicleId;
+  final bool returnToStolenVehicle;
 }
 
 class VehicleDetailScreen extends StatefulWidget {
@@ -8512,7 +8848,64 @@ class VehicleDetailScreen extends StatefulWidget {
   State<VehicleDetailScreen> createState() => _VehicleDetailScreenState();
 }
 
+enum _VehiclePhotoUploadState { local, uploading, uploaded, failed }
+
+class _VehiclePhotoDraft {
+  const _VehiclePhotoDraft({
+    this.id,
+    this.objectKey,
+    this.localPath,
+    this.previewUrl,
+    required this.contentType,
+    this.sizeBytes,
+    this.sortOrder = 0,
+    this.createdAt,
+    this.uploadState = _VehiclePhotoUploadState.local,
+    this.errorMessage,
+  });
+
+  final String? id;
+  final String? objectKey;
+  final String? localPath;
+  final String? previewUrl;
+  final String contentType;
+  final int? sizeBytes;
+  final int sortOrder;
+  final DateTime? createdAt;
+  final _VehiclePhotoUploadState uploadState;
+  final String? errorMessage;
+
+  _VehiclePhotoDraft copyWith({
+    String? id,
+    String? objectKey,
+    String? localPath,
+    String? previewUrl,
+    String? contentType,
+    int? sizeBytes,
+    int? sortOrder,
+    DateTime? createdAt,
+    _VehiclePhotoUploadState? uploadState,
+    String? errorMessage,
+  }) {
+    return _VehiclePhotoDraft(
+      id: id ?? this.id,
+      objectKey: objectKey ?? this.objectKey,
+      localPath: localPath ?? this.localPath,
+      previewUrl: previewUrl ?? this.previewUrl,
+      contentType: contentType ?? this.contentType,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      uploadState: uploadState ?? this.uploadState,
+      errorMessage: errorMessage,
+    );
+  }
+}
+
 class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
+  static const _vehiclePhotoLimitMessage =
+      "You can add up to 8 photos for each vehicle.";
+
   final makeController = TextEditingController();
   final modelController = TextEditingController();
   final yearController = TextEditingController();
@@ -8520,7 +8913,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   final plateController = TextEditingController();
   final vinController = TextEditingController();
   final notesController = TextEditingController();
-  String? imagePath;
+  final List<_VehiclePhotoDraft> _photos = [];
+  final Set<String> _removedRemotePhotoIds = <String>{};
   String? vehicleId;
   bool isPrimary = false;
   bool saving = false;
@@ -8548,8 +8942,21 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       plateController.text = profile.plateNumber;
       vinController.text = profile.vin ?? "";
       notesController.text = profile.notes ?? "";
-      imagePath = profile.imagePath;
       isPrimary = profile.isPrimary;
+      _photos.addAll(
+        profile.photos.map(
+          (photo) => _VehiclePhotoDraft(
+            id: photo.id,
+            objectKey: photo.objectKey,
+            previewUrl: photo.previewUrl,
+            contentType: photo.contentType ?? "image/jpeg",
+            sizeBytes: photo.sizeBytes,
+            sortOrder: photo.sortOrder,
+            createdAt: photo.createdAt,
+            uploadState: _VehiclePhotoUploadState.uploaded,
+          ),
+        ),
+      );
     }
   }
 
@@ -8573,27 +8980,276 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
     final extension =
         p.extension(picked.path).isEmpty ? ".jpg" : p.extension(picked.path);
-    final destination = p.join(carDir.path, "car_photo$extension");
+    final destination = p.join(
+      carDir.path,
+      "car_photo_${DateTime.now().microsecondsSinceEpoch}$extension",
+    );
     await File(picked.path).copy(destination);
     return destination;
   }
 
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
+    if (source == ImageSource.gallery) {
+      final picked = await picker.pickMultiImage(
+        maxWidth: 1920,
+        imageQuality: 85,
+      );
+      if (!mounted || picked.isEmpty) return;
+      await _addPickedImages(picked);
+      return;
+    }
     final picked = await picker.pickImage(
       source: source,
       maxWidth: 1920,
       imageQuality: 85,
     );
     if (!mounted || picked == null) return;
-    try {
+    await _addPickedImages([picked]);
+  }
+
+  Future<void> _addPickedImages(List<XFile> pickedImages) async {
+    if (_photos.length + pickedImages.length >
+        EvidencePolicy.vehiclePhotos.maxPhotos) {
+      showAppSnackBar(context, _vehiclePhotoLimitMessage, isError: true);
+      return;
+    }
+    for (final picked in pickedImages) {
+      final fileName = p.basename(picked.path);
+      final contentType = EvidenceValidation.normalizeMimeType(
+        picked.mimeType,
+        fileName: fileName,
+      );
+      if (!EvidencePolicy.vehiclePhotos.supportedMimeTypes
+          .contains(contentType)) {
+        showAppSnackBar(context, "Vehicle photos must be JPEG, PNG, or WebP.",
+            isError: true);
+        continue;
+      }
       final savedPath = await _persistCarImage(picked);
+      if (!mounted || savedPath == null) return;
+      final sizeBytes = await File(savedPath).length();
+      if (sizeBytes > EvidencePolicy.vehiclePhotos.maxFileSize) {
+        await File(savedPath).delete();
+        if (!mounted) return;
+        showAppSnackBar(context, "Each vehicle photo must be 5 MB or smaller.",
+            isError: true);
+        continue;
+      }
+      setState(() {
+        _photos.add(
+          _VehiclePhotoDraft(
+            localPath: savedPath,
+            previewUrl: savedPath,
+            contentType: contentType,
+            sizeBytes: sizeBytes,
+            uploadState: _VehiclePhotoUploadState.local,
+          ),
+        );
+      });
+    }
+  }
+
+  Future<void> _previewPhoto(_VehiclePhotoDraft photo) async {
+    final preview = photo.previewUrl ?? photo.localPath;
+    if (preview == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: preview.startsWith("http://") || preview.startsWith("https://")
+            ? Image.network(preview, fit: BoxFit.contain)
+            : Image.file(File(preview), fit: BoxFit.contain),
+      ),
+    );
+  }
+
+  void _removePhoto(int index) {
+    final photo = _photos[index];
+    if ((photo.id ?? "").isNotEmpty) {
+      _removedRemotePhotoIds.add(photo.id!);
+    }
+    final localPath = photo.localPath;
+    if (localPath != null &&
+        localPath.isNotEmpty &&
+        File(localPath).existsSync()) {
+      unawaited(File(localPath).delete());
+    }
+    setState(() => _photos.removeAt(index));
+  }
+
+  Future<int> _uploadPendingPhotos({
+    required String accessToken,
+    required String resolvedVehicleId,
+  }) async {
+    var failedCount = 0;
+    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    for (var index = 0; index < _photos.length; index++) {
+      final photo = _photos[index];
+      final localPath = photo.localPath;
+      if (photo.uploadState == _VehiclePhotoUploadState.uploaded ||
+          localPath == null ||
+          localPath.isEmpty) {
+        continue;
+      }
+      setState(() {
+        _photos[index] = photo.copyWith(
+          uploadState: _VehiclePhotoUploadState.uploading,
+          errorMessage: null,
+        );
+      });
+      try {
+        final sizeBytes = photo.sizeBytes ?? await File(localPath).length();
+        final presigned = await api.presignVehiclePhoto(
+          accessToken: accessToken,
+          vehicleId: resolvedVehicleId,
+          contentType: photo.contentType,
+          fileName: p.basename(localPath),
+          sizeBytes: sizeBytes,
+        );
+        await api.uploadPresignedEvidence(
+          uploadUrl: presigned.uploadUrl,
+          filePath: localPath,
+          contentType: photo.contentType,
+          requiredHeaders: presigned.requiredHeaders,
+        );
+        final confirmed = await api.confirmVehiclePhoto(
+          accessToken: accessToken,
+          vehicleId: resolvedVehicleId,
+          objectKey: presigned.objectKey,
+          contentType: photo.contentType,
+          sizeBytes: sizeBytes,
+          sortOrder: index,
+        );
+        if (!mounted) return failedCount;
+        setState(() {
+          _photos[index] = _VehiclePhotoDraft(
+            id: confirmed.id,
+            objectKey: confirmed.objectKey,
+            localPath: localPath,
+            previewUrl: confirmed.signedGetUrl ?? localPath,
+            contentType: confirmed.contentType,
+            sizeBytes: confirmed.sizeBytes,
+            sortOrder: confirmed.sortOrder,
+            createdAt: confirmed.createdAt,
+            uploadState: _VehiclePhotoUploadState.uploaded,
+          );
+        });
+      } catch (error) {
+        failedCount += 1;
+        if (!mounted) return failedCount;
+        setState(() {
+          _photos[index] = photo.copyWith(
+            uploadState: _VehiclePhotoUploadState.failed,
+            errorMessage:
+                error is AuthApiException ? error.userMessage : "Upload failed.",
+          );
+        });
+      }
+    }
+    return failedCount;
+  }
+
+  Future<void> _retryPhotoAt(int index) async {
+    final token = appOf(context).accessToken;
+    final resolvedVehicleId = vehicleId;
+    if (token == null ||
+        token.isEmpty ||
+        resolvedVehicleId == null ||
+        resolvedVehicleId.isEmpty) {
+      showAppSnackBar(context, "Save the vehicle first before retrying.",
+          isError: true);
+      return;
+    }
+    if (index < 0 || index >= _photos.length) return;
+    final photo = _photos[index];
+    final localPath = photo.localPath;
+    if (localPath == null || localPath.isEmpty) return;
+    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    setState(() {
+      _photos[index] = photo.copyWith(
+        uploadState: _VehiclePhotoUploadState.uploading,
+        errorMessage: null,
+      );
+    });
+    try {
+      final sizeBytes = photo.sizeBytes ?? await File(localPath).length();
+      final presigned = await api.presignVehiclePhoto(
+        accessToken: token,
+        vehicleId: resolvedVehicleId,
+        contentType: photo.contentType,
+        fileName: p.basename(localPath),
+        sizeBytes: sizeBytes,
+      );
+      await api.uploadPresignedEvidence(
+        uploadUrl: presigned.uploadUrl,
+        filePath: localPath,
+        contentType: photo.contentType,
+        requiredHeaders: presigned.requiredHeaders,
+      );
+      final confirmed = await api.confirmVehiclePhoto(
+        accessToken: token,
+        vehicleId: resolvedVehicleId,
+        objectKey: presigned.objectKey,
+        contentType: photo.contentType,
+        sizeBytes: sizeBytes,
+        sortOrder: index,
+      );
       if (!mounted) return;
-      setState(() => imagePath = savedPath);
+      setState(() {
+        _photos[index] = _VehiclePhotoDraft(
+          id: confirmed.id,
+          objectKey: confirmed.objectKey,
+          localPath: localPath,
+          previewUrl: confirmed.signedGetUrl ?? localPath,
+          contentType: confirmed.contentType,
+          sizeBytes: confirmed.sizeBytes,
+          sortOrder: confirmed.sortOrder,
+          createdAt: confirmed.createdAt,
+          uploadState: _VehiclePhotoUploadState.uploaded,
+        );
+      });
+      await appOf(context).loadVehicleGarage(refresh: true);
+      if (!mounted) return;
+      showAppSnackBar(context, "Photo upload completed.");
     } catch (error) {
       if (!mounted) return;
-      showAppSnackBar(context, "Unable to save car photo.", isError: true);
+      setState(() {
+        _photos[index] = photo.copyWith(
+          uploadState: _VehiclePhotoUploadState.failed,
+          errorMessage:
+              error is AuthApiException ? error.userMessage : "Upload failed.",
+        );
+      });
+      showAppSnackBar(
+        context,
+        error is AuthApiException ? error.userMessage : "Upload failed.",
+        isError: true,
+      );
     }
+  }
+
+  Future<void> _retryFailedPhoto() async {
+    final token = appOf(context).accessToken;
+    final resolvedVehicleId = vehicleId;
+    if (token == null ||
+        token.isEmpty ||
+        resolvedVehicleId == null ||
+        resolvedVehicleId.isEmpty) {
+      showAppSnackBar(context, "Save the vehicle first before retrying.",
+          isError: true);
+      return;
+    }
+    final failedCount = await _uploadPendingPhotos(
+      accessToken: token,
+      resolvedVehicleId: resolvedVehicleId,
+    );
+    await appOf(context).loadVehicleGarage(refresh: true);
+    if (!mounted) return;
+    if (failedCount > 0) {
+      showAppSnackBar(context, "Some photos are still failing.", isError: true);
+      return;
+    }
+    showAppSnackBar(context, "Photo uploads completed.");
   }
 
   Future<void> _save() async {
@@ -8617,6 +9273,20 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
 
     setState(() => saving = true);
+    final uploadedPhotoRefs = _photos
+        .where((photo) => photo.uploadState == _VehiclePhotoUploadState.uploaded)
+        .map(
+          (photo) => CarPhotoRef(
+            id: photo.id,
+            objectKey: photo.objectKey,
+            contentType: photo.contentType,
+            sizeBytes: photo.sizeBytes,
+            sortOrder: photo.sortOrder,
+            createdAt: photo.createdAt,
+            previewUrl: photo.previewUrl ?? photo.localPath,
+          ),
+        )
+        .toList(growable: false);
     final profile = CarProfile(
       id: vehicleId,
       make: makeController.text.trim(),
@@ -8630,11 +9300,18 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       notes: notesController.text.trim().isEmpty
           ? null
           : notesController.text.trim(),
-      imagePath: imagePath,
+      imagePath: _photos.isNotEmpty
+          ? (_photos.first.previewUrl ?? _photos.first.localPath)
+          : null,
+      photos: uploadedPhotoRefs,
       isPrimary: isPrimary,
     );
 
     try {
+      final token = appOf(context).accessToken;
+      if (token == null || token.isEmpty) {
+        throw StateError("Sign in to save vehicles");
+      }
       if (vehicleId == null || vehicleId!.isEmpty) {
         final created = await appOf(context).addVehicle(profile);
         vehicleId = created.id;
@@ -8644,10 +9321,40 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         vehicleId = updated.id;
         isPrimary = updated.isPrimary;
       }
+      final resolvedVehicleId = vehicleId;
+      if (resolvedVehicleId == null || resolvedVehicleId.isEmpty) {
+        throw StateError("Vehicle save did not return an id");
+      }
+      if (_removedRemotePhotoIds.isNotEmpty) {
+        final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+        for (final photoId in _removedRemotePhotoIds.toList(growable: false)) {
+          await api.deleteVehiclePhoto(
+            accessToken: token,
+            vehicleId: resolvedVehicleId,
+            photoId: photoId,
+          );
+          _removedRemotePhotoIds.remove(photoId);
+        }
+      }
+      final failedCount = await _uploadPendingPhotos(
+        accessToken: token,
+        resolvedVehicleId: resolvedVehicleId,
+      );
+      await appOf(context).loadVehicleGarage(refresh: true);
       if (!mounted) return;
       setState(() => saving = false);
+      if (failedCount > 0) {
+        showAppSnackBar(
+          context,
+          "Vehicle details were saved, but some photos failed to upload. Retry the failed ones.",
+          isError: true,
+        );
+        return;
+      }
       showAppSnackBar(context, "Vehicle details were saved.");
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(
+        widget.args.returnToStolenVehicle ? vehicleId : null,
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => saving = false);
@@ -8704,6 +9411,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final editingExisting = vehicleId != null && vehicleId!.isNotEmpty;
+    final hasFailed = _photos.any(
+      (photo) => photo.uploadState == _VehiclePhotoUploadState.failed,
+    );
     return SafetyScaffold(
       title: editingExisting ? "Vehicle details" : "Add vehicle",
       useFigmaShell: true,
@@ -8715,16 +9425,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (imagePath != null && File(imagePath!).existsSync())
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.file(
-                      File(imagePath!),
-                      height: 180,
-                      fit: BoxFit.cover,
-                    ),
-                  )
-                else
+                if (_photos.isEmpty)
                   Container(
                     height: 180,
                     decoration: BoxDecoration(
@@ -8734,13 +9435,108 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                     ),
                     child: Icon(Icons.directions_car,
                         size: 64, color: context.eyeMutedText),
+                  )
+                else
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _photos.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                    ),
+                    itemBuilder: (context, index) {
+                      final photo = _photos[index];
+                      final preview = photo.previewUrl ?? photo.localPath;
+                      final isNetwork = (preview ?? "").startsWith("http://") ||
+                          (preview ?? "").startsWith("https://");
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: preview == null
+                                    ? null
+                                    : () => _previewPhoto(photo),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: preview == null
+                                      ? Container(color: context.eyeSurfaceMuted)
+                                      : isNetwork
+                                          ? Image.network(preview, fit: BoxFit.cover)
+                                          : Image.file(File(preview), fit: BoxFit.cover),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 4,
+                            top: 4,
+                            child: GestureDetector(
+                              onTap: saving ? null : () => _removePhoto(index),
+                              child: const CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.black54,
+                                child:
+                                    Icon(Icons.close, size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 4,
+                            bottom: 4,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                child: Text(
+                                  switch (photo.uploadState) {
+                                    _VehiclePhotoUploadState.local => "LOCAL",
+                                    _VehiclePhotoUploadState.uploading => "UPLOADING",
+                                    _VehiclePhotoUploadState.uploaded => "UPLOADED",
+                                    _VehiclePhotoUploadState.failed => "FAILED",
+                                  },
+                                  style: const TextStyle(
+                                      fontSize: 10, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (photo.uploadState == _VehiclePhotoUploadState.failed)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: IconButton(
+                                onPressed:
+                                    saving ? null : () => _retryPhotoAt(index),
+                                icon: const Icon(Icons.refresh,
+                                    color: Colors.white, size: 18),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 const SizedBox(height: 12),
+                Text(
+                  "${_photos.length} of ${EvidencePolicy.vehiclePhotos.maxPhotos}",
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _pickImage(ImageSource.camera),
+                        onPressed: saving
+                            ? null
+                            : () => _pickImage(ImageSource.camera),
                         icon: const Icon(Icons.photo_camera_outlined),
                         label: const Text("Take photo"),
                       ),
@@ -8748,13 +9544,23 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _pickImage(ImageSource.gallery),
+                        onPressed: saving
+                            ? null
+                            : () => _pickImage(ImageSource.gallery),
                         icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text("Gallery"),
+                        label: const Text("Add more"),
                       ),
                     ),
                   ],
                 ),
+                if (hasFailed) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: saving ? null : _retryFailedPhoto,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text("Retry failed uploads"),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: makeController,

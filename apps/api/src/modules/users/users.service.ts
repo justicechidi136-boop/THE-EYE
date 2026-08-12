@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "crypto";
 import { AdminRoleName, UserRole } from "@the-eye/shared";
-import type { CitizenVehicle, Prisma } from "@prisma/client";
+import type { CitizenVehicle, CitizenVehiclePhoto, Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
   buildCursorPage,
@@ -21,9 +21,13 @@ import {
 import {
   assertAvatarObjectKey,
   assertKycObjectKey,
+  assertVehiclePhotoObjectKey,
   avatarObjectKey,
+  createS3PresignedGetUrl,
   createS3PresignedPutUrl,
   validateAvatarUpload,
+  validateVehiclePhotoUpload,
+  vehiclePhotoObjectKey,
 } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -41,6 +45,12 @@ import type {
 import { incompleteProfileLocation, isCitizenProfileComplete } from "./profile-complete";
 
 const MAX_EMERGENCY_CONTACTS = 5;
+const VEHICLE_PHOTO_MAX_COUNT = 8;
+const VEHICLE_PHOTO_LIMIT_MESSAGE = "You can add up to 8 photos for each vehicle.";
+
+type CitizenVehicleWithPhotos = Prisma.CitizenVehicleGetPayload<{
+  include: { photos: true };
+}>;
 
 type DirectoryRow = {
   id: string;
@@ -281,6 +291,7 @@ export class UsersService {
     const vehicles = await this.prisma.citizenVehicle.findMany({
       where: { userId: actor.sub },
       orderBy: [{ isPrimary: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
+      include: { photos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
     });
     return { data: vehicles.map((vehicle) => this.mapCitizenVehicle(vehicle)) };
   }
@@ -319,6 +330,7 @@ export class UsersService {
     this.assertCitizen(actor);
     const vehicle = await this.prisma.citizenVehicle.findFirst({
       where: { id: vehicleId, userId: actor.sub },
+      include: { photos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
     });
     if (!vehicle) throw new NotFoundException("Vehicle not found");
     return this.mapCitizenVehicle(vehicle);
@@ -409,6 +421,92 @@ export class UsersService {
       });
     });
     return this.mapCitizenVehicle(vehicle);
+  }
+
+  async presignMyVehiclePhoto(
+    actor: JwtPayload,
+    vehicleId: string,
+    dto: { contentType: string; fileName: string; sizeBytes?: number },
+  ) {
+    this.assertCitizen(actor);
+    validateVehiclePhotoUpload(dto.contentType, dto.sizeBytes);
+    const vehicle = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+      select: { id: true },
+    });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+
+    const photoCount = await this.prisma.citizenVehiclePhoto.count({
+      where: { vehicleId: vehicle.id },
+    });
+    if (photoCount >= VEHICLE_PHOTO_MAX_COUNT) {
+      throw new BadRequestException(VEHICLE_PHOTO_LIMIT_MESSAGE);
+    }
+
+    const objectKey = vehiclePhotoObjectKey(actor.sub, vehicle.id, dto.fileName);
+    try {
+      const uploadUrl = createS3PresignedPutUrl(objectKey, 900, dto.contentType);
+      return {
+        bucket: process.env.S3_BUCKET ?? "the-eye",
+        objectKey,
+        uploadUrl,
+        requiredHeaders: { "content-type": dto.contentType },
+        expiresInSeconds: 900,
+      };
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException || error instanceof BadRequestException) throw error;
+      throw new ServiceUnavailableException("Vehicle photo storage is not configured");
+    }
+  }
+
+  async confirmMyVehiclePhoto(
+    actor: JwtPayload,
+    vehicleId: string,
+    dto: { objectKey: string; contentType: string; sizeBytes?: number; sortOrder?: number },
+  ) {
+    this.assertCitizen(actor);
+    validateVehiclePhotoUpload(dto.contentType, dto.sizeBytes);
+    assertVehiclePhotoObjectKey(actor.sub, vehicleId, dto.objectKey, dto.contentType);
+    const vehicle = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+      select: { id: true },
+    });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const count = await tx.citizenVehiclePhoto.count({
+        where: { vehicleId: vehicle.id },
+      });
+      if (count >= VEHICLE_PHOTO_MAX_COUNT) {
+        throw new BadRequestException(VEHICLE_PHOTO_LIMIT_MESSAGE);
+      }
+
+      return tx.citizenVehiclePhoto.create({
+        data: {
+          vehicleId: vehicle.id,
+          objectKey: dto.objectKey,
+          contentType: dto.contentType,
+          sizeBytes: dto.sizeBytes,
+          sortOrder: dto.sortOrder ?? count,
+        },
+      });
+    });
+    return this.mapCitizenVehiclePhoto(created);
+  }
+
+  async deleteMyVehiclePhoto(actor: JwtPayload, vehicleId: string, photoId: string) {
+    this.assertCitizen(actor);
+    const existing = await this.prisma.citizenVehiclePhoto.findFirst({
+      where: {
+        id: photoId,
+        vehicleId,
+        vehicle: { userId: actor.sub },
+      },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException("Vehicle photo not found");
+    await this.prisma.citizenVehiclePhoto.delete({ where: { id: photoId } });
+    return { ok: true };
   }
 
   async presignAvatar(actor: JwtPayload, dto: AvatarPresignDto) {
@@ -880,7 +978,10 @@ export class UsersService {
     };
   }
 
-  private mapCitizenVehicle(vehicle: CitizenVehicle) {
+  private mapCitizenVehicle(vehicle: CitizenVehicle | CitizenVehicleWithPhotos) {
+    const photos = "photos" in vehicle
+      ? vehicle.photos.map((photo) => this.mapCitizenVehiclePhoto(photo))
+      : [];
     return {
       id: vehicle.id,
       userId: vehicle.userId,
@@ -891,9 +992,33 @@ export class UsersService {
       plateNumber: vehicle.plateNumber,
       vin: vehicle.vin,
       isPrimary: vehicle.isPrimary,
+      photos,
       createdAt: vehicle.createdAt.toISOString(),
       updatedAt: vehicle.updatedAt.toISOString(),
     };
+  }
+
+  private mapCitizenVehiclePhoto(photo: CitizenVehiclePhoto) {
+    return {
+      id: photo.id,
+      objectKey: photo.objectKey,
+      contentType: photo.contentType,
+      sizeBytes: photo.sizeBytes,
+      sortOrder: photo.sortOrder,
+      createdAt: photo.createdAt.toISOString(),
+      signedGetUrl: this.tryCreateSignedGetUrl(photo.objectKey),
+    };
+  }
+
+  private tryCreateSignedGetUrl(objectKey: string): string | null {
+    if (!process.env.S3_ENDPOINT || !process.env.S3_ACCESS_KEY || !process.env.S3_SECRET_KEY) {
+      return null;
+    }
+    try {
+      return createS3PresignedGetUrl(objectKey, 300);
+    } catch {
+      return null;
+    }
   }
 
   private toCitizenVehicleCreateInput(dto: CreateCitizenVehicleDto): {

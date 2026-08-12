@@ -68,11 +68,13 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
     BroadcastFeedItem? detail,
     List<BroadcastFeedItem> mineItems = const [],
     Object? listMineError,
+    BroadcastSubmissionService? submissionService,
   }) : broadcastFeedService = _FakeBroadcastFeedService(
           detail: detail,
           listMineItems: mineItems,
           listMineError: listMineError,
-        );
+        ),
+        broadcastSubmissionService = submissionService ?? BroadcastSubmissionService();
 
   final bool authenticated;
 
@@ -115,8 +117,7 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   final _FakeBroadcastFeedService broadcastFeedService;
 
   @override
-  final BroadcastSubmissionService broadcastSubmissionService =
-      BroadcastSubmissionService();
+  final BroadcastSubmissionService broadcastSubmissionService;
 
   @override
   Future<void> markBroadcastRead(String broadcastId) async {
@@ -128,6 +129,40 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
 
   @override
   Future<void> loadBroadcastsFromApi({bool refresh = false}) async {}
+}
+
+class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
+  _FakeBroadcastSubmissionService({this.onSubmit});
+
+  int submitCalls = 0;
+  final Future<void> Function(Map<String, dynamic> payload)? onSubmit;
+
+  @override
+  Future<SightingSubmissionResult> submitSighting({
+    required String accessToken,
+    required String broadcastId,
+    required String clientActionId,
+    required String description,
+    required String locationMode,
+    String? observedAt,
+    double? latitude,
+    double? longitude,
+    String? approximateArea,
+    String? confidence,
+    bool anonymousToReviewers = false,
+    String? directionOfTravel,
+    List<Map<String, String>> attachments = const [],
+  }) async {
+    submitCalls += 1;
+    await onSubmit?.call({
+      "broadcastId": broadcastId,
+      "clientActionId": clientActionId,
+      "description": description,
+      "locationMode": locationMode,
+      "attachmentsCount": attachments.length,
+    });
+    return const SightingSubmissionResult(id: "s-1");
+  }
 }
 
 void main() {
@@ -387,5 +422,95 @@ void main() {
     expect(find.text("Taken from parking lot"), findsOneWidget);
     expect(find.text("Evidence"), findsOneWidget);
     expect(find.text("Photo 1"), findsOneWidget);
+  });
+
+  testWidgets("report sighting button only shows for live stolen vehicle",
+      (tester) async {
+    final stolen = BroadcastFeedItem(
+      id: "b-stolen",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-stolen"),
+        detail: stolen,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text("Report sighting"), findsOneWidget);
+
+    final missing = BroadcastFeedItem(
+      id: "b-missing",
+      type: "MissingPerson",
+      title: "Missing person alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-missing"),
+        detail: missing,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text("Report sighting"), findsNothing);
+  });
+
+  testWidgets("submit sighting flow shows location modes and success replacement",
+      (tester) async {
+    final submitService = _FakeBroadcastSubmissionService();
+    final detail = BroadcastFeedItem(
+      id: "b1",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+      metadata: const {"make": "Toyota", "model": "Corolla"},
+    );
+    final session = _FakeBroadcastSession(
+      detail: detail,
+      submissionService: submitService,
+    );
+    await tester.pumpWidget(
+      wrap(
+        const SubmitSightingScreen(broadcastId: "b1"),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Use current location"), findsOneWidget);
+    expect(find.text("Enter manually"), findsOneWidget);
+    expect(find.text("Skip"), findsOneWidget);
+    expect(find.text("EVIDENCE"), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, "What did you observe?"),
+      "Seen heading east",
+    );
+    await tester.tap(find.text("Submit sighting"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Sighting submitted"), findsOneWidget);
+    expect(submitService.submitCalls, 1);
+
+    await tester.tap(find.text("Back to broadcast"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.text("Broadcast Detail"), findsOneWidget);
   });
 }

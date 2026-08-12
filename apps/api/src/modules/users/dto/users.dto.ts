@@ -293,3 +293,47 @@ export class SetPrimaryCitizenVehicleDto {
   isPrimary!: boolean;
 }
 
+export class VehiclePhotoPresignDto {
+  @ApiProperty({ example: "image/jpeg" })
+  @IsString()
+  @IsIn(["image/jpeg", "image/png", "image/webp"])
+  contentType!: string;
+
+  @ApiProperty({ example: "front-bumper.jpg" })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(180)
+  fileName!: string;
+
+  @ApiPropertyOptional({ example: 420000 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  sizeBytes?: number;
+}
+
+export class VehiclePhotoConfirmDto {
+  @ApiProperty({ example: "vehicles/user-id/vehicle-id/uuid.jpg" })
+  @IsString()
+  @MinLength(10)
+  @MaxLength(240)
+  objectKey!: string;
+
+  @ApiProperty({ example: "image/jpeg" })
+  @IsString()
+  @IsIn(["image/jpeg", "image/png", "image/webp"])
+  contentType!: string;
+
+  @ApiPropertyOptional({ example: 420000 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  sizeBytes?: number;
+
+  @ApiPropertyOptional({ example: 0, default: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+}
+

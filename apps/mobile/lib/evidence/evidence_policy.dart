@@ -31,6 +31,16 @@ class EvidencePolicy {
     supportedMimeTypes: EvidenceMimeTypes.allowed,
   );
 
+  static const vehiclePhotos = EvidencePolicy(
+    maxPhotos: 8,
+    maxVideos: 0,
+    maxAudio: 0,
+    maxFiles: 8,
+    maxFileSize: 5 * 1024 * 1024,
+    maxTotalBytes: 8 * 5 * 1024 * 1024,
+    supportedMimeTypes: EvidenceMimeTypes.image,
+  );
+
   int maxForMediaType(String mediaType) {
     return switch (mediaType) {
       IncidentMediaType.image => maxPhotos,
@@ -68,7 +78,8 @@ class EvidencePolicy {
     String mediaType,
   ) {
     if (attachments.length >= maxFiles) return false;
-    if (countForMediaType(attachments, mediaType) >= maxForMediaType(mediaType)) {
+    if (countForMediaType(attachments, mediaType) >=
+        maxForMediaType(mediaType)) {
       return false;
     }
     return true;
