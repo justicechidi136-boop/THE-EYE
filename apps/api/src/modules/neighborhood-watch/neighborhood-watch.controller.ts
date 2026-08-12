@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
@@ -6,26 +6,33 @@ import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import {
   AssignCommunityRoleDto,
+  CreateCommunityAlertDto,
   CreateCommunityCommentDto,
   CreateCommunityContentReportDto,
   CreateCommunityDto,
   CreateCommunityPostDto,
   CreateCommunityReactionDto,
   CreateCommunityRequestDto,
+  CreatePatrolObservationDto,
   CreatePatrolScheduleDto,
+  CreatePinnedSafetyInfoDto,
   ModerateMemberDto,
   PatrolCheckpointDto,
   PresignCommunityMediaDto,
   RegisterVolunteerDto,
   ReviewCommunityRequestDto,
   SendCommunityMessageDto,
+  SetHomeCommunityDto,
+  UpdateCommunityAlertDto,
   UpdateCommunityCommentDto,
   UpdateCommunityDto,
   UpdatePatrolScheduleDto,
+  UpdatePinnedSafetyInfoDto,
   UpdateVolunteerAdminDto,
   VerifyCommunityPostDto,
 } from "./dto/neighborhood-watch.dto";
 import { NeighborhoodWatchService } from "./neighborhood-watch.service";
+import { NeighborhoodWatchContextService } from "./neighborhood-watch-context.service";
 import { AiIntelligenceService } from "./ai-intelligence.service";
 
 @ApiTags("neighborhood-watch")
@@ -35,8 +42,33 @@ import { AiIntelligenceService } from "./ai-intelligence.service";
 export class NeighborhoodWatchController {
   constructor(
     private readonly neighborhoodWatch: NeighborhoodWatchService,
+    private readonly contextService: NeighborhoodWatchContextService,
     private readonly aiIntelligenceService: AiIntelligenceService,
   ) {}
+
+  @Get("context")
+  @RequirePermissions("community:read")
+  resolveContext(
+    @Req() request: any,
+    @Query("lat") lat?: string,
+    @Query("lng") lng?: string,
+    @Query("accuracy") accuracy?: string,
+    @Query("capturedAt") capturedAt?: string,
+  ) {
+    return this.contextService.resolveContext(request.user, { lat, lng, accuracy, capturedAt });
+  }
+
+  @Put("home-community")
+  @RequirePermissions("community:join")
+  setHomeCommunityPut(@Body() body: SetHomeCommunityDto, @Req() request: any) {
+    return this.contextService.setHomeCommunity(request.user, body.communityId ?? null);
+  }
+
+  @Patch("home-community")
+  @RequirePermissions("community:join")
+  setHomeCommunity(@Body() body: SetHomeCommunityDto, @Req() request: any) {
+    return this.contextService.setHomeCommunity(request.user, body.communityId ?? null);
+  }
 
   @Get("communities")
   @RequirePermissions("community:read")
@@ -249,6 +281,12 @@ export class NeighborhoodWatchController {
     return this.neighborhoodWatch.removePost(postId, request.user, dto.note);
   }
 
+  @Patch("posts/:postId/restore")
+  @RequirePermissions("community:moderate")
+  restorePost(@Param("postId") postId: string, @Req() request: any) {
+    return this.neighborhoodWatch.restorePost(postId, request.user);
+  }
+
   @Patch("reports/:reportId/review")
   @RequirePermissions("community:moderate")
   reviewReport(@Param("reportId") reportId: string, @Body() dto: { action: "reviewed" | "dismissed"; note?: string }, @Req() request: any) {
@@ -325,6 +363,120 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:volunteer")
   logCheckpoint(@Param("scheduleId") scheduleId: string, @Body() dto: PatrolCheckpointDto, @Req() request: any) {
     return this.neighborhoodWatch.logCheckpoint(scheduleId, dto, request.user);
+  }
+
+  @Post("patrols/:scheduleId/join")
+  @RequirePermissions("community:volunteer")
+  joinPatrol(@Param("scheduleId") scheduleId: string, @Req() request: any) {
+    return this.neighborhoodWatch.joinPatrol(scheduleId, request.user);
+  }
+
+  @Post("patrols/:scheduleId/observations")
+  @RequirePermissions("community:volunteer")
+  createPatrolObservation(
+    @Param("scheduleId") scheduleId: string,
+    @Body() dto: CreatePatrolObservationDto,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.createPatrolObservation(scheduleId, dto, request.user);
+  }
+
+  @Post("patrols/:scheduleId/start")
+  @RequirePermissions("community:volunteer")
+  startPatrol(@Param("scheduleId") scheduleId: string, @Req() request: any) {
+    return this.neighborhoodWatch.transitionPatrol(scheduleId, "Active", request.user);
+  }
+
+  @Post("patrols/:scheduleId/pause")
+  @RequirePermissions("community:volunteer")
+  pausePatrol(@Param("scheduleId") scheduleId: string, @Req() request: any) {
+    return this.neighborhoodWatch.transitionPatrol(scheduleId, "Paused", request.user);
+  }
+
+  @Post("patrols/:scheduleId/complete")
+  @RequirePermissions("community:volunteer")
+  completePatrol(@Param("scheduleId") scheduleId: string, @Req() request: any) {
+    return this.neighborhoodWatch.transitionPatrol(scheduleId, "Completed", request.user);
+  }
+
+  @Post("patrols/:scheduleId/cancel")
+  @RequirePermissions("community:volunteer")
+  cancelPatrol(@Param("scheduleId") scheduleId: string, @Req() request: any) {
+    return this.neighborhoodWatch.transitionPatrol(scheduleId, "Cancelled", request.user);
+  }
+
+  @Get("communities/:communityId/official-alerts")
+  @RequirePermissions("community:read")
+  listOfficialAlerts(@Param("communityId") communityId: string, @Req() request: any) {
+    return this.neighborhoodWatch.listCommunityAlerts(communityId, request.user);
+  }
+
+  @Post("communities/:communityId/official-alerts")
+  @RequirePermissions("community:moderate")
+  createOfficialAlert(
+    @Param("communityId") communityId: string,
+    @Body() dto: CreateCommunityAlertDto,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.createCommunityAlert(communityId, dto, request.user);
+  }
+
+  @Patch("communities/:communityId/official-alerts/:alertId")
+  @RequirePermissions("community:moderate")
+  updateOfficialAlert(
+    @Param("communityId") communityId: string,
+    @Param("alertId") alertId: string,
+    @Body() dto: UpdateCommunityAlertDto,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.updateCommunityAlert(communityId, alertId, dto, request.user);
+  }
+
+  @Post("communities/:communityId/official-alerts/:alertId/cancel")
+  @RequirePermissions("community:moderate")
+  cancelOfficialAlert(
+    @Param("communityId") communityId: string,
+    @Param("alertId") alertId: string,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.cancelCommunityAlert(communityId, alertId, request.user);
+  }
+
+  @Get("communities/:communityId/pinned-safety")
+  @RequirePermissions("community:read")
+  listPinnedSafety(@Param("communityId") communityId: string, @Req() request: any) {
+    return this.neighborhoodWatch.listPinnedSafetyInfo(communityId, request.user);
+  }
+
+  @Post("communities/:communityId/pinned-safety")
+  @RequirePermissions("community:moderate")
+  createPinnedSafety(
+    @Param("communityId") communityId: string,
+    @Body() dto: CreatePinnedSafetyInfoDto,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.createPinnedSafetyInfo(communityId, dto, request.user);
+  }
+
+  @Patch("communities/:communityId/pinned-safety/:pinnedId")
+  @RequirePermissions("community:moderate")
+  updatePinnedSafety(
+    @Param("communityId") communityId: string,
+    @Param("pinnedId") pinnedId: string,
+    @Body() dto: UpdatePinnedSafetyInfoDto,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.updatePinnedSafetyInfo(communityId, pinnedId, dto, request.user);
+  }
+
+  @Post("communities/:communityId/pinned-safety/:pinnedId/deactivate")
+  @RequirePermissions("community:moderate")
+  deactivatePinnedSafety(
+    @Param("communityId") communityId: string,
+    @Param("pinnedId") pinnedId: string,
+    @Req() request: any,
+  ) {
+    return this.neighborhoodWatch.deactivatePinnedSafetyInfo(communityId, pinnedId, request.user);
   }
 
   @Get("channels/:channelId/messages")
