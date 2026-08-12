@@ -48,7 +48,16 @@ function buildService(overrides: Record<string, unknown> = {}) {
   const broadcasts = { create: jest.fn().mockResolvedValue({ data: { id: "broadcast-1" } }) } as any;
   const notifications = { enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }) } as any;
   const auditService = { record: jest.fn().mockResolvedValue({ id: "audit-1" }) } as any;
-  return { service: new NeighborhoodWatchService(prisma, incidents, broadcasts, notifications, auditService), prisma, incidents, broadcasts, notifications, auditService };
+  const dangerZoneGeo = { findActiveZonesNearPoint: jest.fn().mockResolvedValue([]) } as any;
+  return {
+    service: new NeighborhoodWatchService(prisma, incidents, broadcasts, notifications, auditService, dangerZoneGeo),
+    prisma,
+    incidents,
+    broadcasts,
+    notifications,
+    auditService,
+    dangerZoneGeo,
+  };
 }
 
 describe("NeighborhoodWatchService", () => {

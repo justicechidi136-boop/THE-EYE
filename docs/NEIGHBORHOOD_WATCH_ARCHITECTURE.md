@@ -2,7 +2,7 @@
 
 **Branch:** `feature/neighborhood-watch-e2e`  
 **Baseline:** `staging`  
-**Status:** IMPLEMENTATION IN PROGRESS
+**Status:** CODE COMPLETE — STAGING DEPLOYMENT PENDING
 
 ## Principle
 
@@ -43,3 +43,13 @@ Server authorizes visibility, membership, community role, jurisdiction, and geog
 ## Realtime / offline
 
 Polling + Notification Schema v1. Cached context/feed may show **stale** labels offline; GPS never labeled current when stale.
+
+## Implemented E2E surface (this branch)
+
+- `GET /context`, `PUT|PATCH /home-community`
+- Official `CommunityAlert` create/list/update/cancel; pinned safety list/create/update/deactivate
+- Public visitor participation via presence; private deny without membership; soft-hide moderation restore
+- Voice comment metadata; reaction types aligned to Prisma; map `dangerZones` citizen projection
+- Patrol join/start/pause/complete/cancel + observations; escalation idempotency with source linkage
+- NW Schema v1 route types (`NW_*`) + mobile location-home, offline stale cache, deep links
+- Admin rebrand to Neighborhood Watch Management; auth errors no longer swallowed as empty lists

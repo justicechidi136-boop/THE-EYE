@@ -27,6 +27,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
       { create: jest.fn() } as any,
       { enqueue: jest.fn() } as any,
       auditService,
+      { findActiveZonesNearPoint: jest.fn().mockResolvedValue([]) } as any,
     ),
     prisma,
     auditService,
