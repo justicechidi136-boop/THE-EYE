@@ -326,6 +326,16 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
     });
   }
 
+  @override
+  void didUpdateWidget(covariant BroadcastDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.broadcastId != widget.broadcastId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_loadDetail());
+      });
+    }
+  }
+
   Future<void> _loadDetail() async {
     if (!mounted) return;
     setState(() {
@@ -508,8 +518,8 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
     final detailArgs = ModalRoute.of(context)?.settings.arguments;
     final isLiveStatus =
         item?.status == "Active" || item?.status == "Published" || item?.status == "Updated";
-    final isStolenVehicle = item?.type.toLowerCase().contains("stolenvehicle") == true ||
-        item?.type.toLowerCase().contains("vehicle") == true;
+    final normalizedType = item?.type.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
+    final isStolenVehicle = normalizedType.contains("stolenvehicle");
     final canReportSighting = isLiveStatus && isStolenVehicle;
     final returnToCenterOnBack = detailArgs is BroadcastDetailNavigationArgs &&
         detailArgs.returnToCenterOnBack;
@@ -1660,7 +1670,9 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
           const SizedBox(height: 16),
           SectionCard(
             title: "WHERE",
-            child: Column(
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
               children: [
                 RadioListTile<_SightingLocationMode>(
                   value: _SightingLocationMode.currentGps,
@@ -1698,6 +1710,7 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                     ),
                   ),
               ],
+            ),
             ),
           ),
           const SizedBox(height: 16),

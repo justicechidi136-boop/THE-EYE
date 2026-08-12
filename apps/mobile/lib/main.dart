@@ -2402,7 +2402,7 @@ class AppController extends SessionAccessor
   }
 
   Future<void> loadVehicleGarage({bool refresh = false}) async {
-    if (!refresh && vehicles.isEmpty) {
+    if (refresh || vehicles.isEmpty) {
       vehicles = await _vehicleGarageStore.loadVehicles();
       notifyListeners();
     }
@@ -6530,9 +6530,12 @@ class _StolenVehicleBroadcastScreenState
       }
     }
     final hasSavedCar = garageVehicles.isNotEmpty;
+    final hasDraftVehicleDetails = plateController.text.trim().isNotEmpty ||
+        makeController.text.trim().isNotEmpty ||
+        modelController.text.trim().isNotEmpty;
     final showVehicleForm = _entryMode == _StolenVehicleEntryMode.manualEntry ||
         (_entryMode == _StolenVehicleEntryMode.savedVehicle &&
-            selectedVehicle != null);
+            (selectedVehicle != null || hasDraftVehicleDetails));
     return SafetyScaffold(
       title: "Stolen vehicle",
       body: ListView(

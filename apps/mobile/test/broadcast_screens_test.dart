@@ -496,11 +496,23 @@ void main() {
     expect(find.text("Use current location"), findsOneWidget);
     expect(find.text("Enter manually"), findsOneWidget);
     expect(find.text("Skip"), findsOneWidget);
+    final scrollable = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text("EVIDENCE"), 400, scrollable: scrollable);
     expect(find.text("EVIDENCE"), findsOneWidget);
 
-    await tester.enterText(
-      find.widgetWithText(TextField, "What did you observe?"),
-      "Seen heading east",
+    final descriptionField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration is InputDecoration &&
+          (widget.decoration as InputDecoration).labelText ==
+              "What did you observe?",
+    );
+    await tester.scrollUntilVisible(descriptionField, 400, scrollable: scrollable);
+    await tester.enterText(descriptionField, "Seen heading east");
+    await tester.scrollUntilVisible(
+      find.text("Submit sighting"),
+      400,
+      scrollable: scrollable,
     );
     await tester.tap(find.text("Submit sighting"));
     await tester.pumpAndSettle();
