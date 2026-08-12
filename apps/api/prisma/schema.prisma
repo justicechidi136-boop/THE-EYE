@@ -431,6 +431,7 @@ model User {
   timelineEvents            IncidentTimeline[]
   statusChanges             IncidentStatusHistory[]    @relation("StatusChangedBy")
   vehicles                  Vehicle[]
+  citizenVehicles           CitizenVehicle[]
   stolenVehicleReports      StolenVehicleReport[]
   missingPersonReports      MissingPersonReport[]
   notifications             Notification[]
@@ -1180,6 +1181,41 @@ model Vehicle {
 
   @@index([ownerId])
   @@map("vehicles")
+}
+
+model CitizenVehicle {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  make         String
+  model        String
+  year         Int?
+  color        String?
+  plateNumber  String   @map("plate_number")
+  vin          String?
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos       CitizenVehiclePhoto[]
+
+  @@unique([userId, plateNumber])
+  @@index([userId, isPrimary])
+  @@index([userId, updatedAt])
+  @@map("citizen_vehicles")
+}
+
+model CitizenVehiclePhoto {
+  id          String         @id @default(uuid()) @db.Uuid
+  vehicleId   String         @map("vehicle_id") @db.Uuid
+  objectKey   String         @map("object_key")
+  contentType String         @map("content_type")
+  sizeBytes   Int?           @map("size_bytes")
+  sortOrder   Int            @default(0) @map("sort_order")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  vehicle     CitizenVehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, sortOrder])
+  @@map("citizen_vehicle_photos")
 }
 
 model StolenVehicleReport {

@@ -43,7 +43,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text("Nearby police"), findsWidgets);
+    expect(find.text("Nearby Police"), findsWidgets);
     expect(find.byTooltip("Back"), findsOneWidget);
   });
 }

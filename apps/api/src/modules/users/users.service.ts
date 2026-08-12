@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "crypto";
 import { AdminRoleName, UserRole } from "@the-eye/shared";
+import type { CitizenVehicle, CitizenVehiclePhoto, Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
   buildCursorPage,
@@ -20,9 +21,13 @@ import {
 import {
   assertAvatarObjectKey,
   assertKycObjectKey,
+  assertVehiclePhotoObjectKey,
   avatarObjectKey,
+  createS3PresignedGetUrl,
   createS3PresignedPutUrl,
   validateAvatarUpload,
+  validateVehiclePhotoUpload,
+  vehiclePhotoObjectKey,
 } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -33,11 +38,19 @@ import type {
   ReviewKycDto,
   SubmitKycDto,
   UpdateCitizenProfileDto,
+  UpdateCitizenVehicleDto,
   UpsertEmergencyContactDto,
+  CreateCitizenVehicleDto,
 } from "./dto/users.dto";
 import { incompleteProfileLocation, isCitizenProfileComplete } from "./profile-complete";
 
 const MAX_EMERGENCY_CONTACTS = 5;
+const VEHICLE_PHOTO_MAX_COUNT = 8;
+const VEHICLE_PHOTO_LIMIT_MESSAGE = "You can add up to 8 photos for each vehicle.";
+
+type CitizenVehicleWithPhotos = Prisma.CitizenVehicleGetPayload<{
+  include: { photos: true };
+}>;
 
 type DirectoryRow = {
   id: string;
@@ -270,6 +283,229 @@ export class UsersService {
       entityId: contactId,
       metadata: {},
     });
+    return { ok: true };
+  }
+
+  async listMyVehicles(actor: JwtPayload) {
+    this.assertCitizen(actor);
+    const vehicles = await this.prisma.citizenVehicle.findMany({
+      where: { userId: actor.sub },
+      orderBy: [{ isPrimary: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
+      include: { photos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
+    });
+    return { data: vehicles.map((vehicle) => this.mapCitizenVehicle(vehicle)) };
+  }
+
+  async createMyVehicle(actor: JwtPayload, dto: CreateCitizenVehicleDto) {
+    this.assertCitizen(actor);
+    const payload = this.toCitizenVehicleCreateInput(dto);
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const existingCount = await tx.citizenVehicle.count({
+          where: { userId: actor.sub },
+        });
+        const wantsPrimary = dto.isPrimary === true || existingCount === 0;
+        const vehicle = await tx.citizenVehicle.create({
+          data: {
+            ...payload,
+            userId: actor.sub,
+            isPrimary: wantsPrimary,
+          },
+        });
+        if (wantsPrimary) {
+          await tx.citizenVehicle.updateMany({
+            where: { userId: actor.sub, NOT: { id: vehicle.id } },
+            data: { isPrimary: false },
+          });
+        }
+        return vehicle;
+      });
+      return this.mapCitizenVehicle(created);
+    } catch (error) {
+      this.rethrowCitizenVehicleWriteError(error);
+    }
+  }
+
+  async getMyVehicle(actor: JwtPayload, vehicleId: string) {
+    this.assertCitizen(actor);
+    const vehicle = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+      include: { photos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
+    });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+    return this.mapCitizenVehicle(vehicle);
+  }
+
+  async updateMyVehicle(actor: JwtPayload, vehicleId: string, dto: UpdateCitizenVehicleDto) {
+    this.assertCitizen(actor);
+    const existing = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+    });
+    if (!existing) throw new NotFoundException("Vehicle not found");
+
+    const data = this.toCitizenVehicleUpdateInput(dto);
+    const hasDataFields = Object.keys(data).length > 0;
+    const hasPrimaryToggle = dto.isPrimary !== undefined;
+    if (!hasDataFields && !hasPrimaryToggle) {
+      throw new BadRequestException("No vehicle changes provided");
+    }
+
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        if (dto.isPrimary === true) {
+          await tx.citizenVehicle.updateMany({
+            where: { userId: actor.sub },
+            data: { isPrimary: false },
+          });
+        }
+        const vehicle = await tx.citizenVehicle.update({
+          where: { id: vehicleId },
+          data: {
+            ...data,
+            ...(dto.isPrimary !== undefined ? { isPrimary: dto.isPrimary } : {}),
+          },
+        });
+        return vehicle;
+      });
+      return this.mapCitizenVehicle(updated);
+    } catch (error) {
+      this.rethrowCitizenVehicleWriteError(error);
+    }
+  }
+
+  async deleteMyVehicle(actor: JwtPayload, vehicleId: string) {
+    this.assertCitizen(actor);
+    const existing = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+    });
+    if (!existing) throw new NotFoundException("Vehicle not found");
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.citizenVehicle.delete({ where: { id: vehicleId } });
+      if (!existing.isPrimary) return;
+
+      // Primary delete rule: when the primary is deleted, promote the most
+      // recently updated remaining vehicle. If none remain, zero primary is valid.
+      const promote = await tx.citizenVehicle.findFirst({
+        where: { userId: actor.sub },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (!promote) return;
+      await tx.citizenVehicle.update({
+        where: { id: promote.id },
+        data: { isPrimary: true },
+      });
+    });
+
+    return { ok: true };
+  }
+
+  async setMyVehiclePrimary(actor: JwtPayload, vehicleId: string, isPrimary: boolean) {
+    this.assertCitizen(actor);
+    if (!isPrimary) {
+      throw new BadRequestException("Use vehicle update to clear primary status");
+    }
+    const existing = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+    });
+    if (!existing) throw new NotFoundException("Vehicle not found");
+
+    const vehicle = await this.prisma.$transaction(async (tx) => {
+      await tx.citizenVehicle.updateMany({
+        where: { userId: actor.sub },
+        data: { isPrimary: false },
+      });
+      return tx.citizenVehicle.update({
+        where: { id: vehicleId },
+        data: { isPrimary: true },
+      });
+    });
+    return this.mapCitizenVehicle(vehicle);
+  }
+
+  async presignMyVehiclePhoto(
+    actor: JwtPayload,
+    vehicleId: string,
+    dto: { contentType: string; fileName: string; sizeBytes?: number },
+  ) {
+    this.assertCitizen(actor);
+    validateVehiclePhotoUpload(dto.contentType, dto.sizeBytes);
+    const vehicle = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+      select: { id: true },
+    });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+
+    const photoCount = await this.prisma.citizenVehiclePhoto.count({
+      where: { vehicleId: vehicle.id },
+    });
+    if (photoCount >= VEHICLE_PHOTO_MAX_COUNT) {
+      throw new BadRequestException(VEHICLE_PHOTO_LIMIT_MESSAGE);
+    }
+
+    const objectKey = vehiclePhotoObjectKey(actor.sub, vehicle.id, dto.fileName);
+    try {
+      const uploadUrl = createS3PresignedPutUrl(objectKey, 900, dto.contentType);
+      return {
+        bucket: process.env.S3_BUCKET ?? "the-eye",
+        objectKey,
+        uploadUrl,
+        requiredHeaders: { "content-type": dto.contentType },
+        expiresInSeconds: 900,
+      };
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException || error instanceof BadRequestException) throw error;
+      throw new ServiceUnavailableException("Vehicle photo storage is not configured");
+    }
+  }
+
+  async confirmMyVehiclePhoto(
+    actor: JwtPayload,
+    vehicleId: string,
+    dto: { objectKey: string; contentType: string; sizeBytes?: number; sortOrder?: number },
+  ) {
+    this.assertCitizen(actor);
+    validateVehiclePhotoUpload(dto.contentType, dto.sizeBytes);
+    assertVehiclePhotoObjectKey(actor.sub, vehicleId, dto.objectKey, dto.contentType);
+    const vehicle = await this.prisma.citizenVehicle.findFirst({
+      where: { id: vehicleId, userId: actor.sub },
+      select: { id: true },
+    });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const count = await tx.citizenVehiclePhoto.count({
+        where: { vehicleId: vehicle.id },
+      });
+      if (count >= VEHICLE_PHOTO_MAX_COUNT) {
+        throw new BadRequestException(VEHICLE_PHOTO_LIMIT_MESSAGE);
+      }
+
+      return tx.citizenVehiclePhoto.create({
+        data: {
+          vehicleId: vehicle.id,
+          objectKey: dto.objectKey,
+          contentType: dto.contentType,
+          sizeBytes: dto.sizeBytes,
+          sortOrder: dto.sortOrder ?? count,
+        },
+      });
+    });
+    return this.mapCitizenVehiclePhoto(created);
+  }
+
+  async deleteMyVehiclePhoto(actor: JwtPayload, vehicleId: string, photoId: string) {
+    this.assertCitizen(actor);
+    const existing = await this.prisma.citizenVehiclePhoto.findFirst({
+      where: {
+        id: photoId,
+        vehicleId,
+        vehicle: { userId: actor.sub },
+      },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException("Vehicle photo not found");
+    await this.prisma.citizenVehiclePhoto.delete({ where: { id: photoId } });
     return { ok: true };
   }
 
@@ -740,6 +976,100 @@ export class UsersService {
       relationship: contact.relationship,
       priority: contact.priority,
     };
+  }
+
+  private mapCitizenVehicle(vehicle: CitizenVehicle | CitizenVehicleWithPhotos) {
+    const photos = "photos" in vehicle
+      ? vehicle.photos.map((photo) => this.mapCitizenVehiclePhoto(photo))
+      : [];
+    return {
+      id: vehicle.id,
+      userId: vehicle.userId,
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year,
+      color: vehicle.color,
+      plateNumber: vehicle.plateNumber,
+      vin: vehicle.vin,
+      isPrimary: vehicle.isPrimary,
+      photos,
+      createdAt: vehicle.createdAt.toISOString(),
+      updatedAt: vehicle.updatedAt.toISOString(),
+    };
+  }
+
+  private mapCitizenVehiclePhoto(photo: CitizenVehiclePhoto) {
+    return {
+      id: photo.id,
+      objectKey: photo.objectKey,
+      contentType: photo.contentType,
+      sizeBytes: photo.sizeBytes,
+      sortOrder: photo.sortOrder,
+      createdAt: photo.createdAt.toISOString(),
+      signedGetUrl: this.tryCreateSignedGetUrl(photo.objectKey),
+    };
+  }
+
+  private tryCreateSignedGetUrl(objectKey: string): string | null {
+    if (!process.env.S3_ENDPOINT || !process.env.S3_ACCESS_KEY || !process.env.S3_SECRET_KEY) {
+      return null;
+    }
+    try {
+      return createS3PresignedGetUrl(objectKey, 300);
+    } catch {
+      return null;
+    }
+  }
+
+  private toCitizenVehicleCreateInput(dto: CreateCitizenVehicleDto): {
+    make: string;
+    model: string;
+    plateNumber: string;
+    year: number | null;
+    color: string | null;
+    vin: string | null;
+    isPrimary: boolean;
+  } {
+    return {
+      make: this.normalizeRequiredVehicleText(dto.make, "Make is required"),
+      model: this.normalizeRequiredVehicleText(dto.model, "Model is required"),
+      plateNumber: this.normalizePlateNumber(dto.plateNumber),
+      year: dto.year ?? null,
+      color: dto.color?.trim() || null,
+      vin: dto.vin?.trim() || null,
+      isPrimary: dto.isPrimary ?? false,
+    };
+  }
+
+  private toCitizenVehicleUpdateInput(dto: UpdateCitizenVehicleDto): Prisma.CitizenVehicleUncheckedUpdateInput {
+    const data: Prisma.CitizenVehicleUncheckedUpdateInput = {};
+    if (dto.make !== undefined) data.make = this.normalizeRequiredVehicleText(dto.make, "Make is required");
+    if (dto.model !== undefined) data.model = this.normalizeRequiredVehicleText(dto.model, "Model is required");
+    if (dto.plateNumber !== undefined) data.plateNumber = this.normalizePlateNumber(dto.plateNumber);
+    if (dto.year !== undefined) data.year = dto.year;
+    if (dto.color !== undefined) data.color = dto.color?.trim() || null;
+    if (dto.vin !== undefined) data.vin = dto.vin?.trim() || null;
+    return data;
+  }
+
+  private normalizePlateNumber(value: string) {
+    const normalized = value.trim().toUpperCase();
+    if (!normalized) throw new BadRequestException("Plate number is required");
+    return normalized;
+  }
+
+  private normalizeRequiredVehicleText(value: string, message: string) {
+    const normalized = value.trim();
+    if (!normalized) throw new BadRequestException(message);
+    return normalized;
+  }
+
+  private rethrowCitizenVehicleWriteError(error: unknown): never {
+    const code = (error as { code?: string })?.code;
+    if (code === "P2002") {
+      throw new ConflictException("A vehicle with this plate number already exists in your garage");
+    }
+    throw error;
   }
 
   private assertCitizen(actor: JwtPayload) {

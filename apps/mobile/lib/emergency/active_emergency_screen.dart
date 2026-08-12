@@ -418,6 +418,13 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
         (_contract is ActiveEmergencyActiveContract
             ? _contract as ActiveEmergencyActiveContract
             : null);
+    final incidentTypeLabel = active == null
+        ? "Help is on the way"
+        : citizenIncidentCategoryLabel(
+            active.categoryLabel?.trim().isNotEmpty == true
+                ? active.categoryLabel!
+                : active.category,
+          );
 
     return PopScope(
       canPop: Navigator.of(context).canPop(),
@@ -427,7 +434,7 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
           children: [
             ActiveEmergencyHeader(
               title: widget.silent ? "Status" : "Active Emergency",
-              subtitle: "Help is on the way",
+              subtitle: incidentTypeLabel,
               refreshEnabled: !_actionInFlight,
               onRefresh: () => unawaited(_refresh()),
             ),

@@ -787,7 +787,28 @@ export class BroadcastsService {
   }
 
   private async getById(id: string) {
-    const broadcast = await this.prisma.broadcast.findUnique({ where: { id }, include: { deliveries: true, notifications: true } });
+    const broadcast = await this.prisma.broadcast.findUnique({
+      where: { id },
+      include: {
+        deliveries: true,
+        notifications: true,
+        sightings: {
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            observedAt: true,
+            approximateArea: true,
+            description: true,
+            metadata: true,
+            createdAt: true,
+          },
+        },
+        _count: {
+          select: { comments: true, reports: true, deliveries: true, sightings: true },
+        },
+      },
+    });
     if (!broadcast) throw new NotFoundException("Broadcast not found");
     return broadcast;
   }

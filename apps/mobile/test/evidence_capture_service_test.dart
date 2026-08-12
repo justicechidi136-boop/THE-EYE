@@ -42,6 +42,29 @@ Future<File> writeTempJpeg(String name, {int size = 128}) async {
   return file;
 }
 
+Future<File> writeTempMp4(String name, {int size = 256}) async {
+  final file = File("${Directory.systemTemp.path}/$name");
+  final bytes = <int>[
+    0x00,
+    0x00,
+    0x00,
+    0x18,
+    0x66,
+    0x74,
+    0x79,
+    0x70,
+    0x6D,
+    0x70,
+    0x34,
+    0x32,
+  ];
+  while (bytes.length < size) {
+    bytes.add(0x00);
+  }
+  await file.writeAsBytes(bytes);
+  return file;
+}
+
 Future<Directory> testDocumentsDir() async {
   final dir = Directory("${Directory.systemTemp.path}/the_eye_evidence_test");
   if (!await dir.exists()) {
@@ -230,6 +253,46 @@ void main() {
       expect(await File(attachment.originalPath).exists(), isTrue);
       expect(await File(attachment.uploadPath).exists(), isTrue);
       expect(attachment.fileHash, startsWith("sha256:"));
+    });
+
+    test("preserves selected video duration metadata", () async {
+      final file = await writeTempMp4("video-probe.mp4", size: 2048);
+      final service = EvidenceCaptureService(
+        compressor: InMemoryEvidenceCompressor()..forcedUploadPath = file.path,
+        documentsDirectoryProvider: testDocumentsDir,
+      );
+      final result = await service.ingestPickedFile(
+        picked: PickedEvidenceFile(
+          path: file.path,
+          fileName: "video-probe.mp4",
+          mimeType: "video/mp4",
+          durationSeconds: 24,
+        ),
+        mediaType: IncidentMediaType.video,
+        lowDataMode: false,
+      );
+      expect(result.isSuccess, isTrue);
+      expect(result.attachment?.durationSeconds, 24);
+    });
+
+    test("preserves selected audio duration metadata", () async {
+      final file = await writeTempMp4("audio-probe.m4a", size: 2048);
+      final service = EvidenceCaptureService(
+        compressor: InMemoryEvidenceCompressor()..forcedUploadPath = file.path,
+        documentsDirectoryProvider: testDocumentsDir,
+      );
+      final result = await service.ingestPickedFile(
+        picked: PickedEvidenceFile(
+          path: file.path,
+          fileName: "audio-probe.m4a",
+          mimeType: "audio/mp4",
+          durationSeconds: 12,
+        ),
+        mediaType: IncidentMediaType.audio,
+        lowDataMode: false,
+      );
+      expect(result.isSuccess, isTrue);
+      expect(result.attachment?.durationSeconds, 12);
     });
   });
 

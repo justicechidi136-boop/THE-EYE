@@ -2,10 +2,10 @@ import "package:flutter/foundation.dart";
 
 import "../contracts/the_eye_enums.dart";
 import "evidence_capture_service.dart";
-import "evidence_constants.dart";
 import "evidence_media_source.dart";
 import "evidence_permission_service.dart";
 import "evidence_permission_state.dart";
+import "evidence_policy.dart";
 import "local_evidence_attachment.dart";
 
 typedef EvidenceRationalePresenter = Future<bool> Function({
@@ -19,6 +19,7 @@ class EvidenceCaptureController extends ChangeNotifier {
     required EvidenceCaptureService captureService,
     required EvidenceMediaSource mediaSource,
     required EvidencePermissionService permissionService,
+    this.policy = EvidencePolicy.incident,
     this.rationalePresenter,
     this.lowDataMode = false,
     this.latitude,
@@ -30,6 +31,7 @@ class EvidenceCaptureController extends ChangeNotifier {
   final EvidenceCaptureService _captureService;
   final EvidenceMediaSource _mediaSource;
   final EvidencePermissionService _permissionService;
+  final EvidencePolicy policy;
   final EvidenceRationalePresenter? rationalePresenter;
   bool lowDataMode;
   double? latitude;
@@ -39,7 +41,9 @@ class EvidenceCaptureController extends ChangeNotifier {
   bool busy = false;
   String? lastError;
 
-  bool get canAddMore => attachments.length < EvidenceLimits.maxAttachments;
+  bool get canAddMore => attachments.length < policy.maxFiles;
+  bool canAddMoreFor(String mediaType) =>
+      policy.canAddMediaType(attachments, mediaType);
 
   Future<void> takePhoto() => _capture(
         mediaType: IncidentMediaType.image,
@@ -78,7 +82,15 @@ class EvidenceCaptureController extends ChangeNotifier {
   }
 
   void addVoiceAttachment(LocalEvidenceAttachment attachment) {
-    if (!canAddMore) return;
+    final message = policy.limitMessageForAttachment(
+      existing: attachments,
+      incoming: attachment,
+    );
+    if (message != null) {
+      lastError = message;
+      notifyListeners();
+      return;
+    }
     attachments.add(attachment);
     lastError = null;
     notifyListeners();
@@ -140,9 +152,12 @@ class EvidenceCaptureController extends ChangeNotifier {
     bool needsMicrophone = false,
     bool needsPhotos = false,
   }) async {
-    if (!canAddMore) {
-      lastError =
-          "At most ${EvidenceLimits.maxAttachments} evidence files can be attached.";
+    final limitMessage = policy.limitMessageForCapture(
+      attachments: attachments,
+      mediaType: mediaType,
+    );
+    if (limitMessage != null) {
+      lastError = limitMessage;
       notifyListeners();
       return;
     }
@@ -184,7 +199,17 @@ class EvidenceCaptureController extends ChangeNotifier {
       return;
     }
 
-    attachments.add(result.attachment!);
+    final attachment = result.attachment!;
+    final attachmentLimitMessage = policy.limitMessageForAttachment(
+      existing: attachments,
+      incoming: attachment,
+    );
+    if (attachmentLimitMessage != null) {
+      lastError = attachmentLimitMessage;
+      notifyListeners();
+      return;
+    }
+    attachments.add(attachment);
     notifyListeners();
   }
 

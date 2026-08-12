@@ -66,17 +66,19 @@ void main() {
       expect(submitted.routeHint, "OWN_ACTIVE_INCIDENT");
     });
 
-    test("formats verify active incident without technical enums", () {
+    test("formats verify active incident with friendly category copy", () {
       final verify = CitizenNotificationPresenter.present(
         type: "NearbyIncidentVerification",
-        title: "Nearby Robbery Reported",
-        body: "technical",
+        title: "Can you confirm this suspicious activity?",
+        body:
+            "A suspicious activity has been reported near your location. Tap to review the incident and confirm whether it is still active.",
         createdAt: DateTime.now(),
         isUnread: true,
+        metadata: {"incidentCategory": "SuspiciousActivity"},
       );
       expect(verify.category, "Verify Active Incident");
-      expect(verify.title, "Can you confirm this emergency?");
-      expect(verify.preview, contains("near your location"));
+      expect(verify.title, "Can you confirm this suspicious activity?");
+      expect(verify.preview, contains("suspicious activity"));
       expect(verify.preview, isNot(contains("NearbyIncidentVerification")));
     });
   });
@@ -99,7 +101,8 @@ void main() {
   });
 
   group("UX-022 destructive stop control", () {
-    testWidgets("renders high-contrast Stop Live Video control", (tester) async {
+    testWidgets("renders high-contrast Stop Live Video control",
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark(),

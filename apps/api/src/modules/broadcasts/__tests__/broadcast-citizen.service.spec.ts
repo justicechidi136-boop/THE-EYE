@@ -33,16 +33,18 @@ describe("BroadcastCitizenService", () => {
     jurisdiction: { findFirst: jest.fn() },
     broadcastReport: { create: jest.fn() },
     broadcastComment: { create: jest.fn(), findMany: jest.fn() },
+    broadcastSighting: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     $executeRawUnsafe: jest.fn(),
     $queryRawUnsafe: jest.fn().mockResolvedValue([]),
   } as any;
   const audit = { record: jest.fn() } as any;
+  const notificationsService = { create: jest.fn() } as any;
   const broadcastsService = {} as BroadcastsService;
   const broadcastQueue = { enqueueCountryDelivery: jest.fn().mockResolvedValue({ queued: true }) } as any;
   const lifecycle = { enqueueResolutionNotifications: jest.fn().mockResolvedValue({ queued: true }) } as any;
   const share = { buildSharePayload: jest.fn() } as any;
 
-  const service = new BroadcastCitizenService(prisma, audit, broadcastsService, broadcastQueue, lifecycle, share);
+  const service = new BroadcastCitizenService(prisma, audit, notificationsService, broadcastsService, broadcastQueue, lifecycle, share);
 
   function resetCitizenMocks() {
     prisma.profile.findUnique.mockResolvedValue({ userId: "user-1", country: "NG", state: "Lagos", lga: "Ikeja" });
@@ -50,7 +52,11 @@ describe("BroadcastCitizenService", () => {
     prisma.broadcast.findFirst.mock.calls = [];
     prisma.broadcast.create.mock.calls = [];
     prisma.broadcast.update.mock.calls = [];
+    prisma.broadcastSighting.findFirst.mock.calls = [];
+    prisma.broadcastSighting.findMany.mock.calls = [];
+    prisma.broadcastSighting.create.mock.calls = [];
     audit.record.mock.calls = [];
+    notificationsService.create.mock.calls = [];
     broadcastQueue.enqueueCountryDelivery.mock.calls = [];
     broadcastQueue.enqueueCountryDelivery.mockResolvedValue({ queued: true });
     lifecycle.enqueueResolutionNotifications.mock.calls = [];
@@ -153,6 +159,58 @@ describe("BroadcastCitizenService", () => {
     expect(prisma.broadcast.create).not.toHaveBeenCalled();
   });
 
+  it("persists stolen-vehicle source and snapshot metadata", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue(null);
+    prisma.broadcast.create.mockResolvedValue({
+      id: "broadcast-vehicle-1",
+      type: BroadcastType.StolenVehicle,
+      title: "Stolen vehicle: Honda Civic (***1234)",
+      body: "Body",
+      status: BroadcastStatus.Active,
+      country: "NG",
+      authorType: BroadcastAuthorType.Citizen,
+      publishedAt: new Date("2026-08-06T00:00:00.000Z"),
+      expiresAt: new Date("2026-09-06T00:00:00.000Z"),
+      metadata: {},
+      adminVerified: false,
+    });
+
+    await service.createStolenVehicle(
+      {
+        clientBroadcastId: "client-vehicle-1",
+        vehicleType: "Car",
+        make: "Honda",
+        model: "Civic",
+        year: 2023,
+        colour: "Blue",
+        registrationNumber: "ABC-1234",
+        stolenAt: "2026-08-06T10:00:00.000Z",
+        distinguishingFeatures: "Rear bumper dent",
+        contactMethod: "in_app",
+        vinLastFour: "1A2B",
+        metadata: {
+          sourceVehicleId: "vehicle-42",
+          vehiclePhotoObjectKeys: ["garage/vehicle-42/photo-1.jpg"],
+        },
+      },
+      reporter,
+    );
+
+    const createArgs = prisma.broadcast.create.mock.calls[0]?.[0];
+    const metadata = createArgs?.data?.metadata;
+    expect(metadata?.sourceVehicleId).toBe("vehicle-42");
+    expect(metadata?.make).toBe("Honda");
+    expect(metadata?.model).toBe("Civic");
+    expect(metadata?.year).toBe(2023);
+    expect(metadata?.colour).toBe("Blue");
+    expect(metadata?.registrationNumber).toBe("ABC-1234");
+    expect(metadata?.vinLastFour).toBe("1A2B");
+    expect(metadata?.vehiclePhotoObjectKeys).toEqual([
+      "garage/vehicle-42/photo-1.jpg",
+    ]);
+  });
+
   it("allows author resolve and withdraw", async () => {
     resetCitizenMocks();
     prisma.broadcast.findFirst.mockResolvedValue({
@@ -174,6 +232,159 @@ describe("BroadcastCitizenService", () => {
       "MISSING_PERSON_FOUND",
       reporter,
     );
+  });
+
+  it("submits sighting for live broadcast with metadata and owner notification", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      status: BroadcastStatus.Active,
+      creatorUserId: "owner-1",
+      jurisdictionId: "jurisdiction-1",
+      country: "NG",
+      state: "Lagos",
+      lga: "Ikeja",
+      metadata: { make: "Toyota", model: "Corolla" },
+      incident: { assignedAgencyId: "agency-1" },
+    });
+    prisma.broadcastSighting.findFirst.mockResolvedValue(null);
+    prisma.broadcastSighting.create.mockResolvedValue({ id: "sighting-1" });
+
+    const result = await service.submitSighting(
+      "broadcast-1",
+      {
+        clientSightingId: "s-1",
+        observedAt: "2026-08-10T12:00:00.000Z",
+        locationMode: "CURRENT_GPS",
+        latitude: 6.45,
+        longitude: 3.41,
+        approximateArea: "Ikeja bus-stop",
+        description: "Vehicle passed quickly",
+        attachments: [
+          {
+            mediaType: "image",
+            objectKey: "evidence/broadcast-user-1/image-1.jpg",
+            bucket: "the-eye",
+            contentType: "image/jpeg",
+            fileName: "image-1.jpg",
+            label: "Photo 1",
+          },
+        ],
+      },
+      reporter,
+    );
+
+    expect(result.data.id).toBe("sighting-1");
+    expect(prisma.broadcastSighting.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          metadata: expect.objectContaining({
+            clientSightingId: "s-1",
+            locationMode: "CURRENT_GPS",
+            attachments: expect.any(Array),
+          }),
+        }),
+      }),
+    );
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "owner-1",
+        type: "BroadcastSightingAlert",
+        title: "New Sighting Report",
+      }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "broadcast.sighting_authority_routed" }),
+    );
+  });
+
+  it("rejects sighting submission for non-live broadcasts", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      status: BroadcastStatus.Resolved,
+      creatorUserId: "owner-1",
+    });
+    await expect(
+      service.submitSighting(
+        "broadcast-1",
+        {
+          locationMode: "NOT_PROVIDED",
+          description: "No longer active broadcast",
+        },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("returns idempotent duplicate for same clientSightingId", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      status: BroadcastStatus.Active,
+      creatorUserId: "owner-1",
+      metadata: {},
+      incident: null,
+    });
+    prisma.broadcastSighting.findFirst.mockResolvedValue({ id: "existing-sighting" });
+
+    const result = await service.submitSighting(
+      "broadcast-1",
+      {
+        clientSightingId: "dup-1",
+        locationMode: "NOT_PROVIDED",
+        description: "Duplicate submit",
+      },
+      reporter,
+    );
+
+    expect(result.duplicate).toBe(true);
+    expect(result.data.id).toBe("existing-sighting");
+    expect(prisma.broadcastSighting.create).not.toHaveBeenCalled();
+  });
+
+  it("redacts private fields for owner while preserving admin visibility", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      creatorUserId: "user-1",
+    });
+    prisma.broadcastSighting.findMany.mockResolvedValue([
+      {
+        id: "sighting-1",
+        reporterUserId: "user-44",
+        observedAt: new Date("2026-08-10T12:00:00.000Z"),
+        latitude: 6.45,
+        longitude: 3.41,
+        approximateArea: "Ikeja",
+        description: "Seen at market road",
+        directionOfTravel: null,
+        confidence: null,
+        metadata: {
+          locationMode: "MANUAL",
+          attachments: [{ mediaType: "image", label: "Photo 1", fileName: "1.jpg" }],
+        },
+      },
+    ]);
+
+    const ownerList = await service.listSightings("broadcast-1", reporter);
+    expect(ownerList.data[0].reporter).toEqual({ label: "Citizen sighting" });
+    expect(ownerList.data[0].latitude).toBeUndefined();
+    expect(ownerList.data[0].longitude).toBeUndefined();
+
+    const adminList = await service.listSightings("broadcast-1", countryAdmin);
+    expect(adminList.data[0].reporter).toEqual({ reporterUserId: "user-44" });
+    expect(adminList.data[0].latitude).toBeDefined();
+    expect(adminList.data[0].longitude).toBeDefined();
+  });
+
+  it("rejects sightings list for unrelated citizen", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      creatorUserId: "owner-1",
+    });
+    await expect(service.listSightings("broadcast-1", reporter)).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
 

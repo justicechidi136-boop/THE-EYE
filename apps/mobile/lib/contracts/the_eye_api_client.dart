@@ -97,6 +97,92 @@ class EmergencyContact {
   }
 }
 
+class CitizenVehicleRecord {
+  const CitizenVehicleRecord({
+    required this.id,
+    required this.userId,
+    required this.make,
+    required this.model,
+    required this.plateNumber,
+    required this.isPrimary,
+    this.photos = const [],
+    this.year,
+    this.color,
+    this.vin,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String userId;
+  final String make;
+  final String model;
+  final String plateNumber;
+  final int? year;
+  final String? color;
+  final String? vin;
+  final bool isPrimary;
+  final List<CitizenVehiclePhotoRecord> photos;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  factory CitizenVehicleRecord.fromJson(Map<String, dynamic> json) {
+    final yearRaw = json["year"];
+    return CitizenVehicleRecord(
+      id: (json["id"] as String?) ?? "",
+      userId: (json["userId"] as String?) ?? "",
+      make: (json["make"] as String?) ?? "",
+      model: (json["model"] as String?) ?? "",
+      plateNumber: (json["plateNumber"] as String?) ?? "",
+      year: yearRaw is num ? yearRaw.toInt() : int.tryParse("$yearRaw"),
+      color: json["color"] as String?,
+      vin: json["vin"] as String?,
+      isPrimary: json["isPrimary"] == true,
+      photos: (json["photos"] is List)
+          ? (json["photos"] as List)
+              .whereType<Map>()
+              .map((item) => CitizenVehiclePhotoRecord.fromJson(
+                  Map<String, dynamic>.from(item)))
+              .toList(growable: false)
+          : const [],
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      updatedAt: DateTime.tryParse((json["updatedAt"] as String?) ?? ""),
+    );
+  }
+}
+
+class CitizenVehiclePhotoRecord {
+  const CitizenVehiclePhotoRecord({
+    required this.id,
+    required this.objectKey,
+    required this.contentType,
+    required this.sortOrder,
+    this.sizeBytes,
+    this.createdAt,
+    this.signedGetUrl,
+  });
+
+  final String id;
+  final String objectKey;
+  final String contentType;
+  final int sortOrder;
+  final int? sizeBytes;
+  final DateTime? createdAt;
+  final String? signedGetUrl;
+
+  factory CitizenVehiclePhotoRecord.fromJson(Map<String, dynamic> json) {
+    return CitizenVehiclePhotoRecord(
+      id: (json["id"] as String?) ?? "",
+      objectKey: (json["objectKey"] as String?) ?? "",
+      contentType: (json["contentType"] as String?) ?? "",
+      sortOrder: (json["sortOrder"] as num?)?.toInt() ?? 0,
+      sizeBytes: (json["sizeBytes"] as num?)?.toInt(),
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      signedGetUrl: json["signedGetUrl"] as String?,
+    );
+  }
+}
+
 class SmartwatchDeviceRecord {
   const SmartwatchDeviceRecord({
     required this.id,
@@ -181,6 +267,20 @@ class KycSubmissionResult {
 
 class PresignedAvatarTarget {
   const PresignedAvatarTarget({
+    required this.bucket,
+    required this.objectKey,
+    required this.uploadUrl,
+    required this.requiredHeaders,
+  });
+
+  final String bucket;
+  final String objectKey;
+  final String uploadUrl;
+  final Map<String, String> requiredHeaders;
+}
+
+class PresignedVehiclePhotoTarget {
+  const PresignedVehiclePhotoTarget({
     required this.bucket,
     required this.objectKey,
     required this.uploadUrl,
@@ -304,14 +404,50 @@ class PresignedEvidenceTarget {
 }
 
 class TheEyeApiClient {
-  TheEyeApiClient({String? baseUrl, http.Client? httpClient})
-      : baseUrl = baseUrl ?? TheEyeApiConfig.resolveBaseUrl(),
+  TheEyeApiClient({
+    String? baseUrl,
+    http.Client? httpClient,
+    this.onUnauthorizedRefresh,
+  })  : baseUrl = baseUrl ?? TheEyeApiConfig.resolveBaseUrl(),
         _http = httpClient ?? http.Client();
 
   final String baseUrl;
   final http.Client _http;
+  final Future<String?> Function()? onUnauthorizedRefresh;
+
+  static const Set<String> _unauthorizedRefreshExcludedPaths = {
+    TheEyeApiPaths.authLogin,
+    TheEyeApiPaths.authRegister,
+    TheEyeApiPaths.authRefresh,
+  };
 
   Uri _uri(String path) => Uri.parse("$baseUrl$path");
+
+  bool _canAttemptUnauthorizedRefresh(String path, String? accessToken) {
+    if (onUnauthorizedRefresh == null) return false;
+    if (accessToken == null || accessToken.isEmpty) return false;
+    final normalizedPath = Uri.tryParse(path)?.path ?? path;
+    return !_unauthorizedRefreshExcludedPaths.contains(normalizedPath);
+  }
+
+  Future<http.Response> _sendWithUnauthorizedRetry({
+    required String path,
+    required String? accessToken,
+    required Duration timeout,
+    required Future<http.Response> Function(String? token) sendRequest,
+  }) async {
+    final first = await sendRequest(accessToken).timeout(timeout);
+    if (first.statusCode != 401 ||
+        !_canAttemptUnauthorizedRefresh(path, accessToken)) {
+      return first;
+    }
+
+    final refreshedAccessToken = await onUnauthorizedRefresh!.call();
+    if (refreshedAccessToken == null || refreshedAccessToken.isEmpty) {
+      return first;
+    }
+    return sendRequest(refreshedAccessToken).timeout(timeout);
+  }
 
   Future<http.Response> postJson(
     String path,
@@ -321,27 +457,33 @@ class TheEyeApiClient {
     String? clientTraceId,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{
-      "content-type": "application/json",
-      "accept": "application/json"
-    };
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
-    }
-    if (clientSubmissionId != null && clientSubmissionId.isNotEmpty) {
-      headers["x-client-submission-id"] = clientSubmissionId;
-    }
-    if (clientTraceId != null && clientTraceId.isNotEmpty) {
-      headers["x-client-trace-id"] = clientTraceId;
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{
+        "content-type": "application/json",
+        "accept": "application/json"
+      };
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      if (clientSubmissionId != null && clientSubmissionId.isNotEmpty) {
+        headers["x-client-submission-id"] = clientSubmissionId;
+      }
+      if (clientTraceId != null && clientTraceId.isNotEmpty) {
+        headers["x-client-trace-id"] = clientTraceId;
+      }
+      return _http.post(
+        _uri(path),
+        headers: headers,
+        body: jsonEncode(payload),
+      );
     }
 
-    return _http
-        .post(
-          _uri(path),
-          headers: headers,
-          body: jsonEncode(payload),
-        )
-        .timeout(timeout);
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<http.Response> patchJson(
@@ -350,21 +492,27 @@ class TheEyeApiClient {
     String? accessToken,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{
-      "content-type": "application/json",
-      "accept": "application/json"
-    };
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{
+        "content-type": "application/json",
+        "accept": "application/json"
+      };
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      return _http.patch(
+        _uri(path),
+        headers: headers,
+        body: jsonEncode(payload),
+      );
     }
 
-    return _http
-        .patch(
-          _uri(path),
-          headers: headers,
-          body: jsonEncode(payload),
-        )
-        .timeout(timeout);
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<http.Response> deleteJson(
@@ -372,12 +520,20 @@ class TheEyeApiClient {
     String? accessToken,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{"accept": "application/json"};
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{"accept": "application/json"};
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      return _http.delete(_uri(path), headers: headers);
     }
 
-    return _http.delete(_uri(path), headers: headers).timeout(timeout);
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<http.Response> getJson(
@@ -386,17 +542,25 @@ class TheEyeApiClient {
     Map<String, String>? query,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{"accept": "application/json"};
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
-    }
-
     var uri = _uri(path);
     if (query != null && query.isNotEmpty) {
       uri = uri.replace(queryParameters: {...uri.queryParameters, ...query});
     }
 
-    return _http.get(uri, headers: headers).timeout(timeout);
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{"accept": "application/json"};
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      return _http.get(uri, headers: headers);
+    }
+
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<bool> checkApiReachable(
@@ -795,6 +959,189 @@ class TheEyeApiClient {
     throw AuthApiException.fromResponse(response);
   }
 
+  Future<List<CitizenVehicleRecord>> listMyVehicles({
+    required String accessToken,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await getJson(
+      TheEyeApiPaths.usersMeVehicles,
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final decoded = jsonDecode(response.body);
+      final rows = decoded is Map ? decoded["data"] : null;
+      if (rows is! List) return const [];
+      return rows
+          .whereType<Map>()
+          .map((item) =>
+              CitizenVehicleRecord.fromJson(Map<String, dynamic>.from(item)))
+          .toList(growable: false);
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> createMyVehicle({
+    required String accessToken,
+    required Map<String, Object?> payload,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehicles,
+      payload,
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> getMyVehicle({
+    required String accessToken,
+    required String vehicleId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await getJson(
+      TheEyeApiPaths.usersMeVehicle(vehicleId),
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> updateMyVehicle({
+    required String accessToken,
+    required String vehicleId,
+    required Map<String, Object?> payload,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await patchJson(
+      TheEyeApiPaths.usersMeVehicle(vehicleId),
+      payload,
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<void> deleteMyVehicle({
+    required String accessToken,
+    required String vehicleId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await deleteJson(
+      TheEyeApiPaths.usersMeVehicle(vehicleId),
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehicleRecord> setMyVehiclePrimary({
+    required String accessToken,
+    required String vehicleId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehiclePrimary(vehicleId),
+      const {"isPrimary": true},
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehicleRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<PresignedVehiclePhotoTarget> presignVehiclePhoto({
+    required String accessToken,
+    required String vehicleId,
+    required String contentType,
+    required String fileName,
+    int? sizeBytes,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehiclePhotosPresign(vehicleId),
+      {
+        "contentType": contentType,
+        "fileName": fileName,
+        if (sizeBytes != null) "sizeBytes": sizeBytes,
+      },
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final map = _decodeMap(response.body);
+      final headers = map["requiredHeaders"];
+      return PresignedVehiclePhotoTarget(
+        bucket: map["bucket"] as String,
+        objectKey: map["objectKey"] as String,
+        uploadUrl: map["uploadUrl"] as String,
+        requiredHeaders: headers is Map
+            ? Map<String, String>.from(
+                headers.map((key, value) => MapEntry("$key", "$value")))
+            : const {},
+      );
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<CitizenVehiclePhotoRecord> confirmVehiclePhoto({
+    required String accessToken,
+    required String vehicleId,
+    required String objectKey,
+    required String contentType,
+    int? sizeBytes,
+    int? sortOrder,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeVehiclePhotosConfirm(vehicleId),
+      {
+        "objectKey": objectKey,
+        "contentType": contentType,
+        if (sizeBytes != null) "sizeBytes": sizeBytes,
+        if (sortOrder != null) "sortOrder": sortOrder,
+      },
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return CitizenVehiclePhotoRecord.fromJson(_decodeMap(response.body));
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<void> deleteVehiclePhoto({
+    required String accessToken,
+    required String vehicleId,
+    required String photoId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await deleteJson(
+      TheEyeApiPaths.usersMeVehiclePhoto(vehicleId, photoId),
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
   AuthExchangeResult _exchangeFromResponse(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final decoded = jsonDecode(response.body);
@@ -1064,9 +1411,7 @@ class TheEyeApiClient {
       accessToken: accessToken,
     );
     if (response.statusCode == 202) {
-      final decoded = response.body.isEmpty
-          ? null
-          : jsonDecode(response.body);
+      final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
       return IncidentLocationPostResult(
         statusCode: 202,
         persisted: false,

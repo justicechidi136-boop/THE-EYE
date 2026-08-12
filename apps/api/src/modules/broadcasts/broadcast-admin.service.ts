@@ -65,7 +65,7 @@ export class BroadcastAdminService {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit,
       include: {
-        _count: { select: { comments: true, reports: true, deliveries: true } },
+        _count: { select: { comments: true, reports: true, deliveries: true, sightings: true } },
       },
     });
     return { data: rows };

@@ -67,6 +67,12 @@ Internal validation codes (`AUTH-URL-001`…`006`) are for startup/CI logs only 
 | `/account-recovery` | Mobile | Request form + success confirmation |
 | `/account-recovery/complete` | Mobile | Google completion with route args |
 
+### AUTH-007 citizen return-to-app rule
+
+- Citizen-facing reset/recovery pages in `apps/admin-web` must never link to admin `/login` or dashboard routes.
+- Success and invalid-token states must instruct users to return to the THE EYE mobile app to finish sign-in/recovery.
+- If a citizen deep link is introduced in the future, it must target the citizen app flow only (never admin dashboard auth).
+
 ## Logging policy
 
 - Log **hostname only** after send (`host=staging-dashboard8jps.theeye.com.ng`).

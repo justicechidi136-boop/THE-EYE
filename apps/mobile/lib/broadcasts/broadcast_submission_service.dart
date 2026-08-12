@@ -214,6 +214,7 @@ class BroadcastSubmissionService {
     required String broadcastId,
     required String clientActionId,
     required String description,
+    required String locationMode,
     String? observedAt,
     double? latitude,
     double? longitude,
@@ -221,15 +222,14 @@ class BroadcastSubmissionService {
     String? confidence,
     bool anonymousToReviewers = false,
     String? directionOfTravel,
-    String? photoReference,
-    String? videoReference,
-    String? voiceReference,
+    List<Map<String, String>> attachments = const [],
   }) async {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.broadcastSightings(broadcastId),
       {
         "clientSightingId": clientActionId,
         "description": description,
+        "locationMode": locationMode,
         if (observedAt != null && observedAt.isNotEmpty)
           "observedAt": observedAt,
         if (latitude != null) "latitude": latitude,
@@ -241,12 +241,7 @@ class BroadcastSubmissionService {
         "anonymousPublic": anonymousToReviewers,
         if (directionOfTravel != null && directionOfTravel.isNotEmpty)
           "directionOfTravel": directionOfTravel,
-        if (photoReference != null && photoReference.isNotEmpty)
-          "photoReference": photoReference,
-        if (videoReference != null && videoReference.isNotEmpty)
-          "videoReference": videoReference,
-        if (voiceReference != null && voiceReference.isNotEmpty)
-          "voiceReference": voiceReference,
+        if (attachments.isNotEmpty) "attachments": attachments,
       },
       accessToken: accessToken,
     );

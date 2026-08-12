@@ -4,6 +4,7 @@ import "package:shared_preferences/shared_preferences.dart";
 
 import "package:the_eye_mobile/profile/car_profile.dart";
 import "package:the_eye_mobile/profile/car_profile_store.dart";
+import "package:the_eye_mobile/evidence/evidence_policy.dart";
 import "package:the_eye_mobile/theme/theme_preferences.dart";
 import "package:the_eye_mobile/theme/theme_provider.dart";
 
@@ -49,11 +50,12 @@ void main() {
     });
   });
 
-  group("CarProfileStore", () {
-    test("round-trips saved car profile", () async {
+  group("VehicleGarageStore", () {
+    test("round-trips saved vehicle list with one entry", () async {
       SharedPreferences.setMockInitialValues({});
-      final store = await SharedPreferencesCarProfileStore.create();
+      final store = await SharedPreferencesVehicleGarageStore.create();
       const profile = CarProfile(
+        id: "vehicle-1",
         make: "Toyota",
         model: "Corolla",
         plateNumber: "LAG-123-EYE",
@@ -62,13 +64,25 @@ void main() {
         vin: "VIN123",
         notes: "Tinted windows",
         imagePath: "/tmp/car.jpg",
+        photos: [
+          CarPhotoRef(
+            id: "photo-1",
+            objectKey: "vehicles/u1/v1/photo.jpg",
+            contentType: "image/jpeg",
+            sizeBytes: 1024,
+            sortOrder: 0,
+            previewUrl: "https://cdn.test/photo.jpg",
+          ),
+        ],
+        isPrimary: true,
       );
 
-      await store.save(profile);
-      final loaded = await store.load();
+      await store.saveVehicles(const [profile]);
+      final loadedList = await store.loadVehicles();
 
-      expect(loaded, isNotNull);
-      expect(loaded!.make, "Toyota");
+      expect(loadedList, hasLength(1));
+      final loaded = loadedList.first;
+      expect(loaded.make, "Toyota");
       expect(loaded.model, "Corolla");
       expect(loaded.plateNumber, "LAG-123-EYE");
       expect(loaded.year, 2019);
@@ -76,19 +90,75 @@ void main() {
       expect(loaded.vin, "VIN123");
       expect(loaded.notes, "Tinted windows");
       expect(loaded.imagePath, "/tmp/car.jpg");
+      expect(loaded.photos, hasLength(1));
+      expect(loaded.photos.first.objectKey, "vehicles/u1/v1/photo.jpg");
+      expect(loaded.isPrimary, isTrue);
       expect(loaded.displayLabel, "2019 Toyota Corolla");
     });
 
-    test("clear removes saved profile", () async {
+    test("supports zero one two three vehicles", () async {
       SharedPreferences.setMockInitialValues({});
-      final store = await SharedPreferencesCarProfileStore.create();
-      await store.save(const CarProfile(
-        make: "Honda",
-        model: "Civic",
-        plateNumber: "ABC-123",
-      ));
-      await store.clear();
-      expect(await store.load(), isNull);
+      final store = await SharedPreferencesVehicleGarageStore.create();
+      await store.saveVehicles(const []);
+      expect(await store.loadVehicles(), isEmpty);
+
+      await store.saveVehicles(const [
+        CarProfile(make: "Toyota", model: "Corolla", plateNumber: "ABC-111"),
+      ]);
+      expect(await store.loadVehicles(), hasLength(1));
+
+      await store.saveVehicles(const [
+        CarProfile(make: "Toyota", model: "Corolla", plateNumber: "ABC-111"),
+        CarProfile(make: "Honda", model: "Civic", plateNumber: "ABC-222"),
+      ]);
+      expect(await store.loadVehicles(), hasLength(2));
+
+      await store.saveVehicles(const [
+        CarProfile(make: "Toyota", model: "Corolla", plateNumber: "ABC-111"),
+        CarProfile(make: "Honda", model: "Civic", plateNumber: "ABC-222"),
+        CarProfile(make: "Lexus", model: "RX", plateNumber: "ABC-333"),
+      ]);
+      expect(await store.loadVehicles(), hasLength(3));
     });
+
+    test("migration preserves existing local single vehicle", () async {
+      SharedPreferences.setMockInitialValues({
+        SharedPreferencesVehicleGarageStore.legacyStorageKey: const CarProfile(
+          make: "Honda",
+          model: "Civic",
+          plateNumber: "ABC-123",
+          imagePath: "/tmp/legacy.jpg",
+        ).toStorageJson(),
+      });
+      final store = await SharedPreferencesVehicleGarageStore.create();
+      final legacy = await store.loadLegacyCarProfile();
+      expect(legacy, isNotNull);
+      expect(legacy!.plateNumber, "ABC-123");
+      expect(legacy.imagePath, "/tmp/legacy.jpg");
+    });
+
+    test("clear removes saved garage and legacy profile", () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await SharedPreferencesVehicleGarageStore.create();
+      await store.saveVehicles(const [
+        CarProfile(
+          make: "Honda",
+          model: "Civic",
+          plateNumber: "ABC-123",
+        )
+      ]);
+      await store.clear();
+      expect(await store.loadVehicles(), isEmpty);
+      expect(await store.loadLegacyCarProfile(), isNull);
+    });
+  });
+
+  test("vehicle photo evidence policy enforces max of eight", () {
+    expect(EvidencePolicy.vehiclePhotos.maxPhotos, 8);
+    expect(EvidencePolicy.vehiclePhotos.maxFileSize, 5 * 1024 * 1024);
+    expect(
+      EvidencePolicy.vehiclePhotos.supportedMimeTypes,
+      containsAll(<String>["image/jpeg", "image/png", "image/webp"]),
+    );
   });
 }

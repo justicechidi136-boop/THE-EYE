@@ -31,6 +31,8 @@ describe("AUTH-001/AUTH-006 auth recovery URL contract", () => {
     expect(url.hostname).toBe("staging-dashboard8jps.theeye.com.ng");
     expect(url.pathname).toBe("/reset-password");
     expect(url.searchParams.get("token")).toBe("opaque-token-value");
+    expect(url.pathname).not.toBe("/login");
+    expect(url.pathname).not.toBe("/dashboard");
     expect(link).not.toContain("localhost");
     expect(link).not.toContain("staging-app");
   });
@@ -46,6 +48,8 @@ describe("AUTH-001/AUTH-006 auth recovery URL contract", () => {
     expect(url.hostname).toBe("staging.theeye.com.ng");
     expect(url.pathname).toBe("/account-recovery");
     expect(url.searchParams.get("token")).toBe("recovery-token");
+    expect(url.pathname).not.toBe("/login");
+    expect(url.pathname).not.toBe("/dashboard");
   });
 
   it("rejects localhost and insecure schemes", () => {
@@ -86,6 +90,20 @@ describe("AUTH-001/AUTH-006 auth recovery URL contract", () => {
     expectAuthUrlError(
       () =>
         validateAuthLinkBaseUrl("https://staging-dashboard8jps.theeye.com.ng/recover", "account_recovery", {
+          env: stagingEnv,
+        }),
+      AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE,
+    );
+    expectAuthUrlError(
+      () =>
+        validateAuthLinkBaseUrl("https://staging-dashboard8jps.theeye.com.ng/login", "password_reset", {
+          env: stagingEnv,
+        }),
+      AUTH_URL_ERROR_CODES.INVALID_RESET_BASE,
+    );
+    expectAuthUrlError(
+      () =>
+        validateAuthLinkBaseUrl("https://staging-dashboard8jps.theeye.com.ng/dashboard", "account_recovery", {
           env: stagingEnv,
         }),
       AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE,

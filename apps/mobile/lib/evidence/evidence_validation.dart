@@ -3,6 +3,7 @@ import "dart:typed_data";
 
 import "../contracts/the_eye_enums.dart";
 import "evidence_constants.dart";
+import "evidence_policy.dart";
 
 class EvidenceValidationException implements Exception {
   EvidenceValidationException(this.message);
@@ -14,6 +15,7 @@ class EvidenceValidationException implements Exception {
 }
 
 class EvidenceValidation {
+  static const _policy = EvidencePolicy.incident;
   static String? extensionForFileName(String fileName) {
     final dot = fileName.lastIndexOf(".");
     if (dot < 0) return null;
@@ -50,9 +52,9 @@ class EvidenceValidation {
     }
 
     final sizeBytes = await file.length();
-    if (sizeBytes <= 0 || sizeBytes > EvidenceLimits.maxFileBytes) {
+    if (sizeBytes <= 0 || sizeBytes > _policy.maxFileSize) {
       throw EvidenceValidationException(
-          "Evidence must be between 1 byte and 100 MB.");
+          "Evidence must be between 1 byte and ${_policy.maxFileSize ~/ (1024 * 1024)} MB.");
     }
 
     final extension = extensionForFileName(fileName);

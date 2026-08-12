@@ -109,6 +109,11 @@ export class BroadcastsController {
     return this.broadcastCitizen.submitSighting(id, dto, request.user);
   }
 
+  @Get(":id/sightings")
+  listSightings(@Param("id") id: string, @Req() request: any) {
+    return this.broadcastCitizen.listSightings(id, request.user);
+  }
+
   @Get(":id/share")
   @RequirePermissions("incident:read")
   share(@Param("id") id: string) {

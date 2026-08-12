@@ -238,6 +238,37 @@ describe("CommunityVerificationService", () => {
     expect(second.completed).toBe(true);
     expect(prisma.communityVerificationResponse.create).toHaveBeenCalledTimes(1);
   });
+
+  it("uses incident-type friendly verification notification copy", async () => {
+    const { prisma, store } = buildPrismaMock();
+    store.incidents.set("inc-accident", {
+      ...store.incidents.get("inc-1"),
+      id: "inc-accident",
+      type: IncidentType.Accident,
+    });
+    const eligibility = {
+      evaluateIncidentEligibility: jest.fn(async () => ({
+        eligible: true,
+        passiveOnly: false,
+        candidates: [{ userId: "user-verifier-1", distanceMeters: 180 }],
+      })),
+    };
+    const service = new CommunityVerificationService(
+      prisma as never,
+      eligibility as never,
+      new CommunityVerificationSafePayloadService(),
+      new CommunityVerificationScoringService(prisma as never),
+      { enqueue: jest.fn() } as never,
+      { record: jest.fn() } as never,
+    );
+
+    await service.issueRequests("inc-accident");
+
+    expect(store.notifications).toHaveLength(1);
+    expect(store.notifications[0].title).toBe("Can you confirm this accident?");
+    expect(store.notifications[0].body).toContain("accident");
+    expect(store.notifications[0].metadata.incidentCategory).toBe("Accident");
+  });
 });
 
 describe("CommunityVerificationEligibilityService", () => {

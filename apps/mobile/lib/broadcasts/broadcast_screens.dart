@@ -8,21 +8,30 @@ import "../brand.dart";
 import "../design_system/components/eye_page_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../design_system/tokens.dart";
+import "../evidence/evidence_attachment_picker.dart";
+import "../evidence/evidence_policy.dart";
 import "../incidents/incident_submission_service.dart";
 import "../location/location_permission_service.dart";
 import "../presentation/broadcast_expiry_presenter.dart";
 import "../presentation/citizen_date_time.dart";
 import "../presentation/citizen_presentation.dart";
 import "../theme/the_eye_theme.dart";
-import "../voice/voice_recorder.dart";
 import "../widgets/section_card.dart";
 import "broadcast_feed_service.dart";
+import "broadcast_media_upload_service.dart";
 import "broadcast_navigation.dart";
 import "broadcast_session.dart";
-import "broadcast_sighting_draft_store.dart";
 import "broadcast_submission_service.dart";
 import "broadcast_ui_helpers.dart";
 import "../incidents/incident_draft_factory.dart";
+
+enum _MyBroadcastsViewState {
+  loading,
+  success,
+  empty,
+  error,
+  refreshing,
+}
 
 class BroadcastCreateHubScreen extends StatelessWidget {
   const BroadcastCreateHubScreen({super.key});
@@ -30,7 +39,7 @@ class BroadcastCreateHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _BroadcastShell(
-      title: "Create broadcast",
+      title: "Create Broadcast",
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
@@ -88,27 +97,50 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
   ];
 
   List<BroadcastFeedItem> _items = const [];
-  bool _loading = true;
+  _MyBroadcastsViewState _viewState = _MyBroadcastsViewState.loading;
   String? _error;
   String _statusFilter = "All";
 
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_load());
+    });
   }
 
-  Future<void> _load() async {
-    final session = BroadcastSession.require(context);
-    if (!session.isAuthenticated || session.accessToken == null) {
+  Future<void> _load({bool fromRefresh = false}) async {
+    if (!mounted) return;
+    final keepListVisible = fromRefresh && _items.isNotEmpty && _error == null;
+    setState(() {
+      _viewState = keepListVisible
+          ? _MyBroadcastsViewState.refreshing
+          : _MyBroadcastsViewState.loading;
+      _error = null;
+    });
+
+    BroadcastSession session;
+    try {
+      session = BroadcastSession.require(context);
+    } catch (_) {
       if (!mounted) return;
+      setState(() {
+        _viewState = _MyBroadcastsViewState.error;
+        _error = "We couldn't load your broadcasts.";
+      });
       Navigator.of(context).pushReplacementNamed("/login");
       return;
     }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+
+    if (!session.isAuthenticated || session.accessToken == null) {
+      if (!mounted) return;
+      setState(() {
+        _viewState = _MyBroadcastsViewState.error;
+        _error = "We couldn't load your broadcasts.";
+      });
+      Navigator.of(context).pushReplacementNamed("/login");
+      return;
+    }
     try {
       final items = await session.broadcastFeedService.listMine(
         accessToken: session.accessToken!,
@@ -117,19 +149,25 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
       if (!mounted) return;
       setState(() {
         _items = items;
-        _loading = false;
+        _viewState = items.isEmpty
+            ? _MyBroadcastsViewState.empty
+            : _MyBroadcastsViewState.success;
+        _error = null;
       });
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.userMessage;
-        _loading = false;
+        _error = "We couldn't load your broadcasts.";
+        _viewState = _MyBroadcastsViewState.error;
       });
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        Navigator.of(context).pushReplacementNamed("/login");
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = "Unable to load your broadcasts.";
-        _loading = false;
+        _error = "We couldn't load your broadcasts.";
+        _viewState = _MyBroadcastsViewState.error;
       });
     }
   }
@@ -155,7 +193,7 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
                   label: Text(
                       filter == "WithdrawnByAuthor" ? "Withdrawn" : filter),
                   selected: selected,
-                  onSelected: _loading
+                  onSelected: _viewState == _MyBroadcastsViewState.loading
                       ? null
                       : (value) {
                           if (!value) return;
@@ -168,8 +206,8 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _load,
-              child: _loading
+              onRefresh: () => _load(fromRefresh: true),
+              child: _viewState == _MyBroadcastsViewState.loading
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: const [
@@ -177,15 +215,18 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
                         Center(child: CircularProgressIndicator()),
                       ],
                     )
-                  : _error != null
+                  : _viewState == _MyBroadcastsViewState.error
                       ? ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(24),
                           children: [
                             ListTile(
                               leading: const Icon(Icons.cloud_off),
-                              title: const Text("Broadcasts unavailable"),
-                              subtitle: Text(_error!),
+                              title: const Text(
+                                  "We couldn't load your broadcasts."),
+                              subtitle: Text(
+                                _error ?? "Try again in a moment.",
+                              ),
                             ),
                             FilledButton(
                               onPressed: () => unawaited(_load()),
@@ -193,40 +234,62 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
                             ),
                           ],
                         )
-                      : _items.isEmpty
+                      : _viewState == _MyBroadcastsViewState.empty
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.all(16),
-                              children: const [
-                                SectionCard(
+                              children: [
+                                const SectionCard(
                                   title: "No broadcasts yet",
                                   child: Text(
-                                    "Create a missing person or stolen vehicle alert to reach nearby citizens.",
+                                    "You haven't created any broadcasts yet.",
                                   ),
+                                ),
+                                const SizedBox(height: 12),
+                                FilledButton.icon(
+                                  onPressed: () => Navigator.of(context)
+                                      .pushNamed(BroadcastRoutes.create),
+                                  icon: const Icon(Icons.add),
+                                  label: const Text("Create Broadcast"),
                                 ),
                               ],
                             )
-                          : ListView.separated(
-                              padding:
-                                  const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                              itemCount: _items.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final item = _items[index];
-                                return _BroadcastActionTile(
-                                  icon: item.type
-                                          .toLowerCase()
-                                          .contains("vehicle")
-                                      ? Icons.directions_car
-                                      : Icons.person_search,
-                                  title: item.title,
-                                  subtitle: "${item.status} · ${item.type}",
-                                  onTap: () => Navigator.of(context).pushNamed(
-                                    broadcastDetailRoute(item.id)!,
+                          : Stack(
+                              children: [
+                                ListView.separated(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                                  itemCount: _items.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final item = _items[index];
+                                    return _BroadcastActionTile(
+                                      icon: item.type
+                                              .toLowerCase()
+                                              .contains("vehicle")
+                                          ? Icons.directions_car
+                                          : Icons.person_search,
+                                      title: item.title,
+                                      subtitle: "${item.status} · ${item.type}",
+                                      onTap: () =>
+                                          Navigator.of(context).pushNamed(
+                                        broadcastDetailRoute(item.id)!,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (_viewState ==
+                                    _MyBroadcastsViewState.refreshing)
+                                  const Positioned(
+                                    top: 0,
+                                    left: 16,
+                                    right: 16,
+                                    child: LinearProgressIndicator(),
                                   ),
-                                );
-                              },
+                              ],
                             ),
             ),
           ),
@@ -261,6 +324,16 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_loadDetail());
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant BroadcastDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.broadcastId != widget.broadcastId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_loadDetail());
+      });
+    }
   }
 
   Future<void> _loadDetail() async {
@@ -442,93 +515,115 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final item = _item;
-    return _BroadcastShell(
-      title: "Broadcast detail",
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.cloud_off),
-                      title: const Text("Broadcast unavailable"),
-                      subtitle: Text(_error!),
-                    ),
-                    FilledButton(
-                      onPressed: () => unawaited(_loadDetail()),
-                      child: const Text("Retry"),
-                    ),
-                  ],
+    final detailArgs = ModalRoute.of(context)?.settings.arguments;
+    final isLiveStatus =
+        item?.status == "Active" || item?.status == "Published" || item?.status == "Updated";
+    final normalizedType = item?.type.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
+    final isStolenVehicle = normalizedType.contains("stolenvehicle");
+    final canReportSighting = isLiveStatus && isStolenVehicle;
+    final returnToCenterOnBack = detailArgs is BroadcastDetailNavigationArgs &&
+        detailArgs.returnToCenterOnBack;
+    return PopScope(
+      canPop: !returnToCenterOnBack,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || !returnToCenterOnBack) return;
+        Navigator.of(context).pushReplacementNamed(BroadcastRoutes.center);
+      },
+      child: _BroadcastShell(
+        title: "Broadcast Detail",
+        onBack: returnToCenterOnBack
+            ? () => Navigator.of(context).pushReplacementNamed(
+                  BroadcastRoutes.center,
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                  children: [
-                    SectionCard(
-                      title: item?.title ?? "Safety broadcast",
-                      child: _BroadcastDetailBody(item: item),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: _actionInFlight
-                              ? null
-                              : () => Navigator.of(context).pushNamed(
-                                    "${BroadcastRoutes.center}/${widget.broadcastId}/share",
-                                  ),
-                          icon: const Icon(Icons.share_outlined),
-                          label: const Text("Share"),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _actionInFlight
-                              ? null
-                              : () => Navigator.of(context).pushNamed(
-                                    "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
-                                  ),
-                          icon: const Icon(Icons.visibility_outlined),
-                          label: const Text("Report sighting"),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _actionInFlight
-                              ? null
-                              : () => Navigator.of(context).pushNamed(
-                                    "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
-                                  ),
-                          icon: const Icon(Icons.chat_bubble_outline),
-                          label: const Text("Comments"),
-                        ),
-                        if (!_isOwner)
+            : null,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.cloud_off),
+                        title: const Text("Broadcast unavailable"),
+                        subtitle: Text(_error!),
+                      ),
+                      FilledButton(
+                        onPressed: () => unawaited(_loadDetail()),
+                        child: const Text("Retry"),
+                      ),
+                    ],
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                    children: [
+                      SectionCard(
+                        title: item?.title ?? "Safety broadcast",
+                        child: _BroadcastDetailBody(item: item),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
                           OutlinedButton.icon(
                             onPressed: _actionInFlight
                                 ? null
                                 : () => Navigator.of(context).pushNamed(
-                                      "${BroadcastRoutes.center}/${widget.broadcastId}/report",
+                                      "${BroadcastRoutes.center}/${widget.broadcastId}/share",
                                     ),
-                            icon: const Icon(Icons.flag_outlined),
-                            label: const Text("Report"),
+                            icon: const Icon(Icons.share_outlined),
+                            label: const Text("Share"),
                           ),
-                        if (_isOwner &&
-                            (item?.status == "Active" ||
-                                item?.status == "Published" ||
-                                item?.status == "Updated")) ...[
-                          FilledButton.icon(
-                            onPressed: _actionInFlight ? null : _resolve,
-                            icon: const Icon(Icons.check_circle_outline),
-                            label: const Text("Resolve"),
-                          ),
+                          if (canReportSighting)
+                            OutlinedButton.icon(
+                              onPressed: _actionInFlight
+                                  ? null
+                                  : () => Navigator.of(context).pushNamed(
+                                        "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
+                                        arguments: item,
+                                      ),
+                              icon: const Icon(Icons.visibility_outlined),
+                              label: const Text("Report sighting"),
+                            ),
                           OutlinedButton.icon(
-                            onPressed: _actionInFlight ? null : _withdraw,
-                            icon: const Icon(Icons.unpublished_outlined),
-                            label: const Text("Withdraw"),
+                            onPressed: _actionInFlight
+                                ? null
+                                : () => Navigator.of(context).pushNamed(
+                                      "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
+                                    ),
+                            icon: const Icon(Icons.chat_bubble_outline),
+                            label: const Text("Comments"),
                           ),
+                          if (!_isOwner)
+                            OutlinedButton.icon(
+                              onPressed: _actionInFlight
+                                  ? null
+                                  : () => Navigator.of(context).pushNamed(
+                                        "${BroadcastRoutes.center}/${widget.broadcastId}/report",
+                                      ),
+                              icon: const Icon(Icons.flag_outlined),
+                              label: const Text("Report"),
+                            ),
+                          if (_isOwner &&
+                              (item?.status == "Active" ||
+                                  item?.status == "Published" ||
+                                  item?.status == "Updated")) ...[
+                            FilledButton.icon(
+                              onPressed: _actionInFlight ? null : _resolve,
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text("Resolve"),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _actionInFlight ? null : _withdraw,
+                              icon: const Icon(Icons.unpublished_outlined),
+                              label: const Text("Withdraw"),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+      ),
     );
   }
 }
@@ -543,6 +638,28 @@ class _BroadcastDetailBody extends StatelessWidget {
     if (value == null) return null;
     final text = value.toString().trim();
     return text.isEmpty ? null : text;
+  }
+
+  String? _metaAny(List<String> keys) {
+    for (final key in keys) {
+      final value = _meta(key);
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  DateTime? _metaDateAny(List<String> keys) {
+    for (final key in keys) {
+      final raw = _meta(key);
+      if (raw == null) continue;
+      final parsed = DateTime.tryParse(raw);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  String _formatDateTimeWithMeridiem(DateTime value) {
+    return "${CitizenDateTimeFormatter.formatDate(value)} · ${CitizenDateTimeFormatter.formatTime(value)}";
   }
 
   List<Map<String, dynamic>> get _attachments {
@@ -628,10 +745,7 @@ class _BroadcastDetailBody extends StatelessWidget {
     final fullName = _meta("fullName");
     final age = _meta("ageOrApproximateAge");
     final gender = _meta("gender");
-    final lastSeenAtRaw = _meta("lastSeenAt");
-    final lastSeenAt = lastSeenAtRaw == null
-        ? null
-        : DateTime.tryParse(lastSeenAtRaw);
+    final lastSeenAt = _metaDateAny(const ["lastSeenAt"]);
     final lastSeenAddress = _meta("lastSeenAddress");
     final physical = _meta("physicalDescription");
     final clothing = _meta("clothingDescription");
@@ -639,6 +753,37 @@ class _BroadcastDetailBody extends StatelessWidget {
     final isMissingPerson =
         (item?.type.toLowerCase().contains("missing") ?? false) ||
             fullName != null;
+    final isStolenVehicle =
+        (item?.type.toLowerCase().contains("vehicle") ?? false) ||
+            _metaAny(const ["make", "vehicleMake"]) != null ||
+            _metaAny(const ["registrationNumber", "plateNumber"]) != null;
+    final vehicleMake = _metaAny(const ["make", "vehicleMake"]);
+    final vehicleModel = _metaAny(const ["model", "vehicleModel"]);
+    final vehicleYear = _metaAny(const ["year", "vehicleYear"]);
+    final vehicleColor = _metaAny(const ["colour", "color", "vehicleColor"]);
+    final vehiclePlate = _metaAny(const [
+      "registrationNumber",
+      "plateNumber",
+      "licensePlate",
+    ]);
+    final vehicleVin = _metaAny(const ["vin", "vinLastFour"]);
+    final vehicleLastSeenAt =
+        _metaDateAny(const ["lastSeenAt", "stolenAt", "theftAt"]);
+    final vehicleLastSeenAddress = _metaAny(
+      const [
+        "lastSeenAddress",
+        "lastKnownLocation",
+        "lastKnownAddress",
+        "lastSeenLocation",
+      ],
+    );
+    final theftDescription = _metaAny(
+      const [
+        "theftDescription",
+        "distinguishingFeatures",
+        "additionalDescription",
+      ],
+    );
     Map<String, dynamic>? primaryPhoto;
     for (final attachment in _attachments) {
       if (attachment["mediaType"] == "image") {
@@ -771,10 +916,7 @@ class _BroadcastDetailBody extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           Text("Last seen", style: Theme.of(context).textTheme.titleSmall),
-          if (lastSeenAt != null)
-            Text(
-              "${CitizenDateTimeFormatter.formatDate(lastSeenAt)} · ${CitizenDateTimeFormatter.formatTime(lastSeenAt)}",
-            ),
+          if (lastSeenAt != null) Text(_formatDateTimeWithMeridiem(lastSeenAt)),
           if (lastSeenAddress != null) Text(lastSeenAddress),
           if (physical != null) ...[
             const SizedBox(height: 12),
@@ -792,6 +934,69 @@ class _BroadcastDetailBody extends StatelessWidget {
             Text("Additional information",
                 style: Theme.of(context).textTheme.titleSmall),
             Text(additional),
+          ],
+          const SizedBox(height: 12),
+          Text("Evidence", style: Theme.of(context).textTheme.titleSmall),
+          ..._buildEvidenceWidgets(context, muted),
+          if ((item?.commentsCount ?? 0) > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              "Comments: ${item!.commentsCount}",
+              style: TextStyle(color: muted),
+            ),
+          ],
+        ] else if (isStolenVehicle) ...[
+          Text(
+            "STOLEN VEHICLE",
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                ),
+          ),
+          const SizedBox(height: 12),
+          if (vehicleMake != null || vehicleModel != null)
+            Text(
+              [vehicleMake, vehicleModel].whereType<String>().join(" "),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          if (vehicleYear != null) ...[
+            const SizedBox(height: 8),
+            Text("Year", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehicleYear),
+          ],
+          if (vehicleColor != null) ...[
+            const SizedBox(height: 8),
+            Text("Color", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehicleColor),
+          ],
+          if (vehiclePlate != null) ...[
+            const SizedBox(height: 8),
+            Text("Plate", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehiclePlate),
+          ],
+          if (vehicleVin != null) ...[
+            const SizedBox(height: 8),
+            Text("VIN", style: Theme.of(context).textTheme.titleSmall),
+            Text(vehicleVin),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            "Last seen",
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          if (vehicleLastSeenAt != null)
+            Text(_formatDateTimeWithMeridiem(vehicleLastSeenAt)),
+          if (vehicleLastSeenAddress != null) Text(vehicleLastSeenAddress),
+          if (theftDescription != null ||
+              (item?.body ?? "").trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              "Theft description",
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(theftDescription ?? item?.body ?? ""),
           ],
           const SizedBox(height: 12),
           Text("Evidence", style: Theme.of(context).textTheme.titleSmall),
@@ -1270,101 +1475,36 @@ class SubmitSightingScreen extends StatefulWidget {
 }
 
 class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
+  final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _descriptionController = TextEditingController();
   final _areaController = TextEditingController();
-  final _directionController = TextEditingController();
-  final _draftStore = BroadcastSightingDraftStore();
+  final _uploadService = BroadcastMediaUploadService();
   String _clientActionId = createClientSubmissionId();
-  bool _anonymousToReviewers = false;
+  DateTime _observedAt = DateTime.now();
+  _SightingLocationMode _locationMode = _SightingLocationMode.notProvided;
   bool _submitting = false;
-  bool _hasPendingDraft = false;
-  String? _pendingDraftMessage;
-  Position? _position;
-  double? _draftLatitude;
-  double? _draftLongitude;
+  BroadcastFeedItem? _headerItem;
+  double? _manualLatitude;
+  double? _manualLongitude;
   String? _locationStatus;
-  String? _photoReference;
-  String? _videoReference;
-  String? _voiceReference;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_restoreDraft());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is BroadcastFeedItem) {
+        setState(() => _headerItem = args);
+      }
+    });
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
     _areaController.dispose();
-    _directionController.dispose();
     super.dispose();
-  }
-
-  String _userScope(BroadcastSession session) =>
-      session.accessToken ?? "anonymous";
-
-  Future<void> _restoreDraft() async {
-    final session = BroadcastSession.require(context);
-    final draft = await _draftStore.load(
-      userScope: _userScope(session),
-      broadcastId: widget.broadcastId,
-    );
-    if (!mounted || draft == null) return;
-    setState(() {
-      _clientActionId = draft.clientActionId.isNotEmpty
-          ? draft.clientActionId
-          : _clientActionId;
-      _descriptionController.text = draft.description;
-      _areaController.text = draft.approximateArea ?? "";
-      _directionController.text = draft.directionOfTravel ?? "";
-      _anonymousToReviewers = draft.anonymousToReviewers;
-      _photoReference = draft.photoReference;
-      _videoReference = draft.videoReference;
-      _voiceReference = draft.voiceReference;
-      _draftLatitude = draft.latitude;
-      _draftLongitude = draft.longitude;
-      if (draft.latitude != null && draft.longitude != null) {
-        _position = null;
-      }
-      _hasPendingDraft = true;
-      _pendingDraftMessage =
-          "A saved sighting draft is ready to retry. Exact coordinates remain private.";
-    });
-  }
-
-  Future<void> _persistDraft() async {
-    final session = BroadcastSession.require(context);
-    final draft = BroadcastSightingDraft(
-      broadcastId: widget.broadcastId,
-      clientActionId: _clientActionId,
-      description: _descriptionController.text.trim(),
-      observedAt: DateTime.now().toUtc().toIso8601String(),
-      latitude: _position?.latitude ?? _draftLatitude,
-      longitude: _position?.longitude ?? _draftLongitude,
-      approximateArea: _areaController.text.trim().isEmpty
-          ? null
-          : _areaController.text.trim(),
-      directionOfTravel: _directionController.text.trim().isEmpty
-          ? null
-          : _directionController.text.trim(),
-      confidence: "ReporterProvided",
-      anonymousToReviewers: _anonymousToReviewers,
-      photoReference: _photoReference,
-      videoReference: _videoReference,
-      voiceReference: _voiceReference,
-      updatedAt: DateTime.now().toUtc(),
-    );
-    await _draftStore.save(
-      userScope: _userScope(session),
-      draft: draft,
-    );
-    if (!mounted) return;
-    setState(() {
-      _hasPendingDraft = true;
-      _pendingDraftMessage =
-          BroadcastSightingUnavailableException.temporaryUnavailableMessage;
-    });
   }
 
   Future<void> _captureLocation() async {
@@ -1378,11 +1518,45 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       return;
     }
     setState(() {
-      _position = outcome.position;
-      _draftLatitude = outcome.position?.latitude;
-      _draftLongitude = outcome.position?.longitude;
-      _locationStatus =
-          "Approximate location captured for authorized review only.";
+      _manualLatitude = outcome.position?.latitude;
+      _manualLongitude = outcome.position?.longitude;
+      _locationStatus = "Current location captured.";
+    });
+  }
+
+  Future<void> _pickObservedDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDate: _observedAt,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _observedAt = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        _observedAt.hour,
+        _observedAt.minute,
+      );
+    });
+  }
+
+  Future<void> _pickObservedTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_observedAt),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _observedAt = DateTime(
+        _observedAt.year,
+        _observedAt.month,
+        _observedAt.day,
+        picked.hour,
+        picked.minute,
+      );
     });
   }
 
@@ -1392,44 +1566,54 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       showBroadcastSnackBar(context, "Describe what you saw.", isError: true);
       return;
     }
+    if (_locationMode == _SightingLocationMode.currentGps &&
+        (_manualLatitude == null || _manualLongitude == null)) {
+      showBroadcastSnackBar(
+        context,
+        "Capture your current location or choose another location mode.",
+        isError: true,
+      );
+      return;
+    }
     final session = BroadcastSession.require(context);
     if (session.accessToken == null) return;
     setState(() => _submitting = true);
     try {
+      final attachments = await _uploadService.uploadAttachments(
+        attachments: _evidenceSectionKey.currentState?.attachments ?? const [],
+        accessToken: session.accessToken!,
+      );
       await session.broadcastSubmissionService.submitSighting(
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
         clientActionId: _clientActionId,
         description: description,
-        observedAt: DateTime.now().toUtc().toIso8601String(),
-        latitude: _position?.latitude ?? _draftLatitude,
-        longitude: _position?.longitude ?? _draftLongitude,
+        observedAt: _observedAt.toUtc().toIso8601String(),
+        locationMode: _locationMode.apiValue,
+        latitude: _locationMode == _SightingLocationMode.currentGps || _locationMode == _SightingLocationMode.manual
+            ? _manualLatitude
+            : null,
+        longitude: _locationMode == _SightingLocationMode.currentGps || _locationMode == _SightingLocationMode.manual
+            ? _manualLongitude
+            : null,
         approximateArea: _areaController.text.trim().isEmpty
             ? null
             : _areaController.text.trim(),
-        directionOfTravel: _directionController.text.trim().isEmpty
-            ? null
-            : _directionController.text.trim(),
-        anonymousToReviewers: _anonymousToReviewers,
         confidence: "ReporterProvided",
-        photoReference: _photoReference,
-        videoReference: _videoReference,
-        voiceReference: _voiceReference,
-      );
-      await _draftStore.clear(
-        userScope: _userScope(session),
-        broadcastId: widget.broadcastId,
+        attachments: attachments,
       );
       if (!mounted) return;
-      showBroadcastSnackBar(context, "Sighting submitted securely. Thank you.");
-      Navigator.of(context).pop();
-    } on BroadcastSightingUnavailableException catch (error) {
-      await _persistDraft();
-      if (!mounted) return;
-      showBroadcastSnackBar(context, error.userMessage, isError: true);
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => _SightingSubmittedScreen(broadcastId: widget.broadcastId),
+        ),
+      );
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       showBroadcastSnackBar(context, error.userMessage, isError: true);
+    } on BroadcastMediaUploadFailure catch (error) {
+      if (!mounted) return;
+      showBroadcastSnackBar(context, error.message, isError: true);
     } catch (_) {
       if (!mounted) return;
       showBroadcastSnackBar(context, "Unable to submit sighting.",
@@ -1441,28 +1625,102 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final headerTitle = _headerItem == null
+        ? "Report Sighting"
+        : [
+            _headerItem!.metadata["make"],
+            _headerItem!.metadata["model"],
+          ].whereType<String>().join(" ").trim().isEmpty
+            ? _headerItem!.title
+            : [
+                _headerItem!.metadata["make"],
+                _headerItem!.metadata["model"],
+              ].whereType<String>().join(" ");
     return _BroadcastShell(
       title: "Report sighting",
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
+          SectionCard(title: "Vehicle", child: Text(headerTitle)),
+          const SizedBox(height: 16),
           SectionCard(
-            title: "Submit a private sighting",
-            child: Text(
-              _hasPendingDraft && _pendingDraftMessage != null
-                  ? _pendingDraftMessage!
-                  : "Sightings are sent only to authorized reviewers and the broadcast author. They are never posted as public comments.",
-              style: TextStyle(
-                color: EyeSemanticColors.of(context).mutedText,
-              ),
+            title: "WHEN",
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _submitting ? null : _pickObservedDate,
+                      icon: const Icon(Icons.event_outlined),
+                      label: Text(CitizenDateTimeFormatter.formatDate(_observedAt)),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _submitting ? null : _pickObservedTime,
+                      icon: const Icon(Icons.schedule_outlined),
+                      label: Text(CitizenDateTimeFormatter.formatTime(_observedAt)),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
+          SectionCard(
+            title: "WHERE",
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+              children: [
+                RadioListTile<_SightingLocationMode>(
+                  value: _SightingLocationMode.currentGps,
+                  groupValue: _locationMode,
+                  onChanged: _submitting
+                      ? null
+                      : (value) async {
+                          setState(() => _locationMode = value ?? _locationMode);
+                          await _captureLocation();
+                        },
+                  title: const Text("Use current location"),
+                ),
+                RadioListTile<_SightingLocationMode>(
+                  value: _SightingLocationMode.manual,
+                  groupValue: _locationMode,
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _locationMode = value ?? _locationMode),
+                  title: const Text("Enter manually"),
+                ),
+                RadioListTile<_SightingLocationMode>(
+                  value: _SightingLocationMode.notProvided,
+                  groupValue: _locationMode,
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _locationMode = value ?? _locationMode),
+                  title: const Text("Skip"),
+                ),
+                if (_locationStatus != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _locationStatus!,
+                      style: TextStyle(color: EyeSemanticColors.of(context).mutedText),
+                    ),
+                  ),
+              ],
+            ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text("DETAILS", style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
           TextField(
             controller: _descriptionController,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: "What did you see?",
+              labelText: "What did you observe?",
             ),
           ),
           const SizedBox(height: 12),
@@ -1472,80 +1730,21 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
               labelText: "Approximate area (optional)",
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _directionController,
-            decoration: const InputDecoration(
-              labelText: "Direction of travel (optional)",
+          const SizedBox(height: 16),
+          const Text("EVIDENCE", style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          ManagedEvidenceSection(
+            key: _evidenceSectionKey,
+            lowDataMode: false,
+            policy: EvidencePolicy.incident,
+          ),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: "Safety notice",
+            child: Text(
+              "Do not approach suspects. Share only what you observed and stay in a safe location.",
+              style: TextStyle(color: EyeSemanticColors.of(context).mutedText),
             ),
-          ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            value: _anonymousToReviewers,
-            onChanged: _submitting
-                ? null
-                : (value) => setState(() => _anonymousToReviewers = value),
-            title: const Text("Keep my identity private on authorized review"),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed:
-                  _submitting ? null : () => unawaited(_captureLocation()),
-              icon: const Icon(Icons.my_location),
-              label: const Text("Use current location"),
-            ),
-          ),
-          if (_locationStatus != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _locationStatus!,
-              style: TextStyle(
-                color: EyeSemanticColors.of(context).mutedText,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          VoiceRecorder(
-            enabled: !_submitting,
-            onRecordingReady: (result) {
-              setState(() {
-                _voiceReference = "voice:${result.durationSeconds}s";
-              });
-              final note = "Voice note attached (${result.durationSeconds}s).";
-              final current = _descriptionController.text.trim();
-              _descriptionController.text =
-                  current.isEmpty ? note : "$current\n\n$note";
-            },
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _submitting
-                    ? null
-                    : () => setState(
-                          () => _photoReference = "photo:attached",
-                        ),
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: Text(_photoReference == null
-                    ? "Attach photo"
-                    : "Photo attached"),
-              ),
-              OutlinedButton.icon(
-                onPressed: _submitting
-                    ? null
-                    : () => setState(
-                          () => _videoReference = "video:attached",
-                        ),
-                icon: const Icon(Icons.videocam_outlined),
-                label: Text(_videoReference == null
-                    ? "Attach video"
-                    : "Video attached"),
-              ),
-            ],
           ),
           const SizedBox(height: 16),
           FilledButton(
@@ -1556,9 +1755,7 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(_hasPendingDraft
-                    ? "Retry sighting submission"
-                    : "Submit sighting"),
+                : const Text("Submit sighting"),
           ),
         ],
       ),
@@ -1566,11 +1763,61 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   }
 }
 
+enum _SightingLocationMode {
+  currentGps("CURRENT_GPS"),
+  manual("MANUAL"),
+  notProvided("NOT_PROVIDED");
+
+  const _SightingLocationMode(this.apiValue);
+  final String apiValue;
+}
+
+class _SightingSubmittedScreen extends StatelessWidget {
+  const _SightingSubmittedScreen({required this.broadcastId});
+
+  final String broadcastId;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BroadcastShell(
+      title: "Sighting submitted",
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_outline, size: 56),
+              const SizedBox(height: 16),
+              const Text(
+                "Thanks for reporting this sighting.",
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pushReplacementNamed(
+                  broadcastDetailRoute(broadcastId)!,
+                ),
+                child: const Text("Back to broadcast"),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BroadcastShell extends StatelessWidget {
-  const _BroadcastShell({required this.title, required this.child});
+  const _BroadcastShell({
+    required this.title,
+    required this.child,
+    this.onBack,
+  });
 
   final String title;
   final Widget child;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -1582,6 +1829,11 @@ class _BroadcastShell extends StatelessWidget {
           EyePageHeader.secondary(
             title: title,
             onBack: () {
+              final callback = onBack;
+              if (callback != null) {
+                callback();
+                return;
+              }
               if (Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
                 return;

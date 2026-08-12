@@ -1,13 +1,14 @@
 import "dart:io";
 
-import "../evidence/evidence_constants.dart";
 import "../contracts/the_eye_enums.dart";
+import "../evidence/evidence_policy.dart";
 import "../voice/voice_report_validation.dart";
 import "incident_draft.dart";
 import "incident_submission_result.dart";
 
 class IncidentSubmissionValidator {
   const IncidentSubmissionValidator();
+  static const _policy = EvidencePolicy.incident;
 
   IncidentSubmissionResult? validate(IncidentDraft draft,
       {required bool hasAccessToken}) {
@@ -75,9 +76,23 @@ class IncidentSubmissionValidator {
     }
 
     final totalMedia = draft.media.length + draft.localMedia.length;
-    if (totalMedia > TheEyeEnums.mediaMaxCount) {
+    if (totalMedia > _policy.maxFiles) {
       errors["media"] =
-          "At most ${TheEyeEnums.mediaMaxCount} media files can be attached.";
+          "At most ${_policy.maxFiles} media files can be attached.";
+    }
+
+    final localPhotoCount =
+        draft.localMedia.where((item) => item.isImage).length;
+    final localVideoCount =
+        draft.localMedia.where((item) => item.isVideo).length;
+    final localAudioCount =
+        draft.localMedia.where((item) => item.isAudio).length;
+    if (localPhotoCount > _policy.maxPhotos) {
+      errors["media"] = "At most ${_policy.maxPhotos} photos can be attached.";
+    } else if (localVideoCount > _policy.maxVideos) {
+      errors["media"] = "At most ${_policy.maxVideos} videos can be attached.";
+    } else if (localAudioCount > _policy.maxAudio) {
+      errors["media"] = "At most ${_policy.maxAudio} audio files can be attached.";
     }
 
     for (final media in draft.media) {
@@ -91,6 +106,7 @@ class IncidentSubmissionValidator {
       }
     }
 
+    var totalBytes = 0;
     for (final attachment in draft.localMedia) {
       if (attachment.fileHash.isEmpty || attachment.uploadPath.isEmpty) {
         errors["media"] = "Attached evidence is incomplete.";
@@ -102,8 +118,17 @@ class IncidentSubmissionValidator {
         break;
       }
       if (attachment.sizeBytes <= 0 ||
-          attachment.sizeBytes > EvidenceLimits.maxFileBytes) {
+          attachment.sizeBytes > _policy.maxFileSize) {
         errors["media"] = "Attached evidence file size is invalid.";
+        break;
+      }
+      if (!_policy.supportedMimeTypes.contains(attachment.contentType)) {
+        errors["media"] = "Attached evidence file type is not supported.";
+        break;
+      }
+      totalBytes += attachment.sizeBytes;
+      if (totalBytes > _policy.maxTotalBytes) {
+        errors["media"] = "Attached evidence exceeds total upload allowance.";
         break;
       }
     }

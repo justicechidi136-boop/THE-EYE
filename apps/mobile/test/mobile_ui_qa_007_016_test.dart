@@ -86,11 +86,11 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: EyePageHeader.secondary(title: "Broadcast detail"),
+            body: EyePageHeader.secondary(title: "Broadcast Detail"),
           ),
         ),
       );
-      expect(find.text("Broadcast detail"), findsOneWidget);
+      expect(find.text("Broadcast Detail"), findsOneWidget);
       expect(find.byTooltip("Back"), findsOneWidget);
     });
   });
@@ -181,8 +181,8 @@ void main() {
         _attachment(IncidentMediaType.image,
             "550e8400-e29b-41d4-a716-446655440000.jpg"),
         _attachment(IncidentMediaType.image, "incident_969e_upload.jpg"),
-        _attachment(IncidentMediaType.video, "clip.mp4"),
-        _attachment(IncidentMediaType.audio, "voice-uuid.m4a"),
+        _attachment(IncidentMediaType.video, "clip.mp4", durationSeconds: 24),
+        _attachment(IncidentMediaType.audio, "voice-uuid.m4a", durationSeconds: 12),
         _attachment(IncidentMediaType.image, "third.jpg"),
       ];
       final presentations =
@@ -190,8 +190,8 @@ void main() {
       expect(presentations.map((p) => p.displayName).toList(), [
         "Photo 1",
         "Photo 2",
-        "Video 1",
-        "Audio 1",
+        "Video 1 · 00:24",
+        "Audio 1 · 00:12",
         "Photo 3",
       ]);
       for (final p in presentations) {
@@ -226,6 +226,7 @@ void main() {
       expect(find.text("Upload failed"), findsOneWidget);
       expect(find.text("Retry"), findsOneWidget);
       expect(find.text("Remove"), findsOneWidget);
+      expect(find.text("View"), findsNothing);
       expect(find.textContaining("firebase-storage"), findsNothing);
       expect(find.textContaining("HTTP 500"), findsNothing);
     });
@@ -265,10 +266,22 @@ void main() {
         "Verifying",
       );
     });
+
+    test("maps canonical citizen incident category titles", () {
+      expect(citizenIncidentCategoryLabel("SuspiciousActivity"),
+          "Suspicious Activity");
+      expect(citizenIncidentCategoryLabel("EmergencyCase"), "Emergency");
+      expect(citizenIncidentCategoryLabel("LiveEmergencyVideo"),
+          "Live Emergency Video");
+    });
   });
 }
 
-LocalEvidenceAttachment _attachment(String mediaType, String fileName) {
+LocalEvidenceAttachment _attachment(
+  String mediaType,
+  String fileName, {
+  int? durationSeconds,
+}) {
   return LocalEvidenceAttachment(
     localId: "local-$fileName",
     mediaType: mediaType,
@@ -280,5 +293,6 @@ LocalEvidenceAttachment _attachment(String mediaType, String fileName) {
     originalFileHash: "hash",
     sizeBytes: 12,
     capturedAt: DateTime(2026, 8, 10, 21, 44),
+    durationSeconds: durationSeconds,
   );
 }

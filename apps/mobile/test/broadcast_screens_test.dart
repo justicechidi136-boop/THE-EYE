@@ -14,10 +14,17 @@ import "package:the_eye_mobile/brand.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
 
 class _FakeBroadcastFeedService extends BroadcastFeedService {
-  _FakeBroadcastFeedService({this.detail});
+  _FakeBroadcastFeedService({
+    this.detail,
+    this.listMineItems = const [],
+    this.listMineError,
+  });
 
   final BroadcastFeedItem? detail;
+  final List<BroadcastFeedItem> listMineItems;
+  final Object? listMineError;
   int markReadCalls = 0;
+  int listMineCalls = 0;
 
   @override
   Future<BroadcastFeedItem> getDetail({
@@ -27,7 +34,8 @@ class _FakeBroadcastFeedService extends BroadcastFeedService {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     final item = detail;
     if (item == null) {
-      throw IncidentApiException(404, "Broadcast not found", apiCode: "NOT_FOUND");
+      throw IncidentApiException(404, "Broadcast not found",
+          apiCode: "NOT_FOUND");
     }
     return item;
   }
@@ -39,13 +47,34 @@ class _FakeBroadcastFeedService extends BroadcastFeedService {
   }) async {
     markReadCalls += 1;
   }
+
+  @override
+  Future<List<BroadcastFeedItem>> listMine({
+    required String accessToken,
+    String? status,
+  }) async {
+    listMineCalls += 1;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    if (listMineError != null) {
+      throw listMineError!;
+    }
+    return listMineItems;
+  }
 }
 
 class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   _FakeBroadcastSession({
     this.authenticated = true,
     BroadcastFeedItem? detail,
-  }) : broadcastFeedService = _FakeBroadcastFeedService(detail: detail);
+    List<BroadcastFeedItem> mineItems = const [],
+    Object? listMineError,
+    BroadcastSubmissionService? submissionService,
+  }) : broadcastFeedService = _FakeBroadcastFeedService(
+          detail: detail,
+          listMineItems: mineItems,
+          listMineError: listMineError,
+        ),
+        broadcastSubmissionService = submissionService ?? BroadcastSubmissionService();
 
   final bool authenticated;
 
@@ -88,8 +117,7 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   final _FakeBroadcastFeedService broadcastFeedService;
 
   @override
-  final BroadcastSubmissionService broadcastSubmissionService =
-      BroadcastSubmissionService();
+  final BroadcastSubmissionService broadcastSubmissionService;
 
   @override
   Future<void> markBroadcastRead(String broadcastId) async {
@@ -101,6 +129,40 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
 
   @override
   Future<void> loadBroadcastsFromApi({bool refresh = false}) async {}
+}
+
+class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
+  _FakeBroadcastSubmissionService({this.onSubmit});
+
+  int submitCalls = 0;
+  final Future<void> Function(Map<String, dynamic> payload)? onSubmit;
+
+  @override
+  Future<SightingSubmissionResult> submitSighting({
+    required String accessToken,
+    required String broadcastId,
+    required String clientActionId,
+    required String description,
+    required String locationMode,
+    String? observedAt,
+    double? latitude,
+    double? longitude,
+    String? approximateArea,
+    String? confidence,
+    bool anonymousToReviewers = false,
+    String? directionOfTravel,
+    List<Map<String, String>> attachments = const [],
+  }) async {
+    submitCalls += 1;
+    await onSubmit?.call({
+      "broadcastId": broadcastId,
+      "clientActionId": clientActionId,
+      "description": description,
+      "locationMode": locationMode,
+      "attachmentsCount": attachments.length,
+    });
+    return const SightingSubmissionResult(id: "s-1");
+  }
 }
 
 void main() {
@@ -162,7 +224,7 @@ void main() {
     await tester.pumpWidget(wrap(const BroadcastCreateHubScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text("Create broadcast"), findsOneWidget);
+    expect(find.text("Create Broadcast"), findsOneWidget);
     expect(find.text("Missing person"), findsOneWidget);
     expect(find.text("Stolen vehicle"), findsOneWidget);
     expect(find.text("My broadcasts"), findsOneWidget);
@@ -251,5 +313,216 @@ void main() {
     expect(find.text("Broadcast unavailable"), findsOneWidget);
     expect(find.text("This broadcast is no longer available."), findsOneWidget);
     expect(find.text("Retry"), findsOneWidget);
+  });
+
+  testWidgets("FUNC-023 My broadcasts loads empty state after first frame",
+      (tester) async {
+    final session = _FakeBroadcastSession(mineItems: const []);
+    await tester.pumpWidget(
+      wrap(
+        const MyBroadcastsScreen(),
+        session: session,
+      ),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pump(); // post-frame callback
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+        find.text("You haven't created any broadcasts yet."), findsOneWidget);
+    expect(find.text("Create Broadcast"), findsOneWidget);
+    expect(session.broadcastFeedService.listMineCalls, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets("FUNC-023 My broadcasts shows canonical retry error",
+      (tester) async {
+    final session = _FakeBroadcastSession(
+      listMineError: IncidentApiException(500, "backend down"),
+    );
+    await tester.pumpWidget(
+      wrap(
+        const MyBroadcastsScreen(),
+        session: session,
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text("We couldn't load your broadcasts."), findsWidgets);
+    expect(find.text("Retry"), findsOneWidget);
+  });
+
+  testWidgets("FUNC-023 auth redirect does not leave indefinite spinner",
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const MyBroadcastsScreen(),
+        authenticated: false,
+      ),
+    );
+
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text("Login"), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets("FUNC-024 stolen vehicle detail renders structured hierarchy",
+      (tester) async {
+    final detail = BroadcastFeedItem(
+      id: "b-vehicle-1",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "Fallback body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1, 13, 15),
+      status: "Active",
+      metadata: const {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": "2022",
+        "colour": "Red",
+        "registrationNumber": "ABC-123XY",
+        "vin": "JT2BG22K8V0123456",
+        "stolenAt": "2026-08-01T13:10:00.000Z",
+        "lastKnownLocation": "Ikeja under bridge",
+        "theftDescription": "Taken from parking lot",
+        "attachments": [
+          {
+            "mediaType": "image",
+            "label": "Photo 1",
+            "url": "https://example.com/car.jpg",
+          }
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-vehicle-1"),
+        detail: detail,
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text("STOLEN VEHICLE"), findsOneWidget);
+    expect(find.text("Toyota Corolla"), findsOneWidget);
+    expect(find.text("Year"), findsOneWidget);
+    expect(find.text("2022"), findsOneWidget);
+    expect(find.text("Plate"), findsOneWidget);
+    expect(find.text("ABC-123XY"), findsOneWidget);
+    expect(find.text("VIN"), findsOneWidget);
+    expect(find.text("JT2BG22K8V0123456"), findsOneWidget);
+    expect(find.text("Last seen"), findsOneWidget);
+    expect(find.textContaining("PM"), findsWidgets);
+    expect(find.text("Theft description"), findsOneWidget);
+    expect(find.text("Taken from parking lot"), findsOneWidget);
+    expect(find.text("Evidence"), findsOneWidget);
+    expect(find.text("Photo 1"), findsOneWidget);
+  });
+
+  testWidgets("report sighting button only shows for live stolen vehicle",
+      (tester) async {
+    final stolen = BroadcastFeedItem(
+      id: "b-stolen",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-stolen"),
+        detail: stolen,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text("Report sighting"), findsOneWidget);
+
+    final missing = BroadcastFeedItem(
+      id: "b-missing",
+      type: "MissingPerson",
+      title: "Missing person alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-missing"),
+        detail: missing,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text("Report sighting"), findsNothing);
+  });
+
+  testWidgets("submit sighting flow shows location modes and success replacement",
+      (tester) async {
+    final submitService = _FakeBroadcastSubmissionService();
+    final detail = BroadcastFeedItem(
+      id: "b1",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+      metadata: const {"make": "Toyota", "model": "Corolla"},
+    );
+    final session = _FakeBroadcastSession(
+      detail: detail,
+      submissionService: submitService,
+    );
+    await tester.pumpWidget(
+      wrap(
+        const SubmitSightingScreen(broadcastId: "b1"),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Use current location"), findsOneWidget);
+    expect(find.text("Enter manually"), findsOneWidget);
+    expect(find.text("Skip"), findsOneWidget);
+    final scrollable = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text("EVIDENCE"), 400, scrollable: scrollable);
+    expect(find.text("EVIDENCE"), findsOneWidget);
+
+    final descriptionField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration is InputDecoration &&
+          (widget.decoration as InputDecoration).labelText ==
+              "What did you observe?",
+    );
+    await tester.scrollUntilVisible(descriptionField, 400, scrollable: scrollable);
+    await tester.enterText(descriptionField, "Seen heading east");
+    await tester.scrollUntilVisible(
+      find.text("Submit sighting"),
+      400,
+      scrollable: scrollable,
+    );
+    await tester.tap(find.text("Submit sighting"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Sighting submitted"), findsOneWidget);
+    expect(submitService.submitCalls, 1);
+
+    await tester.tap(find.text("Back to broadcast"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.text("Broadcast Detail"), findsOneWidget);
   });
 }

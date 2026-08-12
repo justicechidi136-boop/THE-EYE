@@ -1,0 +1,42 @@
+﻿FUNC-026/027/028 validation — fix/mobile-qa-remediation-20260812-v2
+Date: 2026-08-12/13
+
+## 1) apps/api
+- npx prisma generate: PASS (Prisma Client v6.19.3)
+- npm run lint: PASS (tsc --noEmit)
+- npm test:
+  - BEFORE fixes: 741/743 passed, 2 failed
+    - FAIL submits sighting for live broadcast with metadata and owner notification
+      (TypeError: expect.any is not a function)
+    - FAIL redacts private fields for owner while preserving admin visibility
+      (TypeError: expect(...).toBeDefined is not a function)
+  - AFTER fixes: 743/743 passed
+
+## 2) apps/mobile
+- pnpm run analyze:
+  - 128 issues found (0 errors, 30 warnings, 98 info)
+  - Same class of non-blocking analyzer findings; no compile-blocking errors from FUNC work
+- pnpm run test:
+  - BEFORE fixes: +422 -3 failed
+    - FAIL report sighting button only shows for live stolen vehicle
+    - FAIL submit sighting flow shows location modes and success replacement
+    - FAIL stolen vehicle screen preserves draft when adding a vehicle then returns to selector
+  - AFTER fixes: +425 All tests passed
+
+## 3) apps/admin-web
+- Skipped (no admin-web changes in this remediation working set)
+
+## Fixes committed for stabilization
+- apps/api/src/test-runner.ts: add expect.any + toBeDefined for custom runner
+- apps/mobile/lib/broadcasts/broadcast_screens.dart:
+  - reload detail on broadcastId change (didUpdateWidget)
+  - tighten Report sighting gate to stolen-vehicle types
+  - Material wrap for sighting location RadioListTiles
+- apps/mobile/lib/main.dart:
+  - reload local garage store on refresh
+  - show vehicle form when draft details exist in saved-vehicle mode
+- apps/mobile/test/broadcast_screens_test.dart:
+  - scroll lazily-built ListView children for sighting submit flow
+
+## Notes
+- Do NOT push / Do NOT deploy (per request)

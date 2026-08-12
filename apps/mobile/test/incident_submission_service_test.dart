@@ -200,6 +200,48 @@ void main() {
       expect(await store.loadPending(), isEmpty);
     });
 
+    test("transient retry keeps one clientSubmissionId across attempts", () async {
+      final seenSubmissionIds = <String?>[];
+      var calls = 0;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          calls += 1;
+          seenSubmissionIds.add(request.headers["x-client-submission-id"]);
+          if (calls == 1) {
+            return http.Response(
+              jsonEncode({
+                "message":
+                    "THE EYE servers could not process your report (ERR-INC-502). Please try again shortly.",
+              }),
+              500,
+              headers: {"content-type": "application/json"},
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              "id": "incident-stable-1",
+              "status": "Submitted",
+              "submittedAt": "2026-07-10T01:31:00.000Z"
+            }),
+            200,
+          );
+        }),
+      );
+      final service =
+          IncidentSubmissionService(apiClient: client, pendingStore: InMemoryPendingSubmissionStore());
+      final result = await service.submit(
+        sampleDraft(clientSubmissionId: "draft-stable-retry"),
+      );
+
+      expect(calls, 2);
+      expect(result.isSuccess, isTrue);
+      expect(result.incidentId, "incident-stable-1");
+      expect(
+        seenSubmissionIds,
+        equals(const ["draft-stable-retry", "draft-stable-retry"]),
+      );
+    });
+
     test("unauthorized API response maps to sign-in message", () async {
       final client = TheEyeApiClient(
         httpClient: MockClient((_) async =>

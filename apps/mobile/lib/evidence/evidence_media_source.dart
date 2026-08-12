@@ -1,7 +1,9 @@
 import "dart:typed_data";
+import "dart:io";
 
 import "package:file_picker/file_picker.dart";
 import "package:image_picker/image_picker.dart";
+import "package:just_audio/just_audio.dart";
 
 class PickedEvidenceFile {
   const PickedEvidenceFile({
@@ -86,24 +88,60 @@ class ImagePickerEvidenceSource implements EvidenceMediaSource {
       mimeType: picked.extension == null
           ? null
           : _audioMimeForExtension(picked.extension!),
+      durationSeconds: await _resolveDurationSeconds(path, bytes),
       bytes: bytes == null ? null : Uint8List.fromList(bytes),
     );
   }
 
   Future<PickedEvidenceFile?> _mapXFile(XFile? file) async {
     if (file == null) return null;
+    final path = file.path;
+    final isReadablePath = path.isNotEmpty && File(path).existsSync();
     Uint8List? bytes;
-    try {
-      bytes = await file.readAsBytes();
-    } catch (_) {
-      // Gallery picks may not expose a readable path; bytes are preferred.
+    if (!isReadablePath) {
+      try {
+        bytes = await file.readAsBytes();
+      } catch (_) {
+        // Keep bytes null and let downstream validation reject unreadable inputs.
+      }
     }
+    final mime = file.mimeType;
+    final isMediaWithDuration =
+        mime?.startsWith("video/") == true || mime?.startsWith("audio/") == true;
+    final durationSeconds = isMediaWithDuration
+        ? await _resolveDurationSeconds(path, bytes)
+        : null;
     return PickedEvidenceFile(
-      path: file.path,
+      path: path,
       fileName: file.name,
-      mimeType: file.mimeType,
+      mimeType: mime,
+      durationSeconds: durationSeconds,
       bytes: bytes,
     );
+  }
+
+  Future<int?> _resolveDurationSeconds(String path, Uint8List? bytes) async {
+    final player = AudioPlayer();
+    try {
+      if (path.isNotEmpty && File(path).existsSync()) {
+        await player.setFilePath(path);
+      } else if (bytes != null && bytes.isNotEmpty) {
+        await player.setAudioSource(
+          AudioSource.uri(
+            Uri.dataFromBytes(bytes, mimeType: "audio/mp4"),
+          ),
+        );
+      } else {
+        return null;
+      }
+      final duration = player.duration;
+      if (duration == null || duration.inSeconds <= 0) return null;
+      return duration.inSeconds;
+    } catch (_) {
+      return null;
+    } finally {
+      await player.dispose();
+    }
   }
 
   String _audioMimeForExtension(String extension) {

@@ -162,6 +162,7 @@ void main() {
     expect(find.text(active.incidentId), findsNothing);
     expect(find.textContaining("Trans-Amadi"), findsOneWidget);
     expect(find.textContaining("Rivers State EMA"), findsOneWidget);
+    expect(find.text("Test"), findsOneWidget);
     expect(find.textContaining("statusVersion"), findsNothing);
   });
 
@@ -245,6 +246,28 @@ void main() {
     );
     expect(find.text("No evidence submitted yet."), findsOneWidget);
     expect(find.textContaining("11111111-1111"), findsNothing);
+  });
+
+  testWidgets("evidence tiles show compact indexed labels", (tester) async {
+    final active = _active(
+      evidence: [
+        ActiveEmergencyEvidenceItem(
+          id: "ev-1",
+          mediaType: "Video",
+          uploadedAt: DateTime(2026, 8, 11, 20, 26),
+          durationSeconds: 24,
+        ),
+        ActiveEmergencyEvidenceItem(
+          id: "ev-2",
+          mediaType: "Audio",
+          uploadedAt: DateTime(2026, 8, 11, 20, 27),
+          durationSeconds: 12,
+        ),
+      ],
+    );
+    await tester.pumpWidget(_wrap(EmergencyEvidenceCard(active: active)));
+    expect(find.text("Video 1 · 00:24"), findsOneWidget);
+    expect(find.text("Audio 1 · 00:12"), findsOneWidget);
   });
 
   testWidgets(

@@ -31,6 +31,14 @@ const activeFixture = {
     "videos": 0,
     "voice": 0,
   },
+  "evidenceItems": [
+    {
+      "id": "media-1",
+      "mediaType": "Video",
+      "uploadedAt": "2026-08-05T10:00:10.000Z",
+      "durationSeconds": 24,
+    }
+  ],
   "status": "Verifying",
   "displayLabel": "Verifying report",
   "statusVersion": 2,
@@ -102,6 +110,8 @@ void main() {
     final active = contract as ActiveEmergencyActiveContract;
     expect(active.incidentId, "inc-123");
     expect(active.displayLabel, "Verifying report");
+    expect(active.description, "Road accident on highway");
+    expect(active.evidenceItems.single.durationSeconds, 24);
     expect(active.progressStages.first.state,
         ActiveEmergencyProgressStageState.complete);
     expect(active.allowedActions.cancel, isTrue);

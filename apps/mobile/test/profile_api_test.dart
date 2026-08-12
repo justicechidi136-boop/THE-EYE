@@ -105,4 +105,167 @@ void main() {
     expect(result["ok"], isTrue);
     expect(result["status"], "Deactivated");
   });
+
+  test("vehicle garage endpoints support list/create/set primary/delete/photos",
+      () async {
+    final calls = <String>[];
+    final client = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        calls.add("${request.method} ${request.url.path}");
+        if (request.method == "GET" &&
+            request.url.path.endsWith(TheEyeApiPaths.usersMeVehicles)) {
+          return http.Response(
+            jsonEncode({
+              "data": [
+                {
+                  "id": "v1",
+                  "userId": "u1",
+                  "make": "Toyota",
+                  "model": "Corolla",
+                  "plateNumber": "ABC-111",
+                  "isPrimary": true,
+                  "photos": [
+                    {
+                      "id": "p1",
+                      "objectKey": "vehicles/u1/v1/photo.jpg",
+                      "contentType": "image/jpeg",
+                      "sizeBytes": 1200,
+                      "sortOrder": 0,
+                    }
+                  ],
+                }
+              ]
+            }),
+            200,
+            headers: {"content-type": "application/json"},
+          );
+        }
+        if (request.method == "POST" &&
+            request.url.path.endsWith(TheEyeApiPaths.usersMeVehicles)) {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body["make"], "Honda");
+          return http.Response(
+            jsonEncode({
+              "id": "v2",
+              "userId": "u1",
+              "make": "Honda",
+              "model": "Civic",
+              "plateNumber": "ABC-222",
+              "isPrimary": false,
+            }),
+            201,
+            headers: {"content-type": "application/json"},
+          );
+        }
+        if (request.method == "POST" &&
+            request.url.path.endsWith("/me/vehicles/v2/primary")) {
+          return http.Response(
+            jsonEncode({
+              "id": "v2",
+              "userId": "u1",
+              "make": "Honda",
+              "model": "Civic",
+              "plateNumber": "ABC-222",
+              "isPrimary": true,
+            }),
+            200,
+            headers: {"content-type": "application/json"},
+          );
+        }
+        if (request.method == "DELETE" &&
+            request.url.path.endsWith("/me/vehicles/v2")) {
+          return http.Response("", 204);
+        }
+        if (request.method == "POST" &&
+            request.url.path.endsWith("/me/vehicles/v2/photos/presign")) {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body["contentType"], "image/jpeg");
+          return http.Response(
+            jsonEncode({
+              "bucket": "the-eye",
+              "objectKey": "vehicles/u1/v2/upload.jpg",
+              "uploadUrl": "https://upload.example/signed",
+              "requiredHeaders": {"content-type": "image/jpeg"},
+            }),
+            200,
+            headers: {"content-type": "application/json"},
+          );
+        }
+        if (request.method == "POST" &&
+            request.url.path.endsWith("/me/vehicles/v2/photos/confirm")) {
+          return http.Response(
+            jsonEncode({
+              "id": "p2",
+              "objectKey": "vehicles/u1/v2/upload.jpg",
+              "contentType": "image/jpeg",
+              "sizeBytes": 1111,
+              "sortOrder": 1,
+            }),
+            201,
+            headers: {"content-type": "application/json"},
+          );
+        }
+        if (request.method == "DELETE" &&
+            request.url.path.endsWith("/me/vehicles/v2/photos/p2")) {
+          return http.Response("", 204);
+        }
+        return http.Response("Not Found", 404);
+      }),
+    );
+
+    final list = await client.listMyVehicles(accessToken: "token");
+    final created = await client.createMyVehicle(
+      accessToken: "token",
+      payload: {
+        "make": "Honda",
+        "model": "Civic",
+        "plateNumber": "ABC-222",
+      },
+    );
+    final primary = await client.setMyVehiclePrimary(
+      accessToken: "token",
+      vehicleId: "v2",
+    );
+    final presigned = await client.presignVehiclePhoto(
+      accessToken: "token",
+      vehicleId: "v2",
+      contentType: "image/jpeg",
+      fileName: "front.jpg",
+      sizeBytes: 1111,
+    );
+    final confirmed = await client.confirmVehiclePhoto(
+      accessToken: "token",
+      vehicleId: "v2",
+      objectKey: "vehicles/u1/v2/upload.jpg",
+      contentType: "image/jpeg",
+      sizeBytes: 1111,
+      sortOrder: 1,
+    );
+    await client.deleteVehiclePhoto(
+      accessToken: "token",
+      vehicleId: "v2",
+      photoId: "p2",
+    );
+    await client.deleteMyVehicle(accessToken: "token", vehicleId: "v2");
+
+    expect(list, hasLength(1));
+    expect(list.first.photos, hasLength(1));
+    expect(created.id, "v2");
+    expect(primary.isPrimary, isTrue);
+    expect(presigned.objectKey, contains("vehicles/u1/v2"));
+    expect(confirmed.id, "p2");
+    expect(
+      calls,
+      containsAll([
+        "GET /v1/me/vehicles",
+        "POST /v1/me/vehicles",
+        "POST /v1/me/vehicles/v2/primary",
+        "POST /v1/me/vehicles/v2/photos/presign",
+        "POST /v1/me/vehicles/v2/photos/confirm",
+        "DELETE /v1/me/vehicles/v2/photos/p2",
+        "DELETE /v1/me/vehicles/v2",
+      ]),
+    );
+  });
 }

@@ -140,6 +140,9 @@ export function BroadcastWorkspace({
                           {broadcast.reportCount > 0 ? (
                             <p className="mt-1 text-xs text-warning">{broadcast.reportCount} report{broadcast.reportCount === 1 ? "" : "s"}</p>
                           ) : null}
+                          {broadcast.sightingsCount > 0 ? (
+                            <p className="mt-1 text-xs text-accent">{broadcast.sightingsCount} sighting{broadcast.sightingsCount === 1 ? "" : "s"}</p>
+                          ) : null}
                         </td>
                         <td className="px-4 py-3">
                           <StatusBadge tone={authorLabelTone(broadcast.authorLabel)}>{broadcast.authorLabel}</StatusBadge>
@@ -207,6 +210,7 @@ export function BroadcastWorkspace({
                     <div className="flex justify-between gap-3"><dt className="text-muted">Target</dt><dd className="break-words text-right">{broadcast.target}</dd></div>
                     <div className="flex justify-between gap-3"><dt className="text-muted">Status</dt><dd>{broadcast.status}</dd></div>
                     <div className="flex justify-between gap-3"><dt className="text-muted">Reports</dt><dd>{broadcast.reportCount}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-muted">Sightings</dt><dd>{broadcast.sightingsCount}</dd></div>
                     <div className="flex justify-between gap-3"><dt className="text-muted">Delivery</dt><dd>{broadcast.delivery}</dd></div>
                   </dl>
                   <div className="mt-4 grid gap-4 border-t border-line pt-4">

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { buildCommunityVerificationNotificationMetadata } from "../notifications/notification-routing.schema";
+import { verifyActiveIncidentNotificationCopyForType } from "../notifications/citizen-notification-copy";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -14,7 +15,6 @@ import {
   DEFAULT_VERIFICATION_LIMIT,
   DEFAULT_VERIFICATION_RADIUS_METERS,
   DEFAULT_VERIFICATION_REQUEST_TTL_MINUTES,
-  INCIDENT_TYPE_DISPLAY,
   approximateDistanceLabel,
 } from "./community-verification.constants";
 import { CommunityVerificationEligibilityService } from "./community-verification-eligibility.service";
@@ -76,9 +76,9 @@ export class CommunityVerificationService {
       });
 
       const category = String(incident.type);
-      const title = "Can you confirm this emergency?";
-      const body =
-        "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active.";
+      const verifyCopy = verifyActiveIncidentNotificationCopyForType(category);
+      const title = verifyCopy.title;
+      const body = verifyCopy.body;
       const metadata = {
         ...buildCommunityVerificationNotificationMetadata({
           incidentId,
@@ -89,7 +89,7 @@ export class CommunityVerificationService {
           expiresAt: expiresAt.toISOString(),
         }),
         route: "COMMUNITY_VERIFICATION",
-        citizenCategory: "Verify Active Incident",
+        ...verifyCopy.metadata,
         approximateDistanceLabel: approximateDistanceLabel(candidate.distanceMeters),
       };
 

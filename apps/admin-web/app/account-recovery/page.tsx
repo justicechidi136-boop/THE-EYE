@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { AuthLayout } from "../../components/auth-layout";
@@ -75,9 +74,9 @@ function AccountRecoveryPanel() {
               "This recovery link is missing a token. Request a new recovery email from the THE EYE app."}
           </span>
         </InlineAlert>
-        <Link href="/login" className="text-sm text-eyeDeep hover:underline">
-          Return to sign in
-        </Link>
+        <p className="text-sm text-ink/80">
+          Return to the THE EYE app and continue account recovery there.
+        </p>
       </div>
     );
   }
@@ -87,16 +86,16 @@ function AccountRecoveryPanel() {
       <h1 className="text-[32px] font-semibold leading-tight text-ink">Recovery link verified</h1>
       <InlineAlert tone="success">
         <span>
-          Your recovery link is valid. Open the THE EYE mobile app and continue account recovery with
-          Google to finish restoring access.
+          Your account recovery is confirmed. Return to the THE EYE app and continue account
+          recovery to finish restoring access.
         </span>
       </InlineAlert>
       <p className="text-sm text-ink/80">
         Keep this page open only if you still need the link. Do not share recovery links with anyone.
       </p>
-      <Link href="/login" className="text-sm text-eyeDeep hover:underline">
-        Return to sign in
-      </Link>
+      <p className="text-sm text-ink/80">
+        Return to the THE EYE app and continue account recovery.
+      </p>
     </div>
   );
 }

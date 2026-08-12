@@ -56,6 +56,15 @@ function makeMock(impl?: (...args: unknown[]) => unknown) {
 }
 
 function matches(actual: unknown, expected: unknown): boolean {
+  if (expected && typeof expected === "object" && (expected as any).__any) {
+    const ctor = (expected as any).ctor;
+    if (ctor === Array) return Array.isArray(actual);
+    if (ctor === String) return typeof actual === "string";
+    if (ctor === Number) return typeof actual === "number" && !Number.isNaN(actual);
+    if (ctor === Boolean) return typeof actual === "boolean";
+    if (typeof ctor === "function") return actual instanceof ctor;
+    return actual != null;
+  }
   if (expected && typeof expected === "object" && (expected as any).__objectContaining) {
     return Object.entries((expected as any).sample).every(([key, value]) => matches((actual as any)?.[key], value));
   }
@@ -138,6 +147,9 @@ function expectValue(actual: any, negated = false) {
     toBeUndefined() {
       assert(actual === undefined, `Expected value to be undefined, got ${actual}`);
     },
+    toBeDefined() {
+      assert(actual !== undefined, `Expected value to be defined`);
+    },
     toEqual(expected: unknown) {
       assert(matches(actual, expected), `Expected values to be deeply equal`);
     },
@@ -192,6 +204,7 @@ function expectValue(actual: any, negated = false) {
 (globalThis as any).expect = Object.assign(expectValue, {
   objectContaining: (sample: Record<string, unknown>) => ({ __objectContaining: true, sample }),
   arrayContaining: (sample: unknown[]) => ({ __arrayContaining: true, sample }),
+  any: (ctor: unknown) => ({ __any: true, ctor }),
 });
 (globalThis as any).jest = { fn: makeMock };
 
