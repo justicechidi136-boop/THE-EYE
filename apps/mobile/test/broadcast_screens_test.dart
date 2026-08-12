@@ -59,6 +59,9 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   bool get lowDataMode => false;
 
   @override
+  bool get online => true;
+
+  @override
   bool get isEmergencyLocationTracking => false;
 
   @override
