@@ -246,6 +246,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text("Broadcast unavailable"), findsOneWidget);
+    expect(find.text("This broadcast is no longer available."), findsOneWidget);
     expect(find.text("Retry"), findsOneWidget);
   });
 }

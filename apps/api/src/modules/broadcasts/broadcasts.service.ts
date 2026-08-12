@@ -45,6 +45,12 @@ const PRIORITY_ORDER_SQL = `
   END ASC,
   b.published_at DESC NULLS LAST,
   b.id DESC`;
+const BROADCAST_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isBroadcastId(value: string): boolean {
+  return BROADCAST_ID_RE.test(value.trim());
+}
 
 @Injectable()
 export class BroadcastsService {
@@ -724,6 +730,7 @@ export class BroadcastsService {
 
   async getForCitizen(id: string, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    if (!isBroadcastId(id)) throw new NotFoundException("Broadcast not found");
     const row = await this.findCitizenBroadcastRow(id, actor.sub);
     if (!row) throw new NotFoundException("Broadcast not found");
     return { data: this.toCitizenFeedItem(row, true) };
@@ -731,6 +738,7 @@ export class BroadcastsService {
 
   async markRead(id: string, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    if (!isBroadcastId(id)) throw new NotFoundException("Broadcast not found");
     const row = await this.findCitizenBroadcastRow(id, actor.sub);
     if (!row) throw new NotFoundException("Broadcast not found");
     await this.prisma.broadcastRead.upsert({
@@ -1006,6 +1014,9 @@ export class BroadcastsService {
   }
 
   private async findCitizenBroadcastRow(id: string, userId: string) {
+    // Notification deep links and "My broadcasts" must still open after resolve /
+    // withdraw / expiry. Creators and prior delivery recipients get historical
+    // read access; live audience matching stays limited to non-expired live rows.
     const rows = await this.prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `SELECT b.id, b.type, b.title, b.body, b.priority, b.status, b.author_type, b.admin_verified,
               b.country, b.state, b.published_at, b.expires_at, b.metadata, b.creator_user_id,
@@ -1022,23 +1033,28 @@ export class BroadcastsService {
          LEFT JOIN profiles p ON p.user_id = $2::uuid
          LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
         WHERE b.id = $1::uuid
-          AND b.status IN (${LIVE_BROADCAST_STATUS_SQL})
           AND b.deleted_at IS NULL
-          AND (b.expires_at IS NULL OR b.expires_at > NOW())
+          AND b.status <> 'DeletedByAdmin'
           AND (
             b.creator_user_id = $2::uuid
             OR EXISTS (SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $2::uuid)
             OR (
-              p.user_id IS NOT NULL
-              AND b.country IS NOT NULL
-              AND b.country = p.country
-            )
-            OR (
-              p.user_id IS NOT NULL
-              AND j.id IS NOT NULL
-              AND j.country = p.country
-              AND j.state = p.state
-              AND j.lga = p.lga
+              b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+              AND (b.expires_at IS NULL OR b.expires_at > NOW())
+              AND (
+                (
+                  p.user_id IS NOT NULL
+                  AND b.country IS NOT NULL
+                  AND b.country = p.country
+                )
+                OR (
+                  p.user_id IS NOT NULL
+                  AND j.id IS NOT NULL
+                  AND j.country = p.country
+                  AND j.state = p.state
+                  AND j.lga = p.lga
+                )
+              )
             )
           )
         LIMIT 1`,

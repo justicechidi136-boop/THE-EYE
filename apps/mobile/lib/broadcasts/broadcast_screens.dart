@@ -276,18 +276,28 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
         if (!mounted) return;
         setState(() {
           _loading = false;
-          _error = "We couldn’t load this broadcast. Try again.";
+          _error = "Sign in again to open this broadcast.";
         });
         Navigator.of(context).pushReplacementNamed("/login");
         return;
       }
 
+      final broadcastId = widget.broadcastId.trim();
+      if (broadcastId.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = "This broadcast link is invalid.";
+        });
+        return;
+      }
+
       final item = await session.broadcastFeedService.getDetail(
         accessToken: session.accessToken!,
-        broadcastId: widget.broadcastId,
+        broadcastId: broadcastId,
       );
       // Never block detail rendering on read-receipt side effects.
-      unawaited(session.markBroadcastRead(widget.broadcastId));
+      unawaited(session.markBroadcastRead(broadcastId));
       if (!mounted) return;
       final profileId = session.cachedCitizenProfile?.id;
       setState(() {
@@ -302,14 +312,16 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
       if (!mounted) return;
       setState(() {
         _error = error.statusCode == 404
-            ? "This broadcast is unavailable."
-            : "We couldn’t load this broadcast. Try again.";
+            ? "This broadcast is no longer available."
+            : (error.userMessage.trim().isEmpty
+                ? "We couldn’t load this broadcast. Try again later."
+                : error.userMessage);
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = "We couldn’t load this broadcast. Try again.";
+        _error = "We couldn’t load this broadcast. Try again later.";
         _loading = false;
       });
     } finally {

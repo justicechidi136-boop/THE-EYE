@@ -93,6 +93,7 @@ import "neighborhood_watch/community_media_upload_service.dart";
 import "neighborhood_watch/community_members_screen.dart";
 import "neighborhood_watch/community_post_detail_screen.dart";
 import "neighborhood_watch/community_report_screen.dart";
+import "notifications/notification_destination.dart";
 import "notifications/notification_inbox_cache.dart";
 import "notifications/notification_inbox_service.dart";
 import "startup/startup_diagnostics.dart";
@@ -6214,7 +6215,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _openingNotification = true;
     try {
       await controller.markNotificationRead(alert.id);
-      final route = alert.deepLink ?? "/notifications";
+      final route = resolveInboxNotificationDestination(alert);
       if (!mounted) return;
       if (route == "/notifications") return;
       final navigator = Navigator.of(context);
