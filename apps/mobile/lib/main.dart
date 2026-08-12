@@ -66,6 +66,7 @@ import "live_video/live_video_join_flow.dart";
 import "live_video/live_video_safe_log.dart";
 import "live_video/live_video_session_controller.dart";
 import "live_video/live_video_error_codes.dart";
+import "live_video/live_video_stop_routing.dart";
 import "live_video/live_video_startup_trace.dart";
 import "live_video/live_video_start_validation.dart";
 import "brand.dart";
@@ -540,7 +541,23 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
     final carProfileStore = await SharedPreferencesCarProfileStore.create()
         .timeout(const Duration(seconds: 5));
 
-    final apiClient = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    AuthService? authService;
+    AppController? controller;
+    final apiClient = TheEyeApiClient(
+      baseUrl: theEyeApiUrl,
+      onUnauthorizedRefresh: () async {
+        final service = authService;
+        if (service == null) return null;
+        final refreshed = await service.refreshSessionSingleFlight();
+        final appController = controller;
+        if (refreshed == null) {
+          appController?.clearCachedSession();
+          return null;
+        }
+        await appController?.applyRefreshedSession(refreshed);
+        return refreshed.accessToken;
+      },
+    );
     final evidenceCaptureService = EvidenceCaptureService();
     final submissionService = IncidentSubmissionService(
       apiClient: apiClient,
@@ -553,11 +570,12 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       networkReader: ConnectivityPlusNetworkInterfaceReader(),
     );
 
-    final controller = AppController(
+    authService =
+        AuthService(apiClient: apiClient, sessionStore: authSessionStore);
+    controller = AppController(
       submissionService: submissionService,
       connectivity: connectivity,
-      authService:
-          AuthService(apiClient: apiClient, sessionStore: authSessionStore),
+      authService: authService,
       socialAuthService: SocialAuthService(
         apiClient: apiClient,
         sessionStore: authSessionStore,
@@ -812,17 +830,24 @@ class TheEyeApp extends StatefulWidget {
   State<TheEyeApp> createState() => _TheEyeAppState();
 }
 
-class _TheEyeAppState extends State<TheEyeApp> {
+class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
   AppController get controller => widget.controller;
   StreamSubscription<PushNavigationRequest>? _pushNavigationSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pushNavigationSubscription =
         widget.pushNotifications.navigationStream.listen((request) {
       unawaited(_handlePushNavigation(request));
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(controller.ensureFreshSession());
   }
 
   Future<void> _handlePushNavigation(PushNavigationRequest request) async {
@@ -921,6 +946,7 @@ class _TheEyeAppState extends State<TheEyeApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pushNavigationSubscription?.cancel();
     super.dispose();
   }
@@ -1467,9 +1493,50 @@ class AppController extends SessionAccessor
 
   Future<void> ensureFreshSession() async {
     final session = await _authService.ensureFreshSession();
-    if (session == null) return;
+    if (session == null) {
+      clearCachedSession();
+      return;
+    }
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
+    notifyListeners();
+  }
+
+  Future<void> applyRefreshedSession(AuthSession session) async {
+    _cachedSession = session;
+    _sessionAccessToken = session.accessToken;
+    clearCitizenProfileCache();
+    notifyListeners();
+    await persistBackgroundPushContext(
+      accessToken: session.accessToken,
+      apiBaseUrl: theEyeApiUrl,
+    );
+  }
+
+  void clearCachedSession() {
+    _cachedSession = null;
+    _sessionAccessToken = null;
+    clearCitizenProfileCache();
+    notifications.clear();
+    notificationLoadError = null;
+    notificationNextCursor = null;
+    notificationUnreadCount = 0;
+    broadcasts.clear();
+    broadcastLoadError = null;
+    broadcastNextCursor = null;
+    broadcastUnreadCount = 0;
+    communities.clear();
+    selectedCommunity = null;
+    nwContextCommunityId = null;
+    nwContextCanPost = false;
+    communityLoadError = null;
+    communityFeed.clear();
+    communityFeedError = null;
+    communityAlerts.clear();
+    communityAlertsError = null;
+    communityPatrols.clear();
+    communityPatrolError = null;
+    communityActionMessage = null;
     notifyListeners();
   }
 
@@ -1809,34 +1876,11 @@ class AppController extends SessionAccessor
     final cacheScope = _notificationCacheScope;
     await _authService.logout();
     await _socialAuthService.signOutProviders();
-    _cachedSession = null;
-    _sessionAccessToken = null;
-    clearCitizenProfileCache();
-    notifications.clear();
-    notificationLoadError = null;
-    notificationNextCursor = null;
-    notificationUnreadCount = 0;
+    clearCachedSession();
     if (cacheScope != null) {
       await _notificationInboxCache.clear(cacheScope);
       await _broadcastFeedCache.clear(cacheScope);
     }
-    broadcasts.clear();
-    broadcastLoadError = null;
-    broadcastNextCursor = null;
-    broadcastUnreadCount = 0;
-    communities.clear();
-    selectedCommunity = null;
-    nwContextCommunityId = null;
-    nwContextCanPost = false;
-    communityLoadError = null;
-    communityFeed.clear();
-    communityFeedError = null;
-    communityAlerts.clear();
-    communityAlertsError = null;
-    communityPatrols.clear();
-    communityPatrolError = null;
-    communityActionMessage = null;
-    notifyListeners();
   }
 
   Future<void> loadCommunitiesFromApi({bool refresh = false}) async {
@@ -3877,6 +3921,34 @@ class HomeScreen extends StatelessWidget {
     ),
   ];
 
+  static const _terminalIncidentStatuses = {
+    "Resolved",
+    "Closed",
+    "FalseReport",
+    "CancelledByReporter",
+    "ExpiredAfterReview",
+  };
+
+  void _openIncidentFromHome(
+    BuildContext context,
+    IncidentTrackingItem incident,
+  ) {
+    final incidentId = incident.id.trim();
+    if (incidentId.isEmpty) return;
+    if (_terminalIncidentStatuses.contains(incident.status)) {
+      Navigator.of(context)
+          .pushNamed("/incident-detail", arguments: incidentId);
+      return;
+    }
+    Navigator.of(context).pushNamed(
+      "/active-emergency/$incidentId",
+      arguments: {
+        "incidentId": incidentId,
+        "silent": false,
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
@@ -4060,7 +4132,12 @@ class HomeScreen extends StatelessWidget {
                 child: Column(
                   children: controller.incidents
                       .take(2)
-                      .map((incident) => IncidentStatusTile(incident: incident))
+                      .map(
+                        (incident) => IncidentStatusTile(
+                          incident: incident,
+                          onTap: () => _openIncidentFromHome(context, incident),
+                        ),
+                      )
                       .toList(),
                 ),
               ),
@@ -4626,6 +4703,22 @@ class _MissingPersonBroadcastScreenState
     return _ageRange;
   }
 
+  void _clearDraft() {
+    fullNameController.clear();
+    ageController.clear();
+    lastSeenLocationController.clear();
+    physicalController.clear();
+    clothingController.clear();
+    additionalController.clear();
+    _evidenceSectionKey.currentState?.clearAttachments();
+    _gender = null;
+    _ageMode = MissingPersonAge.exactMode;
+    _ageRange = null;
+    _lastSeenDate = null;
+    _lastSeenTime = null;
+    consent = false;
+  }
+
   Future<void> _submit() async {
     if (fullNameController.text.trim().isEmpty) {
       showAppSnackBar(context, "Enter the missing person's full name.",
@@ -4728,6 +4821,8 @@ class _MissingPersonBroadcastScreenState
       ).timeout(kSosSubmissionTimeout);
       if (!mounted) return;
       setState(() => submitting = false);
+      _clearDraft();
+      if (mounted) setState(() {});
       showAppSnackBar(
         context,
         result.duplicate
@@ -4737,7 +4832,12 @@ class _MissingPersonBroadcastScreenState
       unawaited(controller.loadBroadcastsFromApi(refresh: true));
       final route = broadcastDetailRoute(result.id);
       if (route != null) {
-        await Navigator.of(context).pushNamed(route);
+        await Navigator.of(context).pushReplacementNamed(
+          route,
+          arguments: const BroadcastDetailNavigationArgs(
+            returnToCenterOnBack: true,
+          ),
+        );
       }
     } on IncidentApiException catch (error) {
       if (!mounted) return;
@@ -5741,7 +5841,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
   Future<void> _stopStream(BuildContext context) async {
     if (stoppingStream) return;
+    final routingDecision = resolveLiveVideoStopRouting(
+      returnToActiveEmergency: widget.returnToActiveEmergency,
+      activeIncidentId: activeIncidentId,
+    );
     setState(() => stoppingStream = true);
+    String? cleanupErrorMessage;
     try {
       final listener = _locationListener;
       if (listener != null) {
@@ -5764,20 +5869,44 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         reason: LiveVideoDisconnectReason.userStop,
         caller: "_stopStream",
       );
+    } catch (_) {
+      cleanupErrorMessage =
+          "Live stream stopped locally. Your emergency is still available.";
+    } finally {
       if (!mounted) return;
       setState(() {
         liveSessionId = "";
-        if (!widget.returnToActiveEmergency) {
+        if (routingDecision.shouldPreserveIncidentId) {
+          activeIncidentId = routingDecision.incidentId;
+        } else {
           activeIncidentId = null;
         }
+        stoppingStream = false;
       });
-      if (widget.returnToActiveEmergency) {
-        _returnToActiveEmergency();
-        return;
+
+      final appController = appOf(context);
+      switch (routingDecision.destination) {
+        case LiveVideoStopDestination.returnToActiveEmergency:
+          _returnToActiveEmergency(errorMessage: cleanupErrorMessage);
+          return;
+        case LiveVideoStopDestination.openActiveEmergency:
+          await ActiveEmergencyNavigation.open(
+            context,
+            appController,
+            incidentId: routingDecision.incidentId,
+            replace: true,
+          );
+          if (cleanupErrorMessage != null && context.mounted) {
+            showAppSnackBar(context, cleanupErrorMessage);
+          }
+          return;
+        case LiveVideoStopDestination.stayOnLiveVideo:
+          showAppSnackBar(
+            context,
+            cleanupErrorMessage ?? "Live stream stopped.",
+          );
+          return;
       }
-      showAppSnackBar(context, "Live stream stopped.");
-    } finally {
-      if (mounted) setState(() => stoppingStream = false);
     }
   }
 }
@@ -5841,6 +5970,19 @@ class _StolenVehicleBroadcastScreenState
     super.dispose();
   }
 
+  void _clearDraft() {
+    plateController.clear();
+    makeController.clear();
+    modelController.clear();
+    colorController.clear();
+    yearController.clear();
+    vinController.clear();
+    descriptionController.clear();
+    _evidenceSectionKey.currentState?.clearAttachments();
+    usedSavedCar = false;
+    savedCarImagePath = null;
+  }
+
   Future<void> _submit() async {
     if (plateController.text.trim().isEmpty ||
         makeController.text.trim().isEmpty ||
@@ -5869,6 +6011,8 @@ class _StolenVehicleBroadcastScreenState
     }
 
     final description = descriptionController.text.trim();
+    final year = yearController.text.trim();
+    final parsedYear = int.tryParse(year);
     final vin = vinController.text.trim();
     try {
       final localEvidence =
@@ -5899,6 +6043,7 @@ class _StolenVehicleBroadcastScreenState
           "colour": colorController.text.trim().isEmpty
               ? "Unknown"
               : colorController.text.trim(),
+          if (year.isNotEmpty) "year": parsedYear ?? year,
           "registrationNumber": plateController.text.trim(),
           "stolenAt": DateTime.now().toUtc().toIso8601String(),
           "lastKnownLatitude": outcome.position!.latitude,
@@ -5914,6 +6059,8 @@ class _StolenVehicleBroadcastScreenState
       ).timeout(kSosSubmissionTimeout);
       if (!mounted) return;
       setState(() => submitting = false);
+      _clearDraft();
+      if (mounted) setState(() {});
       showAppSnackBar(
         context,
         result.duplicate
@@ -5923,7 +6070,12 @@ class _StolenVehicleBroadcastScreenState
       unawaited(controller.loadBroadcastsFromApi(refresh: true));
       final route = broadcastDetailRoute(result.id);
       if (route != null) {
-        await Navigator.of(context).pushNamed(route);
+        await Navigator.of(context).pushReplacementNamed(
+          route,
+          arguments: const BroadcastDetailNavigationArgs(
+            returnToCenterOnBack: true,
+          ),
+        );
       }
     } on IncidentApiException catch (error) {
       if (!mounted) return;
@@ -9191,11 +9343,20 @@ class ListTileCard extends StatelessWidget {
 class IncidentStatusTile extends StatelessWidget {
   const IncidentStatusTile({required this.incident, this.onTap, super.key});
 
+  static const _terminalStatuses = {
+    "Resolved",
+    "Closed",
+    "FalseReport",
+    "CancelledByReporter",
+    "ExpiredAfterReview",
+  };
+
   final IncidentTrackingItem incident;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final isTerminal = _terminalStatuses.contains(incident.status);
     return EyeIncidentSummaryCard.fromIncidentFields(
       title: citizenIncidentCategoryLabel(incident.type),
       incidentId: incident.id,
@@ -9204,6 +9365,11 @@ class IncidentStatusTile extends StatelessWidget {
       displayStatus: incident.displayStatus,
       apiPublicReference: incident.publicReference,
       onTap: onTap,
+      semanticsSuffix: onTap == null
+          ? null
+          : (isTerminal
+              ? "Tap to open incident details"
+              : "Tap to open active emergency"),
     );
   }
 }

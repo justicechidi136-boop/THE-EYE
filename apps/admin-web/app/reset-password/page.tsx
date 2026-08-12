@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useId, useMemo, useState } from "react";
 import { AuthLayout } from "../../components/auth-layout";
@@ -64,11 +63,14 @@ function ResetPasswordForm() {
       <div className="grid w-full gap-4 text-center">
         <h1 className="text-[32px] font-semibold leading-tight text-ink">Reset password</h1>
         <InlineAlert>
-          <span>This reset link is missing a token. Request a new password reset from the app.</span>
+          <span>
+            This reset link is invalid or incomplete. Return to the THE EYE app and request a new
+            password reset.
+          </span>
         </InlineAlert>
-        <Link href="/login" className="text-sm text-eyeDeep hover:underline">
-          Return to sign in
-        </Link>
+        <p className="text-sm text-ink/80">
+          Return to the THE EYE app and sign in with your new password after reset completes.
+        </p>
       </div>
     );
   }
@@ -78,11 +80,14 @@ function ResetPasswordForm() {
       <div className="grid w-full gap-4 text-center">
         <h1 className="text-[32px] font-semibold leading-tight text-ink">Password updated</h1>
         <InlineAlert tone="success">
-          <span>Your password was changed. You can sign in with your new credentials.</span>
+          <span>
+            Your password has been reset successfully. Return to the THE EYE app and sign in with
+            your new password.
+          </span>
         </InlineAlert>
-        <Link href="/login" className="text-sm text-eyeDeep hover:underline">
-          Return to sign in
-        </Link>
+        <p className="text-sm text-ink/80">
+          Return to the THE EYE app and sign in with your new password.
+        </p>
       </div>
     );
   }
@@ -131,9 +136,9 @@ function ResetPasswordForm() {
       <Button type="submit" className="h-[46px] w-full rounded-lg" disabled={submitting}>
         {submitting ? "Updating…" : "Update password"}
       </Button>
-      <Link href="/login" className="text-center text-sm text-eyeDeep hover:underline">
-        Return to sign in
-      </Link>
+      <p className="text-center text-sm text-ink/80">
+        Return to the THE EYE app and sign in with your new password after reset completes.
+      </p>
     </form>
   );
 }

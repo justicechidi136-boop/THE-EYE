@@ -253,7 +253,8 @@ void main() {
       expect(restore.status, SessionRestoreStatus.unauthenticated);
     });
 
-    test("refreshSessionSingleFlight coalesces concurrent refresh calls", () async {
+    test("refreshSessionSingleFlight coalesces concurrent refresh calls",
+        () async {
       final store = InMemoryAuthSessionStore();
       await store.save(
         const AuthSession(
@@ -288,12 +289,14 @@ void main() {
       ]);
 
       expect(refreshCalls, 1);
-      expect(results.every((session) => session?.accessToken == "fresh-access-1"),
+      expect(
+          results.every((session) => session?.accessToken == "fresh-access-1"),
           isTrue);
       expect((await store.load())?.accessToken, "fresh-access-1");
     });
 
-    test("withAuthorizedRetry refreshes once on 401 and retries action", () async {
+    test("withAuthorizedRetry refreshes once on 401 and retries action",
+        () async {
       final store = InMemoryAuthSessionStore();
       await store.save(
         const AuthSession(
@@ -319,7 +322,8 @@ void main() {
       );
 
       final service = AuthService(apiClient: client, sessionStore: store);
-      final result = await service.withAuthorizedRetry<String>((accessToken) async {
+      final result =
+          await service.withAuthorizedRetry<String>((accessToken) async {
         actionCalls += 1;
         if (accessToken == "expired-access") {
           throw AuthApiException(401, "Unauthorized");
@@ -330,6 +334,183 @@ void main() {
       expect(result, "ok-fresh-access");
       expect(actionCalls, 2);
       expect((await store.load())?.accessToken, "fresh-access");
+    });
+  });
+
+  group("TheEyeApiClient unauthorized refresh callback", () {
+    test("concurrent 401 responses trigger one single-flight refresh",
+        () async {
+      final store = InMemoryAuthSessionStore();
+      await store.save(
+        const AuthSession(
+          accessToken: "expired-access",
+          refreshToken: "refresh-token",
+        ),
+      );
+
+      var profileCalls = 0;
+      var refreshCalls = 0;
+      late AuthService authService;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.usersMe)) {
+            profileCalls += 1;
+            final token = request.headers["authorization"];
+            if (token == "Bearer expired-access") {
+              return http.Response(
+                  jsonEncode({"message": "Unauthorized"}), 401);
+            }
+            return http.Response(
+              jsonEncode({
+                "id": "user-1",
+                "displayName": "Citizen",
+                "kycStatus": "Unverified",
+                "profile": {
+                  "firstName": "Ada",
+                  "lastName": "Okeke",
+                  "country": "Nigeria",
+                  "state": "Lagos",
+                  "lga": "Ikeja",
+                },
+              }),
+              200,
+            );
+          }
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            refreshCalls += 1;
+            await Future<void>.delayed(const Duration(milliseconds: 30));
+            return http.Response(
+              jsonEncode({
+                "accessToken": "fresh-access",
+                "refreshToken": "fresh-refresh",
+              }),
+              200,
+            );
+          }
+          return http.Response("{}", 404);
+        }),
+        onUnauthorizedRefresh: () async {
+          final refreshed = await authService.refreshSessionSingleFlight();
+          return refreshed?.accessToken;
+        },
+      );
+      authService = AuthService(apiClient: client, sessionStore: store);
+
+      final responses = await Future.wait([
+        client.getJson(TheEyeApiPaths.usersMe, accessToken: "expired-access"),
+        client.getJson(TheEyeApiPaths.usersMe, accessToken: "expired-access"),
+      ]);
+
+      expect(refreshCalls, 1);
+      expect(profileCalls, 4);
+      expect(responses.every((response) => response.statusCode == 200), isTrue);
+      expect((await store.load())?.accessToken, "fresh-access");
+    });
+
+    test("retries once with refreshed token after 401", () async {
+      final store = InMemoryAuthSessionStore();
+      await store.save(
+        const AuthSession(
+          accessToken: "expired-access",
+          refreshToken: "refresh-token",
+        ),
+      );
+
+      late AuthService authService;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.usersMe)) {
+            final token = request.headers["authorization"];
+            if (token == "Bearer expired-access") {
+              return http.Response(
+                  jsonEncode({"message": "Unauthorized"}), 401);
+            }
+            return http.Response(jsonEncode({"id": "user-1"}), 200);
+          }
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            return http.Response(
+              jsonEncode({
+                "accessToken": "fresh-access",
+                "refreshToken": "fresh-refresh",
+              }),
+              200,
+            );
+          }
+          return http.Response("{}", 404);
+        }),
+        onUnauthorizedRefresh: () async {
+          final refreshed = await authService.refreshSessionSingleFlight();
+          return refreshed?.accessToken;
+        },
+      );
+      authService = AuthService(apiClient: client, sessionStore: store);
+
+      final response = await client.getJson(TheEyeApiPaths.usersMe,
+          accessToken: "expired-access");
+
+      expect(response.statusCode, 200);
+      expect((await store.load())?.accessToken, "fresh-access");
+    });
+
+    test("invalid refresh clears stored session and returns original 401",
+        () async {
+      final store = InMemoryAuthSessionStore();
+      await store.save(
+        const AuthSession(
+          accessToken: "expired-access",
+          refreshToken: "invalid-refresh",
+        ),
+      );
+
+      late AuthService authService;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.usersMe)) {
+            return http.Response(jsonEncode({"message": "Unauthorized"}), 401);
+          }
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            return http.Response(
+                jsonEncode({"message": "Invalid refresh token"}), 401);
+          }
+          return http.Response("{}", 404);
+        }),
+        onUnauthorizedRefresh: () async {
+          final refreshed = await authService.refreshSessionSingleFlight();
+          return refreshed?.accessToken;
+        },
+      );
+      authService = AuthService(apiClient: client, sessionStore: store);
+
+      final response = await client.getJson(TheEyeApiPaths.usersMe,
+          accessToken: "expired-access");
+
+      expect(response.statusCode, 401);
+      expect(await store.load(), isNull);
+    });
+
+    test("does not auto-refresh auth refresh endpoint calls", () async {
+      var unauthorizedRefreshCalls = 0;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            return http.Response(jsonEncode({"message": "Unauthorized"}), 401);
+          }
+          return http.Response("{}", 404);
+        }),
+        onUnauthorizedRefresh: () async {
+          unauthorizedRefreshCalls += 1;
+          return "fresh-access";
+        },
+      );
+
+      final response = await client.postJson(
+        TheEyeApiPaths.authRefresh,
+        {"refreshToken": "refresh-token"},
+        accessToken: "expired-access",
+      );
+
+      expect(response.statusCode, 401);
+      expect(unauthorizedRefreshCalls, 0);
     });
   });
 }

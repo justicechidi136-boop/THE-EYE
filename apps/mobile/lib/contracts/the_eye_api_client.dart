@@ -304,14 +304,50 @@ class PresignedEvidenceTarget {
 }
 
 class TheEyeApiClient {
-  TheEyeApiClient({String? baseUrl, http.Client? httpClient})
-      : baseUrl = baseUrl ?? TheEyeApiConfig.resolveBaseUrl(),
+  TheEyeApiClient({
+    String? baseUrl,
+    http.Client? httpClient,
+    this.onUnauthorizedRefresh,
+  })  : baseUrl = baseUrl ?? TheEyeApiConfig.resolveBaseUrl(),
         _http = httpClient ?? http.Client();
 
   final String baseUrl;
   final http.Client _http;
+  final Future<String?> Function()? onUnauthorizedRefresh;
+
+  static const Set<String> _unauthorizedRefreshExcludedPaths = {
+    TheEyeApiPaths.authLogin,
+    TheEyeApiPaths.authRegister,
+    TheEyeApiPaths.authRefresh,
+  };
 
   Uri _uri(String path) => Uri.parse("$baseUrl$path");
+
+  bool _canAttemptUnauthorizedRefresh(String path, String? accessToken) {
+    if (onUnauthorizedRefresh == null) return false;
+    if (accessToken == null || accessToken.isEmpty) return false;
+    final normalizedPath = Uri.tryParse(path)?.path ?? path;
+    return !_unauthorizedRefreshExcludedPaths.contains(normalizedPath);
+  }
+
+  Future<http.Response> _sendWithUnauthorizedRetry({
+    required String path,
+    required String? accessToken,
+    required Duration timeout,
+    required Future<http.Response> Function(String? token) sendRequest,
+  }) async {
+    final first = await sendRequest(accessToken).timeout(timeout);
+    if (first.statusCode != 401 ||
+        !_canAttemptUnauthorizedRefresh(path, accessToken)) {
+      return first;
+    }
+
+    final refreshedAccessToken = await onUnauthorizedRefresh!.call();
+    if (refreshedAccessToken == null || refreshedAccessToken.isEmpty) {
+      return first;
+    }
+    return sendRequest(refreshedAccessToken).timeout(timeout);
+  }
 
   Future<http.Response> postJson(
     String path,
@@ -321,27 +357,33 @@ class TheEyeApiClient {
     String? clientTraceId,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{
-      "content-type": "application/json",
-      "accept": "application/json"
-    };
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
-    }
-    if (clientSubmissionId != null && clientSubmissionId.isNotEmpty) {
-      headers["x-client-submission-id"] = clientSubmissionId;
-    }
-    if (clientTraceId != null && clientTraceId.isNotEmpty) {
-      headers["x-client-trace-id"] = clientTraceId;
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{
+        "content-type": "application/json",
+        "accept": "application/json"
+      };
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      if (clientSubmissionId != null && clientSubmissionId.isNotEmpty) {
+        headers["x-client-submission-id"] = clientSubmissionId;
+      }
+      if (clientTraceId != null && clientTraceId.isNotEmpty) {
+        headers["x-client-trace-id"] = clientTraceId;
+      }
+      return _http.post(
+        _uri(path),
+        headers: headers,
+        body: jsonEncode(payload),
+      );
     }
 
-    return _http
-        .post(
-          _uri(path),
-          headers: headers,
-          body: jsonEncode(payload),
-        )
-        .timeout(timeout);
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<http.Response> patchJson(
@@ -350,21 +392,27 @@ class TheEyeApiClient {
     String? accessToken,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{
-      "content-type": "application/json",
-      "accept": "application/json"
-    };
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{
+        "content-type": "application/json",
+        "accept": "application/json"
+      };
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      return _http.patch(
+        _uri(path),
+        headers: headers,
+        body: jsonEncode(payload),
+      );
     }
 
-    return _http
-        .patch(
-          _uri(path),
-          headers: headers,
-          body: jsonEncode(payload),
-        )
-        .timeout(timeout);
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<http.Response> deleteJson(
@@ -372,12 +420,20 @@ class TheEyeApiClient {
     String? accessToken,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{"accept": "application/json"};
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{"accept": "application/json"};
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      return _http.delete(_uri(path), headers: headers);
     }
 
-    return _http.delete(_uri(path), headers: headers).timeout(timeout);
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<http.Response> getJson(
@@ -386,17 +442,25 @@ class TheEyeApiClient {
     Map<String, String>? query,
     Duration timeout = const Duration(seconds: 30),
   }) {
-    final headers = <String, String>{"accept": "application/json"};
-    if (accessToken != null && accessToken.isNotEmpty) {
-      headers["authorization"] = "Bearer $accessToken";
-    }
-
     var uri = _uri(path);
     if (query != null && query.isNotEmpty) {
       uri = uri.replace(queryParameters: {...uri.queryParameters, ...query});
     }
 
-    return _http.get(uri, headers: headers).timeout(timeout);
+    Future<http.Response> send(String? token) {
+      final headers = <String, String>{"accept": "application/json"};
+      if (token != null && token.isNotEmpty) {
+        headers["authorization"] = "Bearer $token";
+      }
+      return _http.get(uri, headers: headers);
+    }
+
+    return _sendWithUnauthorizedRetry(
+      path: path,
+      accessToken: accessToken,
+      timeout: timeout,
+      sendRequest: send,
+    );
   }
 
   Future<bool> checkApiReachable(
@@ -1064,9 +1128,7 @@ class TheEyeApiClient {
       accessToken: accessToken,
     );
     if (response.statusCode == 202) {
-      final decoded = response.body.isEmpty
-          ? null
-          : jsonDecode(response.body);
+      final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
       return IncidentLocationPostResult(
         statusCode: 202,
         persisted: false,
