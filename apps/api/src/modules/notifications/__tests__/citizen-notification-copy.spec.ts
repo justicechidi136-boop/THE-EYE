@@ -2,8 +2,10 @@ import {
   assertValidMissingPersonAge,
   buildMissingPersonBroadcastPreview,
   reportSubmittedNotificationCopy,
+  resolveCitizenIncidentTypeLabel,
   resolveCancellationReason,
   verifyActiveIncidentNotificationCopy,
+  verifyActiveIncidentNotificationCopyForType,
 } from "../citizen-notification-copy";
 
 describe("UX-016 / missing-person notification copy", () => {
@@ -51,6 +53,31 @@ describe("UX-016 / missing-person notification copy", () => {
     const verify = verifyActiveIncidentNotificationCopy();
     expect(verify.title).toBe("Can you confirm this emergency?");
     expect(verify.metadata.route).toBe("COMMUNITY_VERIFICATION");
+    expect(verify.metadata.incidentCategory).toBe("Emergency");
+  });
+
+  it("builds category-aware verification copy", () => {
+    const samples: Array<[string, string]> = [
+      ["Accident", "Can you confirm this accident?"],
+      ["Fire", "Can you confirm this fire?"],
+      ["SuspiciousActivity", "Can you confirm this suspicious activity?"],
+      ["Crime", "Can you confirm this crime?"],
+      ["EmergencyCase", "Can you confirm this emergency?"],
+    ];
+    for (const finalSample of samples) {
+      const [incidentType, expectedTitle] = finalSample;
+      const copy = verifyActiveIncidentNotificationCopyForType(incidentType);
+      expect(copy.title).toBe(expectedTitle);
+      expect(copy.body).toContain("near your location");
+      expect(copy.metadata.incidentCategory.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("normalizes incident type labels for citizen copy", () => {
+    expect(resolveCitizenIncidentTypeLabel("EmergencyCase")).toBe("Emergency");
+    expect(resolveCitizenIncidentTypeLabel("LiveEmergencyVideo")).toBe(
+      "Live Emergency Video",
+    );
   });
 });
 

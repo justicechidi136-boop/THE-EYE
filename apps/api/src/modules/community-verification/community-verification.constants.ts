@@ -46,6 +46,7 @@ export const RESOLUTION_ELIGIBLE_INCIDENT_TYPES = new Set<IncidentType>([
 
 export const INCIDENT_TYPE_DISPLAY: Record<string, string> = {
   Emergency: "Emergency",
+  EmergencyCase: "Emergency",
   Crime: "Crime",
   Accident: "Accident",
   Fire: "Fire",
@@ -54,6 +55,7 @@ export const INCIDENT_TYPE_DISPLAY: Record<string, string> = {
   Kidnapping: "Kidnapping",
   Abuse: "Abuse",
   SuspiciousActivity: "Suspicious Activity",
+  LiveEmergencyVideo: "Live Emergency Video",
   MissingPerson: "Missing Person",
   StolenVehicle: "Stolen Vehicle",
   SOS: "SOS",

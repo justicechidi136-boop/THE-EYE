@@ -69,15 +69,56 @@ export function reportSubmittedNotificationCopy(publicReference: string) {
 }
 
 export function verifyActiveIncidentNotificationCopy() {
+  return verifyActiveIncidentNotificationCopyForType("Emergency");
+}
+
+export function verifyActiveIncidentNotificationCopyForType(incidentType: string) {
+  const incidentLabel = resolveCitizenIncidentTypeLabel(incidentType);
+  const noun = incidentLabel.toLowerCase();
+  const title =
+    incidentLabel === "Emergency"
+      ? "Can you confirm this emergency?"
+      : `Can you confirm this ${noun}?`;
+  const body =
+    incidentLabel === "Emergency"
+      ? "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active."
+      : `A ${noun} has been reported near your location. Tap to review the incident and confirm whether it is still active.`;
   return {
     type: "NearbyIncidentVerification" as const,
-    title: "Can you confirm this emergency?",
-    body: "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active.",
+    title,
+    body,
     metadata: {
       route: "COMMUNITY_VERIFICATION",
       citizenCategory: "Verify Active Incident",
+      incidentCategory: incidentLabel,
     },
   };
+}
+
+export function resolveCitizenIncidentTypeLabel(incidentType: string): string {
+  const normalized = incidentType.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  switch (normalized) {
+    case "emergency":
+    case "emergencycase":
+      return "Emergency";
+    case "accident":
+      return "Accident";
+    case "fire":
+      return "Fire";
+    case "suspiciousactivity":
+      return "Suspicious Activity";
+    case "abuse":
+      return "Abuse";
+    case "kidnapping":
+      return "Kidnapping";
+    case "crime":
+      return "Crime";
+    case "liveemergencyvideo":
+    case "livevideo":
+      return "Live Emergency Video";
+    default:
+      return incidentType.trim().isEmpty ? "Emergency" : incidentType.trim();
+  }
 }
 
 export const CANCELLATION_REASON_CODES = [
