@@ -724,7 +724,7 @@ export class NeighborhoodWatchService {
       { postId: post.id },
     );
     await this.audit(actor, "community.post_created", "community_posts", post.id, { communityId, type: dto.type });
-    return { data: { ...scored, authorLabel } };
+    return { data: { ...scored, ...(authorLabel ? { authorLabel } : {}) } };
   }
 
   async listPosts(actor: JwtPayload, query: CursorPageQuery = {}) {
@@ -792,7 +792,7 @@ export class NeighborhoodWatchService {
       ...page,
       data: page.data.map((row) => ({
         ...row,
-        authorLabel: labels.get(row.authorId) ?? "Community member",
+        ...(labels.has(row.authorId) ? { authorLabel: labels.get(row.authorId) } : {}),
         commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
       })),
     };
@@ -1369,7 +1369,7 @@ export class NeighborhoodWatchService {
       data: page.data.map((comment) => {
         const displayName =
           [comment.author.profile?.firstName, comment.author.profile?.lastName].filter(Boolean).join(" ") || "Member";
-        const authorLabel = labels.get(comment.author.id) ?? "Community member";
+        const authorLabel = labels.get(comment.author.id);
         return {
           id: comment.id,
           body: comment.body,
@@ -1377,7 +1377,7 @@ export class NeighborhoodWatchService {
           durationSeconds: comment.durationSeconds,
           mediaType: comment.mediaType,
           createdAt: comment.createdAt,
-          authorLabel,
+          ...(authorLabel ? { authorLabel } : {}),
           author: {
             id: comment.author.id,
             displayName: authorLabel === "Current Area Visitor" ? "Current Area Visitor" : displayName,
@@ -1456,7 +1456,7 @@ export class NeighborhoodWatchService {
         hasVoice,
         durationSeconds: comment.durationSeconds,
         createdAt: comment.createdAt,
-        authorLabel,
+        ...(authorLabel ? { authorLabel } : {}),
         author: {
           id: actor.sub,
           displayName: authorLabel === "Current Area Visitor" ? "Current Area Visitor" : "Member",
@@ -1599,7 +1599,13 @@ export class NeighborhoodWatchService {
       this.resolveAuthorLabel(post.communityId, post.authorId),
       this.prisma.communityPostComment.count({ where: { postId } }),
     ]);
-    return { data: { ...post, authorLabel, commentCount } };
+    return {
+      data: {
+        ...post,
+        ...(authorLabel ? { authorLabel } : {}),
+        commentCount,
+      },
+    };
   }
 
   private async scorePost(postId: string, reporterId: string, moderatorConfirmed: boolean) {
@@ -1658,9 +1664,9 @@ export class NeighborhoodWatchService {
     }
   }
 
-  private async resolveAuthorLabel(communityId: string, userId: string): Promise<string> {
+  private async resolveAuthorLabel(communityId: string, userId: string): Promise<string | undefined> {
     const labels = await this.resolveAuthorLabels(communityId, [userId]);
-    return labels.get(userId) ?? "Community member";
+    return labels.get(userId);
   }
 
   private async resolveAuthorLabels(communityId: string, userIds: string[]): Promise<Map<string, string>> {
@@ -1675,7 +1681,11 @@ export class NeighborhoodWatchService {
     });
     const members = new Set(memberships.map((row) => row.userId));
     for (const userId of unique) {
-      result.set(userId, members.has(userId) ? "Community member" : "Current Area Visitor");
+      // Only emit visitor label for non-members so clients keep real display names
+      // for residents. Travelers stay "Current Area Visitor" after presence expires.
+      if (!members.has(userId)) {
+        result.set(userId, "Current Area Visitor");
+      }
     }
     return result;
   }

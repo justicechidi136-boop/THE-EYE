@@ -81,7 +81,8 @@ class _NeighborhoodWatchHomeScreenState
       } else {
         if (!mounted) return;
         setState(() {
-          _loadError = "You are offline and no saved neighborhood context is available.";
+          _loadError =
+              "You are offline and no saved neighborhood context is available.";
         });
       }
       return;
@@ -194,19 +195,22 @@ class _NeighborhoodWatchHomeScreenState
       setState(() => _homeCommunityMessage = error.userMessage);
     } catch (_) {
       if (!mounted) return;
-      setState(
-          () => _homeCommunityMessage = "Unable to set home community.");
+      setState(() => _homeCommunityMessage = "Unable to set home community.");
     } finally {
       if (mounted) setState(() => _settingHomeCommunity = false);
     }
   }
 
   void _syncSelectedCommunity(NwContextResponse contextResponse) {
-    final community = contextResponse.publicCommunity;
-    if (community == null || community.id.isEmpty) return;
     final session = AppScope.of(context);
-    final nwSession =
-        session is NeighborhoodWatchSession ? session as NeighborhoodWatchSession : null;
+    final nwSession = session is NeighborhoodWatchSession
+        ? session as NeighborhoodWatchSession
+        : null;
+    final community = contextResponse.publicCommunity;
+    if (community == null || community.id.isEmpty) {
+      nwSession?.clearNeighborhoodWatchParticipationContext();
+      return;
+    }
     nwSession?.applyNeighborhoodWatchContext(
       community: community.toCommunitySummary(
         activeAlertsCount: contextResponse.safetySummary.activeAlerts,
@@ -214,6 +218,7 @@ class _NeighborhoodWatchHomeScreenState
       canPost: contextResponse.permissions.canPost,
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
@@ -264,8 +269,8 @@ class _NeighborhoodWatchHomeScreenState
         if (_contextIsStale)
           _LocationIssueCard(
             title: "Saved context (STALE)",
-            message: _loadError ??
-                "Refresh your location when you are back online.",
+            message:
+                _loadError ?? "Refresh your location when you are back online.",
             detail: _locationCaptureMessage,
             onRetry: _refreshContext,
             loading: _loading || _capturingLocation,
@@ -296,8 +301,8 @@ class _NeighborhoodWatchHomeScreenState
                       ),
                       trailing: const Icon(Icons.lock_outline),
                       onTap: () => Navigator.of(context).pushNamed(
-                        NeighborhoodWatchDestinations.privateCommunityMembership(
-                            item.id),
+                        NeighborhoodWatchDestinations
+                            .privateCommunityMembership(item.id),
                       ),
                     ),
                   )
@@ -365,9 +370,8 @@ class _NeighborhoodWatchHomeScreenState
       if (!_contextIsStale && !isHomeCommunity) ...[
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: _settingHomeCommunity
-              ? null
-              : () => _setHomeCommunity(community),
+          onPressed:
+              _settingHomeCommunity ? null : () => _setHomeCommunity(community),
           icon: _settingHomeCommunity
               ? const SizedBox(
                   width: 16,
@@ -473,8 +477,7 @@ class _NeighborhoodWatchHomeScreenState
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: () =>
-              Navigator.of(context).pushNamed("/report/emergency"),
+          onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
           icon: const Icon(Icons.emergency),
           label: const Text("Report Emergency"),
         ),

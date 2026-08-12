@@ -92,6 +92,7 @@ class CommunityPostItem {
     required this.verificationStatus,
     required this.confidenceScore,
     required this.createdAt,
+    this.communityId,
     this.authorName,
     this.authorLabel,
     this.commentCount = 0,
@@ -104,15 +105,17 @@ class CommunityPostItem {
   final String verificationStatus;
   final double confidenceScore;
   final DateTime? createdAt;
+  final String? communityId;
   final String? authorName;
   final String? authorLabel;
   final int commentCount;
 
   String get displayAuthor {
     final label = authorLabel?.trim();
-    if (label != null && label.isNotEmpty) return label;
+    if (label == "Current Area Visitor") return label!;
     final name = authorName?.trim();
     if (name != null && name.isNotEmpty) return name;
+    if (label != null && label.isNotEmpty) return label;
     return "Community member";
   }
 
@@ -137,6 +140,7 @@ class CommunityPostItem {
           (json["verificationStatus"] as String?) ?? "PendingVerification",
       confidenceScore: double.tryParse("${json["confidenceScore"]}") ?? 0,
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      communityId: json["communityId"] as String?,
       authorName: authorName,
       authorLabel: json["authorLabel"] as String?,
       commentCount: commentCount,
@@ -200,8 +204,7 @@ class CommunityCommentItem {
   final int? durationSeconds;
   final String? mediaType;
 
-  bool get isVoiceComment =>
-      hasVoice || mediaType == IncidentMediaType.audio;
+  bool get isVoiceComment => hasVoice || mediaType == IncidentMediaType.audio;
 
   String get displayBody {
     if (isVoiceComment) {
@@ -242,8 +245,8 @@ class CommunityCommentItem {
   factory CommunityCommentItem.fromJson(Map<String, dynamic> json) {
     final author = json["author"] as Map<String, dynamic>?;
     final mediaType = json["mediaType"] as String?;
-    final hasVoice = json["hasVoice"] == true ||
-        mediaType == IncidentMediaType.audio;
+    final hasVoice =
+        json["hasVoice"] == true || mediaType == IncidentMediaType.audio;
     final authorLabel = json["authorLabel"] as String?;
     return CommunityCommentItem(
       id: (json["id"] as String?) ?? "",
@@ -966,6 +969,20 @@ class NeighborhoodWatchService {
     return _decodePage(response, CommunityPostItem.fromJson);
   }
 
+  Future<CommunityPostItem> getPost({
+    required String accessToken,
+    required String postId,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.neighborhoodWatchPost(postId),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
+    return CommunityPostItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   Future<CommunityPostItem> createPost({
     required String accessToken,
     required String communityId,
@@ -1082,8 +1099,8 @@ class NeighborhoodWatchService {
       createdAt: DateTime.tryParse((map["createdAt"] as String?) ?? "") ??
           DateTime.now(),
       hasVoice: hasVoice,
-      durationSeconds: (map["durationSeconds"] as num?)?.toInt() ??
-          durationSeconds,
+      durationSeconds:
+          (map["durationSeconds"] as num?)?.toInt() ?? durationSeconds,
       mediaType: hasVoice ? (mediaType ?? IncidentMediaType.audio) : mediaType,
     );
   }

@@ -10,4 +10,7 @@ abstract class NeighborhoodWatchSession {
     required CommunitySummary community,
     required bool canPost,
   });
+
+  /// Clears presence-based posting authority when context has no public community.
+  void clearNeighborhoodWatchParticipationContext();
 }

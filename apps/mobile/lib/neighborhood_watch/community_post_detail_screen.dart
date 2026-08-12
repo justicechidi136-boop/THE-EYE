@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 
 import "../contracts/the_eye_api_client.dart";
@@ -54,11 +56,47 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
   bool _posting = false;
   VoiceRecordingResult? _voiceDraft;
   double _voiceUploadProgress = 0;
+  late String _resolvedCommunityId;
+  late String _resolvedTitle;
+  int _authoritativeCommentCount = 0;
+
+  String get _communityId => _resolvedCommunityId;
 
   @override
   void initState() {
     super.initState();
-    _load(refresh: true);
+    _resolvedCommunityId = widget.args.communityId;
+    _resolvedTitle = widget.args.postTitle;
+    unawaited(_bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    await _resolveAuthoritativePostContext();
+    if (!mounted) return;
+    await _load(refresh: true);
+  }
+
+  Future<void> _resolveAuthoritativePostContext() async {
+    try {
+      final post = await _service.getPost(
+        accessToken: widget.accessToken,
+        postId: widget.args.postId,
+      );
+      if (!mounted) return;
+      final fetchedCommunityId = post.communityId?.trim() ?? "";
+      setState(() {
+        if (fetchedCommunityId.isNotEmpty) {
+          // Authoritative post payload wins over selectedCommunity fallback.
+          _resolvedCommunityId = fetchedCommunityId;
+        }
+        if (post.title.trim().isNotEmpty) {
+          _resolvedTitle = post.title;
+        }
+        _authoritativeCommentCount = post.commentCount;
+      });
+    } catch (_) {
+      // Keep route/selectedCommunity fallback; comment load may still succeed.
+    }
   }
 
   @override
@@ -109,7 +147,8 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
 
   Future<void> _recordVoiceComment() async {
     if (!widget.isOnline) {
-      setState(() => _error = "You are offline. Voice comments need a connection.");
+      setState(
+          () => _error = "You are offline. Voice comments need a connection.");
       return;
     }
     final recording = await showModalBottomSheet<VoiceRecordingResult>(
@@ -176,7 +215,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
       if (voiceDraft != null) {
         setState(() => _voiceUploadProgress = 0.1);
         final uploaded = await _mediaUploadService.uploadForPost(
-          communityId: widget.args.communityId,
+          communityId: _communityId,
           attachments: [voiceDraft.attachment],
           accessToken: widget.accessToken,
           onProgress: (_, progress) {
@@ -340,7 +379,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
     final semantics = EyeSemanticColors.of(context);
     final voiceDraft = _voiceDraft;
     return EyeScaffold(
-      title: widget.args.postTitle,
+      title: _resolvedTitle,
       useNavigateBackOrHome: true,
       actions: [
         IconButton(
@@ -349,10 +388,10 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
             Navigator.of(context).pushNamed(
               "/neighborhood-watch/report",
               arguments: CommunityReportRouteArgs(
-                communityId: widget.args.communityId,
+                communityId: _communityId,
                 targetType: "Post",
                 targetId: widget.args.postId,
-                targetLabel: widget.args.postTitle,
+                targetLabel: _resolvedTitle,
               ),
             );
           },
@@ -432,7 +471,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
                                       Navigator.of(context).pushNamed(
                                         "/neighborhood-watch/report",
                                         arguments: CommunityReportRouteArgs(
-                                          communityId: widget.args.communityId,
+                                          communityId: _communityId,
                                           targetType: "Comment",
                                           targetId: comment.id,
                                           targetLabel: comment.displayBody,
@@ -456,7 +495,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
                                     Navigator.of(context).pushNamed(
                                       "/neighborhood-watch/report",
                                       arguments: CommunityReportRouteArgs(
-                                        communityId: widget.args.communityId,
+                                        communityId: _communityId,
                                         targetType: "Comment",
                                         targetId: comment.id,
                                         targetLabel: comment.displayBody,

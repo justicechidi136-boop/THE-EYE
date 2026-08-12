@@ -200,7 +200,7 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
       { type: "SafetyTip", title: "Lock gates early", body: "Tip for residents tonight" },
       resident,
     );
-    expect(result.data.authorLabel).toBe("Community member");
+    expect(result.data.authorLabel).toBeUndefined();
     expect(prisma.communityPresence.findFirst).not.toHaveBeenCalled();
   });
 

@@ -1,85 +1,272 @@
+import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:the_eye_mobile/neighborhood_watch/community_conversation_eligibility.dart";
+import "package:the_eye_mobile/neighborhood_watch/community_post_detail_screen.dart";
+import "package:the_eye_mobile/neighborhood_watch/community_post_route_args.dart";
 import "package:the_eye_mobile/neighborhood_watch/neighborhood_watch_destinations.dart";
 import "package:the_eye_mobile/neighborhood_watch/neighborhood_watch_service.dart";
 
+CommunitySummary _public({
+  required String id,
+  String? membershipStatus,
+}) {
+  return CommunitySummary(
+    id: id,
+    name: "Public $id",
+    visibility: "Public",
+    memberCount: 10,
+    activeAlertsCount: 0,
+    membershipStatus: membershipStatus,
+  );
+}
+
+CommunitySummary _private({
+  required String id,
+  String? membershipStatus,
+}) {
+  return CommunitySummary(
+    id: id,
+    name: "Private $id",
+    visibility: "Private",
+    memberCount: 4,
+    activeAlertsCount: 0,
+    membershipStatus: membershipStatus,
+  );
+}
+
 void main() {
-  group("Public community conversations", () {
-    test("2) Start Conversation eligibility for public non-member", () {
-      const travelerCommunity = CommunitySummary(
-        id: "lagos-1",
-        name: "Lagos Public",
-        visibility: "Public",
-        memberCount: 12,
-        activeAlertsCount: 0,
-        membershipStatus: null,
-      );
-      const privateLocked = CommunitySummary(
-        id: "estate-1",
-        name: "Private Estate",
-        visibility: "Private",
-        memberCount: 4,
-        activeAlertsCount: 0,
-        membershipStatus: "Pending",
-      );
-      const privateMember = CommunitySummary(
-        id: "estate-1",
-        name: "Private Estate",
-        visibility: "Private",
-        memberCount: 4,
-        activeAlertsCount: 0,
-        membershipStatus: "Approved",
-      );
-
-      bool canStart({
-        required bool authenticated,
-        required CommunitySummary? community,
-        bool nwContextCanPost = false,
-        String? nwContextCommunityId,
-      }) {
-        if (!authenticated) return false;
-        if (community == null || community.id.isEmpty) return false;
-        if (community.visibility == "Private") return community.isMember;
-        if (community.membershipStatus == "Suspended" ||
-            community.membershipStatus == "Banned") {
-          return false;
-        }
-        if (community.isMember) return true;
-        return nwContextCanPost && nwContextCommunityId == community.id;
-      }
-
+  group("evaluateCanStartCommunityConversation (production)", () {
+    test("1) approved member allowed", () {
       expect(
-        canStart(
-          authenticated: true,
-          community: travelerCommunity,
-          nwContextCanPost: true,
-          nwContextCommunityId: "lagos-1",
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _public(id: "A", membershipStatus: "Approved"),
+          nwContextCanPost: false,
+          nwContextCommunityId: null,
         ),
         isTrue,
       );
+    });
+
+    test("2) confirmed traveler + canPost true allowed", () {
       expect(
-        canStart(authenticated: true, community: travelerCommunity),
-        isFalse,
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _public(id: "A"),
+          nwContextCanPost: true,
+          nwContextCommunityId: "A",
+        ),
+        isTrue,
       );
-      expect(canStart(authenticated: true, community: privateLocked), isFalse);
-      expect(canStart(authenticated: true, community: privateMember), isTrue);
+    });
+
+    test("3) traveler + canPost false denied", () {
       expect(
-        canStart(authenticated: false, community: travelerCommunity),
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _public(id: "A"),
+          nwContextCanPost: false,
+          nwContextCommunityId: "A",
+        ),
         isFalse,
       );
     });
 
-    test("empty-state copy contract for discussions", () {
+    test("4) traveler in different selected community denied", () {
+      expect(
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _public(id: "B"),
+          nwContextCanPost: true,
+          nwContextCommunityId: "A",
+        ),
+        isFalse,
+      );
+    });
+
+    test("5) stale/unconfirmed community context denied", () {
+      expect(
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _public(id: "A"),
+          nwContextCanPost: true,
+          nwContextCommunityId: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test("6) private-community non-member denied", () {
+      expect(
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _private(id: "P", membershipStatus: "Pending"),
+          nwContextCanPost: true,
+          nwContextCommunityId: "P",
+        ),
+        isFalse,
+      );
+    });
+
+    test("7) suspended/restricted user denied", () {
+      expect(
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _public(id: "A", membershipStatus: "Suspended"),
+          nwContextCanPost: true,
+          nwContextCommunityId: "A",
+        ),
+        isFalse,
+      );
+      expect(
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: true,
+          community: _public(id: "A", membershipStatus: "Banned"),
+          nwContextCanPost: true,
+          nwContextCommunityId: "A",
+        ),
+        isFalse,
+      );
+    });
+
+    test("8) no authenticated user denied", () {
+      expect(
+        evaluateCanStartCommunityConversation(
+          isAuthenticated: false,
+          community: _public(id: "A"),
+          nwContextCanPost: true,
+          nwContextCommunityId: "A",
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group("resolveCommunityPostRouteArgs", () {
+    test("A) in-app navigation preserves typed args over selectedCommunity",
+        () {
+      final args = resolveCommunityPostRouteArgs(
+        pathPostId: "path-id",
+        settingsArguments: const CommunityPostDetailRouteArgs(
+          postId: "post-1",
+          postTitle: "Safety Discussion",
+          communityId: "community-A",
+          currentUserId: "user-1",
+        ),
+        selectedCommunityId: "stale-community",
+        currentUserId: "other",
+      );
+      expect(args.postId, "post-1");
+      expect(args.postTitle, "Safety Discussion");
+      expect(args.communityId, "community-A");
+      expect(args.currentUserId, "user-1");
+    });
+
+    test(
+        "B) cold-start deep link with null selectedCommunity keeps path postId",
+        () {
+      final args = resolveCommunityPostRouteArgs(
+        pathPostId: "post-deep",
+        settingsArguments: null,
+        selectedCommunityId: null,
+        currentUserId: null,
+      );
+      expect(args.postId, "post-deep");
+      expect(args.communityId, "");
+      expect(
+          NeighborhoodWatchDestinations.isPostRoute(
+            NeighborhoodWatchDestinations.post("post-deep"),
+          ),
+          isTrue);
+    });
+
+    test("C) stale selectedCommunity does not override route communityId", () {
+      final args = resolveCommunityPostRouteArgs(
+        pathPostId: "post-1",
+        settingsArguments: const CommunityPostDetailRouteArgs(
+          postId: "post-1",
+          postTitle: "Tip",
+          communityId: "community-A",
+        ),
+        selectedCommunityId: "community-B",
+        currentUserId: "u1",
+      );
+      expect(args.communityId, "community-A");
+    });
+  });
+
+  group("visitor label + commentCount models", () {
+    test("Current Area Visitor preferred over profile name", () {
+      final post = CommunityPostItem.fromJson({
+        "id": "p1",
+        "title": "Safety Discussion",
+        "body": "Anyone nearby?",
+        "type": "Discussion",
+        "verificationStatus": "PendingVerification",
+        "confidenceScore": 20,
+        "createdAt": "2026-08-12T12:00:00.000Z",
+        "authorLabel": "Current Area Visitor",
+        "commentCount": 67,
+        "communityId": "community-A",
+        "author": {
+          "id": "u1",
+          "profile": {"firstName": "Ada", "lastName": "Traveler"},
+        },
+      });
+      expect(post.displayAuthor, "Current Area Visitor");
+      expect(post.commentCount, 67);
+      expect(post.communityId, "community-A");
+    });
+
+    test("member without authorLabel keeps real display name", () {
+      final post = CommunityPostItem.fromJson({
+        "id": "p2",
+        "title": "Security Tip",
+        "body": "Lock gates",
+        "type": "SafetyTip",
+        "verificationStatus": "PendingVerification",
+        "confidenceScore": 10,
+        "createdAt": "2026-08-12T12:00:00.000Z",
+        "commentCount": 2,
+        "author": {
+          "id": "u2",
+          "profile": {"firstName": "Bola", "lastName": "Resident"},
+        },
+      });
+      expect(post.displayAuthor, "Bola Resident");
+      expect(post.commentCount, 2);
+    });
+
+    test("loaded page of 20 comments may still report commentCount 67", () {
+      final post = CommunityPostItem.fromJson({
+        "id": "p3",
+        "title": "Thread",
+        "body": "Busy",
+        "type": "Discussion",
+        "verificationStatus": "PendingVerification",
+        "confidenceScore": 1,
+        "commentCount": 67,
+        "comments": List.generate(20, (i) => {"id": "c$i"}),
+      });
+      expect(post.commentCount, 67);
+    });
+  });
+
+  group("empty-state copy", () {
+    test("eligible empty community copy contract", () {
       const title = "No community discussions yet";
       const subtitle =
           "Be the first to start a safety conversation in this area.";
       const cta = "Start Conversation";
-      expect(title.contains("discussions"), isTrue);
-      expect(subtitle.contains("first"), isTrue);
+      expect(title, contains("discussions"));
+      expect(subtitle, contains("first"));
       expect(cta, "Start Conversation");
     });
+  });
 
-    test("conversation type labels map to CommunityPost types", () {
+  group("conversation type map", () {
+    test("maps required UI labels to CommunityPost types", () {
       const typeMap = {
         "Safety Discussion": "Discussion",
         "Security Tip": "SafetyTip",
@@ -91,54 +278,32 @@ void main() {
       expect(typeMap.length, 6);
       expect(typeMap.values.toSet().length, 6);
     });
+  });
 
-    test("14) discussion deep link parses post id", () {
-      const route = "/neighborhood-watch/post/post-abc";
-      expect(NeighborhoodWatchDestinations.isPostRoute(route), isTrue);
-      expect(NeighborhoodWatchDestinations.postIdFromRoute(route), "post-abc");
-      expect(
-        NeighborhoodWatchDestinations.post("post-abc"),
-        "/neighborhood-watch/post/post-abc",
-      );
-    });
+  testWidgets(
+      "deep-link route builder does not crash with null selectedCommunity",
+      (tester) async {
+    final args = resolveCommunityPostRouteArgs(
+      pathPostId: "post-cold",
+      settingsArguments: null,
+      selectedCommunityId: null,
+      currentUserId: null,
+    );
+    expect(args.postId, "post-cold");
+    expect(args.communityId, isEmpty);
 
-    test("17) Report Emergency uses canonical route", () {
-      expect("/report/emergency", "/report/emergency");
-    });
-
-    test("Current Area Visitor author label parses from feed JSON", () {
-      final post = CommunityPostItem.fromJson({
-        "id": "p1",
-        "title": "Safety Discussion",
-        "body": "Anyone nearby?",
-        "type": "Discussion",
-        "verificationStatus": "PendingVerification",
-        "confidenceScore": 20,
-        "createdAt": "2026-08-12T12:00:00.000Z",
-        "authorLabel": "Current Area Visitor",
-        "commentCount": 12,
-        "author": {
-          "id": "u1",
-          "displayName": "Hidden Name",
-        },
-      });
-      expect(post.displayAuthor, "Current Area Visitor");
-      expect(post.commentCount, 12);
-    });
-
-    test("voice comment authorLabel prefers visitor label", () {
-      final comment = CommunityCommentItem.fromJson({
-        "id": "c1",
-        "body": "",
-        "hasVoice": true,
-        "durationSeconds": 8,
-        "mediaType": "Audio",
-        "authorLabel": "Current Area Visitor",
-        "author": {"id": "u2", "displayName": "Someone"},
-        "createdAt": "2026-08-12T12:01:00.000Z",
-      });
-      expect(comment.authorName, "Current Area Visitor");
-      expect(comment.isVoiceComment, isTrue);
-    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Text(
+                  "${args.postId}:${args.communityId.isEmpty ? "pending-fetch" : args.communityId}"),
+            );
+          },
+        ),
+      ),
+    );
+    expect(find.text("post-cold:pending-fetch"), findsOneWidget);
   });
 }
