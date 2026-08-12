@@ -1,3 +1,4 @@
+import { ForbiddenException } from "@nestjs/common";
 import { NeighborhoodWatchService } from "../neighborhood-watch.service";
 import { buildNeighborhoodWatchNotificationMetadata } from "../../notifications/notification-routing.schema";
 
@@ -29,8 +30,8 @@ function buildService(overrides: Record<string, unknown> = {}) {
         incidentId: null,
         isEscalated: false,
         verificationStatus: "Verified",
-        latitude: null,
-        longitude: null,
+        latitude: 6.52,
+        longitude: 3.37,
         community: { id: "community-1", jurisdictionId: null },
       }),
       update: jest.fn().mockResolvedValue({ id: "post-1", incidentId: "incident-1", isEscalated: true }),
@@ -57,6 +58,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
         title: "Evening walk",
       }),
       update: jest.fn().mockResolvedValue({ id: "patrol-1", status: "Active" }),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     patrolAssignment: {
       findFirst: jest.fn().mockResolvedValue({ id: "assign-1", scheduleId: "patrol-1", userId: "user-1" }),
@@ -114,8 +116,8 @@ const moderatorMembership = {
 describe("Neighborhood Watch E2E gap coverage", () => {
   it("denies private community feed without approved membership", async () => {
     const { service, prisma } = buildService();
-    await expect(service.feed("community-private", citizen, {})).rejects.toThrow(
-      /membership|private|forbidden|not found|visible|access/i,
+    await expect(service.feed("community-private", citizen, {})).rejects.toBeInstanceOf(
+      ForbiddenException,
     );
     expect(prisma.communityPost.findMany).not.toHaveBeenCalled();
   });
@@ -141,10 +143,12 @@ describe("Neighborhood Watch E2E gap coverage", () => {
     const result = await service.map("community-1", citizen);
     expect(dangerZoneGeo.findActiveZonesNearPoint).toHaveBeenCalled();
     expect(result.data.dangerZones).toHaveLength(1);
-    expect(result.data.dangerZones[0]).toMatchObject({
-      id: "dz-1",
-      publicMessage: "Avoid intersection",
-    });
+    expect(result.data.dangerZones[0]).toEqual(
+      expect.objectContaining({
+        id: "dz-1",
+        publicMessage: "Avoid intersection",
+      }),
+    );
   });
 
   it("cancels community alerts and deactivates pinned safety", async () => {
@@ -175,43 +179,44 @@ describe("Neighborhood Watch E2E gap coverage", () => {
   });
 
   it("escalates a post to incident idempotently", async () => {
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({
+        id: "post-1",
+        communityId: "community-1",
+        authorId: "author-1",
+        title: "Suspicious",
+        body: "Seen near gate",
+        type: "SuspiciousActivity",
+        incidentId: null,
+        isEscalated: false,
+        verificationStatus: "Verified",
+        latitude: 6.52,
+        longitude: 3.37,
+        community: { id: "community-1", jurisdictionId: null },
+      })
+      .mockResolvedValueOnce({
+        id: "post-1",
+        communityId: "community-1",
+        authorId: "author-1",
+        title: "Suspicious",
+        body: "Seen near gate",
+        type: "SuspiciousActivity",
+        incidentId: "incident-1",
+        isEscalated: true,
+        escalatedAt: new Date("2026-08-12T00:00:00.000Z"),
+        escalatedById: "user-1",
+        verificationStatus: "Verified",
+        latitude: 6.52,
+        longitude: 3.37,
+        community: { id: "community-1", jurisdictionId: null },
+      });
     const { service, incidents } = buildService({
       communityMembership: {
         findUnique: jest.fn().mockResolvedValue(moderatorMembership),
       },
       communityPost: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValueOnce({
-            id: "post-1",
-            communityId: "community-1",
-            authorId: "author-1",
-            title: "Suspicious",
-            body: "Seen near gate",
-            type: "SuspiciousActivity",
-            incidentId: null,
-            isEscalated: false,
-            verificationStatus: "Verified",
-            latitude: 6.52,
-            longitude: 3.37,
-            community: { id: "community-1", jurisdictionId: null },
-          })
-          .mockResolvedValueOnce({
-            id: "post-1",
-            communityId: "community-1",
-            authorId: "author-1",
-            title: "Suspicious",
-            body: "Seen near gate",
-            type: "SuspiciousActivity",
-            incidentId: "incident-1",
-            isEscalated: true,
-            escalatedAt: new Date("2026-08-12T00:00:00.000Z"),
-            escalatedById: "user-1",
-            verificationStatus: "Verified",
-            latitude: 6.52,
-            longitude: 3.37,
-            community: { id: "community-1", jurisdictionId: null },
-          }),
+        findUnique,
         update: jest.fn().mockResolvedValue({ id: "post-1", incidentId: "incident-1" }),
       },
     });

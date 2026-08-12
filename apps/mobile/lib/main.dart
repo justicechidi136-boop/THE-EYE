@@ -88,6 +88,7 @@ import "community_verification/community_verification_screen.dart";
 import "community_verification/community_verification_service.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
 import "neighborhood_watch/neighborhood_watch_destinations.dart";
+import "neighborhood_watch/neighborhood_watch_session.dart";
 import "neighborhood_watch/nw_home_screen.dart";
 import "neighborhood_watch/volunteer_categories.dart";
 import "navigation/navigate_back_or_home.dart";
@@ -3742,6 +3743,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 }
 
+class ServicesHubScreen extends StatelessWidget {
   const ServicesHubScreen({super.key});
 
   static const _destinations = [
@@ -7717,12 +7719,10 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
                         : Icons.route,
                     color: highlighted ? Theme.of(context).colorScheme.primary : null,
                   ),
-                  title: Text(patrol.title),
-                  subtitle: Text(
-                    highlighted
-                        ? "${patrol.status} • ${patrol.startsAt ?? "TBD"} • Deep link match"
-                        : "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
-                  ),
+                  title: patrol.title,
+                  subtitle: highlighted
+                      ? "${patrol.status} • ${patrol.startsAt ?? "TBD"} • Deep link match"
+                      : "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
                 );
               }),
             ],

@@ -5,6 +5,7 @@ import "../contracts/the_eye_enums.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
+import "../widgets/eye_scaffold.dart";
 import "community_media_upload_service.dart";
 import "community_members_screen.dart";
 import "neighborhood_watch_service.dart";

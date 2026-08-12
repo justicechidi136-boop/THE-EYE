@@ -21,14 +21,10 @@ describe("NeighborhoodWatchContextService", () => {
   const service = new NeighborhoodWatchContextService(prisma as any, audit as any);
   const citizen = { typ: "user", sub: "11111111-1111-4111-8111-111111111111" };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it("returns LOCATION_REQUIRED when coords missing", async () => {
     const result = await service.resolveContext(citizen as any, {});
     expect(result.locationStatus).toBe("LOCATION_REQUIRED");
-    expect(result.publicCommunity).toBeNull();
+    expect(result.publicCommunity).toBe(null);
   });
 
   it("returns LOCATION_STALE for old capturedAt", async () => {
@@ -52,7 +48,8 @@ describe("NeighborhoodWatchContextService", () => {
   });
 
   it("returns CONFIRMED with presence for a public community", async () => {
-    prisma.$queryRawUnsafe
+    prisma.$queryRawUnsafe = jest
+      .fn()
       .mockResolvedValueOnce([
         {
           id: "22222222-2222-4222-8222-222222222222",
@@ -66,11 +63,17 @@ describe("NeighborhoodWatchContextService", () => {
         },
       ])
       .mockResolvedValueOnce([]);
-    prisma.communityPresence.findFirst.mockResolvedValue(null);
-    prisma.communityPresence.upsert.mockResolvedValue({});
-    prisma.communityMembership.findUnique.mockResolvedValue(null);
+    prisma.communityPresence.findFirst = jest.fn().mockResolvedValue(null);
+    prisma.communityPresence.upsert = jest.fn().mockResolvedValue({});
+    prisma.communityMembership.findUnique = jest.fn().mockResolvedValue(null);
+    prisma.communityMembership.findMany = jest.fn().mockResolvedValue([]);
+    prisma.communityAlert.count = jest.fn().mockResolvedValue(1);
+    prisma.communityPost.count = jest.fn().mockResolvedValue(0);
+    prisma.communityPinnedSafetyInfo.findMany = jest.fn().mockResolvedValue([]);
+    prisma.profile.findUnique = jest.fn().mockResolvedValue(null);
 
-    const result = await service.resolveContext(citizen as any, {
+    const confirmedService = new NeighborhoodWatchContextService(prisma as any, audit as any);
+    const result = await confirmedService.resolveContext(citizen as any, {
       lat: "4.8156",
       lng: "7.0498",
       accuracy: "25",
