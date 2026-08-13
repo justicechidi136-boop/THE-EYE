@@ -137,6 +137,14 @@ abstract final class TheEyeApiPaths {
   static const neighborhoodWatchContext = "/neighborhood-watch/context";
   static const neighborhoodWatchHomeCommunity =
       "/neighborhood-watch/home-community";
+  static const neighborhoodWatchDynamicAreaFeed =
+      "/neighborhood-watch/dynamic-areas/feed";
+  static const neighborhoodWatchDynamicAreaPosts =
+      "/neighborhood-watch/dynamic-areas/posts";
+  static const neighborhoodWatchDynamicAreaPostMediaPresign =
+      "/neighborhood-watch/dynamic-areas/posts/media/presign";
+  static const neighborhoodWatchDynamicAreaReports =
+      "/neighborhood-watch/dynamic-areas/reports";
   static const neighborhoodWatchCommunities = "/neighborhood-watch/communities";
   static const neighborhoodWatchCommunityRequests =
       "/neighborhood-watch/community-requests";
