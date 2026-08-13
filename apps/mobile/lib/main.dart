@@ -80,6 +80,7 @@ import "presentation/citizen_date_time.dart";
 import "presentation/citizen_notification_presenter.dart";
 import "presentation/missing_person_age.dart";
 import "push/push_background_handler.dart";
+import "auth/citizen_auth_return_listener.dart";
 import "push/push_deep_link_router.dart";
 import "push/push_navigation.dart";
 import "push/push_notification_service.dart";
@@ -973,10 +974,12 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
             themeMode: controller.themeMode,
             onGenerateRoute: _onGenerateRoute,
             builder: (context, child) {
-              if (child == null) {
-                return const StartupSplashScreen();
-              }
-              return child;
+              final content = child ?? const StartupSplashScreen();
+              return CitizenAuthReturnHost(
+                navigatorKey: theEyeNavigatorKey,
+                isAuthenticated: () => controller.isAuthenticated,
+                child: content,
+              );
             },
             routes: {
               "/": (_) => const SplashScreen(),
@@ -3029,6 +3032,18 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map && args["authReturnMessage"] is String) {
+      final message = (args["authReturnMessage"] as String).trim();
+      if (message.isNotEmpty && formSuccess != message) {
+        formSuccess = message;
+      }
+    }
   }
 
   @override

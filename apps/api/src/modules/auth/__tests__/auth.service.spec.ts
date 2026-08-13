@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, HttpException, UnauthorizedException } from "@nestjs/common";
-import { hashOtp, hashPassword } from "../../../common/auth/crypto";
+import { hashOtp, hashPassword, hashToken } from "../../../common/auth/crypto";
 import { AuthService } from "../auth.service";
 
 function createAuthService(overrides: Record<string, unknown> = {}) {
@@ -23,7 +23,12 @@ function createAuthService(overrides: Record<string, unknown> = {}) {
       create: jest.fn(),
     },
     refreshToken: { create: jest.fn().mockResolvedValue({}) },
-    passwordResetToken: { create: jest.fn().mockResolvedValue({ id: "reset-1" }) },
+    passwordResetToken: {
+      create: jest.fn().mockResolvedValue({ id: "reset-1" }),
+      findUnique: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
     ...overrides,
   };
 
@@ -309,5 +314,59 @@ describe("AuthService login", () => {
     await expect(
       service.login({ email: "staging.citizen@theeye.local", password }),
     ).rejects.toBeInstanceOf(HttpException);
+  });
+});
+
+describe("AuthService password reset (AUTH-007 token security)", () => {
+  it("rejects invalid reset tokens", async () => {
+    const { service, prisma } = createAuthService();
+    prisma.passwordResetToken.findUnique.mockResolvedValueOnce(null);
+    await expect(service.confirmPasswordReset("missing-token", "Password123!")).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it("rejects expired reset tokens", async () => {
+    const { service, prisma } = createAuthService();
+    prisma.passwordResetToken.findUnique.mockResolvedValueOnce({
+      id: "reset-1",
+      userId: "user-1",
+      usedAt: null,
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    await expect(service.confirmPasswordReset("expired-token", "Password123!")).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it("rejects already-used reset tokens", async () => {
+    const { service, prisma } = createAuthService();
+    prisma.passwordResetToken.findUnique.mockResolvedValueOnce({
+      id: "reset-1",
+      userId: "user-1",
+      usedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(service.confirmPasswordReset("used-token", "Password123!")).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it("confirms password reset and rotates refresh sessions", async () => {
+    const { service, prisma } = createAuthService();
+    const token = "valid-reset-token";
+    prisma.passwordResetToken.findUnique.mockResolvedValueOnce({
+      id: "reset-1",
+      userId: "user-1",
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      tokenHash: hashToken(token),
+    });
+    prisma.user.update = jest.fn().mockResolvedValue({});
+    prisma.refreshToken.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+
+    const result = await service.confirmPasswordReset(token, "Password123!");
+    expect(result).toEqual({ ok: true });
+    expect(prisma.$transaction).toHaveBeenCalled();
   });
 });

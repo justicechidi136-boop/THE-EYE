@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { AuthLayout } from "../../components/auth-layout";
+import { CitizenReturnToApp } from "../../components/citizen-return-to-app";
 import { InlineAlert } from "../../components/form-primitives";
 
 type VerifyState = "loading" | "valid" | "invalid" | "missing";
@@ -71,30 +72,24 @@ function AccountRecoveryPanel() {
         <InlineAlert>
           <span>
             {message ??
-              "This recovery link is missing a token. Request a new recovery email from the THE EYE app."}
+              "This recovery link is missing a token. Request a new recovery email from THE EYE."}
           </span>
         </InlineAlert>
-        <p className="text-sm text-ink/80">
-          Return to the THE EYE app and continue account recovery there.
-        </p>
+        <CitizenReturnToApp result="ACCOUNT_RECOVERY_CONTINUE" />
       </div>
     );
   }
 
   return (
     <div className="grid w-full gap-4 text-center">
-      <h1 className="text-[32px] font-semibold leading-tight text-ink">Recovery link verified</h1>
+      <CitizenReturnToApp result="ACCOUNT_RECOVERY_SUCCESS" showTitle />
       <InlineAlert tone="success">
         <span>
-          Your account recovery is confirmed. Return to the THE EYE app and continue account
-          recovery to finish restoring access.
+          Your account recovery is confirmed. Continue in THE EYE to finish restoring access.
         </span>
       </InlineAlert>
       <p className="text-sm text-ink/80">
-        Keep this page open only if you still need the link. Do not share recovery links with anyone.
-      </p>
-      <p className="text-sm text-ink/80">
-        Return to the THE EYE app and continue account recovery.
+        Do not share recovery links with anyone.
       </p>
     </div>
   );

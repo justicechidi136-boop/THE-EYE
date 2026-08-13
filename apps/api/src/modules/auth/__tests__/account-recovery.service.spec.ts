@@ -117,6 +117,25 @@ describe("AccountRecoveryService", () => {
     await expect(service.verifyRecoveryToken("expired-token")).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it("rejects invalid recovery token", async () => {
+    prisma.accountRecoveryChallenge.findUnique.mockResolvedValueOnce(null);
+    await expect(service.verifyRecoveryToken("missing-token")).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("verifies a valid recovery token successfully", async () => {
+    prisma.accountRecoveryChallenge.findUnique.mockResolvedValueOnce({
+      id: "challenge-1",
+      userId: "user-1",
+      provider: "google.com",
+      status: "pending",
+      usedAt: null,
+      cancelledAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const result = await service.verifyRecoveryToken("valid-token");
+    expect(result.ok).toBe(true);
+  });
+
   it("cancels an active recovery challenge", async () => {
     prisma.accountRecoveryChallenge.findUnique.mockResolvedValueOnce({
       id: "challenge-1",
