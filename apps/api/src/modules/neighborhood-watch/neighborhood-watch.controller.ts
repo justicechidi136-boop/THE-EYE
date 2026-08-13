@@ -236,6 +236,38 @@ export class NeighborhoodWatchController {
     return this.neighborhoodWatch.createPost(communityId, dto, request.user);
   }
 
+  @Get("dynamic-areas/feed")
+  @RequirePermissions("community:read")
+  feedDynamicArea(@Req() request: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return this.neighborhoodWatch.feedDynamicArea(request.user, { cursor, limit });
+  }
+
+  @Post("dynamic-areas/posts/media/presign")
+  @RequirePermissions("community:post")
+  presignDynamicAreaMedia(@Body() dto: PresignCommunityMediaDto, @Req() request: any) {
+    return this.neighborhoodWatch.presignDynamicAreaMedia(dto, request.user);
+  }
+
+  @Post("dynamic-areas/posts")
+  @RateLimit("communityPostCreate")
+  @RequirePermissions("community:post")
+  createDynamicAreaPost(@Body() dto: CreateCommunityPostDto, @Req() request: any) {
+    return this.neighborhoodWatch.createDynamicAreaPost(dto, request.user);
+  }
+
+  @Post("dynamic-areas/reports")
+  @RateLimit("communityPostCreate")
+  @RequirePermissions("community:post")
+  reportDynamicAreaContent(@Body() dto: CreateCommunityContentReportDto, @Req() request: any) {
+    return this.neighborhoodWatch.createDynamicAreaContentReport(dto, request.user);
+  }
+
+  @Get("admin/dynamic-area-posts")
+  @RequirePermissions("community:moderate")
+  listAdminDynamicAreaPosts(@Req() request: any, @Query() query: Record<string, string | undefined>) {
+    return this.neighborhoodWatch.listAdminDynamicAreaPosts(request.user, query);
+  }
+
   @Get("posts/:postId/comments")
   @RequirePermissions("community:read")
   listComments(@Param("postId") postId: string, @Req() request: any, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {

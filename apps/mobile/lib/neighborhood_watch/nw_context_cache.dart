@@ -75,11 +75,13 @@ String nwContextStaleBannerMessage(DateTime cachedAt) {
 NwContextResponse stripLivePresence(NwContextResponse context) {
   return NwContextResponse(
     locationStatus: context.locationStatus,
+    contextType: context.contextType,
     publicCommunity: context.publicCommunity,
+    dynamicArea: context.dynamicArea,
     presence: null,
     homeCommunity: context.homeCommunity,
     privateCommunitiesNearby: context.privateCommunitiesNearby,
-    permissions: context.permissions,
+    permissions: context.permissions.copyWithRestrictedActions(),
     safetySummary: context.safetySummary,
   );
 }

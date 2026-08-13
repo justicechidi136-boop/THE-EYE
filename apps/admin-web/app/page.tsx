@@ -16,6 +16,7 @@ const QUICK_LINKS: [string, string, string][] = [
   ["Emergency command center", "/dispatch", "Unassigned incidents and live coordinates"],
   ["Verification queue", "/verification", "Confidence scoring and crowd confirmation"],
   ["Community chat", "/neighborhood-watch/chat", "Moderated community channels"],
+  ["Dynamic areas", "/neighborhood-watch/dynamic-areas", "Unmapped public area conversations"],
   ["Settings", "/settings", "Profile, security, and display preferences"],
 ];
 

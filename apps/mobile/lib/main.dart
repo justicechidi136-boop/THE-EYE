@@ -1994,13 +1994,32 @@ class AppController extends SessionAccessor
     communityAlertsError = null;
     notifyListeners();
     try {
-      final page = await _neighborhoodWatchService.communityAlerts(
-        accessToken: accessToken!,
-        communityId: community.id,
-      );
-      communityAlerts
-        ..clear()
-        ..addAll(page.items);
+      if (isDynamicAreaCommunityId(community.id)) {
+        // Dynamic areas use conversation posts for hazards/warnings; no mapped alerts feed.
+        final page = await _neighborhoodWatchService.communityFeed(
+          accessToken: accessToken!,
+          communityId: community.id,
+        );
+        communityAlerts
+          ..clear()
+          ..addAll(page.items.where((post) => const {
+                "SuspiciousActivity",
+                "LocalWarning",
+                "RoadHazard",
+                "CrimeAlert",
+                "AccidentAlert",
+                "FireAlert",
+                "FloodWarning",
+              }.contains(post.type)));
+      } else {
+        final page = await _neighborhoodWatchService.communityAlerts(
+          accessToken: accessToken!,
+          communityId: community.id,
+        );
+        communityAlerts
+          ..clear()
+          ..addAll(page.items);
+      }
     } on IncidentApiException catch (error) {
       communityAlertsError = error.userMessage;
     } catch (_) {
@@ -2014,6 +2033,13 @@ class AppController extends SessionAccessor
   Future<void> loadCommunityPatrols() async {
     final community = selectedCommunity;
     if (!isAuthenticated || accessToken == null || community == null) return;
+    if (isDynamicAreaCommunityId(community.id)) {
+      communityPatrols.clear();
+      communityPatrolError = null;
+      loadingCommunityPatrols = false;
+      notifyListeners();
+      return;
+    }
     loadingCommunityPatrols = true;
     communityPatrolError = null;
     notifyListeners();
@@ -2122,7 +2148,7 @@ class AppController extends SessionAccessor
   }) async {
     final community = selectedCommunity;
     if (community == null) {
-      return "Resolve your current public community before starting a conversation";
+      return "Confirm your current location before starting a conversation";
     }
     if (community.visibility == "Private" && !community.isMember) {
       return "Approved community membership is required";
@@ -8072,7 +8098,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                 leading: Icon(Icons.lock_outline),
                 title: "Start Conversation unavailable",
                 subtitle:
-                    "Sign in and confirm your current public community to participate.",
+                    "Sign in and confirm your current location to participate in this area.",
               ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -8200,9 +8226,26 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
       showAppSnackBar(context, error, isError: true);
       return;
     }
-    showAppSnackBar(context, "Conversation posted to this community");
+    showAppSnackBar(context, "Conversation posted for this area");
     Navigator.of(context)
         .pushReplacementNamed(NeighborhoodWatchDestinations.feed);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      final type = args["type"];
+      if (type is String) {
+        for (final entry in _typeMap.entries) {
+          if (entry.value == type && entry.key != _selectedType) {
+            _selectedType = entry.key;
+            break;
+          }
+        }
+      }
+    }
   }
 
   @override

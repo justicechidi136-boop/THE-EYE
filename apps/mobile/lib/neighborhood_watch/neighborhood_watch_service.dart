@@ -382,7 +382,15 @@ enum NwLocationStatus {
   locationRequired,
   locationStale,
   locationLowAccuracy,
-  noPublicCommunity,
+}
+
+enum NwContextType {
+  mappedPublicCommunity,
+  dynamicPublicArea,
+  locationRequired,
+  locationStale,
+  locationLowAccuracy,
+  unknown,
 }
 
 NwLocationStatus parseNwLocationStatus(String? raw) {
@@ -393,11 +401,27 @@ NwLocationStatus parseNwLocationStatus(String? raw) {
       return NwLocationStatus.locationStale;
     case "LOCATION_LOW_ACCURACY":
       return NwLocationStatus.locationLowAccuracy;
-    case "NO_PUBLIC_COMMUNITY":
-      return NwLocationStatus.noPublicCommunity;
     case "LOCATION_REQUIRED":
+    case "NO_PUBLIC_COMMUNITY": // legacy dead-end — force fresh resolve
     default:
       return NwLocationStatus.locationRequired;
+  }
+}
+
+NwContextType parseNwContextType(String? raw) {
+  switch (raw) {
+    case "MAPPED_PUBLIC_COMMUNITY":
+      return NwContextType.mappedPublicCommunity;
+    case "DYNAMIC_PUBLIC_AREA":
+      return NwContextType.dynamicPublicArea;
+    case "LOCATION_STALE":
+      return NwContextType.locationStale;
+    case "LOCATION_LOW_ACCURACY":
+      return NwContextType.locationLowAccuracy;
+    case "LOCATION_REQUIRED":
+      return NwContextType.locationRequired;
+    default:
+      return NwContextType.unknown;
   }
 }
 
@@ -411,8 +435,6 @@ String nwLocationStatusLabel(NwLocationStatus status) {
       return "Location is stale";
     case NwLocationStatus.locationLowAccuracy:
       return "Location accuracy is too low";
-    case NwLocationStatus.noPublicCommunity:
-      return "No public community for this area";
   }
 }
 
@@ -426,8 +448,23 @@ String nwLocationStatusToApi(NwLocationStatus status) {
       return "LOCATION_STALE";
     case NwLocationStatus.locationLowAccuracy:
       return "LOCATION_LOW_ACCURACY";
-    case NwLocationStatus.noPublicCommunity:
-      return "NO_PUBLIC_COMMUNITY";
+  }
+}
+
+String nwContextTypeToApi(NwContextType type) {
+  switch (type) {
+    case NwContextType.mappedPublicCommunity:
+      return "MAPPED_PUBLIC_COMMUNITY";
+    case NwContextType.dynamicPublicArea:
+      return "DYNAMIC_PUBLIC_AREA";
+    case NwContextType.locationRequired:
+      return "LOCATION_REQUIRED";
+    case NwContextType.locationStale:
+      return "LOCATION_STALE";
+    case NwContextType.locationLowAccuracy:
+      return "LOCATION_LOW_ACCURACY";
+    case NwContextType.unknown:
+      return "UNKNOWN";
   }
 }
 
@@ -441,9 +478,18 @@ String? nwLocationStatusRetryHint(NwLocationStatus status) {
       return "Move to an open area and refresh your GPS fix.";
     case NwLocationStatus.locationLowAccuracy:
       return "Wait for a stronger GPS signal, then retry.";
-    case NwLocationStatus.noPublicCommunity:
-      return "You may be outside a mapped public safety community. Try a nearby area or join a private community.";
   }
+}
+
+/// Synthetic community id for Dynamic Public Area session selection.
+String dynamicAreaCommunityId(String areaKey) => "dynamic:$areaKey";
+
+bool isDynamicAreaCommunityId(String? communityId) =>
+    communityId != null && communityId.startsWith("dynamic:");
+
+String? dynamicAreaKeyFromCommunityId(String? communityId) {
+  if (!isDynamicAreaCommunityId(communityId)) return null;
+  return communityId!.substring("dynamic:".length);
 }
 
 const neighborhoodWatchPostTypeLabels = {
@@ -536,6 +582,7 @@ class NwPresenceInfo {
   const NwPresenceInfo({
     this.mode,
     this.communityId,
+    this.dynamicAreaKey,
     this.capturedAt,
     this.expiresAt,
     this.accuracyM,
@@ -545,6 +592,7 @@ class NwPresenceInfo {
 
   final String? mode;
   final String? communityId;
+  final String? dynamicAreaKey;
   final DateTime? capturedAt;
   final DateTime? expiresAt;
   final double? accuracyM;
@@ -558,6 +606,7 @@ class NwPresenceInfo {
     return NwPresenceInfo(
       mode: json["mode"] as String?,
       communityId: json["communityId"] as String?,
+      dynamicAreaKey: json["dynamicAreaKey"] as String?,
       capturedAt: DateTime.tryParse((json["capturedAt"] as String?) ?? ""),
       expiresAt: DateTime.tryParse((json["expiresAt"] as String?) ?? ""),
       accuracyM: (json["accuracyM"] as num?)?.toDouble(),
@@ -569,12 +618,70 @@ class NwPresenceInfo {
   Map<String, dynamic> toJson() => {
         if (mode != null) "mode": mode,
         if (communityId != null) "communityId": communityId,
+        if (dynamicAreaKey != null) "dynamicAreaKey": dynamicAreaKey,
         if (capturedAt != null) "capturedAt": capturedAt!.toIso8601String(),
         if (expiresAt != null) "expiresAt": expiresAt!.toIso8601String(),
         if (accuracyM != null) "accuracyM": accuracyM,
         "switchRecommended": switchRecommended,
         if (switchMessage != null) "switchMessage": switchMessage,
       };
+}
+
+class NwDynamicArea {
+  const NwDynamicArea({
+    required this.areaKey,
+    required this.areaLabel,
+    required this.countryCode,
+    this.stateCode,
+    this.lgaCode,
+    this.city,
+    this.resolutionSource,
+  });
+
+  final String areaKey;
+  final String areaLabel;
+  final String countryCode;
+  final String? stateCode;
+  final String? lgaCode;
+  final String? city;
+  final String? resolutionSource;
+
+  factory NwDynamicArea.fromJson(Map<String, dynamic> json) {
+    return NwDynamicArea(
+      areaKey: (json["areaKey"] as String?) ?? "",
+      areaLabel: (json["areaLabel"] as String?) ?? "Current Area",
+      countryCode: (json["countryCode"] as String?) ?? "",
+      stateCode: json["stateCode"] as String?,
+      lgaCode: json["lgaCode"] as String?,
+      city: json["city"] as String?,
+      resolutionSource: json["resolutionSource"] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        "areaKey": areaKey,
+        "areaLabel": areaLabel,
+        "countryCode": countryCode,
+        if (stateCode != null) "stateCode": stateCode,
+        if (lgaCode != null) "lgaCode": lgaCode,
+        if (city != null) "city": city,
+        if (resolutionSource != null) "resolutionSource": resolutionSource,
+      };
+
+  CommunitySummary toCommunitySummary({int activeAlertsCount = 0}) {
+    return CommunitySummary(
+      id: dynamicAreaCommunityId(areaKey),
+      name: areaLabel,
+      visibility: "Public",
+      memberCount: 0,
+      activeAlertsCount: activeAlertsCount,
+      description:
+          "Local public safety area — no formal public community mapped yet.",
+      country: countryCode,
+      state: stateCode,
+      lga: lgaCode,
+    );
+  }
 }
 
 class NwSafetySummary {
@@ -620,6 +727,10 @@ class NwPermissions {
     required this.canViewPrivateFeed,
     required this.canModerate,
     required this.canManagePatrol,
+    this.canViewPublicSafety = false,
+    this.canReportActivity = false,
+    this.canShareSecurityTip = false,
+    this.canVerify = false,
   });
 
   final bool canViewPublicFeed;
@@ -628,16 +739,26 @@ class NwPermissions {
   final bool canViewPrivateFeed;
   final bool canModerate;
   final bool canManagePatrol;
+  final bool canViewPublicSafety;
+  final bool canReportActivity;
+  final bool canShareSecurityTip;
+  final bool canVerify;
 
   factory NwPermissions.fromJson(Map<String, dynamic>? json) {
     bool read(String key) => json?[key] == true;
+    final canPost = read("canPost");
     return NwPermissions(
       canViewPublicFeed: read("canViewPublicFeed"),
-      canPost: read("canPost"),
+      canPost: canPost,
       canComment: read("canComment"),
       canViewPrivateFeed: read("canViewPrivateFeed"),
       canModerate: read("canModerate"),
       canManagePatrol: read("canManagePatrol"),
+      canViewPublicSafety:
+          read("canViewPublicSafety") || read("canViewPublicFeed"),
+      canReportActivity: read("canReportActivity") || canPost,
+      canShareSecurityTip: read("canShareSecurityTip") || canPost,
+      canVerify: read("canVerify") || canPost,
     );
   }
 
@@ -650,6 +771,22 @@ class NwPermissions {
     canManagePatrol: false,
   );
 
+  /// Stale/cached context may show info but must not authorize live posting.
+  NwPermissions copyWithRestrictedActions() {
+    return NwPermissions(
+      canViewPublicFeed: canViewPublicFeed,
+      canPost: false,
+      canComment: false,
+      canViewPrivateFeed: false,
+      canModerate: false,
+      canManagePatrol: false,
+      canViewPublicSafety: canViewPublicSafety,
+      canReportActivity: false,
+      canShareSecurityTip: false,
+      canVerify: false,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         "canViewPublicFeed": canViewPublicFeed,
         "canPost": canPost,
@@ -657,6 +794,10 @@ class NwPermissions {
         "canViewPrivateFeed": canViewPrivateFeed,
         "canModerate": canModerate,
         "canManagePatrol": canManagePatrol,
+        "canViewPublicSafety": canViewPublicSafety,
+        "canReportActivity": canReportActivity,
+        "canShareSecurityTip": canShareSecurityTip,
+        "canVerify": canVerify,
       };
 }
 
@@ -698,7 +839,9 @@ class NwPrivateCommunityNearby {
 class NwContextResponse {
   const NwContextResponse({
     required this.locationStatus,
+    this.contextType = NwContextType.unknown,
     this.publicCommunity,
+    this.dynamicArea,
     this.presence,
     this.homeCommunity,
     this.privateCommunitiesNearby = const [],
@@ -713,7 +856,9 @@ class NwContextResponse {
   });
 
   final NwLocationStatus locationStatus;
+  final NwContextType contextType;
   final NwPublicCommunityCard? publicCommunity;
+  final NwDynamicArea? dynamicArea;
   final NwPresenceInfo? presence;
   final NwPublicCommunityCard? homeCommunity;
   final List<NwPrivateCommunityNearby> privateCommunitiesNearby;
@@ -722,13 +867,39 @@ class NwContextResponse {
 
   bool get isConfirmed => locationStatus == NwLocationStatus.confirmed;
 
+  bool get isMappedPublicCommunity =>
+      isConfirmed && contextType == NwContextType.mappedPublicCommunity;
+
+  bool get isDynamicPublicArea =>
+      isConfirmed && contextType == NwContextType.dynamicPublicArea;
+
+  /// Neighborhood Watch is usable for public participation.
+  bool get isUsablePublicContext =>
+      isMappedPublicCommunity || isDynamicPublicArea;
+
   factory NwContextResponse.fromJson(Map<String, dynamic> json) {
     final privateRaw = json["privateCommunitiesNearby"];
+    final locationStatus =
+        parseNwLocationStatus(json["locationStatus"] as String?);
+    var contextType = parseNwContextType(json["contextType"] as String?);
+    if (contextType == NwContextType.unknown &&
+        locationStatus == NwLocationStatus.confirmed) {
+      if (json["publicCommunity"] is Map) {
+        contextType = NwContextType.mappedPublicCommunity;
+      } else if (json["dynamicArea"] is Map) {
+        contextType = NwContextType.dynamicPublicArea;
+      }
+    }
     return NwContextResponse(
-      locationStatus: parseNwLocationStatus(json["locationStatus"] as String?),
+      locationStatus: locationStatus,
+      contextType: contextType,
       publicCommunity: json["publicCommunity"] is Map
           ? NwPublicCommunityCard.fromJson(
               Map<String, dynamic>.from(json["publicCommunity"] as Map))
+          : null,
+      dynamicArea: json["dynamicArea"] is Map
+          ? NwDynamicArea.fromJson(
+              Map<String, dynamic>.from(json["dynamicArea"] as Map))
           : null,
       presence: json["presence"] is Map
           ? NwPresenceInfo.fromJson(
@@ -760,8 +931,10 @@ class NwContextResponse {
 
   Map<String, dynamic> toJson() => {
         "locationStatus": nwLocationStatusToApi(locationStatus),
+        "contextType": nwContextTypeToApi(contextType),
         if (publicCommunity != null)
           "publicCommunity": publicCommunity!.toJson(),
+        if (dynamicArea != null) "dynamicArea": dynamicArea!.toJson(),
         if (presence != null) "presence": presence!.toJson(),
         if (homeCommunity != null) "homeCommunity": homeCommunity!.toJson(),
         "privateCommunitiesNearby":
@@ -941,8 +1114,11 @@ class NeighborhoodWatchService {
     String? cursor,
     int limit = 25,
   }) async {
+    final path = isDynamicAreaCommunityId(communityId)
+        ? TheEyeApiPaths.neighborhoodWatchDynamicAreaFeed
+        : TheEyeApiPaths.neighborhoodWatchCommunityFeed(communityId);
     final response = await _apiClient.getJson(
-      TheEyeApiPaths.neighborhoodWatchCommunityFeed(communityId),
+      path,
       accessToken: accessToken,
       query: {
         "limit": "$limit",
@@ -993,8 +1169,11 @@ class NeighborhoodWatchService {
     double? longitude,
     List<CommunityPostMediaItem> media = const [],
   }) async {
+    final path = isDynamicAreaCommunityId(communityId)
+        ? TheEyeApiPaths.neighborhoodWatchDynamicAreaPosts
+        : TheEyeApiPaths.neighborhoodWatchCommunityPosts(communityId);
     final response = await _apiClient.postJson(
-      TheEyeApiPaths.neighborhoodWatchCommunityPosts(communityId),
+      path,
       {
         "type": type,
         "title": title,

@@ -571,8 +571,67 @@ export async function fetchContentReports(): Promise<ContentReportView[]> {
     ]);
     const communityNames = new Map(communities.map((community) => [String(community.id), String(community.name ?? "Community")]));
     return reportsResponse.data.map((report) =>
-      toContentReportView(report, communityNames.get(String(report.communityId)) ?? "Community"),
+      toContentReportView(
+        report,
+        report.communityId
+          ? communityNames.get(String(report.communityId)) ?? "Community"
+          : report.dynamicAreaKey
+            ? `Dynamic area · ${String(report.dynamicAreaKey)}`
+            : "Dynamic area",
+      ),
     );
+  });
+}
+
+export type DynamicAreaPostAdminView = {
+  id: string;
+  title: string;
+  type: string;
+  areaKey: string;
+  areaLabel: string;
+  country: string;
+  state: string;
+  lga: string;
+  hidden: boolean;
+  createdAt: string | null;
+};
+
+export async function fetchDynamicAreaPosts(filters: {
+  country?: string;
+  state?: string;
+  lga?: string;
+  dynamicAreaKey?: string;
+  type?: string;
+  status?: string;
+} = {}): Promise<DynamicAreaPostAdminView[]> {
+  return withNwToken(async (token) => {
+    const response = await apiRequest<{ data: Record<string, unknown>[] }>(
+      "/neighborhood-watch/admin/dynamic-area-posts",
+      {
+        token,
+        query: {
+          ...(filters.country ? { country: filters.country } : {}),
+          ...(filters.state ? { state: filters.state } : {}),
+          ...(filters.lga ? { lga: filters.lga } : {}),
+          ...(filters.dynamicAreaKey ? { dynamicAreaKey: filters.dynamicAreaKey } : {}),
+          ...(filters.type ? { type: filters.type } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          limit: "100",
+        },
+      },
+    );
+    return (response.data ?? []).map((row) => ({
+      id: String(row.id ?? ""),
+      title: String(row.title ?? ""),
+      type: String(row.type ?? ""),
+      areaKey: String(row.dynamicAreaKey ?? ""),
+      areaLabel: String(row.areaLabel ?? row.dynamicAreaKey ?? "Dynamic area"),
+      country: String(row.areaCountry ?? ""),
+      state: String(row.areaState ?? ""),
+      lga: String(row.areaLga ?? ""),
+      hidden: Boolean(row.hiddenAt),
+      createdAt: row.createdAt ? String(row.createdAt) : null,
+    }));
   });
 }
 

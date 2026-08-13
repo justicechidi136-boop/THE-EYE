@@ -206,17 +206,29 @@ class _NeighborhoodWatchHomeScreenState
     final nwSession = session is NeighborhoodWatchSession
         ? session as NeighborhoodWatchSession
         : null;
-    final community = contextResponse.publicCommunity;
-    if (community == null || community.id.isEmpty) {
-      nwSession?.clearNeighborhoodWatchParticipationContext();
+    if (contextResponse.isMappedPublicCommunity &&
+        contextResponse.publicCommunity != null &&
+        contextResponse.publicCommunity!.id.isNotEmpty) {
+      nwSession?.applyNeighborhoodWatchContext(
+        community: contextResponse.publicCommunity!.toCommunitySummary(
+          activeAlertsCount: contextResponse.safetySummary.activeAlerts,
+        ),
+        canPost: contextResponse.permissions.canPost,
+      );
       return;
     }
-    nwSession?.applyNeighborhoodWatchContext(
-      community: community.toCommunitySummary(
-        activeAlertsCount: contextResponse.safetySummary.activeAlerts,
-      ),
-      canPost: contextResponse.permissions.canPost,
-    );
+    if (contextResponse.isDynamicPublicArea &&
+        contextResponse.dynamicArea != null &&
+        contextResponse.dynamicArea!.areaKey.isNotEmpty) {
+      nwSession?.applyNeighborhoodWatchContext(
+        community: contextResponse.dynamicArea!.toCommunitySummary(
+          activeAlertsCount: contextResponse.safetySummary.activeAlerts,
+        ),
+        canPost: contextResponse.permissions.canPost,
+      );
+      return;
+    }
+    nwSession?.clearNeighborhoodWatchParticipationContext();
   }
 
   @override
@@ -264,7 +276,7 @@ class _NeighborhoodWatchHomeScreenState
     NwContextResponse ctx,
     EyeSemanticColors semantics,
   ) {
-    if (!ctx.isConfirmed) {
+    if (!ctx.isUsablePublicContext) {
       return [
         if (_contextIsStale)
           _LocationIssueCard(
@@ -284,8 +296,7 @@ class _NeighborhoodWatchHomeScreenState
             onRetry: _refreshContext,
             loading: _loading || _capturingLocation,
           ),
-        if (ctx.locationStatus == NwLocationStatus.noPublicCommunity &&
-            ctx.privateCommunitiesNearby.isNotEmpty) ...[
+        if (ctx.privateCommunitiesNearby.isNotEmpty) ...[
           const SizedBox(height: 16),
           SectionCard(
             title: "Private communities nearby",
@@ -313,10 +324,20 @@ class _NeighborhoodWatchHomeScreenState
       ];
     }
 
-    final community = ctx.publicCommunity!;
+    final isDynamic = ctx.isDynamicPublicArea;
+    final community = ctx.publicCommunity;
+    final dynamicArea = ctx.dynamicArea;
+    final areaTitle = isDynamic
+        ? (dynamicArea?.areaLabel ?? "Current Area")
+        : (community?.name ?? "Current Area");
+    final areaSubtitle =
+        isDynamic ? "LOCAL PUBLIC SAFETY AREA" : (community?.areaLabel ?? "");
     final summary = ctx.safetySummary;
     final presence = _contextIsStale ? null : ctx.presence;
-    final isHomeCommunity = ctx.homeCommunity?.id == community.id;
+    final isHomeCommunity = !isDynamic &&
+        community != null &&
+        ctx.homeCommunity?.id == community.id;
+    final canPost = !_contextIsStale && ctx.permissions.canPost;
 
     return [
       if (!_contextIsStale &&
@@ -329,19 +350,31 @@ class _NeighborhoodWatchHomeScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              community.name,
+              areaTitle,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: semantics.bodyText,
                     fontWeight: FontWeight.w600,
                   ),
             ),
-            const SizedBox(height: 4),
-            Text(community.areaLabel),
+            if (areaSubtitle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(areaSubtitle),
+            ],
+            if (isDynamic) ...[
+              const SizedBox(height: 8),
+              Text(
+                "No formal public community has been mapped here yet.\n"
+                "You can still participate in Neighborhood Watch for your current area.",
+                style: TextStyle(color: semantics.mutedText),
+              ),
+            ],
             const SizedBox(height: 8),
             _StatusChip(
               label: _contextIsStale
                   ? "STALE"
-                  : nwLocationStatusLabel(ctx.locationStatus),
+                  : (isDynamic
+                      ? "Dynamic public area"
+                      : nwLocationStatusLabel(ctx.locationStatus)),
               tone: _contextIsStale
                   ? _StatusChipTone.warning
                   : _StatusChipTone.success,
@@ -367,7 +400,10 @@ class _NeighborhoodWatchHomeScreenState
           ],
         ),
       ),
-      if (!_contextIsStale && !isHomeCommunity) ...[
+      if (!_contextIsStale &&
+          !isDynamic &&
+          community != null &&
+          !isHomeCommunity) ...[
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed:
@@ -411,10 +447,56 @@ class _NeighborhoodWatchHomeScreenState
             Text("Community warnings: ${summary.communityWarnings}"),
             if (summary.publicBroadcasts > 0)
               Text("Public broadcasts: ${summary.publicBroadcasts}"),
+            if (summary.activeAlerts == 0 &&
+                summary.roadHazards == 0 &&
+                summary.communityWarnings == 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  "No local safety alerts in the last 7 days.",
+                  style: TextStyle(color: semantics.mutedText),
+                ),
+              ),
           ],
         ),
       ),
       const SizedBox(height: 16),
+      if (canPost) ...[
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context)
+              .pushNamed(NeighborhoodWatchDestinations.create),
+          icon: const Icon(Icons.forum_outlined),
+          label: const Text("Start Conversation"),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).pushNamed(
+            NeighborhoodWatchDestinations.create,
+            arguments: const {"type": "SafetyTip"},
+          ),
+          icon: const Icon(Icons.tips_and_updates_outlined),
+          label: const Text("Share Security Tip"),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).pushNamed(
+            NeighborhoodWatchDestinations.create,
+            arguments: const {"type": "SuspiciousActivity"},
+          ),
+          icon: const Icon(Icons.report_outlined),
+          label: const Text("Report Activity"),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).pushNamed(
+            NeighborhoodWatchDestinations.create,
+            arguments: const {"type": "RoadHazard"},
+          ),
+          icon: const Icon(Icons.warning_amber_outlined),
+          label: const Text("Report Road Hazard"),
+        ),
+        const SizedBox(height: 8),
+      ],
       FilledButton.icon(
         style: FilledButton.styleFrom(
           backgroundColor: semantics.error,
@@ -423,7 +505,7 @@ class _NeighborhoodWatchHomeScreenState
         ),
         onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
         icon: const Icon(Icons.emergency),
-        label: const Text("Report emergency"),
+        label: const Text("Report Emergency"),
       ),
       const SizedBox(height: 16),
       SectionCard(
@@ -467,33 +549,20 @@ class _NeighborhoodWatchHomeScreenState
           ],
         ),
       ),
-      if (ctx.permissions.canPost) ...[
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: () => Navigator.of(context)
-              .pushNamed(NeighborhoodWatchDestinations.create),
-          icon: const Icon(Icons.forum_outlined),
-          label: const Text("Start Conversation"),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
-          icon: const Icon(Icons.emergency),
-          label: const Text("Report Emergency"),
-        ),
-      ],
       if (ctx.privateCommunitiesNearby.isNotEmpty) ...[
         const SizedBox(height: 16),
         SectionCard(
-          title: "Private communities nearby",
+          title: "Private community nearby",
           child: Column(
             children: ctx.privateCommunitiesNearby
                 .map(
                   (item) => ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(item.name),
-                    subtitle: Text("${item.approximateDistanceMeters}m away"),
-                    trailing: const Icon(Icons.chevron_right),
+                    subtitle: Text(
+                      "${item.approximateDistanceMeters}m away • Request membership",
+                    ),
+                    trailing: const Icon(Icons.lock_outline),
                     onTap: () => Navigator.of(context).pushNamed(
                       NeighborhoodWatchDestinations.privateCommunityMembership(
                           item.id),

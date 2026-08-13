@@ -42,9 +42,12 @@ class CommunityMediaUploadService {
     for (final attachment in attachments) {
       try {
         onProgress?.call(attachment.localId, 0.1);
+        final path = isDynamicAreaCommunityId(communityId)
+            ? TheEyeApiPaths.neighborhoodWatchDynamicAreaPostMediaPresign
+            : TheEyeApiPaths.neighborhoodWatchCommunityPostMediaPresign(
+                communityId);
         final response = await _apiClient.postJson(
-          TheEyeApiPaths.neighborhoodWatchCommunityPostMediaPresign(
-              communityId),
+          path,
           {
             "mediaType": attachment.mediaType,
             "contentType": attachment.contentType,
