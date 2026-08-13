@@ -68,15 +68,18 @@ android {
             dimension = "environment"
             applicationIdSuffix = ".dev"
             resValue "string", "app_name", "THE EYE Dev"
+            manifestPlaceholders += [deepLinkScheme: "theeye-dev"]
         }
         staging {
             dimension = "environment"
             applicationIdSuffix = ".staging"
             resValue "string", "app_name", "THE EYE Staging"
+            manifestPlaceholders += [deepLinkScheme: "theeye-staging"]
         }
         production {
             dimension = "environment"
             resValue "string", "app_name", "THE EYE"
+            manifestPlaceholders += [deepLinkScheme: "theeye"]
         }
     }
 

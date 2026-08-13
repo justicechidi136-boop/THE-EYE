@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useId, useMemo, useState } from "react";
 import { AuthLayout } from "../../components/auth-layout";
+import { CitizenReturnToApp } from "../../components/citizen-return-to-app";
 import { Button, FormField, InlineAlert, TextInput } from "../../components/form-primitives";
 import { validatePassword } from "../../lib/auth-validation";
 
@@ -64,13 +65,10 @@ function ResetPasswordForm() {
         <h1 className="text-[32px] font-semibold leading-tight text-ink">Reset password</h1>
         <InlineAlert>
           <span>
-            This reset link is invalid or incomplete. Return to the THE EYE app and request a new
-            password reset.
+            This reset link is invalid or incomplete. Request a new password reset from THE EYE.
           </span>
         </InlineAlert>
-        <p className="text-sm text-ink/80">
-          Return to the THE EYE app and sign in with your new password after reset completes.
-        </p>
+        <CitizenReturnToApp result="PASSWORD_RESET_REQUIRED" />
       </div>
     );
   }
@@ -78,16 +76,10 @@ function ResetPasswordForm() {
   if (success) {
     return (
       <div className="grid w-full gap-4 text-center">
-        <h1 className="text-[32px] font-semibold leading-tight text-ink">Password updated</h1>
+        <CitizenReturnToApp result="PASSWORD_RESET_SUCCESS" showTitle />
         <InlineAlert tone="success">
-          <span>
-            Your password has been reset successfully. Return to the THE EYE app and sign in with
-            your new password.
-          </span>
+          <span>Your password has been reset successfully.</span>
         </InlineAlert>
-        <p className="text-sm text-ink/80">
-          Return to the THE EYE app and sign in with your new password.
-        </p>
       </div>
     );
   }
@@ -137,7 +129,7 @@ function ResetPasswordForm() {
         {submitting ? "Updating…" : "Update password"}
       </Button>
       <p className="text-center text-sm text-ink/80">
-        Return to the THE EYE app and sign in with your new password after reset completes.
+        After updating, you will return to THE EYE — not the Admin Dashboard.
       </p>
     </form>
   );

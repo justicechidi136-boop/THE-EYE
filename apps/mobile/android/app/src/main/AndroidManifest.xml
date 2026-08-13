@@ -36,6 +36,16 @@
                 <action android:name="FLUTTER_NOTIFICATION_CLICK" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- AUTH-007: citizen recovery return → mobile sign-in (never Admin Web) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="${deepLinkScheme}"
+                    android:host="auth"
+                    android:pathPrefix="/login" />
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"

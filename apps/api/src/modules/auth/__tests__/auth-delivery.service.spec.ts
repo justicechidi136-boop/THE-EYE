@@ -154,6 +154,9 @@ describe("AuthDeliveryService", () => {
       "https://staging-dashboard8jps.theeye.com.ng/account-recovery?token=recovery-token",
     );
     expect(payload.html).not.toContain("staging-app.theeye.com.ng");
+    // AUTH-007: email opens citizen recovery page, never admin login.
+    expect(payload.html).not.toContain("/login");
+    expect(payload.html).not.toContain("Admin Dashboard");
     restore();
   });
 
@@ -181,6 +184,9 @@ describe("AuthDeliveryService", () => {
     expect(payload.html).toMatch(/https:\/\//);
     expect(payload.html).not.toContain("localhost");
     expect(payload.html).not.toContain("staging-app");
+    // AUTH-007: email opens citizen reset page, never admin login.
+    expect(payload.html).not.toContain("/login");
+    expect(payload.html).not.toContain("Admin Dashboard");
     restore();
   });
 });
