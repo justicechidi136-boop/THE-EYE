@@ -111,72 +111,78 @@ class _CancellationReasonSheetState extends State<_CancellationReasonSheet> {
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.92;
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            widget.title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: semantics.bodyText,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            widget.helper ?? "Why are you cancelling this emergency?",
-            style: TextStyle(color: semantics.secondaryText),
-          ),
-          const SizedBox(height: 16),
-          ...kCancellationReasonOptions.map(
-            (option) => RadioListTile<String>(
-              value: option.code,
-              groupValue: _selectedCode,
-              onChanged: (value) => setState(() {
-                _selectedCode = value;
-                _error = null;
-              }),
-              title: Text(option.label),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-          if (_selectedCode == "OTHER") ...[
-            const SizedBox(height: 8),
-            EyeTextField(
-              label: "Please tell us why",
-              controller: _otherController,
-              hint: "Enter a short reason",
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-            ),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Semantics(
-              liveRegion: true,
-              label: _error!,
-              child: Text(
-                _error!,
-                style: TextStyle(
-                  color: semantics.error,
-                  fontWeight: FontWeight.w700,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.title,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: semantics.bodyText,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.helper ?? "Why are you cancelling this emergency?",
+                style: TextStyle(color: semantics.secondaryText),
+              ),
+              const SizedBox(height: 16),
+              ...kCancellationReasonOptions.map(
+                (option) => RadioListTile<String>(
+                  value: option.code,
+                  groupValue: _selectedCode,
+                  onChanged: (value) => setState(() {
+                    _selectedCode = value;
+                    _error = null;
+                  }),
+                  title: Text(option.label),
+                  contentPadding: EdgeInsets.zero,
                 ),
               ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          EyePrimaryButton(
-            label: widget.confirmLabel,
-            onPressed: _submit,
+              if (_selectedCode == "OTHER") ...[
+                const SizedBox(height: 8),
+                EyeTextField(
+                  label: "Please tell us why",
+                  controller: _otherController,
+                  hint: "Enter a short reason",
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Semantics(
+                  liveRegion: true,
+                  label: _error!,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: semantics.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              EyePrimaryButton(
+                label: widget.confirmLabel,
+                onPressed: _submit,
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text("Back"),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text("Back"),
-          ),
-        ],
+        ),
       ),
     );
   }

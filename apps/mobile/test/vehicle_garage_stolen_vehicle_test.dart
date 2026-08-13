@@ -315,6 +315,7 @@ AppController _testController(
   );
 
   return AppController(
+    apiClient: apiClient,
     submissionService: IncidentSubmissionService(
       apiClient: apiClient,
       pendingStore: InMemoryPendingSubmissionStore(),

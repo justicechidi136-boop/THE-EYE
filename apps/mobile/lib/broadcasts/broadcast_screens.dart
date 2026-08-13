@@ -15,6 +15,7 @@ import "../location/location_permission_service.dart";
 import "../presentation/broadcast_expiry_presenter.dart";
 import "../presentation/citizen_date_time.dart";
 import "../presentation/citizen_presentation.dart";
+import "../presentation/citizen_time_picker.dart";
 import "../theme/the_eye_theme.dart";
 import "../widgets/section_card.dart";
 import "broadcast_feed_service.dart";
@@ -1544,8 +1545,8 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   }
 
   Future<void> _pickObservedTime() async {
-    final picked = await showTimePicker(
-      context: context,
+    final picked = await showCitizenTimePicker(
+      context,
       initialTime: TimeOfDay.fromDateTime(_observedAt),
     );
     if (picked == null || !mounted) return;
