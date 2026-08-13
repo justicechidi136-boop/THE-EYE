@@ -2,18 +2,25 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { JwtPayload } from "../../common/auth/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { JurisdictionResolutionService } from "../incidents/jurisdiction-resolution.service";
+import {
+  buildDynamicAreaFromJurisdiction,
+  buildDynamicAreaGeohashFallback,
+  type DynamicAreaGeo,
+  type NwContextType,
+} from "./dynamic-public-area";
 
 export type NwLocationStatus =
   | "CONFIRMED"
   | "LOCATION_REQUIRED"
   | "LOCATION_STALE"
-  | "LOCATION_LOW_ACCURACY"
-  | "NO_PUBLIC_COMMUNITY";
+  | "LOCATION_LOW_ACCURACY";
 
-/** Fresh GPS window for context resolution and public presence-based posting. */
+/** Fresh GPS window for context resolution and creating new posts. */
 export const MAX_LOCATION_AGE_MS = 5 * 60 * 1000;
 const MAX_ACCURACY_M = 100;
-const PRESENCE_TTL_MS = 30 * 60 * 1000;
+/** Presence TTL — comments/reactions may continue within this window without a brand-new GPS fix. */
+export const PRESENCE_TTL_MS = 30 * 60 * 1000;
 const MIN_SWITCH_DISPLACEMENT_M = 120;
 const PRIVATE_NEARBY_RADIUS_M = 1500;
 
@@ -40,6 +47,7 @@ export class NeighborhoodWatchContextService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly jurisdictionResolution: JurisdictionResolutionService,
   ) {}
 
   async resolveContext(actor: JwtPayload, query: ResolveContextQuery) {
@@ -51,28 +59,70 @@ export class NeighborhoodWatchContextService {
     const capturedAt = query.capturedAt ? new Date(query.capturedAt) : null;
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return this.emptyContext("LOCATION_REQUIRED");
+      return this.locationFailure("LOCATION_REQUIRED");
     }
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return this.emptyContext("LOCATION_REQUIRED");
+      return this.locationFailure("LOCATION_REQUIRED");
     }
     if (!capturedAt || Number.isNaN(capturedAt.getTime())) {
-      return this.emptyContext("LOCATION_REQUIRED");
+      return this.locationFailure("LOCATION_REQUIRED");
     }
     const ageMs = Date.now() - capturedAt.getTime();
     if (ageMs > MAX_LOCATION_AGE_MS || ageMs < -60_000) {
-      return this.emptyContext("LOCATION_STALE");
+      return this.locationFailure("LOCATION_STALE");
     }
     if (!Number.isFinite(accuracy) || accuracy <= 0 || accuracy > MAX_ACCURACY_M) {
-      return this.emptyContext("LOCATION_LOW_ACCURACY");
+      return this.locationFailure("LOCATION_LOW_ACCURACY");
     }
 
     const publicCommunity = await this.resolvePublicCommunity(lat, lng);
-    if (!publicCommunity) {
-      return this.emptyContext("NO_PUBLIC_COMMUNITY", { latitude: lat, longitude: lng, accuracyM: accuracy });
+    if (publicCommunity) {
+      return this.mappedPublicContext(actor, publicCommunity, {
+        latitude: lat,
+        longitude: lng,
+        accuracyM: accuracy,
+        capturedAt,
+      });
     }
 
+    return this.dynamicPublicAreaContext(actor, {
+      latitude: lat,
+      longitude: lng,
+      accuracyM: accuracy,
+      capturedAt,
+    });
+  }
+
+  async setHomeCommunity(actor: JwtPayload, communityId: string | null) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    if (communityId) {
+      const community = await this.prisma.community.findUnique({ where: { id: communityId } });
+      if (!community || community.status !== "Active") throw new NotFoundException("Community not found");
+      if (community.visibility !== "Public") {
+        throw new BadRequestException("Only public communities can be set as home community");
+      }
+    }
+    await this.prisma.profile.update({
+      where: { userId: actor.sub },
+      data: { homeCommunityId: communityId },
+    });
+    await this.audit.record({
+      actor,
+      action: "community.home_set",
+      entityType: "profiles",
+      entityId: actor.sub,
+      metadata: { homeCommunityId: communityId },
+    });
+    return { data: { homeCommunityId: communityId } };
+  }
+
+  private async mappedPublicContext(
+    actor: JwtPayload,
+    publicCommunity: PublicCommunityRow,
+    coords: { latitude: number; longitude: number; accuracyM: number; capturedAt: Date },
+  ) {
     const communityId = publicCommunity.id;
+    const { latitude: lat, longitude: lng, accuracyM: accuracy, capturedAt } = coords;
 
     const previous = await this.prisma.communityPresence.findFirst({
       where: { userId: actor.sub, mode: "LocationParticipant" },
@@ -125,7 +175,7 @@ export class NeighborhoodWatchContextService {
 
     const [privateNearby, safetySummary, homeCommunity, pinned, membership] = await Promise.all([
       this.listPrivateNearby(lat, lng, actor.sub),
-      this.buildSafetySummary(communityId),
+      this.buildCommunitySafetySummary(communityId),
       this.getHomeCommunity(actor.sub),
       this.prisma.communityPinnedSafetyInfo.findMany({
         where: { communityId, active: true },
@@ -139,13 +189,25 @@ export class NeighborhoodWatchContextService {
     ]);
 
     const roleName = membership?.role?.name ? String(membership.role.name) : null;
+    const suspended = membership?.status === "Suspended" || membership?.status === "Banned";
+
+    await this.audit.record({
+      actor,
+      action: "nw.mapped_public_community_resolved",
+      entityType: "communities",
+      entityId: communityId,
+      metadata: { event: "NW_MAPPED_PUBLIC_COMMUNITY_RESOLVED" },
+    });
 
     return {
       locationStatus: "CONFIRMED" as NwLocationStatus,
+      contextType: "MAPPED_PUBLIC_COMMUNITY" as NwContextType,
       publicCommunity: this.toPublicCommunityCard(publicCommunity),
+      dynamicArea: null,
       presence: {
         mode: "LOCATION_PARTICIPANT",
         communityId,
+        dynamicAreaKey: null,
         capturedAt: capturedAt.toISOString(),
         expiresAt: expiresAt.toISOString(),
         accuracyM: accuracy,
@@ -156,8 +218,12 @@ export class NeighborhoodWatchContextService {
       privateCommunitiesNearby: privateNearby,
       permissions: {
         canViewPublicFeed: true,
-        canPost: true,
-        canComment: true,
+        canViewPublicSafety: true,
+        canPost: !suspended,
+        canComment: !suspended,
+        canReportActivity: !suspended,
+        canShareSecurityTip: !suspended,
+        canVerify: !suspended,
         canViewPrivateFeed: membership?.status === "Approved",
         canModerate: Boolean(roleName && ["CommunityModerator", "EstateAdmin"].includes(roleName)),
         canManagePatrol: Boolean(
@@ -174,53 +240,165 @@ export class NeighborhoodWatchContextService {
     };
   }
 
-  async setHomeCommunity(actor: JwtPayload, communityId: string | null) {
-    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
-    if (communityId) {
-      const community = await this.prisma.community.findUnique({ where: { id: communityId } });
-      if (!community || community.status !== "Active") throw new NotFoundException("Community not found");
-      if (community.visibility !== "Public") {
-        throw new BadRequestException("Only public communities can be set as home community");
+  private async dynamicPublicAreaContext(
+    actor: JwtPayload,
+    coords: { latitude: number; longitude: number; accuracyM: number; capturedAt: Date },
+  ) {
+    const { latitude: lat, longitude: lng, accuracyM: accuracy, capturedAt } = coords;
+    const dynamicArea = await this.resolveDynamicArea(lat, lng);
+    const expiresAt = new Date(Date.now() + PRESENCE_TTL_MS);
+
+    const previous = await this.prisma.nwDynamicAreaPresence.findFirst({
+      where: { userId: actor.sub },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    let switchRecommended = false;
+    let switchMessage: string | null = null;
+    if (previous && previous.areaKey !== dynamicArea.areaKey) {
+      const displacement = await this.distanceMeters(
+        Number(previous.latitude),
+        Number(previous.longitude),
+        lat,
+        lng,
+      );
+      switchRecommended = displacement >= MIN_SWITCH_DISPLACEMENT_M;
+      if (switchRecommended) {
+        switchMessage = `You're now in ${dynamicArea.areaLabel}. Neighborhood Watch has updated to your current area.`;
       }
     }
-    await this.prisma.profile.update({
-      where: { userId: actor.sub },
-      data: { homeCommunityId: communityId },
+
+    await this.prisma.nwDynamicAreaPresence.upsert({
+      where: {
+        userId_areaKey: {
+          userId: actor.sub,
+          areaKey: dynamicArea.areaKey,
+        },
+      },
+      update: {
+        areaCountry: dynamicArea.country,
+        areaState: dynamicArea.state,
+        areaLga: dynamicArea.lga,
+        areaCity: dynamicArea.city,
+        areaLabel: dynamicArea.areaLabel,
+        latitude: lat,
+        longitude: lng,
+        accuracyM: accuracy,
+        capturedAt,
+        expiresAt,
+      },
+      create: {
+        userId: actor.sub,
+        areaKey: dynamicArea.areaKey,
+        areaCountry: dynamicArea.country,
+        areaState: dynamicArea.state,
+        areaLga: dynamicArea.lga,
+        areaCity: dynamicArea.city,
+        areaLabel: dynamicArea.areaLabel,
+        latitude: lat,
+        longitude: lng,
+        accuracyM: accuracy,
+        capturedAt,
+        expiresAt,
+      },
     });
+
+    const [privateNearby, safetySummary, homeCommunity] = await Promise.all([
+      this.listPrivateNearby(lat, lng, actor.sub),
+      this.buildDynamicAreaSafetySummary(dynamicArea.areaKey),
+      this.getHomeCommunity(actor.sub),
+    ]);
+
     await this.audit.record({
       actor,
-      action: "community.home_set",
-      entityType: "profiles",
+      action: "nw.dynamic_area_resolved",
+      entityType: "nw_dynamic_area_presence",
       entityId: actor.sub,
-      metadata: { homeCommunityId: communityId },
+      metadata: {
+        event: "NW_DYNAMIC_AREA_RESOLVED",
+        areaKey: dynamicArea.areaKey,
+        resolutionSource: dynamicArea.resolutionSource,
+      },
     });
-    return { data: { homeCommunityId: communityId } };
+
+    return {
+      locationStatus: "CONFIRMED" as NwLocationStatus,
+      contextType: "DYNAMIC_PUBLIC_AREA" as NwContextType,
+      publicCommunity: null,
+      dynamicArea: {
+        countryCode: dynamicArea.countryCode,
+        stateCode: dynamicArea.stateCode,
+        lgaCode: dynamicArea.lgaCode,
+        city: dynamicArea.city,
+        areaLabel: dynamicArea.areaLabel,
+        areaKey: dynamicArea.areaKey,
+        resolutionSource: dynamicArea.resolutionSource,
+      },
+      presence: {
+        mode: "DYNAMIC_AREA_PARTICIPANT",
+        communityId: null,
+        dynamicAreaKey: dynamicArea.areaKey,
+        capturedAt: capturedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        accuracyM: accuracy,
+        switchRecommended,
+        switchMessage,
+      },
+      homeCommunity,
+      privateCommunitiesNearby: privateNearby,
+      permissions: {
+        canViewPublicFeed: true,
+        canViewPublicSafety: true,
+        canPost: true,
+        canComment: true,
+        canReportActivity: true,
+        canShareSecurityTip: true,
+        canVerify: true,
+        canViewPrivateFeed: false,
+        canModerate: false,
+        canManagePatrol: false,
+      },
+      safetySummary,
+      pinnedSafetyInfo: [],
+    };
   }
 
-  private emptyContext(
-    locationStatus: NwLocationStatus,
-    coords?: { latitude: number; longitude: number; accuracyM: number },
-  ) {
+  /**
+   * Resolve geographic bucket from GPS only.
+   * Never uses profile jurisdiction as current physical location.
+   */
+  private async resolveDynamicArea(lat: number, lng: number): Promise<DynamicAreaGeo> {
+    const diagnostic = await this.jurisdictionResolution.diagnose(lat, lng);
+    const match = diagnostic.polygonMatch ?? diagnostic.nearestMatch;
+    if (match) {
+      return buildDynamicAreaFromJurisdiction({
+        country: match.country,
+        state: match.state,
+        lga: match.lga,
+        resolutionSource: diagnostic.polygonMatch ? "jurisdiction_polygon" : "jurisdiction_nearest",
+      });
+    }
+    return buildDynamicAreaGeohashFallback(lat, lng);
+  }
+
+  private locationFailure(locationStatus: Exclude<NwLocationStatus, "CONFIRMED">) {
+    const contextType = locationStatus as NwContextType;
     return {
       locationStatus,
+      contextType,
       publicCommunity: null,
-      presence: coords
-        ? {
-            mode: null,
-            communityId: null,
-            capturedAt: null,
-            expiresAt: null,
-            accuracyM: coords.accuracyM,
-            switchRecommended: false,
-            switchMessage: null,
-          }
-        : null,
+      dynamicArea: null,
+      presence: null,
       homeCommunity: null,
       privateCommunitiesNearby: [],
       permissions: {
         canViewPublicFeed: false,
+        canViewPublicSafety: false,
         canPost: false,
         canComment: false,
+        canReportActivity: false,
+        canShareSecurityTip: false,
+        canVerify: false,
         canViewPrivateFeed: false,
         canModerate: false,
         canManagePatrol: false,
@@ -302,7 +480,7 @@ export class NeighborhoodWatchContextService {
     }));
   }
 
-  private async buildSafetySummary(communityId: string) {
+  private async buildCommunitySafetySummary(communityId: string) {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const [activeAlerts, roadHazards, communityWarnings, verifiedPosts] = await Promise.all([
       this.prisma.communityAlert.count({
@@ -336,6 +514,44 @@ export class NeighborhoodWatchContextService {
     ]);
     return {
       activeAlerts,
+      recentVerifiedIncidents: verifiedPosts,
+      roadHazards,
+      publicBroadcasts: 0,
+      communityWarnings,
+    };
+  }
+
+  private async buildDynamicAreaSafetySummary(areaKey: string) {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const base = {
+      targetType: "DYNAMIC_AREA" as const,
+      dynamicAreaKey: areaKey,
+      hiddenAt: null,
+      createdAt: { gte: since },
+    };
+    const [roadHazards, communityWarnings, verifiedPosts] = await Promise.all([
+      this.prisma.communityPost.count({
+        where: {
+          ...base,
+          type: "RoadHazard",
+          hazardStatus: { in: ["Open", "Verified", "Ongoing"] },
+        } as never,
+      }),
+      this.prisma.communityPost.count({
+        where: {
+          ...base,
+          type: { in: ["LocalWarning", "SuspiciousActivity", "CrimeAlert"] },
+        } as never,
+      }),
+      this.prisma.communityPost.count({
+        where: {
+          ...base,
+          verificationStatus: "Verified",
+        } as never,
+      }),
+    ]);
+    return {
+      activeAlerts: 0,
       recentVerifiedIncidents: verifiedPosts,
       roadHazards,
       publicBroadcasts: 0,

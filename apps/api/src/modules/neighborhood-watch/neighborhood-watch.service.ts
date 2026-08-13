@@ -52,6 +52,7 @@ import {
   NW_DISCUSSION_POST_TYPES,
 } from "./dto/neighborhood-watch.dto";
 import { MAX_LOCATION_AGE_MS } from "./neighborhood-watch-context.service";
+import { publicAreaDisplayLabel } from "./dynamic-public-area";
 
 @Injectable()
 export class NeighborhoodWatchService {
@@ -569,24 +570,31 @@ export class NeighborhoodWatchService {
   async removePost(postId: string, actor: JwtPayload, note?: string) {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertModerator(post.communityId, actor);
+    await this.assertModeratorForPost(post, actor);
     await this.prisma.communityPost.update({
       where: { id: postId },
       data: { hiddenAt: new Date() } as never,
     });
-    await this.audit(actor, "community.post_removed", "community_posts", postId, { communityId: post.communityId, note });
+    await this.audit(actor, "community.post_removed", "community_posts", postId, {
+      communityId: post.communityId,
+      dynamicAreaKey: post.dynamicAreaKey,
+      note,
+    });
     return { data: { id: postId, removed: true, softDeleted: true } };
   }
 
   async restorePost(postId: string, actor: JwtPayload) {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertModerator(post.communityId, actor);
+    await this.assertModeratorForPost(post, actor);
     await this.prisma.communityPost.update({
       where: { id: postId },
       data: { hiddenAt: null } as never,
     });
-    await this.audit(actor, "community.post_restored", "community_posts", postId, { communityId: post.communityId });
+    await this.audit(actor, "community.post_restored", "community_posts", postId, {
+      communityId: post.communityId,
+      dynamicAreaKey: post.dynamicAreaKey,
+    });
     return { data: { id: postId, restored: true } };
   }
 
@@ -611,7 +619,13 @@ export class NeighborhoodWatchService {
   async reviewContentReport(reportId: string, dto: { action: "reviewed" | "dismissed"; note?: string }, actor: JwtPayload) {
     const report = await this.prisma.communityContentReport.findUnique({ where: { id: reportId } });
     if (!report) throw new NotFoundException("Report not found");
-    await this.assertModerator(report.communityId, actor);
+    if (report.communityId) {
+      await this.assertModerator(report.communityId, actor);
+    } else if (report.dynamicAreaKey) {
+      await this.assertDynamicAreaModerator(report.dynamicAreaKey, actor);
+    } else {
+      throw new ForbiddenException("Moderation scope unavailable for this report");
+    }
     const updated = await this.prisma.communityContentReport.update({
       where: { id: reportId },
       data: {
@@ -724,7 +738,212 @@ export class NeighborhoodWatchService {
       { postId: post.id },
     );
     await this.audit(actor, "community.post_created", "community_posts", post.id, { communityId, type: dto.type });
-    return { data: { ...scored, ...(authorLabel ? { authorLabel } : {}) } };
+    return {
+      data: this.toPublicPostPayload({
+        ...scored,
+        ...(authorLabel ? { authorLabel } : {}),
+        targetType: "COMMUNITY",
+        communityId,
+      }),
+    };
+  }
+
+  /**
+   * Create a post in the user's currently confirmed Dynamic Public Area.
+   * Server derives areaKey from presence — client areaKey is ignored.
+   */
+  async createDynamicAreaPost(dto: CreateCommunityPostDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can create community posts");
+    validatePost(dto);
+    const presence = await this.requireFreshDynamicAreaPresence(actor.sub, { forNewThread: true });
+    const mediaPrefix = `nw-da-${presence.areaKey.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80)}`;
+    if (dto.media?.length) {
+      for (const media of dto.media) {
+        assertEvidenceObjectKey(mediaPrefix, media.objectKey, media.bucket, media.contentType);
+      }
+    }
+    const hazardStatus =
+      dto.type === "RoadHazard" || dto.type === "LocalWarning"
+        ? (dto.hazardStatus ?? "Open")
+        : undefined;
+    const post = await this.prisma.communityPost.create({
+      data: {
+        communityId: null,
+        targetType: "DYNAMIC_AREA",
+        dynamicAreaKey: presence.areaKey,
+        areaCountry: presence.areaCountry,
+        areaState: presence.areaState,
+        areaLga: presence.areaLga,
+        areaCity: presence.areaCity,
+        areaLabel: presence.areaLabel,
+        authorId: actor.sub,
+        type: dto.type as never,
+        title: dto.title.trim(),
+        body: dto.body?.trim() ?? "",
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        hazardStatus: hazardStatus as never,
+        media: dto.media?.length
+          ? {
+              create: dto.media.map((media) => ({
+                uploaderId: actor.sub,
+                mediaType: media.mediaType as never,
+                bucket: media.bucket,
+                objectKey: media.objectKey,
+                contentType: media.contentType,
+                fileHash: media.fileHash,
+              })),
+            }
+          : undefined,
+      } as never,
+    });
+    if (dto.latitude !== undefined && dto.longitude !== undefined) {
+      await this.writePostLocation(post.id, dto.latitude, dto.longitude);
+    }
+    const scored = await this.scorePost(post.id, actor.sub, false);
+    await this.audit(actor, "nw.dynamic_area_conversation_created", "community_posts", post.id, {
+      event: "NW_DYNAMIC_AREA_CONVERSATION_CREATED",
+      areaKey: presence.areaKey,
+      type: dto.type,
+    });
+    return {
+      data: this.toPublicPostPayload({
+        ...scored,
+        authorLabel: "Current Area Visitor",
+        targetType: "DYNAMIC_AREA",
+        dynamicAreaKey: presence.areaKey,
+        areaLabel: presence.areaLabel,
+      }),
+    };
+  }
+
+  async feedDynamicArea(actor: JwtPayload, query: CursorPageQuery = {}) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    const presence = await this.requireFreshDynamicAreaPresence(actor.sub, { forNewThread: false });
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const rows = await this.prisma.communityPost.findMany({
+      where: {
+        targetType: "DYNAMIC_AREA",
+        dynamicAreaKey: presence.areaKey,
+        hiddenAt: null,
+        ...dateIdCursorWhere(cursor),
+      } as never,
+      include: {
+        media: true,
+        comments: true,
+        reactions: true,
+        verifications: true,
+        incident: true,
+        broadcast: true,
+        author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    return {
+      ...page,
+      data: page.data.map((row) =>
+        this.toPublicPostPayload({
+          ...row,
+          authorLabel: "Current Area Visitor",
+          commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
+        }),
+      ),
+      meta: {
+        targetType: "DYNAMIC_AREA",
+        dynamicAreaKey: presence.areaKey,
+        areaLabel: presence.areaLabel,
+      },
+    };
+  }
+
+  async presignDynamicAreaMedia(dto: PresignCommunityMediaDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can upload community media");
+    const presence = await this.requireFreshDynamicAreaPresence(actor.sub, { forNewThread: true });
+    if (!dto.fileName || !dto.contentType || !dto.mediaType) {
+      throw new BadRequestException("fileName, contentType, and mediaType are required");
+    }
+    validateEvidenceUpload(dto.contentType, dto.sizeBytes);
+    const prefix = `nw-da-${presence.areaKey.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80)}`;
+    const objectKey = evidenceObjectKey(prefix, dto.fileName);
+    return {
+      data: {
+        bucket: process.env.S3_BUCKET ?? "the-eye",
+        objectKey,
+        uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
+        requiredHeaders: { "content-type": dto.contentType },
+        expiresInSeconds: 300,
+        dynamicAreaKey: presence.areaKey,
+      },
+    };
+  }
+
+  async createDynamicAreaContentReport(dto: CreateCommunityContentReportDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can submit reports");
+    const presence = await this.requireFreshDynamicAreaPresence(actor.sub, { forNewThread: false });
+    if (!COMMUNITY_REPORT_REASONS.includes(dto.reasonCode as never) && dto.reasonCode !== "Other") {
+      throw new BadRequestException("Invalid report reason code");
+    }
+    const report = await this.prisma.communityContentReport.create({
+      data: {
+        communityId: null,
+        dynamicAreaKey: presence.areaKey,
+        reporterId: actor.sub,
+        targetType: dto.targetType as never,
+        targetId: dto.targetId,
+        reasonCode: dto.reasonCode,
+        note: dto.note,
+      } as never,
+    });
+    await this.audit(actor, "nw.dynamic_area_content_reported", "community_content_reports", report.id, {
+      areaKey: presence.areaKey,
+      targetType: dto.targetType,
+      targetId: dto.targetId,
+    });
+    return { data: report };
+  }
+
+  async listAdminDynamicAreaPosts(
+    actor: JwtPayload,
+    query: {
+      cursor?: string;
+      limit?: string;
+      country?: string;
+      state?: string;
+      lga?: string;
+      dynamicAreaKey?: string;
+      type?: string;
+      status?: string;
+    } = {},
+  ) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Admin access required");
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const where: Record<string, unknown> = { targetType: "DYNAMIC_AREA" };
+    if (actor.role !== "Super Admin") {
+      if (actor.country) where.areaCountry = actor.country;
+      if (actor.state) where.areaState = actor.state;
+      if (actor.lga) where.areaLga = actor.lga;
+    }
+    if (query.country) where.areaCountry = query.country;
+    if (query.state) where.areaState = query.state;
+    if (query.lga) where.areaLga = query.lga;
+    if (query.dynamicAreaKey) where.dynamicAreaKey = query.dynamicAreaKey;
+    if (query.type) where.type = query.type;
+    if (query.status === "hidden") where.hiddenAt = { not: null };
+    else if (query.status === "visible") where.hiddenAt = null;
+    const rows = await this.prisma.communityPost.findMany({
+      where: { ...where, ...dateIdCursorWhere(cursor) } as never,
+      include: {
+        author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        media: true,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
   }
 
   async listPosts(actor: JwtPayload, query: CursorPageQuery = {}) {
@@ -734,9 +953,34 @@ export class NeighborhoodWatchService {
         : {};
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
+    const dynamicAreaKeys =
+      actor.typ === "user"
+        ? (
+            await this.prisma.nwDynamicAreaPresence.findMany({
+              where: { userId: actor.sub, expiresAt: { gt: new Date() } },
+              select: { areaKey: true },
+            })
+          ).map((row) => row.areaKey)
+        : [];
     const visibilityFilter =
       actor.typ === "admin"
-        ? {}
+        ? {
+            OR: [
+              ...(Object.keys(communityWhere).length
+                ? [{ community: communityWhere }]
+                : [{ targetType: "COMMUNITY" as const }, { targetType: "DYNAMIC_AREA" as const }]),
+              ...(actor.role !== "Super Admin"
+                ? [
+                    {
+                      targetType: "DYNAMIC_AREA" as const,
+                      areaCountry: actor.country,
+                      areaState: actor.state,
+                      areaLga: actor.lga,
+                    },
+                  ]
+                : []),
+            ],
+          }
         : {
             OR: [
               { community: { visibility: "Public" as const, status: "Active" as const } },
@@ -749,12 +993,14 @@ export class NeighborhoodWatchService {
                   },
                 },
               },
+              ...(dynamicAreaKeys.length
+                ? [{ targetType: "DYNAMIC_AREA" as const, dynamicAreaKey: { in: dynamicAreaKeys } }]
+                : []),
             ],
           };
     const rows = await this.prisma.communityPost.findMany({
       where: {
         hiddenAt: null,
-        ...(Object.keys(communityWhere).length ? { community: communityWhere } : {}),
         ...visibilityFilter,
         ...dateIdCursorWhere(cursor),
       } as never,
@@ -801,7 +1047,7 @@ export class NeighborhoodWatchService {
   async verifyPost(postId: string, dto: VerifyCommunityPostDto, actor: JwtPayload) {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertModerator(post.communityId, actor);
+    await this.assertModeratorForPost(post, actor);
     const scored = await this.scorePost(postId, post.authorId, dto.moderatorConfirmed ?? true);
     const confidence = dto.status === "Verified" ? Math.max(Number(scored.confidenceScore), 75) : Number(scored.confidenceScore);
     await this.prisma.communityVerification.create({
@@ -818,7 +1064,7 @@ export class NeighborhoodWatchService {
   async convertPostToIncident(postId: string, actor: JwtPayload) {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId }, include: { community: true } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertModerator(post.communityId, actor);
+    await this.assertModeratorForPost(post, actor);
     if (post.isEscalated && post.incidentId) {
       return {
         data: {
@@ -874,14 +1120,14 @@ export class NeighborhoodWatchService {
   async broadcastVerifiedPost(postId: string, scope: "Neighborhood" | "LGA" | "State" | "Emergency", actor: JwtPayload) {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId }, include: { community: true } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertModerator(post.communityId, actor);
+    await this.assertModeratorForPost(post, actor);
     if (post.verificationStatus !== "Verified") throw new BadRequestException("Only verified community posts can become broadcasts");
     const result = await this.broadcasts.create({
       type: scope === "Emergency" ? BroadcastType.Emergency : BroadcastType.CommunityWarning,
       title: post.title,
       body: post.body,
       priority: scope === "Emergency" ? IncidentPriority.P1LifeThreatening : IncidentPriority.P3SuspiciousActivity,
-      jurisdictionId: post.community.jurisdictionId ?? undefined,
+      jurisdictionId: post.community?.jurisdictionId ?? undefined,
       latitude: post.latitude ? Number(post.latitude) : undefined,
       longitude: post.longitude ? Number(post.longitude) : undefined,
       radiusMeters: scope === "State" ? 50000 : scope === "LGA" ? 15000 : 3000,
@@ -1350,7 +1596,19 @@ export class NeighborhoodWatchService {
   async listPostComments(postId: string, actor: JwtPayload, query: CursorPageQuery = {}) {
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertCommunityVisible(post.communityId, actor);
+    if (post.communityId) {
+      await this.assertCommunityVisible(post.communityId, actor);
+    } else if (post.targetType === "DYNAMIC_AREA" && post.dynamicAreaKey) {
+      if (actor.typ === "admin") {
+        await this.assertDynamicAreaModerator(post.dynamicAreaKey, actor);
+      } else if (actor.typ === "user") {
+        await this.assertCanParticipateOnPost(post, actor, { forNewThread: false });
+      } else {
+        throw new ForbiddenException("Access denied");
+      }
+    } else {
+      throw new NotFoundException("Community post not found");
+    }
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
     const rows = await this.prisma.communityPostComment.findMany({
@@ -1360,10 +1618,12 @@ export class NeighborhoodWatchService {
       take: limit + 1,
     });
     const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
-    const labels = await this.resolveAuthorLabels(
-      post.communityId,
-      page.data.map((comment) => comment.author.id),
-    );
+    const labels = post.communityId
+      ? await this.resolveAuthorLabels(
+          post.communityId,
+          page.data.map((comment) => comment.author.id),
+        )
+      : new Map(page.data.map((comment) => [comment.author.id, "Current Area Visitor"] as const));
     return {
       ...page,
       data: page.data.map((comment) => {
@@ -1395,7 +1655,7 @@ export class NeighborhoodWatchService {
     }
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertCanParticipate(post.communityId, actor);
+    await this.assertCanParticipateOnPost(post, actor, { forNewThread: false });
     const priorCommenters = await this.prisma.communityPostComment.findMany({
       where: { postId, authorId: { not: actor.sub } },
       select: { authorId: true },
@@ -1417,6 +1677,8 @@ export class NeighborhoodWatchService {
     await this.audit(actor, "community.comment_created", "community_post_comments", comment.id, {
       postId,
       hasVoice,
+      dynamicAreaKey: post.dynamicAreaKey,
+      event: post.targetType === "DYNAMIC_AREA" ? "NW_DYNAMIC_AREA_POST_COMMENTED" : undefined,
     });
     const snippet = (dto.body?.trim() || "Voice comment").slice(0, 120);
     if (post.authorId !== actor.sub) {
@@ -1426,7 +1688,7 @@ export class NeighborhoodWatchService {
         snippet,
         buildNeighborhoodWatchNotificationMetadata({
           routeType: "NW_POST_COMMENT",
-          communityId: post.communityId,
+          communityId: post.communityId ?? undefined,
           postId,
           notificationType: "NwPostComment",
         }),
@@ -1442,13 +1704,15 @@ export class NeighborhoodWatchService {
         snippet,
         buildNeighborhoodWatchNotificationMetadata({
           routeType: "NW_POST_REPLY",
-          communityId: post.communityId,
+          communityId: post.communityId ?? undefined,
           postId,
           notificationType: "NwPostReply",
         }),
       );
     }
-    const authorLabel = await this.resolveAuthorLabel(post.communityId, actor.sub);
+    const authorLabel = post.communityId
+      ? await this.resolveAuthorLabel(post.communityId, actor.sub)
+      : "Current Area Visitor";
     return {
       data: {
         id: comment.id,
@@ -1477,7 +1741,7 @@ export class NeighborhoodWatchService {
   async deletePostComment(commentId: string, actor: JwtPayload) {
     const comment = await this.prisma.communityPostComment.findUnique({ where: { id: commentId }, include: { post: true } });
     if (!comment) throw new NotFoundException("Comment not found");
-    if (comment.authorId !== actor.sub) await this.assertModerator(comment.post.communityId, actor);
+    if (comment.authorId !== actor.sub) await this.assertModeratorForPost(comment.post, actor);
     await this.prisma.communityPostComment.delete({ where: { id: commentId } });
     await this.audit(actor, "community.comment_deleted", "community_post_comments", commentId, { postId: comment.postId });
     return { data: { id: commentId, deleted: true } };
@@ -1487,7 +1751,7 @@ export class NeighborhoodWatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can react");
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertCanParticipate(post.communityId, actor);
+    await this.assertCanParticipateOnPost(post, actor, { forNewThread: false });
     const reaction = await this.prisma.communityPostReaction.upsert({
       where: { postId_userId_type: { postId, userId: actor.sub, type: dto.type as never } },
       update: {},
@@ -1501,7 +1765,7 @@ export class NeighborhoodWatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can remove reactions");
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertCanParticipate(post.communityId, actor);
+    await this.assertCanParticipateOnPost(post, actor, { forNewThread: false });
     await this.prisma.communityPostReaction.deleteMany({ where: { postId, userId: actor.sub, type: type as never } });
     await this.audit(actor, "community.reaction_deleted", "community_post_reactions", postId, { type });
     return { data: { postId, type, deleted: true } };
@@ -1594,17 +1858,31 @@ export class NeighborhoodWatchService {
       },
     });
     if (!post) throw new NotFoundException("Community post not found");
-    await this.assertCommunityVisible(post.communityId, actor);
+    if (post.communityId) {
+      await this.assertCommunityVisible(post.communityId, actor);
+    } else if (post.targetType === "DYNAMIC_AREA" && post.dynamicAreaKey) {
+      if (actor.typ === "admin") {
+        await this.assertDynamicAreaModerator(post.dynamicAreaKey, actor);
+      } else if (actor.typ === "user") {
+        await this.assertCanParticipateOnPost(post, actor, { forNewThread: false });
+      } else {
+        throw new ForbiddenException("Access denied");
+      }
+    } else {
+      throw new NotFoundException("Community post not found");
+    }
     const [authorLabel, commentCount] = await Promise.all([
-      this.resolveAuthorLabel(post.communityId, post.authorId),
+      post.communityId
+        ? this.resolveAuthorLabel(post.communityId, post.authorId)
+        : Promise.resolve("Current Area Visitor"),
       this.prisma.communityPostComment.count({ where: { postId } }),
     ]);
     return {
-      data: {
+      data: this.toPublicPostPayload({
         ...post,
         ...(authorLabel ? { authorLabel } : {}),
         commentCount,
-      },
+      }),
     };
   }
 
@@ -1662,6 +1940,179 @@ export class NeighborhoodWatchService {
     if (ageMs > MAX_LOCATION_AGE_MS || ageMs < -60_000) {
       throw new ForbiddenException("Location proof is stale; refresh Neighborhood Watch context before posting");
     }
+  }
+
+  /**
+   * Participation policy:
+   * - NEW threads (posts): require presence expiresAt > now AND capturedAt within MAX_LOCATION_AGE_MS.
+   * - EXISTING threads (comments/reactions): allow while presence expiresAt > now for the same target
+   *   (30m presence window), without requiring a brand-new GPS fix.
+   */
+  private async assertCanParticipateOnPost(
+    post: { communityId: string | null; targetType?: string | null; dynamicAreaKey?: string | null },
+    actor: JwtPayload,
+    opts: { forNewThread: boolean },
+  ) {
+    if (post.targetType === "DYNAMIC_AREA" || (!post.communityId && post.dynamicAreaKey)) {
+      if (!post.dynamicAreaKey) throw new ForbiddenException("Dynamic area target missing");
+      await this.assertCanParticipateDynamicArea(post.dynamicAreaKey, actor, opts);
+      return;
+    }
+    if (!post.communityId) throw new ForbiddenException("Post target unavailable");
+    if (opts.forNewThread) {
+      await this.assertCanParticipate(post.communityId, actor);
+      return;
+    }
+    // Existing community threads: approved member OR unexpired presence (comment window).
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    const community = await this.prisma.community.findUnique({ where: { id: post.communityId } });
+    if (!community || community.status !== "Active") throw new NotFoundException("Community not found");
+    if (community.visibility === "Private") {
+      await this.assertApprovedMember(post.communityId, actor.sub);
+      return;
+    }
+    const membership = await this.prisma.communityMembership.findUnique({
+      where: { communityId_userId: { communityId: post.communityId, userId: actor.sub } },
+    });
+    if (membership?.status === "Approved") return;
+    if (membership?.status === "Suspended" || membership?.status === "Banned") {
+      throw new ForbiddenException("Suspended or banned members cannot perform this action");
+    }
+    const presence = await this.prisma.communityPresence.findFirst({
+      where: {
+        userId: actor.sub,
+        communityId: post.communityId,
+        mode: "LocationParticipant",
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (!presence) {
+      throw new ForbiddenException("Resolve current location context before participating in this public community");
+    }
+  }
+
+  private async assertCanParticipateDynamicArea(
+    areaKey: string,
+    actor: JwtPayload,
+    opts: { forNewThread: boolean },
+  ) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    const presence = await this.prisma.nwDynamicAreaPresence.findUnique({
+      where: { userId_areaKey: { userId: actor.sub, areaKey } },
+    });
+    if (!presence || presence.expiresAt.getTime() <= Date.now()) {
+      throw new ForbiddenException("Resolve current location context before participating in this public area");
+    }
+    if (opts.forNewThread) {
+      const ageMs = Date.now() - new Date(presence.capturedAt).getTime();
+      if (ageMs > MAX_LOCATION_AGE_MS || ageMs < -60_000) {
+        throw new ForbiddenException("Location proof is stale; refresh Neighborhood Watch context before posting");
+      }
+    }
+  }
+
+  private async requireFreshDynamicAreaPresence(userId: string, opts: { forNewThread: boolean }) {
+    const presence = await this.prisma.nwDynamicAreaPresence.findFirst({
+      where: { userId, expiresAt: { gt: new Date() } },
+      orderBy: { capturedAt: "desc" },
+    });
+    if (!presence) {
+      throw new ForbiddenException("Resolve current location context before participating in this public area");
+    }
+    if (opts.forNewThread) {
+      const ageMs = Date.now() - new Date(presence.capturedAt).getTime();
+      if (ageMs > MAX_LOCATION_AGE_MS || ageMs < -60_000) {
+        throw new ForbiddenException("Location proof is stale; refresh Neighborhood Watch context before posting");
+      }
+    }
+    return presence;
+  }
+
+  private async assertModeratorForPost(
+    post: {
+      communityId: string | null;
+      dynamicAreaKey?: string | null;
+      areaCountry?: string | null;
+      areaState?: string | null;
+      areaLga?: string | null;
+    },
+    actor: JwtPayload,
+  ) {
+    if (post.communityId) {
+      await this.assertModerator(post.communityId, actor);
+      return;
+    }
+    if (post.dynamicAreaKey) {
+      await this.assertDynamicAreaModerator(post.dynamicAreaKey, actor, post);
+      return;
+    }
+    throw new ForbiddenException("Moderation scope unavailable");
+  }
+
+  private async assertDynamicAreaModerator(
+    areaKey: string,
+    actor: JwtPayload,
+    areaHint?: { areaCountry?: string | null; areaState?: string | null; areaLga?: string | null },
+  ) {
+    if (actor.typ !== "admin") {
+      throw new ForbiddenException("Platform moderation is required for Dynamic Public Area content");
+    }
+    if (!platformAdminCan(actor, "moderate_member")) {
+      throw new ForbiddenException("Admin role cannot moderate this area");
+    }
+    if (actor.role === "Super Admin") return;
+    const sample =
+      areaHint ??
+      (await this.prisma.communityPost.findFirst({
+        where: { dynamicAreaKey: areaKey, targetType: "DYNAMIC_AREA" },
+        select: { areaCountry: true, areaState: true, areaLga: true },
+      }));
+    if (!sample) {
+      const presence = await this.prisma.nwDynamicAreaPresence.findFirst({
+        where: { areaKey },
+        select: { areaCountry: true, areaState: true, areaLga: true },
+      });
+      if (!presence) throw new NotFoundException("Dynamic area not found");
+      await this.assertAdminJurisdiction(
+        actor,
+        presence.areaCountry,
+        presence.areaState ?? undefined,
+        presence.areaLga ?? undefined,
+      );
+      return;
+    }
+    await this.assertAdminJurisdiction(
+      actor,
+      sample.areaCountry ?? "",
+      sample.areaState ?? undefined,
+      sample.areaLga ?? undefined,
+    );
+  }
+
+  /** Strip exact GPS from public community feed payloads. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private toPublicPostPayload(post: Record<string, unknown>): any {
+    const {
+      latitude: _lat,
+      longitude: _lng,
+      gpsLocation: _gps,
+      ...rest
+    } = post as Record<string, unknown>;
+    const areaLabel =
+      typeof rest.areaLabel === "string" && rest.areaLabel.trim()
+        ? rest.areaLabel
+        : typeof rest.dynamicAreaKey === "string"
+          ? publicAreaDisplayLabel({
+              areaLabel: "Current Area",
+              city: typeof rest.areaCity === "string" ? rest.areaCity : null,
+              lgaCode: typeof rest.areaLga === "string" ? rest.areaLga : null,
+            })
+          : undefined;
+    return {
+      ...rest,
+      ...(areaLabel ? { approximateLocationLabel: areaLabel } : {}),
+      hasApproximateLocation: _lat != null && _lng != null,
+    };
   }
 
   private async resolveAuthorLabel(communityId: string, userId: string): Promise<string | undefined> {

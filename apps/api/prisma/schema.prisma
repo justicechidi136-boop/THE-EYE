@@ -211,6 +211,11 @@ enum CommunityPostType {
   CommunityQuestion
 }
 
+enum CommunityPostTargetType {
+  COMMUNITY
+  DYNAMIC_AREA
+}
+
 enum CommunityHazardStatus {
   Open
   Verified
@@ -464,6 +469,7 @@ model User {
   communityRequests         CommunityRequest[]
   communityContentReports   CommunityContentReport[]
   communityPresence         CommunityPresence[]
+  nwDynamicAreaPresence     NwDynamicAreaPresence[]
   communityAlertsCreated    CommunityAlert[]
   volunteerProfile          VolunteerProfile?
   patrolAssignments         PatrolAssignment[]
@@ -1494,10 +1500,19 @@ model CommunityMembership {
 
 model CommunityPost {
   id                 String                                @id @default(uuid()) @db.Uuid
-  communityId        String                                @map("community_id") @db.Uuid
+  /// Mapped community target. Null when targetType = DYNAMIC_AREA.
+  communityId        String?                               @map("community_id") @db.Uuid
   authorId           String                                @map("author_id") @db.Uuid
   incidentId         String?                               @map("incident_id") @db.Uuid
   broadcastId        String?                               @map("broadcast_id") @db.Uuid
+  targetType         CommunityPostTargetType               @default(COMMUNITY) @map("target_type")
+  /// Deterministic geographic bucket (never raw lat/lng). Required for DYNAMIC_AREA.
+  dynamicAreaKey     String?                               @map("dynamic_area_key")
+  areaCountry        String?                               @map("area_country")
+  areaState          String?                               @map("area_state")
+  areaLga            String?                               @map("area_lga")
+  areaCity           String?                               @map("area_city")
+  areaLabel          String?                               @map("area_label")
   type               CommunityPostType
   title              String
   body               String
@@ -1513,7 +1528,7 @@ model CommunityPost {
   hiddenAt           DateTime?                             @map("hidden_at") @db.Timestamptz(6)
   createdAt          DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  community          Community                             @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  community          Community?                            @relation(fields: [communityId], references: [id], onDelete: Cascade)
   author             User                                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
   incident           Incident?                             @relation(fields: [incidentId], references: [id])
   broadcast          Broadcast?                            @relation(fields: [broadcastId], references: [id])
@@ -1524,6 +1539,10 @@ model CommunityPost {
 
   @@index([communityId, createdAt])
   @@index([communityId, type, createdAt])
+  @@index([dynamicAreaKey, createdAt])
+  @@index([dynamicAreaKey, type, createdAt])
+  @@index([areaCountry, areaState, areaLga, createdAt])
+  @@index([targetType, createdAt])
   @@index([verificationStatus, confidenceScore])
   @@index([hazardStatus])
   @@index([incidentId])
@@ -1731,23 +1750,50 @@ model CommunityRequest {
 }
 
 model CommunityContentReport {
-  id           String                    @id @default(uuid()) @db.Uuid
-  communityId  String                    @map("community_id") @db.Uuid
-  reporterId   String                    @map("reporter_id") @db.Uuid
-  targetType   CommunityReportTargetType @map("target_type")
-  targetId     String                    @map("target_id") @db.Uuid
-  reasonCode   String                    @map("reason_code")
-  note         String?
-  status       CommunityReportStatus     @default(Pending)
-  reviewedById String?                   @map("reviewed_by_id") @db.Uuid
-  reviewedAt   DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
-  createdAt    DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
-  community    Community                 @relation(fields: [communityId], references: [id], onDelete: Cascade)
-  reporter     User                      @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  id             String                    @id @default(uuid()) @db.Uuid
+  communityId    String?                   @map("community_id") @db.Uuid
+  dynamicAreaKey String?                   @map("dynamic_area_key")
+  reporterId     String                    @map("reporter_id") @db.Uuid
+  targetType     CommunityReportTargetType @map("target_type")
+  targetId       String                    @map("target_id") @db.Uuid
+  reasonCode     String                    @map("reason_code")
+  note           String?
+  status         CommunityReportStatus     @default(Pending)
+  reviewedById   String?                   @map("reviewed_by_id") @db.Uuid
+  reviewedAt     DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  community      Community?                @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  reporter       User                      @relation(fields: [reporterId], references: [id], onDelete: Cascade)
 
   @@index([communityId, status, createdAt])
+  @@index([dynamicAreaKey, status, createdAt])
   @@index([targetType, targetId])
   @@map("community_content_reports")
+}
+
+/// Short-lived location presence for Dynamic Public Area participation (not membership).
+model NwDynamicAreaPresence {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  areaKey     String   @map("area_key")
+  areaCountry String   @map("area_country")
+  areaState   String?  @map("area_state")
+  areaLga     String?  @map("area_lga")
+  areaCity    String?  @map("area_city")
+  areaLabel   String   @map("area_label")
+  latitude    Decimal  @db.Decimal(9, 6)
+  longitude   Decimal  @db.Decimal(9, 6)
+  accuracyM   Decimal? @map("accuracy_m") @db.Decimal(8, 2)
+  capturedAt  DateTime @map("captured_at") @db.Timestamptz(6)
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, areaKey])
+  @@index([areaKey, expiresAt])
+  @@index([userId, updatedAt])
+  @@map("nw_dynamic_area_presence")
 }
 
 model VolunteerProfile {
