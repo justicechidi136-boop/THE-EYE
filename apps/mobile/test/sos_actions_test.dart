@@ -162,6 +162,7 @@ AppController _testController(ThemeProvider themeProvider) {
   );
 
   return AppController(
+    apiClient: apiClient,
     submissionService: IncidentSubmissionService(
       apiClient: apiClient,
       pendingStore: InMemoryPendingSubmissionStore(),

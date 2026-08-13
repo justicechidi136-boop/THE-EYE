@@ -78,7 +78,9 @@ import "config/the_eye_api_config.dart";
 import "design_system/eye_design_system.dart";
 import "presentation/citizen_date_time.dart";
 import "presentation/citizen_notification_presenter.dart";
+import "presentation/citizen_time_picker.dart";
 import "presentation/missing_person_age.dart";
+import "vehicles/vehicle_image_persist.dart";
 import "push/push_background_handler.dart";
 import "auth/citizen_auth_return_listener.dart";
 import "push/push_deep_link_router.dart";
@@ -578,6 +580,7 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
     authService =
         AuthService(apiClient: apiClient, sessionStore: authSessionStore);
     controller = AppController(
+      apiClient: apiClient,
       submissionService: submissionService,
       connectivity: connectivity,
       authService: authService,
@@ -1363,6 +1366,7 @@ class AppController extends SessionAccessor
         BroadcastSession,
         NeighborhoodWatchSession {
   AppController({
+    required TheEyeApiClient apiClient,
     required IncidentSubmissionService submissionService,
     required ConnectivityService connectivity,
     required AuthService authService,
@@ -1370,7 +1374,20 @@ class AppController extends SessionAccessor
     required AuthSessionStore authSessionStore,
     required ThemeProvider themeProvider,
     required VehicleGarageStore vehicleGarageStore,
-  })  : _submissionService = submissionService,
+  })  : _apiClient = apiClient,
+        _submissionService = submissionService,
+        _historyService = IncidentHistoryService(apiClient: apiClient),
+        _notificationInboxService =
+            NotificationInboxService(apiClient: apiClient),
+        _broadcastFeedService = BroadcastFeedService(apiClient: apiClient),
+        _broadcastSubmissionService =
+            BroadcastSubmissionService(apiClient: apiClient),
+        _broadcastMediaUploadService =
+            BroadcastMediaUploadService(apiClient: apiClient),
+        _neighborhoodWatchService =
+            NeighborhoodWatchService(apiClient: apiClient),
+        _communityMediaUploadService =
+            CommunityMediaUploadService(apiClient: apiClient),
         _connectivity = connectivity,
         _authService = authService,
         _socialAuthService = socialAuthService,
@@ -1382,17 +1399,16 @@ class AppController extends SessionAccessor
     unawaited(_loadVehicleGarageCache());
   }
 
+  /// Shared HTTP client with single-flight 401 refresh (FUNC-004 / FUNC-0XX).
+  final TheEyeApiClient _apiClient;
   final IncidentSubmissionService _submissionService;
-  final IncidentHistoryService _historyService = IncidentHistoryService();
-  final NotificationInboxService _notificationInboxService =
-      NotificationInboxService();
+  final IncidentHistoryService _historyService;
+  final NotificationInboxService _notificationInboxService;
   final NotificationInboxCache _notificationInboxCache =
       NotificationInboxCache();
-  final BroadcastFeedService _broadcastFeedService = BroadcastFeedService();
-  final BroadcastSubmissionService _broadcastSubmissionService =
-      BroadcastSubmissionService();
-  final BroadcastMediaUploadService _broadcastMediaUploadService =
-      BroadcastMediaUploadService();
+  final BroadcastFeedService _broadcastFeedService;
+  final BroadcastSubmissionService _broadcastSubmissionService;
+  final BroadcastMediaUploadService _broadcastMediaUploadService;
   final BroadcastFeedCache _broadcastFeedCache = BroadcastFeedCache();
   final ComposeDraftStore _composeDraftStore = ComposeDraftStore();
   EmergencyLocationCoordinator? _locationCoordinator;
@@ -1428,10 +1444,8 @@ class AppController extends SessionAccessor
   String? broadcastNextCursor;
   int broadcastUnreadCount = 0;
   bool loadingMoreBroadcasts = false;
-  final NeighborhoodWatchService _neighborhoodWatchService =
-      NeighborhoodWatchService();
-  final CommunityMediaUploadService _communityMediaUploadService =
-      CommunityMediaUploadService();
+  final NeighborhoodWatchService _neighborhoodWatchService;
+  final CommunityMediaUploadService _communityMediaUploadService;
   final List<CommunitySummary> communities = [];
   CommunitySummary? selectedCommunity;
   bool loadingCommunities = false;
@@ -1452,6 +1466,7 @@ class AppController extends SessionAccessor
 
   ConnectivityService get connectivity => _connectivity;
   AuthService get authService => _authService;
+  TheEyeApiClient get apiClient => _apiClient;
   BroadcastFeedService get broadcastFeedService => _broadcastFeedService;
   BroadcastSubmissionService get broadcastSubmissionService =>
       _broadcastSubmissionService;
@@ -2438,7 +2453,7 @@ class AppController extends SessionAccessor
     final token = accessToken;
     if (token == null || token.isEmpty) return;
 
-    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final api = _apiClient;
     try {
       var remote = await api.listMyVehicles(accessToken: token);
       if (remote.isEmpty) {
@@ -2477,7 +2492,7 @@ class AppController extends SessionAccessor
     if (token == null || token.isEmpty) {
       throw StateError("Sign in to add vehicles");
     }
-    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final api = _apiClient;
     final created = await api.createMyVehicle(
       accessToken: token,
       payload: {
@@ -2515,7 +2530,7 @@ class AppController extends SessionAccessor
         vehicleId.isEmpty) {
       throw StateError("Sign in and select a valid vehicle");
     }
-    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final api = _apiClient;
     final updated = await api.updateMyVehicle(
       accessToken: token,
       vehicleId: vehicleId,
@@ -2549,7 +2564,7 @@ class AppController extends SessionAccessor
     if (token == null || token.isEmpty) {
       throw StateError("Sign in to update primary vehicle");
     }
-    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final api = _apiClient;
     final updated = await api.setMyVehiclePrimary(
       accessToken: token,
       vehicleId: vehicleId,
@@ -2564,7 +2579,7 @@ class AppController extends SessionAccessor
     if (token == null || token.isEmpty) {
       throw StateError("Sign in to delete vehicles");
     }
-    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final api = _apiClient;
     await api.deleteMyVehicle(accessToken: token, vehicleId: vehicleId);
     vehicles =
         vehicles.where((item) => item.id != vehicleId).toList(growable: false);
@@ -4374,7 +4389,7 @@ class HomeScreen extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: 1.15,
+                  childAspectRatio: 1.05,
                   children: [
                     ActionTile(
                         "Live emergency video",
@@ -5011,8 +5026,8 @@ class _MissingPersonBroadcastScreenState
   }
 
   Future<void> _pickLastSeenTime() async {
-    final time = await showTimePicker(
-      context: context,
+    final time = await showCitizenTimePicker(
+      context,
       initialTime: _lastSeenTime ?? TimeOfDay.now(),
     );
     if (time == null || !mounted) return;
@@ -5265,7 +5280,7 @@ class _MissingPersonBroadcastScreenState
                   subtitle: Text(
                     _lastSeenTime == null
                         ? "Tap to select time"
-                        : _lastSeenTime!.format(context),
+                        : formatCitizenTimeOfDay(_lastSeenTime!),
                   ),
                   trailing: const Icon(Icons.schedule),
                   onTap: submitting ? null : _pickLastSeenTime,
@@ -8813,13 +8828,13 @@ class _YourCarScreenState extends State<YourCarScreen> {
     final controller = appOf(context);
     final vehicles = controller.vehicles;
     return SafetyScaffold(
-      title: "My Cars",
+      title: "My Vehicles",
       useFigmaShell: true,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           SectionCard(
-            title: "My Cars",
+            title: "My Vehicles",
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -9034,19 +9049,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   Future<String?> _persistCarImage(XFile picked) async {
-    final documentsDir = await getApplicationDocumentsDirectory();
-    final carDir = Directory(p.join(documentsDir.path, "car_profile"));
-    if (!await carDir.exists()) {
-      await carDir.create(recursive: true);
-    }
-    final extension =
-        p.extension(picked.path).isEmpty ? ".jpg" : p.extension(picked.path);
-    final destination = p.join(
-      carDir.path,
-      "car_photo_${DateTime.now().microsecondsSinceEpoch}$extension",
-    );
-    await File(picked.path).copy(destination);
-    return destination;
+    return persistPickedVehicleImage(picked);
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -9088,7 +9091,15 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         continue;
       }
       final savedPath = await _persistCarImage(picked);
-      if (!mounted || savedPath == null) return;
+      if (!mounted) return;
+      if (savedPath == null) {
+        showAppSnackBar(
+          context,
+          "Unable to prepare vehicle photo. Try another image.",
+          isError: true,
+        );
+        continue;
+      }
       final sizeBytes = await File(savedPath).length();
       if (sizeBytes > EvidencePolicy.vehiclePhotos.maxFileSize) {
         await File(savedPath).delete();
@@ -9143,7 +9154,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     required String resolvedVehicleId,
   }) async {
     var failedCount = 0;
-    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final api = appOf(context).apiClient;
     for (var index = 0; index < _photos.length; index++) {
       final photo = _photos[index];
       final localPath = photo.localPath;
@@ -9225,7 +9236,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     final photo = _photos[index];
     final localPath = photo.localPath;
     if (localPath == null || localPath.isEmpty) return;
-    final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+    final api = appOf(context).apiClient;
     setState(() {
       _photos[index] = photo.copyWith(
         uploadState: _VehiclePhotoUploadState.uploading,
@@ -9387,7 +9398,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         throw StateError("Vehicle save did not return an id");
       }
       if (_removedRemotePhotoIds.isNotEmpty) {
-        final api = TheEyeApiClient(baseUrl: theEyeApiUrl);
+        final api = appOf(context).apiClient;
         for (final photoId in _removedRemotePhotoIds.toList(growable: false)) {
           await api.deleteVehiclePhoto(
             accessToken: token,
@@ -9412,15 +9423,19 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         );
         return;
       }
-      showAppSnackBar(context, "Vehicle details were saved.");
+      showAppSnackBar(context, "Vehicle saved.");
       Navigator.of(context).pop(
         widget.args.returnToStolenVehicle ? vehicleId : null,
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => saving = false);
-      showAppSnackBar(context, "Unable to save vehicle details.",
-          isError: true);
+      final message = error is AuthApiException
+          ? error.userMessage
+          : error is StateError
+              ? error.message
+              : "Unable to save vehicle details.";
+      showAppSnackBar(context, message, isError: true);
     }
   }
 
@@ -9546,30 +9561,32 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                               ),
                             ),
                           ),
-                          Positioned(
-                            left: 4,
-                            bottom: 4,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                child: Text(
-                                  switch (photo.uploadState) {
-                                    _VehiclePhotoUploadState.local => "LOCAL",
-                                    _VehiclePhotoUploadState.uploading => "UPLOADING",
-                                    _VehiclePhotoUploadState.uploaded => "UPLOADED",
-                                    _VehiclePhotoUploadState.failed => "FAILED",
-                                  },
-                                  style: const TextStyle(
-                                      fontSize: 10, color: Colors.white),
+                          if (photo.uploadState ==
+                                  _VehiclePhotoUploadState.uploading ||
+                              photo.uploadState ==
+                                  _VehiclePhotoUploadState.failed)
+                            Positioned(
+                              left: 4,
+                              bottom: 4,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  child: Text(
+                                    photo.uploadState ==
+                                            _VehiclePhotoUploadState.uploading
+                                        ? "UPLOADING"
+                                        : "FAILED",
+                                    style: const TextStyle(
+                                        fontSize: 10, color: Colors.white),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                           if (photo.uploadState == _VehiclePhotoUploadState.failed)
                             Positioned(
                               right: 0,
@@ -9658,7 +9675,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 TextField(
                   controller: notesController,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: "Notes"),
+                  decoration: const InputDecoration(
+                      labelText: "Vehicle Description"),
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -9828,7 +9846,7 @@ class SettingsScreen extends StatelessWidget {
           const LocationPermissionSettingsSection(),
           const SizedBox(height: 16),
           SectionCard(
-            title: "My Cars",
+            title: "My Vehicles",
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(
@@ -10582,13 +10600,17 @@ class ActionTile extends StatelessWidget {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(icon, color: color, size: 34),
+                  Icon(icon, color: color, size: 30),
+                  const Spacer(),
                   Text(
                     label,
+                    maxLines: 3,
+                    softWrap: true,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
+                      height: 1.15,
                       fontWeight: FontWeight.w800,
                       color: semantics.bodyText,
                     ),
