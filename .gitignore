@@ -5,6 +5,29 @@ build/
 out/
 .vite/
 .turbo/
+*.tsbuildinfo
+
+# Local build/tool caches
+**/.gradle/
+**/.gradle-home/
+**/android/local.properties
+.tmp-prisma-deploy*/
+
+# Local validation output and handoff artifacts
+/.api-test-summary.txt
+/.audit-diff-stat.txt
+/.backup-*.txt
+/.jest-*-out.txt
+/.pr*.json
+/.pr*.txt
+/.pr-*.md
+/.tmp-*.json
+/.watch-*.png
+/.watch-*.xml
+/apps/**/.build-*.txt
+/apps/**/.test-*.txt
+/apps/**/.tmp-*.txt
+/artifacts/staging-apk-*/
 
 # Environment files — never commit real secrets
 .env
