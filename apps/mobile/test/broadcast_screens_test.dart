@@ -69,12 +69,13 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
     List<BroadcastFeedItem> mineItems = const [],
     Object? listMineError,
     BroadcastSubmissionService? submissionService,
-  }) : broadcastFeedService = _FakeBroadcastFeedService(
+  })  : broadcastFeedService = _FakeBroadcastFeedService(
           detail: detail,
           listMineItems: mineItems,
           listMineError: listMineError,
         ),
-        broadcastSubmissionService = submissionService ?? BroadcastSubmissionService();
+        broadcastSubmissionService =
+            submissionService ?? BroadcastSubmissionService();
 
   final bool authenticated;
 
@@ -151,7 +152,7 @@ class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
     String? confidence,
     bool anonymousToReviewers = false,
     String? directionOfTravel,
-    List<Map<String, String>> attachments = const [],
+    List<Map<String, Object?>> attachments = const [],
   }) async {
     submitCalls += 1;
     await onSubmit?.call({
@@ -467,7 +468,8 @@ void main() {
     expect(find.text("Report sighting"), findsNothing);
   });
 
-  testWidgets("submit sighting flow shows location modes and success replacement",
+  testWidgets(
+      "submit sighting flow shows location modes and success replacement",
       (tester) async {
     final submitService = _FakeBroadcastSubmissionService();
     final detail = BroadcastFeedItem(
@@ -497,7 +499,8 @@ void main() {
     expect(find.text("Enter manually"), findsOneWidget);
     expect(find.text("Skip"), findsOneWidget);
     final scrollable = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(find.text("EVIDENCE"), 400, scrollable: scrollable);
+    await tester.scrollUntilVisible(find.text("EVIDENCE"), 400,
+        scrollable: scrollable);
     expect(find.text("EVIDENCE"), findsOneWidget);
 
     final descriptionField = find.byWidgetPredicate(
@@ -507,7 +510,8 @@ void main() {
           (widget.decoration as InputDecoration).labelText ==
               "What did you observe?",
     );
-    await tester.scrollUntilVisible(descriptionField, 400, scrollable: scrollable);
+    await tester.scrollUntilVisible(descriptionField, 400,
+        scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen heading east");
     await tester.scrollUntilVisible(
       find.text("Submit sighting"),

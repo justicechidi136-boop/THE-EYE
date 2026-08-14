@@ -268,6 +268,8 @@ describe("BroadcastCitizenService", () => {
             contentType: "image/jpeg",
             fileName: "image-1.jpg",
             label: "Photo 1",
+            fileHash: "sha256:abc",
+            sizeBytes: 2048,
           },
         ],
       },
@@ -275,6 +277,13 @@ describe("BroadcastCitizenService", () => {
     );
 
     expect(result.data.id).toBe("sighting-1");
+    const createArgs = prisma.broadcastSighting.create.mock.calls[0]?.[0];
+    expect(createArgs.data.metadata.attachments[0]).toEqual(
+      expect.objectContaining({
+        fileHash: "sha256:abc",
+        sizeBytes: 2048,
+      }),
+    );
     expect(prisma.broadcastSighting.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

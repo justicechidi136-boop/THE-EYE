@@ -26,10 +26,13 @@ class PickedEvidenceFile {
 abstract class EvidenceMediaSource {
   Future<PickedEvidenceFile?> takePhoto();
   Future<PickedEvidenceFile?> pickImage();
+  Future<List<PickedEvidenceFile>> pickImages();
   Future<PickedEvidenceFile?> recordVideo(
       {Duration maxDuration = const Duration(seconds: 120)});
   Future<PickedEvidenceFile?> pickVideo();
+  Future<List<PickedEvidenceFile>> pickVideos();
   Future<PickedEvidenceFile?> pickAudio();
+  Future<List<PickedEvidenceFile>> pickAudioFiles();
 }
 
 class ImagePickerEvidenceSource implements EvidenceMediaSource {
@@ -53,6 +56,12 @@ class ImagePickerEvidenceSource implements EvidenceMediaSource {
   }
 
   @override
+  Future<List<PickedEvidenceFile>> pickImages() async {
+    final files = await _picker.pickMultiImage(imageQuality: 100);
+    return _mapXFiles(files);
+  }
+
+  @override
   Future<PickedEvidenceFile?> recordVideo(
       {Duration maxDuration = const Duration(seconds: 120)}) async {
     final file = await _picker.pickVideo(
@@ -70,27 +79,52 @@ class ImagePickerEvidenceSource implements EvidenceMediaSource {
   }
 
   @override
+  Future<List<PickedEvidenceFile>> pickVideos() async {
+    final picked = await pickVideo();
+    return picked == null ? const [] : [picked];
+  }
+
+  @override
   Future<PickedEvidenceFile?> pickAudio() async {
+    final files = await pickAudioFiles();
+    return files.isEmpty ? null : files.first;
+  }
+
+  @override
+  Future<List<PickedEvidenceFile>> pickAudioFiles() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ["mp3", "mpeg", "m4a", "mp4", "webm"],
+      allowMultiple: true,
       withReadStream: false,
       withData: true,
     );
-    if (result == null || result.files.isEmpty) return null;
-    final picked = result.files.single;
-    final path = picked.path ?? "";
-    final bytes = picked.bytes;
-    if (path.isEmpty && (bytes == null || bytes.isEmpty)) return null;
-    return PickedEvidenceFile(
-      path: path,
-      fileName: picked.name,
-      mimeType: picked.extension == null
-          ? null
-          : _audioMimeForExtension(picked.extension!),
-      durationSeconds: await _resolveDurationSeconds(path, bytes),
-      bytes: bytes == null ? null : Uint8List.fromList(bytes),
-    );
+    if (result == null || result.files.isEmpty) return const [];
+    final files = <PickedEvidenceFile>[];
+    for (final picked in result.files) {
+      final path = picked.path ?? "";
+      final bytes = picked.bytes;
+      if (path.isEmpty && (bytes == null || bytes.isEmpty)) continue;
+      files.add(PickedEvidenceFile(
+        path: path,
+        fileName: picked.name,
+        mimeType: picked.extension == null
+            ? null
+            : _audioMimeForExtension(picked.extension!),
+        durationSeconds: await _resolveDurationSeconds(path, bytes),
+        bytes: bytes == null ? null : Uint8List.fromList(bytes),
+      ));
+    }
+    return files;
+  }
+
+  Future<List<PickedEvidenceFile>> _mapXFiles(List<XFile> files) async {
+    final mapped = <PickedEvidenceFile>[];
+    for (final file in files) {
+      final picked = await _mapXFile(file);
+      if (picked != null) mapped.add(picked);
+    }
+    return mapped;
   }
 
   Future<PickedEvidenceFile?> _mapXFile(XFile? file) async {
@@ -106,11 +140,10 @@ class ImagePickerEvidenceSource implements EvidenceMediaSource {
       }
     }
     final mime = file.mimeType;
-    final isMediaWithDuration =
-        mime?.startsWith("video/") == true || mime?.startsWith("audio/") == true;
-    final durationSeconds = isMediaWithDuration
-        ? await _resolveDurationSeconds(path, bytes)
-        : null;
+    final isMediaWithDuration = mime?.startsWith("video/") == true ||
+        mime?.startsWith("audio/") == true;
+    final durationSeconds =
+        isMediaWithDuration ? await _resolveDurationSeconds(path, bytes) : null;
     return PickedEvidenceFile(
       path: path,
       fileName: file.name,
@@ -158,15 +191,22 @@ class ImagePickerEvidenceSource implements EvidenceMediaSource {
 class FakeEvidenceMediaSource implements EvidenceMediaSource {
   PickedEvidenceFile? nextPhoto;
   PickedEvidenceFile? nextImage;
+  List<PickedEvidenceFile>? nextImages;
   PickedEvidenceFile? nextVideo;
+  List<PickedEvidenceFile>? nextVideos;
   PickedEvidenceFile? nextRecordedVideo;
   PickedEvidenceFile? nextAudio;
+  List<PickedEvidenceFile>? nextAudioFiles;
 
   @override
   Future<PickedEvidenceFile?> takePhoto() async => nextPhoto;
 
   @override
   Future<PickedEvidenceFile?> pickImage() async => nextImage;
+
+  @override
+  Future<List<PickedEvidenceFile>> pickImages() async =>
+      nextImages ?? (nextImage == null ? const [] : [nextImage!]);
 
   @override
   Future<PickedEvidenceFile?> recordVideo(
@@ -177,5 +217,13 @@ class FakeEvidenceMediaSource implements EvidenceMediaSource {
   Future<PickedEvidenceFile?> pickVideo() async => nextVideo;
 
   @override
+  Future<List<PickedEvidenceFile>> pickVideos() async =>
+      nextVideos ?? (nextVideo == null ? const [] : [nextVideo!]);
+
+  @override
   Future<PickedEvidenceFile?> pickAudio() async => nextAudio;
+
+  @override
+  Future<List<PickedEvidenceFile>> pickAudioFiles() async =>
+      nextAudioFiles ?? (nextAudio == null ? const [] : [nextAudio!]);
 }

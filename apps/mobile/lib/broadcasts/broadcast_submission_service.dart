@@ -222,7 +222,7 @@ class BroadcastSubmissionService {
     String? confidence,
     bool anonymousToReviewers = false,
     String? directionOfTravel,
-    List<Map<String, String>> attachments = const [],
+    List<Map<String, Object?>> attachments = const [],
   }) async {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.broadcastSightings(broadcastId),

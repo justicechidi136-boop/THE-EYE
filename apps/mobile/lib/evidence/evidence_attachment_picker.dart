@@ -3,6 +3,7 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:permission_handler/permission_handler.dart";
+import "package:url_launcher/url_launcher.dart";
 
 import "../contracts/the_eye_enums.dart";
 import "evidence_audio_preview.dart";
@@ -218,18 +219,17 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
             .toList(growable: false);
         final listAttachments = controller.attachments
             .where(
-              (attachment) =>
-                  !(attachment.isAudio &&
-                      attachment.metadata["voiceReport"] == true),
+              (attachment) => !(attachment.isAudio &&
+                  attachment.metadata["voiceReport"] == true),
             )
             .toList(growable: false);
         final voiceUploadProgress = voiceReportAttachments.isEmpty
             ? null
             : voiceReportAttachments.first.uploadProgress;
-        final photoCount =
-            controller.policy.countForMediaType(listAttachments, IncidentMediaType.image);
-        final videoCount =
-            controller.policy.countForMediaType(listAttachments, IncidentMediaType.video);
+        final photoCount = controller.policy
+            .countForMediaType(listAttachments, IncidentMediaType.image);
+        final videoCount = controller.policy
+            .countForMediaType(listAttachments, IncidentMediaType.video);
         final audioCount = controller.policy.countForMediaType(
               listAttachments.where(
                 (item) => item.metadata["voiceReport"] != true,
@@ -237,7 +237,8 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
               IncidentMediaType.audio,
             ) +
             voiceReportAttachments.length;
-        final filesCount = listAttachments.length + voiceReportAttachments.length;
+        final filesCount =
+            listAttachments.length + voiceReportAttachments.length;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -400,10 +401,16 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                               )
                           : null,
                       onPlay: presentations[i].canPlay
-                          ? () => _audioPreview.toggle(
-                                listAttachments[i].localId,
-                                listAttachments[i].uploadPath,
-                              )
+                          ? () => listAttachments[i].isAudio
+                              ? _audioPreview.toggle(
+                                  listAttachments[i].localId,
+                                  listAttachments[i].uploadPath,
+                                )
+                              : _openAttachmentPreview(
+                                  context,
+                                  listAttachments[i],
+                                  presentations[i].displayName,
+                                )
                           : null,
                       onRemove: () =>
                           controller.remove(listAttachments[i].localId),
@@ -441,7 +448,7 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                 title: const Text("Choose image"),
                 onTap: () {
                   Navigator.pop(context);
-                  controller.pickImage();
+                  controller.pickImages();
                 }),
           ],
         ),
@@ -468,7 +475,7 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                 title: const Text("Choose video"),
                 onTap: () {
                   Navigator.pop(context);
-                  controller.pickVideo();
+                  controller.pickVideos();
                 }),
           ],
         ),
@@ -498,7 +505,7 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
               title: const Text("Choose image"),
               onTap: () {
                 Navigator.pop(context);
-                controller.pickImage();
+                controller.pickImages();
               },
             ),
             ListTile(
@@ -516,7 +523,7 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
               title: const Text("Choose video"),
               onTap: () {
                 Navigator.pop(context);
-                controller.pickVideo();
+                controller.pickVideos();
               },
             ),
             ListTile(
@@ -545,7 +552,8 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
         final duration = attachment.durationSeconds;
         return AlertDialog(
           title: Text(label),
-          content: attachment.isImage && File(attachment.uploadPath).existsSync()
+          content: attachment.isImage &&
+                  File(attachment.uploadPath).existsSync()
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: Image.file(
@@ -553,31 +561,57 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                     fit: BoxFit.cover,
                   ),
                 )
-              : SizedBox(
-                  width: 220,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        attachment.isVideo
-                            ? Icons.play_circle_fill
-                            : Icons.graphic_eq,
-                        size: 54,
+              : attachment.isVideo && File(attachment.uploadPath).existsSync()
+                  ? SizedBox(
+                      width: 240,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.play_circle_fill, size: 54),
+                          const SizedBox(height: 8),
+                          const Text(
+                            "Video ready to play",
+                            textAlign: TextAlign.center,
+                          ),
+                          if (duration != null) ...[
+                            const SizedBox(height: 6),
+                            Text("Duration ${_clock(duration)}"),
+                          ],
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: () =>
+                                _launchVideo(attachment.uploadPath),
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text("Play video"),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        attachment.isVideo
-                            ? "Video preview placeholder"
-                            : "Audio attachment",
-                        textAlign: TextAlign.center,
+                    )
+                  : SizedBox(
+                      width: 220,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            attachment.isVideo
+                                ? Icons.play_circle_fill
+                                : Icons.graphic_eq,
+                            size: 54,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            attachment.isVideo
+                                ? "Video preview unavailable"
+                                : "Audio attachment",
+                            textAlign: TextAlign.center,
+                          ),
+                          if (duration != null) ...[
+                            const SizedBox(height: 6),
+                            Text("Duration ${_clock(duration)}"),
+                          ],
+                        ],
                       ),
-                      if (duration != null) ...[
-                        const SizedBox(height: 6),
-                        Text("Duration ${_clock(duration)}"),
-                      ],
-                    ],
-                  ),
-                ),
+                    ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -593,6 +627,11 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
     final m = (seconds ~/ 60).toString().padLeft(2, "0");
     final s = (seconds % 60).toString().padLeft(2, "0");
     return "$m:$s";
+  }
+
+  Future<void> _launchVideo(String path) async {
+    final uri = Uri.file(path);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 

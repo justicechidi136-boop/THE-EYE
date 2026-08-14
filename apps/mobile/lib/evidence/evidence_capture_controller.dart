@@ -57,6 +57,12 @@ class EvidenceCaptureController extends ChangeNotifier {
         action: _mediaSource.pickImage,
       );
 
+  Future<void> pickImages() => _captureMany(
+        mediaType: IncidentMediaType.image,
+        needsPhotos: true,
+        action: _mediaSource.pickImages,
+      );
+
   Future<void> recordVideo() => _capture(
         mediaType: IncidentMediaType.video,
         needsCamera: true,
@@ -70,10 +76,16 @@ class EvidenceCaptureController extends ChangeNotifier {
         action: _mediaSource.pickVideo,
       );
 
-  Future<void> pickAudio() => _capture(
+  Future<void> pickVideos() => _captureMany(
+        mediaType: IncidentMediaType.video,
+        needsPhotos: true,
+        action: _mediaSource.pickVideos,
+      );
+
+  Future<void> pickAudio() => _captureMany(
         mediaType: IncidentMediaType.audio,
         needsPhotos: true,
-        action: _mediaSource.pickAudio,
+        action: _mediaSource.pickAudioFiles,
       );
 
   void remove(String localId) {
@@ -211,6 +223,109 @@ class EvidenceCaptureController extends ChangeNotifier {
     }
     attachments.add(attachment);
     notifyListeners();
+  }
+
+  Future<void> _captureMany({
+    required String mediaType,
+    required Future<List<PickedEvidenceFile>> Function() action,
+    bool needsCamera = false,
+    bool needsMicrophone = false,
+    bool needsPhotos = false,
+  }) async {
+    final limitMessage = policy.limitMessageForCapture(
+      attachments: attachments,
+      mediaType: mediaType,
+    );
+    if (limitMessage != null) {
+      lastError = limitMessage;
+      notifyListeners();
+      return;
+    }
+
+    final allowed = await _ensurePermissions(
+      needsCamera: needsCamera,
+      needsMicrophone: needsMicrophone,
+      needsPhotos: needsPhotos,
+    );
+    if (!allowed) return;
+
+    busy = true;
+    lastError = null;
+    notifyListeners();
+
+    final pickedFiles = await action();
+    if (pickedFiles.isEmpty) {
+      busy = false;
+      notifyListeners();
+      return;
+    }
+
+    final accepted = <LocalEvidenceAttachment>[];
+    final skippedMessages = <String>[];
+
+    for (final picked in pickedFiles) {
+      final current = [...attachments, ...accepted];
+      final captureLimit = policy.limitMessageForCapture(
+        attachments: current,
+        mediaType: mediaType,
+      );
+      if (captureLimit != null) {
+        skippedMessages.add(captureLimit);
+        continue;
+      }
+
+      final result = await _captureService.ingestPickedFile(
+        picked: picked,
+        mediaType: mediaType,
+        lowDataMode: lowDataMode,
+        latitude: latitude,
+        longitude: longitude,
+      );
+      if (result.cancelled) continue;
+      if (!result.isSuccess) {
+        skippedMessages.add(
+          result.errorMessage ?? "Unable to prepare evidence file.",
+        );
+        continue;
+      }
+
+      final attachment = result.attachment!;
+      final attachmentLimitMessage = policy.limitMessageForAttachment(
+        existing: current,
+        incoming: attachment,
+      );
+      if (attachmentLimitMessage != null) {
+        skippedMessages.add(attachmentLimitMessage);
+        continue;
+      }
+      accepted.add(attachment);
+    }
+
+    busy = false;
+    if (accepted.isNotEmpty) {
+      attachments.addAll(accepted);
+    }
+    lastError = _batchResultMessage(
+      acceptedCount: accepted.length,
+      skippedMessages: skippedMessages,
+    );
+    notifyListeners();
+  }
+
+  String? _batchResultMessage({
+    required int acceptedCount,
+    required List<String> skippedMessages,
+  }) {
+    if (skippedMessages.isEmpty) return null;
+    final firstMessage = skippedMessages.first;
+    final skippedCount = skippedMessages.length;
+    if (acceptedCount == 0) {
+      return "No files added. $firstMessage";
+    }
+    final addedLabel = acceptedCount == 1 ? "file" : "files";
+    final skippedLabel = skippedCount == 1 ? "file" : "files";
+    return "$acceptedCount $addedLabel added. "
+        "$skippedCount $skippedLabel skipped. $firstMessage";
   }
 
   Future<bool> _ensurePermissions({

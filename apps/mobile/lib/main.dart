@@ -5120,7 +5120,7 @@ class _MissingPersonBroadcastScreenState
     try {
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
-      var uploadedEvidence = const <Map<String, String>>[];
+      var uploadedEvidence = const <Map<String, Object?>>[];
       if (localEvidence.isNotEmpty) {
         try {
           uploadedEvidence =
@@ -6486,7 +6486,7 @@ class _StolenVehicleBroadcastScreenState
     try {
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
-      var uploadedEvidence = const <Map<String, String>>[];
+      var uploadedEvidence = const <Map<String, Object?>>[];
       if (localEvidence.isNotEmpty) {
         try {
           uploadedEvidence =
