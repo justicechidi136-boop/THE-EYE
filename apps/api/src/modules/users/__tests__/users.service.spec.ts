@@ -9,6 +9,9 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn(),
     },
+    adminUserPreference: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     profile: {
       upsert: jest.fn(),
       findUnique: jest.fn(),
@@ -80,6 +83,8 @@ describe("isCitizenProfileComplete", () => {
         firstName: "Google",
         lastName: "User",
         country: "Nigeria",
+        countryCode: "NG",
+        preferredLocale: "ha",
         state: "Lagos",
         lga: "Ikeja",
       }),
@@ -92,6 +97,8 @@ describe("isCitizenProfileComplete", () => {
         firstName: "Ada",
         lastName: "Okeke",
         country: "Nigeria",
+        countryCode: "NG",
+        preferredLocale: "ha",
         state: "Lagos",
         lga: "Ikeja",
       }),
@@ -113,6 +120,8 @@ describe("UsersService.getMe", () => {
         firstName: "Ada",
         lastName: "Okeke",
         country: "Nigeria",
+        countryCode: "NG",
+        preferredLocale: "ha",
         state: "Lagos",
         lga: "Ikeja",
         avatarUrl: null,
@@ -142,7 +151,16 @@ describe("UsersService.getMe", () => {
         kycStatus: "Verified",
         trustScore: 91,
         profileComplete: true,
+        preferredLocale: "ha",
+        effectivePreferredLocale: "ha",
         emergencyContact: expect.objectContaining({ phone: "+2348099990000" }),
+      }),
+    );
+    expect(result.profile).toEqual(
+      expect.objectContaining({
+        countryCode: "NG",
+        preferredLocale: "ha",
+        effectivePreferredLocale: "ha",
       }),
     );
   });
@@ -179,6 +197,8 @@ describe("UsersService.updateMe", () => {
           firstName: "Ada",
           lastName: "Okeke",
           country: "",
+          countryCode: null,
+          preferredLocale: null,
           state: "",
           lga: "",
           dateOfBirth: null,
@@ -198,6 +218,8 @@ describe("UsersService.updateMe", () => {
           firstName: "Ada",
           lastName: "Okeke",
           country: "Nigeria",
+          countryCode: "NG",
+          preferredLocale: "yo",
           state: "Lagos",
           lga: "Ikeja",
           avatarUrl: null,
@@ -212,14 +234,38 @@ describe("UsersService.updateMe", () => {
 
     const result = await service.updateMe(
       { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
-      { country: "Nigeria", state: "Lagos", lga: "Ikeja" },
+      { country: "Nigeria", countryCode: "ng", preferredLocale: "YO", state: "Lagos", lga: "Ikeja" },
     );
 
-    expect(prisma.profile.upsert).toHaveBeenCalled();
+    expect(prisma.profile.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ countryCode: "NG", preferredLocale: "yo" }),
+        update: expect.objectContaining({ countryCode: "NG", preferredLocale: "yo" }),
+      }),
+    );
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "profile.updated" }),
     );
     expect(result.profileComplete).toBe(true);
+    expect(result.effectivePreferredLocale).toBe("yo");
+  });
+
+  it("rejects unsupported language and country codes", async () => {
+    const { service } = createUsersService();
+
+    await expect(
+      service.updateMe(
+        { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+        { preferredLocale: "HAUSA" },
+      ),
+    ).rejects.toThrow("Unsupported preferredLocale");
+
+    await expect(
+      service.updateMe(
+        { sub: "user-1", typ: "user", role: "Citizen", permissions: [] } as never,
+        { countryCode: "Nigeria" },
+      ),
+    ).rejects.toThrow("Unsupported countryCode");
   });
 
   it("rejects trust score mass assignment", async () => {

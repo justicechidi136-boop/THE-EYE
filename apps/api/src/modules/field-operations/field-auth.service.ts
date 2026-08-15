@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "crypto";
-import { FIELD_ERROR_CODES } from "@the-eye/shared";
+import { FIELD_ERROR_CODES, effectivePreferredLocale } from "@the-eye/shared";
 import { hashToken, randomToken, verifyPassword } from "../../common/auth/crypto";
 import { parseTtl, signJwt, type JwtPayload } from "../../common/auth/jwt";
 import { requireJwtAccessSecret } from "../../common/auth/jwt-secrets";
@@ -47,7 +47,7 @@ export class FieldAuthService {
     });
 
     const email = dto.email.trim().toLowerCase();
-    const admin = await this.prisma.adminUser.findUnique({ where: { email }, include: { role: true } });
+    const admin = await this.prisma.adminUser.findUnique({ where: { email }, include: { role: true, preferences: true } });
     if (!admin?.isActive || !verifyPassword(dto.password, admin.passwordHash)) {
       throw new UnauthorizedException("Invalid credentials");
     }
@@ -68,6 +68,8 @@ export class FieldAuthService {
       fieldRole,
       permissions,
       country: admin.country,
+      preferredLocale: admin.preferences?.preferredLocale ?? undefined,
+      effectivePreferredLocale: effectivePreferredLocale(admin.preferences?.preferredLocale),
       state: admin.state,
       lga: admin.lga,
       agencyId: admin.agencyId ?? undefined,
@@ -102,6 +104,8 @@ export class FieldAuthService {
           displayName: admin.displayName,
           role: admin.role.name,
           fieldRole,
+          preferredLocale: admin.preferences?.preferredLocale ?? null,
+          effectivePreferredLocale: effectivePreferredLocale(admin.preferences?.preferredLocale),
         },
       },
     };
@@ -119,7 +123,7 @@ export class FieldAuthService {
         revokedAt: null,
         expiresAt: { gt: new Date() },
       },
-      include: { adminUser: { include: { role: true } } },
+      include: { adminUser: { include: { role: true, preferences: true } } },
     });
     if (!session || session.tokenVersion !== device.tokenVersion) {
       throw new UnauthorizedException({ code: FIELD_ERROR_CODES.SESSION_EXPIRED, message: "Session expired" });
@@ -192,6 +196,8 @@ export class FieldAuthService {
         fieldRole: actor.fieldRole,
         agencyId: actor.agencyId,
         assignedUnitId: actor.assignedUnitId,
+        preferredLocale: actor.preferredLocale ?? null,
+        effectivePreferredLocale: effectivePreferredLocale(actor.preferredLocale ?? actor.effectivePreferredLocale),
         permissions: actor.permissions ?? [],
         device: device ? this.devices.mapDevice(device) : null,
       },
@@ -232,7 +238,17 @@ export class FieldAuthService {
   }
 
   private issueTokens(
-    admin: { id: string; email: string; role: { name: string }; country: string; state: string; lga: string; agencyId: string | null; jurisdictionId: string },
+    admin: {
+      id: string;
+      email: string;
+      role: { name: string };
+      country: string;
+      state: string;
+      lga: string;
+      agencyId: string | null;
+      jurisdictionId: string;
+      preferences?: { preferredLocale?: string | null } | null;
+    },
     device: { id: string; tokenVersion: number; assignedUnitId: string | null },
     sessionId: string,
     tokenVersion: number,
@@ -248,6 +264,8 @@ export class FieldAuthService {
         fieldRole,
         permissions,
         country: admin.country,
+        preferredLocale: admin.preferences?.preferredLocale ?? undefined,
+        effectivePreferredLocale: effectivePreferredLocale(admin.preferences?.preferredLocale),
         state: admin.state,
         lga: admin.lga,
         agencyId: admin.agencyId ?? undefined,

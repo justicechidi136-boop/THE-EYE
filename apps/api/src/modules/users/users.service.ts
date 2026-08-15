@@ -7,7 +7,15 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { createHash } from "crypto";
-import { AdminRoleName, UserRole } from "@the-eye/shared";
+import {
+  AdminRoleName,
+  UserRole,
+  effectivePreferredLocale,
+  isEnabledCountryCode,
+  isEnabledPreferredLocale,
+  normalizeCountryCode,
+  normalizePreferredLocale,
+} from "@the-eye/shared";
 import type { CitizenVehicle, CitizenVehiclePhoto, Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
@@ -73,6 +81,9 @@ export class UsersService {
 
   async getMe(actor: JwtPayload) {
     if (actor.typ === "admin") {
+      const preferences = await this.prisma.adminUserPreference.findUnique({
+        where: { adminUserId: actor.sub },
+      });
       return {
         id: actor.sub,
         typ: actor.typ,
@@ -80,8 +91,11 @@ export class UsersService {
         role: actor.role,
         permissions: actor.permissions ?? [],
         country: actor.country ?? null,
+        countryCode: actor.countryCode ?? null,
         state: actor.state ?? null,
         lga: actor.lga ?? null,
+        preferredLocale: preferences?.preferredLocale ?? null,
+        effectivePreferredLocale: effectivePreferredLocale(preferences?.preferredLocale),
       };
     }
 
@@ -100,6 +114,16 @@ export class UsersService {
     const firstName = dto.firstName?.trim();
     const lastName = dto.lastName?.trim();
     const country = dto.country?.trim();
+    const countryCode = dto.countryCode === null
+      ? null
+      : dto.countryCode === undefined
+        ? undefined
+        : normalizeCountryCode(dto.countryCode);
+    const preferredLocale = dto.preferredLocale === null
+      ? null
+      : dto.preferredLocale === undefined
+        ? undefined
+        : normalizePreferredLocale(dto.preferredLocale);
     const state = dto.state?.trim();
     const lga = dto.lga?.trim();
     const phone = dto.phone === null || dto.phone === undefined
@@ -110,6 +134,12 @@ export class UsersService {
 
     if (phone !== undefined && phone !== null && !isValidPhoneNumber(phone)) {
       throw new BadRequestException("Enter a valid phone number");
+    }
+    if (countryCode !== undefined && countryCode !== null && !isEnabledCountryCode(countryCode)) {
+      throw new BadRequestException("Unsupported countryCode");
+    }
+    if (preferredLocale !== undefined && preferredLocale !== null && !isEnabledPreferredLocale(preferredLocale)) {
+      throw new BadRequestException("Unsupported preferredLocale");
     }
     if (phone) {
       const clash = await this.prisma.user.findFirst({
@@ -129,6 +159,8 @@ export class UsersService {
       firstName: firstName ?? existing.profile?.firstName ?? "",
       lastName: lastName ?? existing.profile?.lastName ?? "",
       country: country ?? existing.profile?.country ?? "",
+      countryCode: countryCode === undefined ? existing.profile?.countryCode ?? null : countryCode,
+      preferredLocale: preferredLocale === undefined ? existing.profile?.preferredLocale ?? null : preferredLocale,
       state: state ?? existing.profile?.state ?? "",
       lga: lga ?? existing.profile?.lga ?? "",
       dateOfBirth: dto.dateOfBirth === undefined
@@ -158,6 +190,8 @@ export class UsersService {
             ? incompleteProfileLocation()
             : {}),
           country: nextProfile.country,
+          countryCode: nextProfile.countryCode,
+          preferredLocale: nextProfile.preferredLocale,
           state: nextProfile.state,
           lga: nextProfile.lga,
         },
@@ -165,6 +199,8 @@ export class UsersService {
           firstName: nextProfile.firstName,
           lastName: nextProfile.lastName,
           country: nextProfile.country,
+          countryCode: nextProfile.countryCode,
+          preferredLocale: nextProfile.preferredLocale,
           state: nextProfile.state,
           lga: nextProfile.lga,
           dateOfBirth: nextProfile.dateOfBirth,
@@ -741,6 +777,9 @@ export class UsersService {
             firstName: user.profile.firstName,
             lastName: user.profile.lastName,
             country: user.profile.country || null,
+            countryCode: user.profile.countryCode || null,
+            preferredLocale: user.profile.preferredLocale || null,
+            effectivePreferredLocale: effectivePreferredLocale(user.profile.preferredLocale),
             state: user.profile.state || null,
             lga: user.profile.lga || null,
             avatarUrl: user.profile.avatarUrl,
@@ -936,6 +975,9 @@ export class UsersService {
             firstName: user.profile.firstName,
             lastName: user.profile.lastName,
             country: user.profile.country || null,
+            countryCode: user.profile.countryCode || null,
+            preferredLocale: user.profile.preferredLocale || null,
+            effectivePreferredLocale: effectivePreferredLocale(user.profile.preferredLocale),
             state: user.profile.state || null,
             lga: user.profile.lga || null,
             avatarUrl: user.profile.avatarUrl,
@@ -947,6 +989,7 @@ export class UsersService {
       profileJurisdiction: user.profile
         ? {
             country: user.profile.country || null,
+            countryCode: user.profile.countryCode || null,
             state: user.profile.state || null,
             lga: user.profile.lga || null,
             source: "user_profile",
@@ -957,6 +1000,8 @@ export class UsersService {
         status: "unavailable",
         source: "unavailable",
       },
+      preferredLocale: user.profile?.preferredLocale ?? null,
+      effectivePreferredLocale: effectivePreferredLocale(user.profile?.preferredLocale),
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
     };

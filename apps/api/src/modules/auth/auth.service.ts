@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
-import { AdminRoleName, adminRolePermissions, userRolePermissions, UserRole } from "@the-eye/shared";
+import { AdminRoleName, adminRolePermissions, effectivePreferredLocale, userRolePermissions, UserRole } from "@the-eye/shared";
 import type { VerifiedFirebaseIdentity } from "../../common/auth/firebase-id-token";
 import { peekFirebaseIdToken } from "../../common/auth/firebase-id-token";
 import { FirebaseAuthVerifier } from "../../common/auth/firebase-auth.verifier";
@@ -241,7 +241,7 @@ export class AuthService {
     if (payload.typ === "admin" && stored.adminUserId) {
       const admin = await this.prisma.adminUser.findUnique({
         where: { id: stored.adminUserId },
-        include: { role: true },
+        include: { role: true, preferences: true },
       });
       if (!admin) throw new UnauthorizedException("Admin not found");
       return this.issueAdminSession(admin, stored.familyId);
@@ -250,7 +250,7 @@ export class AuthService {
     if (stored.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: stored.userId },
-        include: { trustedReporter: true },
+        include: { trustedReporter: true, profile: true },
       });
       if (!user) throw new UnauthorizedException("User not found");
       return this.issueUserSession(user, stored.familyId);
@@ -364,7 +364,7 @@ export class AuthService {
       where: { phone: normalizedPhone },
       update: { phoneVerifiedAt: new Date() },
       create: { phone: normalizedPhone, phoneVerifiedAt: new Date() },
-      include: { trustedReporter: true },
+      include: { trustedReporter: true, profile: true },
     });
 
     await this.prisma.phoneOtp.update({ where: { id: otp.id }, data: { verifiedAt: new Date(), userId: user.id } });
@@ -385,7 +385,7 @@ export class AuthService {
           normalizedPhone ? { phone: normalizedPhone } : undefined,
         ].filter(Boolean) as Prisma.UserWhereInput[],
       },
-      include: { trustedReporter: true },
+      include: { trustedReporter: true, profile: true },
     });
 
     if (!user || !verifyPassword(dto.password, user.passwordHash)) {
@@ -399,7 +399,7 @@ export class AuthService {
     const normalizedEmail = dto.email ? this.normalizeEmail(dto.email) : "";
     const admin = await this.prisma.adminUser.findUnique({
       where: { email: normalizedEmail },
-      include: { role: true },
+      include: { role: true, preferences: true },
     });
 
     if (!admin || !admin.isActive || !verifyPassword(dto.password, admin.passwordHash)) {
@@ -418,7 +418,16 @@ export class AuthService {
     return session;
   }
 
-  private async issueUserSession(user: { id: string; email: string | null; phone: string | null; trustedReporter?: unknown }, familyId?: string) {
+  private async issueUserSession(
+    user: {
+      id: string;
+      email: string | null;
+      phone: string | null;
+      profile?: { countryCode?: string | null; preferredLocale?: string | null } | null;
+      trustedReporter?: unknown;
+    },
+    familyId?: string,
+  ) {
     const role = user.trustedReporter ? UserRole.TrustedReporter : UserRole.Citizen;
     const payload: JwtPayload = {
       sub: user.id,
@@ -427,12 +436,29 @@ export class AuthService {
       phone: user.phone ?? undefined,
       role,
       permissions: userRolePermissions[role],
+      countryCode: user.profile?.countryCode ?? undefined,
+      preferredLocale: user.profile?.preferredLocale ?? undefined,
+      effectivePreferredLocale: effectivePreferredLocale(user.profile?.preferredLocale),
     };
     return this.issueSession(payload, { userId: user.id }, familyId);
   }
 
-  private async issueAdminSession(admin: { id: string; email: string; role: { name: string }; country: string; state: string; lga: string; agencyId: string | null; jurisdictionId: string }, familyId?: string) {
+  private async issueAdminSession(
+    admin: {
+      id: string;
+      email: string;
+      role: { name: string };
+      country: string;
+      state: string;
+      lga: string;
+      agencyId: string | null;
+      jurisdictionId: string;
+      preferences?: { preferredLocale?: string | null } | null;
+    },
+    familyId?: string,
+  ) {
     const role = admin.role.name as AdminRoleName;
+    const preferredLocale = admin.preferences?.preferredLocale ?? null;
     const payload: JwtPayload = {
       sub: admin.id,
       typ: "admin",
@@ -440,6 +466,8 @@ export class AuthService {
       role,
       permissions: adminRolePermissions[role],
       country: admin.country,
+      preferredLocale: preferredLocale ?? undefined,
+      effectivePreferredLocale: effectivePreferredLocale(preferredLocale),
       state: admin.state,
       lga: admin.lga,
       agencyId: admin.agencyId ?? undefined,

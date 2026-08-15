@@ -30,6 +30,8 @@ class FieldLoginResult {
     required this.publicDeviceId,
     this.officerId,
     this.officerName,
+    this.preferredLocale,
+    this.effectivePreferredLocale,
     this.registrationStatus,
   });
 
@@ -45,6 +47,8 @@ class FieldLoginResult {
       publicDeviceId: device['publicDeviceId'] as String? ?? '',
       officerId: officer['id'] as String?,
       officerName: officer['displayName'] as String?,
+      preferredLocale: officer['preferredLocale'] as String?,
+      effectivePreferredLocale: officer['effectivePreferredLocale'] as String?,
       registrationStatus: device['registrationStatus'] as String?,
     );
   }
@@ -56,6 +60,8 @@ class FieldLoginResult {
   final String publicDeviceId;
   final String? officerId;
   final String? officerName;
+  final String? preferredLocale;
+  final String? effectivePreferredLocale;
   final String? registrationStatus;
 }
 
@@ -113,6 +119,7 @@ class FieldAuthService {
       publicDeviceId: result.publicDeviceId,
       officerId: result.officerId,
       officerName: result.officerName,
+      preferredLocale: result.effectivePreferredLocale ?? result.preferredLocale,
     );
     _api.accessToken = result.accessToken;
     return result;
@@ -143,6 +150,7 @@ class FieldAuthService {
       publicDeviceId: result.publicDeviceId,
       officerId: result.officerId,
       officerName: result.officerName,
+      preferredLocale: result.effectivePreferredLocale ?? result.preferredLocale,
     );
     _api.accessToken = result.accessToken;
     return result;

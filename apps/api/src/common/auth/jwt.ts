@@ -23,6 +23,9 @@ export type JwtPayload = {
   role?: string;
   permissions?: string[];
   country?: string;
+  countryCode?: string;
+  preferredLocale?: string;
+  effectivePreferredLocale?: string;
   state?: string;
   lga?: string;
   agencyId?: string;
