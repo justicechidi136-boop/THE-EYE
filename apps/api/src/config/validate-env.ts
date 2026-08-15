@@ -13,6 +13,7 @@ import {
   STAGING_FIREBASE_PROJECT_ID,
 } from "../common/auth/firebase-project";
 import { assertStagingAuthLinkBases } from "../modules/auth/auth-recovery-urls";
+import { assertFirebaseStorageConfiguration } from "../common/storage/s3-presign";
 
 const productionSecrets = [
   "JWT_ACCESS_SECRET",
@@ -75,6 +76,7 @@ export const assertStagingRecoveryLinkBases = assertStagingAuthLinkBases;
 export function validateEnvironment(config: Record<string, unknown>) {
   validateFirebaseProjectEnv(config);
   validatePublicStorageEndpoint(config);
+  assertFirebaseStorageConfiguration(config);
 
   const appEnvironment = resolveAppEnvironment(config);
   if (appEnvironment === "staging") {

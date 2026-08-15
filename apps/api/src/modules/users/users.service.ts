@@ -31,8 +31,9 @@ import {
   assertKycObjectKey,
   assertVehiclePhotoObjectKey,
   avatarObjectKey,
-  createS3PresignedGetUrl,
-  createS3PresignedPutUrl,
+  createStorageDownloadUrl,
+  createStorageUploadUrl,
+  getConfiguredStorageBucket,
   validateAvatarUpload,
   validateVehiclePhotoUpload,
   vehiclePhotoObjectKey,
@@ -329,7 +330,7 @@ export class UsersService {
       orderBy: [{ isPrimary: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
       include: { photos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
     });
-    return { data: vehicles.map((vehicle) => this.mapCitizenVehicle(vehicle)) };
+    return { data: await Promise.all(vehicles.map((vehicle) => this.mapCitizenVehicle(vehicle))) };
   }
 
   async createMyVehicle(actor: JwtPayload, dto: CreateCitizenVehicleDto) {
@@ -481,13 +482,13 @@ export class UsersService {
 
     const objectKey = vehiclePhotoObjectKey(actor.sub, vehicle.id, dto.fileName);
     try {
-      const uploadUrl = createS3PresignedPutUrl(objectKey, 900, dto.contentType);
+      const signed = await createStorageUploadUrl(objectKey, 900, dto.contentType);
       return {
-        bucket: process.env.S3_BUCKET ?? "the-eye",
+        bucket: signed.bucket,
         objectKey,
-        uploadUrl,
+        uploadUrl: signed.url,
         requiredHeaders: { "content-type": dto.contentType },
-        expiresInSeconds: 900,
+        expiresInSeconds: signed.expiresInSeconds,
       };
     } catch (error) {
       if (error instanceof ServiceUnavailableException || error instanceof BadRequestException) throw error;
@@ -550,13 +551,13 @@ export class UsersService {
     validateAvatarUpload(dto.contentType, dto.sizeBytes);
     const objectKey = avatarObjectKey(actor.sub, dto.fileName);
     try {
-      const uploadUrl = createS3PresignedPutUrl(objectKey, 900, dto.contentType);
+      const signed = await createStorageUploadUrl(objectKey, 900, dto.contentType);
       return {
-        bucket: process.env.S3_BUCKET ?? "the-eye",
+        bucket: signed.bucket,
         objectKey,
-        uploadUrl,
+        uploadUrl: signed.url,
         requiredHeaders: { "content-type": dto.contentType },
-        expiresInSeconds: 900,
+        expiresInSeconds: signed.expiresInSeconds,
       };
     } catch (error) {
       if (error instanceof ServiceUnavailableException || error instanceof BadRequestException) throw error;
@@ -568,11 +569,8 @@ export class UsersService {
     this.assertCitizen(actor);
     assertAvatarObjectKey(actor.sub, dto.objectKey, dto.bucket, dto.contentType);
 
-    const endpoint = process.env.S3_ENDPOINT;
-    const bucket = process.env.S3_BUCKET ?? "the-eye";
-    if (!endpoint) throw new ServiceUnavailableException("Avatar storage is not configured");
-
-    const avatarUrl = `${endpoint.replace(/\/$/, "")}/${bucket}/${dto.objectKey}`;
+    const bucket = getConfiguredStorageBucket();
+    const avatarUrl = `storage://${bucket}/${dto.objectKey}`;
     const profile = await this.prisma.profile.findUnique({ where: { userId: actor.sub } });
     if (!profile) {
       throw new BadRequestException("Complete your profile before uploading an avatar");
@@ -782,7 +780,7 @@ export class UsersService {
             effectivePreferredLocale: effectivePreferredLocale(user.profile.preferredLocale),
             state: user.profile.state || null,
             lga: user.profile.lga || null,
-            avatarUrl: user.profile.avatarUrl,
+            avatarUrl: await this.resolveProfileAvatarUrl(user.profile.avatarUrl),
             dateOfBirth: user.profile.dateOfBirth?.toISOString().slice(0, 10) ?? null,
             gender: user.profile.gender,
             address: user.profile.address,
@@ -980,7 +978,7 @@ export class UsersService {
             effectivePreferredLocale: effectivePreferredLocale(user.profile.preferredLocale),
             state: user.profile.state || null,
             lga: user.profile.lga || null,
-            avatarUrl: user.profile.avatarUrl,
+            avatarUrl: await this.resolveProfileAvatarUrl(user.profile.avatarUrl),
             dateOfBirth: user.profile.dateOfBirth?.toISOString().slice(0, 10) ?? null,
             gender: user.profile.gender,
             address: user.profile.address,
@@ -1007,6 +1005,18 @@ export class UsersService {
     };
   }
 
+  private async resolveProfileAvatarUrl(value?: string | null) {
+    if (!value) return value ?? null;
+    const match = value.match(/^storage:\/\/([^/]+)\/(.+)$/);
+    if (!match) return value;
+    try {
+      if (match[1] !== getConfiguredStorageBucket()) return null;
+      return (await createStorageDownloadUrl(match[2], 300)).url;
+    } catch {
+      return null;
+    }
+  }
+
   private mapEmergencyContact(contact: {
     id: string;
     name: string;
@@ -1023,9 +1033,9 @@ export class UsersService {
     };
   }
 
-  private mapCitizenVehicle(vehicle: CitizenVehicle | CitizenVehicleWithPhotos) {
+  private async mapCitizenVehicle(vehicle: CitizenVehicle | CitizenVehicleWithPhotos) {
     const photos = "photos" in vehicle
-      ? vehicle.photos.map((photo) => this.mapCitizenVehiclePhoto(photo))
+      ? await Promise.all(vehicle.photos.map((photo) => this.mapCitizenVehiclePhoto(photo)))
       : [];
     return {
       id: vehicle.id,
@@ -1043,7 +1053,7 @@ export class UsersService {
     };
   }
 
-  private mapCitizenVehiclePhoto(photo: CitizenVehiclePhoto) {
+  private async mapCitizenVehiclePhoto(photo: CitizenVehiclePhoto) {
     return {
       id: photo.id,
       objectKey: photo.objectKey,
@@ -1051,16 +1061,13 @@ export class UsersService {
       sizeBytes: photo.sizeBytes,
       sortOrder: photo.sortOrder,
       createdAt: photo.createdAt.toISOString(),
-      signedGetUrl: this.tryCreateSignedGetUrl(photo.objectKey),
+      signedGetUrl: await this.tryCreateSignedGetUrl(photo.objectKey),
     };
   }
 
-  private tryCreateSignedGetUrl(objectKey: string): string | null {
-    if (!process.env.S3_ENDPOINT || !process.env.S3_ACCESS_KEY || !process.env.S3_SECRET_KEY) {
-      return null;
-    }
+  private async tryCreateSignedGetUrl(objectKey: string): Promise<string | null> {
     try {
-      return createS3PresignedGetUrl(objectKey, 300);
+      return (await createStorageDownloadUrl(objectKey, 300)).url;
     } catch {
       return null;
     }
