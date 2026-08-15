@@ -4,6 +4,8 @@ const crypto = require("crypto");
 const apiBaseUrl = String(process.env.STAGING_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 const token = String(process.env.STAGING_STORAGE_SMOKE_TOKEN || process.env.STAGING_AUTH_TOKEN || "");
 const expectedHost = String(process.env.STAGING_STORAGE_HOST || process.env.THE_EYE_STORAGE_SERVER_NAME || "").trim().toLowerCase();
+const provider = String(process.env.STORAGE_PROVIDER || "s3").trim().toLowerCase();
+const expectedFirebaseBucket = String(process.env.FIREBASE_STORAGE_BUCKET || "").trim().toLowerCase();
 
 function fail(message) {
   console.error(`FAIL storage smoke: ${message}`);
@@ -31,7 +33,13 @@ function safeUrlShape(rawUrl) {
 async function main() {
   if (!apiBaseUrl) fail("STAGING_API_BASE_URL or NEXT_PUBLIC_API_BASE_URL is required");
   if (!token) fail("STAGING_STORAGE_SMOKE_TOKEN is required");
-  if (!expectedHost) fail("STAGING_STORAGE_HOST or THE_EYE_STORAGE_SERVER_NAME is required");
+  if (!["firebase", "s3", "minio"].includes(provider)) fail("STORAGE_PROVIDER must be one of: firebase, s3, minio");
+  if (provider === "firebase" && expectedFirebaseBucket !== "the-eye-2stg.firebasestorage.app") {
+    fail("FIREBASE_STORAGE_BUCKET must be the staging Firebase Storage bucket in firebase mode");
+  }
+  if ((provider === "s3" || provider === "minio") && !expectedHost) {
+    fail("STAGING_STORAGE_HOST or THE_EYE_STORAGE_SERVER_NAME is required in s3 mode");
+  }
 
   const presignEndpoint = `${apiBaseUrl}/storage/presign`;
   const objectBody = Buffer.from(`the-eye-storage-smoke:${crypto.randomUUID()}\n`, "utf8");
@@ -62,6 +70,7 @@ async function main() {
   const shape = safeUrlShape(uploadUrl);
   logSafe({
     event: "presign",
+    provider,
     scheme: shape.scheme,
     host: shape.host,
     port: shape.port,
@@ -69,7 +78,21 @@ async function main() {
   });
 
   if (shape.scheme !== "https") fail(`upload URL scheme must be https, got ${shape.scheme}`);
-  if (shape.host !== expectedHost) fail(`upload URL host ${shape.host} did not match expected storage host`);
+  if (provider === "firebase") {
+    const firebaseHosts = new Set(["storage.googleapis.com", "firebasestorage.googleapis.com"]);
+    if (!firebaseHosts.has(shape.host)) fail(`upload URL host ${shape.host} is not an approved Firebase/GCS host`);
+    if (uploadUrl.includes("minio") || shape.host === "storage-staging.theeye.com.ng") {
+      fail("firebase upload URL must not point at legacy MinIO storage");
+    }
+    if (!uploadUrl.includes(expectedFirebaseBucket)) {
+      fail("firebase upload URL did not reference the expected staging bucket");
+    }
+    if (!uploadUrl.includes("X-Goog-Signature=") && !uploadUrl.includes("X-Goog-Algorithm=")) {
+      fail("firebase upload URL is missing signed Google query parameters");
+    }
+  } else if (shape.host !== expectedHost) {
+    fail(`upload URL host ${shape.host} did not match expected storage host`);
+  }
   if (shape.host === "minio" || shape.host.includes("localhost") || shape.host.endsWith(".local")) {
     fail("upload URL host is not publicly reachable");
   }
@@ -102,7 +125,15 @@ async function main() {
       host: getShape.host,
       hasQuery: getShape.hasQuery,
     });
-    if (getShape.scheme !== "https" || getShape.host !== expectedHost || !getShape.hasQuery) {
+    if (provider === "firebase") {
+      const firebaseHosts = new Set(["storage.googleapis.com", "firebasestorage.googleapis.com"]);
+      if (getShape.scheme !== "https" || !firebaseHosts.has(getShape.host) || !getShape.hasQuery) {
+        fail("GET URL shape is invalid");
+      }
+      if (getUrl.includes("minio") || getShape.host === "storage-staging.theeye.com.ng") {
+        fail("firebase GET URL must not point at legacy MinIO storage");
+      }
+    } else if (getShape.scheme !== "https" || getShape.host !== expectedHost || !getShape.hasQuery) {
       fail("GET URL shape is invalid");
     }
     const getResponse = await fetch(getUrl, { method: "GET" });

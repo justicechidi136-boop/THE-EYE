@@ -86,8 +86,14 @@ jobs:
           THE_EYE_APP_ENV: ${{ vars.THE_EYE_APP_ENV }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FCM_PROJECT_ID: ${{ vars.FCM_PROJECT_ID }}
+          STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER }}
+          FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
           NEXT_PUBLIC_APP_ENV: ${{ vars.NEXT_PUBLIC_APP_ENV }}
           STAGING_STORAGE_HOST: ${{ vars.STAGING_STORAGE_HOST }}
+          FCM_CLIENT_EMAIL: ${{ secrets.FCM_CLIENT_EMAIL }}
+          FCM_PRIVATE_KEY: ${{ secrets.FCM_PRIVATE_KEY }}
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ vars.GOOGLE_APPLICATION_CREDENTIALS }}
         run: node scripts/ci/validate-staging-deploy-gate.mjs
 
   build:
@@ -218,9 +224,15 @@ jobs:
             export THE_EYE_IMAGE_TAG=${{ steps.meta.outputs.tag }}
             export ADMIN_WEB_APP_ENV=staging
             export NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
-            export STAGING_STORAGE_HOST='${{ vars.STAGING_STORAGE_HOST }}'
-            export THE_EYE_STORAGE_SERVER_NAME='${{ vars.STAGING_STORAGE_HOST }}'
-            export S3_PUBLIC_ENDPOINT='https://${{ vars.STAGING_STORAGE_HOST }}'
+            export STORAGE_PROVIDER='${{ vars.STORAGE_PROVIDER }}'
+            export FIREBASE_PROJECT_ID='${{ vars.FIREBASE_PROJECT_ID }}'
+            export FIREBASE_STORAGE_BUCKET='${{ vars.FIREBASE_STORAGE_BUCKET }}'
+            if [ "${STORAGE_PROVIDER}" = "s3" ] || [ "${STORAGE_PROVIDER}" = "minio" ]; then
+              export STAGING_STORAGE_HOST='${{ vars.STAGING_STORAGE_HOST }}'
+              export THE_EYE_STORAGE_SERVER_NAME='${{ vars.STAGING_STORAGE_HOST }}'
+              export S3_PUBLIC_ENDPOINT='https://${{ vars.STAGING_STORAGE_HOST }}'
+            fi
+            export RUN_MIGRATIONS=${{ github.event.inputs.run_migrations }}
             export PROOF_ONLY=${{ github.event.inputs.proof_only }}
             export RUN_LOCATION_PROOF=${{ github.event.inputs.run_location_proof }}
             export SKIP_LIVE_VIDEO_PROOF=${{ github.event.inputs.skip_live_video_proof }}

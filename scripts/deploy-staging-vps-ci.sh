@@ -26,7 +26,9 @@ echo "STEP env-check-ok"
 
 PROOF_ONLY="${PROOF_ONLY:-false}"
 RUN_LOCATION_PROOF="${RUN_LOCATION_PROOF:-false}"
+RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
 echo "STEP deploy-start proof_only=${PROOF_ONLY}"
+echo "STEP migration-mode run_migrations=${RUN_MIGRATIONS}"
 
 if [[ "$PROOF_ONLY" == "true" ]]; then
   echo "=== Proof-only mode (skip full redeploy) ==="
@@ -37,7 +39,13 @@ else
   "${COMPOSE[@]}" pull api admin-web notification-worker || true
   echo "STEP compose-build-start"
   "${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools
-  "${COMPOSE[@]}" --profile tools run --rm api-migrate
+  if [[ "$RUN_MIGRATIONS" == "true" ]]; then
+    echo "STEP migrations-start"
+    "${COMPOSE[@]}" --profile tools run --rm api-migrate
+    echo "STEP migrations-complete"
+  else
+    echo "Skipping staging migrations (RUN_MIGRATIONS=${RUN_MIGRATIONS})"
+  fi
   echo "=== Rendered LiveKit service (compose config) ==="
   "${COMPOSE[@]}" config 2>/dev/null | grep -A 20 '^  livekit:' || true
 fi
