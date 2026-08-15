@@ -16,19 +16,56 @@ PER_HOST="${THE_EYE_TLS_PER_HOST:-false}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
+read_dotenv_value() {
+  local key="$1"
+  local file="$2"
+  local line value found=""
 
-EMAIL="${CERTBOT_EMAIL:-}"
+  [[ -f "$file" ]] || return 1
 
-ADMIN_NAME="${THE_EYE_ADMIN_SERVER_NAME:-${THE_EYE_SERVER_NAME:-}}"
-API_NAME="${THE_EYE_API_SERVER_NAME:-}"
-LIVEKIT_NAME="${THE_EYE_LIVEKIT_SERVER_NAME:-}"
-STORAGE_NAME="${THE_EYE_STORAGE_SERVER_NAME:-}"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" == "$key="* ]]; then
+      value="${line#"$key="}"
+      if [[ ${#value} -ge 2 ]]; then
+        if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+          value="${value:1:${#value}-2}"
+        elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+          value="${value:1:${#value}-2}"
+        fi
+      fi
+      found="true"
+    fi
+  done < "$file"
+
+  [[ "$found" == "true" ]] || return 1
+  printf '%s' "$value"
+}
+
+config_value() {
+  local key="$1"
+  local fallback="${2:-}"
+
+  if [[ -v "$key" ]]; then
+    printf '%s' "${!key}"
+    return 0
+  fi
+
+  if read_dotenv_value "$key" "$ENV_FILE"; then
+    return 0
+  fi
+
+  printf '%s' "$fallback"
+}
+
+EMAIL="$(config_value CERTBOT_EMAIL)"
+LEGACY_ADMIN_NAME="$(config_value THE_EYE_SERVER_NAME)"
+
+ADMIN_NAME="$(config_value THE_EYE_ADMIN_SERVER_NAME "$LEGACY_ADMIN_NAME")"
+API_NAME="$(config_value THE_EYE_API_SERVER_NAME)"
+LIVEKIT_NAME="$(config_value THE_EYE_LIVEKIT_SERVER_NAME)"
+STORAGE_NAME="$(config_value THE_EYE_STORAGE_SERVER_NAME)"
 
 if [[ -z "$ADMIN_NAME" || -z "$API_NAME" || -z "$LIVEKIT_NAME" ]]; then
   echo "Set THE_EYE_ADMIN_SERVER_NAME, THE_EYE_API_SERVER_NAME, and THE_EYE_LIVEKIT_SERVER_NAME" >&2
@@ -38,6 +75,11 @@ fi
 if [[ -z "$EMAIL" ]]; then
   echo "Set CERTBOT_EMAIL for Let's Encrypt registration" >&2
   exit 1
+fi
+
+if [[ "${THE_EYE_LETSENCRYPT_VALIDATE_ENV_ONLY:-false}" == "true" ]]; then
+  echo "TLS environment validated."
+  exit 0
 fi
 
 DOMAINS=("$ADMIN_NAME" "$API_NAME" "$LIVEKIT_NAME")
