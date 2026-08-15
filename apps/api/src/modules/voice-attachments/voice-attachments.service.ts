@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { JwtPayload } from "../../common/auth/jwt";
-import { createS3PresignedGetUrl } from "../../common/storage/s3-presign";
+import { createStorageDownloadUrl } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { VoiceTranscriptionService } from "./voice-transcription.service";
@@ -33,10 +33,11 @@ export class VoiceAttachmentsService {
       metadata: { incidentId, fileHash: media.fileHash },
     });
 
+    const signed = await createStorageDownloadUrl(media.objectKey, 300);
     return {
       mediaId: media.id,
-      signedUrl: createS3PresignedGetUrl(media.objectKey, 300),
-      expiresInSeconds: 300,
+      signedUrl: signed.url,
+      expiresInSeconds: signed.expiresInSeconds,
       durationSeconds: media.durationSeconds,
       transcriptionStatus: media.transcriptionStatus,
       transcript: media.transcript,

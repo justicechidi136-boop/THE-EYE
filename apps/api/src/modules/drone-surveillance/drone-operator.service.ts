@@ -4,7 +4,7 @@ import type { JwtPayload } from "../../common/auth/jwt";
 import { adminCanAccessGeography, adminGeographyWhere } from "../../common/auth/admin-geography-scope";
 import { buildCursorPage, dateIdCursorWhere, decodeDateIdCursor, encodeDateIdCursor, resolvePageLimit } from "../../common/pagination/cursor-pagination";
 import { buildBullJobId } from "../../common/queue/bull-job-id";
-import { assertDroneOperatorDocumentObjectKey, createS3PresignedGetUrl, createS3PresignedPutUrl, droneOperatorDocumentObjectKey } from "../../common/storage/s3-presign";
+import { assertDroneOperatorDocumentObjectKey, createStorageDownloadUrl, createStorageUploadUrl, droneOperatorDocumentObjectKey } from "../../common/storage/s3-presign";
 import { isValidPhoneNumber, normalizePhoneNumber } from "../auth/phone-normalize";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -331,7 +331,8 @@ export class DroneOperatorService {
     const operator = await this.findOperatorOrThrow(operatorId);
     this.assertOperatorAccess(operator, actor);
     const objectKey = droneOperatorDocumentObjectKey(operatorId, dto.fileName);
-    return { data: { operatorId, bucket: process.env.S3_BUCKET ?? "the-eye", objectKey, putUrl: createS3PresignedPutUrl(objectKey, 900, dto.contentType), expiresInSeconds: 900 } };
+    const signed = await createStorageUploadUrl(objectKey, 900, dto.contentType);
+    return { data: { operatorId, bucket: signed.bucket, objectKey, putUrl: signed.url, expiresInSeconds: signed.expiresInSeconds } };
   }
 
   async confirmDocument(operatorId: string, dto: DocumentConfirmInput, actor: JwtPayload) {
@@ -353,7 +354,8 @@ export class DroneOperatorService {
     if (!doc) throw new NotFoundException("Document not found");
     if (doc.restricted && !this.canAccessRestricted(actor, operator)) throw new ForbiddenException("Restricted document");
     await this.audit(actor, "drone.operator_document_download_authorized", E.document, documentId, { operatorId, restricted: doc.restricted });
-    return { data: { documentId, downloadUrl: createS3PresignedGetUrl(doc.objectKey, 300), expiresInSeconds: 300 } };
+    const signed = await createStorageDownloadUrl(doc.objectKey, 300);
+    return { data: { documentId, downloadUrl: signed.url, expiresInSeconds: signed.expiresInSeconds } };
   }
 
   async listSafetyRecords(operatorId: string, actor: JwtPayload) {

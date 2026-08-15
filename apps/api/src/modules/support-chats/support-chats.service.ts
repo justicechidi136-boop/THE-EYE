@@ -9,8 +9,9 @@ import { AdminRoleName } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
   assertSupportAttachmentObjectKey,
-  createS3PresignedGetUrl,
-  createS3PresignedPutUrl,
+  createStorageDownloadUrl,
+  createStorageUploadUrl,
+  getConfiguredStorageBucket,
   supportAttachmentObjectKey,
   validateEvidenceUpload,
 } from "../../common/storage/s3-presign";
@@ -247,19 +248,19 @@ export class SupportChatsService {
     await this.requireUserConversation(id, actor.sub);
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const objectKey = supportAttachmentObjectKey(id, dto.fileName);
-    const bucket = process.env.S3_BUCKET ?? "the-eye";
+    const signed = await createStorageUploadUrl(objectKey, 900, dto.contentType);
     return {
-      uploadUrl: createS3PresignedPutUrl(objectKey, 900, dto.contentType),
+      uploadUrl: signed.url,
       objectKey,
-      bucket,
-      expiresInSeconds: 900,
+      bucket: signed.bucket,
+      expiresInSeconds: signed.expiresInSeconds,
     };
   }
 
   async confirmAttachment(actor: JwtPayload, id: string, dto: ConfirmSupportAttachmentDto) {
     this.assertUser(actor);
     await this.requireUserConversation(id, actor.sub);
-    const bucket = process.env.S3_BUCKET ?? "the-eye";
+    const bucket = getConfiguredStorageBucket();
     assertSupportAttachmentObjectKey(id, dto.objectKey, bucket, dto.contentType);
     await this.audit.record({
       actor,
@@ -479,12 +480,12 @@ export class SupportChatsService {
     await this.requireAdminConversation(id, actor);
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const objectKey = supportAttachmentObjectKey(id, dto.fileName);
-    const bucket = process.env.S3_BUCKET ?? "the-eye";
+    const signed = await createStorageUploadUrl(objectKey, 900, dto.contentType);
     return {
-      uploadUrl: createS3PresignedPutUrl(objectKey, 900, dto.contentType),
+      uploadUrl: signed.url,
       objectKey,
-      bucket,
-      expiresInSeconds: 900,
+      bucket: signed.bucket,
+      expiresInSeconds: signed.expiresInSeconds,
     };
   }
 
@@ -511,7 +512,8 @@ export class SupportChatsService {
       entityId: messageId,
       metadata: { conversationId: id },
     });
-    return { url: createS3PresignedGetUrl(message.attachmentKey, 300), expiresInSeconds: 300 };
+    const signed = await createStorageDownloadUrl(message.attachmentKey, 300);
+    return { url: signed.url, expiresInSeconds: signed.expiresInSeconds };
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────

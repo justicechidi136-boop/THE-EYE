@@ -10,7 +10,7 @@ import {
   resolvePageLimit,
   type CursorPageQuery,
 } from "../../common/pagination/cursor-pagination";
-import { createS3PresignedGetUrl } from "../../common/storage/s3-presign";
+import { createStorageDownloadUrl } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -723,7 +723,7 @@ export class BroadcastsService {
     );
 
     return {
-      data: page.data.map((row) => this.toCitizenFeedItem(row)),
+      data: await Promise.all(page.data.map((row) => this.toCitizenFeedItem(row))),
       nextCursor: page.nextCursor,
     };
   }
@@ -733,7 +733,7 @@ export class BroadcastsService {
     if (!isBroadcastId(id)) throw new NotFoundException("Broadcast not found");
     const row = await this.findCitizenBroadcastRow(id, actor.sub);
     if (!row) throw new NotFoundException("Broadcast not found");
-    return { data: this.toCitizenFeedItem(row, true) };
+    return { data: await this.toCitizenFeedItem(row, true) };
   }
 
   async markRead(id: string, actor: JwtPayload) {
@@ -924,7 +924,7 @@ export class BroadcastsService {
     return parsed;
   }
 
-  private toCitizenFeedItem(row: Record<string, unknown>, includeBody = false) {
+  private async toCitizenFeedItem(row: Record<string, unknown>, includeBody = false) {
     const publishedAt = row.published_at ? new Date(String(row.published_at)) : null;
     const expiresAt = row.expires_at ? new Date(String(row.expires_at)) : null;
     const expired = expiresAt ? expiresAt.getTime() <= Date.now() : false;
@@ -938,7 +938,7 @@ export class BroadcastsService {
         : adminVerified
           ? "Verified by Admin"
           : "Admin Broadcast";
-    const metadata = this.projectCitizenMetadata(row.metadata);
+    const metadata = await this.projectCitizenMetadata(row.metadata);
     return {
       id: String(row.id),
       type: String(row.type),
@@ -964,7 +964,7 @@ export class BroadcastsService {
     };
   }
 
-  private projectCitizenMetadata(raw: unknown): Record<string, unknown> {
+  private async projectCitizenMetadata(raw: unknown): Promise<Record<string, unknown>> {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const source = raw as Record<string, unknown>;
     const allowedKeys = [
@@ -1016,7 +1016,7 @@ export class BroadcastsService {
         }
         let url = "";
         try {
-          url = createS3PresignedGetUrl(objectKey, 600);
+          url = (await createStorageDownloadUrl(objectKey, 600)).url;
         } catch {
           url = "";
         }

@@ -12,7 +12,7 @@ import {
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
-  createS3PresignedPutUrl,
+  createStorageUploadUrl,
   evidenceObjectKey,
   validateEvidenceUpload,
 } from "../../common/storage/s3-presign";
@@ -117,13 +117,14 @@ export class BroadcastCitizenService {
     }
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const objectKey = evidenceObjectKey(`broadcast-${actor.sub}`, dto.fileName);
+    const signed = await createStorageUploadUrl(objectKey, 300, dto.contentType);
     return {
       data: {
-        bucket: process.env.S3_BUCKET ?? "the-eye",
+        bucket: signed.bucket,
         objectKey,
-        uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
+        uploadUrl: signed.url,
         requiredHeaders: { "content-type": dto.contentType },
-        expiresInSeconds: 300,
+        expiresInSeconds: signed.expiresInSeconds,
       },
     };
   }

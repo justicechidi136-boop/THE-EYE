@@ -4,7 +4,7 @@ import { BadRequestException, Body, Req } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
-import { createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
+import { createStorageUploadUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
 
 @ApiTags("storage")
 @ApiBearerAuth()
@@ -13,10 +13,11 @@ import { createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } fr
 export class StorageController {
   @Post("presign")
   @RequirePermissions("incident:create")
-  presignUpload(@Body() dto: { fileName?: string; contentType?: string; sizeBytes?: number }, @Req() request: any) {
+  async presignUpload(@Body() dto: { fileName?: string; contentType?: string; sizeBytes?: number }, @Req() request: any) {
     if (!dto.fileName || !dto.contentType) throw new BadRequestException("fileName and contentType are required");
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const objectKey = evidenceObjectKey(request.user.sub, dto.fileName);
-    return { uploadUrl: createS3PresignedPutUrl(objectKey), objectKey, expiresInSeconds: 900 };
+    const signed = await createStorageUploadUrl(objectKey, 900, dto.contentType);
+    return { bucket: signed.bucket, uploadUrl: signed.url, objectKey, expiresInSeconds: signed.expiresInSeconds };
   }
 }

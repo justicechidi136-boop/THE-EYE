@@ -1,5 +1,9 @@
 import { createHash, createHmac, randomUUID } from "crypto";
 import { BadRequestException, InternalServerErrorException } from "@nestjs/common";
+import { Storage } from "@google-cloud/storage";
+import { resolveFcmCredentials } from "../auth/firebase-credentials";
+import { resolveAppEnvironment } from "../auth/firebase-environment";
+import { PRODUCTION_FIREBASE_PROJECT_ID, STAGING_FIREBASE_PROJECT_ID } from "../auth/firebase-project";
 
 const allowedContentTypes = new Set([
   "image/jpeg", "image/png", "image/webp",
@@ -21,6 +25,16 @@ const vehiclePhotoKeyPattern =
 
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 const VEHICLE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const STAGING_FIREBASE_STORAGE_BUCKET = "the-eye-2stg.firebasestorage.app";
+const PRODUCTION_FIREBASE_STORAGE_BUCKET = "the-eye-2pd-d0217.firebasestorage.app";
+
+export type StorageProviderName = "s3" | "firebase";
+
+export type StorageSignedUrl = {
+  bucket: string;
+  url: string;
+  expiresInSeconds: number;
+};
 
 function hmac(key: Buffer | string, value: string) {
   return createHmac("sha256", key).update(value).digest();
@@ -34,6 +48,46 @@ export function validateEvidenceUpload(contentType: string, sizeBytes?: number) 
   if (!allowedContentTypes.has(contentType)) throw new BadRequestException("Unsupported evidence content type");
   if (sizeBytes !== undefined && (!Number.isInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > 100 * 1024 * 1024)) {
     throw new BadRequestException("Evidence file size must be between 1 byte and 100 MB");
+  }
+}
+
+export function resolveStorageProviderName(env: Record<string, unknown> = process.env): StorageProviderName {
+  const value = String(env.STORAGE_PROVIDER ?? "s3").trim().toLowerCase();
+  if (value === "s3" || value === "minio") return "s3";
+  if (value === "firebase") return "firebase";
+  throw new InternalServerErrorException("Unsupported evidence storage provider");
+}
+
+export function getConfiguredStorageBucket(env: Record<string, unknown> = process.env) {
+  const provider = resolveStorageProviderName(env);
+  if (provider === "firebase") {
+    const bucket = String(env.FIREBASE_STORAGE_BUCKET ?? "").trim();
+    if (!bucket) throw new InternalServerErrorException("Firebase evidence storage bucket is not configured");
+    return bucket;
+  }
+  return String(env.S3_BUCKET ?? "the-eye").trim();
+}
+
+export function assertFirebaseStorageConfiguration(env: Record<string, unknown> = process.env) {
+  if (resolveStorageProviderName(env) !== "firebase") return;
+
+  const appEnvironment = resolveAppEnvironment(env);
+  const projectId = String(env.FIREBASE_PROJECT_ID ?? "").trim();
+  const bucket = String(env.FIREBASE_STORAGE_BUCKET ?? "").trim();
+  if (!bucket) throw new Error("FIREBASE_STORAGE_BUCKET is required when STORAGE_PROVIDER=firebase");
+  if (bucket === PRODUCTION_FIREBASE_STORAGE_BUCKET && appEnvironment === "staging") {
+    throw new Error("FIREBASE_STORAGE_BUCKET must not use the production Firebase Storage bucket in staging");
+  }
+  if (projectId === PRODUCTION_FIREBASE_PROJECT_ID && appEnvironment === "staging") {
+    throw new Error("FIREBASE_PROJECT_ID must not use the production Firebase project in staging");
+  }
+  if (appEnvironment === "staging") {
+    if (projectId !== STAGING_FIREBASE_PROJECT_ID) {
+      throw new Error(`FIREBASE_PROJECT_ID must be ${STAGING_FIREBASE_PROJECT_ID} in staging`);
+    }
+    if (bucket !== STAGING_FIREBASE_STORAGE_BUCKET) {
+      throw new Error(`FIREBASE_STORAGE_BUCKET must be ${STAGING_FIREBASE_STORAGE_BUCKET} in staging`);
+    }
   }
 }
 
@@ -94,7 +148,7 @@ export function assertVehiclePhotoObjectKey(
 }
 
 export function assertAvatarObjectKey(userId: string, objectKey: string, bucket: string, contentType?: string) {
-  const expectedBucket = process.env.S3_BUCKET ?? "the-eye";
+  const expectedBucket = getConfiguredStorageBucket();
   if (bucket !== expectedBucket) throw new BadRequestException("Avatar bucket mismatch");
   if (!userId || objectKey.includes("..") || !objectKey.startsWith(`avatars/${userId}/`)) {
     throw new BadRequestException("Avatar objectKey must remain under the user avatar prefix");
@@ -121,7 +175,7 @@ export function supportAttachmentObjectKey(conversationId: string, fileName: str
 }
 
 export function assertSupportAttachmentObjectKey(conversationId: string, objectKey: string, bucket: string, contentType?: string) {
-  const expectedBucket = process.env.S3_BUCKET ?? "the-eye";
+  const expectedBucket = getConfiguredStorageBucket();
   if (bucket !== expectedBucket) throw new BadRequestException("Support attachment bucket mismatch");
   if (!conversationId || objectKey.includes("..") || !objectKey.startsWith(`support/${conversationId}/`)) {
     throw new BadRequestException("Support attachment objectKey must remain under the conversation prefix");
@@ -136,7 +190,7 @@ export function droneOperatorDocumentObjectKey(operatorId: string, fileName: str
 }
 
 export function assertDroneOperatorDocumentObjectKey(operatorId: string, objectKey: string, bucket: string, contentType?: string) {
-  const expectedBucket = process.env.S3_BUCKET ?? "the-eye";
+  const expectedBucket = getConfiguredStorageBucket();
   if (bucket !== expectedBucket) throw new BadRequestException("Document bucket mismatch");
   if (!operatorId || objectKey.includes("..") || !objectKey.startsWith(`drone-operators/${operatorId}/`)) {
     throw new BadRequestException("Document objectKey must remain under the operator document prefix");
@@ -146,7 +200,7 @@ export function assertDroneOperatorDocumentObjectKey(operatorId: string, objectK
 }
 
 export function assertEvidenceObjectKey(incidentId: string, objectKey: string, bucket: string, contentType?: string) {
-  const expectedBucket = process.env.S3_BUCKET ?? "the-eye";
+  const expectedBucket = getConfiguredStorageBucket();
   if (bucket !== expectedBucket) throw new BadRequestException("Evidence bucket mismatch");
   if (!incidentId || objectKey.includes("..") || !objectKey.startsWith(`evidence/${incidentId}/`)) {
     throw new BadRequestException("Evidence objectKey must remain under the incident upload prefix");
@@ -236,4 +290,86 @@ export function createS3PresignedGetUrl(objectKey: string, expiresSeconds = 300)
   const signingKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, dateStamp), region), "s3"), "aws4_request");
   const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
   return `${url.origin}${canonicalUri}?${query.toString()}&X-Amz-Signature=${signature}`;
+}
+
+function validateStorageObjectKey(objectKey: string) {
+  if (!objectKey || objectKey.includes("..") || objectKey.startsWith("/") || objectKey.includes("\\")) {
+    throw new BadRequestException("Invalid storage object key");
+  }
+  if (
+    !objectKey.startsWith("evidence/") &&
+    !objectKey.startsWith("avatars/") &&
+    !objectKey.startsWith("vehicles/") &&
+    !objectKey.startsWith("kyc/") &&
+    !objectKey.startsWith("support/") &&
+    !objectKey.startsWith("drone-operators/")
+  ) {
+    throw new BadRequestException("Storage object key must remain under an approved prefix");
+  }
+}
+
+async function createFirebaseSignedUrl(
+  action: "read" | "write",
+  objectKey: string,
+  expiresSeconds: number,
+  contentType?: string,
+): Promise<StorageSignedUrl> {
+  validateStorageObjectKey(objectKey);
+  assertFirebaseStorageConfiguration();
+  const bucket = getConfiguredStorageBucket();
+  const credentials = resolveFcmCredentials(process.env);
+  if (!credentials?.clientEmail || !credentials.privateKey) {
+    throw new InternalServerErrorException("Firebase evidence storage credentials are not configured");
+  }
+
+  const storage = new Storage({
+    projectId: credentials.projectId || String(process.env.FIREBASE_PROJECT_ID ?? "").trim(),
+    credentials: {
+      client_email: credentials.clientEmail,
+      private_key: credentials.privateKey,
+    },
+  });
+  const [url] = await storage.bucket(bucket).file(objectKey).getSignedUrl({
+    version: "v4",
+    action,
+    expires: Date.now() + expiresSeconds * 1000,
+    ...(action === "write" && contentType ? { contentType } : {}),
+  });
+
+  return { bucket, url, expiresInSeconds: expiresSeconds };
+}
+
+export async function createStorageUploadUrl(
+  objectKey: string,
+  expiresSeconds = 900,
+  contentType?: string,
+): Promise<StorageSignedUrl> {
+  if (resolveStorageProviderName() === "firebase") {
+    if (contentType) {
+      if (objectKey.startsWith("avatars/")) {
+        validateAvatarUpload(contentType);
+      } else if (objectKey.startsWith("vehicles/")) {
+        validateVehiclePhotoUpload(contentType);
+      } else {
+        validateEvidenceUpload(contentType);
+      }
+    }
+    return createFirebaseSignedUrl("write", objectKey, expiresSeconds, contentType);
+  }
+  return {
+    bucket: getConfiguredStorageBucket(),
+    url: createS3PresignedPutUrl(objectKey, expiresSeconds, contentType),
+    expiresInSeconds: expiresSeconds,
+  };
+}
+
+export async function createStorageDownloadUrl(objectKey: string, expiresSeconds = 300): Promise<StorageSignedUrl> {
+  if (resolveStorageProviderName() === "firebase") {
+    return createFirebaseSignedUrl("read", objectKey, expiresSeconds);
+  }
+  return {
+    bucket: getConfiguredStorageBucket(),
+    url: createS3PresignedGetUrl(objectKey, expiresSeconds),
+    expiresInSeconds: expiresSeconds,
+  };
 }

@@ -21,7 +21,7 @@ import {
   resolveCancellationReason,
 } from "../notifications/citizen-notification-copy";
 import { hashPassword, randomToken } from "../../common/auth/crypto";
-import { createS3PresignedPutUrl, createS3PresignedGetUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
+import { createStorageUploadUrl, createStorageDownloadUrl, evidenceObjectKey, validateEvidenceUpload, assertEvidenceObjectKey } from "../../common/storage/s3-presign";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import {
@@ -370,12 +370,13 @@ export class IncidentsService {
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
 
     const objectKey = evidenceObjectKey(id, dto.fileName);
+    const signed = await createStorageUploadUrl(objectKey, 300, dto.contentType);
     return {
-      bucket: process.env.S3_BUCKET ?? "the-eye",
+      bucket: signed.bucket,
       objectKey,
-      uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
+      uploadUrl: signed.url,
       requiredHeaders: { "content-type": dto.contentType },
-      expiresInSeconds: 300,
+      expiresInSeconds: signed.expiresInSeconds,
     };
   }
 
@@ -1001,7 +1002,7 @@ export class IncidentsService {
 
     let signedUrl: string | undefined;
     try {
-      signedUrl = createS3PresignedGetUrl(media.objectKey, 300);
+      signedUrl = (await createStorageDownloadUrl(media.objectKey, 300)).url;
     } catch {
       signedUrl = undefined;
     }

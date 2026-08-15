@@ -12,7 +12,7 @@ import {
 } from "../../common/pagination/cursor-pagination";
 import { BroadcastsService } from "../broadcasts/broadcasts.service";
 import { AuditService } from "../audit/audit.service";
-import { assertEvidenceObjectKey, createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
+import { assertEvidenceObjectKey, createStorageUploadUrl, evidenceObjectKey, getConfiguredStorageBucket, validateEvidenceUpload } from "../../common/storage/s3-presign";
 import { communityRoleCan, isCommunityAdminRole, isModeratorRole, platformAdminCan } from "./community-permissions";
 import { DangerZoneGeoService } from "../danger-zones/danger-zone-geo.service";
 import { IncidentsService } from "../incidents/incidents.service";
@@ -605,13 +605,14 @@ export class NeighborhoodWatchService {
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const prefix = `community-${communityId}`;
     const objectKey = evidenceObjectKey(prefix, dto.fileName);
+    const signed = await createStorageUploadUrl(objectKey, 300, dto.contentType);
     return {
       data: {
-        bucket: process.env.S3_BUCKET ?? "the-eye",
+        bucket: signed.bucket,
         objectKey,
-        uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
+        uploadUrl: signed.url,
         requiredHeaders: { "content-type": dto.contentType },
-        expiresInSeconds: 300,
+        expiresInSeconds: signed.expiresInSeconds,
       },
     };
   }
@@ -868,13 +869,14 @@ export class NeighborhoodWatchService {
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const prefix = `nw-da-${presence.areaKey.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80)}`;
     const objectKey = evidenceObjectKey(prefix, dto.fileName);
+    const signed = await createStorageUploadUrl(objectKey, 300, dto.contentType);
     return {
       data: {
-        bucket: process.env.S3_BUCKET ?? "the-eye",
+        bucket: signed.bucket,
         objectKey,
-        uploadUrl: createS3PresignedPutUrl(objectKey, 300, dto.contentType),
+        uploadUrl: signed.url,
         requiredHeaders: { "content-type": dto.contentType },
-        expiresInSeconds: 300,
+        expiresInSeconds: signed.expiresInSeconds,
         dynamicAreaKey: presence.areaKey,
       },
     };
@@ -1778,7 +1780,7 @@ export class NeighborhoodWatchService {
       throw new BadRequestException("Invalid report reason code");
     }
     if (dto.evidenceObjectKey) {
-      assertEvidenceObjectKey(`community-${communityId}`, dto.evidenceObjectKey, dto.evidenceBucket ?? process.env.S3_BUCKET ?? "the-eye");
+      assertEvidenceObjectKey(`community-${communityId}`, dto.evidenceObjectKey, dto.evidenceBucket ?? getConfiguredStorageBucket());
     }
     const report = await this.prisma.communityContentReport.create({
       data: {
