@@ -157,11 +157,12 @@ export function assertEvidenceObjectKey(incidentId: string, objectKey: string, b
 
 export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900, contentType?: string) {
   const endpoint = process.env.S3_ENDPOINT;
+  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT ?? endpoint;
   const bucket = process.env.S3_BUCKET;
   const accessKey = process.env.S3_ACCESS_KEY;
   const secretKey = process.env.S3_SECRET_KEY;
   const region = process.env.S3_REGION ?? "us-east-1";
-  if (!endpoint || !bucket || !accessKey || !secretKey) {
+  if (!endpoint || !publicEndpoint || !bucket || !accessKey || !secretKey) {
     throw new InternalServerErrorException("Evidence storage is not configured");
   }
   if (contentType) {
@@ -179,7 +180,7 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900,
   const dateStamp = date.slice(0, 8);
   const scope = `${dateStamp}/${region}/s3/aws4_request`;
   const credential = `${accessKey}/${scope}`;
-  const url = new URL(endpoint);
+  const url = new URL(publicEndpoint);
   const canonicalUri = `/${encodePath(`${bucket}/${objectKey}`)}`;
   const signedHeaders = contentType ? "content-type;host" : "host";
   const query = new URLSearchParams({
@@ -203,11 +204,12 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900,
 
 export function createS3PresignedGetUrl(objectKey: string, expiresSeconds = 300) {
   const endpoint = process.env.S3_ENDPOINT;
+  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT ?? endpoint;
   const bucket = process.env.S3_BUCKET;
   const accessKey = process.env.S3_ACCESS_KEY;
   const secretKey = process.env.S3_SECRET_KEY;
   const region = process.env.S3_REGION ?? "us-east-1";
-  if (!endpoint || !bucket || !accessKey || !secretKey) {
+  if (!endpoint || !publicEndpoint || !bucket || !accessKey || !secretKey) {
     throw new InternalServerErrorException("Evidence storage is not configured");
   }
 
@@ -216,7 +218,7 @@ export function createS3PresignedGetUrl(objectKey: string, expiresSeconds = 300)
   const dateStamp = date.slice(0, 8);
   const scope = `${dateStamp}/${region}/s3/aws4_request`;
   const credential = `${accessKey}/${scope}`;
-  const url = new URL(endpoint);
+  const url = new URL(publicEndpoint);
   const canonicalUri = `/${encodePath(`${bucket}/${objectKey}`)}`;
   const signedHeaders = "host";
   const query = new URLSearchParams({

@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../s3-presign";
+import { createS3PresignedGetUrl, createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../s3-presign";
 
 describe("evidence upload signing", () => {
   it("creates a scoped private object key without retaining unsafe file names", () => {
@@ -14,6 +14,7 @@ describe("evidence upload signing", () => {
 
   it("creates a time-limited AWS Signature V4 upload URL", () => {
     process.env.S3_ENDPOINT = "https://storage.example.com";
+    delete process.env.S3_PUBLIC_ENDPOINT;
     process.env.S3_BUCKET = "the-eye";
     process.env.S3_ACCESS_KEY = "test-access";
     process.env.S3_SECRET_KEY = "test-secret";
@@ -21,5 +22,21 @@ describe("evidence upload signing", () => {
     expect(url).toContain("X-Amz-Algorithm=AWS4-HMAC-SHA256");
     expect(url).toContain("X-Amz-Signature=");
     expect(url).toContain("X-Amz-Expires=900");
+  });
+
+  it("uses a client-reachable public endpoint when signing URLs", () => {
+    process.env.S3_ENDPOINT = "http://minio:9000";
+    process.env.S3_PUBLIC_ENDPOINT = "https://storage.staging.example.com";
+    process.env.S3_BUCKET = "the-eye";
+    process.env.S3_ACCESS_KEY = "test-access";
+    process.env.S3_SECRET_KEY = "test-secret";
+
+    const putUrl = createS3PresignedPutUrl("evidence/incident-1/file.jpg", 300, "image/jpeg");
+    const getUrl = createS3PresignedGetUrl("evidence/incident-1/file.jpg", 300);
+
+    expect(new URL(putUrl).origin).toBe("https://storage.staging.example.com");
+    expect(new URL(getUrl).origin).toBe("https://storage.staging.example.com");
+    expect(putUrl).not.toContain("minio:9000");
+    expect(getUrl).not.toContain("minio:9000");
   });
 });

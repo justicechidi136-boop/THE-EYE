@@ -304,6 +304,27 @@ void main() {
       expect(result.isSuccess, isTrue);
       expect(result.attachment?.durationSeconds, 12);
     });
+
+    test("falls back to original file when image compression fails", () async {
+      final file = await writeTempJpeg("compression-fallback.jpg");
+      final service = EvidenceCaptureService(
+        compressor: ThrowingEvidenceCompressor(),
+        documentsDirectoryProvider: testDocumentsDir,
+      );
+      final result = await service.ingestPickedFile(
+        picked: PickedEvidenceFile(
+          path: file.path,
+          fileName: "compression-fallback.jpg",
+          mimeType: "image/jpeg",
+        ),
+        mediaType: IncidentMediaType.image,
+        lowDataMode: false,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.attachment?.uploadPath, result.attachment?.originalPath);
+      expect(result.attachment?.metadata["hashSource"], "original");
+    });
   });
 
   group("EvidenceCaptureController", () {
@@ -641,4 +662,17 @@ void main() {
       expect(uploaded.single["durationSeconds"], 24);
     });
   });
+}
+
+class ThrowingEvidenceCompressor implements EvidenceCompressor {
+  @override
+  Future<String> prepareUploadCopy({
+    required String sourcePath,
+    required String fileName,
+    required String contentType,
+    required bool lowDataMode,
+    required String evidenceId,
+  }) async {
+    throw StateError("compression failed");
+  }
 }

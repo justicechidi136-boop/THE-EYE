@@ -72,7 +72,7 @@ class EvidenceCaptureService {
         picked.fileName,
         fallbackBytes: picked.bytes,
       );
-      final uploadPath = await _compressor.prepareUploadCopy(
+      final uploadPath = await _prepareUploadCopy(
         sourcePath: originalPath,
         fileName: picked.fileName,
         contentType: contentType,
@@ -166,8 +166,8 @@ class EvidenceCaptureService {
     return target;
   }
 
-  Future<String> _preserveOriginal(String sourcePath, String evidenceId,
-      String fileName,
+  Future<String> _preserveOriginal(
+      String sourcePath, String evidenceId, String fileName,
       {Uint8List? fallbackBytes}) async {
     final directory = await _documentsDirectoryProvider();
     final originalDir =
@@ -194,6 +194,26 @@ class EvidenceCaptureService {
     }
 
     throw _EvidenceSourceException(EvidenceErrorCodes.persistFailed);
+  }
+
+  Future<String> _prepareUploadCopy({
+    required String sourcePath,
+    required String fileName,
+    required String contentType,
+    required bool lowDataMode,
+    required String evidenceId,
+  }) async {
+    try {
+      return await _compressor.prepareUploadCopy(
+        sourcePath: sourcePath,
+        fileName: fileName,
+        contentType: contentType,
+        lowDataMode: lowDataMode,
+        evidenceId: evidenceId,
+      );
+    } catch (_) {
+      return sourcePath;
+    }
   }
 }
 
