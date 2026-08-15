@@ -44,3 +44,9 @@ This document does not configure or deploy production.
 ## Legacy MinIO Compatibility
 
 Do not delete MinIO, the existing bucket, S3 signing code, storage DNS, Nginx routing, TLS material, or old stored evidence during the provider cutover. Existing persisted records keep their object paths and bucket values; future Firebase records use the Firebase bucket while preserving the same canonical path prefixes such as `evidence/`, `vehicles/`, `avatars/`, `support/`, and `drone-operators/`.
+
+## Staging Deploy Wiring
+
+Staging deployment must set `STORAGE_PROVIDER=firebase` and `FIREBASE_STORAGE_BUCKET=the-eye-2stg.firebasestorage.app` before Firebase Storage runtime certification. In Firebase mode, the deploy gate validates the staging Firebase project, staging bucket, and service-account credential mechanism, and it does not require `STAGING_STORAGE_HOST`, `THE_EYE_STORAGE_SERVER_NAME`, or `S3_PUBLIC_ENDPOINT` for the active evidence store.
+
+For rollback, `STORAGE_PROVIDER=s3` keeps the legacy public storage host validation and may continue to use `STAGING_STORAGE_HOST`, `THE_EYE_STORAGE_SERVER_NAME`, and `S3_PUBLIC_ENDPOINT`.
