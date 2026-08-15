@@ -95,7 +95,7 @@ assert(deployScript.includes('if [[ "$RUN_MIGRATIONS" == "true" ]]; then'), "run
 assert(deployScript.includes("Skipping staging migrations"), "run_migrations=false must skip api-migrate path");
 
 const storageSmoke = readFileSync("scripts/staging-storage-smoke.cjs", "utf8");
-assert(storageSmoke.includes('provider = String(process.env.STORAGE_PROVIDER || "s3")'), "storage smoke must read STORAGE_PROVIDER");
+assert(storageSmoke.includes('provider: String(env.STORAGE_PROVIDER || "s3")'), "storage smoke must read STORAGE_PROVIDER");
 assert(storageSmoke.includes("storage.googleapis.com"), "storage smoke must accept GCS signed URLs");
 assert(storageSmoke.includes("firebase upload URL must not point at legacy MinIO storage"), "storage smoke must reject legacy MinIO in Firebase mode");
 assert(storageSmoke.includes("STAGING_STORAGE_HOST or THE_EYE_STORAGE_SERVER_NAME is required in s3 mode"), "storage smoke must preserve S3 host requirement");

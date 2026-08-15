@@ -37,6 +37,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_storage_proof:
+        description: Staging only — run Firebase Storage signed PUT/GET runtime proof after deploy
+        required: false
+        default: false
+        type: boolean
       skip_live_video_proof:
         description: Staging only — skip LiveKit stage 4/5 public proof (unblocks API/admin deploys when LiveKit gateway is degraded)
         required: false
@@ -234,6 +239,7 @@ jobs:
             export RUN_MIGRATIONS=${{ github.event.inputs.run_migrations }}
             export PROOF_ONLY=${{ github.event.inputs.proof_only }}
             export RUN_LOCATION_PROOF=${{ github.event.inputs.run_location_proof }}
+            export RUN_STORAGE_PROOF=${{ github.event.inputs.run_storage_proof }}
             export SKIP_LIVE_VIDEO_PROOF=${{ github.event.inputs.skip_live_video_proof }}
             git fetch --tags origin
             git checkout -- infra/docker/livekit/livekit.yaml 2>/dev/null || true

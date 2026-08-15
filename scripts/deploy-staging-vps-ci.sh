@@ -27,8 +27,10 @@ echo "STEP env-check-ok"
 PROOF_ONLY="${PROOF_ONLY:-false}"
 RUN_LOCATION_PROOF="${RUN_LOCATION_PROOF:-false}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
+RUN_STORAGE_PROOF="${RUN_STORAGE_PROOF:-false}"
 echo "STEP deploy-start proof_only=${PROOF_ONLY}"
 echo "STEP migration-mode run_migrations=${RUN_MIGRATIONS}"
+echo "STEP storage-proof-mode run_storage_proof=${RUN_STORAGE_PROOF}"
 
 if [[ "$PROOF_ONLY" == "true" ]]; then
   echo "=== Proof-only mode (skip full redeploy) ==="
@@ -90,6 +92,19 @@ fi
 
 # Release gate: compose ps, runtime yaml, network guard, smoke, health — before proofs.
 staging_release_validation
+
+if [[ "$RUN_STORAGE_PROOF" == "true" ]]; then
+  echo "=== Staging Firebase Storage runtime proof ==="
+  "${COMPOSE[@]}" --profile tools run --rm \
+    -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
+    -e STORAGE_PROVIDER="${STORAGE_PROVIDER:?}" \
+    -e FIREBASE_STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:?}" \
+    -e THE_EYE_APP_ENV="${THE_EYE_APP_ENV:?}" \
+    -e FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:?}" \
+    api-tools scripts/staging-storage-smoke.cjs
+else
+  echo "SKIP storage proof (RUN_STORAGE_PROOF=${RUN_STORAGE_PROOF})"
+fi
 
 echo "=== Staging live video public proof (mobile parity) ==="
 if [[ "${SKIP_LIVE_VIDEO_PROOF:-false}" == "true" ]]; then
