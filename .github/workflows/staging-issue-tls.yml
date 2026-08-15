@@ -69,7 +69,6 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           command_timeout: 15m
           debug: false
-          script_stop: true
           envs: EXPECTED_STORAGE_HOST,STAGING_STORAGE_HOST,WORKFLOW_SHA
           script: |
             set -euo pipefail
