@@ -95,13 +95,14 @@ staging_release_validation
 
 if [[ "$RUN_STORAGE_PROOF" == "true" ]]; then
   echo "=== Staging Firebase Storage runtime proof ==="
-  "${COMPOSE[@]}" --profile tools run --rm \
+  "${COMPOSE[@]}" exec -T \
     -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
     -e STORAGE_PROVIDER="${STORAGE_PROVIDER:?}" \
     -e FIREBASE_STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:?}" \
     -e THE_EYE_APP_ENV="${THE_EYE_APP_ENV:?}" \
     -e FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:?}" \
-    api-tools scripts/staging-storage-smoke.cjs
+    api \
+    node scripts/staging-storage-smoke.cjs
 else
   echo "SKIP storage proof (RUN_STORAGE_PROOF=${RUN_STORAGE_PROOF})"
 fi

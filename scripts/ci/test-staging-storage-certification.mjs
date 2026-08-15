@@ -11,6 +11,15 @@ function assert(condition, message) {
   if (!condition) failures.push(message);
 }
 
+function serviceBlock(composeSource, serviceName) {
+  const normalized = composeSource.replace(/\r\n/g, "\n");
+  const start = normalized.indexOf(`  ${serviceName}:\n`);
+  if (start === -1) return "";
+  const rest = normalized.slice(start + `  ${serviceName}:\n`.length);
+  const nextService = rest.search(/\n  [a-zA-Z0-9_-]+:\n/);
+  return nextService === -1 ? rest : rest.slice(0, nextService);
+}
+
 const signedUploadUrl =
   "https://storage.googleapis.com/the-eye-2stg.firebasestorage.app/evidence/storage-smoke.png?X-Goog-Signature=abc123";
 const signedGetUrl =
@@ -136,7 +145,22 @@ const deployScript = readFileSync("scripts/deploy-staging-vps-ci.sh", "utf8");
 assert(deployScript.includes('RUN_STORAGE_PROOF="${RUN_STORAGE_PROOF:-false}"'), "deploy script must default RUN_STORAGE_PROOF to false");
 assert(deployScript.includes('if [[ "$RUN_STORAGE_PROOF" == "true" ]]; then'), "deploy script must gate storage proof on true");
 assert(deployScript.includes("scripts/staging-storage-smoke.cjs"), "deploy script must invoke staging storage smoke");
+assert(!deployScript.includes("api-tools scripts/staging-storage-smoke.cjs"), "storage proof must not run through api-tools");
+assert(deployScript.includes('"${COMPOSE[@]}" exec -T \\'), "storage proof must use docker compose exec -T");
+assert(deployScript.includes("api \\\n    node scripts/staging-storage-smoke.cjs"), "storage proof must execute inside the running API service");
 assert(deployScript.includes("SKIP storage proof"), "deploy script must skip storage proof unless enabled");
+
+const compose = readFileSync("infra/docker/docker-compose.yml", "utf8");
+const apiBlock = serviceBlock(compose, "api");
+const apiToolsBlock = serviceBlock(compose, "api-tools");
+assert(apiBlock.includes("- the-eye-internal") && apiBlock.includes("- the-eye-public"), "api service must keep public egress network");
+assert(apiBlock.includes("env_file:") && apiBlock.includes("../../.env"), "api service must inherit the VPS .env");
+assert(apiToolsBlock.includes("- the-eye-internal"), "api-tools must remain on internal network");
+assert(!apiToolsBlock.includes("- the-eye-public"), "api-tools must not gain public egress for storage proof");
+
+const apiDockerfile = readFileSync("apps/api/Dockerfile", "utf8");
+assert(apiDockerfile.includes("COPY . ."), "API image build must include repository scripts before deploy packaging");
+assert(apiDockerfile.includes("pnpm --filter @the-eye/api deploy --prod /app/deploy"), "API production image must use deploy-prod packaging");
 
 if (failures.length) {
   console.error("Staging storage certification tests failed:");
