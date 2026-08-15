@@ -42,6 +42,8 @@ const requiredComposeMarkers = [
   "THE_EYE_ADMIN_SERVER_NAME",
   "THE_EYE_API_SERVER_NAME",
   "THE_EYE_LIVEKIT_SERVER_NAME",
+  "THE_EYE_STORAGE_SERVER_NAME",
+  "S3_PUBLIC_ENDPOINT",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_GENERATE_DEV_SSL",
   "THE_EYE_TLS_BOOTSTRAP",
@@ -102,6 +104,10 @@ const livekitLocations = fs.readFileSync(
   path.join(root, "infra", "docker", "nginx", "snippets", "livekit-locations.conf"),
   "utf8",
 );
+const storageLocations = fs.readFileSync(
+  path.join(root, "infra", "docker", "nginx", "snippets", "storage-locations.conf"),
+  "utf8",
+);
 const healthzSnippet = fs.readFileSync(
   path.join(root, "infra", "docker", "nginx", "snippets", "healthz.conf"),
   "utf8",
@@ -121,8 +127,13 @@ const nginxChecks = [
   ["location = /healthz", healthzSnippet, "shared healthz snippet"],
   ["/.well-known/acme-challenge/", httpTemplate, "ACME challenge path"],
   ["upstream the_eye_api", upstreams, "API upstream block"],
+  ["upstream the_eye_minio", upstreams, "MinIO object upstream block"],
   [" resolve;", upstreams, "Docker DNS resolve on upstream"],
   ["livekit:7880", livekitLocations, "LiveKit Docker DNS upstream"],
+  ["minio:9000", storageLocations, "MinIO object API Docker DNS upstream"],
+  ["proxy_set_header Host $host", storageLocations, "Storage SigV4 Host preservation"],
+  ["proxy_request_buffering off", storageLocations, "Storage direct upload buffering disabled"],
+  ["limit_except GET PUT", storageLocations, "Storage object API method allowlist"],
   ['"${LIVEKIT_HTTP_PORT:-7880}:7880"', compose, "LiveKit signaling port publish"],
   ['"${LIVEKIT_RTC_UDP_PORT:-7882}:7882/udp"', compose, "LiveKit RTC UDP port publish"],
   ["the-eye-internal", compose, "LiveKit internal bridge network"],
@@ -145,10 +156,13 @@ const entrypointChecks = [
   "THE_EYE_ADMIN_SERVER_NAME",
   "THE_EYE_API_SERVER_NAME",
   "THE_EYE_LIVEKIT_SERVER_NAME",
+  "THE_EYE_STORAGE_SERVER_NAME",
   "THE_EYE_SSL_REDIRECT",
   "THE_EYE_TLS_BOOTSTRAP",
   "render_service_http \"10-admin\"",
   "render_service_https \"21-api\"",
+  "render_service_http \"13-storage\"",
+  "render_service_https \"23-storage\"",
 ];
 for (const needle of entrypointChecks) {
   if (!entrypoint.includes(needle)) {

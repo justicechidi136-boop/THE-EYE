@@ -35,6 +35,36 @@ const productionConfig = {
 };
 
 describe("validateEnvironment livekit credentials", () => {
+  it("accepts public HTTPS storage endpoints", () => {
+    const config = {
+      ...productionConfig,
+      S3_PUBLIC_ENDPOINT: "https://storage-staging.theeye.com.ng",
+    };
+
+    expect(validateEnvironment(config)).toBe(config);
+  });
+
+  it("rejects internal or console public storage endpoints", () => {
+    for (const endpoint of [
+      "http://storage-staging.theeye.com.ng",
+      "http://minio:9000",
+      "https://localhost",
+      "https://storage-staging.theeye.com.ng:9001",
+      "https://storage-staging.theeye.com.ng/bucket",
+    ]) {
+      try {
+        validateEnvironment({
+          ...productionConfig,
+          S3_PUBLIC_ENDPOINT: endpoint,
+        });
+        throw new Error(`Expected S3_PUBLIC_ENDPOINT rejection for ${endpoint}`);
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("Expected S3_PUBLIC_ENDPOINT rejection")) throw error;
+        expect(String(error)).toContain("S3_PUBLIC_ENDPOINT");
+      }
+    }
+  });
+
   it("accepts short LiveKit Cloud API keys in production", () => {
     const stagingKeyConfig = {
       ...productionConfig,

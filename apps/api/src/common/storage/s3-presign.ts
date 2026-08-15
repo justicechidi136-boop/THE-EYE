@@ -157,7 +157,7 @@ export function assertEvidenceObjectKey(incidentId: string, objectKey: string, b
 
 export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900, contentType?: string) {
   const endpoint = process.env.S3_ENDPOINT;
-  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT ?? endpoint;
+  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT?.trim() || endpoint;
   const bucket = process.env.S3_BUCKET;
   const accessKey = process.env.S3_ACCESS_KEY;
   const secretKey = process.env.S3_SECRET_KEY;
@@ -204,7 +204,7 @@ export function createS3PresignedPutUrl(objectKey: string, expiresSeconds = 900,
 
 export function createS3PresignedGetUrl(objectKey: string, expiresSeconds = 300) {
   const endpoint = process.env.S3_ENDPOINT;
-  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT ?? endpoint;
+  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT?.trim() || endpoint;
   const bucket = process.env.S3_BUCKET;
   const accessKey = process.env.S3_ACCESS_KEY;
   const secretKey = process.env.S3_SECRET_KEY;

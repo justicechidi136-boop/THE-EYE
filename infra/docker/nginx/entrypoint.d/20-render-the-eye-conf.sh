@@ -12,6 +12,7 @@ CONF_D="/etc/nginx/conf.d"
 : "${THE_EYE_ADMIN_SERVER_NAME:=${THE_EYE_SERVER_NAME:-localhost}}"
 : "${THE_EYE_API_SERVER_NAME:=localhost}"
 : "${THE_EYE_LIVEKIT_SERVER_NAME:=localhost}"
+: "${THE_EYE_STORAGE_SERVER_NAME:=}"
 : "${THE_EYE_SSL_REDIRECT:=false}"
 : "${THE_EYE_GENERATE_DEV_SSL:=false}"
 : "${THE_EYE_TLS_BOOTSTRAP:=auto}"
@@ -141,14 +142,20 @@ render_service_https() {
 render_service_http "10-admin" "Admin dashboard" "$THE_EYE_ADMIN_SERVER_NAME" "admin-locations.conf"
 render_service_http "11-api" "NestJS API" "$THE_EYE_API_SERVER_NAME" "api-locations.conf"
 render_service_http "12-livekit" "LiveKit" "$THE_EYE_LIVEKIT_SERVER_NAME" "livekit-locations.conf"
+if [ -n "$THE_EYE_STORAGE_SERVER_NAME" ]; then
+  render_service_http "13-storage" "Object storage" "$THE_EYE_STORAGE_SERVER_NAME" "storage-locations.conf"
+fi
 
 if [ "$bootstrap_mode" = "false" ]; then
   render_service_https "20-admin" "Admin dashboard" "$THE_EYE_ADMIN_SERVER_NAME" "admin-locations.conf"
   render_service_https "21-api" "NestJS API" "$THE_EYE_API_SERVER_NAME" "api-locations.conf"
   render_service_https "22-livekit" "LiveKit" "$THE_EYE_LIVEKIT_SERVER_NAME" "livekit-locations.conf"
-  echo "Rendered nginx config (admin=${THE_EYE_ADMIN_SERVER_NAME}, api=${THE_EYE_API_SERVER_NAME}, livekit=${THE_EYE_LIVEKIT_SERVER_NAME}, ssl_redirect=${THE_EYE_SSL_REDIRECT}, https=enabled)"
+  if [ -n "$THE_EYE_STORAGE_SERVER_NAME" ]; then
+    render_service_https "23-storage" "Object storage" "$THE_EYE_STORAGE_SERVER_NAME" "storage-locations.conf"
+  fi
+  echo "Rendered nginx config (admin=${THE_EYE_ADMIN_SERVER_NAME}, api=${THE_EYE_API_SERVER_NAME}, livekit=${THE_EYE_LIVEKIT_SERVER_NAME}, storage=${THE_EYE_STORAGE_SERVER_NAME:-disabled}, ssl_redirect=${THE_EYE_SSL_REDIRECT}, https=enabled)"
 else
-  echo "Rendered nginx config (admin=${THE_EYE_ADMIN_SERVER_NAME}, api=${THE_EYE_API_SERVER_NAME}, livekit=${THE_EYE_LIVEKIT_SERVER_NAME}, ssl_redirect=${THE_EYE_SSL_REDIRECT}, https=disabled)"
+  echo "Rendered nginx config (admin=${THE_EYE_ADMIN_SERVER_NAME}, api=${THE_EYE_API_SERVER_NAME}, livekit=${THE_EYE_LIVEKIT_SERVER_NAME}, storage=${THE_EYE_STORAGE_SERVER_NAME:-disabled}, ssl_redirect=${THE_EYE_SSL_REDIRECT}, https=disabled)"
 fi
 
 if [ "$THE_EYE_SSL_REDIRECT" = "true" ] && [ "$bootstrap_mode" = "true" ]; then

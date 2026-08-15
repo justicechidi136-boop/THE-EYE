@@ -38,5 +38,19 @@ describe("evidence upload signing", () => {
     expect(new URL(getUrl).origin).toBe("https://storage.staging.example.com");
     expect(putUrl).not.toContain("minio:9000");
     expect(getUrl).not.toContain("minio:9000");
+    delete process.env.S3_PUBLIC_ENDPOINT;
+  });
+
+  it("falls back to the internal endpoint when the public endpoint is blank", () => {
+    process.env.S3_ENDPOINT = "http://minio:9000";
+    process.env.S3_PUBLIC_ENDPOINT = "";
+    process.env.S3_BUCKET = "the-eye";
+    process.env.S3_ACCESS_KEY = "test-access";
+    process.env.S3_SECRET_KEY = "test-secret";
+
+    const url = createS3PresignedPutUrl("evidence/incident-1/file.jpg");
+
+    expect(new URL(url).origin).toBe("http://minio:9000");
+    delete process.env.S3_PUBLIC_ENDPOINT;
   });
 });
