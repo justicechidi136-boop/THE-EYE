@@ -368,6 +368,7 @@ function writeFixtureTree(label, fixtures) {
     "admin-locations.conf",
     "api-locations.conf",
     "livekit-locations.conf",
+    "storage-locations.conf",
     "ssl-params.conf",
   ]) {
     fs.copyFileSync(path.join(nginxRoot, "snippets", snippet), path.join(snippets, snippet));
@@ -393,6 +394,7 @@ const VALIDATION_UPSTREAM_HOSTS = [
   "api:127.0.0.1",
   "admin-web:127.0.0.1",
   "livekit:127.0.0.1",
+  "minio:127.0.0.1",
   "host.docker.internal:127.0.0.1",
 ];
 
