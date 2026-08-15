@@ -7,6 +7,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  the_eye_flutter_l10n:
+    path: ../../packages/flutter_l10n
   cupertino_icons: ^1.0.8
   firebase_core: ^3.9.0
   firebase_auth: ^5.3.4
@@ -63,6 +68,7 @@ flutter_native_splash:
   web: false
 
 flutter:
+  generate: true
   uses-material-design: true
   assets:
     - assets/images/brand/the-eye-logomark-transparent.png

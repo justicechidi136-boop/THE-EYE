@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../config/app_flavor.dart';
 import '../../config/field_device_mode.dart';
+import '../../l10n/generated/field_localizations.dart';
 import '../../launcher/approved_app_launcher.dart';
 import '../../launcher/field_launcher_platform.dart';
 import '../../launcher/launcher_modules.dart';
@@ -112,6 +113,7 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
   Widget build(BuildContext context) {
     final modules = LauncherModules.visibleFor(_policy);
     final theme = Theme.of(context);
+    final l10n = FieldLocalizations.of(context);
 
     return PopScope(
       canPop: false,
@@ -176,7 +178,7 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                           ),
                         ),
                         IconButton(
-                          tooltip: 'Refresh policy',
+                          tooltip: l10n.refresh,
                           onPressed: _refresh,
                           icon: const Icon(
                             Icons.refresh,

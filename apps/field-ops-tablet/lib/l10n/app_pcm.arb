@@ -1,0 +1,15 @@
+{
+  "@@locale": "pcm",
+  "@@last_modified": "2026-08-15",
+  "@@note": "Provisional Wave 3 pilot translations awaiting language review.",
+  "home": "House",
+  "settings": "Settings",
+  "profile": "Profile",
+  "back": "Go back",
+  "refresh": "Refresh",
+  "language": "Language",
+  "dashboard": "Dashboard",
+  "fieldOps": "Field work",
+  "signOut": "Sign out",
+  "lock": "Lock"
+}

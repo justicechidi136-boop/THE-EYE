@@ -1,9 +1,11 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:shared_preferences/shared_preferences.dart";
+import "package:the_eye_flutter_l10n/the_eye_locales.dart";
 import "package:the_eye_mobile/app/app_scope.dart";
 import "package:the_eye_mobile/app/session_accessor.dart";
 import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
+import "package:the_eye_mobile/l10n/generated/app_localizations.dart";
 import "package:the_eye_mobile/profile/profile_screen.dart";
 import "package:the_eye_mobile/settings/language_region_preference_store.dart";
 import "package:the_eye_mobile/settings/language_region_registry.dart";
@@ -107,8 +109,14 @@ CitizenProfile _profile({
   });
 }
 
-Widget _app(SessionAccessor session, Widget child) {
+Widget _app(SessionAccessor session, Widget child, {Locale? locale}) {
   return MaterialApp(
+    locale: locale,
+    supportedLocales: TheEyeLocaleCatalog.supportedLocales,
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      ...TheEyeLocaleCatalog.frameworkLocalizationsDelegates,
+    ],
     home: AppScope(
       controller: session,
       child: child,
@@ -131,6 +139,41 @@ void main() {
       ["en", "ha", "yo", "ig", "pcm"],
     );
     expect(LanguageRegionRegistry.countryByCode("ng")?.displayName, "Nigeria");
+  });
+
+  test("shared catalog resolves all enabled UI locale codes", () {
+    expect(
+      TheEyeLocaleCatalog.supportedLocales,
+      const [
+        Locale("en"),
+        Locale("ha"),
+        Locale("yo"),
+        Locale("ig"),
+        Locale("pcm"),
+      ],
+    );
+    expect(TheEyeLocaleCatalog.effectiveLocaleForCode("unknown"),
+        const Locale("en"));
+    expect(
+      TheEyeLocaleCatalog.resolvePreferredLocale(
+        cachedLocale: "yo",
+        deviceLocales: const [Locale("ha")],
+      ),
+      const Locale("yo"),
+    );
+  });
+
+  testWidgets("pilot localized strings visibly change by locale",
+      (tester) async {
+    final session = _FakeSession(_profile(preferredLocale: "ha"));
+    await tester.pumpWidget(
+      _app(session, const LanguageRegionSettingsScreen(),
+          locale: const Locale("ha")),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Harshe & Yanki"), findsWidgets);
+    expect(find.text("Harshe da aka fi so"), findsWidgets);
   });
 
   test("device locale suggestion and fallback stay independent of country", () {
