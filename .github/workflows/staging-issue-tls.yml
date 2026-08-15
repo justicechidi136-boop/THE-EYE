@@ -92,29 +92,6 @@ jobs:
               exit 1
             fi
 
-            set -a
-            # shellcheck disable=SC1091
-            . ./.env
-            set +a
-
-            required_env=(
-              THE_EYE_ADMIN_SERVER_NAME
-              THE_EYE_API_SERVER_NAME
-              THE_EYE_LIVEKIT_SERVER_NAME
-              CERTBOT_EMAIL
-            )
-            for name in "${required_env[@]}"; do
-              if [ -z "${!name:-}" ]; then
-                echo "Required staging TLS value ${name} is missing."
-                exit 1
-              fi
-            done
-
-            if [ "${THE_EYE_SSL_REDIRECT:-}" != "true" ]; then
-              echo "THE_EYE_SSL_REDIRECT must already be true in staging .env."
-              exit 1
-            fi
-
             resolved_ip="$(getent ahostsv4 "$EXPECTED_STORAGE_HOST" | awk '{ print $1; exit }')"
             if [ -z "$resolved_ip" ]; then
               echo "DNS lookup failed for storage staging host from VPS."
