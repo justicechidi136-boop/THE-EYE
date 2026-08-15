@@ -10,8 +10,9 @@ Deploy THE EYE to the Ubuntu 24.04 staging VPS using Docker Compose.
 | NestJS API | `https://staging-api.theeye.com.ng` |
 | API base URL | `https://staging-api.theeye.com.ng/v1` |
 | LiveKit | `wss://staging-livekit.theeye.com.ng` |
+| Object storage | `https://<owner-supplied staging storage hostname>` |
 
-Each service is served by a dedicated nginx `server_name`. The admin dashboard hostname must **not** be used as the canonical API URL in clients.
+Each service is served by a dedicated nginx `server_name`. The admin dashboard hostname must **not** be used as the canonical API URL in clients. The object storage hostname must be dedicated to presigned MinIO object API traffic and must not reuse the API, admin, or LiveKit hostnames.
 
 For the full **order-of-operations** rollout (DNS → HTTP bootstrap → ACME → HTTPS → migration gate → rollback), see [STAGING_SUBDOMAIN_DEPLOYMENT.md](./STAGING_SUBDOMAIN_DEPLOYMENT.md).
 
@@ -22,6 +23,8 @@ For the full **order-of-operations** rollout (DNS → HTTP bootstrap → ACME �
   - `staging-dashboard8jps.theeye.com.ng`
   - `staging-api.theeye.com.ng`
   - `staging-livekit.theeye.com.ng`
+- A DNS **A record** for an owner-supplied staging storage hostname pointing at the same VPS before storage upload certification:
+  - `<owner-supplied staging storage hostname>`
 - GitHub Environment `staging` secrets configured (see [GitHub Workflows](./github-workflows.md))
 - `.env` on the server (never commit) with staging values
 
@@ -42,10 +45,15 @@ FIREBASE_PROJECT_ID=the-eye-2stg
 THE_EYE_ADMIN_SERVER_NAME=staging-dashboard8jps.theeye.com.ng
 THE_EYE_API_SERVER_NAME=staging-api.theeye.com.ng
 THE_EYE_LIVEKIT_SERVER_NAME=staging-livekit.theeye.com.ng
+THE_EYE_STORAGE_SERVER_NAME=<owner-supplied staging storage hostname>
 CORS_ORIGINS=https://staging-dashboard8jps.theeye.com.ng
 NEXT_PUBLIC_API_BASE_URL=https://staging-api.theeye.com.ng/v1
 NEXT_PUBLIC_LIVEKIT_URL=wss://staging-livekit.theeye.com.ng
+S3_ENDPOINT=http://minio:9000
+S3_PUBLIC_ENDPOINT=https://<owner-supplied staging storage hostname>
 ```
+
+GitHub Environment `staging` must also set the non-secret variable `STAGING_STORAGE_HOST` to the same storage hostname. See [STAGING_PUBLIC_OBJECT_STORAGE.md](./STAGING_PUBLIC_OBJECT_STORAGE.md) before deploying storage routing.
 
 ## First-time deploy
 
@@ -95,6 +103,7 @@ See [NGINX_TLS_BOOTSTRAP.md](./NGINX_TLS_BOOTSTRAP.md).
 export THE_EYE_ADMIN_SERVER_NAME=staging-dashboard8jps.theeye.com.ng
 export THE_EYE_API_SERVER_NAME=staging-api.theeye.com.ng
 export THE_EYE_LIVEKIT_SERVER_NAME=staging-livekit.theeye.com.ng
+export THE_EYE_STORAGE_SERVER_NAME=<owner-supplied staging storage hostname>
 export CERTBOT_EMAIL=ops@example.com
 bash scripts/issue-letsencrypt.sh
 # Then set THE_EYE_SSL_REDIRECT=true in .env and restart nginx
@@ -106,6 +115,7 @@ bash scripts/issue-letsencrypt.sh
 curl -sf https://staging-dashboard8jps.theeye.com.ng/healthz
 curl -sf https://staging-api.theeye.com.ng/healthz
 curl -sf https://staging-livekit.theeye.com.ng/healthz
+curl -sfI https://<owner-supplied staging storage hostname>/
 curl -sf https://staging-api.theeye.com.ng/v1/health/ready
 docker compose -f infra/docker/docker-compose.yml ps
 docker compose -f infra/docker/docker-compose.yml images api
@@ -113,6 +123,15 @@ docker images --filter reference='*the-eye-api*'
 ```
 
 Confirm the running API image tag matches the deployed commit (`THE_EYE_IMAGE_TAG` or git SHA), not an unpinned `:latest` tag. See [DOCKER_BUILD.md](./DOCKER_BUILD.md#image-tagging-policy).
+
+After authenticated staging API access is available, validate presigned storage URLs without printing signatures:
+
+```bash
+STAGING_API_BASE_URL=https://staging-api.theeye.com.ng/v1 \
+STAGING_STORAGE_HOST=<owner-supplied staging storage hostname> \
+STAGING_STORAGE_SMOKE_TOKEN=<authenticated staging citizen token> \
+node scripts/staging-storage-smoke.cjs
+```
 
 ### Network egress (Firebase / Google OAuth)
 

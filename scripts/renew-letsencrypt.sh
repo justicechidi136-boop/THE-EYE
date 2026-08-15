@@ -18,6 +18,7 @@ fi
 ADMIN_NAME="${THE_EYE_ADMIN_SERVER_NAME:-${THE_EYE_SERVER_NAME:-}}"
 API_NAME="${THE_EYE_API_SERVER_NAME:-}"
 LIVEKIT_NAME="${THE_EYE_LIVEKIT_SERVER_NAME:-}"
+STORAGE_NAME="${THE_EYE_STORAGE_SERVER_NAME:-}"
 
 if [[ -z "$ADMIN_NAME" || -z "$API_NAME" || -z "$LIVEKIT_NAME" ]]; then
   echo "Set THE_EYE_ADMIN_SERVER_NAME, THE_EYE_API_SERVER_NAME, and THE_EYE_LIVEKIT_SERVER_NAME" >&2
@@ -25,6 +26,9 @@ if [[ -z "$ADMIN_NAME" || -z "$API_NAME" || -z "$LIVEKIT_NAME" ]]; then
 fi
 
 DOMAINS=("$ADMIN_NAME" "$API_NAME" "$LIVEKIT_NAME")
+if [[ -n "$STORAGE_NAME" ]]; then
+  DOMAINS+=("$STORAGE_NAME")
+fi
 CERT_LIVE="$REPO_ROOT/infra/docker/nginx/certs/live"
 
 echo "Renewing Let's Encrypt certificates ..."

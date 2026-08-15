@@ -38,10 +38,43 @@ function validateFirebaseProjectEnv(config: Record<string, unknown>) {
   }
 }
 
+function validatePublicStorageEndpoint(config: Record<string, unknown>) {
+  const value = String(config.S3_PUBLIC_ENDPOINT ?? "").trim();
+  if (!value) return;
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("S3_PUBLIC_ENDPOINT must be a valid HTTPS URL");
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  if (url.protocol !== "https:") {
+    throw new Error("S3_PUBLIC_ENDPOINT must use https://");
+  }
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("S3_PUBLIC_ENDPOINT must contain only scheme and hostname");
+  }
+  if (url.port === "9001") {
+    throw new Error("S3_PUBLIC_ENDPOINT must not point at the MinIO console port");
+  }
+  if (
+    hostname === "minio" ||
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal")
+  ) {
+    throw new Error("S3_PUBLIC_ENDPOINT must be publicly reachable, not an internal Docker hostname");
+  }
+}
+
 export const assertStagingRecoveryLinkBases = assertStagingAuthLinkBases;
 
 export function validateEnvironment(config: Record<string, unknown>) {
   validateFirebaseProjectEnv(config);
+  validatePublicStorageEndpoint(config);
 
   const appEnvironment = resolveAppEnvironment(config);
   if (appEnvironment === "staging") {

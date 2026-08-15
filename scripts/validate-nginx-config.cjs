@@ -12,12 +12,14 @@ const FIXTURE_HOSTS = {
   admin: "staging-dashboard8jps.example.test",
   api: "staging-api.example.test",
   livekit: "staging-livekit.example.test",
+  storage: "staging-storage.example.test",
 };
 
 const SERVICE_SNIPPETS = {
   admin: "admin-locations.conf",
   api: "api-locations.conf",
   livekit: "livekit-locations.conf",
+  storage: "storage-locations.conf",
 };
 
 function fail(message) {
@@ -164,9 +166,10 @@ function assertSharedSnippetMarkers() {
   const admin = read("infra/docker/nginx/snippets/admin-locations.conf");
   const api = read("infra/docker/nginx/snippets/api-locations.conf");
   const livekit = read("infra/docker/nginx/snippets/livekit-locations.conf");
+  const storage = read("infra/docker/nginx/snippets/storage-locations.conf");
   const entrypoint = read(entrypointRel);
 
-  for (const needle of ["upstream the_eye_api", "upstream the_eye_admin_web", "upstream the_eye_livekit", " resolve;"]) {
+  for (const needle of ["upstream the_eye_api", "upstream the_eye_admin_web", "upstream the_eye_livekit", "upstream the_eye_minio", " resolve;"]) {
     if (!upstreams.includes(needle)) {
       fail(`upstreams.conf missing ${needle}`);
     }
@@ -194,6 +197,17 @@ function assertSharedSnippetMarkers() {
         "proxy_set_header Connection $connection_upgrade",
       ],
     ],
+    [
+      "storage-locations.conf",
+      storage,
+      [
+        "set $the_eye_minio_backend",
+        "proxy_pass $the_eye_minio_backend",
+        "proxy_set_header Host $host",
+        "proxy_request_buffering off",
+        "limit_except GET PUT",
+      ],
+    ],
   ]) {
     for (const needle of needles) {
       if (!content.includes(needle)) {
@@ -206,8 +220,11 @@ function assertSharedSnippetMarkers() {
     "THE_EYE_ADMIN_SERVER_NAME",
     "THE_EYE_API_SERVER_NAME",
     "THE_EYE_LIVEKIT_SERVER_NAME",
+    "THE_EYE_STORAGE_SERVER_NAME",
     'render_service_http "10-admin"',
     'render_service_https "21-api"',
+    'render_service_http "13-storage"',
+    'render_service_https "23-storage"',
   ]) {
     if (!entrypoint.includes(needle)) {
       fail(`entrypoint missing ${needle}`);
