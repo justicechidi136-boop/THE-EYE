@@ -99,7 +99,7 @@ export THE_EYE_TLS_BOOTSTRAP=auto
 export THE_EYE_SSL_REDIRECT=false
 export THE_EYE_GENERATE_DEV_SSL=false
 
-"${COMPOSE[@]}" up -d nginx
+"${COMPOSE[@]}" up -d --no-deps nginx
 
 issue_domain() {
   local domain="$1"
