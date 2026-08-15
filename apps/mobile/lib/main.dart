@@ -394,6 +394,20 @@ Future<void> openMaps(double latitude, double longitude) async {
 const kSosSubmissionTimeout = Duration(seconds: 45);
 const kLiveVideoStartTimeout = Duration(seconds: 45);
 
+String safeBroadcastPublishErrorLog(Object error, StackTrace stackTrace) {
+  final redactedMessage = error.toString().replaceAllMapped(
+    RegExp(r"https?://\S+"),
+    (match) {
+      final raw = match.group(0) ?? "";
+      final uri = Uri.tryParse(raw);
+      if (uri == null) return "<redacted-url>";
+      return uri.replace(query: "redacted", fragment: "").toString();
+    },
+  );
+  final stackHead = stackTrace.toString().split("\n").take(6).join("\n");
+  return "${error.runtimeType}: $redactedMessage\n$stackHead";
+}
+
 void showAppSnackBar(BuildContext context, String message,
     {bool isError = false}) {
   final messenger = ScaffoldMessenger.maybeOf(context);
@@ -5120,7 +5134,7 @@ class _MissingPersonBroadcastScreenState
     try {
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
-      var uploadedEvidence = const <Map<String, String>>[];
+      var uploadedEvidence = const <Map<String, Object?>>[];
       if (localEvidence.isNotEmpty) {
         try {
           uploadedEvidence =
@@ -5181,10 +5195,20 @@ class _MissingPersonBroadcastScreenState
       if (!mounted) return;
       setState(() => submitting = false);
       showAppSnackBar(context, error.userMessage, isError: true);
-    } catch (_) {
+    } on TimeoutException {
       if (!mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Unable to publish broadcast.", isError: true);
+      showAppSnackBar(context, "Broadcast publish timed out (ERR-BRD-408).",
+          isError: true);
+    } catch (error, stackTrace) {
+      debugPrint(
+        "Missing person broadcast publish failed: "
+        "${safeBroadcastPublishErrorLog(error, stackTrace)}",
+      );
+      if (!mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Unable to publish broadcast (ERR-BRD-500).",
+          isError: true);
     }
   }
 
@@ -6486,7 +6510,7 @@ class _StolenVehicleBroadcastScreenState
     try {
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
-      var uploadedEvidence = const <Map<String, String>>[];
+      var uploadedEvidence = const <Map<String, Object?>>[];
       if (localEvidence.isNotEmpty) {
         try {
           uploadedEvidence =
@@ -6559,10 +6583,20 @@ class _StolenVehicleBroadcastScreenState
       if (!mounted) return;
       setState(() => submitting = false);
       showAppSnackBar(context, error.userMessage, isError: true);
-    } catch (_) {
+    } on TimeoutException {
       if (!mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Unable to publish broadcast.", isError: true);
+      showAppSnackBar(context, "Broadcast publish timed out (ERR-BRD-408).",
+          isError: true);
+    } catch (error, stackTrace) {
+      debugPrint(
+        "Stolen vehicle broadcast publish failed: "
+        "${safeBroadcastPublishErrorLog(error, stackTrace)}",
+      );
+      if (!mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, "Unable to publish broadcast (ERR-BRD-500).",
+          isError: true);
     }
   }
 

@@ -27,12 +27,12 @@ class BroadcastMediaUploadService {
   final TheEyeApiClient _apiClient;
   final http.Client? _httpClient;
 
-  Future<List<Map<String, String>>> uploadAttachments({
+  Future<List<Map<String, Object?>>> uploadAttachments({
     required List<LocalEvidenceAttachment> attachments,
     required String accessToken,
   }) async {
     if (attachments.isEmpty) return const [];
-    final uploaded = <Map<String, String>>[];
+    final uploaded = <Map<String, Object?>>[];
     var photoCount = 0;
     var videoCount = 0;
     var audioCount = 0;
@@ -85,6 +85,10 @@ class BroadcastMediaUploadService {
           "fileName": attachment.fileName,
           "clientAttachmentId": attachment.localId,
           "label": label,
+          "fileHash": attachment.fileHash,
+          "sizeBytes": attachment.sizeBytes,
+          if (attachment.durationSeconds != null)
+            "durationSeconds": attachment.durationSeconds,
         });
       } on IncidentApiException catch (error) {
         throw BroadcastMediaUploadFailure(

@@ -67,6 +67,23 @@ void main() {
         greaterThanOrEqualTo(15));
   });
 
+  test("broadcast publish diagnostics redact presigned URL query values", () {
+    final message = safeBroadcastPublishErrorLog(
+      Exception(
+        "Failed host lookup, uri=http://minio:9000/the-eye/evidence/broadcast-1/photo.png?X-Amz-Signature=secret&X-Amz-Credential=key",
+      ),
+      StackTrace.current,
+    );
+
+    expect(
+        message,
+        contains(
+            "http://minio:9000/the-eye/evidence/broadcast-1/photo.png?redacted"));
+    expect(message, isNot(contains("X-Amz-Signature")));
+    expect(message, isNot(contains("secret")));
+    expect(message, isNot(contains("X-Amz-Credential")));
+  });
+
   testWidgets("SafetyScaffold Eye button opens distinct SOS action sheet",
       (tester) async {
     await tester.pumpWidget(

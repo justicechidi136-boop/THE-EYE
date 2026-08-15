@@ -7,14 +7,17 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 import "package:permission_handler/permission_handler.dart";
 
+import "package:the_eye_mobile/broadcasts/broadcast_media_upload_service.dart";
 import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
 import "package:the_eye_mobile/contracts/the_eye_enums.dart";
+import "package:the_eye_mobile/evidence/evidence_capture_controller.dart";
 import "package:the_eye_mobile/evidence/evidence_capture_service.dart";
 import "package:the_eye_mobile/evidence/evidence_compressor.dart";
 import "package:the_eye_mobile/evidence/evidence_hash.dart";
 import "package:the_eye_mobile/evidence/evidence_media_source.dart";
 import "package:the_eye_mobile/evidence/evidence_permission_service.dart";
 import "package:the_eye_mobile/evidence/evidence_permission_state.dart";
+import "package:the_eye_mobile/evidence/evidence_policy.dart";
 import "package:the_eye_mobile/evidence/evidence_upload_coordinator.dart";
 import "package:the_eye_mobile/evidence/evidence_upload_service.dart";
 import "package:the_eye_mobile/evidence/evidence_constants.dart";
@@ -71,6 +74,13 @@ Future<Directory> testDocumentsDir() async {
     await dir.create(recursive: true);
   }
   return dir;
+}
+
+EvidencePermissionService grantedPermissionService() {
+  return EvidencePermissionService(
+    checkPermission: (_) async => PermissionStatus.granted,
+    requestPermission: (_) async => PermissionStatus.granted,
+  );
 }
 
 void main() {
@@ -294,6 +304,126 @@ void main() {
       expect(result.isSuccess, isTrue);
       expect(result.attachment?.durationSeconds, 12);
     });
+
+    test("falls back to original file when image compression fails", () async {
+      final file = await writeTempJpeg("compression-fallback.jpg");
+      final service = EvidenceCaptureService(
+        compressor: ThrowingEvidenceCompressor(),
+        documentsDirectoryProvider: testDocumentsDir,
+      );
+      final result = await service.ingestPickedFile(
+        picked: PickedEvidenceFile(
+          path: file.path,
+          fileName: "compression-fallback.jpg",
+          mimeType: "image/jpeg",
+        ),
+        mediaType: IncidentMediaType.image,
+        lowDataMode: false,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.attachment?.uploadPath, result.attachment?.originalPath);
+      expect(result.attachment?.metadata["hashSource"], "original");
+    });
+  });
+
+  group("EvidenceCaptureController", () {
+    test("multi-image selection keeps valid files and reports skipped limit",
+        () async {
+      final first = await writeTempJpeg("batch-first.jpg");
+      final second = await writeTempJpeg("batch-second.jpg");
+      final third = await writeTempJpeg("batch-third.jpg");
+      final mediaSource = FakeEvidenceMediaSource()
+        ..nextImages = [
+          PickedEvidenceFile(
+            path: first.path,
+            fileName: "batch-first.jpg",
+            mimeType: "image/jpeg",
+          ),
+          PickedEvidenceFile(
+            path: second.path,
+            fileName: "batch-second.jpg",
+            mimeType: "image/jpeg",
+          ),
+          PickedEvidenceFile(
+            path: third.path,
+            fileName: "batch-third.jpg",
+            mimeType: "image/jpeg",
+          ),
+        ];
+      final controller = EvidenceCaptureController(
+        captureService: EvidenceCaptureService(
+          compressor: InMemoryEvidenceCompressor(),
+          documentsDirectoryProvider: testDocumentsDir,
+        ),
+        mediaSource: mediaSource,
+        permissionService: grantedPermissionService(),
+        policy: const EvidencePolicy(
+          maxPhotos: 2,
+          maxVideos: 0,
+          maxAudio: 0,
+          maxFiles: 2,
+          maxFileSize: EvidenceLimits.maxFileBytes,
+          maxTotalBytes: 300 * 1024 * 1024,
+          supportedMimeTypes: EvidenceMimeTypes.allowed,
+        ),
+      );
+
+      await controller.pickImages();
+
+      expect(controller.attachments, hasLength(2));
+      expect(controller.attachments.map((item) => item.fileName), [
+        "batch-first.jpg",
+        "batch-second.jpg",
+      ]);
+      expect(controller.lastError, contains("2 files added"));
+      expect(controller.lastError, contains("1 file skipped"));
+      controller.dispose();
+    });
+
+    test("multi-audio selection keeps valid bytes-backed files", () async {
+      final audioBytes = Uint8List.fromList([
+        0x00,
+        0x00,
+        0x00,
+        0x18,
+        0x66,
+        0x74,
+        0x79,
+        0x70,
+        0x6D,
+        0x70,
+        0x34,
+        0x32,
+        ...List<int>.filled(128, 0x00),
+      ]);
+      final mediaSource = FakeEvidenceMediaSource()
+        ..nextAudioFiles = [
+          PickedEvidenceFile(
+            path: "",
+            fileName: "gallery-voice.m4a",
+            mimeType: "audio/mp4",
+            durationSeconds: 8,
+            bytes: audioBytes,
+          ),
+        ];
+      final controller = EvidenceCaptureController(
+        captureService: EvidenceCaptureService(
+          compressor: InMemoryEvidenceCompressor(),
+          documentsDirectoryProvider: testDocumentsDir,
+        ),
+        mediaSource: mediaSource,
+        permissionService: grantedPermissionService(),
+      );
+
+      await controller.pickAudio();
+
+      expect(controller.attachments, hasLength(1));
+      expect(controller.attachments.single.fileName, "gallery-voice.m4a");
+      expect(controller.attachments.single.durationSeconds, 8);
+      expect(controller.lastError, isNull);
+      controller.dispose();
+    });
   });
 
   group("EvidenceUploadService", () {
@@ -480,4 +610,69 @@ void main() {
       expect(batch.isPartialSuccess, isTrue);
     });
   });
+
+  group("BroadcastMediaUploadService", () {
+    test("returns chain-of-custody metadata for broadcast attachments",
+        () async {
+      final storeFile = await writeTempMp4("broadcast-video.mp4", size: 2048);
+      final client = TheEyeApiClient(
+        baseUrl: "http://localhost:4000/v1",
+        httpClient: MockClient((request) async {
+          if (request.method == "POST" &&
+              request.url.path.endsWith("/broadcasts/media/presign")) {
+            return http.Response(
+              jsonEncode({
+                "bucket": "the-eye",
+                "objectKey": "evidence/broadcast-user-1/video-1.mp4",
+                "uploadUrl": "https://storage.example/broadcast/video-1",
+                "requiredHeaders": {"content-type": "video/mp4"},
+              }),
+              200,
+            );
+          }
+          if (request.method == "PUT") {
+            return http.Response("", 200);
+          }
+          return http.Response("not found", 404);
+        }),
+      );
+      final uploader = BroadcastMediaUploadService(apiClient: client);
+      final attachment = LocalEvidenceAttachment(
+        localId: "local-video",
+        mediaType: IncidentMediaType.video,
+        fileName: "broadcast-video.mp4",
+        originalPath: storeFile.path,
+        uploadPath: storeFile.path,
+        contentType: "video/mp4",
+        fileHash: await sha256FileHash(storeFile.path),
+        originalFileHash: await sha256FileHash(storeFile.path),
+        sizeBytes: await storeFile.length(),
+        capturedAt: DateTime.utc(2026, 8, 14, 12, 0),
+        durationSeconds: 24,
+      );
+
+      final uploaded = await uploader.uploadAttachments(
+        attachments: [attachment],
+        accessToken: "token",
+      );
+
+      expect(uploaded, hasLength(1));
+      expect(uploaded.single["fileHash"], attachment.fileHash);
+      expect(uploaded.single["sizeBytes"], attachment.sizeBytes);
+      expect(uploaded.single["durationSeconds"], 24);
+    });
+  });
+}
+
+class ThrowingEvidenceCompressor implements EvidenceCompressor {
+  @override
+  Future<String> prepareUploadCopy({
+    required String sourcePath,
+    required String fileName,
+    required String contentType,
+    required bool lowDataMode,
+    required String evidenceId,
+  }) async {
+    throw StateError("compression failed");
+  }
 }

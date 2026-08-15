@@ -43,9 +43,9 @@ const DEFAULT_EXPIRY_DAYS = 30;
 const BROADCAST_MEDIA_TYPES = new Set(["image", "video", "audio"]);
 const SIGHTING_LOCATION_MODES = new Set(["CURRENT_GPS", "MANUAL", "NOT_PROVIDED"]);
 
-function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string>> {
+function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string | number>> {
   if (!Array.isArray(raw)) return [];
-  const attachments: Array<Record<string, string>> = [];
+  const attachments: Array<Record<string, string | number>> = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
@@ -55,7 +55,7 @@ function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string
     const contentType = String(row.contentType ?? "").trim();
     if (!BROADCAST_MEDIA_TYPES.has(mediaType) || !objectKey || !bucket || !contentType) continue;
     if (objectKey.includes("..") || !objectKey.startsWith("evidence/broadcast-")) continue;
-    attachments.push({
+    const sanitized: Record<string, string | number> = {
       mediaType,
       objectKey,
       bucket,
@@ -63,7 +63,14 @@ function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string
       fileName: String(row.fileName ?? "").trim() || `${mediaType}-attachment`,
       clientAttachmentId: String(row.clientAttachmentId ?? "").trim(),
       label: String(row.label ?? "").trim(),
-    });
+    };
+    const fileHash = String(row.fileHash ?? "").trim();
+    if (fileHash) sanitized.fileHash = fileHash;
+    const sizeBytes = Number(row.sizeBytes);
+    if (Number.isInteger(sizeBytes) && sizeBytes > 0) sanitized.sizeBytes = sizeBytes;
+    const durationSeconds = Number(row.durationSeconds);
+    if (Number.isInteger(durationSeconds) && durationSeconds > 0) sanitized.durationSeconds = durationSeconds;
+    attachments.push(sanitized);
     if (attachments.length >= 8) break;
   }
   return attachments;
