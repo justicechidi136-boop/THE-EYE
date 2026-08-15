@@ -6,6 +6,12 @@ import {
   mobileApiContracts,
   reportIncidentValidation,
 } from "./contracts";
+import {
+  COUNTRY_REGISTRY,
+  DEFAULT_COUNTRY_CODE,
+  DEFAULT_PREFERRED_LOCALE,
+  LANGUAGE_REGISTRY,
+} from "./language-region";
 
 const manifest = {
   version: "0.1.0",
@@ -14,6 +20,12 @@ const manifest = {
   enums: apiEnumValues,
   endpoints: mobileApiContracts,
   validation: reportIncidentValidation,
+  languageRegion: {
+    defaultCountryCode: DEFAULT_COUNTRY_CODE,
+    defaultPreferredLocale: DEFAULT_PREFERRED_LOCALE,
+    countries: COUNTRY_REGISTRY,
+    languages: LANGUAGE_REGISTRY,
+  },
 };
 
 const outputPath = resolve(__dirname, "contracts.json");

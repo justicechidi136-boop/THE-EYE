@@ -8,6 +8,9 @@ import "../brand.dart";
 import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_input_theme.dart";
+import "../settings/language_region_preference_store.dart";
+import "../settings/language_region_registry.dart";
+import "../settings/language_region_selector.dart";
 import "../widgets/section_card.dart";
 import "avatar_upload_service.dart";
 import "profile_widgets.dart";
@@ -35,8 +38,12 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
   String? _firstNameError;
   String? _lastNameError;
   String? _countryError;
+  String? _languageError;
   String? _stateError;
   String? _lgaError;
+  CountryRegionOption? _selectedCountry;
+  PreferredLanguageOption? _selectedLanguage;
+  LanguageRegionPreferenceStore? _languageRegionStore;
   bool _loading = true;
   bool _submittingCompletion = false;
   bool _uploadingAvatar = false;
@@ -64,7 +71,21 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
   void _seedCompletionFields(CitizenProfile profile) {
     _firstNameController.text = profile.profile.firstName ?? "";
     _lastNameController.text = profile.profile.lastName ?? "";
-    _countryController.text = profile.profile.country ?? "";
+    _selectedCountry =
+        LanguageRegionRegistry.countryByCode(profile.profile.countryCode) ??
+            LanguageRegionRegistry.countryFromLegacyName(
+              profile.profile.country,
+            ) ??
+            _selectedCountry ??
+            LanguageRegionRegistry.defaultCountry();
+    _countryController.text = _selectedCountry?.displayName ?? "";
+    _selectedLanguage = LanguageRegionRegistry.suggestedLanguage(
+      deviceLocales: WidgetsBinding.instance.platformDispatcher.locales,
+      countryCode: _selectedCountry?.code,
+      cachedLocale: _languageRegionStore?.preferredLocale,
+      serverLocale:
+          profile.effectivePreferredLocale ?? profile.profile.preferredLocale,
+    );
     _stateController.text = profile.profile.state ?? "";
     _lgaController.text = profile.profile.lga ?? "";
   }
@@ -87,6 +108,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
     });
 
     try {
+      _languageRegionStore ??= await LanguageRegionPreferenceStore.create();
       final profile =
           await session.loadCitizenProfile(forceRefresh: forceRefresh);
       if (!mounted) return;
@@ -96,6 +118,10 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
       });
       if (profile != null && !profile.profileComplete) {
         _seedCompletionFields(profile);
+        await _languageRegionStore?.save(
+          countryCode: _selectedCountry?.code,
+          preferredLocale: _selectedLanguage?.locale,
+        );
       }
     } on AuthApiException catch (error) {
       if (!mounted) return;
@@ -115,7 +141,8 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
   Future<void> _submitCompletion() async {
     final firstName = _firstNameController.text.trim();
     final lastName = _lastNameController.text.trim();
-    final country = _countryController.text.trim();
+    final country = _selectedCountry;
+    final language = _selectedLanguage;
     final state = _stateController.text.trim();
     final lga = _lgaController.text.trim();
 
@@ -124,7 +151,9 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
       _completionError = null;
       _firstNameError = firstName.isEmpty ? "Enter your first name." : null;
       _lastNameError = lastName.isEmpty ? "Enter your last name." : null;
-      _countryError = country.isEmpty ? "Enter your country." : null;
+      _countryError = country == null ? "Select your country." : null;
+      _languageError =
+          language == null ? "Select your preferred language." : null;
       _stateError = state.isEmpty ? "Enter your state." : null;
       _lgaError = lga.isEmpty ? "Enter your LGA." : null;
     });
@@ -132,6 +161,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
     if (_firstNameError != null ||
         _lastNameError != null ||
         _countryError != null ||
+        _languageError != null ||
         _stateError != null ||
         _lgaError != null) {
       setState(() => _submittingCompletion = false);
@@ -143,10 +173,15 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
       final updated = await session.updateCitizenProfile({
         "firstName": firstName,
         "lastName": lastName,
-        "country": country,
+        "country": country!.displayName,
+        "countryCode": country.code,
+        "preferredLocale": language!.locale,
         "state": state,
         "lga": lga,
       });
+      await (_languageRegionStore ??
+              await LanguageRegionPreferenceStore.create())
+          .saveFromProfile(updated);
       if (!mounted) return;
       setState(() {
         _profile = updated;
@@ -282,17 +317,41 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
           ),
           profileLabeledField(
             context: context,
-            label: "Country",
-            field: TextField(
-              controller: _countryController,
-              textInputAction: TextInputAction.next,
-              style: EyeInputTheme.textStyle(context),
-              cursorColor: EyeInputTheme.focusBorderColor(context),
-              decoration: profileFieldDecoration(
-                context: context,
-                hintText: "Nigeria",
-                errorText: _countryError,
-              ),
+            label: "Country / Region",
+            field: LanguageRegionSelectorField<CountryRegionOption>(
+              label: "Country / Region",
+              valueLabel: _selectedCountry?.selectorLabel ?? "Select country",
+              options: LanguageRegionRegistry.enabledCountries,
+              optionLabel: (country) => country.selectorLabel,
+              optionSearchText: (country) =>
+                  "${country.code} ${country.englishName} ${country.nativeName}",
+              errorText: _countryError,
+              onChanged: (country) {
+                setState(() {
+                  _selectedCountry = country;
+                  _countryController.text = country.displayName;
+                  _countryError = null;
+                });
+              },
+            ),
+          ),
+          profileLabeledField(
+            context: context,
+            label: "Preferred Language",
+            field: LanguageRegionSelectorField<PreferredLanguageOption>(
+              label: "Preferred Language",
+              valueLabel: _selectedLanguage?.displayName ?? "Select language",
+              options: LanguageRegionRegistry.enabledLanguages,
+              optionLabel: (language) => language.displayName,
+              optionSearchText: (language) =>
+                  "${language.locale} ${language.englishName} ${language.nativeName}",
+              errorText: _languageError,
+              onChanged: (language) {
+                setState(() {
+                  _selectedLanguage = language;
+                  _languageError = null;
+                });
+              },
             ),
           ),
           profileLabeledField(

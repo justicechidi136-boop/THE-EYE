@@ -123,6 +123,8 @@ import "presentation/citizen_presentation.dart";
 import "police/police_stations_screen.dart";
 import "profile/profile_screen.dart";
 import "settings/build_diagnostics_screen.dart";
+import "settings/language_region_preference_store.dart";
+import "settings/language_region_settings_screen.dart";
 import "support/support_chat_screens.dart";
 import "support/support_home_screen.dart";
 import "support/support_models.dart";
@@ -561,6 +563,9 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
     final vehicleGarageStore =
         await SharedPreferencesVehicleGarageStore.create()
             .timeout(const Duration(seconds: 5));
+    final languageRegionPreferenceStore =
+        await LanguageRegionPreferenceStore.create()
+            .timeout(const Duration(seconds: 5));
 
     AuthService? authService;
     AppController? controller;
@@ -591,8 +596,11 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       networkReader: ConnectivityPlusNetworkInterfaceReader(),
     );
 
-    authService =
-        AuthService(apiClient: apiClient, sessionStore: authSessionStore);
+    authService = AuthService(
+      apiClient: apiClient,
+      sessionStore: authSessionStore,
+      languageRegionPreferenceStore: languageRegionPreferenceStore,
+    );
     controller = AppController(
       apiClient: apiClient,
       submissionService: submissionService,
@@ -605,6 +613,7 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       authSessionStore: authSessionStore,
       themeProvider: themeProvider,
       vehicleGarageStore: vehicleGarageStore,
+      languageRegionPreferenceStore: languageRegionPreferenceStore,
     );
     await controller.loadPersistedSession().timeout(const Duration(seconds: 5));
     final appController = controller!;
@@ -1150,6 +1159,8 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/profile/kyc": (_) => const KycScreen(),
               "/settings": (_) => const SettingsScreen(),
               "/settings/diagnostics": (_) => const BuildDiagnosticsScreen(),
+              "/settings/language-region": (_) =>
+                  const LanguageRegionSettingsScreen(),
               "/support": (context) => SupportHomeScreen(
                     accessToken: appOf(context).accessToken ?? "",
                   ),
@@ -1388,6 +1399,7 @@ class AppController extends SessionAccessor
     required AuthSessionStore authSessionStore,
     required ThemeProvider themeProvider,
     required VehicleGarageStore vehicleGarageStore,
+    LanguageRegionPreferenceStore? languageRegionPreferenceStore,
   })  : _apiClient = apiClient,
         _submissionService = submissionService,
         _historyService = IncidentHistoryService(apiClient: apiClient),
@@ -1407,7 +1419,8 @@ class AppController extends SessionAccessor
         _socialAuthService = socialAuthService,
         _authSessionStore = authSessionStore,
         _themeProvider = themeProvider,
-        _vehicleGarageStore = vehicleGarageStore {
+        _vehicleGarageStore = vehicleGarageStore,
+        _languageRegionPreferenceStore = languageRegionPreferenceStore {
     _connectivity.addListener(_onConnectivityChanged);
     _themeProvider.addListener(_onThemeChanged);
     unawaited(_loadVehicleGarageCache());
@@ -1433,6 +1446,13 @@ class AppController extends SessionAccessor
   final AuthSessionStore _authSessionStore;
   final ThemeProvider _themeProvider;
   final VehicleGarageStore _vehicleGarageStore;
+  LanguageRegionPreferenceStore? _languageRegionPreferenceStore;
+
+  Future<LanguageRegionPreferenceStore> _languageRegionStore() async {
+    return _languageRegionPreferenceStore ??=
+        await LanguageRegionPreferenceStore.create();
+  }
+
   PushNotificationService? _pushNotifications;
   AuthSession? _cachedSession;
   String? _sessionAccessToken;
@@ -1896,6 +1916,7 @@ class AppController extends SessionAccessor
     }
     final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
     final profile = await client.fetchCitizenProfile(accessToken: accessToken!);
+    await (await _languageRegionStore()).saveFromProfile(profile);
     _cachedCitizenProfile = profile;
     notifyListeners();
     return profile;
@@ -1913,6 +1934,7 @@ class AppController extends SessionAccessor
       accessToken: token,
       payload: payload,
     );
+    await (await _languageRegionStore()).saveFromProfile(updated);
     _cachedCitizenProfile = updated;
     notifyListeners();
     return updated;
@@ -2633,7 +2655,8 @@ class AppController extends SessionAccessor
       final resolvedPhotos = photos.isNotEmpty
           ? photos
           : (byId?.photos ?? byPlate?.photos ?? const <CarPhotoRef>[]);
-      final firstPhotoPreview = resolvedPhotos.isNotEmpty ? resolvedPhotos.first.previewUrl : null;
+      final firstPhotoPreview =
+          resolvedPhotos.isNotEmpty ? resolvedPhotos.first.previewUrl : null;
       return _fromApiVehicle(item).copyWith(
         imagePath: firstPhotoPreview ?? byId?.imagePath ?? byPlate?.imagePath,
         photos: resolvedPhotos,
@@ -6419,7 +6442,8 @@ class _StolenVehicleBroadcastScreenState
   List<String> _extractVehiclePhotoObjectKeys(CarProfile? profile) {
     final imagePath = profile?.imagePath?.trim() ?? "";
     if (imagePath.isEmpty) return const [];
-    final looksLikeLocalPath = imagePath.contains("\\") || imagePath.contains(":");
+    final looksLikeLocalPath =
+        imagePath.contains("\\") || imagePath.contains(":");
     if (looksLikeLocalPath) return const [];
     return [imagePath];
   }
@@ -6503,10 +6527,12 @@ class _StolenVehicleBroadcastScreenState
     final normalizedColor = colorController.text.trim().isEmpty
         ? "Unknown"
         : colorController.text.trim();
-    final sourceVehicle = selectedVehicleId == null || selectedVehicleId!.isEmpty
-        ? null
-        : _findGarageVehicleById(selectedVehicleId!);
-    final vehiclePhotoObjectKeys = _extractVehiclePhotoObjectKeys(sourceVehicle);
+    final sourceVehicle =
+        selectedVehicleId == null || selectedVehicleId!.isEmpty
+            ? null
+            : _findGarageVehicleById(selectedVehicleId!);
+    final vehiclePhotoObjectKeys =
+        _extractVehiclePhotoObjectKeys(sourceVehicle);
     try {
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
@@ -6667,7 +6693,8 @@ class _StolenVehicleBroadcastScreenState
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed: () {
-                      setState(() => _entryMode = _StolenVehicleEntryMode.manualEntry);
+                      setState(() =>
+                          _entryMode = _StolenVehicleEntryMode.manualEntry);
                     },
                     child: const Text("Enter Vehicle Manually"),
                   ),
@@ -6676,83 +6703,84 @@ class _StolenVehicleBroadcastScreenState
                     hasSavedCar) ...[
                   OutlinedButton(
                     onPressed: () {
-                      setState(() => _entryMode = _StolenVehicleEntryMode.savedVehicle);
+                      setState(() =>
+                          _entryMode = _StolenVehicleEntryMode.savedVehicle);
                     },
                     child: const Text("Use Saved Vehicle"),
                   ),
                   const SizedBox(height: 12),
                 ],
                 if (showVehicleForm) ...[
-                if (savedCarImagePath != null &&
-                    (savedCarImagePath!.startsWith("http://") ||
-                        savedCarImagePath!.startsWith("https://") ||
-                        File(savedCarImagePath!).existsSync()))
+                  if (savedCarImagePath != null &&
+                      (savedCarImagePath!.startsWith("http://") ||
+                          savedCarImagePath!.startsWith("https://") ||
+                          File(savedCarImagePath!).existsSync()))
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                      child: savedCarImagePath!.startsWith("http://") ||
-                              savedCarImagePath!.startsWith("https://")
-                          ? Image.network(
-                              savedCarImagePath!,
-                              height: 140,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                            )
-                          : Image.file(
-                              File(savedCarImagePath!),
-                              height: 140,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                            ),
+                        child: savedCarImagePath!.startsWith("http://") ||
+                                savedCarImagePath!.startsWith("https://")
+                            ? Image.network(
+                                savedCarImagePath!,
+                                height: 140,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.file(
+                                File(savedCarImagePath!),
+                                height: 140,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
                       ),
                     ),
-                TextField(
-                    controller: plateController,
-                    decoration:
-                        const InputDecoration(labelText: "Plate number")),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: makeController,
-                    decoration: const InputDecoration(labelText: "Make")),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: modelController,
-                    decoration: const InputDecoration(labelText: "Model")),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: yearController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Year")),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: colorController,
-                    decoration: const InputDecoration(labelText: "Color")),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: vinController,
-                    decoration:
-                        const InputDecoration(labelText: "VIN (optional)")),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: descriptionController,
-                    maxLines: 3,
-                    decoration:
-                        const InputDecoration(labelText: "Description")),
-                const SizedBox(height: 12),
-                ManagedEvidenceSection(
-                    key: _evidenceSectionKey,
-                    lowDataMode: appOf(context).lowDataMode),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: submitting ? null : _submit,
-                  child: submitting
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text("Submit broadcast"),
-                ),
+                  TextField(
+                      controller: plateController,
+                      decoration:
+                          const InputDecoration(labelText: "Plate number")),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: makeController,
+                      decoration: const InputDecoration(labelText: "Make")),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: modelController,
+                      decoration: const InputDecoration(labelText: "Model")),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: yearController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: "Year")),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: colorController,
+                      decoration: const InputDecoration(labelText: "Color")),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: vinController,
+                      decoration:
+                          const InputDecoration(labelText: "VIN (optional)")),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: descriptionController,
+                      maxLines: 3,
+                      decoration:
+                          const InputDecoration(labelText: "Description")),
+                  const SizedBox(height: 12),
+                  ManagedEvidenceSection(
+                      key: _evidenceSectionKey,
+                      lowDataMode: appOf(context).lowDataMode),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: submitting ? null : _submit,
+                    child: submitting
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text("Submit broadcast"),
+                  ),
                 ],
               ],
             ),
@@ -6864,7 +6892,9 @@ class _StolenVehicleBroadcastScreenState
 
   Widget _buildVehicleThumb(CarProfile vehicle) {
     final imagePath = vehicle.imagePath;
-    if (imagePath != null && imagePath.isNotEmpty && File(imagePath).existsSync()) {
+    if (imagePath != null &&
+        imagePath.isNotEmpty &&
+        File(imagePath).existsSync()) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Image.file(
@@ -8942,7 +8972,8 @@ class _YourCarScreenState extends State<YourCarScreen> {
 }
 
 class _VehicleEditorArgs {
-  const _VehicleEditorArgs({this.vehicleId, this.returnToStolenVehicle = false});
+  const _VehicleEditorArgs(
+      {this.vehicleId, this.returnToStolenVehicle = false});
 
   final String? vehicleId;
   final bool returnToStolenVehicle;
@@ -9246,8 +9277,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         setState(() {
           _photos[index] = photo.copyWith(
             uploadState: _VehiclePhotoUploadState.failed,
-            errorMessage:
-                error is AuthApiException ? error.userMessage : "Upload failed.",
+            errorMessage: error is AuthApiException
+                ? error.userMessage
+                : "Upload failed.",
           );
         });
       }
@@ -9380,7 +9412,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
 
     setState(() => saving = true);
     final uploadedPhotoRefs = _photos
-        .where((photo) => photo.uploadState == _VehiclePhotoUploadState.uploaded)
+        .where(
+            (photo) => photo.uploadState == _VehiclePhotoUploadState.uploaded)
         .map(
           (photo) => CarPhotoRef(
             id: photo.id,
@@ -9574,10 +9607,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(10),
                                   child: preview == null
-                                      ? Container(color: context.eyeSurfaceMuted)
+                                      ? Container(
+                                          color: context.eyeSurfaceMuted)
                                       : isNetwork
-                                          ? Image.network(preview, fit: BoxFit.cover)
-                                          : Image.file(File(preview), fit: BoxFit.cover),
+                                          ? Image.network(preview,
+                                              fit: BoxFit.cover)
+                                          : Image.file(File(preview),
+                                              fit: BoxFit.cover),
                                 ),
                               ),
                             ),
@@ -9590,8 +9626,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                               child: const CircleAvatar(
                                 radius: 12,
                                 backgroundColor: Colors.black54,
-                                child:
-                                    Icon(Icons.close, size: 14, color: Colors.white),
+                                child: Icon(Icons.close,
+                                    size: 14, color: Colors.white),
                               ),
                             ),
                           ),
@@ -9621,7 +9657,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                                 ),
                               ),
                             ),
-                          if (photo.uploadState == _VehiclePhotoUploadState.failed)
+                          if (photo.uploadState ==
+                              _VehiclePhotoUploadState.failed)
                             Positioned(
                               right: 0,
                               bottom: 0,
@@ -9709,8 +9746,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 TextField(
                   controller: notesController,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                      labelText: "Vehicle Description"),
+                  decoration:
+                      const InputDecoration(labelText: "Vehicle Description"),
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -9836,6 +9873,18 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).pushNamed("/profile"),
                 ),
                 if (authenticated) ...[
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.language,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text("Language & Region"),
+                    subtitle: const Text("Country and preferred language"),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context)
+                        .pushNamed("/settings/language-region"),
+                  ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(

@@ -65,6 +65,21 @@ for (const [key, value] of Object.entries(validation)) {
   }
 }
 
+if (manifest.languageRegion) {
+  const countryCodes = (manifest.languageRegion.countries ?? []).map((country) => country.code);
+  const localeCodes = (manifest.languageRegion.languages ?? []).map((language) => language.locale);
+  for (const code of countryCodes) {
+    if (!enumsSource.includes(`"${code}"`)) {
+      failures.push(`Dart AccountCountryCode missing shared country code ${code}`);
+    }
+  }
+  for (const locale of localeCodes) {
+    if (!enumsSource.includes(`"${locale}"`)) {
+      failures.push(`Dart PreferredLocale missing shared locale ${locale}`);
+    }
+  }
+}
+
 const payloadMethods = extractPayloadMethods(payloadsSource);
 const endpointKeys = Object.keys(manifest.endpoints);
 for (const endpointKey of endpointKeys) {
