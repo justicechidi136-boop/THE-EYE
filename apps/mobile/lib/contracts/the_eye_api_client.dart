@@ -35,6 +35,9 @@ class CitizenProfileDetails {
     this.firstName,
     this.lastName,
     this.country,
+    this.countryCode,
+    this.preferredLocale,
+    this.effectivePreferredLocale,
     this.state,
     this.lga,
     this.avatarUrl,
@@ -46,6 +49,9 @@ class CitizenProfileDetails {
   final String? firstName;
   final String? lastName;
   final String? country;
+  final String? countryCode;
+  final String? preferredLocale;
+  final String? effectivePreferredLocale;
   final String? state;
   final String? lga;
   final String? avatarUrl;
@@ -61,6 +67,9 @@ class CitizenProfileDetails {
       firstName: json["firstName"] as String?,
       lastName: json["lastName"] as String?,
       country: json["country"] as String?,
+      countryCode: json["countryCode"] as String?,
+      preferredLocale: json["preferredLocale"] as String?,
+      effectivePreferredLocale: json["effectivePreferredLocale"] as String?,
       state: json["state"] as String?,
       lga: json["lga"] as String?,
       avatarUrl: json["avatarUrl"] as String?,
@@ -305,6 +314,8 @@ class CitizenProfile {
     this.emergencyContactPhone,
     this.emergencyContactName,
     this.profile = const CitizenProfileDetails(),
+    this.preferredLocale,
+    this.effectivePreferredLocale,
     this.emergencyContacts = const [],
     this.kycRejectionReason,
   });
@@ -319,6 +330,8 @@ class CitizenProfile {
   final String? emergencyContactPhone;
   final String? emergencyContactName;
   final CitizenProfileDetails profile;
+  final String? preferredLocale;
+  final String? effectivePreferredLocale;
   final List<EmergencyContact> emergencyContacts;
   final String? kycRejectionReason;
 
@@ -366,6 +379,10 @@ class CitizenProfile {
       emergencyContactName:
           primaryContact?.name ?? contactMap["name"] as String?,
       profile: profileDetails,
+      preferredLocale:
+          json["preferredLocale"] as String? ?? profileDetails.preferredLocale,
+      effectivePreferredLocale: json["effectivePreferredLocale"] as String? ??
+          profileDetails.effectivePreferredLocale,
       emergencyContacts: contacts,
       kycRejectionReason: json["kycRejectionReason"] as String?,
     );

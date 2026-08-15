@@ -14,6 +14,7 @@ class SecureSessionStore {
   static const _installationIdKey = 'field.installation_id';
   static const _officerIdKey = 'field.officer_id';
   static const _officerNameKey = 'field.officer_name';
+  static const _preferredLocaleKey = 'field.preferred_locale';
   static const _lockedKey = 'field.session_locked';
 
   final FlutterSecureStorage _secure;
@@ -26,6 +27,7 @@ class SecureSessionStore {
   Future<String?> readInstallationId() => _read(_installationIdKey);
   Future<String?> readOfficerId() => _read(_officerIdKey);
   Future<String?> readOfficerName() => _read(_officerNameKey);
+  Future<String?> readPreferredLocale() => _read(_preferredLocaleKey);
 
   Future<bool> isLocked() async {
     final value = await _read(_lockedKey);
@@ -45,6 +47,7 @@ class SecureSessionStore {
     required String publicDeviceId,
     String? officerId,
     String? officerName,
+    String? preferredLocale,
   }) async {
     await _write(_accessTokenKey, accessToken);
     await _write(_refreshTokenKey, refreshToken);
@@ -56,6 +59,9 @@ class SecureSessionStore {
     }
     if (officerName != null && officerName.isNotEmpty) {
       await _write(_officerNameKey, officerName);
+    }
+    if (preferredLocale != null && preferredLocale.isNotEmpty) {
+      await _write(_preferredLocaleKey, preferredLocale);
     }
   }
 
@@ -75,6 +81,7 @@ class SecureSessionStore {
     await _delete(_sessionIdKey);
     await _delete(_officerIdKey);
     await _delete(_officerNameKey);
+    await _delete(_preferredLocaleKey);
     await _delete(_lockedKey);
   }
 

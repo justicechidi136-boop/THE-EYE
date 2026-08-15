@@ -51,6 +51,18 @@ export class UpdateCitizenProfileDto {
   @MaxLength(80)
   country?: string;
 
+  @ApiPropertyOptional({ example: "NG" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  countryCode?: string | null;
+
+  @ApiPropertyOptional({ example: "ha" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  preferredLocale?: string | null;
+
   @ApiPropertyOptional({ example: "Lagos" })
   @IsOptional()
   @IsString()

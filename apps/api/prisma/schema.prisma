@@ -513,6 +513,8 @@ model Profile {
   gender          String?
   address         String?
   country         String
+  countryCode     String?    @map("country_code")
+  preferredLocale String?    @map("preferred_locale")
   state           String
   lga             String
   avatarUrl       String?    @map("avatar_url")
@@ -523,6 +525,7 @@ model Profile {
   homeCommunity   Community? @relation("ProfileHomeCommunity", fields: [homeCommunityId], references: [id], onDelete: SetNull)
 
   @@index([country, state, lga])
+  @@index([countryCode])
   @@index([homeCommunityId])
   @@map("profiles")
 }
@@ -2710,6 +2713,7 @@ model PolicyConfiguration {
 model AdminUserPreference {
   adminUserId       String    @id @map("admin_user_id") @db.Uuid
   theme             String    @default("system")
+  preferredLocale   String?   @map("preferred_locale")
   notificationPrefs Json      @default("{}") @map("notification_prefs")
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   adminUser         AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)

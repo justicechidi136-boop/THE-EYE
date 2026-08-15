@@ -15,3 +15,4 @@ export * from "./field-preprovisioning";
 export * from "./agency-registry";
 export * from "./public-reference";
 export * from "./citizen-presentation";
+export * from "./language-region";
