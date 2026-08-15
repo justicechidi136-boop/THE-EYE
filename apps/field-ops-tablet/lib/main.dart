@@ -3,7 +3,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:the_eye_flutter_l10n/the_eye_locales.dart';
 
+import 'l10n/field_locale_store.dart';
+import 'l10n/generated/field_localizations.dart';
 import 'screens/approval_pending_screen.dart';
 import 'screens/assignments/assignments_screen.dart';
 import 'screens/assignments/incident_workspace_screen.dart';
@@ -59,6 +62,7 @@ class TheEyeFieldOpsApp extends StatefulWidget {
 class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
   final FieldAppServices _services = FieldAppServices();
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
+  final TheEyeLocaleController _localeController = TheEyeLocaleController();
 
   @override
   void initState() {
@@ -67,91 +71,134 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+    unawaited(_hydrateLocale());
+  }
+
+  Future<void> _hydrateLocale() async {
+    final locale = await FieldLocaleStore(
+      _services.session,
+    ).load(deviceLocales: PlatformDispatcher.instance.locales);
+    _localeController.setLocale(locale);
   }
 
   @override
   void dispose() {
+    _localeController.dispose();
     _services.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'THE EYE Field Ops',
-      debugShowCheckedModeBanner: false,
-      theme: buildFieldTheme(),
-      navigatorKey: _navKey,
-      initialRoute: FieldRoutes.splash,
-      onGenerateRoute: (settings) {
-        switch (settings.name) {
-          case FieldRoutes.splash:
-            return _page(SplashScreen(services: _services), settings);
-          case FieldRoutes.login:
-            return _page(LoginScreen(services: _services), settings);
-          case FieldRoutes.deviceRegistration:
-            return _page(
-              DeviceRegistrationScreen(services: _services),
-              settings,
-            );
-          case FieldRoutes.pairDevice:
-            return _page(PairDeviceScreen(services: _services), settings);
-          case FieldRoutes.approvalPending:
-            return _page(ApprovalPendingScreen(services: _services), settings);
-          case FieldRoutes.locked:
-            return _page(LockedScreen(services: _services), settings);
-          case FieldRoutes.home:
-            return _page(LauncherShellGate(services: _services), settings);
-          case FieldRoutes.launcherHome:
-            return _page(LauncherShellGate(services: _services), settings);
-          case FieldRoutes.deviceLock:
-            final args = settings.arguments;
-            final map =
-                args is Map
-                    ? Map<String, dynamic>.from(args)
-                    : const <String, dynamic>{};
-            return _page(
-              DeviceLockScreen(
-                reason: map['reason']?.toString() ?? 'Device locked',
-                deviceReference:
-                    map['deviceReference']?.toString() ?? 'unknown',
-                policy: null,
-              ),
-              settings,
-            );
-          case FieldRoutes.deviceStatus:
-            return _page(DeviceStatusScreen(services: _services), settings);
-          case FieldRoutes.unauthorized:
-            return _page(UnauthorizedScreen(services: _services), settings);
-          case FieldRoutes.patrol:
-            return _page(PatrolModeScreen(services: _services), settings);
-          case FieldRoutes.checkpoint:
-            return _page(CheckpointModeScreen(services: _services), settings);
-          case FieldRoutes.assignments:
-            return _page(AssignmentsScreen(services: _services), settings);
-          case FieldRoutes.incidentWorkspace:
-            final args = settings.arguments;
-            final assignmentId =
-                args is Map
-                    ? args['assignmentId']?.toString() ?? ''
-                    : args?.toString() ?? '';
-            return _page(
-              IncidentWorkspaceScreen(
-                services: _services,
-                assignmentId: assignmentId,
-              ),
-              settings,
-            );
-          case FieldRoutes.bolo:
-            return _page(BoloScreen(services: _services), settings);
-          case FieldRoutes.drone:
-            return _page(DroneMonitorScreen(services: _services), settings);
-          case FieldRoutes.comms:
-            return _page(CommsScreen(services: _services), settings);
-          default:
-            return _page(SplashScreen(services: _services), settings);
-        }
-      },
+    return AnimatedBuilder(
+      animation: _localeController,
+      builder:
+          (context, _) => MaterialApp(
+            title: 'THE EYE Field Ops',
+            debugShowCheckedModeBanner: false,
+            theme: buildFieldTheme(),
+            locale: _localeController.locale,
+            supportedLocales: TheEyeLocaleCatalog.supportedLocales,
+            localizationsDelegates: const [
+              FieldLocalizations.delegate,
+              ...TheEyeLocaleCatalog.frameworkLocalizationsDelegates,
+            ],
+            navigatorKey: _navKey,
+            initialRoute: FieldRoutes.splash,
+            onGenerateRoute: (settings) {
+              switch (settings.name) {
+                case FieldRoutes.splash:
+                  return _page(SplashScreen(services: _services), settings);
+                case FieldRoutes.login:
+                  return _page(LoginScreen(services: _services), settings);
+                case FieldRoutes.deviceRegistration:
+                  return _page(
+                    DeviceRegistrationScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.pairDevice:
+                  return _page(PairDeviceScreen(services: _services), settings);
+                case FieldRoutes.approvalPending:
+                  return _page(
+                    ApprovalPendingScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.locked:
+                  return _page(LockedScreen(services: _services), settings);
+                case FieldRoutes.home:
+                  return _page(
+                    LauncherShellGate(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.launcherHome:
+                  return _page(
+                    LauncherShellGate(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.deviceLock:
+                  final args = settings.arguments;
+                  final map =
+                      args is Map
+                          ? Map<String, dynamic>.from(args)
+                          : const <String, dynamic>{};
+                  return _page(
+                    DeviceLockScreen(
+                      reason: map['reason']?.toString() ?? 'Device locked',
+                      deviceReference:
+                          map['deviceReference']?.toString() ?? 'unknown',
+                      policy: null,
+                    ),
+                    settings,
+                  );
+                case FieldRoutes.deviceStatus:
+                  return _page(
+                    DeviceStatusScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.unauthorized:
+                  return _page(
+                    UnauthorizedScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.patrol:
+                  return _page(PatrolModeScreen(services: _services), settings);
+                case FieldRoutes.checkpoint:
+                  return _page(
+                    CheckpointModeScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.assignments:
+                  return _page(
+                    AssignmentsScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.incidentWorkspace:
+                  final args = settings.arguments;
+                  final assignmentId =
+                      args is Map
+                          ? args['assignmentId']?.toString() ?? ''
+                          : args?.toString() ?? '';
+                  return _page(
+                    IncidentWorkspaceScreen(
+                      services: _services,
+                      assignmentId: assignmentId,
+                    ),
+                    settings,
+                  );
+                case FieldRoutes.bolo:
+                  return _page(BoloScreen(services: _services), settings);
+                case FieldRoutes.drone:
+                  return _page(
+                    DroneMonitorScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.comms:
+                  return _page(CommsScreen(services: _services), settings);
+                default:
+                  return _page(SplashScreen(services: _services), settings);
+              }
+            },
+          ),
     );
   }
 

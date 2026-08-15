@@ -159,6 +159,7 @@ class PreferencesStore {
       'watch.launcher_onboarding_dismissed';
   static const _locationOnboardingDismissedKey =
       'watch.location_onboarding_dismissed';
+  static const _preferredUiLocaleKey = 'watch.preferred_ui_locale';
   static const _activeEmergencyTrackingKey = 'watch.active_emergency_tracking';
   static const _accessibilityPrefsKey = 'watch.accessibility_preferences';
   static const _dangerAckQueueKey = 'watch.danger_alert_ack_queue';
@@ -181,7 +182,8 @@ class PreferencesStore {
     );
   }
 
-  Future<({bool active, String? sosEventId})?> loadActiveEmergencyTracking() async {
+  Future<({bool active, String? sosEventId})?>
+      loadActiveEmergencyTracking() async {
     final store = await prefs;
     final raw = store.getString(_activeEmergencyTrackingKey);
     if (raw == null || raw.isEmpty) return null;
@@ -200,6 +202,16 @@ class PreferencesStore {
   Future<void> setLocationOnboardingDismissed(bool value) async {
     final store = await prefs;
     await store.setBool(_locationOnboardingDismissedKey, value);
+  }
+
+  Future<String?> readPreferredUiLocale() async {
+    final store = await prefs;
+    return store.getString(_preferredUiLocaleKey);
+  }
+
+  Future<void> savePreferredUiLocale(String locale) async {
+    final store = await prefs;
+    await store.setString(_preferredUiLocaleKey, locale);
   }
 
   Future<List<OfflineEvent>> loadOfflineQueue() async {

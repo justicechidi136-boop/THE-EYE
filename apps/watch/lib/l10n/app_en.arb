@@ -1,0 +1,14 @@
+{
+  "@@locale": "en",
+  "@@last_modified": "2026-08-15",
+  "@@note": "Wave 3 pilot localization. Emergency semantics remain unchanged.",
+  "sos": "SOS",
+  "settings": "Settings",
+  "back": "Back",
+  "cancel": "Cancel",
+  "alerts": "Alerts",
+  "language": "Language",
+  "silentAlert": "Silent alert",
+  "radius": "Radius",
+  "apps": "Apps"
+}

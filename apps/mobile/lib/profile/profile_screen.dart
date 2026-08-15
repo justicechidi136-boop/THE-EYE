@@ -8,6 +8,7 @@ import "../brand.dart";
 import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_input_theme.dart";
+import "../l10n/generated/app_localizations.dart";
 import "../settings/language_region_preference_store.dart";
 import "../settings/language_region_registry.dart";
 import "../settings/language_region_selector.dart";
@@ -252,6 +253,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
   }
 
   Widget _buildGuestGate() {
+    final l10n = AppLocalizations.of(context);
     return SectionCard(
       title: "Sign in required",
       child: Column(
@@ -263,7 +265,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => Navigator.of(context).pushNamed("/login"),
-            child: const Text("Sign in"),
+            child: Text(l10n.signIn),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
@@ -276,8 +278,9 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
   }
 
   Widget _buildCompletionForm() {
+    final l10n = AppLocalizations.of(context);
     return SectionCard(
-      title: "Complete your profile",
+      title: l10n.completeYourProfile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -317,9 +320,9 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
           ),
           profileLabeledField(
             context: context,
-            label: "Country / Region",
+            label: l10n.countryRegion,
             field: LanguageRegionSelectorField<CountryRegionOption>(
-              label: "Country / Region",
+              label: l10n.countryRegion,
               valueLabel: _selectedCountry?.selectorLabel ?? "Select country",
               options: LanguageRegionRegistry.enabledCountries,
               optionLabel: (country) => country.selectorLabel,
@@ -337,10 +340,10 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
           ),
           profileLabeledField(
             context: context,
-            label: "Preferred Language",
+            label: l10n.preferredLanguage,
             field: LanguageRegionSelectorField<PreferredLanguageOption>(
-              label: "Preferred Language",
-              valueLabel: _selectedLanguage?.displayName ?? "Select language",
+              label: l10n.preferredLanguage,
+              valueLabel: _selectedLanguage?.displayName ?? l10n.selectLanguage,
               options: LanguageRegionRegistry.enabledLanguages,
               optionLabel: (language) => language.displayName,
               optionSearchText: (language) =>
@@ -400,7 +403,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text("Save and continue"),
+                : Text(l10n.saveAndContinue),
           ),
         ],
       ),

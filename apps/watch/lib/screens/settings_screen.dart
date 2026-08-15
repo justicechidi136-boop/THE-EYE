@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/watch_flavor.dart';
+import '../l10n/generated/watch_localizations.dart';
 import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
@@ -19,11 +20,12 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = WatchLocalizations.of(context);
     return WatchScreenShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const WatchSectionTitle('Settings'),
+          WatchSectionTitle(l10n.settings),
           _SettingToggle(
             label: 'Vibration',
             value: true,
@@ -47,6 +49,11 @@ class SettingsScreen extends StatelessWidget {
             label: 'SOS Contacts',
             onPressed: () =>
                 Navigator.pushNamed(context, WatchRoutes.settingsContacts),
+          ),
+          const SizedBox(height: 6),
+          WatchOutlineButton(
+            label: l10n.language,
+            onPressed: () {},
           ),
           const SizedBox(height: 6),
           WatchOutlineButton(

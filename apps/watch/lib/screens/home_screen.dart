@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../config/watch_flavor.dart';
 import '../design_system/design_system.dart';
+import '../l10n/generated/watch_localizations.dart';
 import '../models/emergency_mode.dart';
 import '../models/connectivity_mode.dart';
 import '../models/sos_event.dart';
@@ -100,6 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final battery = widget.services.heartbeat.latest?.batteryLevel ?? 100;
     final gpsActive = widget.services.sos.state.latitude != null;
     final gpsLabel = gpsActive ? 'GPS' : '500m';
+    final l10n = WatchLocalizations.of(context);
 
     return StreamBuilder<SosEventState>(
       stream: _sosStream,
@@ -111,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return WatchScaffold(
           enableBack: false,
-          leadingLabel: 'Apps',
+          leadingLabel: l10n.apps,
           onLeadingTap: () => Navigator.push(
             context,
             MaterialPageRoute<void>(
@@ -155,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   WatchMetricColumn(
                     value: '$_alertCount',
-                    label: 'Alerts',
+                    label: l10n.alerts,
                     onTap: () async {
                       if (_alertCount > 0) {
                         await Navigator.pushNamed(
@@ -185,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   WatchMetricColumn(
                     value: gpsLabel,
-                    label: 'Radius',
+                    label: l10n.radius,
                     onTap: () =>
                         Navigator.pushNamed(context, WatchRoutes.deviceStatus),
                   ),
@@ -193,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: EyeTokens.spaceXs),
               WatchOutlineButton(
-                label: 'Silent alert',
+                label: l10n.silentAlert,
                 onPressed: () {
                   widget.services.sos
                       .beginHold(emergencyMode: WatchEmergencyMode.silentSos);

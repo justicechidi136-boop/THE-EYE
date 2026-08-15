@@ -1,0 +1,15 @@
+{
+  "@@locale": "ha",
+  "@@last_modified": "2026-08-15",
+  "@@note": "Provisional Wave 3 pilot translations awaiting language review.",
+  "home": "Gida",
+  "settings": "Saituna",
+  "profile": "Bayani na",
+  "back": "Koma baya",
+  "refresh": "Sabunta",
+  "language": "Harshe",
+  "dashboard": "Allon aiki",
+  "fieldOps": "Aikin Fili",
+  "signOut": "Fita",
+  "lock": "Kulle"
+}

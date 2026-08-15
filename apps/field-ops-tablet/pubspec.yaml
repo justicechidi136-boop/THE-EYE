@@ -9,6 +9,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  the_eye_flutter_l10n:
+    path: ../../packages/flutter_l10n
   http: ^1.2.2
   shared_preferences: ^2.3.3
   flutter_secure_storage: ^9.2.4
@@ -29,6 +34,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 
 flutter:
+  generate: true
   uses-material-design: true
   assets:
     - assets/branding/field_ops_logo.png

@@ -1,0 +1,15 @@
+{
+  "@@locale": "en",
+  "@@last_modified": "2026-08-15",
+  "@@note": "Wave 3 pilot localization. Operational/legal instructions remain English until review.",
+  "home": "Home",
+  "settings": "Settings",
+  "profile": "Profile",
+  "back": "Back",
+  "refresh": "Refresh",
+  "language": "Language",
+  "dashboard": "Dashboard",
+  "fieldOps": "Field Ops",
+  "signOut": "Sign out",
+  "lock": "Lock"
+}

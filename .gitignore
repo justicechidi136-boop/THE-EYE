@@ -8,6 +8,7 @@ out/
 *.tsbuildinfo
 
 # Local build/tool caches
+**/.dart_tool/
 **/.gradle/
 **/.gradle-home/
 **/android/local.properties

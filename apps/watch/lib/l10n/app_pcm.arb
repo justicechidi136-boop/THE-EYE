@@ -1,0 +1,14 @@
+{
+  "@@locale": "pcm",
+  "@@last_modified": "2026-08-15",
+  "@@note": "Provisional Wave 3 pilot translations awaiting language review.",
+  "sos": "SOS",
+  "settings": "Settings",
+  "back": "Go back",
+  "cancel": "Cancel",
+  "alerts": "Alerts",
+  "language": "Language",
+  "silentAlert": "Silent alert",
+  "radius": "Radius",
+  "apps": "Apps"
+}

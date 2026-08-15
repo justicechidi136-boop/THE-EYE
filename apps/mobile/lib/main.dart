@@ -10,6 +10,7 @@ import "package:google_fonts/google_fonts.dart";
 import "package:image_picker/image_picker.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
+import "package:the_eye_flutter_l10n/the_eye_locales.dart";
 import "package:url_launcher/url_launcher.dart";
 
 import "auth/auth_service.dart";
@@ -58,6 +59,7 @@ import "emergency/active_emergency_store.dart";
 import "incidents/pending_submission_store.dart";
 import "location/location_permission_settings_section.dart";
 import "location/location_permission_service.dart";
+import "l10n/generated/app_localizations.dart";
 import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
 import "live_video/live_video_disconnect_source.dart";
@@ -566,6 +568,10 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
     final languageRegionPreferenceStore =
         await LanguageRegionPreferenceStore.create()
             .timeout(const Duration(seconds: 5));
+    final initialLocale = TheEyeLocaleCatalog.resolvePreferredLocale(
+      cachedLocale: languageRegionPreferenceStore.preferredLocale,
+      deviceLocales: WidgetsBinding.instance.platformDispatcher.locales,
+    );
 
     AuthService? authService;
     AppController? controller;
@@ -613,6 +619,7 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       authSessionStore: authSessionStore,
       themeProvider: themeProvider,
       vehicleGarageStore: vehicleGarageStore,
+      initialLocale: initialLocale,
       languageRegionPreferenceStore: languageRegionPreferenceStore,
     );
     await controller.loadPersistedSession().timeout(const Duration(seconds: 5));
@@ -995,6 +1002,12 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
             title: "THE EYE",
             debugShowCheckedModeBanner: false,
             initialRoute: "/",
+            locale: controller.locale,
+            supportedLocales: TheEyeLocaleCatalog.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...TheEyeLocaleCatalog.frameworkLocalizationsDelegates,
+            ],
             theme: buildTheme(controller.highContrastMode),
             darkTheme: buildDarkTheme(controller.highContrastMode),
             themeMode: controller.themeMode,
@@ -1399,6 +1412,7 @@ class AppController extends SessionAccessor
     required AuthSessionStore authSessionStore,
     required ThemeProvider themeProvider,
     required VehicleGarageStore vehicleGarageStore,
+    Locale initialLocale = TheEyeLocaleCatalog.defaultLocale,
     LanguageRegionPreferenceStore? languageRegionPreferenceStore,
   })  : _apiClient = apiClient,
         _submissionService = submissionService,
@@ -1420,6 +1434,7 @@ class AppController extends SessionAccessor
         _authSessionStore = authSessionStore,
         _themeProvider = themeProvider,
         _vehicleGarageStore = vehicleGarageStore,
+        _locale = initialLocale,
         _languageRegionPreferenceStore = languageRegionPreferenceStore {
     _connectivity.addListener(_onConnectivityChanged);
     _themeProvider.addListener(_onThemeChanged);
@@ -1446,6 +1461,7 @@ class AppController extends SessionAccessor
   final AuthSessionStore _authSessionStore;
   final ThemeProvider _themeProvider;
   final VehicleGarageStore _vehicleGarageStore;
+  Locale _locale;
   LanguageRegionPreferenceStore? _languageRegionPreferenceStore;
 
   Future<LanguageRegionPreferenceStore> _languageRegionStore() async {
@@ -1510,6 +1526,21 @@ class AppController extends SessionAccessor
   ConnectivityState get connectivityState => _connectivity.state;
   bool get online => _connectivity.isOnline;
   bool get showConnectivityBanner => _connectivity.showConnectivityBanner;
+  Locale get locale => _locale;
+
+  void _setLocaleCode(String? code, {bool notify = true}) {
+    final next = TheEyeLocaleCatalog.effectiveLocaleForCode(code);
+    if (_locale == next) return;
+    _locale = next;
+    if (notify) notifyListeners();
+  }
+
+  void _setLocaleFromProfile(CitizenProfile profile, {bool notify = true}) {
+    _setLocaleCode(
+      profile.effectivePreferredLocale ?? profile.profile.preferredLocale,
+      notify: notify,
+    );
+  }
 
   @override
   String? get accessToken {
@@ -1530,6 +1561,8 @@ class AppController extends SessionAccessor
     final session = await _authSessionStore.load();
     _cachedSession = session;
     _sessionAccessToken = session?.accessToken;
+    final store = await _languageRegionStore();
+    _setLocaleCode(store.preferredLocale, notify: false);
     notifyListeners();
     if (_sessionAccessToken != null && _sessionAccessToken!.isNotEmpty) {
       await persistBackgroundPushContext(
@@ -1918,6 +1951,7 @@ class AppController extends SessionAccessor
     final profile = await client.fetchCitizenProfile(accessToken: accessToken!);
     await (await _languageRegionStore()).saveFromProfile(profile);
     _cachedCitizenProfile = profile;
+    _setLocaleFromProfile(profile, notify: false);
     notifyListeners();
     return profile;
   }
@@ -1936,6 +1970,7 @@ class AppController extends SessionAccessor
     );
     await (await _languageRegionStore()).saveFromProfile(updated);
     _cachedCitizenProfile = updated;
+    _setLocaleFromProfile(updated, notify: false);
     notifyListeners();
     return updated;
   }
@@ -9832,14 +9867,15 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = appOf(context);
     final authenticated = controller.isAuthenticated;
+    final l10n = AppLocalizations.of(context);
     return SafetyScaffold(
-      title: "Settings",
+      title: l10n.settings,
       selectedIndex: 4,
       useFigmaShell: true,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
-          const EyePageHeader.root(title: "Settings"),
+          EyePageHeader.root(title: l10n.settings),
           const SizedBox(height: 8),
           SectionCard(
             title: "Account",
@@ -9863,7 +9899,7 @@ class SettingsScreen extends StatelessWidget {
                     Icons.person_outline,
                     color: Theme.of(context).colorScheme.primary,
                   ),
-                  title: const Text("Profile"),
+                  title: Text(l10n.profile),
                   subtitle: Text(
                     authenticated
                         ? "View your citizen profile and KYC status"
@@ -9879,8 +9915,10 @@ class SettingsScreen extends StatelessWidget {
                       Icons.language,
                       color: Theme.of(context).colorScheme.primary,
                     ),
-                    title: const Text("Language & Region"),
-                    subtitle: const Text("Country and preferred language"),
+                    title: Text(l10n.languageRegion),
+                    subtitle: Text(
+                      "${l10n.countryRegion} / ${l10n.preferredLanguage}",
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context)
                         .pushNamed("/settings/language-region"),
@@ -9891,7 +9929,7 @@ class SettingsScreen extends StatelessWidget {
                       Icons.logout,
                       color: Theme.of(context).colorScheme.primary,
                     ),
-                    title: const Text("Sign out"),
+                    title: Text(l10n.signOut),
                     onTap: () async {
                       await controller.clearSession();
                       if (!context.mounted) return;
@@ -9918,7 +9956,7 @@ class SettingsScreen extends StatelessWidget {
                       Icons.login,
                       color: Theme.of(context).colorScheme.primary,
                     ),
-                    title: const Text("Sign in"),
+                    title: Text(l10n.signIn),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).pushNamed("/login"),
                   ),
@@ -10100,10 +10138,18 @@ class SafetyScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = Localizations.of<AppLocalizations>(
+      context,
+      AppLocalizations,
+    );
     final routeName = ModalRoute.of(context)?.settings.name;
     final navIndex = useFigmaShell
         ? selectedIndex
         : EyeNavRoutes.selectedIndexForRoute(routeName);
+    final backLabel = l10n?.back ?? "Back";
+    final homeLabel = l10n?.home ?? "Home";
+    final profileLabel = l10n?.profile ?? "Profile";
+    final settingsLabel = l10n?.settings ?? "Settings";
 
     return Scaffold(
       backgroundColor: EyeSemanticColors.of(context).background,
@@ -10112,7 +10158,7 @@ class SafetyScaffold extends StatelessWidget {
           : AppBar(
               leading: Navigator.of(context).canPop()
                   ? IconButton(
-                      tooltip: "Back",
+                      tooltip: backLabel,
                       icon: const Icon(Icons.arrow_back),
                       onPressed: () => Navigator.of(context).maybePop(),
                     )
@@ -10120,7 +10166,7 @@ class SafetyScaffold extends StatelessWidget {
               title: Text(title),
               actions: [
                 IconButton(
-                  tooltip: "Settings",
+                  tooltip: settingsLabel,
                   icon: const Icon(Icons.settings),
                   onPressed: () => Navigator.of(context).pushNamed("/settings"),
                 ),
@@ -10130,6 +10176,8 @@ class SafetyScaffold extends StatelessWidget {
       bottomNavigationBar: useFigmaShell
           ? EyeBottomNav(
               selectedIndex: navIndex,
+              homeLabel: homeLabel,
+              settingsLabel: settingsLabel,
               onTabSelected: (index) {
                 if (index != 2) _navigateTab(context, index);
               },
@@ -10150,16 +10198,21 @@ class SafetyScaffold extends StatelessWidget {
                   Navigator.of(context).pushReplacementNamed(route);
                 }
               },
-              destinations: const [
-                NavigationDestination(icon: Icon(Icons.home), label: "Home"),
+              destinations: [
                 NavigationDestination(
-                    icon: Icon(Icons.local_police), label: "Police"),
+                  icon: const Icon(Icons.home),
+                  label: homeLabel,
+                ),
                 NavigationDestination(
-                    icon: Icon(Icons.route), label: "Tracking"),
+                    icon: const Icon(Icons.local_police), label: "Police"),
                 NavigationDestination(
-                    icon: Icon(Icons.family_restroom), label: "Family"),
+                    icon: const Icon(Icons.route), label: "Tracking"),
                 NavigationDestination(
-                    icon: Icon(Icons.person), label: "Profile"),
+                    icon: const Icon(Icons.family_restroom), label: "Family"),
+                NavigationDestination(
+                  icon: const Icon(Icons.person),
+                  label: profileLabel,
+                ),
               ],
             ),
     );

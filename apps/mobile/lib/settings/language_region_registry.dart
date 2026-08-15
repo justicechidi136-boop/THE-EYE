@@ -1,4 +1,5 @@
 import "package:flutter/widgets.dart";
+import "package:the_eye_flutter_l10n/the_eye_locales.dart";
 
 import "../contracts/the_eye_enums.dart";
 
@@ -46,7 +47,7 @@ class PreferredLanguageOption {
 
 abstract final class LanguageRegionRegistry {
   static const defaultCountryCode = AccountCountryCode.nigeria;
-  static const defaultPreferredLocale = PreferredLocale.english;
+  static const defaultPreferredLocale = TheEyeLocaleCatalog.defaultLocaleCode;
 
   static const countries = <CountryRegionOption>[
     CountryRegionOption(
@@ -60,35 +61,35 @@ abstract final class LanguageRegionRegistry {
 
   static const languages = <PreferredLanguageOption>[
     PreferredLanguageOption(
-      locale: PreferredLocale.english,
+      locale: TheEyeLocaleCodes.english,
       englishName: "English",
       nativeName: "English",
       enabled: true,
       countries: ["NG"],
     ),
     PreferredLanguageOption(
-      locale: PreferredLocale.hausa,
+      locale: TheEyeLocaleCodes.hausa,
       englishName: "Hausa",
       nativeName: "Hausa",
       enabled: true,
       countries: ["NG"],
     ),
     PreferredLanguageOption(
-      locale: PreferredLocale.yoruba,
+      locale: TheEyeLocaleCodes.yoruba,
       englishName: "Yoruba",
       nativeName: "Yoruba",
       enabled: true,
       countries: ["NG"],
     ),
     PreferredLanguageOption(
-      locale: PreferredLocale.igbo,
+      locale: TheEyeLocaleCodes.igbo,
       englishName: "Igbo",
       nativeName: "Igbo",
       enabled: true,
       countries: ["NG"],
     ),
     PreferredLanguageOption(
-      locale: PreferredLocale.nigerianPidgin,
+      locale: TheEyeLocaleCodes.nigerianPidgin,
       englishName: "Nigerian Pidgin",
       nativeName: "Nigerian Pidgin",
       enabled: true,

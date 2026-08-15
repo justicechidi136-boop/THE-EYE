@@ -6,6 +6,7 @@ import "../app/app_scope.dart";
 import "../app/session_accessor.dart";
 import "../brand.dart";
 import "../contracts/the_eye_api_client.dart";
+import "../l10n/generated/app_localizations.dart";
 import "../profile/profile_widgets.dart";
 import "../widgets/section_card.dart";
 import "language_region_preference_store.dart";
@@ -107,9 +108,16 @@ class _LanguageRegionSettingsScreenState
         );
         _saving = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Preferred language saved.")),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).preferredLanguageSaved,
+            ),
+          ),
+        );
+      });
     } on AuthApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -129,36 +137,37 @@ class _LanguageRegionSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text("Language & Region")),
+      appBar: AppBar(title: Text(l10n.languageRegion)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 SectionCard(
-                  title: "Language & Region",
+                  title: l10n.languageRegion,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       ProfileRow(
-                        "Country / Region",
-                        _country?.displayName ?? "Not set",
+                        l10n.countryRegion,
+                        _country?.displayName ?? l10n.notSet,
                       ),
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
-                          "Country changes are handled separately so state and LGA can be revalidated safely.",
-                          style: TextStyle(fontSize: 12),
+                          l10n.languageRegionNotice,
+                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
                       profileLabeledField(
                         context: context,
-                        label: "Preferred Language",
+                        label: l10n.preferredLanguage,
                         field: LanguageRegionSelectorField<
                             PreferredLanguageOption>(
-                          label: "Preferred Language",
-                          valueLabel: _language?.displayName ?? "Select",
+                          label: l10n.preferredLanguage,
+                          valueLabel: _language?.displayName ?? l10n.select,
                           options: LanguageRegionRegistry.enabledLanguages,
                           optionLabel: (language) => language.displayName,
                           optionSearchText: (language) =>
@@ -181,9 +190,9 @@ class _LanguageRegionSettingsScreenState
                           ),
                         ),
                       if (_profile?.preferredLocale == null)
-                        const Text(
-                          "Most screens remain English in this release; this saves your preference for upcoming language support.",
-                          style: TextStyle(fontSize: 12),
+                        Text(
+                          l10n.pilotEnglishNotice,
+                          style: const TextStyle(fontSize: 12),
                         ),
                     ],
                   ),

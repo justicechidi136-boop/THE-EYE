@@ -45,12 +45,20 @@ class EyeBottomNav extends StatelessWidget {
     required this.selectedIndex,
     required this.onTabSelected,
     required this.onEyePressed,
+    this.homeLabel = "Home",
+    this.servicesLabel = "Services",
+    this.broadcastLabel = "Broadcast",
+    this.settingsLabel = "Settings",
     super.key,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
   final VoidCallback onEyePressed;
+  final String homeLabel;
+  final String servicesLabel;
+  final String broadcastLabel;
+  final String settingsLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -81,26 +89,26 @@ class EyeBottomNav extends StatelessWidget {
                     children: [
                       _NavItem(
                         icon: Icons.home_rounded,
-                        label: "Home",
+                        label: homeLabel,
                         selected: selectedIndex == 0,
                         onTap: () => onTabSelected(0),
                       ),
                       _NavItem(
                         icon: Icons.layers_rounded,
-                        label: "Services",
+                        label: servicesLabel,
                         selected: selectedIndex == 1,
                         onTap: () => onTabSelected(1),
                       ),
                       const Expanded(child: SizedBox()),
                       _NavItem(
                         icon: Icons.campaign_outlined,
-                        label: "Broadcast",
+                        label: broadcastLabel,
                         selected: selectedIndex == 3,
                         onTap: () => onTabSelected(3),
                       ),
                       _NavItem(
                         icon: Icons.settings_outlined,
-                        label: "Settings",
+                        label: settingsLabel,
                         selected: selectedIndex == 4,
                         onTap: () => onTabSelected(4),
                       ),
