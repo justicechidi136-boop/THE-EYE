@@ -1,0 +1,201 @@
+name: Staging Issue TLS
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: staging-issue-tls
+  cancel-in-progress: false
+
+jobs:
+  issue-tls:
+    name: Issue staging TLS certificate
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      EXPECTED_STAGING_IP: 134.209.190.77
+      EXPECTED_STORAGE_HOST: storage-staging.theeye.com.ng
+      STAGING_STORAGE_HOST: ${{ vars.STAGING_STORAGE_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail closed for staging TLS target
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH STAGING_STORAGE_HOST; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::GitHub staging environment value ${name} is not configured."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          if [ "$STAGING_STORAGE_HOST" != "$EXPECTED_STORAGE_HOST" ]; then
+            echo "::error::STAGING_STORAGE_HOST must be ${EXPECTED_STORAGE_HOST} for this staging-only workflow."
+            exit 1
+          fi
+
+          case "$STAGING_STORAGE_HOST" in
+            localhost|127.*|0.0.0.0|*.localhost|minio|*minio*)
+              echo "::error::Refusing local or internal storage hostname."
+              exit 1
+              ;;
+            api.theeye.com.ng|dashboard.theeye.com.ng|livekit.theeye.com.ng|storage.theeye.com.ng|theeye.com.ng|www.theeye.com.ng)
+              echo "::error::Refusing production hostname."
+              exit 1
+              ;;
+          esac
+
+      - name: Issue staging certificate over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          EXPECTED_STORAGE_HOST: ${{ env.EXPECTED_STORAGE_HOST }}
+          STAGING_STORAGE_HOST: ${{ env.STAGING_STORAGE_HOST }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 15m
+          debug: false
+          script_stop: true
+          envs: EXPECTED_STORAGE_HOST,STAGING_STORAGE_HOST,WORKFLOW_SHA
+          script: |
+            set -euo pipefail
+
+            if [ "$STAGING_STORAGE_HOST" != "$EXPECTED_STORAGE_HOST" ]; then
+              echo "Refusing unexpected storage host."
+              exit 1
+            fi
+
+            DEPLOY_ROOT='${{ secrets.DEPLOY_PATH }}'
+            cd "$DEPLOY_ROOT"
+
+            git fetch --tags origin staging
+            git checkout "$WORKFLOW_SHA"
+            git merge-base --is-ancestor "$WORKFLOW_SHA" origin/staging
+            echo "VPS HEAD: $(git rev-parse HEAD)"
+
+            if [ ! -f .env ]; then
+              echo "Missing staging .env on VPS."
+              exit 1
+            fi
+
+            set -a
+            # shellcheck disable=SC1091
+            . ./.env
+            set +a
+
+            required_env=(
+              THE_EYE_ADMIN_SERVER_NAME
+              THE_EYE_API_SERVER_NAME
+              THE_EYE_LIVEKIT_SERVER_NAME
+              CERTBOT_EMAIL
+            )
+            for name in "${required_env[@]}"; do
+              if [ -z "${!name:-}" ]; then
+                echo "Required staging TLS value ${name} is missing."
+                exit 1
+              fi
+            done
+
+            if [ "${THE_EYE_SSL_REDIRECT:-}" != "true" ]; then
+              echo "THE_EYE_SSL_REDIRECT must already be true in staging .env."
+              exit 1
+            fi
+
+            resolved_ip="$(getent ahostsv4 "$EXPECTED_STORAGE_HOST" | awk '{ print $1; exit }')"
+            if [ -z "$resolved_ip" ]; then
+              echo "DNS lookup failed for storage staging host from VPS."
+              exit 1
+            fi
+            echo "Storage DNS resolved from VPS."
+
+            http_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "http://${EXPECTED_STORAGE_HOST}/.well-known/acme-challenge/the-eye-tls-probe" || true)"
+            if [ "$http_code" = "000" ]; then
+              echo "Storage HTTP ACME path is not reachable from VPS."
+              exit 1
+            fi
+            echo "Storage HTTP ACME path is reachable."
+
+            temp_env="$(mktemp)"
+            cleanup() {
+              rm -f "$temp_env"
+            }
+            trap cleanup EXIT
+
+            cp .env "$temp_env"
+            {
+              echo ""
+              echo "THE_EYE_STORAGE_SERVER_NAME=${EXPECTED_STORAGE_HOST}"
+              echo "S3_PUBLIC_ENDPOINT=https://${EXPECTED_STORAGE_HOST}"
+              echo "THE_EYE_SSL_REDIRECT=true"
+              echo "THE_EYE_GENERATE_DEV_SSL=false"
+            } >> "$temp_env"
+
+            ENV_FILE="$temp_env" bash scripts/issue-letsencrypt.sh
+
+            cert_path="infra/docker/nginx/certs/live/fullchain.pem"
+            if [ ! -f "$cert_path" ]; then
+              echo "Shared SAN certificate was not written."
+              exit 1
+            fi
+
+            for host in \
+              staging-api.theeye.com.ng \
+              staging-dashboard8jps.theeye.com.ng \
+              staging-livekit.theeye.com.ng \
+              "$EXPECTED_STORAGE_HOST"
+            do
+              if ! openssl x509 -in "$cert_path" -noout -ext subjectAltName | grep -Fq "DNS:${host}"; then
+                echo "Issued certificate is missing an expected SAN."
+                exit 1
+              fi
+            done
+
+            docker compose -f infra/docker/docker-compose.yml --env-file "$temp_env" config >/dev/null
+            docker compose -f infra/docker/docker-compose.yml --env-file "$temp_env" up -d --no-deps --force-recreate nginx
+            docker compose -f infra/docker/docker-compose.yml --env-file "$temp_env" exec -T nginx nginx -t
+            docker compose -f infra/docker/docker-compose.yml --env-file "$temp_env" ps nginx
+
+      - name: Verify public TLS and private storage ports
+        run: |
+          set -euo pipefail
+
+          verify_tls_host() {
+            host="$1"
+            echo "Verifying TLS for ${host}"
+            curl -sS -o /dev/null --max-time 15 "https://${host}/"
+            cert_info="$(
+              echo | openssl s_client \
+                -connect "${host}:443" \
+                -servername "$host" \
+                -verify_return_error \
+                2>/dev/null | openssl x509 -noout -ext subjectAltName -dates
+            )"
+            printf '%s\n' "$cert_info" | grep -Fq "DNS:${host}"
+          }
+
+          verify_tls_host staging-api.theeye.com.ng
+          verify_tls_host staging-dashboard8jps.theeye.com.ng
+          verify_tls_host staging-livekit.theeye.com.ng
+          verify_tls_host "$EXPECTED_STORAGE_HOST"
+
+          for port in 9000 9001; do
+            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/${EXPECTED_STAGING_IP}/${port}" 2>/dev/null; then
+              echo "::error::Unexpected public connectivity to ${EXPECTED_STAGING_IP}:${port}."
+              exit 1
+            fi
+            echo "Confirmed ${EXPECTED_STAGING_IP}:${port} is not publicly reachable."
+          done
