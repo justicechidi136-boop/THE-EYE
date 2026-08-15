@@ -74,6 +74,8 @@ expectGateFail("invalid provider fails closed", {
 }, "STORAGE_PROVIDER must be one of");
 
 const deployWorkflow = readFileSync(".github/workflows/deploy.yml", "utf8");
+assert(!deployWorkflow.includes("script_stop: true"), "staging SSH deploy must not enable script_stop");
+assert(deployWorkflow.includes("set -euo pipefail"), "staging SSH deploy must retain shell fail-fast guard");
 assert(deployWorkflow.includes("STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER }}"), "deploy preflight must export STORAGE_PROVIDER");
 assert(deployWorkflow.includes("FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}"), "deploy preflight must export FIREBASE_STORAGE_BUCKET");
 assert(deployWorkflow.includes("export STORAGE_PROVIDER='${{ vars.STORAGE_PROVIDER }}'"), "SSH deploy must export STORAGE_PROVIDER");
@@ -81,6 +83,10 @@ assert(deployWorkflow.includes("export FIREBASE_STORAGE_BUCKET='${{ vars.FIREBAS
 assert(
   deployWorkflow.includes('if [ "${STORAGE_PROVIDER}" = "s3" ] || [ "${STORAGE_PROVIDER}" = "minio" ]; then'),
   "Firebase mode must not force legacy S3 public endpoint exports",
+);
+assert(
+  deployWorkflow.includes("export RUN_MIGRATIONS=${{ github.event.inputs.run_migrations }}"),
+  "SSH deploy must export RUN_MIGRATIONS",
 );
 
 const deployScript = readFileSync("scripts/deploy-staging-vps-ci.sh", "utf8");

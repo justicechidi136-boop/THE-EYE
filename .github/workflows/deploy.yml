@@ -216,7 +216,6 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           command_timeout: 30m
           debug: true
-          script_stop: true
           script: |
             set -euo pipefail
             DEPLOY_ROOT='${{ secrets.DEPLOY_PATH }}'
