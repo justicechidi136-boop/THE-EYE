@@ -15,6 +15,9 @@ void main() {
         expect(request.url.path, endsWith(TheEyeApiPaths.usersMe));
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body["firstName"], "Ada");
+        expect(body["country"], "Nigeria");
+        expect(body["countryCode"], "NG");
+        expect(body["preferredLocale"], "ha");
         expect(body.containsKey("trustScore"), isFalse);
         return http.Response(
           jsonEncode({
@@ -26,6 +29,9 @@ void main() {
               "firstName": "Ada",
               "lastName": "Okeke",
               "country": "Nigeria",
+              "countryCode": "NG",
+              "preferredLocale": "ha",
+              "effectivePreferredLocale": "ha",
               "state": "Lagos",
               "lga": "Ikeja",
             },
@@ -42,6 +48,8 @@ void main() {
         "firstName": "Ada",
         "lastName": "Okeke",
         "country": "Nigeria",
+        "countryCode": "NG",
+        "preferredLocale": "ha",
         "state": "Lagos",
         "lga": "Ikeja",
       },

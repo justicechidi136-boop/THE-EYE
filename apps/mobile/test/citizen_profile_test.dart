@@ -14,6 +14,9 @@ void main() {
         "firstName": "Ada",
         "lastName": "Okeke",
         "country": "Nigeria",
+        "countryCode": "NG",
+        "preferredLocale": "yo",
+        "effectivePreferredLocale": "yo",
         "state": "Lagos",
         "lga": "Ikeja",
         "avatarUrl": "https://cdn.example/avatars/a.jpg",
@@ -28,6 +31,8 @@ void main() {
         },
       ],
       "emergencyContact": {"name": "Mum", "phone": "+2348099990000"},
+      "preferredLocale": "yo",
+      "effectivePreferredLocale": "yo",
     });
 
     expect(profile.displayName, "Ada Okeke");
@@ -35,6 +40,9 @@ void main() {
     expect(profile.trustScore, 91);
     expect(profile.profileComplete, isTrue);
     expect(profile.profile.avatarUrl, "https://cdn.example/avatars/a.jpg");
+    expect(profile.profile.countryCode, "NG");
+    expect(profile.preferredLocale, "yo");
+    expect(profile.effectivePreferredLocale, "yo");
     expect(profile.emergencyContacts, hasLength(1));
     expect(profile.emergencyContactPhone, "+2348099990000");
   });

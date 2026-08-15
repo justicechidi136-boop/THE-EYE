@@ -11,6 +11,28 @@ abstract final class TheEyeEnums {
   static const offlineSyncMaxEvents = 100;
 }
 
+abstract final class AccountCountryCode {
+  static const nigeria = "NG";
+
+  static const all = <String>[nigeria];
+}
+
+abstract final class PreferredLocale {
+  static const english = "en";
+  static const hausa = "ha";
+  static const yoruba = "yo";
+  static const igbo = "ig";
+  static const nigerianPidgin = "pcm";
+
+  static const all = <String>[
+    english,
+    hausa,
+    yoruba,
+    igbo,
+    nigerianPidgin,
+  ];
+}
+
 abstract final class IncidentType {
   static const emergency = "Emergency";
   static const crime = "Crime";
@@ -48,9 +70,13 @@ abstract final class IncidentStatus {
   static const verified = "Verified";
   static const assigned = "Assigned";
   static const responding = "Responding";
+  static const underControl = "UnderControl";
+  static const cancellationRequested = "CancellationRequested";
   static const resolved = "Resolved";
   static const closed = "Closed";
   static const falseReport = "FalseReport";
+  static const cancelledByReporter = "CancelledByReporter";
+  static const expiredAfterReview = "ExpiredAfterReview";
 }
 
 abstract final class IncidentPriority {
@@ -73,7 +99,17 @@ abstract final class BroadcastType {
 abstract final class BroadcastStatus {
   static const draft = "Draft";
   static const pendingApproval = "PendingApproval";
+  static const scheduled = "Scheduled";
+  static const dispatchQueued = "DispatchQueued";
+  static const dispatching = "Dispatching";
   static const published = "Published";
+  static const active = "Active";
+  static const updated = "Updated";
+  static const resolved = "Resolved";
+  static const suspended = "Suspended";
+  static const deletedByAdmin = "DeletedByAdmin";
+  static const withdrawnByAuthor = "WithdrawnByAuthor";
+  static const failed = "Failed";
   static const expired = "Expired";
   static const cancelled = "Cancelled";
   static const rejected = "Rejected";

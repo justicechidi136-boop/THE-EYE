@@ -5,6 +5,7 @@ import "dart:io";
 import "package:http/http.dart" as http;
 
 import "../contracts/the_eye_api_client.dart";
+import "../settings/language_region_preference_store.dart";
 import "auth_safe_log.dart";
 import "auth_session_store.dart";
 import "auth_validation.dart";
@@ -67,11 +68,14 @@ class AuthService {
   AuthService({
     required TheEyeApiClient apiClient,
     required AuthSessionStore sessionStore,
+    LanguageRegionPreferenceStore? languageRegionPreferenceStore,
   })  : _apiClient = apiClient,
-        _sessionStore = sessionStore;
+        _sessionStore = sessionStore,
+        _languageRegionPreferenceStore = languageRegionPreferenceStore;
 
   final TheEyeApiClient _apiClient;
   final AuthSessionStore _sessionStore;
+  final LanguageRegionPreferenceStore? _languageRegionPreferenceStore;
   bool _otpRequestInFlight = false;
   Completer<AuthSession?>? _refreshInFlight;
 
@@ -501,6 +505,7 @@ class AuthService {
     try {
       final profile = await _apiClient.fetchCitizenProfile(
           accessToken: session.accessToken);
+      await _languageRegionPreferenceStore?.saveFromProfile(profile);
       return (session: session, citizenProfile: profile);
     } on AuthApiException catch (error) {
       if (error.statusCode != 401 || session.refreshToken.isEmpty) rethrow;
@@ -508,6 +513,7 @@ class AuthService {
       if (refreshed == null) rethrow;
       final profile = await _apiClient.fetchCitizenProfile(
           accessToken: refreshed.accessToken);
+      await _languageRegionPreferenceStore?.saveFromProfile(profile);
       return (session: refreshed, citizenProfile: profile);
     }
   }
