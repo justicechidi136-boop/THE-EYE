@@ -4,7 +4,12 @@ import { BadRequestException, Body, Req } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
-import { createStorageUploadUrl, evidenceObjectKey, validateEvidenceUpload } from "../../common/storage/s3-presign";
+import {
+  createStorageDownloadUrl,
+  createStorageUploadUrl,
+  evidenceObjectKey,
+  validateEvidenceUpload,
+} from "../../common/storage/s3-presign";
 
 @ApiTags("storage")
 @ApiBearerAuth()
@@ -17,7 +22,15 @@ export class StorageController {
     if (!dto.fileName || !dto.contentType) throw new BadRequestException("fileName and contentType are required");
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
     const objectKey = evidenceObjectKey(request.user.sub, dto.fileName);
-    const signed = await createStorageUploadUrl(objectKey, 900, dto.contentType);
-    return { bucket: signed.bucket, uploadUrl: signed.url, objectKey, expiresInSeconds: signed.expiresInSeconds };
+    const uploadSigned = await createStorageUploadUrl(objectKey, 900, dto.contentType);
+    const downloadSigned = await createStorageDownloadUrl(objectKey, 300);
+    return {
+      bucket: uploadSigned.bucket,
+      uploadUrl: uploadSigned.url,
+      getUrl: downloadSigned.url,
+      objectKey,
+      expiresInSeconds: uploadSigned.expiresInSeconds,
+      getExpiresInSeconds: downloadSigned.expiresInSeconds,
+    };
   }
 }
