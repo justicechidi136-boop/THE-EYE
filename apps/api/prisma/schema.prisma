@@ -92,6 +92,21 @@ enum VoiceModerationStatus {
   Rejected
 }
 
+enum SpeechContentProvenance {
+  ORIGINAL
+  TRANSCRIPT
+  TRANSLATION
+  SYNTHESIZED_SPEECH
+}
+
+enum LanguageProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  UNSUPPORTED
+}
+
 enum BroadcastStatus {
   Draft
   PendingApproval
@@ -876,6 +891,54 @@ model IncidentMediaAccessLog {
   @@index([mediaId, accessedAt])
   @@index([accessorId])
   @@map("incident_media_access_logs")
+}
+
+model SpeechArtifact {
+  id                          String                    @id @default(uuid()) @db.Uuid
+  sourceType                  String                    @map("source_type")
+  sourceId                    String                    @map("source_id") @db.Uuid
+  provenance                  SpeechContentProvenance
+  sourceLocale                String?                   @map("source_locale")
+  detectedLocale              String?                   @map("detected_locale")
+  languageConfidence          Decimal?                  @map("language_confidence") @db.Decimal(5, 4)
+  content                     String?
+  sourceHash                  String?                   @map("source_hash")
+  provider                    String?
+  model                       String?
+  confidence                  Decimal?                  @db.Decimal(5, 4)
+  status                      LanguageProcessingStatus  @default(PENDING)
+  errorCode                   String?                   @map("error_code")
+  generatedAt                 DateTime?                 @map("generated_at") @db.Timestamptz(6)
+  createdAt                   DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  translations                SpeechTranslation[]
+
+  @@unique([sourceType, sourceId, provenance])
+  @@index([sourceType, sourceId])
+  @@index([status])
+  @@map("speech_artifacts")
+}
+
+model SpeechTranslation {
+  id                String                   @id @default(uuid()) @db.Uuid
+  speechArtifactId  String                   @map("speech_artifact_id") @db.Uuid
+  targetLocale      String                   @map("target_locale")
+  sourceLocale      String?                  @map("source_locale")
+  translatedText    String?                  @map("translated_text")
+  provider          String?
+  model             String?
+  confidence        Decimal?                 @db.Decimal(5, 4)
+  status            LanguageProcessingStatus @default(PENDING)
+  errorCode         String?                  @map("error_code")
+  generatedAt       DateTime?                @map("generated_at") @db.Timestamptz(6)
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  speechArtifact    SpeechArtifact           @relation(fields: [speechArtifactId], references: [id], onDelete: Cascade)
+
+  @@unique([speechArtifactId, targetLocale])
+  @@index([targetLocale])
+  @@index([status])
+  @@map("speech_translations")
 }
 
 model IncidentVerification {
