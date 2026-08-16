@@ -1,4 +1,7 @@
 import { buildSpeechTranslationJobId, buildVoiceTranscriptionJobId } from "../../../common/queue/queue-jobs";
+import { GoogleTranscriptionProvider } from "../google-speech.provider";
+import { OpenAiTranscriptionProvider, OpenAiTranslationProvider } from "../openai-speech.provider";
+import { assertSpeechRuntimeConfiguration } from "../speech-runtime.config";
 import { StubTranscriptionProvider } from "../stub-transcription.provider";
 import { StubTranslationProvider } from "../stub-translation.provider";
 import { VoiceTranscriptionService } from "../voice-transcription.service";
@@ -29,7 +32,12 @@ describe("voice transcription foundation", () => {
 });
 
 describe("Wave 6 speech artifact processing", () => {
-  function buildHarness(options: { provider?: StubTranscriptionProvider; translator?: StubTranslationProvider; queue?: any } = {}) {
+  function buildHarness(options: {
+    provider?: StubTranscriptionProvider;
+    translator?: StubTranslationProvider;
+    queue?: any;
+    config?: Record<string, unknown>;
+  } = {}) {
     const state = {
       media: {
         id: "media-1",
@@ -106,9 +114,41 @@ describe("Wave 6 speech artifact processing", () => {
       options.provider ?? new StubTranscriptionProvider(),
       options.translator ?? new StubTranslationProvider(),
       queue as never,
+      {
+        get: (key: string) =>
+          ({
+            LANGUAGE_AI_RUNTIME_ENABLED: "true",
+            THE_EYE_APP_ENV: "test",
+            SPEECH_STT_PROVIDER: "stub",
+            SPEECH_TRANSLATION_PROVIDER: "stub",
+            ...(options.config ?? {}),
+          })[key],
+      } as never,
     );
     return { service, prisma, queue, state };
   }
+
+  it("keeps API healthy and avoids generated output when speech runtime is disabled", async () => {
+    const { service, state } = buildHarness({ config: { LANGUAGE_AI_RUNTIME_ENABLED: "false" } });
+    const result = await service.processJob({
+      attachmentId: "media-1",
+      resourceType: "incident_media",
+      idempotencyKey: "voice-transcription-media-1",
+    });
+
+    expect(result.status).toBe("runtime_disabled");
+    expect(state.artifact.status).toBe("UNSUPPORTED");
+    expect(state.artifact.errorCode).toBe("LANGUAGE_AI_RUNTIME_DISABLED");
+    expect(state.media.transcript).toBeUndefined();
+  });
+
+  it("does not mark uploads queued when speech runtime is disabled", async () => {
+    const { service, state, queue } = buildHarness({ config: { LANGUAGE_AI_RUNTIME_ENABLED: "false" } });
+    state.media.transcriptionStatus = "Uploaded";
+    await service.enqueueIncidentMediaTranscription("media-1");
+    expect(state.media.transcriptionStatus).toBe("Uploaded");
+    expect(queue.add).not.toHaveBeenCalled();
+  });
 
   it("audio triggers STT and preserves source media integrity", async () => {
     const provider = new StubTranscriptionProvider();
@@ -274,5 +314,157 @@ describe("Wave 6 speech artifact processing", () => {
     expect(state.artifact.content).toBe("Ina lafiya");
     expect(state.translations.get("en").status).toBe("FAILED");
     expect(state.translations.get("en").errorCode).toBe("TRANSLATION_DOWN");
+  });
+});
+
+describe("speech provider readiness configuration", () => {
+  it("blocks stub STT in staging when runtime is enabled", () => {
+    expect(() =>
+      assertSpeechRuntimeConfiguration({
+        THE_EYE_APP_ENV: "staging",
+        LANGUAGE_AI_RUNTIME_ENABLED: "true",
+        SPEECH_STT_PROVIDER: "stub",
+        SPEECH_TRANSLATION_PROVIDER: "openai",
+        OPENAI_API_KEY: "test-key",
+      }),
+    ).toThrow();
+  });
+
+  it("allows stub providers in test/dev when runtime is enabled", () => {
+    expect(() =>
+      assertSpeechRuntimeConfiguration({
+        THE_EYE_APP_ENV: "development",
+        LANGUAGE_AI_RUNTIME_ENABLED: "true",
+        SPEECH_STT_PROVIDER: "stub",
+        SPEECH_TRANSLATION_PROVIDER: "stub",
+      }),
+    ).not.toThrow();
+  });
+
+  it("keeps runtime disabled healthy without provider credentials", () => {
+    expect(() =>
+      assertSpeechRuntimeConfiguration({
+        THE_EYE_APP_ENV: "staging",
+        LANGUAGE_AI_RUNTIME_ENABLED: "false",
+        SPEECH_STT_PROVIDER: "stub",
+        SPEECH_TRANSLATION_PROVIDER: "stub",
+      }),
+    ).not.toThrow();
+  });
+
+  it("requires explicit OpenAI credentials when selected", () => {
+    expect(() =>
+      assertSpeechRuntimeConfiguration({
+        THE_EYE_APP_ENV: "staging",
+        LANGUAGE_AI_RUNTIME_ENABLED: "true",
+        SPEECH_STT_PROVIDER: "openai",
+        SPEECH_TRANSLATION_PROVIDER: "openai",
+      }),
+    ).toThrow();
+  });
+
+  it("requires explicit Google credential contract when selected", () => {
+    expect(() =>
+      assertSpeechRuntimeConfiguration({
+        THE_EYE_APP_ENV: "staging",
+        LANGUAGE_AI_RUNTIME_ENABLED: "true",
+        SPEECH_STT_PROVIDER: "google",
+        SPEECH_TRANSLATION_PROVIDER: "google",
+        GOOGLE_CLOUD_ACCESS_TOKEN: "test-token",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("real speech provider adapters", () => {
+  const originalFetch = globalThis.fetch;
+
+  function config(values: Record<string, unknown>) {
+    return { get: (key: string) => values[key] } as never;
+  }
+
+  it("normalizes OpenAI transcription without fabricating confidence", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = jest.fn(async (url: string) => {
+      calls.push(url);
+      if (url.includes("api.openai.com")) {
+        return { ok: true, json: async () => ({ text: "Officer down at Marina", language: "en" }) } as never;
+      }
+      return { ok: true, arrayBuffer: async () => Buffer.from("audio").buffer } as never;
+    }) as never;
+
+    const provider = new OpenAiTranscriptionProvider(
+      config({ OPENAI_API_KEY: "sk-test", OPENAI_STT_MODEL: "test-transcribe" }),
+    );
+    const result = await provider.transcribe({
+      attachmentId: "media-1",
+      storageKey: "evidence/inc/audio.m4a",
+      contentType: "audio/mp4",
+      selectedLanguage: "en",
+    });
+
+    expect(result.transcript).toBe("Officer down at Marina");
+    expect(result.model).toBe("test-transcribe");
+    expect(result.transcriptionConfidence).toBeUndefined();
+    expect(calls.some((url) => url.includes("api.openai.com"))).toBe(true);
+    globalThis.fetch = originalFetch;
+  });
+
+  it("normalizes OpenAI translation and preserves source/target contract", async () => {
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: "resp-1",
+        output_text: "A child is missing near Ring Road",
+      }),
+    })) as never;
+    const provider = new OpenAiTranslationProvider(
+      config({ OPENAI_API_KEY: "sk-test", OPENAI_TRANSLATION_MODEL: "test-translate" }),
+    );
+
+    const result = await provider.translate({
+      speechArtifactId: "artifact-1",
+      sourceContentId: "media-1",
+      sourceLocale: "ha",
+      targetLocale: "en",
+      text: "An rasa yaro kusa da Ring Road",
+    });
+
+    expect(result.translatedText).toBe("A child is missing near Ring Road");
+    expect(result.providerReference).toBe("resp-1");
+    expect(result.model).toBe("test-translate");
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns unsupported for Google Pidgin STT instead of relabeling", async () => {
+    const provider = new GoogleTranscriptionProvider(
+      config({
+        GOOGLE_CLOUD_ACCESS_TOKEN: "token",
+        GOOGLE_CLOUD_PROJECT: "project",
+      }),
+    );
+
+    await expect(provider.transcribe({
+      attachmentId: "media-2",
+      storageKey: "evidence/inc/audio2.m4a",
+      contentType: "audio/mp4",
+      selectedLanguage: "pcm",
+    })).rejects.toThrow("google-stt does not support pcm");
+  });
+
+  it("maps provider auth and rate limit failures without leaking keys or transcript text", async () => {
+    globalThis.fetch = jest.fn(async (url: string) => {
+      if (url.includes("api.openai.com")) return { ok: false, status: 429 } as never;
+      return { ok: true, arrayBuffer: async () => Buffer.from("audio").buffer } as never;
+    }) as never;
+    const provider = new OpenAiTranscriptionProvider(config({ OPENAI_API_KEY: "sk-sensitive-test-key" }));
+
+    await expect(provider.transcribe({
+      attachmentId: "media-1",
+      storageKey: "evidence/inc/audio.m4a",
+      contentType: "audio/mp4",
+      selectedLanguage: "en",
+    })).rejects.toThrow("OpenAI transcription failed: 429");
+    globalThis.fetch = originalFetch;
   });
 });
