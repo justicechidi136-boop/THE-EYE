@@ -14,6 +14,7 @@ export class StubTranscriptionProvider implements VoiceTranscriptionProvider {
       languageDetectionConfidence: 0.5,
       transcriptionConfidence: 0.4,
       providerReference: `stub-${input.attachmentId}`,
+      model: "stub-transcription",
       processingDurationMs: Date.now() - started,
       lowConfidence: true,
     };
