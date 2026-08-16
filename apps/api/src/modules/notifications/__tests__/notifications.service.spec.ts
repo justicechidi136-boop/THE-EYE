@@ -24,7 +24,13 @@ function buildService() {
       create: jest.fn().mockResolvedValue({ id: "log-1" }),
       findMany: jest.fn(),
     },
-    $queryRaw: jest.fn().mockResolvedValue([{ userId: "user-1", distanceMeters: 120 }]),
+    user: {
+      findUnique: jest.fn().mockResolvedValue({ profile: { preferredLocale: "en" } }),
+    },
+    adminUser: {
+      findUnique: jest.fn().mockResolvedValue({ preferences: { preferredLocale: "en" } }),
+    },
+    $queryRaw: jest.fn().mockResolvedValue([{ userId: "user-1", distanceMeters: 120, preferredLocale: "ha" }]),
   } as any;
   return { service: new NotificationsService(queue, prisma, createMetricsMock(), config), queue, prisma };
 }
@@ -52,6 +58,57 @@ describe("NotificationsService", () => {
     expect(prisma.notificationDeliveryLog.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "Queued", attempt: 0 }),
     }));
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        title: "Hadari a kusa",
+        metadata: expect.objectContaining({
+          notificationLocale: "ha",
+          notificationTemplateKey: "danger.generalNearby",
+          distanceMeters: 120,
+        }),
+      }),
+    }));
+  });
+
+  it("isolates localized copy per direct recipient locale", async () => {
+    const { service, prisma, queue } = buildService();
+    prisma.user.findUnique.mockResolvedValueOnce({ profile: { preferredLocale: "yo" } });
+
+    await service.create({
+      userId: "user-yo",
+      type: "MissingPersonAlert",
+      title: "Missing person alert",
+      body: "Help find Ada.",
+      metadata: {
+        notificationParams: {
+          personName: "Ada Okafor",
+          areaName: "Allen Avenue",
+        },
+        deepLink: "/missing-person",
+      },
+    });
+
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        userId: "user-yo",
+        title: "Ikilo eni ti o sonu",
+        body: expect.any(String),
+        metadata: expect.objectContaining({
+          notificationLocale: "yo",
+          deepLink: "/missing-person",
+        }),
+      }),
+    }));
+    expect(prisma.notification.create.mock.calls[0][0].data.body).toContain("Ada Okafor");
+    expect(queue.add).toHaveBeenCalledWith(
+      NOTIFICATION_DISPATCH_JOB_NAME,
+      expect.objectContaining({
+        title: "Ikilo eni ti o sonu",
+        locale: "yo",
+        templateKey: "missingPerson.alert",
+      }),
+      expect.any(Object),
+    );
   });
 
   it("marks a notification read for the current actor", async () => {

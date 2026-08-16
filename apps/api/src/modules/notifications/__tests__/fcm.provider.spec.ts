@@ -207,4 +207,77 @@ describe("FcmProvider", () => {
     expect(caught?.message).toContain("staging");
     expect(caught?.message).toContain("production");
   });
+
+  it("preserves localized notification data and routing identifiers in FCM payload", async () => {
+    const config = {
+      get: (key: string) => {
+        if (key === "THE_EYE_APP_ENV") return "production";
+        if (key === "FCM_PROJECT_ID") return PRODUCTION_FCM_PROJECT_ID;
+        if (key === "FCM_CLIENT_EMAIL") return "firebase-adminsdk@test.iam.gserviceaccount.com";
+        if (key === "FCM_PRIVATE_KEY") return "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n";
+        if (key === "FCM_MODE") return "real";
+        if (key === "FCM_ALLOW_SIMULATION") return "false";
+        if (key === "FCM_SIMULATION_MODE") return "false";
+        return "";
+      },
+    } as ConfigService;
+
+    const prisma = {
+      notification: {
+        findUnique: jest.fn().mockResolvedValue({
+          metadata: {
+            notificationLocale: "ha",
+            notificationTemplateKey: "missingPerson.alert",
+            deepLink: "/missing-person",
+            route: "/missing-person",
+          },
+        }),
+      },
+      userPushToken: {
+        findMany: async () => [{ token: "localized-device-token", userId: "user-1", appEnvironment: "production" }],
+      },
+    } as never;
+
+    const provider = new FcmProvider(config, prisma);
+    (provider as any).getAccessToken = async () => "oauth-token";
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ name: "projects/test/messages/1" }),
+    });
+    globalThis.fetch = fetchMock as never;
+
+    try {
+      await provider.send({
+        notificationId: "notif-1",
+        userId: "user-1",
+        title: "Sanarwar bataccen mutum",
+        body: "A taimaka a nemo Ada Okafor.",
+        locale: "ha",
+        templateKey: "missingPerson.alert",
+        type: "MissingPersonAlert",
+        priority: "High",
+        incidentId: "incident-1",
+        broadcastId: "broadcast-1",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(requestBody.message.notification).toEqual({
+      title: "Sanarwar bataccen mutum",
+      body: "A taimaka a nemo Ada Okafor.",
+    });
+    expect(requestBody.message.data).toEqual(expect.objectContaining({
+      notificationId: "notif-1",
+      incidentId: "incident-1",
+      broadcastId: "broadcast-1",
+      locale: "ha",
+      templateKey: "missingPerson.alert",
+      deepLink: "/missing-person",
+      route: "/missing-person",
+      notificationType: "MissingPersonAlert",
+    }));
+  });
 });

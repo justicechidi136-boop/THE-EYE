@@ -34,7 +34,11 @@ export type CreateNotificationDto = {
   latitude?: number;
   longitude?: number;
   radiusMeters?: number;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> & {
+    templateKey?: string;
+    notificationTemplateKey?: string;
+    notificationParams?: Record<string, string | number | boolean | null | undefined>;
+  };
 };
 
 export type DeliveryReceiptDto = {
