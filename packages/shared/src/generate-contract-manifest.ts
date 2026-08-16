@@ -12,6 +12,7 @@ import {
   DEFAULT_PREFERRED_LOCALE,
   LANGUAGE_REGISTRY,
 } from "./language-region";
+import { languageAiContract } from "./language-ai-contract";
 
 const manifest = {
   version: "0.1.0",
@@ -26,6 +27,7 @@ const manifest = {
     countries: COUNTRY_REGISTRY,
     languages: LANGUAGE_REGISTRY,
   },
+  languageAi: languageAiContract,
 };
 
 const outputPath = resolve(__dirname, "contracts.json");
