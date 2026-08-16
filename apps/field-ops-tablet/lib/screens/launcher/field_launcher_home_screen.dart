@@ -194,7 +194,7 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                                   platform: _platform,
                                   policy: _policy,
                                 ),
-                            child: const Text('Maintenance'),
+                            child: Text(l10n.maintenance),
                           ),
                       ],
                     ),
@@ -219,7 +219,7 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                           if (index == modules.length) {
                             return _tile(
                               icon: Icons.apps,
-                              label: 'Approved Apps',
+                              label: l10n.approvedApps,
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute<void>(
@@ -236,7 +236,7 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                           final module = modules[index];
                           return _tile(
                             icon: module.icon,
-                            label: module.label,
+                            label: _moduleLabel(l10n, module),
                             onTap: () => _openModule(module),
                           );
                         },
@@ -283,5 +283,36 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
         ),
       ),
     );
+  }
+
+  String _moduleLabel(FieldLocalizations l10n, LauncherModule module) {
+    switch (module.id) {
+      case 'dashboard':
+        return l10n.dashboard;
+      case 'patrol':
+        return l10n.patrol;
+      case 'checkpoint':
+        return l10n.checkpoint;
+      case 'assignments':
+        return l10n.assignments;
+      case 'incident_map':
+        return l10n.incidentLocation;
+      case 'bolo':
+        return 'BOLO';
+      case 'broadcasts':
+        return l10n.broadcasts;
+      case 'drone':
+        return l10n.drone;
+      case 'comms':
+        return l10n.communications;
+      case 'backup':
+        return l10n.requestBackup;
+      case 'officer_safety':
+        return l10n.officerSafety;
+      case 'device_status':
+        return l10n.deviceStatus;
+      default:
+        return module.label;
+    }
   }
 }

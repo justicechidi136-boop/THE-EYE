@@ -34,6 +34,9 @@ abstract final class FieldApiPaths {
   static const authUnlock = '/field/auth/unlock';
   static const authSession = '/field/auth/session';
 
+  // Authenticated officer/admin preferences
+  static const adminPreferences = '/admin/preferences';
+
   // Dashboard & telemetry
   static const dashboard = '/field/dashboard';
   static const dashboardTelemetry = '/field/dashboard/telemetry';

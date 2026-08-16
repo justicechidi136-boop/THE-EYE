@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:the_eye_flutter_l10n/the_eye_locales.dart';
 
-import 'l10n/field_locale_store.dart';
 import 'l10n/generated/field_localizations.dart';
 import 'screens/approval_pending_screen.dart';
 import 'screens/assignments/assignments_screen.dart';
@@ -18,6 +17,7 @@ import 'screens/device_status_screen.dart';
 import 'screens/drone/drone_monitor_screen.dart';
 import 'screens/launcher/device_lock_screen.dart';
 import 'screens/launcher/launcher_shell_gate.dart';
+import 'screens/language_region_screen.dart';
 import 'screens/locked_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/pair_device_screen.dart';
@@ -62,7 +62,6 @@ class TheEyeFieldOpsApp extends StatefulWidget {
 class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
   final FieldAppServices _services = FieldAppServices();
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
-  final TheEyeLocaleController _localeController = TheEyeLocaleController();
 
   @override
   void initState() {
@@ -71,19 +70,15 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    unawaited(_hydrateLocale());
-  }
-
-  Future<void> _hydrateLocale() async {
-    final locale = await FieldLocaleStore(
-      _services.session,
-    ).load(deviceLocales: PlatformDispatcher.instance.locales);
-    _localeController.setLocale(locale);
+    unawaited(
+      _services.accountLocale.hydrate(
+        deviceLocales: PlatformDispatcher.instance.locales,
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _localeController.dispose();
     _services.dispose();
     super.dispose();
   }
@@ -91,13 +86,13 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _localeController,
+      animation: _services.accountLocale.controller,
       builder:
           (context, _) => MaterialApp(
             title: 'THE EYE Field Ops',
             debugShowCheckedModeBanner: false,
             theme: buildFieldTheme(),
-            locale: _localeController.locale,
+            locale: _services.accountLocale.locale,
             supportedLocales: TheEyeLocaleCatalog.supportedLocales,
             localizationsDelegates: const [
               FieldLocalizations.delegate,
@@ -153,6 +148,11 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
                 case FieldRoutes.deviceStatus:
                   return _page(
                     DeviceStatusScreen(services: _services),
+                    settings,
+                  );
+                case FieldRoutes.languageRegion:
+                  return _page(
+                    LanguageRegionScreen(services: _services),
                     settings,
                   );
                 case FieldRoutes.unauthorized:

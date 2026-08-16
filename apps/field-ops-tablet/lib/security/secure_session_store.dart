@@ -4,8 +4,8 @@ class SecureSessionStore {
   SecureSessionStore({
     FlutterSecureStorage? secureStorage,
     Map<String, String>? memory,
-  })  : _secure = secureStorage ?? const FlutterSecureStorage(),
-        _memory = memory;
+  }) : _secure = secureStorage ?? const FlutterSecureStorage(),
+       _memory = memory;
 
   static const _accessTokenKey = 'field.access_token';
   static const _refreshTokenKey = 'field.refresh_token';
@@ -67,6 +67,11 @@ class SecureSessionStore {
 
   Future<void> saveAccessToken(String accessToken) =>
       _write(_accessTokenKey, accessToken);
+
+  Future<void> savePreferredLocale(String preferredLocale) =>
+      _write(_preferredLocaleKey, preferredLocale);
+
+  Future<void> clearPreferredLocale() => _delete(_preferredLocaleKey);
 
   Future<void> setLocked(bool locked) =>
       _write(_lockedKey, locked ? 'true' : 'false');

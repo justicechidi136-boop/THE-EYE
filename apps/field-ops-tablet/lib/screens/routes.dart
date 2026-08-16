@@ -9,6 +9,7 @@ abstract final class FieldRoutes {
   static const launcherHome = '/launcher';
   static const deviceLock = '/device-lock';
   static const deviceStatus = '/device-status';
+  static const languageRegion = '/language-region';
   static const unauthorized = '/unauthorized';
 
   // Sprint 2 operational routes

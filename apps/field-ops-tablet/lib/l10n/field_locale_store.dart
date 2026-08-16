@@ -16,4 +16,11 @@ class FieldLocaleStore {
       deviceLocales: deviceLocales,
     );
   }
+
+  Future<String?> cachedLocaleCode() => _session.readPreferredLocale();
+
+  Future<void> saveLocaleCode(String code) =>
+      _session.savePreferredLocale(code);
+
+  Future<void> clearLocaleCode() => _session.clearPreferredLocale();
 }
