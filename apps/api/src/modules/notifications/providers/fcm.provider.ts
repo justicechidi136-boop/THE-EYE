@@ -163,6 +163,14 @@ export class FcmProvider implements OnModuleInit {
                 notificationId: payload.notificationId ?? "",
                 type: payload.type ?? "",
                 priority: payload.priority ?? "Normal",
+                locale:
+                  typeof storedMetadata.notificationLocale === "string"
+                    ? storedMetadata.notificationLocale
+                    : payload.locale ?? "",
+                templateKey:
+                  typeof storedMetadata.notificationTemplateKey === "string"
+                    ? storedMetadata.notificationTemplateKey
+                    : payload.templateKey ?? "",
                 incidentId: payload.incidentId ?? "",
                 broadcastId: payload.broadcastId ?? "",
                 route: routing.destination,

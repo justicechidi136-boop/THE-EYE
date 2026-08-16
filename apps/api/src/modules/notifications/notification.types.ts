@@ -9,6 +9,8 @@ export type NotificationDispatchPayload = {
   channel?: NotificationChannel | string;
   title: string;
   body: string;
+  locale?: string;
+  templateKey?: string;
   type?: string;
   priority?: string;
   phone?: string;
