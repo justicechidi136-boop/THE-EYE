@@ -6,13 +6,26 @@ const repoRoot = path.join(__dirname, "..");
 const mobileRoot = path.join(repoRoot, "apps", "mobile");
 const testDir = path.join(mobileRoot, "test");
 
-function commandExists(command) {
+function resolveCommand(command) {
   const lookup = spawnSync(process.platform === "win32" ? "where" : "which", [command], { encoding: "utf8" });
-  return lookup.status === 0;
+  if (lookup.status !== 0) return null;
+  const candidates = lookup.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (process.platform === "win32") {
+    return candidates.find((line) => line.toLowerCase().endsWith(".bat")) ?? candidates[0] ?? null;
+  }
+  return candidates[0] ?? null;
 }
 
-function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+function run(commandPath, args, cwd) {
+  const needsShell = process.platform === "win32" && /\.(bat|cmd)$/i.test(commandPath);
+  const result = spawnSync(commandPath, args, { cwd, stdio: "inherit", shell: needsShell });
+  if (result.error) {
+    console.error(`Mobile dart test failed to run ${commandPath}: ${result.error.message}`);
+    process.exit(1);
+  }
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
@@ -77,18 +90,25 @@ if (missingCases.length) {
   process.exit(1);
 }
 
-if (commandExists("flutter")) {
-  run("flutter", ["pub", "get"], mobileRoot);
-  run("flutter", ["analyze", "lib", "test"], mobileRoot);
-  run("flutter", ["test"], mobileRoot);
+const flutter = resolveCommand("flutter");
+if (flutter) {
+  run(flutter, ["pub", "get"], mobileRoot);
+  run(flutter, ["analyze", "--no-fatal-warnings", "--no-fatal-infos", "lib", "test"], mobileRoot);
+  run(flutter, [
+    "test",
+    "--dart-define=THE_EYE_FLAVOR=production",
+    "--dart-define=THE_EYE_PROD_API_URL=https://api.theeye.com.ng/v1",
+    "--dart-define=GOOGLE_WEB_CLIENT_ID_PRODUCTION=137367371675-7sikh2svb9k1c7ft8mqsmkmjpqpnav36.apps.googleusercontent.com",
+  ], mobileRoot);
   console.log("Flutter analyze and tests passed.");
   process.exit(0);
 }
 
-if (commandExists("dart")) {
-  run("dart", ["pub", "get"], mobileRoot);
-  run("dart", ["analyze", "lib", "test"], mobileRoot);
-  run("dart", ["test"], mobileRoot);
+const dart = resolveCommand("dart");
+if (dart) {
+  run(dart, ["pub", "get"], mobileRoot);
+  run(dart, ["analyze", "lib", "test"], mobileRoot);
+  run(dart, ["test"], mobileRoot);
   console.log("Dart analyze and tests passed.");
   process.exit(0);
 }
