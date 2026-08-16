@@ -16,3 +16,4 @@ export * from "./agency-registry";
 export * from "./public-reference";
 export * from "./citizen-presentation";
 export * from "./language-region";
+export * from "./language-ai-contract";
