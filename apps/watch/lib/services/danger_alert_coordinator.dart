@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../alerts/danger_alert_models.dart';
 import '../alerts/danger_alert_templates.dart';
+import '../models/watch_safety_status.dart';
 import '../services/alert_version_tracker.dart';
 import '../services/audio_output_service.dart';
 import '../services/danger_alert_signature_verifier.dart';
@@ -9,7 +12,8 @@ import '../services/quiet_hours_service.dart';
 import 'danger_alert_tts_service.dart';
 import 'vibration_service.dart';
 
-typedef DangerAlertNavigateHandler = Future<void> Function(DangerAlertPayload payload);
+typedef DangerAlertNavigateHandler = Future<void> Function(
+    DangerAlertPayload payload);
 
 enum DangerAlertTelemetryEvent {
   received,
@@ -31,7 +35,8 @@ typedef DangerAlertTelemetryHandler = void Function(
   String? reason,
 });
 
-typedef DangerAlertFeatureFlagChecker = bool Function(String flag, {bool fallback});
+typedef DangerAlertFeatureFlagChecker = bool Function(String flag,
+    {bool fallback});
 
 class DangerAlertCoordinator {
   DangerAlertCoordinator({
@@ -50,7 +55,8 @@ class DangerAlertCoordinator {
         _quietHours = quietHours ?? QuietHoursService(),
         _audioOutput = audioOutput ?? AudioOutputService(),
         _tts = tts ?? DangerAlertTtsService(),
-        _signatureVerifier = signatureVerifier ?? DangerAlertSignatureVerifier(),
+        _signatureVerifier =
+            signatureVerifier ?? DangerAlertSignatureVerifier(),
         _onNavigate = onNavigate,
         _onTelemetry = onTelemetry,
         _isFeatureEnabled = isFeatureEnabled,
@@ -71,6 +77,8 @@ class DangerAlertCoordinator {
       const WatchAccessibilityPreferences();
 
   DangerAlertPayload? _activePayload;
+  final ValueNotifier<WatchSafetyStatus> safetyStatus =
+      ValueNotifier<WatchSafetyStatus>(WatchSafetyStatus.safe);
   Timer? _repeatTimer;
   int _repeatIndex = 0;
   bool _muted = false;
@@ -84,8 +92,13 @@ class DangerAlertCoordinator {
     _preferences = preferences;
   }
 
+  void restoreSafetyStatus(WatchSafetyStatus status) {
+    safetyStatus.value = status;
+  }
+
   Future<void> dispose() async {
     _repeatTimer?.cancel();
+    safetyStatus.dispose();
     await _tts.stop();
   }
 
@@ -93,6 +106,7 @@ class DangerAlertCoordinator {
     _emit(DangerAlertTelemetryEvent.received, alertId: payload.alertId);
 
     if (payload.isExpired) {
+      safetyStatus.value = WatchSafetyStatus.safe;
       _emit(DangerAlertTelemetryEvent.expired, alertId: payload.alertId);
       return;
     }
@@ -139,6 +153,7 @@ class DangerAlertCoordinator {
     }
 
     _activePayload = payload;
+    safetyStatus.value = WatchSafetyStatus.fromTrustedPayload(payload);
     _repeatIndex = 0;
     _muted = false;
     await _versionTracker?.record(payload);
@@ -148,6 +163,7 @@ class DangerAlertCoordinator {
 
   Future<void> _applyUpdate(DangerAlertPayload payload) async {
     _activePayload = payload;
+    safetyStatus.value = WatchSafetyStatus.fromTrustedPayload(payload);
     _repeatIndex = 0;
     await _versionTracker?.record(payload);
     final vibrate = payload.isEscalation;
@@ -163,6 +179,7 @@ class DangerAlertCoordinator {
       await _versionTracker?.markAcknowledged(payload);
     }
     _activePayload = null;
+    safetyStatus.value = WatchSafetyStatus.safe;
     _emit(DangerAlertTelemetryEvent.acknowledged, alertId: payload?.alertId);
   }
 
@@ -186,6 +203,7 @@ class DangerAlertCoordinator {
       await _vibration.playPattern(VibrationPattern.clear);
     }
     _activePayload = null;
+    safetyStatus.value = WatchSafetyStatus.safe;
   }
 
   Future<void> _present(
@@ -214,8 +232,10 @@ class DangerAlertCoordinator {
       }
     }
     if (speak && !_muted) {
-      if (!(_isFeatureEnabled?.call('WATCH_LOCAL_TTS', fallback: true) ?? true)) {
-        _emit(DangerAlertTelemetryEvent.ttsUnavailable, alertId: payload.alertId, reason: 'local_tts_disabled');
+      if (!(_isFeatureEnabled?.call('WATCH_LOCAL_TTS', fallback: true) ??
+          true)) {
+        _emit(DangerAlertTelemetryEvent.ttsUnavailable,
+            alertId: payload.alertId, reason: 'local_tts_disabled');
         return;
       }
       await _speak(payload, quietHours: quiet);
@@ -248,14 +268,19 @@ class DangerAlertCoordinator {
     if (_muted) return;
 
     final quiet = quietHours ??
-        _quietHours.evaluate(preferences: _preferences, priority: payload.priority);
+        _quietHours.evaluate(
+            preferences: _preferences, priority: payload.priority);
     if (!force && !quiet.allowSpeech) return;
 
-    final language = payload.languageHint ?? _preferences.preferredSpokenLanguage;
+    final language =
+        payload.languageHint ?? _preferences.preferredSpokenLanguage;
     final speechText = DangerAlertTemplates.resolve(
       alertCode: payload.alertCode,
       languageCode: language,
-      params: (areaName: payload.areaName, distanceMeters: payload.distanceMeters),
+      params: (
+        areaName: payload.areaName,
+        distanceMeters: payload.distanceMeters
+      ),
     );
 
     if (!force && !await _shouldSpeak(payload)) return;
@@ -270,12 +295,15 @@ class DangerAlertCoordinator {
 
     switch (outcome) {
       case DangerAlertTtsOutcome.unavailable:
-        _emit(DangerAlertTelemetryEvent.ttsUnavailable, alertId: payload.alertId);
+        _emit(DangerAlertTelemetryEvent.ttsUnavailable,
+            alertId: payload.alertId);
       case DangerAlertTtsOutcome.fallbackLanguage:
-        _emit(DangerAlertTelemetryEvent.fallbackLanguage, alertId: payload.alertId);
+        _emit(DangerAlertTelemetryEvent.fallbackLanguage,
+            alertId: payload.alertId);
       case DangerAlertTtsOutcome.completed:
       case DangerAlertTtsOutcome.started:
-        _emit(DangerAlertTelemetryEvent.speechCompleted, alertId: payload.alertId);
+        _emit(DangerAlertTelemetryEvent.speechCompleted,
+            alertId: payload.alertId);
       case DangerAlertTtsOutcome.skipped:
         break;
     }
@@ -285,7 +313,8 @@ class DangerAlertCoordinator {
     if (!_preferences.spokenDangerAlertsEnabled) return false;
 
     final headphonePrivacyEnabled =
-        _isFeatureEnabled?.call('WATCH_HEADPHONE_PRIVACY', fallback: true) ?? true;
+        _isFeatureEnabled?.call('WATCH_HEADPHONE_PRIVACY', fallback: true) ??
+            true;
     if (!headphonePrivacyEnabled) return true;
 
     final headphones = await _audioOutput.isHeadphoneConnected();
@@ -333,7 +362,8 @@ class DangerAlertCoordinator {
     );
   }
 
-  void _emit(DangerAlertTelemetryEvent event, {String? alertId, String? reason}) {
+  void _emit(DangerAlertTelemetryEvent event,
+      {String? alertId, String? reason}) {
     _onTelemetry?.call(event, alertId: alertId, reason: reason);
   }
 }

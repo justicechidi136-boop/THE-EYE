@@ -6,8 +6,8 @@ import '../config/watch_flavor.dart';
 import '../design_system/design_system.dart';
 import '../l10n/generated/watch_localizations.dart';
 import '../models/emergency_mode.dart';
-import '../models/connectivity_mode.dart';
 import '../models/sos_event.dart';
+import '../models/watch_safety_status.dart';
 import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
@@ -68,26 +68,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  WatchStatusTone _statusTone() {
-    final mode = widget.services.connectivity.activeMode;
-    if (mode == WatchConnectivityMode.offline) return WatchStatusTone.danger;
-    if (_isDangerFace()) return WatchStatusTone.warning;
-    return WatchStatusTone.safe;
+  Color _safetyColor(WatchSafetyStatus status) {
+    return switch (status.level) {
+      WatchSafetyLevel.danger => EyeColors.danger,
+      WatchSafetyLevel.highAlert => EyeColors.orange,
+      WatchSafetyLevel.safe => EyeColors.green,
+    };
   }
 
-  String _statusLabel() {
-    final mode = widget.services.connectivity.activeMode;
-    if (mode == WatchConnectivityMode.offline) return 'Offline';
-    if (mode == WatchConnectivityMode.standaloneCellular) {
-      return 'LTE Standalone';
+  IconData _safetyIcon(WatchSafetyStatus status) {
+    return switch (status.level) {
+      WatchSafetyLevel.danger => Icons.warning_amber_rounded,
+      WatchSafetyLevel.highAlert => Icons.report_problem_outlined,
+      WatchSafetyLevel.safe => Icons.check_circle_outline,
+    };
+  }
+
+  String _safetyTitle(WatchLocalizations l10n, WatchSafetyStatus status) {
+    return switch (status.level) {
+      WatchSafetyLevel.danger => l10n.danger,
+      WatchSafetyLevel.highAlert => l10n.highAlert,
+      WatchSafetyLevel.safe => l10n.areaSafe,
+    };
+  }
+
+  String _safetyMessage(WatchLocalizations l10n, WatchSafetyStatus status) {
+    return switch (status.level) {
+      WatchSafetyLevel.danger =>
+        WatchDangerLabels.nearbyLabel(l10n, status.dangerCode),
+      WatchSafetyLevel.highAlert => l10n.beCarefulStayAlert,
+      WatchSafetyLevel.safe => l10n.stayAlertSuspiciousActivity,
+    };
+  }
+
+  String? _safetyMeta(WatchSafetyStatus status) {
+    final parts = <String>[];
+    final area = status.areaName?.trim();
+    if (area != null && area.isNotEmpty) parts.add(area);
+    final distance = status.distanceMeters;
+    if (distance != null && distance > 0) {
+      parts.add(distance >= 1000
+          ? '${(distance / 1000).toStringAsFixed(1)} km'
+          : '$distance m');
     }
-    if (_isDangerFace()) return 'DANGER NEARBY';
-    return 'Area: Moderate Risk';
-  }
-
-  bool _isDangerFace() {
-    final mode = widget.services.connectivity.activeMode;
-    return _alertCount > 0 && mode != WatchConnectivityMode.offline;
+    return parts.isEmpty ? null : parts.join(' - ');
   }
 
   String _modeBadge() {
@@ -120,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (_) => AppDrawerScreen(launcher: widget.launcher),
             ),
           ),
-          backgroundColor: _isDangerFace() ? EyeTokens.surface : EyeTokens.dark,
+          backgroundColor: EyeTokens.dark,
           child: Column(
             children: [
               GestureDetector(
@@ -138,7 +162,16 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Text(formatWatchDate(now), style: EyeTokens.dateLabel),
               const SizedBox(height: EyeTokens.spaceSm),
-              WatchStatusChip(label: _statusLabel(), tone: _statusTone()),
+              ValueListenableBuilder<WatchSafetyStatus>(
+                valueListenable: widget.services.dangerAlerts.safetyStatus,
+                builder: (context, safety, _) => _SafetyStatusCard(
+                  icon: _safetyIcon(safety),
+                  color: _safetyColor(safety),
+                  title: _safetyTitle(l10n, safety),
+                  message: _safetyMessage(l10n, safety),
+                  meta: _safetyMeta(safety),
+                ),
+              ),
               const SizedBox(height: EyeTokens.spaceXs),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -266,6 +299,78 @@ class _ModeBadge extends StatelessWidget {
         label,
         style:
             TextStyle(color: color, fontSize: 7, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _SafetyStatusCard extends StatelessWidget {
+  const _SafetyStatusCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.message,
+    this.meta,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String message;
+  final String? meta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: EyeColors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (meta != null)
+                  Text(
+                    meta!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: EyeColors.muted,
+                      fontSize: 9,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

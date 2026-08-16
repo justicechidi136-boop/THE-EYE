@@ -157,6 +157,204 @@ abstract class WatchLocalizations {
   /// In en, this message translates to:
   /// **'Apps'**
   String get apps;
+
+  /// No description provided for @selectLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Select language'**
+  String get selectLanguage;
+
+  /// No description provided for @preferredLanguageSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Language saved'**
+  String get preferredLanguageSaved;
+
+  /// No description provided for @areaSafe.
+  ///
+  /// In en, this message translates to:
+  /// **'Area safe'**
+  String get areaSafe;
+
+  /// No description provided for @stayAlertSuspiciousActivity.
+  ///
+  /// In en, this message translates to:
+  /// **'Stay alert for suspicious activity.'**
+  String get stayAlertSuspiciousActivity;
+
+  /// No description provided for @highAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'High alert'**
+  String get highAlert;
+
+  /// No description provided for @beCarefulStayAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Be careful and stay alert.'**
+  String get beCarefulStayAlert;
+
+  /// No description provided for @danger.
+  ///
+  /// In en, this message translates to:
+  /// **'Danger'**
+  String get danger;
+
+  /// No description provided for @nearby.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby'**
+  String get nearby;
+
+  /// No description provided for @areaCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Area cleared'**
+  String get areaCleared;
+
+  /// No description provided for @dangerAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Danger alert'**
+  String get dangerAlert;
+
+  /// No description provided for @iUnderstand.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand'**
+  String get iUnderstand;
+
+  /// No description provided for @hearAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Hear again'**
+  String get hearAgain;
+
+  /// No description provided for @muteAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute alert'**
+  String get muteAlert;
+
+  /// No description provided for @voiceUnavailableShowingText.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice unavailable - showing text'**
+  String get voiceUnavailableShowingText;
+
+  /// No description provided for @dangerAlertReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Danger alert received'**
+  String get dangerAlertReceived;
+
+  /// No description provided for @dangerWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Danger warning'**
+  String get dangerWarning;
+
+  /// No description provided for @alertAcknowledged.
+  ///
+  /// In en, this message translates to:
+  /// **'Alert acknowledged'**
+  String get alertAcknowledged;
+
+  /// No description provided for @dangerTypeArmedRobbery.
+  ///
+  /// In en, this message translates to:
+  /// **'Armed robbery'**
+  String get dangerTypeArmedRobbery;
+
+  /// No description provided for @dangerTypeKidnapping.
+  ///
+  /// In en, this message translates to:
+  /// **'Kidnapping'**
+  String get dangerTypeKidnapping;
+
+  /// No description provided for @dangerTypeViolentAttack.
+  ///
+  /// In en, this message translates to:
+  /// **'Violent attack'**
+  String get dangerTypeViolentAttack;
+
+  /// No description provided for @dangerTypeActiveShooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Active shooter'**
+  String get dangerTypeActiveShooter;
+
+  /// No description provided for @dangerTypeCommunalViolence.
+  ///
+  /// In en, this message translates to:
+  /// **'Communal violence'**
+  String get dangerTypeCommunalViolence;
+
+  /// No description provided for @dangerTypeTerroristThreat.
+  ///
+  /// In en, this message translates to:
+  /// **'Terrorist threat'**
+  String get dangerTypeTerroristThreat;
+
+  /// No description provided for @dangerTypeFire.
+  ///
+  /// In en, this message translates to:
+  /// **'Fire'**
+  String get dangerTypeFire;
+
+  /// No description provided for @dangerTypeFlood.
+  ///
+  /// In en, this message translates to:
+  /// **'Flood'**
+  String get dangerTypeFlood;
+
+  /// No description provided for @dangerTypeGasLeak.
+  ///
+  /// In en, this message translates to:
+  /// **'Gas leak'**
+  String get dangerTypeGasLeak;
+
+  /// No description provided for @dangerTypeHazardousArea.
+  ///
+  /// In en, this message translates to:
+  /// **'Hazardous area'**
+  String get dangerTypeHazardousArea;
+
+  /// No description provided for @dangerTypeRoadDanger.
+  ///
+  /// In en, this message translates to:
+  /// **'Road danger'**
+  String get dangerTypeRoadDanger;
+
+  /// No description provided for @dangerTypeBuildingCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Building collapse'**
+  String get dangerTypeBuildingCollapse;
+
+  /// No description provided for @dangerTypeCivilDisturbance.
+  ///
+  /// In en, this message translates to:
+  /// **'Civil disturbance'**
+  String get dangerTypeCivilDisturbance;
+
+  /// No description provided for @dangerTypePoliceAdvisory.
+  ///
+  /// In en, this message translates to:
+  /// **'Police advisory'**
+  String get dangerTypePoliceAdvisory;
+
+  /// No description provided for @dangerTypeMissingChild.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing child'**
+  String get dangerTypeMissingChild;
+
+  /// No description provided for @dangerTypeEvacuation.
+  ///
+  /// In en, this message translates to:
+  /// **'Evacuation'**
+  String get dangerTypeEvacuation;
 }
 
 class _WatchLocalizationsDelegate

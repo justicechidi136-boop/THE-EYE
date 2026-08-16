@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../alerts/danger_alert_models.dart';
-import '../alerts/danger_alert_templates.dart';
+import '../l10n/generated/watch_localizations.dart';
+import '../models/watch_safety_status.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
 import '../widgets/watch_ui.dart';
@@ -29,37 +30,48 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
   void initState() {
     super.initState();
     _languageFallback = widget.services.dangerAlerts.tts.languageUnavailable;
-    SemanticsService.sendAnnouncement(
-      View.of(context),
-      'Danger alert received',
-      TextDirection.ltr,
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        WatchLocalizations.of(context).dangerAlertReceived,
+        Directionality.of(context),
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final payload = widget.payload;
-    final title = payload.displayTitle ??
-        DangerAlertDisplayLabels.titleFor(payload.alertCode);
-    final subtitle = DangerAlertDisplayLabels.subtitleFor(payload);
+    final l10n = WatchLocalizations.of(context);
+    final title = payload.allClear ? l10n.areaCleared : l10n.dangerAlert;
+    final subtitle = payload.allClear
+        ? l10n.areaCleared
+        : WatchDangerLabels.nearbyLabel(l10n, payload.alertCode);
+    final meta = _alertMeta(payload);
     final isCritical = payload.priority == DangerAlertPriority.critical;
 
     return WatchScreenShell(
       child: Semantics(
-        label: 'Danger alert. $title. $subtitle',
+        label: '${l10n.dangerAlert}. $title. $subtitle',
         child: Column(
           children: [
             const SizedBox(height: 8),
             Icon(
-              payload.allClear ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+              payload.allClear
+                  ? Icons.check_circle_outline
+                  : Icons.warning_amber_rounded,
               color: payload.allClear ? EyeColors.green : EyeColors.danger,
               size: 42,
-              semanticLabel: payload.allClear ? 'Area cleared' : 'Danger warning',
+              semanticLabel:
+                  payload.allClear ? l10n.areaCleared : l10n.dangerWarning,
             ),
             const SizedBox(height: 10),
             Text(
               title,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: EyeColors.white,
                 fontSize: isCritical ? 16 : 14,
@@ -71,33 +83,49 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
             Text(
               subtitle,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: EyeColors.muted,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),
+            if (meta != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                meta,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: EyeColors.muted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
             if (_languageFallback) ...[
               const SizedBox(height: 6),
-              const Text(
-                'Voice unavailable — showing text',
+              Text(
+                l10n.voiceUnavailableShowingText,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: EyeColors.orange, fontSize: 10),
+                style: const TextStyle(color: EyeColors.orange, fontSize: 10),
               ),
             ],
             const Spacer(),
             WatchPrimaryButton(
-              label: 'I understand',
+              label: l10n.iUnderstand,
               onPressed: _acknowledged ? null : _acknowledge,
             ),
             const SizedBox(height: 8),
             WatchOutlineButton(
-              label: 'Hear again',
+              label: l10n.hearAgain,
               onPressed: () => widget.services.dangerAlerts.replayActive(),
             ),
             const SizedBox(height: 8),
             WatchOutlineButton(
-              label: 'Mute alert',
+              label: l10n.muteAlert,
               onPressed: () async {
                 final navigator = Navigator.of(context);
                 await widget.services.dangerAlerts.muteActive();
@@ -120,9 +148,22 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
     if (!mounted) return;
     SemanticsService.sendAnnouncement(
       view,
-      'Alert acknowledged',
-      TextDirection.ltr,
+      WatchLocalizations.of(context).alertAcknowledged,
+      Directionality.of(context),
     );
     navigator.pop();
+  }
+
+  String? _alertMeta(DangerAlertPayload payload) {
+    final parts = <String>[];
+    final area = payload.areaName?.trim();
+    if (area != null && area.isNotEmpty) parts.add(area);
+    final distance = payload.distanceMeters;
+    if (distance != null && distance > 0) {
+      parts.add(distance >= 1000
+          ? '${(distance / 1000).toStringAsFixed(1)} km'
+          : '$distance m');
+    }
+    return parts.isEmpty ? null : parts.join(' - ');
   }
 }

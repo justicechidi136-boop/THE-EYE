@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../alerts/danger_alert_models.dart';
 import '../api/watch_api_client.dart';
 import '../api/watch_api_paths.dart';
 import '../pairing/companion_relay_service.dart';
 import '../storage/secure_credential_store.dart';
+import '../models/watch_safety_status.dart';
 import 'alert_version_tracker.dart';
 import 'audio_output_service.dart';
 import 'danger_alert_coordinator.dart';
@@ -67,7 +70,8 @@ class DangerAlertService {
       tts: tts,
       isFeatureEnabled: _featureFlags.isEnabled,
       onTelemetry: (event, {alertId, reason}) {
-        unawaited(_forwardCoordinatorTelemetry(event, alertId: alertId, reason: reason));
+        unawaited(_forwardCoordinatorTelemetry(event,
+            alertId: alertId, reason: reason));
       },
     );
     _coordinator.onNavigate = null;
@@ -86,10 +90,14 @@ class DangerAlertService {
   }
 
   DangerAlertTtsService get tts => _coordinator.tts;
+  ValueNotifier<WatchSafetyStatus> get safetyStatus =>
+      _coordinator.safetyStatus;
 
   Future<void> initialize() async {
     final cached = await _preferences.loadAccessibilityPreferences();
     _coordinator.updatePreferences(cached);
+    _coordinator
+        .restoreSafetyStatus(await _preferences.loadActiveSafetyStatus());
     await _featureFlags.syncFromServer();
     await syncPreferencesFromServer();
 
@@ -129,14 +137,16 @@ class DangerAlertService {
       );
       final preferencesJson = response['preferences'];
       if (preferencesJson is Map<String, dynamic>) {
-        final preferences = WatchAccessibilityPreferences.fromJson(preferencesJson);
+        final preferences =
+            WatchAccessibilityPreferences.fromJson(preferencesJson);
         _coordinator.updatePreferences(preferences);
         await _preferences.saveAccessibilityPreferences(preferences);
       }
     } catch (_) {}
   }
 
-  Future<void> savePreferences(WatchAccessibilityPreferences preferences) async {
+  Future<void> savePreferences(
+      WatchAccessibilityPreferences preferences) async {
     _coordinator.updatePreferences(preferences);
     await _preferences.saveAccessibilityPreferences(preferences);
 
@@ -162,11 +172,14 @@ class DangerAlertService {
     }
     _telemetryPayload = payload;
     await _coordinator.handleIncoming(payload);
-    await _recordTelemetry(payload, 'received', channel: payload.deliverySource.name);
+    await _preferences.saveActiveSafetyStatus(_coordinator.safetyStatus.value);
+    await _recordTelemetry(payload, 'received',
+        channel: payload.deliverySource.name);
   }
 
   Future<void> acknowledgeActive(DangerAlertPayload payload) async {
     await _coordinator.acknowledgeActive();
+    await _preferences.saveActiveSafetyStatus(WatchSafetyStatus.safe);
     await _companionRelay.sendAcknowledgement(payload.safetyAlertId);
     if (_featureFlags.isEnabled('WATCH_ALERT_ACKNOWLEDGEMENT')) {
       await _queueOrSendAcknowledgement(payload);
@@ -255,7 +268,8 @@ class DangerAlertService {
           'event': event,
           if (channel != null) 'channel': channel,
           if (reason != null) 'reason': reason,
-          'language': payload.languageHint ?? _coordinator.preferences.preferredSpokenLanguage,
+          'language': payload.languageHint ??
+              _coordinator.preferences.preferredSpokenLanguage,
         },
       );
     } catch (_) {}

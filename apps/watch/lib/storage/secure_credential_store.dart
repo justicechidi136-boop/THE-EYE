@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../alerts/danger_alert_models.dart';
 import '../models/alert.dart';
+import '../models/watch_safety_status.dart';
 import '../models/offline_event.dart';
 
 class SecureCredentialStore {
@@ -163,6 +164,7 @@ class PreferencesStore {
   static const _activeEmergencyTrackingKey = 'watch.active_emergency_tracking';
   static const _accessibilityPrefsKey = 'watch.accessibility_preferences';
   static const _dangerAckQueueKey = 'watch.danger_alert_ack_queue';
+  static const _activeSafetyStatusKey = 'watch.active_safety_status';
 
   Future<void> saveActiveEmergencyTracking({
     required bool active,
@@ -322,5 +324,30 @@ class PreferencesStore {
   Future<void> saveQueuedDangerAlertAcks(List<String> alertIds) async {
     final store = await prefs;
     await store.setString(_dangerAckQueueKey, jsonEncode(alertIds));
+  }
+
+  Future<WatchSafetyStatus> loadActiveSafetyStatus() async {
+    final store = await prefs;
+    final raw = store.getString(_activeSafetyStatusKey);
+    if (raw == null || raw.isEmpty) return WatchSafetyStatus.safe;
+    try {
+      final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      return WatchSafetyStatus.fromStorageJson(decoded);
+    } catch (_) {
+      await store.remove(_activeSafetyStatusKey);
+      return WatchSafetyStatus.safe;
+    }
+  }
+
+  Future<void> saveActiveSafetyStatus(WatchSafetyStatus status) async {
+    final store = await prefs;
+    if (!status.isLive) {
+      await store.remove(_activeSafetyStatusKey);
+      return;
+    }
+    await store.setString(
+      _activeSafetyStatusKey,
+      jsonEncode(status.toStorageJson()),
+    );
   }
 }
