@@ -12,6 +12,8 @@ export type TranscriptionResult = {
   languageDetectionConfidence?: number;
   transcriptionConfidence?: number;
   providerReference?: string;
+  model?: string;
+  sourceHash?: string;
   processingDurationMs?: number;
   lowConfidence?: boolean;
 };

@@ -33,6 +33,12 @@ import { CreateNotificationDto, DeliveryReceiptDto, NotificationChannel, Registe
 import { bullJobAttempts, bullJobPriority, isEmergencyPriority } from "./notification.types";
 import type { NotificationDispatchJobPayload, NotificationDispatchPayload } from "./notification.types";
 import { isExpiredNotification, mapNotificationInboxItem } from "./notification-inbox.mapper";
+import {
+  groupNotificationRecipientsByLocale,
+  localizeNotification,
+  toNotificationLocalizationMetadata,
+  type NotificationRecipient,
+} from "./notification-localization";
 
 type NotificationInboxQuery = CursorPageQuery & {
   unreadOnly?: boolean;
@@ -67,50 +73,68 @@ export class NotificationsService {
     const channels = dto.channels?.length ? dto.channels : ["push", "in_app"] as NotificationChannel[];
     const priority = dto.priority ?? this.defaultPriority(dto.type);
     const created = [];
+    const groupedRecipients = groupNotificationRecipientsByLocale(recipients);
 
-    for (const recipient of recipients) {
-      for (const channel of channels) {
-        const notification = await this.prisma.notification.create({
-          data: {
-            userId: recipient.userId,
-            adminUserId: recipient.adminUserId,
-            incidentId: dto.incidentId,
-            broadcastId: dto.broadcastId,
-            communityId: dto.communityId,
-            type: dto.type,
-            priority,
-            channel,
-            title: dto.title,
-            body: dto.body,
-            status: "Pending" as never,
-            provider: this.providerForChannel(channel),
-            targetLatitude: dto.latitude,
-            targetLongitude: dto.longitude,
-            targetRadiusMeters: dto.radiusMeters,
-            metadata: { ...(dto.metadata ?? {}), distanceMeters: recipient.distanceMeters ?? null },
-          } as never,
-        });
-        created.push(notification);
-        await this.enqueue({
-          notificationId: notification.id,
-          userId: recipient.userId,
-          adminUserId: recipient.adminUserId,
-          channel,
+    for (const localeRecipients of groupedRecipients.values()) {
+      for (const recipient of localeRecipients) {
+        const localized = localizeNotification({
+          type: dto.type,
           title: dto.title,
           body: dto.body,
-          type: dto.type,
-          priority,
-          broadcastId: dto.broadcastId,
-          incidentId: dto.incidentId,
-          communityId: dto.communityId,
-          provider: this.providerForChannel(channel),
-          deviceId:
-            typeof (dto.metadata as Record<string, unknown> | undefined)?.deviceId === "string"
-              ? String((dto.metadata as Record<string, unknown>).deviceId)
-              : typeof (dto.metadata as Record<string, unknown> | undefined)?.pairedWatchDeviceId === "string"
-                ? String((dto.metadata as Record<string, unknown>).pairedWatchDeviceId)
-                : undefined,
+          metadata: dto.metadata,
+          recipientPreferredLocale: recipient.preferredLocale,
         });
+        const localizedMetadata = {
+          ...(dto.metadata ?? {}),
+          distanceMeters: recipient.distanceMeters ?? null,
+          ...toNotificationLocalizationMetadata(localized),
+        };
+
+        for (const channel of channels) {
+          const notification = await this.prisma.notification.create({
+            data: {
+              userId: recipient.userId,
+              adminUserId: recipient.adminUserId,
+              incidentId: dto.incidentId,
+              broadcastId: dto.broadcastId,
+              communityId: dto.communityId,
+              type: dto.type,
+              priority,
+              channel,
+              title: localized.title,
+              body: localized.body,
+              status: "Pending" as never,
+              provider: this.providerForChannel(channel),
+              targetLatitude: dto.latitude,
+              targetLongitude: dto.longitude,
+              targetRadiusMeters: dto.radiusMeters,
+              metadata: localizedMetadata,
+            } as never,
+          });
+          created.push(notification);
+          await this.enqueue({
+            notificationId: notification.id,
+            userId: recipient.userId,
+            adminUserId: recipient.adminUserId,
+            channel,
+            title: localized.title,
+            body: localized.body,
+            locale: localized.locale,
+            templateKey: localized.templateKey,
+            type: dto.type,
+            priority,
+            broadcastId: dto.broadcastId,
+            incidentId: dto.incidentId,
+            communityId: dto.communityId,
+            provider: this.providerForChannel(channel),
+            deviceId:
+              typeof (dto.metadata as Record<string, unknown> | undefined)?.deviceId === "string"
+                ? String((dto.metadata as Record<string, unknown>).deviceId)
+                : typeof (dto.metadata as Record<string, unknown> | undefined)?.pairedWatchDeviceId === "string"
+                  ? String((dto.metadata as Record<string, unknown>).pairedWatchDeviceId)
+                  : undefined,
+          });
+        }
       }
     }
 
@@ -492,19 +516,33 @@ export class NotificationsService {
     };
   }
 
-  private async resolveRecipients(dto: CreateNotificationDto): Promise<Array<{ userId?: string; adminUserId?: string; distanceMeters?: number }>> {
-    if (dto.userId) return [{ userId: dto.userId }];
-    if (dto.adminUserId) return [{ adminUserId: dto.adminUserId }];
+  private async resolveRecipients(dto: CreateNotificationDto): Promise<NotificationRecipient[]> {
+    if (dto.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: dto.userId },
+        include: { profile: true },
+      });
+      return [{ userId: dto.userId, preferredLocale: user?.profile?.preferredLocale ?? null }];
+    }
+    if (dto.adminUserId) {
+      const admin = await this.prisma.adminUser.findUnique({
+        where: { id: dto.adminUserId },
+        include: { preferences: true },
+      });
+      return [{ adminUserId: dto.adminUserId, preferredLocale: admin?.preferences?.preferredLocale ?? null }];
+    }
     return this.findUsersNear(dto.latitude!, dto.longitude!, dto.radiusMeters!);
   }
 
   private async findUsersNear(latitude: number, longitude: number, radiusMeters: number) {
-    return this.prisma.$queryRaw<Array<{ userId: string; distanceMeters: number }>>`
+    return this.prisma.$queryRaw<Array<{ userId: string; distanceMeters: number; preferredLocale?: string | null }>>`
       WITH latest_user_location AS (
         SELECT DISTINCT ON (u.id)
                u.id AS user_id,
+               up.preferred_locale AS preferred_locale,
                COALESCE(vp.gps_location, i.gps_location, s.gps_location) AS gps_location
           FROM users u
+          LEFT JOIN profiles up ON up.user_id = u.id
           LEFT JOIN volunteer_profiles vp ON vp.user_id = u.id AND vp.gps_location IS NOT NULL
           LEFT JOIN incidents i ON i.reporter_id = u.id AND i.gps_location IS NOT NULL
           LEFT JOIN sos_events s ON s.user_id = u.id AND s.gps_location IS NOT NULL
@@ -513,6 +551,7 @@ export class NotificationsService {
       ),
       nearby_users AS (
         SELECT user_id AS "userId",
+               preferred_locale AS "preferredLocale",
                ST_Distance(
                  gps_location,
                  ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography
