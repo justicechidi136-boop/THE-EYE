@@ -138,6 +138,10 @@ assert(
   deployWorkflow.includes("export RUN_STORAGE_PROOF=${{ github.event.inputs.run_storage_proof }}"),
   "deploy workflow must export RUN_STORAGE_PROOF",
 );
+assert(
+  deployWorkflow.includes("export THE_EYE_APP_ENV='${{ vars.THE_EYE_APP_ENV }}'"),
+  "deploy workflow must export THE_EYE_APP_ENV into the staging SSH script",
+);
 assert(!deployWorkflow.includes("script_stop: true"), "deploy workflow must not reintroduce script_stop");
 assert(deployWorkflow.includes("set -euo pipefail"), "deploy SSH script must retain set -euo pipefail");
 
