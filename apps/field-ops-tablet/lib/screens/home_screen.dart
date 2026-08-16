@@ -115,40 +115,40 @@ class _HomeScreenState extends State<HomeScreen> {
                 selectedIcon: const Icon(Icons.dashboard),
                 label: Text(l10n.dashboard),
               ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.map_outlined),
-                selectedIcon: Icon(Icons.map),
-                label: Text('Patrol'),
+              NavigationRailDestination(
+                icon: const Icon(Icons.map_outlined),
+                selectedIcon: const Icon(Icons.map),
+                label: Text(l10n.patrol),
               ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.fact_check_outlined),
-                selectedIcon: Icon(Icons.fact_check),
-                label: Text('Checkpoint'),
+              NavigationRailDestination(
+                icon: const Icon(Icons.fact_check_outlined),
+                selectedIcon: const Icon(Icons.fact_check),
+                label: Text(l10n.checkpoint),
               ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.assignment_outlined),
-                selectedIcon: Icon(Icons.assignment),
-                label: Text('Assignments'),
+              NavigationRailDestination(
+                icon: const Icon(Icons.assignment_outlined),
+                selectedIcon: const Icon(Icons.assignment),
+                label: Text(l10n.assignments),
               ),
               const NavigationRailDestination(
                 icon: Icon(Icons.search_outlined),
                 selectedIcon: Icon(Icons.search),
                 label: Text('BOLO'),
               ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.flight_outlined),
-                selectedIcon: Icon(Icons.flight),
-                label: Text('Drone'),
+              NavigationRailDestination(
+                icon: const Icon(Icons.flight_outlined),
+                selectedIcon: const Icon(Icons.flight),
+                label: Text(l10n.drone),
               ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.forum_outlined),
-                selectedIcon: Icon(Icons.forum),
-                label: Text('Comms'),
+              NavigationRailDestination(
+                icon: const Icon(Icons.forum_outlined),
+                selectedIcon: const Icon(Icons.forum),
+                label: Text(l10n.comms),
               ),
-              const NavigationRailDestination(
-                icon: Icon(Icons.devices_other_outlined),
-                selectedIcon: Icon(Icons.devices_other),
-                label: Text('Device'),
+              NavigationRailDestination(
+                icon: const Icon(Icons.devices_other_outlined),
+                selectedIcon: const Icon(Icons.devices_other),
+                label: Text(l10n.device),
               ),
               NavigationRailDestination(
                 icon: const Icon(Icons.lock_outline),

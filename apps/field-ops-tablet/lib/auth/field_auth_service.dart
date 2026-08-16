@@ -37,8 +37,12 @@ class FieldLoginResult {
 
   factory FieldLoginResult.fromJson(Map<String, dynamic> json) {
     final data = Map<String, dynamic>.from(json['data'] as Map? ?? json);
-    final officer = Map<String, dynamic>.from(data['officer'] as Map? ?? const {});
-    final device = Map<String, dynamic>.from(data['device'] as Map? ?? const {});
+    final officer = Map<String, dynamic>.from(
+      data['officer'] as Map? ?? const {},
+    );
+    final device = Map<String, dynamic>.from(
+      data['device'] as Map? ?? const {},
+    );
     return FieldLoginResult(
       accessToken: data['accessToken'] as String,
       refreshToken: data['refreshToken'] as String,
@@ -70,13 +74,19 @@ class FieldAuthService {
     required FieldApiClient api,
     required SecureSessionStore session,
     required DeviceKeystoreService keystore,
-  })  : _api = api,
-        _session = session,
-        _keystore = keystore;
+    Future<void> Function(String? locale)? onLocaleResolved,
+    Future<void> Function()? onLogoutLocaleCleared,
+  }) : _api = api,
+       _session = session,
+       _keystore = keystore,
+       _onLocaleResolved = onLocaleResolved,
+       _onLogoutLocaleCleared = onLogoutLocaleCleared;
 
   final FieldApiClient _api;
   final SecureSessionStore _session;
   final DeviceKeystoreService _keystore;
+  final Future<void> Function(String? locale)? _onLocaleResolved;
+  final Future<void> Function()? _onLogoutLocaleCleared;
 
   Future<FieldChallenge> createSignedChallenge() async {
     final response = await _api.post(FieldApiPaths.deviceChallenge);
@@ -119,9 +129,13 @@ class FieldAuthService {
       publicDeviceId: result.publicDeviceId,
       officerId: result.officerId,
       officerName: result.officerName,
-      preferredLocale: result.effectivePreferredLocale ?? result.preferredLocale,
+      preferredLocale:
+          result.effectivePreferredLocale ?? result.preferredLocale,
     );
     _api.accessToken = result.accessToken;
+    await _onLocaleResolved?.call(
+      result.effectivePreferredLocale ?? result.preferredLocale,
+    );
     return result;
   }
 
@@ -137,10 +151,7 @@ class FieldAuthService {
 
     final response = await _api.post(
       FieldApiPaths.authRefresh,
-      body: {
-        'refreshToken': refreshToken,
-        'publicDeviceId': publicDeviceId,
-      },
+      body: {'refreshToken': refreshToken, 'publicDeviceId': publicDeviceId},
     );
     final result = FieldLoginResult.fromJson(response);
     await _session.saveSession(
@@ -150,9 +161,13 @@ class FieldAuthService {
       publicDeviceId: result.publicDeviceId,
       officerId: result.officerId,
       officerName: result.officerName,
-      preferredLocale: result.effectivePreferredLocale ?? result.preferredLocale,
+      preferredLocale:
+          result.effectivePreferredLocale ?? result.preferredLocale,
     );
     _api.accessToken = result.accessToken;
+    await _onLocaleResolved?.call(
+      result.effectivePreferredLocale ?? result.preferredLocale,
+    );
     return result;
   }
 
@@ -168,6 +183,7 @@ class FieldAuthService {
     }
     await _session.clearSession();
     _api.accessToken = null;
+    await _onLogoutLocaleCleared?.call();
   }
 
   Future<void> lockSession() async {

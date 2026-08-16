@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../api/field_api_client.dart';
+import '../../l10n/generated/field_localizations.dart';
 import '../../services/field_app_services.dart';
 import '../../services/field_offline_queue.dart';
 import '../../theme/field_theme.dart';
@@ -82,20 +83,23 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
         longitude: _position?.longitude,
       );
       if (!mounted) return;
-      final markers = (mapData['markers'] as List?)
+      final markers =
+          (mapData['markers'] as List?)
               ?.map((e) => Map<String, dynamic>.from(e as Map))
               .toList() ??
           const [];
-      final layers = (mapData['layersEnabled'] as List?)
+      final layers =
+          (mapData['layersEnabled'] as List?)
               ?.map((e) => e.toString())
               .toList() ??
           const [];
       setState(() {
         _mapMarkers = markers;
         _mapLayers = layers;
-        _mapCenter = mapData['center'] is Map
-            ? Map<String, dynamic>.from(mapData['center'] as Map)
-            : null;
+        _mapCenter =
+            mapData['center'] is Map
+                ? Map<String, dynamic>.from(mapData['center'] as Map)
+                : null;
         _mapBusy = false;
       });
     } on FieldApiException {
@@ -152,10 +156,7 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
     };
     if (_recordingRoute) {
       setState(() {
-        _routePoints.add({
-          'lat': position.latitude,
-          'lng': position.longitude,
-        });
+        _routePoints.add({'lat': position.latitude, 'lng': position.longitude});
       });
     }
     try {
@@ -189,118 +190,124 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Patrol mode'),
+        title: Text(l10n.patrol),
         backgroundColor: FieldColors.surface,
         foregroundColor: FieldColors.white,
       ),
-      body: _busy
-          ? const Center(child: CircularProgressIndicator())
-          : Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: FieldMapWidget(
-                    markers: _mapMarkers,
-                    center: _mapCenter,
-                    position: _position,
-                    followUnit: true,
-                    layersEnabled: _mapLayers,
-                    busy: _mapBusy,
-                    onRefresh: _refreshMap,
-                  ),
-                ),
-                SizedBox(
-                  width: 320,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_error != null) ...[
-                          Text(_error!, style: const TextStyle(color: FieldColors.danger)),
-                          const SizedBox(height: 12),
-                        ],
-                        Text(
-                          _patrol == null ? 'Patrol inactive' : 'Patrol active',
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _position == null
-                              ? 'GPS acquiring…'
-                              : '${_position!.latitude.toStringAsFixed(5)}, '
-                                  '${_position!.longitude.toStringAsFixed(5)}',
-                        ),
-                        const SizedBox(height: 24),
-                        if (_patrol == null)
-                          ElevatedButton(
-                            onPressed: _startPatrol,
-                            child: const Text('Start patrol'),
-                          )
-                        else ...[
-                          ElevatedButton(
-                            onPressed: _recordLocation,
-                            child: const Text('Record GPS point'),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton(
-                            onPressed: () =>
-                                setState(() => _recordingRoute = !_recordingRoute),
-                            child: Text(
-                              _recordingRoute
-                                  ? 'Stop route recording'
-                                  : 'Start route recording',
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton(
-                            onPressed: _endPatrol,
-                            child: const Text('End patrol'),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton(
-                            onPressed: _showBackupSheet,
-                            child: const Text('Request backup'),
-                          ),
-                        ],
-                        const Spacer(),
-                        OfficerSafetyPanel(services: widget.services),
-                        const SizedBox(height: 12),
-                        _EvidencePlaceholder(),
-                      ],
+      body:
+          _busy
+              ? const Center(child: CircularProgressIndicator())
+              : Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: FieldMapWidget(
+                      markers: _mapMarkers,
+                      center: _mapCenter,
+                      position: _position,
+                      followUnit: true,
+                      layersEnabled: _mapLayers,
+                      busy: _mapBusy,
+                      onRefresh: _refreshMap,
                     ),
                   ),
-                ),
-              ],
-            ),
+                  SizedBox(
+                    width: 320,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_error != null) ...[
+                            Text(
+                              _error!,
+                              style: const TextStyle(color: FieldColors.danger),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          Text(
+                            _patrol == null
+                                ? l10n.patrolInactive
+                                : l10n.patrolActive,
+                            style: Theme.of(context).textTheme.headlineMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _position == null
+                                ? l10n.locationAcquiring
+                                : '${_position!.latitude.toStringAsFixed(5)}, '
+                                    '${_position!.longitude.toStringAsFixed(5)}',
+                          ),
+                          const SizedBox(height: 24),
+                          if (_patrol == null)
+                            ElevatedButton(
+                              onPressed: _startPatrol,
+                              child: Text(l10n.startPatrol),
+                            )
+                          else ...[
+                            ElevatedButton(
+                              onPressed: _recordLocation,
+                              child: Text(l10n.recordGpsPoint),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed:
+                                  () => setState(
+                                    () => _recordingRoute = !_recordingRoute,
+                                  ),
+                              child: Text(
+                                _recordingRoute
+                                    ? l10n.stopRouteRecording
+                                    : l10n.startRouteRecording,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: _endPatrol,
+                              child: Text(l10n.endPatrol),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: _showBackupSheet,
+                              child: Text(l10n.requestBackup),
+                            ),
+                          ],
+                          const Spacer(),
+                          OfficerSafetyPanel(services: widget.services),
+                          const SizedBox(height: 12),
+                          const _EvidencePlaceholder(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
     );
   }
 }
 
 class _EvidencePlaceholder extends StatelessWidget {
+  const _EvidencePlaceholder();
+
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Evidence', style: Theme.of(context).textTheme.labelLarge),
+            Text(l10n.evidence, style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             Row(
               children: [
-                OutlinedButton(
-                  onPressed: () {},
-                  child: const Text('Photo'),
-                ),
+                OutlinedButton(onPressed: () {}, child: Text(l10n.photo)),
                 const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: () {},
-                  child: const Text('Video'),
-                ),
+                OutlinedButton(onPressed: () {}, child: Text(l10n.video)),
               ],
             ),
           ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../api/field_api_client.dart';
+import '../../l10n/generated/field_localizations.dart';
 import '../../screens/routes.dart';
 import '../../services/field_app_services.dart';
 import '../../theme/field_theme.dart';
@@ -16,7 +17,8 @@ class OperationalDashboardScreen extends StatefulWidget {
       _OperationalDashboardScreenState();
 }
 
-class _OperationalDashboardScreenState extends State<OperationalDashboardScreen> {
+class _OperationalDashboardScreenState
+    extends State<OperationalDashboardScreen> {
   Map<String, dynamic>? _dashboard;
   Position? _position;
   String? _error;
@@ -78,6 +80,7 @@ class _OperationalDashboardScreenState extends State<OperationalDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     if (_busy) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -88,14 +91,15 @@ class _OperationalDashboardScreenState extends State<OperationalDashboardScreen>
           children: [
             Text(_error!, style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _load, child: const Text('Retry')),
+            ElevatedButton(onPressed: _load, child: Text(l10n.retry)),
           ],
         ),
       );
     }
 
-    final officer =
-        Map<String, dynamic>.from(_dashboard?['officer'] as Map? ?? const {});
+    final officer = Map<String, dynamic>.from(
+      _dashboard?['officer'] as Map? ?? const {},
+    );
     final shift = _dashboard?['shift'] as Map?;
     final status = Map<String, dynamic>.from(
       _dashboard?['status'] as Map? ?? const {},
@@ -116,7 +120,7 @@ class _OperationalDashboardScreenState extends State<OperationalDashboardScreen>
         padding: const EdgeInsets.all(24),
         children: [
           Text(
-            'Operational dashboard',
+            l10n.operationalDashboard,
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: 8),
@@ -130,42 +134,48 @@ class _OperationalDashboardScreenState extends State<OperationalDashboardScreen>
               Expanded(
                 child: _StatusCard(
                   title: 'Shift',
-                  value: shift == null
-                      ? 'No active shift'
-                      : shift['status']?.toString() ?? 'Active',
+                  value:
+                      shift == null
+                          ? l10n.noActiveShift
+                          : shift['status']?.toString() ?? l10n.active,
                   icon: Icons.schedule,
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _StatusCard(
-                  title: 'GPS',
-                  value: lat != null && lng != null
-                      ? '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
-                      : status['gpsStatus']?.toString() ?? 'Unavailable',
+                  title: l10n.currentLocation,
+                  value:
+                      lat != null && lng != null
+                          ? '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
+                          : status['gpsStatus']?.toString() ??
+                              l10n.locationUnavailable,
                   icon: Icons.gps_fixed,
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _StatusCard(
-                  title: 'Battery',
-                  value: battery != null ? '$battery%' : 'Unknown',
+                  title: l10n.battery,
+                  value: battery != null ? '$battery%' : l10n.unknown,
                   icon: Icons.battery_std,
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _StatusCard(
-                  title: 'Offline queue',
-                  value: '$_pendingSync pending',
+                  title: l10n.offlineQueue,
+                  value: l10n.pendingCount(_pendingSync),
                   icon: Icons.cloud_upload_outlined,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 24),
-          Text('Quick actions', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            l10n.quickActions,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 4,
@@ -176,17 +186,17 @@ class _OperationalDashboardScreenState extends State<OperationalDashboardScreen>
             childAspectRatio: 1.4,
             children: [
               _QuickAction(
-                label: 'Patrol',
+                label: l10n.patrol,
                 icon: Icons.map,
                 onTap: () => _openRoute(FieldRoutes.patrol),
               ),
               _QuickAction(
-                label: 'Checkpoint',
+                label: l10n.checkpoint,
                 icon: Icons.fact_check_outlined,
                 onTap: () => _openRoute(FieldRoutes.checkpoint),
               ),
               _QuickAction(
-                label: 'Assignments',
+                label: l10n.assignments,
                 icon: Icons.assignment,
                 count: counts['activeAssignments'] as int?,
                 onTap: () => _openRoute(FieldRoutes.assignments),
@@ -197,30 +207,30 @@ class _OperationalDashboardScreenState extends State<OperationalDashboardScreen>
                 onTap: () => _openRoute(FieldRoutes.bolo),
               ),
               _QuickAction(
-                label: 'Drone',
+                label: l10n.drone,
                 icon: Icons.flight,
                 onTap: () => _openRoute(FieldRoutes.drone),
               ),
               _QuickAction(
-                label: 'Comms',
+                label: l10n.comms,
                 icon: Icons.forum_outlined,
                 onTap: () => _openRoute(FieldRoutes.comms),
               ),
               _QuickAction(
-                label: 'Sync',
+                label: l10n.sync,
                 icon: Icons.sync,
                 onTap: () async {
                   final messenger = ScaffoldMessenger.of(context);
                   await widget.services.offlineQueue.flushIfOnline();
                   if (!context.mounted) return;
                   messenger.showSnackBar(
-                    const SnackBar(content: Text('Sync attempted')),
+                    SnackBar(content: Text(l10n.syncAttempted)),
                   );
                   await _load();
                 },
               ),
               _QuickAction(
-                label: 'Emergency',
+                label: l10n.emergency,
                 icon: Icons.emergency,
                 color: FieldColors.danger,
                 onTap: () => _openRoute(FieldRoutes.patrol),

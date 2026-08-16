@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../api/field_api_client.dart';
+import '../l10n/generated/field_localizations.dart';
 import '../services/field_app_services.dart';
 import '../services/field_offline_queue.dart';
 import '../theme/field_theme.dart';
@@ -55,9 +56,10 @@ class _OfficerSafetyPanelState extends State<OfficerSafetyPanel> {
         }
         if (!mounted) return;
         setState(() => _lastAlertId = result['id']?.toString());
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Safety alert sent (${result['alertType']})')),
-        );
+        final l10n = FieldLocalizations.of(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.safetyAlertSent)));
       } on FieldApiException {
         await widget.services.offlineQueue.enqueue(
           type: FieldOfflineActionType.safety,
@@ -65,9 +67,10 @@ class _OfficerSafetyPanelState extends State<OfficerSafetyPanel> {
           payload: body,
         );
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Safety alert queued — will sync when online')),
-        );
+        final l10n = FieldLocalizations.of(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.safetyAlertQueued)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -76,6 +79,7 @@ class _OfficerSafetyPanelState extends State<OfficerSafetyPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Card(
       color: FieldColors.surfaceElevated,
       child: Padding(
@@ -84,12 +88,12 @@ class _OfficerSafetyPanelState extends State<OfficerSafetyPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Officer safety',
+              l10n.officerSafety,
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             if (_lastAlertId != null) ...[
               const SizedBox(height: 8),
-              Text('Last alert: $_lastAlertId'),
+              Text('${l10n.lastAlert}: $_lastAlertId'),
             ],
             const SizedBox(height: 12),
             ElevatedButton.icon(
@@ -98,29 +102,29 @@ class _OfficerSafetyPanelState extends State<OfficerSafetyPanel> {
                 backgroundColor: FieldColors.danger,
                 foregroundColor: FieldColors.white,
               ),
-              onPressed: _busy
-                  ? null
-                  : () => _trigger('panic', 'Panic'),
+              onPressed: _busy ? null : () => _trigger('panic', 'Panic'),
               icon: const Icon(Icons.emergency),
-              label: const Text('PANIC'),
+              label: Text(l10n.panic),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: _busy
-                  ? null
-                  : () => _trigger('officer-down', 'OfficerDown'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              onPressed:
+                  _busy ? null : () => _trigger('officer-down', 'OfficerDown'),
               icon: const Icon(Icons.sos),
-              label: const Text('Officer down'),
+              label: Text(l10n.officerDown),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: _busy
-                  ? null
-                  : () => _trigger('distress', 'DistressSignal'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              onPressed:
+                  _busy ? null : () => _trigger('distress', 'DistressSignal'),
               icon: const Icon(Icons.warning_amber),
-              label: const Text('Manual distress'),
+              label: Text(l10n.manualDistress),
             ),
           ],
         ),

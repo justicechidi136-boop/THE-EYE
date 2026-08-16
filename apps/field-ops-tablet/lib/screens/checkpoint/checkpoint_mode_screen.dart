@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../api/field_api_client.dart';
+import '../../l10n/generated/field_localizations.dart';
 import '../../services/field_app_services.dart';
 import '../../theme/field_theme.dart';
 
@@ -81,9 +82,10 @@ class _CheckpointModeScreenState extends State<CheckpointModeScreen> {
       'vehicleChecks': _vehicleChecks,
     });
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Queue updated')),
-    );
+    final l10n = FieldLocalizations.of(context);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.queueUpdated)));
   }
 
   Future<void> _search(String type) async {
@@ -111,171 +113,187 @@ class _CheckpointModeScreenState extends State<CheckpointModeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Checkpoint mode'),
+        title: Text(l10n.checkpoint),
         backgroundColor: FieldColors.surface,
         foregroundColor: FieldColors.white,
       ),
-      body: _busy
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          _checkpoint == null
-                              ? 'No active checkpoint'
-                              : _checkpoint!['checkpointName']?.toString() ??
-                                  'Checkpoint active',
-                          style: Theme.of(context).textTheme.headlineLarge,
-                        ),
-                        if (_error != null) ...[
-                          const SizedBox(height: 8),
-                          Text(_error!, style: const TextStyle(color: FieldColors.danger)),
-                        ],
-                        const SizedBox(height: 24),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _CounterCard(
-                                label: 'Queue count',
-                                value: _queueCount,
-                                onChanged: (v) => setState(() => _queueCount = v),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _CounterCard(
-                                label: 'Vehicle checks',
-                                value: _vehicleChecks,
-                                onChanged: (v) =>
-                                    setState(() => _vehicleChecks = v),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        if (_checkpoint != null)
-                          ElevatedButton(
-                            onPressed: _updateQueue,
-                            child: const Text('Save queue stats'),
+      body:
+          _busy
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            _checkpoint == null
+                                ? l10n.noActiveCheckpoint
+                                : _checkpoint!['checkpointName']?.toString() ??
+                                    l10n.checkpointActive,
+                            style: Theme.of(context).textTheme.headlineLarge,
                           ),
-                        const SizedBox(height: 16),
-                        if (_checkpoint == null)
-                          ElevatedButton(
-                            onPressed: _startCheckpoint,
-                            child: const Text('Start checkpoint session'),
-                          )
-                        else
-                          OutlinedButton(
-                            onPressed: _endCheckpoint,
-                            child: const Text('End checkpoint session'),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 24),
-                  Expanded(
-                    flex: 3,
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
+                          if (_error != null) ...[
+                            const SizedBox(height: 8),
                             Text(
-                              'Search',
-                              style: Theme.of(context).textTheme.headlineMedium,
+                              _error!,
+                              style: const TextStyle(color: FieldColors.danger),
                             ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: _searchController,
-                              decoration: const InputDecoration(
-                                labelText: 'Plate, ID, or name',
-                                prefixIcon: Icon(Icons.search),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                ElevatedButton(
-                                  onPressed: _searching
-                                      ? null
-                                      : () => _search('vehicle'),
-                                  child: const Text('Vehicle'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: _searching
-                                      ? null
-                                      : () => _search('person'),
-                                  child: const Text('Person'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: _searching
-                                      ? null
-                                      : () => _search('bolo'),
-                                  child: const Text('BOLO'),
-                                ),
-                                OutlinedButton(
-                                  onPressed: _searching
-                                      ? null
-                                      : () => _search('all'),
-                                  child: const Text('All'),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            if (_searching)
-                              const Center(child: CircularProgressIndicator())
-                            else
-                              Expanded(
-                                child: _searchResults.isEmpty
-                                    ? Center(
-                                        child: Text(
-                                          'Search results appear here',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium,
-                                        ),
-                                      )
-                                    : ListView.separated(
-                                        itemCount: _searchResults.length,
-                                        separatorBuilder: (_, __) =>
-                                            const Divider(height: 1),
-                                        itemBuilder: (context, index) {
-                                          final row = _searchResults[index];
-                                          return ListTile(
-                                            title: Text(
-                                              row['title']?.toString() ??
-                                                  row['label']?.toString() ??
-                                                  'Result ${index + 1}',
-                                            ),
-                                            subtitle: Text(
-                                              row['description']?.toString() ??
-                                                  row['type']?.toString() ??
-                                                  '',
-                                            ),
-                                          );
-                                        },
-                                      ),
-                              ),
                           ],
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _CounterCard(
+                                  label: l10n.queueCount,
+                                  value: _queueCount,
+                                  onChanged:
+                                      (v) => setState(() => _queueCount = v),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _CounterCard(
+                                  label: l10n.vehicleChecks,
+                                  value: _vehicleChecks,
+                                  onChanged:
+                                      (v) => setState(() => _vehicleChecks = v),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          if (_checkpoint != null)
+                            ElevatedButton(
+                              onPressed: _updateQueue,
+                              child: Text(l10n.saveQueueStats),
+                            ),
+                          const SizedBox(height: 16),
+                          if (_checkpoint == null)
+                            ElevatedButton(
+                              onPressed: _startCheckpoint,
+                              child: Text(l10n.startCheckpointSession),
+                            )
+                          else
+                            OutlinedButton(
+                              onPressed: _endCheckpoint,
+                              child: Text(l10n.endCheckpointSession),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      flex: 3,
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                l10n.search,
+                                style:
+                                    Theme.of(context).textTheme.headlineMedium,
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  labelText: l10n.plateIdOrName,
+                                  prefixIcon: const Icon(Icons.search),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  ElevatedButton(
+                                    onPressed:
+                                        _searching
+                                            ? null
+                                            : () => _search('vehicle'),
+                                    child: Text(l10n.vehicle),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed:
+                                        _searching
+                                            ? null
+                                            : () => _search('person'),
+                                    child: Text(l10n.person),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed:
+                                        _searching
+                                            ? null
+                                            : () => _search('bolo'),
+                                    child: const Text('BOLO'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed:
+                                        _searching
+                                            ? null
+                                            : () => _search('all'),
+                                    child: Text(l10n.all),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              if (_searching)
+                                const Center(child: CircularProgressIndicator())
+                              else
+                                Expanded(
+                                  child:
+                                      _searchResults.isEmpty
+                                          ? Center(
+                                            child: Text(
+                                              l10n.searchResultsAppearHere,
+                                              style:
+                                                  Theme.of(
+                                                    context,
+                                                  ).textTheme.bodyMedium,
+                                            ),
+                                          )
+                                          : ListView.separated(
+                                            itemCount: _searchResults.length,
+                                            separatorBuilder:
+                                                (_, __) =>
+                                                    const Divider(height: 1),
+                                            itemBuilder: (context, index) {
+                                              final row = _searchResults[index];
+                                              return ListTile(
+                                                title: Text(
+                                                  row['title']?.toString() ??
+                                                      row['label']
+                                                          ?.toString() ??
+                                                      'Result ${index + 1}',
+                                                ),
+                                                subtitle: Text(
+                                                  row['description']
+                                                          ?.toString() ??
+                                                      row['type']?.toString() ??
+                                                      '',
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
@@ -307,7 +325,10 @@ class _CounterCard extends StatelessWidget {
                   onPressed: value > 0 ? () => onChanged(value - 1) : null,
                   icon: const Icon(Icons.remove_circle_outline),
                 ),
-                Text('$value', style: Theme.of(context).textTheme.headlineMedium),
+                Text(
+                  '$value',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
                 IconButton(
                   onPressed: () => onChanged(value + 1),
                   icon: const Icon(Icons.add_circle_outline),

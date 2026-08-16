@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../api/field_api_client.dart';
+import '../l10n/generated/field_localizations.dart';
 import '../services/field_app_services.dart';
 import '../services/field_offline_queue.dart';
 import '../theme/field_theme.dart';
@@ -72,9 +73,10 @@ class _BackupRequestSheetState extends State<BackupRequestSheet> {
         await widget.services.workflows.createBackupRequest(body);
         if (!mounted) return;
         Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$_requestType backup requested')),
-        );
+        final l10n = FieldLocalizations.of(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.backupRequested)));
       } on FieldApiException {
         await widget.services.offlineQueue.enqueue(
           type: FieldOfflineActionType.backup,
@@ -83,9 +85,10 @@ class _BackupRequestSheetState extends State<BackupRequestSheet> {
         );
         if (!mounted) return;
         Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Backup queued for sync')),
-        );
+        final l10n = FieldLocalizations.of(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.backupQueuedForSync)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -94,6 +97,7 @@ class _BackupRequestSheetState extends State<BackupRequestSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -105,20 +109,27 @@ class _BackupRequestSheetState extends State<BackupRequestSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Request backup', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            l10n.requestBackup,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _requestType,
-            decoration: const InputDecoration(labelText: 'Backup type'),
-            items: _backupTypes
-                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                .toList(),
-            onChanged: _busy ? null : (v) => setState(() => _requestType = v ?? 'Immediate'),
+            initialValue: _requestType,
+            decoration: InputDecoration(labelText: l10n.backupType),
+            items:
+                _backupTypes
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
+            onChanged:
+                _busy
+                    ? null
+                    : (v) => setState(() => _requestType = v ?? 'Immediate'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _reasonController,
-            decoration: const InputDecoration(labelText: 'Reason'),
+            decoration: InputDecoration(labelText: l10n.reason),
             maxLines: 2,
           ),
           const SizedBox(height: 16),
@@ -129,13 +140,14 @@ class _BackupRequestSheetState extends State<BackupRequestSheet> {
               foregroundColor: FieldColors.dark,
             ),
             onPressed: _busy ? null : _submit,
-            child: _busy
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Submit backup request'),
+            child:
+                _busy
+                    ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : Text(l10n.submitBackupRequest),
           ),
         ],
       ),

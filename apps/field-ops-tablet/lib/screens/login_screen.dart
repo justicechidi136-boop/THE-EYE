@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/field_api_client.dart';
 import '../config/app_flavor.dart';
+import '../l10n/generated/field_localizations.dart';
 import '../screens/routes.dart';
 import '../services/field_app_services.dart';
 import '../theme/field_branding.dart';
@@ -80,10 +81,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Scaffold(
       backgroundColor: FieldColors.dark,
       appBar: AppBar(
-        title: const Text('Officer sign in'),
+        title: Text(l10n.officerSignIn),
         backgroundColor: FieldColors.surface,
       ),
       body: Center(
@@ -99,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const FieldOpsBrandHeader(logoSize: 96, compact: true),
                   const SizedBox(height: 8),
                   Text(
-                    'FIELD OPERATIONS',
+                    l10n.fieldOperations,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       letterSpacing: 1.2,
@@ -109,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (_deviceLabel != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Device · $_deviceLabel',
+                      '${l10n.device} - $_deviceLabel',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
@@ -127,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                   const SizedBox(height: 24),
                   Text(
-                    'Sign in with your assigned field credentials.',
+                    l10n.signInWithCredentials,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 24),
@@ -135,11 +137,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.username],
-                    decoration: const InputDecoration(labelText: 'Email'),
+                    decoration: InputDecoration(labelText: l10n.email),
                     validator:
                         (value) =>
                             value == null || value.trim().isEmpty
-                                ? 'Email is required'
+                                ? l10n.emailRequired
                                 : null,
                   ),
                   const SizedBox(height: 16),
@@ -147,11 +149,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
-                    decoration: const InputDecoration(labelText: 'Password'),
+                    decoration: InputDecoration(labelText: l10n.password),
                     validator:
                         (value) =>
                             value == null || value.isEmpty
-                                ? 'Password is required'
+                                ? l10n.passwordRequired
                                 : null,
                   ),
                   if (_error != null) ...[
@@ -171,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 24,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                            : const Text('Sign in'),
+                            : Text(l10n.signIn),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton(
@@ -181,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             : () => Navigator.of(
                               context,
                             ).pushReplacementNamed(FieldRoutes.deviceStatus),
-                    child: const Text('Device status'),
+                    child: Text(l10n.deviceStatus),
                   ),
                 ],
               ),

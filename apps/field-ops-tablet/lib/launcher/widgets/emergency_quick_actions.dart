@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/generated/field_localizations.dart';
 import '../../services/field_app_services.dart';
 import '../../widgets/backup_request_sheet.dart';
 import '../../widgets/officer_safety_panel.dart';
@@ -21,6 +22,7 @@ class EmergencyQuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Row(
       children: [
         Expanded(
@@ -31,7 +33,10 @@ class EmergencyQuickActions extends StatelessWidget {
               minimumSize: const Size.fromHeight(64),
             ),
             onPressed: () => _openPanic(context),
-            child: const Text('OFFICER PANIC', style: TextStyle(fontWeight: FontWeight.w800)),
+            child: Text(
+              l10n.panic,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -43,7 +48,10 @@ class EmergencyQuickActions extends StatelessWidget {
               minimumSize: const Size.fromHeight(64),
             ),
             onPressed: () => _openBackup(context),
-            child: const Text('REQUEST BACKUP', style: TextStyle(fontWeight: FontWeight.w800)),
+            child: Text(
+              l10n.requestBackup,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
           ),
         ),
         if (policy.emergencyDialerAllowed) ...[
@@ -56,7 +64,10 @@ class EmergencyQuickActions extends StatelessWidget {
                 minimumSize: const Size.fromHeight(64),
               ),
               onPressed: () => platform.openEmergencyDialer(),
-              child: const Text('EMERGENCY CALL', style: TextStyle(fontWeight: FontWeight.w800)),
+              child: Text(
+                l10n.emergency,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
           ),
         ],
@@ -69,10 +80,11 @@ class EmergencyQuickActions extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF121C2A),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: OfficerSafetyPanel(services: services),
-      ),
+      builder:
+          (ctx) => Padding(
+            padding: const EdgeInsets.all(20),
+            child: OfficerSafetyPanel(services: services),
+          ),
     );
   }
 
@@ -81,15 +93,16 @@ class EmergencyQuickActions extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF121C2A),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
-        ),
-        child: BackupRequestSheet(services: services),
-      ),
+      builder:
+          (ctx) => Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
+            ),
+            child: BackupRequestSheet(services: services),
+          ),
     );
   }
 }

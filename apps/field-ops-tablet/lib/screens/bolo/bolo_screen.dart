@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../api/field_api_client.dart';
+import '../../l10n/generated/field_localizations.dart';
 import '../../services/field_app_services.dart';
 import '../../services/field_offline_queue.dart';
 import '../../theme/field_theme.dart';
@@ -71,16 +72,18 @@ class _BoloScreenState extends State<BoloScreen> {
       );
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sighting recorded')),
-    );
+    final l10n = FieldLocalizations.of(context);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.sightingRecorded)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BOLO search'),
+        title: Text(l10n.boloSearch),
         backgroundColor: FieldColors.surface,
         foregroundColor: FieldColors.white,
       ),
@@ -94,9 +97,9 @@ class _BoloScreenState extends State<BoloScreen> {
                 Expanded(
                   child: TextField(
                     controller: _queryController,
-                    decoration: const InputDecoration(
-                      labelText: 'Search BOLO',
-                      prefixIcon: Icon(Icons.search),
+                    decoration: InputDecoration(
+                      labelText: l10n.searchBolo,
+                      prefixIcon: const Icon(Icons.search),
                     ),
                     onSubmitted: (_) => _search(),
                   ),
@@ -104,12 +107,12 @@ class _BoloScreenState extends State<BoloScreen> {
                 const SizedBox(width: 12),
                 ElevatedButton(
                   onPressed: _searching ? null : _search,
-                  child: const Text('Search'),
+                  child: Text(l10n.search),
                 ),
                 const SizedBox(width: 12),
                 OutlinedButton(
                   onPressed: _reportSighting,
-                  child: const Text('Report sighting'),
+                  child: Text(l10n.reportSighting),
                 ),
               ],
             ),
@@ -119,29 +122,28 @@ class _BoloScreenState extends State<BoloScreen> {
             ],
             const SizedBox(height: 16),
             if (_searching)
-              const Expanded(
-                child: Center(child: CircularProgressIndicator()),
-              )
+              const Expanded(child: Center(child: CircularProgressIndicator()))
             else
               Expanded(
-                child: _results.isEmpty
-                    ? const Center(child: Text('Enter a query to search BOLO'))
-                    : ListView.separated(
-                        itemCount: _results.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final row = _results[index];
-                          return ListTile(
-                            leading: const Icon(Icons.warning_amber),
-                            title: Text(row['title']?.toString() ?? 'BOLO'),
-                            subtitle: Text(
-                              row['description']?.toString() ??
-                                  row['sightingType']?.toString() ??
-                                  '',
-                            ),
-                          );
-                        },
-                      ),
+                child:
+                    _results.isEmpty
+                        ? Center(child: Text(l10n.enterQueryToSearchBolo))
+                        : ListView.separated(
+                          itemCount: _results.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final row = _results[index];
+                            return ListTile(
+                              leading: const Icon(Icons.warning_amber),
+                              title: Text(row['title']?.toString() ?? 'BOLO'),
+                              subtitle: Text(
+                                row['description']?.toString() ??
+                                    row['sightingType']?.toString() ??
+                                    '',
+                              ),
+                            );
+                          },
+                        ),
               ),
           ],
         ),
