@@ -64,21 +64,53 @@ class _IncidentArchiveScreenState extends State<IncidentArchiveScreen> {
 
   List<Map<String, dynamic>> _mapList(Object? value) {
     if (value is! List) return const [];
-    return value.whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+    return value
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
+  }
+
+  String _evidenceLabel(Map<String, dynamic> item, int index) {
+    final label = item["label"]?.toString().trim();
+    if (label != null && label.isNotEmpty) return label;
+    final mediaType = item["mediaType"]?.toString().toLowerCase();
+    final prefix = switch (mediaType) {
+      "image" || "photo" => "Photo",
+      "video" => "Video",
+      "audio" => "Audio",
+      _ => "Evidence",
+    };
+    return "$prefix ${index + 1}";
+  }
+
+  String _evidenceStatus(Map<String, dynamic> item) {
+    final uploadedAt = item["uploadedAt"]?.toString().trim();
+    if (uploadedAt != null && uploadedAt.isNotEmpty) {
+      return "Uploaded $uploadedAt";
+    }
+    final status = item["status"]?.toString().trim();
+    return status == null || status.isEmpty ? "Archived evidence item" : status;
   }
 
   @override
   Widget build(BuildContext context) {
     final archive = _archive;
-    final location = archive?["location"] is Map ? Map<String, dynamic>.from(archive!["location"] as Map) : null;
-    final map = archive?["map"] is Map ? Map<String, dynamic>.from(archive!["map"] as Map) : null;
+    final location = archive?["location"] is Map
+        ? Map<String, dynamic>.from(archive!["location"] as Map)
+        : null;
+    final map = archive?["map"] is Map
+        ? Map<String, dynamic>.from(archive!["map"] as Map)
+        : null;
     final community = archive?["communityVerificationSummary"] is Map
-        ? Map<String, dynamic>.from(archive!["communityVerificationSummary"] as Map)
+        ? Map<String, dynamic>.from(
+            archive!["communityVerificationSummary"] as Map)
         : null;
     final mediaStats = archive?["mediaStatistics"] is Map
         ? Map<String, dynamic>.from(archive!["mediaStatistics"] as Map)
         : null;
-    final audit = archive?["auditSummary"] is Map ? Map<String, dynamic>.from(archive!["auditSummary"] as Map) : null;
+    final audit = archive?["auditSummary"] is Map
+        ? Map<String, dynamic>.from(archive!["auditSummary"] as Map)
+        : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -170,25 +202,29 @@ class _IncidentArchiveScreenState extends State<IncidentArchiveScreen> {
                 ListTile(
                   leading: const Icon(Icons.perm_media),
                   title: const Text("Media statistics"),
-                  subtitle: Text("${mediaStats["totalItems"] ?? 0} evidence items"),
+                  subtitle:
+                      Text("${mediaStats["totalItems"] ?? 0} evidence items"),
                 ),
               if (audit != null)
                 ListTile(
                   leading: const Icon(Icons.shield),
                   title: const Text("Audit summary"),
-                  subtitle: Text("${audit["eventCount"] ?? 0} audit events recorded"),
+                  subtitle:
+                      Text("${audit["eventCount"] ?? 0} audit events recorded"),
                 ),
               const SizedBox(height: 12),
-              const Text("Evidence gallery", style: TextStyle(fontWeight: FontWeight.w800)),
-              ..._mapList(archive["evidenceGallery"]).map(
-                (item) => ListTile(
-                  leading: const Icon(Icons.attach_file),
-                  title: Text("${item["mediaType"]} • ${item["id"]}"),
-                  subtitle: Text("Hash ${item["fileHash"]}\nUploaded ${item["uploadedAt"]}"),
-                ),
-              ),
+              const Text("Evidence gallery",
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+              ..._mapList(archive["evidenceGallery"]).indexed.map(
+                    (entry) => ListTile(
+                      leading: const Icon(Icons.attach_file),
+                      title: Text(_evidenceLabel(entry.$2, entry.$1)),
+                      subtitle: Text(_evidenceStatus(entry.$2)),
+                    ),
+                  ),
               const SizedBox(height: 12),
-              const Text("Timeline", style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text("Timeline",
+                  style: TextStyle(fontWeight: FontWeight.w800)),
               ..._mapList(archive["timeline"]).map(
                 (entry) => ListTile(
                   title: Text("${entry["label"] ?? entry["type"] ?? "Update"}"),
@@ -196,19 +232,24 @@ class _IncidentArchiveScreenState extends State<IncidentArchiveScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text("Dispatch timeline", style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text("Dispatch timeline",
+                  style: TextStyle(fontWeight: FontWeight.w800)),
               ..._mapList(archive["dispatchTimeline"]).map(
                 (entry) => ListTile(
                   title: Text("${entry["label"] ?? "Dispatch update"}"),
-                  subtitle: Text("${entry["at"] ?? ""}${entry["agency"] != null ? " • ${entry["agency"]}" : ""}"),
+                  subtitle: Text(
+                      "${entry["at"] ?? ""}${entry["agency"] != null ? " • ${entry["agency"]}" : ""}"),
                 ),
               ),
               const SizedBox(height: 12),
-              const Text("Notifications sent", style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text("Notifications sent",
+                  style: TextStyle(fontWeight: FontWeight.w800)),
               ..._mapList(archive["notificationsSent"]).map(
                 (entry) => ListTile(
-                  title: Text("${entry["title"] ?? entry["type"] ?? "Notification"}"),
-                  subtitle: Text("${entry["createdAt"] ?? ""} • ${entry["read"] == true ? "Read" : "Unread"}"),
+                  title: Text(
+                      "${entry["title"] ?? entry["type"] ?? "Notification"}"),
+                  subtitle: Text(
+                      "${entry["createdAt"] ?? ""} • ${entry["read"] == true ? "Read" : "Unread"}"),
                 ),
               ),
             ],

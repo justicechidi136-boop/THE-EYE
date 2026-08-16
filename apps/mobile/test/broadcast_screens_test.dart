@@ -8,9 +8,7 @@ import "package:the_eye_mobile/broadcasts/broadcast_screens.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_session.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_submission_service.dart";
 import "package:the_eye_mobile/app/app_scope.dart";
-import "package:the_eye_mobile/app/session_accessor.dart";
 import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
-import "package:the_eye_mobile/brand.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
 
 class _FakeBroadcastFeedService extends BroadcastFeedService {
@@ -160,6 +158,8 @@ class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
       "clientActionId": clientActionId,
       "description": description,
       "locationMode": locationMode,
+      "latitude": latitude,
+      "longitude": longitude,
       "attachmentsCount": attachments.length,
     });
     return const SightingSubmissionResult(id: "s-1");
@@ -468,6 +468,34 @@ void main() {
     expect(find.text("Report sighting"), findsNothing);
   });
 
+  testWidgets("broadcast detail groups available action buttons",
+      (tester) async {
+    final stolen = BroadcastFeedItem(
+      id: "b-stolen",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-stolen"),
+        detail: stolen,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text("Actions"), findsOneWidget);
+    expect(find.text("Share"), findsOneWidget);
+    expect(find.text("Report sighting"), findsOneWidget);
+    expect(find.text("Comments"), findsOneWidget);
+    expect(find.text("Report"), findsOneWidget);
+  });
+
   testWidgets(
       "submit sighting flow shows location modes and success replacement",
       (tester) async {
@@ -528,5 +556,64 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     expect(find.text("Broadcast Detail"), findsOneWidget);
+  });
+
+  testWidgets("manual sighting location submits entered coordinates",
+      (tester) async {
+    Map<String, dynamic>? payload;
+    final submitService = _FakeBroadcastSubmissionService(
+      onSubmit: (value) async => payload = value,
+    );
+    final session = _FakeBroadcastSession(
+      detail: BroadcastFeedItem(
+        id: "b1",
+        type: "StolenVehicle",
+        title: "Stolen vehicle alert",
+        body: "body",
+        priority: "P2Urgent",
+        read: false,
+        publishedAt: DateTime.utc(2026, 8, 1),
+        status: "Active",
+      ),
+      submissionService: submitService,
+    );
+
+    await tester.pumpWidget(
+      wrap(
+        const SubmitSightingScreen(broadcastId: "b1"),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Enter manually"));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextField, "Latitude"), "6.524379");
+    await tester.enterText(
+        find.widgetWithText(TextField, "Longitude"), "3.379206");
+
+    final scrollable = find.byType(Scrollable).first;
+    final descriptionField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration is InputDecoration &&
+          (widget.decoration as InputDecoration).labelText ==
+              "What did you observe?",
+    );
+    await tester.scrollUntilVisible(descriptionField, 400,
+        scrollable: scrollable);
+    await tester.enterText(descriptionField, "Seen near the roundabout");
+    await tester.scrollUntilVisible(
+      find.text("Submit sighting"),
+      400,
+      scrollable: scrollable,
+    );
+    await tester.tap(find.text("Submit sighting"));
+    await tester.pumpAndSettle();
+
+    expect(payload?["locationMode"], "MANUAL");
+    expect(payload?["latitude"], 6.524379);
+    expect(payload?["longitude"], 3.379206);
   });
 }
