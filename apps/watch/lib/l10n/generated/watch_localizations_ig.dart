@@ -34,4 +34,104 @@ class WatchLocalizationsIg extends WatchLocalizations {
 
   @override
   String get apps => 'Ngwa';
+
+  @override
+  String get selectLanguage => 'Họrọ asusu';
+
+  @override
+  String get preferredLanguageSaved => 'Edebere asusu';
+
+  @override
+  String get areaSafe => 'Mpaghara di mma';
+
+  @override
+  String get stayAlertSuspiciousActivity =>
+      'Nọ na nche maka omume a na-enyo enyo.';
+
+  @override
+  String get highAlert => 'Nche elu';
+
+  @override
+  String get beCarefulStayAlert => 'Kpachara anya ma nọ na nche.';
+
+  @override
+  String get danger => 'Ihe egwu';
+
+  @override
+  String get nearby => 'Dị nso';
+
+  @override
+  String get areaCleared => 'E wepula egwu na mpaghara';
+
+  @override
+  String get dangerAlert => 'Mkpu ihe egwu';
+
+  @override
+  String get iUnderstand => 'Aghotara m';
+
+  @override
+  String get hearAgain => 'Gee ozo';
+
+  @override
+  String get muteAlert => 'Gbanyuo mkpu';
+
+  @override
+  String get voiceUnavailableShowingText => 'Olu adighi - a na-egosi ederede';
+
+  @override
+  String get dangerAlertReceived => 'Mkpu ihe egwu abatala';
+
+  @override
+  String get dangerWarning => 'Ikilọ ihe egwu';
+
+  @override
+  String get alertAcknowledged => 'A nabatala mkpu';
+
+  @override
+  String get dangerTypeArmedRobbery => 'Ohi ji ngwa agha';
+
+  @override
+  String get dangerTypeKidnapping => 'Ịtọ mmadụ';
+
+  @override
+  String get dangerTypeViolentAttack => 'Mwakpo ike';
+
+  @override
+  String get dangerTypeActiveShooter => 'Onye na-agba egbe';
+
+  @override
+  String get dangerTypeCommunalViolence => 'Ime ihe ike obodo';
+
+  @override
+  String get dangerTypeTerroristThreat => 'Iyi egwu ndi omekome';
+
+  @override
+  String get dangerTypeFire => 'Oku';
+
+  @override
+  String get dangerTypeFlood => 'Iju mmiri';
+
+  @override
+  String get dangerTypeGasLeak => 'Gas na-apu';
+
+  @override
+  String get dangerTypeHazardousArea => 'Mpaghara nwere ihe egwu';
+
+  @override
+  String get dangerTypeRoadDanger => 'Ihe egwu uzo';
+
+  @override
+  String get dangerTypeBuildingCollapse => 'Ụlọ dara';
+
+  @override
+  String get dangerTypeCivilDisturbance => 'Ọgbaaghara obodo';
+
+  @override
+  String get dangerTypePoliceAdvisory => 'Ndụmọdụ ndị uwe ojii';
+
+  @override
+  String get dangerTypeMissingChild => 'Nwa furu efu';
+
+  @override
+  String get dangerTypeEvacuation => 'Pụọ na mpaghara';
 }

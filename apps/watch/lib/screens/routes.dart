@@ -16,6 +16,7 @@ abstract final class WatchRoutes {
   static const settings = '/settings';
   static const settingsRadius = '/settings/radius';
   static const settingsContacts = '/settings/contacts';
+  static const settingsLanguage = '/settings/language';
   static const settingsLocation = '/settings/location';
   static const reportCategory = '/report/category';
   static const reportDescribe = '/report/describe';

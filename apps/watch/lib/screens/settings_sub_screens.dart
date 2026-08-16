@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:the_eye_flutter_l10n/the_eye_locales.dart';
 
 import '../design_system/design_system.dart';
+import '../l10n/generated/watch_localizations.dart';
+import '../services/watch_app_services.dart';
 import '../widgets/watch_ui.dart';
 
 class SettingsRadiusScreen extends StatefulWidget {
@@ -93,6 +96,61 @@ class SettingsContactsScreen extends StatelessWidget {
           ),
           const SizedBox(height: EyeTokens.spaceSm),
         ],
+      ),
+    );
+  }
+}
+
+class SettingsLanguageScreen extends StatelessWidget {
+  const SettingsLanguageScreen({super.key, required this.services});
+
+  final WatchAppServices services;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = WatchLocalizations.of(context);
+    return WatchScaffold(
+      child: ValueListenableBuilder<Locale>(
+        valueListenable: services.accountLanguage.locale,
+        builder: (context, locale, _) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              WatchSectionTitle(l10n.selectLanguage),
+              const SizedBox(height: EyeTokens.spaceXs),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: TheEyeLocaleCatalog.enabled.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: EyeTokens.spaceXs),
+                  itemBuilder: (context, index) {
+                    final option = TheEyeLocaleCatalog.enabled[index];
+                    final selected = locale.languageCode == option.code;
+                    final label = selected
+                        ? '${option.nativeName} (${l10n.preferredLanguageSaved})'
+                        : option.nativeName;
+                    return WatchOutlineButton(
+                      label: label,
+                      onPressed: () async {
+                        await services.accountLanguage.selectLocale(
+                          option.code,
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              Text(
+                l10n.preferredLanguageSaved,
+                textAlign: TextAlign.center,
+                style: EyeTokens.bodySmall,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: EyeTokens.spaceSm),
+            ],
+          );
+        },
       ),
     );
   }

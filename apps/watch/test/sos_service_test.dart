@@ -9,7 +9,6 @@ import 'package:the_eye_watch/services/connectivity_service.dart';
 import 'package:the_eye_watch/services/location_service.dart';
 import 'package:the_eye_watch/services/sos_service.dart';
 import 'package:the_eye_watch/services/vibration_service.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:the_eye_watch/platform/emergency_tracking_platform.dart';
 import 'package:the_eye_watch/storage/secure_credential_store.dart';
 
@@ -149,7 +148,8 @@ SosService _buildSosService(
 
 class _NoOpEmergencyTrackingPlatform extends EmergencyTrackingPlatform {
   @override
-  Future<void> startEmergencyTracking({String? sosEventId, bool silent = false}) async {}
+  Future<void> startEmergencyTracking(
+      {String? sosEventId, bool silent = false}) async {}
 
   @override
   Future<void> stopEmergencyTracking() async {}

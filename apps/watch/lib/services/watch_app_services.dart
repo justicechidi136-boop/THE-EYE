@@ -11,6 +11,7 @@ import '../services/push_messaging_service.dart';
 import '../services/sos_service.dart';
 import '../services/standalone_auth_service.dart';
 import '../services/vibration_service.dart';
+import '../services/watch_account_language_service.dart';
 import '../storage/secure_credential_store.dart';
 
 class WatchAppServices {
@@ -28,10 +29,16 @@ class WatchAppServices {
         vibration = vibration ?? VibrationService(),
         _enablePush = enablePush {
     final creds = this.credentials;
+    accountLanguage = WatchAccountLanguageService(
+      api: api,
+      credentials: creds,
+      preferences: this.preferences,
+    );
     standaloneAuth = StandaloneAuthService(
       api: api,
       credentials: creds,
       connectivity: this.connectivity,
+      authBootstrap: () => accountLanguage.syncFromAccount(),
     );
     pairing = PairingService(
       api: api,
@@ -90,6 +97,7 @@ class WatchAppServices {
   late final AlertService alerts;
   late final DangerAlertService dangerAlerts;
   late final PushMessagingService push;
+  late final WatchAccountLanguageService accountLanguage;
   DeviceTelemetryService? _telemetry;
 
   Future<void> initialize({bool firebaseReady = false}) async {
@@ -133,6 +141,7 @@ class WatchAppServices {
       );
     }
     await heartbeat.refreshAfterResume();
+    await accountLanguage.syncFromAccount();
   }
 
   void dispose() {
@@ -142,6 +151,7 @@ class WatchAppServices {
     sos.dispose();
     pairing.dispose();
     dangerAlerts.dispose();
+    accountLanguage.dispose();
     push.dispose();
     api.dispose();
   }

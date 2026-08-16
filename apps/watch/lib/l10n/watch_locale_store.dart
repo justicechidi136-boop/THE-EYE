@@ -9,6 +9,8 @@ class WatchLocaleStore {
 
   final PreferencesStore _preferences;
 
+  Future<String?> cachedLocaleCode() => _preferences.readPreferredUiLocale();
+
   Future<Locale> load({
     Iterable<Locale> deviceLocales = const [],
   }) async {

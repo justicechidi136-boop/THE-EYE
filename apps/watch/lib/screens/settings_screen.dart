@@ -53,7 +53,8 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 6),
           WatchOutlineButton(
             label: l10n.language,
-            onPressed: () {},
+            onPressed: () =>
+                Navigator.pushNamed(context, WatchRoutes.settingsLanguage),
           ),
           const SizedBox(height: 6),
           WatchOutlineButton(

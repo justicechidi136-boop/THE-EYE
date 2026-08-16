@@ -6,7 +6,6 @@ import 'package:the_eye_flutter_l10n/the_eye_locales.dart';
 
 import 'alerts/danger_alert_models.dart';
 import 'l10n/generated/watch_localizations.dart';
-import 'l10n/watch_locale_store.dart';
 import 'models/alert.dart';
 import 'models/emergency_mode.dart';
 import 'screens/active_emergency_screen.dart';
@@ -105,14 +104,19 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp>
         arguments: payload,
       );
     };
+    _services.accountLanguage.locale.addListener(_syncLocaleFromService);
     unawaited(_hydrateLocale());
   }
 
   Future<void> _hydrateLocale() async {
-    final locale = await WatchLocaleStore(_services.preferences).load(
+    await _services.accountLanguage.hydrate(
       deviceLocales: PlatformDispatcher.instance.locales,
     );
-    _localeController.setLocale(locale);
+    _localeController.setLocale(_services.accountLanguage.locale.value);
+  }
+
+  void _syncLocaleFromService() {
+    _localeController.setLocale(_services.accountLanguage.locale.value);
   }
 
   @override
@@ -125,6 +129,7 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _services.accountLanguage.locale.removeListener(_syncLocaleFromService);
     _localeController.dispose();
     _services.dispose();
     super.dispose();
@@ -272,6 +277,11 @@ class _TheEyeWatchAppState extends State<TheEyeWatchApp>
               return _darkPage(const SettingsRadiusScreen(), settings);
             case WatchRoutes.settingsContacts:
               return _darkPage(const SettingsContactsScreen(), settings);
+            case WatchRoutes.settingsLanguage:
+              return _darkPage(
+                SettingsLanguageScreen(services: _services),
+                settings,
+              );
             case WatchRoutes.settingsLocation:
               return _darkPage(
                 LocationSettingsScreen(

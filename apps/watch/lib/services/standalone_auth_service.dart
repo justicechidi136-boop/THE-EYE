@@ -83,6 +83,7 @@ class StandaloneAuthService {
         watchDeviceId: normalizedDeviceId,
       );
 
+      await _assertNetworkReady(_api);
       final packageInfo = await _safePackageInfo();
       response = await _api.post(
         WatchApiPaths.activateWithCode,
@@ -219,8 +220,9 @@ class StandaloneAuthService {
   Future<void> _runAuthBootstrap() async {
     _diagnostics.log(WatchActivationCheckpoint.authBootstrapBegin);
     try {
-      if (_authBootstrap != null) {
-        await _authBootstrap!().timeout(const Duration(seconds: 8));
+      final bootstrap = _authBootstrap;
+      if (bootstrap != null) {
+        await bootstrap().timeout(const Duration(seconds: 8));
       }
       _diagnostics.log(WatchActivationCheckpoint.authBootstrapSuccess);
     } catch (error, stack) {

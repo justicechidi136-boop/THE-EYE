@@ -10,6 +10,7 @@ abstract final class WatchApiPaths {
   static const activateWithCode = '/smartwatch/devices/activate-with-code';
   static const standaloneLogin = '/smartwatch/devices/standalone-login';
   static const sos = '/smartwatch/sos';
+  static const usersMe = '/users/me';
 
   static String heartbeat(String deviceId) =>
       '/smartwatch/devices/$deviceId/heartbeat';
