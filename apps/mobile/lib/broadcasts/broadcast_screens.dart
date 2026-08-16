@@ -2,7 +2,6 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
-import "package:geolocator/geolocator.dart";
 
 import "../brand.dart";
 import "../design_system/components/eye_page_header.dart";
@@ -12,8 +11,6 @@ import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_policy.dart";
 import "../incidents/incident_submission_service.dart";
 import "../location/location_permission_service.dart";
-import "../presentation/broadcast_expiry_presenter.dart";
-import "../presentation/citizen_date_time.dart";
 import "../presentation/citizen_presentation.dart";
 import "../presentation/citizen_time_picker.dart";
 import "../theme/the_eye_theme.dart";
@@ -517,9 +514,11 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   Widget build(BuildContext context) {
     final item = _item;
     final detailArgs = ModalRoute.of(context)?.settings.arguments;
-    final isLiveStatus =
-        item?.status == "Active" || item?.status == "Published" || item?.status == "Updated";
-    final normalizedType = item?.type.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
+    final isLiveStatus = item?.status == "Active" ||
+        item?.status == "Published" ||
+        item?.status == "Updated";
+    final normalizedType =
+        item?.type.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
     final isStolenVehicle = normalizedType.contains("stolenvehicle");
     final canReportSighting = isLiveStatus && isStolenVehicle;
     final returnToCenterOnBack = detailArgs is BroadcastDetailNavigationArgs &&
@@ -562,65 +561,68 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                         child: _BroadcastDetailBody(item: item),
                       ),
                       const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: _actionInFlight
-                                ? null
-                                : () => Navigator.of(context).pushNamed(
-                                      "${BroadcastRoutes.center}/${widget.broadcastId}/share",
-                                    ),
-                            icon: const Icon(Icons.share_outlined),
-                            label: const Text("Share"),
-                          ),
-                          if (canReportSighting)
+                      SectionCard(
+                        title: "Actions",
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
                             OutlinedButton.icon(
                               onPressed: _actionInFlight
                                   ? null
                                   : () => Navigator.of(context).pushNamed(
-                                        "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
-                                        arguments: item,
+                                        "${BroadcastRoutes.center}/${widget.broadcastId}/share",
                                       ),
-                              icon: const Icon(Icons.visibility_outlined),
-                              label: const Text("Report sighting"),
+                              icon: const Icon(Icons.share_outlined),
+                              label: const Text("Share"),
                             ),
-                          OutlinedButton.icon(
-                            onPressed: _actionInFlight
-                                ? null
-                                : () => Navigator.of(context).pushNamed(
-                                      "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
-                                    ),
-                            icon: const Icon(Icons.chat_bubble_outline),
-                            label: const Text("Comments"),
-                          ),
-                          if (!_isOwner)
+                            if (canReportSighting)
+                              OutlinedButton.icon(
+                                onPressed: _actionInFlight
+                                    ? null
+                                    : () => Navigator.of(context).pushNamed(
+                                          "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
+                                          arguments: item,
+                                        ),
+                                icon: const Icon(Icons.visibility_outlined),
+                                label: const Text("Report sighting"),
+                              ),
                             OutlinedButton.icon(
                               onPressed: _actionInFlight
                                   ? null
                                   : () => Navigator.of(context).pushNamed(
-                                        "${BroadcastRoutes.center}/${widget.broadcastId}/report",
+                                        "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
                                       ),
-                              icon: const Icon(Icons.flag_outlined),
-                              label: const Text("Report"),
+                              icon: const Icon(Icons.chat_bubble_outline),
+                              label: const Text("Comments"),
                             ),
-                          if (_isOwner &&
-                              (item?.status == "Active" ||
-                                  item?.status == "Published" ||
-                                  item?.status == "Updated")) ...[
-                            FilledButton.icon(
-                              onPressed: _actionInFlight ? null : _resolve,
-                              icon: const Icon(Icons.check_circle_outline),
-                              label: const Text("Resolve"),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _actionInFlight ? null : _withdraw,
-                              icon: const Icon(Icons.unpublished_outlined),
-                              label: const Text("Withdraw"),
-                            ),
+                            if (!_isOwner)
+                              OutlinedButton.icon(
+                                onPressed: _actionInFlight
+                                    ? null
+                                    : () => Navigator.of(context).pushNamed(
+                                          "${BroadcastRoutes.center}/${widget.broadcastId}/report",
+                                        ),
+                                icon: const Icon(Icons.flag_outlined),
+                                label: const Text("Report"),
+                              ),
+                            if (_isOwner &&
+                                (item?.status == "Active" ||
+                                    item?.status == "Published" ||
+                                    item?.status == "Updated")) ...[
+                              FilledButton.icon(
+                                onPressed: _actionInFlight ? null : _resolve,
+                                icon: const Icon(Icons.check_circle_outline),
+                                label: const Text("Resolve"),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _actionInFlight ? null : _withdraw,
+                                icon: const Icon(Icons.unpublished_outlined),
+                                label: const Text("Withdraw"),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ],
                   ),
@@ -1479,8 +1481,10 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _descriptionController = TextEditingController();
   final _areaController = TextEditingController();
+  final _manualLatitudeController = TextEditingController();
+  final _manualLongitudeController = TextEditingController();
   final _uploadService = BroadcastMediaUploadService();
-  String _clientActionId = createClientSubmissionId();
+  final String _clientActionId = createClientSubmissionId();
   DateTime _observedAt = DateTime.now();
   _SightingLocationMode _locationMode = _SightingLocationMode.notProvided;
   bool _submitting = false;
@@ -1505,6 +1509,8 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   void dispose() {
     _descriptionController.dispose();
     _areaController.dispose();
+    _manualLatitudeController.dispose();
+    _manualLongitudeController.dispose();
     super.dispose();
   }
 
@@ -1521,8 +1527,19 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
     setState(() {
       _manualLatitude = outcome.position?.latitude;
       _manualLongitude = outcome.position?.longitude;
+      _manualLatitudeController.text =
+          _manualLatitude?.toStringAsFixed(6) ?? "";
+      _manualLongitudeController.text =
+          _manualLongitude?.toStringAsFixed(6) ?? "";
       _locationStatus = "Current location captured.";
     });
+  }
+
+  double? _parseCoordinate(String value,
+      {required double min, required double max}) {
+    final parsed = double.tryParse(value.trim());
+    if (parsed == null || parsed < min || parsed > max) return null;
+    return parsed;
   }
 
   Future<void> _pickObservedDate() async {
@@ -1576,6 +1593,28 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       );
       return;
     }
+    double? latitude = _manualLatitude;
+    double? longitude = _manualLongitude;
+    if (_locationMode == _SightingLocationMode.manual) {
+      latitude = _parseCoordinate(
+        _manualLatitudeController.text,
+        min: -90,
+        max: 90,
+      );
+      longitude = _parseCoordinate(
+        _manualLongitudeController.text,
+        min: -180,
+        max: 180,
+      );
+      if (latitude == null || longitude == null) {
+        showBroadcastSnackBar(
+          context,
+          "Enter valid latitude and longitude.",
+          isError: true,
+        );
+        return;
+      }
+    }
     final session = BroadcastSession.require(context);
     if (session.accessToken == null) return;
     setState(() => _submitting = true);
@@ -1591,11 +1630,13 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
         description: description,
         observedAt: _observedAt.toUtc().toIso8601String(),
         locationMode: _locationMode.apiValue,
-        latitude: _locationMode == _SightingLocationMode.currentGps || _locationMode == _SightingLocationMode.manual
-            ? _manualLatitude
+        latitude: _locationMode == _SightingLocationMode.currentGps ||
+                _locationMode == _SightingLocationMode.manual
+            ? latitude
             : null,
-        longitude: _locationMode == _SightingLocationMode.currentGps || _locationMode == _SightingLocationMode.manual
-            ? _manualLongitude
+        longitude: _locationMode == _SightingLocationMode.currentGps ||
+                _locationMode == _SightingLocationMode.manual
+            ? longitude
             : null,
         approximateArea: _areaController.text.trim().isEmpty
             ? null
@@ -1606,7 +1647,8 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => _SightingSubmittedScreen(broadcastId: widget.broadcastId),
+          builder: (_) =>
+              _SightingSubmittedScreen(broadcastId: widget.broadcastId),
         ),
       );
     } on IncidentApiException catch (error) {
@@ -1656,12 +1698,14 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                     OutlinedButton.icon(
                       onPressed: _submitting ? null : _pickObservedDate,
                       icon: const Icon(Icons.event_outlined),
-                      label: Text(CitizenDateTimeFormatter.formatDate(_observedAt)),
+                      label: Text(
+                          CitizenDateTimeFormatter.formatDate(_observedAt)),
                     ),
                     OutlinedButton.icon(
                       onPressed: _submitting ? null : _pickObservedTime,
                       icon: const Icon(Icons.schedule_outlined),
-                      label: Text(CitizenDateTimeFormatter.formatTime(_observedAt)),
+                      label: Text(
+                          CitizenDateTimeFormatter.formatTime(_observedAt)),
                     ),
                   ],
                 ),
@@ -1674,44 +1718,76 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
             child: Material(
               color: Colors.transparent,
               child: Column(
-              children: [
-                RadioListTile<_SightingLocationMode>(
-                  value: _SightingLocationMode.currentGps,
-                  groupValue: _locationMode,
-                  onChanged: _submitting
-                      ? null
-                      : (value) async {
-                          setState(() => _locationMode = value ?? _locationMode);
-                          await _captureLocation();
-                        },
-                  title: const Text("Use current location"),
-                ),
-                RadioListTile<_SightingLocationMode>(
-                  value: _SightingLocationMode.manual,
-                  groupValue: _locationMode,
-                  onChanged: _submitting
-                      ? null
-                      : (value) => setState(() => _locationMode = value ?? _locationMode),
-                  title: const Text("Enter manually"),
-                ),
-                RadioListTile<_SightingLocationMode>(
-                  value: _SightingLocationMode.notProvided,
-                  groupValue: _locationMode,
-                  onChanged: _submitting
-                      ? null
-                      : (value) => setState(() => _locationMode = value ?? _locationMode),
-                  title: const Text("Skip"),
-                ),
-                if (_locationStatus != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _locationStatus!,
-                      style: TextStyle(color: EyeSemanticColors.of(context).mutedText),
-                    ),
+                children: [
+                  RadioListTile<_SightingLocationMode>(
+                    value: _SightingLocationMode.currentGps,
+                    groupValue: _locationMode,
+                    onChanged: _submitting
+                        ? null
+                        : (value) async {
+                            setState(
+                                () => _locationMode = value ?? _locationMode);
+                            await _captureLocation();
+                          },
+                    title: const Text("Use current location"),
                   ),
-              ],
-            ),
+                  RadioListTile<_SightingLocationMode>(
+                    value: _SightingLocationMode.manual,
+                    groupValue: _locationMode,
+                    onChanged: _submitting
+                        ? null
+                        : (value) => setState(
+                            () => _locationMode = value ?? _locationMode),
+                    title: const Text("Enter manually"),
+                  ),
+                  if (_locationMode == _SightingLocationMode.manual) ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _manualLatitudeController,
+                      enabled: !_submitting,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        signed: true,
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: "Latitude",
+                        helperText: "Example: 6.524379",
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _manualLongitudeController,
+                      enabled: !_submitting,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        signed: true,
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: "Longitude",
+                        helperText: "Example: 3.379206",
+                      ),
+                    ),
+                  ],
+                  RadioListTile<_SightingLocationMode>(
+                    value: _SightingLocationMode.notProvided,
+                    groupValue: _locationMode,
+                    onChanged: _submitting
+                        ? null
+                        : (value) => setState(
+                            () => _locationMode = value ?? _locationMode),
+                    title: const Text("Skip"),
+                  ),
+                  if (_locationStatus != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _locationStatus!,
+                        style: TextStyle(
+                            color: EyeSemanticColors.of(context).mutedText),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
