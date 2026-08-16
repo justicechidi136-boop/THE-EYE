@@ -17,6 +17,10 @@ import {
 import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import { VOICE_TRANSCRIPTION_QUEUE_NAME } from "../../common/queue/queue-names";
 import { PrismaService } from "../prisma/prisma.service";
+import type { ConfigService } from "@nestjs/config";
+import { GoogleTranscriptionProvider, GoogleTranslationProvider } from "./google-speech.provider";
+import { OpenAiTranscriptionProvider, OpenAiTranslationProvider } from "./openai-speech.provider";
+import { resolveSpeechRuntimeConfig, type SpeechRuntimeConfig } from "./speech-runtime.config";
 import { StubTranscriptionProvider } from "./stub-transcription.provider";
 import { StubTranslationProvider } from "./stub-translation.provider";
 import type { VoiceTranscriptionProvider } from "./transcription-provider.interface";
@@ -44,18 +48,29 @@ export class VoiceTranscriptionService {
   private readonly logger = new Logger(VoiceTranscriptionService.name);
   private readonly transcriptionProvider: VoiceTranscriptionProvider;
   private readonly translationProvider: SpeechTranslationProvider;
+  private readonly runtimeConfig: SpeechRuntimeConfig;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly stubProvider: StubTranscriptionProvider,
     private readonly stubTranslationProvider: StubTranslationProvider,
     @Optional() @InjectQueue(VOICE_TRANSCRIPTION_QUEUE_NAME) private readonly queue?: Queue,
+    @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly openAiTranscriptionProvider?: OpenAiTranscriptionProvider,
+    @Optional() private readonly openAiTranslationProvider?: OpenAiTranslationProvider,
+    @Optional() private readonly googleTranscriptionProvider?: GoogleTranscriptionProvider,
+    @Optional() private readonly googleTranslationProvider?: GoogleTranslationProvider,
   ) {
-    this.transcriptionProvider = this.stubProvider;
-    this.translationProvider = this.stubTranslationProvider;
+    this.runtimeConfig = resolveSpeechRuntimeConfig(this.config);
+    this.transcriptionProvider = this.resolveTranscriptionProvider();
+    this.translationProvider = this.resolveTranslationProvider();
   }
 
   async enqueueIncidentMediaTranscription(attachmentId: string) {
+    if (!this.runtimeConfig.runtimeEnabled) {
+      this.logger.warn(`Speech AI runtime disabled; not enqueueing transcription for ${attachmentId}`);
+      return;
+    }
     const media = await this.prisma.incidentMedia.findUnique({ where: { id: attachmentId } });
     if (!media || media.mediaType !== "Audio") return;
     if (media.deletedAt) return;
@@ -76,6 +91,10 @@ export class VoiceTranscriptionService {
   }
 
   async enqueueCommunityPostMediaTranscription(attachmentId: string) {
+    if (!this.runtimeConfig.runtimeEnabled) {
+      this.logger.warn(`Speech AI runtime disabled; not enqueueing transcription for ${attachmentId}`);
+      return;
+    }
     const media = await this.prisma.communityPostMedia.findUnique({ where: { id: attachmentId } });
     if (!media || media.mediaType !== "Audio") return;
     if (media.deletedAt) return;
@@ -96,6 +115,10 @@ export class VoiceTranscriptionService {
   }
 
   async enqueue(payload: VoiceTranscriptionJobPayload) {
+    if (!this.runtimeConfig.runtimeEnabled) {
+      this.logger.warn(`Speech AI runtime disabled; leaving ${payload.attachmentId} without generated transcript`);
+      return;
+    }
     if (!shouldRegisterBullMq() || !this.queue) {
       this.logger.warn(`Transcription queue unavailable; leaving ${payload.attachmentId} queued for retry`);
       return;
@@ -136,6 +159,9 @@ export class VoiceTranscriptionService {
   }
 
   async enqueueTranslation(speechArtifactId: string, targetLocale: string) {
+    if (!this.runtimeConfig.runtimeEnabled) {
+      return { status: "runtime_disabled" as const };
+    }
     const effectiveTarget = effectivePreferredLocale(targetLocale);
     const artifact = await (this.prisma as any).speechArtifact.findUnique({ where: { id: speechArtifactId } });
     if (!artifact || artifact.provenance !== "TRANSCRIPT" || artifact.status !== "COMPLETED" || !artifact.content) {
@@ -210,6 +236,12 @@ export class VoiceTranscriptionService {
   }
 
   async processJob(payload: SpeechLanguageJobPayload) {
+    if (!this.runtimeConfig.runtimeEnabled) {
+      if ("speechArtifactId" in payload) {
+        return { status: "runtime_disabled" as const, speechArtifactId: payload.speechArtifactId };
+      }
+      return this.markTranscriptionUnsupported(payload.resourceType, payload.attachmentId, "LANGUAGE_AI_RUNTIME_DISABLED");
+    }
     if ("speechArtifactId" in payload) {
       return this.processTranslation(payload.speechArtifactId, payload.targetLocale);
     }
@@ -512,6 +544,31 @@ export class VoiceTranscriptionService {
   private supportedLocaleOrNull(locale: string | null | undefined) {
     const normalized = normalizePreferredLocale(locale);
     return isEnabledPreferredLocale(normalized) ? normalized : null;
+  }
+
+  private resolveTranscriptionProvider(): VoiceTranscriptionProvider {
+    if (this.runtimeConfig.sttProvider === "openai" && this.openAiTranscriptionProvider) return this.openAiTranscriptionProvider;
+    if (this.runtimeConfig.sttProvider === "google" && this.googleTranscriptionProvider) return this.googleTranscriptionProvider;
+    return this.stubProvider;
+  }
+
+  private resolveTranslationProvider(): SpeechTranslationProvider {
+    if (this.runtimeConfig.translationProvider === "openai" && this.openAiTranslationProvider) return this.openAiTranslationProvider;
+    if (this.runtimeConfig.translationProvider === "google" && this.googleTranslationProvider) return this.googleTranslationProvider;
+    return this.stubTranslationProvider;
+  }
+
+  private async markTranscriptionUnsupported(
+    sourceType: "incident_media" | "community_post_media",
+    attachmentId: string,
+    errorCode: string,
+  ) {
+    await (this.prisma as any).speechArtifact.upsert({
+      where: { sourceType_sourceId_provenance: { sourceType, sourceId: attachmentId, provenance: "TRANSCRIPT" } },
+      update: { status: "UNSUPPORTED", errorCode, generatedAt: new Date() },
+      create: { sourceType, sourceId: attachmentId, provenance: "TRANSCRIPT", status: "UNSUPPORTED", errorCode, generatedAt: new Date() },
+    });
+    return { status: "runtime_disabled" as const, attachmentId };
   }
 
   private async withTimeout<T>(operation: Promise<T>, timeoutMs: number, code: string): Promise<T> {

@@ -4,6 +4,8 @@ import { shouldRegisterBullMq } from "../../common/queue/queue-config";
 import { VOICE_TRANSCRIPTION_QUEUE_NAME } from "../../common/queue/queue-names";
 import { MetricsModule } from "../../common/metrics/metrics.module";
 import { PrismaModule } from "../prisma/prisma.module";
+import { GoogleTranscriptionProvider, GoogleTranslationProvider } from "./google-speech.provider";
+import { OpenAiTranscriptionProvider, OpenAiTranslationProvider } from "./openai-speech.provider";
 import { StubTranscriptionProvider } from "./stub-transcription.provider";
 import { StubTranslationProvider } from "./stub-translation.provider";
 import { VoiceTranscriptionProcessor } from "./voice-transcription.processor";
@@ -17,6 +19,15 @@ import { VoiceTranscriptionService } from "./voice-transcription.service";
       ? [BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE_NAME })]
       : []),
   ],
-  providers: [VoiceTranscriptionService, VoiceTranscriptionProcessor, StubTranscriptionProvider, StubTranslationProvider],
+  providers: [
+    VoiceTranscriptionService,
+    VoiceTranscriptionProcessor,
+    StubTranscriptionProvider,
+    StubTranslationProvider,
+    OpenAiTranscriptionProvider,
+    OpenAiTranslationProvider,
+    GoogleTranscriptionProvider,
+    GoogleTranslationProvider,
+  ],
 })
 export class VoiceTranscriptionWorkerModule {}

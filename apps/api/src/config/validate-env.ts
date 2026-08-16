@@ -14,6 +14,7 @@ import {
 } from "../common/auth/firebase-project";
 import { assertStagingAuthLinkBases } from "../modules/auth/auth-recovery-urls";
 import { assertFirebaseStorageConfiguration } from "../common/storage/s3-presign";
+import { assertSpeechRuntimeConfiguration } from "../modules/voice-attachments/speech-runtime.config";
 
 const productionSecrets = [
   "JWT_ACCESS_SECRET",
@@ -77,6 +78,7 @@ export function validateEnvironment(config: Record<string, unknown>) {
   validateFirebaseProjectEnv(config);
   validatePublicStorageEndpoint(config);
   assertFirebaseStorageConfiguration(config);
+  assertSpeechRuntimeConfiguration(config);
 
   const appEnvironment = resolveAppEnvironment(config);
   if (appEnvironment === "staging") {

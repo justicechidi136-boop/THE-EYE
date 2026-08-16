@@ -1,0 +1,56 @@
+{
+  "name": "the-eye-five-language-synthetic-speech-benchmark",
+  "description": "Metadata only. Audio files are local synthetic or explicitly approved test recordings and are not committed here.",
+  "samples": [
+    {
+      "id": "en-clean-officer-down",
+      "locale": "en",
+      "scenario": "clean speech",
+      "filePath": "benchmarks/speech/local/en-clean-officer-down.wav",
+      "expectedTranscript": "Officer down near Marina Road. Request backup now.",
+      "translationTarget": "ha",
+      "expectedTranslation": "Officer down near Marina Road. Request backup now.",
+      "criticalEntities": ["Marina Road"]
+    },
+    {
+      "id": "ha-noise-missing-child",
+      "locale": "ha",
+      "scenario": "background noise",
+      "filePath": "benchmarks/speech/local/ha-noise-missing-child.wav",
+      "expectedTranscript": "An rasa yaro kusa da kasuwar Wuse.",
+      "translationTarget": "en",
+      "expectedTranslation": "A child is missing near Wuse market.",
+      "criticalEntities": ["Wuse"]
+    },
+    {
+      "id": "yo-fast-fire",
+      "locale": "yo",
+      "scenario": "fast speech",
+      "filePath": "benchmarks/speech/local/yo-fast-fire.wav",
+      "expectedTranscript": "Ina wa ni oju ona Adeola, ina n jo, e ran wa lowo.",
+      "translationTarget": "en",
+      "expectedTranslation": "We are on Adeola Road, there is a fire, please help us.",
+      "criticalEntities": ["Adeola"]
+    },
+    {
+      "id": "ig-short-road-blocked",
+      "locale": "ig",
+      "scenario": "short emergency phrase",
+      "filePath": "benchmarks/speech/local/ig-short-road-blocked.wav",
+      "expectedTranscript": "E mechiela uzo Okigwe, anyi choro enyemaka.",
+      "translationTarget": "en",
+      "expectedTranslation": "Okigwe road is blocked, we need help.",
+      "criticalEntities": ["Okigwe"]
+    },
+    {
+      "id": "pcm-plate-kidnapping",
+      "locale": "pcm",
+      "scenario": "location and vehicle plate",
+      "filePath": "benchmarks/speech/local/pcm-plate-kidnapping.wav",
+      "expectedTranscript": "Dem kidnap person for Airport Road, vehicle plate ABC 123 KJA.",
+      "translationTarget": "en",
+      "expectedTranslation": "Someone was kidnapped on Airport Road, vehicle plate ABC 123 KJA.",
+      "criticalEntities": ["Airport Road", "ABC 123 KJA"]
+    }
+  ]
+}
