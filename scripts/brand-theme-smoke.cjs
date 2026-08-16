@@ -32,6 +32,7 @@ const adminThemeProvider = read("apps/admin-web/components/theme-provider.tsx");
 const adminTokens = read("apps/admin-web/lib/theme/tokens.ts");
 const mobileMain = read("apps/mobile/lib/main.dart");
 const mobileBrand = read("apps/mobile/lib/brand.dart");
+const mobileThemeProvider = read("apps/mobile/lib/theme/theme_provider.dart");
 const mobileThemePrefs = read("apps/mobile/lib/theme/theme_preferences.dart");
 
 const requiredSnippets = [
@@ -39,7 +40,8 @@ const requiredSnippets = [
   { file: "admin styles", source: adminStyles, needles: [':root[data-theme="dark"]', "#0b0f14", "#009933", "#ff9933"] },
   { file: "admin theme provider", source: adminThemeProvider, needles: ['useState<ThemePreference>("dark")', "THEME_STORAGE_KEY", "prefers-color-scheme"] },
   { file: "admin tokens", source: adminTokens, needles: ['THEME_STORAGE_KEY = "the-eye-theme"', "#0B0F14", "#009933"] },
-  { file: "mobile main", source: mobileMain, needles: ["ThemePreferences.load()", "controller.themeMode", "BrandAssets.lockupDarkBg", "setThemePreference"] },
+  { file: "mobile main", source: mobileMain, needles: ["ThemeProvider.load()", "controller.themeMode", "BrandAssets.lockupDarkBg", "setThemePreference"] },
+  { file: "mobile theme provider", source: mobileThemeProvider, needles: ["ThemePreferences.load()", "ThemeMode get themeMode", "setPreference"] },
   { file: "mobile brand", source: mobileBrand, needles: ["0xFF0B0F14", "0xFF009933", "0xFFFF9933", "lockupDarkBg"] },
   { file: "mobile theme prefs", source: mobileThemePrefs, needles: ['storageKey = "the_eye_theme_preference"', "ThemePreference.dark"] },
 ];
