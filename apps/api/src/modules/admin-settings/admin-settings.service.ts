@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  effectivePreferredLocale,
+  isEnabledPreferredLocale,
+  normalizePreferredLocale,
+} from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -96,20 +101,25 @@ export class AdminSettingsService {
       data: {
         theme: prefs?.theme ?? "system",
         notificationPrefs: (prefs?.notificationPrefs as Record<string, unknown> | null) ?? {},
+        preferredLocale: prefs?.preferredLocale ?? null,
+        effectivePreferredLocale: effectivePreferredLocale(prefs?.preferredLocale),
       },
     };
   }
 
   async updatePreferences(actor: JwtPayload, dto: UpdateAdminPreferencesDto) {
+    const preferredLocale = this.normalizePreferredLocale(dto.preferredLocale);
     const saved = await this.prisma.adminUserPreference.upsert({
       where: { adminUserId: actor.sub },
       create: {
         adminUserId: actor.sub,
         theme: dto.theme ?? "system",
         notificationPrefs: (dto.notificationPrefs ?? {}) as never,
+        preferredLocale: preferredLocale ?? null,
       },
       update: {
         theme: dto.theme ?? undefined,
+        preferredLocale,
         notificationPrefs: dto.notificationPrefs ? (dto.notificationPrefs as never) : undefined,
       },
     });
@@ -117,6 +127,8 @@ export class AdminSettingsService {
       data: {
         theme: saved.theme,
         notificationPrefs: saved.notificationPrefs,
+        preferredLocale: saved.preferredLocale ?? null,
+        effectivePreferredLocale: effectivePreferredLocale(saved.preferredLocale),
       },
     };
   }
@@ -180,5 +192,15 @@ export class AdminSettingsService {
     if (scope === "community" && !communityId) {
       throw new ForbiddenException("communityId is required for community policy scope");
     }
+  }
+
+  private normalizePreferredLocale(value: string | null | undefined) {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const normalized = normalizePreferredLocale(value);
+    if (normalized !== null && !isEnabledPreferredLocale(normalized)) {
+      throw new BadRequestException("Unsupported preferredLocale");
+    }
+    return normalized;
   }
 }
