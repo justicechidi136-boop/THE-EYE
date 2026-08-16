@@ -33,7 +33,7 @@ const baseEnv = {
   FIREBASE_STORAGE_BUCKET: "the-eye-2stg.firebasestorage.app",
 };
 
-function makeFetch({ expectToken, loginToken = "runtime-access-token" } = {}) {
+function makeFetch({ expectToken, loginToken = "runtime-access-token", loginStatus = 201, omitGetUrl = false } = {}) {
   const calls = [];
   let uploadedBody = null;
 
@@ -42,7 +42,7 @@ function makeFetch({ expectToken, loginToken = "runtime-access-token" } = {}) {
 
     if (String(url).endsWith("/auth/login")) {
       return new Response(JSON.stringify({ accessToken: loginToken, refreshToken: "runtime-refresh-token" }), {
-        status: 200,
+        status: loginStatus,
         headers: { "content-type": "application/json" },
       });
     }
@@ -52,7 +52,7 @@ function makeFetch({ expectToken, loginToken = "runtime-access-token" } = {}) {
       return new Response(
         JSON.stringify({
           uploadUrl: signedUploadUrl,
-          getUrl: signedGetUrl,
+          ...(omitGetUrl ? {} : { getUrl: signedGetUrl }),
           objectKey: "evidence/storage-smoke.png",
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -82,9 +82,9 @@ async function expectPass(name, env, fetchOptions = {}) {
   return { logs: logs.join("\n"), calls };
 }
 
-async function expectFail(name, env, expectedMessage) {
+async function expectFail(name, env, expectedMessage, fetchOptions = {}) {
   const logs = [];
-  const { fetchMock, calls } = makeFetch();
+  const { fetchMock, calls } = makeFetch(fetchOptions);
   try {
     await run({ env, fetch: fetchMock, log: (line) => logs.push(String(line)) });
     assert(false, `${name} expected failure`);
@@ -109,7 +109,12 @@ const credentialLogin = await expectPass("missing token triggers citizen login",
   STAGING_TEST_CITIZEN_PASSWORD: password,
 }, { loginToken });
 assert(credentialLogin.calls.some((call) => String(call.url).endsWith("/auth/login")), "missing token must trigger citizen login");
-assert(credentialLogin.logs.includes("event=auth status=200 account=citizen"), "credential login must log only safe auth status");
+assert(credentialLogin.logs.includes("event=auth status=201 account=citizen"), "credential login must accept and safely log HTTP 201");
+
+await expectFail("firebase mode requires GET URL for certification", {
+  ...baseEnv,
+  STAGING_STORAGE_SMOKE_TOKEN: "supplied-token",
+}, "firebase GET URL is required for runtime certification", { expectToken: "supplied-token", omitGetUrl: true });
 
 const missingCredentials = await expectFail("missing citizen credentials fails safely", {
   ...baseEnv,
