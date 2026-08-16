@@ -61,6 +61,19 @@ Server validates:
 
 ---
 
+## Officer Locale Preferences
+
+Field Ops officers use the existing admin/officer preferences source:
+
+- Storage: `AdminUserPreference.preferredLocale`
+- Write contract: `PATCH /v1/admin/preferences` with `{ "preferredLocale": "ha" }`
+- Read contract: `GET /v1/admin/preferences`
+- Propagation: login, refresh, and session introspection return `preferredLocale` and `effectivePreferredLocale`
+
+`/v1/users/me` is citizen-scoped and is not a Field Ops officer locale write contract.
+
+---
+
 ## Session lock
 
 - Configurable inactivity threshold (client policy)

@@ -188,6 +188,10 @@ export class FieldAuthService {
     const device = actor.fieldDeviceId
       ? await this.prisma.fieldDevice.findUnique({ where: { id: actor.fieldDeviceId } })
       : null;
+    const preferences = await this.prisma.adminUserPreference.findUnique({
+      where: { adminUserId: actor.sub },
+    });
+    const preferredLocale = preferences?.preferredLocale ?? null;
     return {
       data: {
         sessionId: actor.sessionId,
@@ -196,8 +200,8 @@ export class FieldAuthService {
         fieldRole: actor.fieldRole,
         agencyId: actor.agencyId,
         assignedUnitId: actor.assignedUnitId,
-        preferredLocale: actor.preferredLocale ?? null,
-        effectivePreferredLocale: effectivePreferredLocale(actor.preferredLocale ?? actor.effectivePreferredLocale),
+        preferredLocale,
+        effectivePreferredLocale: effectivePreferredLocale(preferredLocale),
         permissions: actor.permissions ?? [],
         device: device ? this.devices.mapDevice(device) : null,
       },

@@ -23,6 +23,10 @@ export class UpdateAdminPreferencesDto {
   theme?: string;
 
   @IsOptional()
+  @IsString()
+  preferredLocale?: string | null;
+
+  @IsOptional()
   @IsObject()
   notificationPrefs?: Record<string, unknown>;
 }
