@@ -10,6 +10,7 @@ import '../services/audio_output_service.dart';
 import '../services/danger_alert_signature_verifier.dart';
 import '../services/quiet_hours_service.dart';
 import 'danger_alert_tts_service.dart';
+import 'tts_contract.dart';
 import 'vibration_service.dart';
 
 typedef DangerAlertNavigateHandler = Future<void> Function(
@@ -291,6 +292,10 @@ class DangerAlertCoordinator {
       preferences: _preferences,
       dedupeKey: force ? '${payload.dedupeKey}:replay' : payload.dedupeKey,
       languageHint: language,
+      priority: payload.priority == DangerAlertPriority.critical
+          ? TtsPriority.critical
+          : TtsPriority.high,
+      contentId: payload.alertId,
     );
 
     switch (outcome) {
