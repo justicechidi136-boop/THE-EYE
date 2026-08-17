@@ -38,6 +38,8 @@ export type Incident = {
   }>;
 };
 
+export type AdminEvidenceView = Incident["evidence"][number];
+
 export type MissingPersonCaseView = {
   incidentId: string;
   reportId?: string;
@@ -55,6 +57,7 @@ export type MissingPersonCaseView = {
   createdAt?: string;
   latitude?: number;
   longitude?: number;
+  evidence: AdminEvidenceView[];
 };
 
 export type StolenVehicleCaseView = {
@@ -76,6 +79,7 @@ export type StolenVehicleCaseView = {
   createdAt?: string;
   latitude?: number;
   longitude?: number;
+  evidence: AdminEvidenceView[];
 };
 
 export type PoliceStationView = {
@@ -220,6 +224,12 @@ export type BroadcastDetailView = BroadcastView & {
   publishedAt: string | null;
   resolvedAt: string | null;
   suspendedAt: string | null;
+  attachments: Array<{
+    mediaType: string;
+    label: string;
+    contentType?: string;
+    url?: string;
+  }>;
   sightings?: Array<{
     id: string;
     observedAt: string | null;

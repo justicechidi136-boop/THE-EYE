@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { IncidentAdminActions } from "../incident-admin-actions";
+import { EvidenceGallery } from "../admin-media";
 import { Button, FormField, InlineAlert, TextInput } from "../form-primitives";
 import { Panel, StatusBadge } from "../ui";
 import type { StolenVehicleCaseView } from "../../lib/types/admin-views";
@@ -110,6 +111,9 @@ export function StolenVehicleDetailConsole({ caseView }: { caseView: StolenVehic
             <p><strong>Created:</strong> {caseView.createdAt ? new Date(caseView.createdAt).toLocaleString() : "—"}</p>
             <p><strong>Last seen:</strong> {caseView.lastSeenAt ? new Date(caseView.lastSeenAt).toLocaleString() : "—"}</p>
           </div>
+        </Panel>
+        <Panel title="Persisted evidence">
+          <EvidenceGallery incidentId={caseView.incidentId} items={caseView.evidence} />
         </Panel>
         <IncidentAdminActions incidentId={caseView.incidentId} currentStatus={caseView.incidentStatus} />
       </div>

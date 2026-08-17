@@ -12,6 +12,7 @@ import {
   ConsoleSearchInput,
 } from "../console";
 import { Button, FormField, InlineAlert, TextInput } from "../form-primitives";
+import { EvidencePicker, uploadIncidentEvidence, type SelectedEvidenceFile } from "../admin-media";
 import { Panel, StatusBadge } from "../ui";
 import type { MissingPersonCaseView } from "../../lib/types/admin-views";
 
@@ -27,6 +28,7 @@ export function MissingPersonConsole({ cases, hasMore, nextCursor, filters }: Mi
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<SelectedEvidenceFile[]>([]);
   const [createForm, setCreateForm] = useState({
     fullName: "",
     age: "",
@@ -70,9 +72,15 @@ export function MissingPersonConsole({ cases, hasMore, nextCursor, filters }: Mi
       });
       const payload = (await response.json()) as { message?: string; data?: { incident?: { id?: string } } };
       if (!response.ok) throw new Error(payload.message ?? "Case creation failed");
-      setMessage("Missing person case created.");
-      setCreateForm({ fullName: "", age: "", gender: "", description: "", lastSeenAddress: "", latitude: "", longitude: "" });
       const incidentId = payload.data?.incident?.id;
+      if (!incidentId) throw new Error("Case was created but no incident ID was returned.");
+      if (evidenceFiles.length) {
+        await uploadIncidentEvidence(incidentId, evidenceFiles);
+      }
+      setMessage(evidenceFiles.length ? "Missing person case and evidence created." : "Missing person case created.");
+      setCreateForm({ fullName: "", age: "", gender: "", description: "", lastSeenAddress: "", latitude: "", longitude: "" });
+      evidenceFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      setEvidenceFiles([]);
       if (incidentId) router.push(`/missing-persons/${incidentId}`);
       else router.refresh();
     } catch (actionError) {
@@ -149,8 +157,15 @@ export function MissingPersonConsole({ cases, hasMore, nextCursor, filters }: Mi
               />
             </FormField>
           </div>
+          <EvidencePicker
+            label="Evidence attachments"
+            allowedTypes={["Image", "Audio"]}
+            files={evidenceFiles}
+            onChange={setEvidenceFiles}
+            disabled={busyId === "create"}
+          />
           <div className="md:col-span-2">
-            <Button type="submit" disabled={busyId === "create"}>{busyId === "create" ? "Creating…" : "Create case"}</Button>
+            <Button type="submit" disabled={busyId === "create"}>{busyId === "create" ? "Creating and uploading..." : "Create case"}</Button>
           </div>
         </form>
       </Panel>

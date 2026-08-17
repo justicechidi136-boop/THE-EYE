@@ -12,6 +12,7 @@ import {
   ConsoleSearchInput,
 } from "../console";
 import { Button, FormField, InlineAlert, TextInput } from "../form-primitives";
+import { EvidencePicker, uploadIncidentEvidence, type SelectedEvidenceFile } from "../admin-media";
 import { Panel, StatusBadge } from "../ui";
 import type { StolenVehicleCaseView } from "../../lib/types/admin-views";
 
@@ -27,6 +28,7 @@ export function StolenVehicleConsole({ cases, hasMore, nextCursor, filters }: St
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [evidenceFiles, setEvidenceFiles] = useState<SelectedEvidenceFile[]>([]);
   const [createForm, setCreateForm] = useState({
     plateNumber: "",
     vin: "",
@@ -74,9 +76,15 @@ export function StolenVehicleConsole({ cases, hasMore, nextCursor, filters }: St
       });
       const payload = (await response.json()) as { message?: string; data?: { incident?: { id?: string } } };
       if (!response.ok) throw new Error(payload.message ?? "Case creation failed");
-      setMessage("Stolen vehicle case created.");
-      setCreateForm({ plateNumber: "", vin: "", make: "", model: "", color: "", year: "", lastSeenArea: "", latitude: "", longitude: "" });
       const incidentId = payload.data?.incident?.id;
+      if (!incidentId) throw new Error("Case was created but no incident ID was returned.");
+      if (evidenceFiles.length) {
+        await uploadIncidentEvidence(incidentId, evidenceFiles);
+      }
+      setMessage(evidenceFiles.length ? "Stolen vehicle case and evidence created." : "Stolen vehicle case created.");
+      setCreateForm({ plateNumber: "", vin: "", make: "", model: "", color: "", year: "", lastSeenArea: "", latitude: "", longitude: "" });
+      evidenceFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      setEvidenceFiles([]);
       if (incidentId) router.push(`/stolen-vehicles/${incidentId}`);
       else router.refresh();
     } catch (actionError) {
@@ -152,8 +160,15 @@ export function StolenVehicleConsole({ cases, hasMore, nextCursor, filters }: St
           <FormField label="Longitude">
             <TextInput value={createForm.longitude} onChange={(event) => setCreateForm((current) => ({ ...current, longitude: event.target.value }))} />
           </FormField>
+          <EvidencePicker
+            label="Evidence attachments"
+            allowedTypes={["Image", "Video", "Audio"]}
+            files={evidenceFiles}
+            onChange={setEvidenceFiles}
+            disabled={busyId === "create"}
+          />
           <div className="md:col-span-2">
-            <Button type="submit" disabled={busyId === "create"}>{busyId === "create" ? "Creating…" : "Create case"}</Button>
+            <Button type="submit" disabled={busyId === "create"}>{busyId === "create" ? "Creating and uploading..." : "Create case"}</Button>
           </div>
         </form>
       </Panel>

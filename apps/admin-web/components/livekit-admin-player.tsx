@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button } from "./form-primitives";
 
-export type LivekitPlayerState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "failed";
+export type LivekitPlayerState = "idle" | "connecting" | "connected" | "paused" | "reconnecting" | "disconnected" | "failed" | "unavailable";
 
 type Props = {
   sessionId: string;
@@ -12,6 +13,7 @@ type Props = {
 
 export function LivekitAdminPlayer({ sessionId, sessionStatus, onStateChange }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const roomRef = useRef<import("livekit-client").Room | null>(null);
   const [playerState, setPlayerState] = useState<LivekitPlayerState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -20,75 +22,108 @@ export function LivekitAdminPlayer({ sessionId, sessionStatus, onStateChange }: 
   }, [onStateChange, playerState]);
 
   useEffect(() => {
-    if (sessionStatus !== "Active" || !sessionId || sessionId === "-") {
-      setPlayerState("idle");
-      setError(null);
-      return;
-    }
-
-    let room: import("livekit-client").Room | null = null;
-    let cancelled = false;
-
-    async function connect() {
-      setPlayerState("connecting");
-      setError(null);
-      try {
-        const response = await fetch(`/api/live-video/sessions/${sessionId}/admin-token`, { method: "POST" });
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-          throw new Error(payload?.message ?? "Unable to authorize live stream");
-        }
-        const payload = (await response.json()) as {
-          livekit?: { url?: string; token?: string };
-        };
-        const url = payload.livekit?.url;
-        const token = payload.livekit?.token;
-        if (!url || !token) throw new Error("Live stream authorization token was not returned.");
-
-        const { Room, RoomEvent, Track } = await import("livekit-client");
-        room = new Room({ adaptiveStream: true, dynacast: true });
-        room.on(RoomEvent.Reconnecting, () => {
-          if (!cancelled) setPlayerState("reconnecting");
-        });
-        room.on(RoomEvent.Reconnected, () => {
-          if (!cancelled) setPlayerState("connected");
-        });
-        room.on(RoomEvent.Disconnected, () => {
-          if (!cancelled) setPlayerState("disconnected");
-        });
-        room.on(RoomEvent.TrackSubscribed, (track) => {
-          if (track.kind === Track.Kind.Video && videoRef.current) {
-            track.attach(videoRef.current);
-          }
-        });
-        await room.connect(url, token, { autoSubscribe: true });
-        if (!cancelled) setPlayerState("connected");
-      } catch (connectError) {
-        if (!cancelled) {
-          setPlayerState("failed");
-          setError(connectError instanceof Error ? connectError.message : "Connection failed");
-        }
-      }
-    }
-
-    void connect();
+    setError(null);
+    setPlayerState(sessionStatus === "Active" && sessionId && sessionId !== "-" ? "idle" : "unavailable");
     return () => {
-      cancelled = true;
-      void room?.disconnect();
+      void roomRef.current?.disconnect();
+      roomRef.current = null;
     };
   }, [sessionId, sessionStatus]);
 
+  async function connect() {
+    if (sessionStatus !== "Active" || !sessionId || sessionId === "-") {
+      setPlayerState("unavailable");
+      return;
+    }
+
+    setPlayerState("connecting");
+    setError(null);
+    try {
+      await roomRef.current?.disconnect();
+      roomRef.current = null;
+      const response = await fetch(`/api/live-video/sessions/${sessionId}/admin-token`, { method: "POST" });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(payload?.message ?? "Unable to authorize live stream");
+      }
+      const payload = (await response.json()) as {
+        livekit?: { url?: string; token?: string };
+      };
+      const url = payload.livekit?.url;
+      const token = payload.livekit?.token;
+      if (!url || !token) throw new Error("Live stream authorization token was not returned.");
+
+      const { Room, RoomEvent, Track } = await import("livekit-client");
+      const room = new Room({ adaptiveStream: true, dynacast: true });
+      roomRef.current = room;
+      room.on(RoomEvent.Reconnecting, () => setPlayerState("reconnecting"));
+      room.on(RoomEvent.Reconnected, () => setPlayerState("connected"));
+      room.on(RoomEvent.Disconnected, () => setPlayerState("disconnected"));
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === Track.Kind.Video && videoRef.current) {
+          track.attach(videoRef.current);
+          void videoRef.current.play().catch(() => undefined);
+        }
+      });
+      await room.connect(url, token, { autoSubscribe: true });
+      setPlayerState("connected");
+    } catch (connectError) {
+      setPlayerState("failed");
+      setError(connectError instanceof Error ? connectError.message : "Connection failed");
+    }
+  }
+
+  function pause() {
+    videoRef.current?.pause();
+    setPlayerState("paused");
+  }
+
+  function resume() {
+    void videoRef.current?.play();
+    setPlayerState("connected");
+  }
+
   return (
     <div className="relative h-full min-h-[520px] w-full">
-      <video ref={videoRef} className="h-full w-full object-cover" playsInline autoPlay muted />
-      {playerState !== "connected" ? (
+      <video ref={videoRef} className="h-full w-full object-cover" playsInline muted controls={playerState === "connected" || playerState === "paused"} />
+      {playerState === "connected" ? (
+        <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" className="bg-black/70 text-white hover:bg-black" onClick={pause}>
+            Pause
+          </Button>
+        </div>
+      ) : null}
+      {playerState !== "connected" && playerState !== "paused" ? (
         <div className="absolute inset-0 grid place-items-center bg-command/80 px-6 text-center text-white">
-          <div>
+          <div className="max-w-sm">
             {playerState === "connecting" ? <p className="text-lg font-semibold">Connecting to authorized stream...</p> : null}
             {playerState === "reconnecting" ? <p className="text-lg font-semibold">Reconnecting...</p> : null}
             {playerState === "disconnected" ? <p className="text-lg font-semibold">Stream disconnected</p> : null}
             {playerState === "failed" ? <p className="text-lg font-semibold">{error ?? "Connection failed"}</p> : null}
-            {playerState === "idle" ? <p className="text-lg font-semibold">Select an active incident stream</p> : null}
+            {playerState === "unavailable" ? <p className="text-lg font-semibold">No live stream is available for this incident.</p> : null}
+            {playerState === "idle" ? (
+              <>
+                <p className="text-lg font-semibold">Live video is ready.</p>
+                <p className="mt-2 text-sm text-white/80">Start playback when you are ready to monitor this incident.</p>
+              </>
+            ) : null}
+            <div className="mt-4 flex justify-center">
+              {playerState === "idle" || playerState === "failed" || playerState === "disconnected" ? (
+                <Button type="button" variant="secondary" className="bg-white text-command hover:bg-white/90" onClick={() => void connect()}>
+                  {playerState === "failed" || playerState === "disconnected" ? "Retry live video" : "Play live video"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {playerState === "paused" ? (
+        <div className="absolute inset-0 grid place-items-center bg-command/70 px-6 text-center text-white">
+          <div>
+            <p className="text-lg font-semibold">Live video paused.</p>
+            <Button type="button" variant="secondary" className="mt-4 bg-white text-command hover:bg-white/90" onClick={resume}>
+              Play
+            </Button>
           </div>
         </div>
       ) : null}

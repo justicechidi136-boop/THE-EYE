@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "../../../components/app-shell";
 import { BroadcastActions } from "../../../components/broadcast-actions";
 import { authorLabelTone, BroadcastModerationActions } from "../../../components/broadcast/broadcast-moderation-actions";
+import { EvidenceGallery } from "../../../components/admin-media";
 import { ConsoleEmptyState, ConsolePageHeader } from "../../../components/console";
 import { StatusBadge } from "../../../components/ui";
 import { fetchAdminBroadcast, fetchBroadcastReports } from "../../../lib/api/data";
@@ -62,6 +63,18 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
                 Suspended: {broadcast.suspendedReason}
               </p>
             ) : null}
+          </article>
+
+          <article className="rounded-lg border border-line bg-surface p-5 shadow-sm">
+            <EvidenceGallery
+              title="Broadcast media"
+              items={broadcast.attachments.map((item) => ({
+                type: item.mediaType === "image" ? "Image" : item.mediaType === "video" ? "Video" : item.mediaType === "audio" ? "Audio" : "Media",
+                label: item.label,
+                contentType: item.contentType,
+                url: item.url,
+              }))}
+            />
           </article>
 
           <article className="rounded-lg border border-line bg-surface p-5 shadow-sm">
