@@ -33,7 +33,12 @@ const DEFAULT_PAIRING_TTL_MINUTES = 15;
 const MIN_PAIRING_TTL_MINUTES = 5;
 const MAX_PAIRING_TTL_MINUTES = 24 * 60;
 const MAX_CLAIM_ATTEMPTS = 5;
+const MAX_FAILED_ACTIVATION_ATTEMPTS = 3;
 const DUPLICATE_ACTIVE_CODE_REASON = "DUPLICATE_ACTIVE_ACTIVATION_CODES";
+const ACTIVATION_STATUS_LOCKED = "LOCKED";
+const ACTIVATION_STATUS_USABLE = "USABLE";
+const BRUTE_FORCE_LOCK_REASON = "TOO_MANY_FAILED_ACTIVATION_ATTEMPTS";
+const BRUTE_FORCE_LOCK_EVENT = "DEVICE_ACTIVATION_BRUTE_FORCE_LOCKED";
 const ACTIVE_PAIRING_STATUSES = [FieldPairingTokenStatus.Issued, FieldPairingTokenStatus.Claimed] as const;
 
 type PairingTokenRow = {
@@ -74,6 +79,12 @@ export class FieldDevicePairingService {
     return this.issueOrRegenerate(actor, deviceId, dto, "field.device.pairing_regenerated");
   }
 
+  async recoverActivationLock(actor: JwtPayload, deviceId: string, dto: IssuePairingCodeDto) {
+    return this.issueOrRegenerate(actor, deviceId, dto, "field.device.activation_lock_recovered", {
+      allowLockedRecovery: true,
+    });
+  }
+
   async regenerateForAuthenticatedDevice(actor: JwtPayload, dto: IssuePairingCodeDto) {
     if (actor.typ !== "field" || !actor.fieldDeviceId) {
       throw new ForbiddenException("Field device session required");
@@ -109,7 +120,7 @@ export class FieldDevicePairingService {
     deviceId: string,
     dto: IssuePairingCodeDto,
     auditAction: string,
-    options: { allowBoundRecovery?: boolean } = {},
+    options: { allowBoundRecovery?: boolean; allowLockedRecovery?: boolean } = {},
   ) {
     let device;
     if (options.allowBoundRecovery) {
@@ -128,6 +139,9 @@ export class FieldDevicePairingService {
     }
     if (!options.allowBoundRecovery && (device.publicKey || device.installationIdHash)) {
       throw new BadRequestException("Device is already bound — use require-re-pair instead");
+    }
+    if ((device as any).activationStatus === ACTIVATION_STATUS_LOCKED && !options.allowLockedRecovery) {
+      throw this.genericActivationFailure();
     }
 
     const ttlMinutes = this.resolveTtlMinutes(dto.ttlMinutes);
@@ -148,6 +162,20 @@ export class FieldDevicePairingService {
 
       if (activeCodeCount === 1) {
         await this.revokeActiveTokensWithClient(device.id, actor.sub, "superseded", tx);
+      }
+
+      if (options.allowLockedRecovery) {
+        await tx.fieldDevice.update({
+          where: { id: device.id },
+          data: {
+            failedActivationAttempts: 0,
+            firstFailedActivationAt: null,
+            lastFailedActivationAt: null,
+            activationStatus: ACTIVATION_STATUS_USABLE,
+            activationLockedAt: null,
+            activationLockReason: null,
+          } as never,
+        });
       }
 
       await tx.fieldDevicePairingToken.create({
@@ -189,7 +217,11 @@ export class FieldDevicePairingService {
       action: auditAction,
       entityType: "field_device",
       entityId: device.id,
-      metadata: { publicDeviceId: device.publicDeviceId, expiresAt: expiresAt.toISOString() },
+      metadata: {
+        publicDeviceId: device.publicDeviceId,
+        expiresAt: expiresAt.toISOString(),
+        activationRecovery: options.allowLockedRecovery === true,
+      },
     });
 
     return {
@@ -302,6 +334,7 @@ export class FieldDevicePairingService {
   async claim(dto: ClaimFieldPairingDto) {
     const token = await this.findToken(dto);
     await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
+    await this.assertFieldActivationUnlocked(token.fieldDeviceId);
     this.assertTokenClaimable(token);
 
     if (token.status === FieldPairingTokenStatus.Issued) {
@@ -327,6 +360,7 @@ export class FieldDevicePairingService {
   async challenge(dto: FieldPairingChallengeDto) {
     const token = await this.findToken(dto);
     await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
+    await this.assertFieldActivationUnlocked(token.fieldDeviceId);
     this.assertTokenClaimable(token);
     if (token.status !== FieldPairingTokenStatus.Claimed) {
       throw new ForbiddenException({
@@ -340,6 +374,7 @@ export class FieldDevicePairingService {
   async complete(dto: CompleteFieldPairingClaimDto) {
     const token = await this.findToken(dto);
     await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
+    await this.assertFieldActivationUnlocked(token.fieldDeviceId);
     this.assertTokenClaimable(token);
     if (token.status !== FieldPairingTokenStatus.Claimed) {
       throw new ForbiddenException({
@@ -354,13 +389,13 @@ export class FieldDevicePairingService {
     try {
       await this.devices.consumeChallenge(dto.challengeId, dto.challenge);
     } catch (error) {
-      await this.registerFailedAttempt(token.id);
+      await this.registerFailedAttempt(token);
       throw error;
     }
 
     if (!verifyFieldDeviceSignature(dto.publicKey, dto.challenge, dto.challengeSignature)) {
-      await this.registerFailedAttempt(token.id);
-      throw new UnauthorizedException({ code: FIELD_ERROR_CODES.DEVICE_SIGNATURE_INVALID, message: "Device signature invalid" });
+      await this.registerFailedAttempt(token);
+      throw this.genericActivationFailure(FIELD_ERROR_CODES.DEVICE_SIGNATURE_INVALID);
     }
 
     const existingBinding = await this.prisma.fieldDevice.findUnique({ where: { installationIdHash: dto.installationIdHash } });
@@ -397,6 +432,12 @@ export class FieldDevicePairingService {
         packageName: dto.packageName ?? device.packageName,
         appEnvironment: dto.appEnvironment ?? device.appEnvironment,
         requiresRePair: false,
+        failedActivationAttempts: 0,
+        firstFailedActivationAt: null,
+        lastFailedActivationAt: null,
+        activationStatus: ACTIVATION_STATUS_USABLE,
+        activationLockedAt: null,
+        activationLockReason: null,
         lastAuthenticatedAt: now,
         preProvisionStatus: autoActivate ? FieldPreProvisionStatus.Active : FieldPreProvisionStatus.AwaitingFinalApproval,
         registrationStatus: autoActivate ? FieldDeviceRegistrationStatus.Active : device.registrationStatus,
@@ -440,6 +481,7 @@ export class FieldDevicePairingService {
   async status(query: FieldPairingStatusQuery) {
     const token = await this.findToken(query);
     await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
+    await this.assertFieldActivationUnlocked(token.fieldDeviceId);
     return {
       data: {
         status: token.status,
@@ -482,6 +524,13 @@ export class FieldDevicePairingService {
     });
   }
 
+  private async assertFieldActivationUnlocked(fieldDeviceId: string) {
+    const device = await this.prisma.fieldDevice.findUnique({ where: { id: fieldDeviceId } });
+    if ((device as any)?.activationStatus === ACTIVATION_STATUS_LOCKED) {
+      throw this.genericActivationFailure();
+    }
+  }
+
   private assertTokenClaimable(token: PairingTokenRow) {
     if (token.status === FieldPairingTokenStatus.Completed) {
       throw new ForbiddenException({ code: FIELD_PAIRING_ERROR_CODES.TOKEN_ALREADY_USED, message: "Pairing code already used" });
@@ -493,20 +542,80 @@ export class FieldDevicePairingService {
       throw new ForbiddenException({ code: FIELD_PAIRING_ERROR_CODES.TOKEN_EXPIRED, message: "Pairing code expired" });
     }
     if (token.attemptCount >= token.maxAttempts) {
-      throw new ForbiddenException({ code: FIELD_PAIRING_ERROR_CODES.RATE_LIMITED, message: "Too many attempts — request a new pairing code" });
+      throw this.genericActivationFailure(FIELD_PAIRING_ERROR_CODES.RATE_LIMITED);
     }
   }
 
-  private async registerFailedAttempt(tokenId: string) {
-    const updated = await this.prisma.fieldDevicePairingToken.update({
-      where: { id: tokenId },
-      data: { attemptCount: { increment: 1 } },
-    });
-    if (updated.attemptCount >= updated.maxAttempts) {
-      await this.prisma.fieldDevicePairingToken.update({
-        where: { id: tokenId },
-        data: { status: FieldPairingTokenStatus.Failed },
+  private async registerFailedAttempt(token: PairingTokenRow) {
+    await this.withTransaction(async (tx) => {
+      await this.lockFieldDevice(tx, token.fieldDeviceId);
+      const now = new Date();
+      const updatedDevice = await tx.fieldDevice.update({
+        where: { id: token.fieldDeviceId },
+        data: {
+          failedActivationAttempts: { increment: 1 },
+          lastFailedActivationAt: now,
+        } as never,
       });
-    }
+      const failedAttempts = Number((updatedDevice as any)?.failedActivationAttempts ?? token.attemptCount + 1);
+      if (!(updatedDevice as any)?.firstFailedActivationAt) {
+        await tx.fieldDevice.update({
+          where: { id: token.fieldDeviceId },
+          data: { firstFailedActivationAt: now } as never,
+        });
+      }
+      await tx.fieldDevicePairingToken.update({
+        where: { id: token.id },
+        data: { attemptCount: { increment: 1 } },
+      });
+      if (failedAttempts >= MAX_FAILED_ACTIVATION_ATTEMPTS) {
+        await tx.fieldDevice.update({
+          where: { id: token.fieldDeviceId },
+          data: {
+            activationStatus: ACTIVATION_STATUS_LOCKED,
+            activationLockedAt: now,
+            activationLockReason: BRUTE_FORCE_LOCK_REASON,
+            requiresRePair: true,
+          } as never,
+        });
+        await tx.fieldDevicePairingToken.updateMany({
+          where: { fieldDeviceId: token.fieldDeviceId, status: { in: [...ACTIVE_PAIRING_STATUSES] } },
+          data: {
+            status: FieldPairingTokenStatus.Revoked,
+            cancelledAt: now,
+            revokedReason: BRUTE_FORCE_LOCK_REASON,
+          },
+        });
+        await tx.auditLog.create?.({
+          data: {
+            actorType: "system",
+            action: BRUTE_FORCE_LOCK_EVENT,
+            entityType: "field_device",
+            entityId: token.fieldDeviceId,
+            reason: BRUTE_FORCE_LOCK_REASON,
+            metadata: {
+              deviceType: "field_tablet",
+              failedAttemptCount: failedAttempts,
+              firstFailedAt: ((updatedDevice as any)?.firstFailedActivationAt ?? now).toISOString(),
+              lastFailedAt: now.toISOString(),
+              lockedAt: now.toISOString(),
+              result: "ACTIVATION_LOCKED",
+            },
+          } as never,
+        });
+      } else if (token.attemptCount + 1 >= token.maxAttempts) {
+        await tx.fieldDevicePairingToken.update({
+          where: { id: token.id },
+          data: { status: FieldPairingTokenStatus.Failed },
+        });
+      }
+    });
+  }
+
+  private genericActivationFailure(code = FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID) {
+    return new UnauthorizedException({
+      code,
+      message: "Device activation could not be completed.",
+    });
   }
 }

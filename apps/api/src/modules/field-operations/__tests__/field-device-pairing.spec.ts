@@ -259,6 +259,7 @@ describe("FieldDevicePairingService", () => {
       const { service, prisma, devices } = createService();
       prisma.fieldDevicePairingToken.findFirst.mockResolvedValue(issuedToken({ status: FieldPairingTokenStatus.Claimed }));
       prisma.fieldDevicePairingToken.update.mockResolvedValue({ attemptCount: 1, maxAttempts: 5 });
+      prisma.fieldDevice.update.mockResolvedValue({ id: "device-1", failedActivationAttempts: 1, firstFailedActivationAt: null });
       devices.consumeChallenge.mockResolvedValue(undefined);
 
       await expect(
@@ -275,6 +276,139 @@ describe("FieldDevicePairingService", () => {
       expect(prisma.fieldDevicePairingToken.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ attemptCount: { increment: 1 } }) }),
       );
+    });
+
+    it("locks activation and revokes the outstanding code on the third failed attempt without deactivating the device", async () => {
+      const { service, prisma, devices } = createService();
+      prisma.fieldDevicePairingToken.findFirst.mockResolvedValue(
+        issuedToken({ status: FieldPairingTokenStatus.Claimed, attemptCount: 2 }),
+      );
+      prisma.fieldDevice.findUnique.mockResolvedValue({ id: "device-1", activationStatus: "USABLE" });
+      prisma.fieldDevice.update
+        .mockResolvedValueOnce({
+          id: "device-1",
+          failedActivationAttempts: 3,
+          firstFailedActivationAt: new Date("2026-08-17T10:00:00.000Z"),
+        })
+        .mockResolvedValue({ id: "device-1" });
+      devices.consumeChallenge.mockResolvedValue(undefined);
+
+      await expect(
+        service.complete({
+          pairingToken: "claimed-token",
+          challengeId: "challenge-1",
+          challenge: "abc",
+          challengeSignature: "bad-signature",
+          publicKey: "pk",
+          installationIdHash: "hash-1",
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ message: "Device activation could not be completed." }),
+      });
+
+      expect(prisma.fieldDevice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            activationStatus: "LOCKED",
+            activationLockReason: "TOO_MANY_FAILED_ACTIVATION_ATTEMPTS",
+            requiresRePair: true,
+          }),
+        }),
+      );
+      expect(prisma.fieldDevice.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ registrationStatus: "Deactivated" }),
+        }),
+      );
+      expect(prisma.fieldDevicePairingToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: FieldPairingTokenStatus.Revoked,
+            revokedReason: "TOO_MANY_FAILED_ACTIVATION_ATTEMPTS",
+          }),
+        }),
+      );
+      expect(prisma.fieldDeviceSession.updateMany).not.toHaveBeenCalled();
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: "DEVICE_ACTIVATION_BRUTE_FORCE_LOCKED" }),
+        }),
+      );
+    });
+
+    it("rejects locked-device attempts before completing the pairing challenge", async () => {
+      const { service, prisma, devices } = createService();
+      prisma.fieldDevicePairingToken.findFirst.mockResolvedValue(issuedToken({ status: FieldPairingTokenStatus.Claimed }));
+      prisma.fieldDevice.findUnique.mockResolvedValue({ id: "device-1", activationStatus: "LOCKED" });
+
+      await expect(
+        service.complete({
+          pairingToken: "claimed-token",
+          challengeId: "challenge-1",
+          challenge: "abc",
+          challengeSignature: "valid-looking",
+          publicKey: "pk",
+          installationIdHash: "hash-1",
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ message: "Device activation could not be completed." }),
+      });
+
+      expect(devices.consumeChallenge).not.toHaveBeenCalled();
+    });
+
+    it("blocks self-regeneration while activation is locked", async () => {
+      const { service, prisma, devicesAdmin, devices } = createService();
+      prisma.fieldDevice.findUnique.mockResolvedValue({
+        id: "device-1",
+        provisioningMode: FieldProvisioningMode.PreProvisioned,
+        permissionProfileId: "profile-1",
+        publicKey: "bound-key",
+        installationIdHash: "hash",
+        activationStatus: "LOCKED",
+      });
+      (devices as any).assertDeviceCanAuthenticate = jest.fn();
+
+      await expect(
+        service.regenerateForAuthenticatedDevice(
+          { sub: "field-user", typ: "field", fieldDeviceId: "device-1" } as never,
+          {},
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ message: "Device activation could not be completed." }),
+      });
+
+      expect(devicesAdmin.assertSupervisor).not.toHaveBeenCalled();
+      expect(prisma.fieldDevicePairingToken.create).not.toHaveBeenCalled();
+    });
+
+    it("authorized recovery clears lock state and creates exactly one new active code", async () => {
+      const { service, prisma, devicesAdmin } = createService();
+      devicesAdmin.requireScopedDevice.mockResolvedValue({
+        id: "device-1",
+        publicDeviceId: "fd_abc123",
+        provisioningMode: FieldProvisioningMode.PreProvisioned,
+        permissionProfileId: "profile-1",
+        publicKey: null,
+        installationIdHash: null,
+        activationStatus: "LOCKED",
+      });
+      prisma.fieldDevicePairingToken.count.mockResolvedValue(0);
+
+      const result = await service.recoverActivationLock(actor, "device-1", {});
+
+      expect(result.data.shortCode).toMatch(/^EYE-/);
+      expect(prisma.fieldDevice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            failedActivationAttempts: 0,
+            activationStatus: "USABLE",
+            activationLockedAt: null,
+            activationLockReason: null,
+          }),
+        }),
+      );
+      expect(prisma.fieldDevicePairingToken.create).toHaveBeenCalledTimes(1);
     });
 
     it("rejects completion when the installationIdHash is already bound to a different device (duplicate binding)", async () => {

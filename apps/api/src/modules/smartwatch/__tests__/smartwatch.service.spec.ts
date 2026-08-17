@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import { AdminRoleName } from "@the-eye/shared";
 import { hashToken } from "../../../common/auth/crypto";
 import { SmartwatchConnectivityMode, SmartwatchOfflineEventType, SmartwatchPairingMethod } from "@the-eye/shared";
@@ -61,7 +61,10 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({ id: "offline-1", status: "Processed" }),
     },
+    $transaction: jest.fn(),
+    $queryRawUnsafe: jest.fn(),
   } as any;
+  prisma.$transaction.mockImplementation((callback: any) => callback(prisma));
   const incidents = {
     report: jest.fn().mockResolvedValue({ id: "incident-1", priority: "P1LifeThreatening", status: "Submitted" }),
   } as any;
@@ -160,7 +163,7 @@ describe("SmartwatchService", () => {
       pairingMethod: SmartwatchPairingMethod.PairingCode,
       pairingCode: "123456",
       firebaseEnv: "staging",
-    }, { sub: "user-1", typ: "user", permissions: ["incident:create"] } as any)).rejects.toBeInstanceOf(BadRequestException);
+    }, { sub: "user-1", typ: "user", permissions: ["incident:create"] } as any)).rejects.toMatchObject({ status: 401 });
   });
 
   it("rejects reused pairing codes", async () => {
@@ -181,7 +184,7 @@ describe("SmartwatchService", () => {
       pairingMethod: SmartwatchPairingMethod.PairingCode,
       pairingCode: "123456",
       firebaseEnv: "staging",
-    }, { sub: "user-1", typ: "user", permissions: ["incident:create"] } as any)).rejects.toBeInstanceOf(BadRequestException);
+    }, { sub: "user-1", typ: "user", permissions: ["incident:create"] } as any)).rejects.toMatchObject({ status: 401 });
   });
 
   it("rejects wrong-environment pairing codes", async () => {
@@ -202,7 +205,7 @@ describe("SmartwatchService", () => {
       pairingMethod: SmartwatchPairingMethod.PairingCode,
       pairingCode: "123456",
       firebaseEnv: "staging",
-    }, { sub: "user-1", typ: "user", permissions: ["incident:create"] } as any)).rejects.toBeInstanceOf(BadRequestException);
+    }, { sub: "user-1", typ: "user", permissions: ["incident:create"] } as any)).rejects.toMatchObject({ status: 401 });
   });
 
   it("returns one-time device secret from pairing status", async () => {
@@ -438,6 +441,114 @@ describe("SmartwatchService", () => {
       pairingCode: "654321",
       firebaseEnv: "staging",
     })).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("locks standalone activation after the third wrong admin code and does not deactivate an existing watch", async () => {
+    const lockedAtStart = {
+      id: "session-1",
+      deviceId: "EYE-WATCH-001",
+      pairingCodeHash: hashToken("123456"),
+      status: "ACTIVE",
+      firebaseEnv: "staging",
+      expiresAt: new Date(Date.now() + 60_000),
+      usedAt: null,
+      deviceSecretPlain: null,
+      failedActivationAttempts: 2,
+      firstFailedActivationAt: new Date("2026-08-17T10:00:00.000Z"),
+      activationStatus: "USABLE",
+    };
+    const { service, prisma } = buildService({ pairingSession: lockedAtStart });
+    prisma.smartwatchPairingSession.findUnique
+      .mockResolvedValueOnce(lockedAtStart)
+      .mockResolvedValueOnce(lockedAtStart);
+
+    await expect(service.activateWithCode({
+      deviceId: "EYE-WATCH-001",
+      pairingCode: "654321",
+      firebaseEnv: "staging",
+    })).rejects.toMatchObject({ status: 401 });
+
+    expect(prisma.smartwatchPairingSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          failedActivationAttempts: 3,
+          activationStatus: "LOCKED",
+          activationLockReason: "TOO_MANY_FAILED_ACTIVATION_ATTEMPTS",
+          status: "REVOKED",
+        }),
+      }),
+    );
+    expect(prisma.smartwatchDevice.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({ isActive: false }),
+      }),
+    );
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "DEVICE_ACTIVATION_BRUTE_FORCE_LOCKED" }),
+      }),
+    );
+  });
+
+  it("rejects locked standalone activation before code validation", async () => {
+    const { service, prisma } = buildService({
+      pairingSession: {
+        id: "session-1",
+        deviceId: "EYE-WATCH-001",
+        pairingCodeHash: hashToken("123456"),
+        status: "REVOKED",
+        firebaseEnv: "staging",
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+        deviceSecretPlain: null,
+        failedActivationAttempts: 3,
+        activationStatus: "LOCKED",
+      },
+    });
+
+    await expect(service.activateWithCode({
+      deviceId: "EYE-WATCH-001",
+      pairingCode: "123456",
+      firebaseEnv: "staging",
+    })).rejects.toMatchObject({ status: 401 });
+
+    expect(prisma.smartwatchDevice.upsert).not.toHaveBeenCalled();
+    expect(prisma.smartwatchPairingSession.update).not.toHaveBeenCalled();
+  });
+
+  it("admin activation issuance recovers a locked smartwatch session with one new active code", async () => {
+    const { service, prisma } = buildService({
+      pairingSession: {
+        id: "session-1",
+        deviceId: "EYE-WATCH-001",
+        pairingCodeHash: hashToken("123456"),
+        status: "REVOKED",
+        firebaseEnv: "staging",
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+        deviceSecretPlain: null,
+        failedActivationAttempts: 3,
+        activationStatus: "LOCKED",
+      },
+    });
+    prisma.smartwatchPairingSession.upsert = jest.fn().mockResolvedValue({ id: "session-1", deviceId: "EYE-WATCH-001" });
+
+    await service.adminIssueActivation(
+      { deviceId: "EYE-WATCH-001", ttlMinutes: 10 },
+      { typ: "admin", sub: "admin-1", role: AdminRoleName.SuperAdmin } as any,
+    );
+
+    expect(prisma.smartwatchPairingSession.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          status: "ACTIVE",
+          failedActivationAttempts: 0,
+          activationStatus: "USABLE",
+          activationLockedAt: null,
+          activationLockReason: null,
+        }),
+      }),
+    );
   });
 
   it("activates unassigned inventory watches without inventing a user audit FK", async () => {

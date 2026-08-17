@@ -72,6 +72,13 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
       });
       return;
     }
+    if (device.isActivationLocked) {
+      setState(() {
+        _error =
+            'Activation locked for security. Too many unsuccessful activation attempts were detected. Use the approved recovery process.';
+      });
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder:
@@ -171,6 +178,15 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                           subtitle: Text('Security verification required'),
                         ),
                       ),
+                    if (_device!.isActivationLocked)
+                      const Card(
+                        child: ListTile(
+                          title: Text('Activation locked for security'),
+                          subtitle: Text(
+                            'Too many unsuccessful activation attempts were detected. Use the approved recovery process.',
+                          ),
+                        ),
+                      ),
                     if (_activationCode != null)
                       Card(
                         child: ListTile(
@@ -200,6 +216,7 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                     onPressed:
                         _device == null ||
                                 _device!.isSecurityDeactivated ||
+                                _device!.isActivationLocked ||
                                 _regenerating
                             ? null
                             : _regenerateActivationCode,

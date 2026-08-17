@@ -173,6 +173,10 @@ class PairingService {
           if (secret.isNotEmpty) {
             await completePairing(deviceSecret: secret);
           }
+        } else if (status == 'locked') {
+          await markFailed(
+            'Activation locked for security. Too many unsuccessful activation attempts were detected. Contact an authorized administrator or use the approved recovery process.',
+          );
         } else if (status == 'expired') {
           await markFailed('Pairing code expired. Generate a new code.');
         }

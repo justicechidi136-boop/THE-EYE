@@ -14,6 +14,7 @@ class FieldDeviceRecord {
     this.manufacturer,
     this.model,
     this.requiresRePair = false,
+    this.activationStatus = 'USABLE',
     this.isLost = false,
     this.isRevoked = false,
     this.lastSeenAt,
@@ -29,6 +30,7 @@ class FieldDeviceRecord {
       manufacturer: data['manufacturer'] as String?,
       model: data['model'] as String?,
       requiresRePair: data['requiresRePair'] as bool? ?? false,
+      activationStatus: data['activationStatus'] as String? ?? 'USABLE',
       isLost: data['isLost'] as bool? ?? false,
       isRevoked: data['isRevoked'] as bool? ?? false,
       lastSeenAt: data['lastSeenAt'] as String?,
@@ -45,6 +47,7 @@ class FieldDeviceRecord {
       registrationStatus == 'Disabled';
   bool get isSecurityDeactivated =>
       registrationStatus == 'Deactivated' || registrationStatus == 'Disabled';
+  bool get isActivationLocked => activationStatus == 'LOCKED';
 
   final String id;
   final String publicDeviceId;
@@ -53,6 +56,7 @@ class FieldDeviceRecord {
   final String? manufacturer;
   final String? model;
   final bool requiresRePair;
+  final String activationStatus;
   final bool isLost;
   final bool isRevoked;
   final String? lastSeenAt;

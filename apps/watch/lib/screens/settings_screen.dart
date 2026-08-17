@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/watch_flavor.dart';
 import '../l10n/generated/watch_localizations.dart';
+import '../api/watch_api_client.dart';
 import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
@@ -178,6 +179,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _activationCode = result.code;
         _activationExpiresAt = result.expiresAt;
+        _regenerating = false;
+      });
+    } on WatchApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _activationError = error.statusCode == 401 || error.statusCode == 403
+            ? 'Activation locked for security. Too many unsuccessful activation attempts were detected. Contact an authorized administrator or use the approved recovery process.'
+            : 'Internet connection is required to generate a new device code.';
         _regenerating = false;
       });
     } catch (error) {

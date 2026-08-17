@@ -291,6 +291,7 @@ export class FieldDevicesService {
     isLost: boolean;
     isRevoked: boolean;
     requiresRePair: boolean;
+    activationStatus?: string | null;
     isRootRiskDetected?: boolean;
     approvedAt: Date | null;
     registeredAt: Date;
@@ -333,6 +334,7 @@ export class FieldDevicesService {
       isLost: device.isLost,
       isRevoked: device.isRevoked,
       requiresRePair: device.requiresRePair,
+      activationStatus: device.activationStatus ?? "USABLE",
       isRootRiskDetected: device.isRootRiskDetected ?? false,
       approvedAt: device.approvedAt?.toISOString() ?? null,
       registeredAt: device.registeredAt.toISOString(),
