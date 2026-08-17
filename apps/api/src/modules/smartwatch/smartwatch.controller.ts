@@ -18,6 +18,7 @@ import {
   IssueSmartwatchPairingCodeDto,
   AdminIssueSmartwatchActivationDto,
   ActivateWatchWithCodeDto,
+  RegenerateWatchActivationCodeDto,
 } from "./dto/smartwatch.dto";
 import { SmartwatchService } from "./smartwatch.service";
 
@@ -55,6 +56,17 @@ export class SmartwatchController {
   @RateLimit("auth")
   activateWithCode(@Body() dto: ActivateWatchWithCodeDto) {
     return this.smartwatch.activateWithCode(dto);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post("devices/:deviceId/activation-code/regenerate")
+  @RateLimit("auth")
+  regenerateActivationCode(
+    @Param("deviceId") deviceId: string,
+    @Body() dto: RegenerateWatchActivationCodeDto,
+    @Req() request: any,
+  ) {
+    return this.smartwatch.regenerateActivationCode(deviceId, dto ?? {}, request.user);
   }
 
   @ApiBearerAuth()

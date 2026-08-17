@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../config/watch_flavor.dart';
 import '../l10n/generated/watch_localizations.dart';
+import '../api/watch_api_client.dart';
 import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
 import '../theme/eye_colors.dart';
 import '../widgets/watch_ui.dart';
 import 'routes.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     required this.services,
@@ -17,6 +18,16 @@ class SettingsScreen extends StatelessWidget {
 
   final WatchAppServices services;
   final LauncherService launcher;
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  String? _activationCode;
+  DateTime? _activationExpiresAt;
+  String? _activationError;
+  bool _regenerating = false;
 
   @override
   Widget build(BuildContext context) {
@@ -29,13 +40,13 @@ class SettingsScreen extends StatelessWidget {
           _SettingToggle(
             label: 'Vibration',
             value: true,
-            onChanged: services.vibration.setEnabled,
+            onChanged: widget.services.vibration.setEnabled,
           ),
           _SettingToggle(
             label: 'Failover to LTE',
-            value: services.connectivity.failoverEnabled,
+            value: widget.services.connectivity.failoverEnabled,
             onChanged: (value) {
-              services.connectivity.update(failoverEnabled: value);
+              widget.services.connectivity.update(failoverEnabled: value);
             },
           ),
           const SizedBox(height: 8),
@@ -84,21 +95,29 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 6),
             WatchOutlineButton(
               label: 'Change Default Home',
-              onPressed: launcher.openHomeSettings,
+              onPressed: widget.launcher.openHomeSettings,
             ),
           ],
           const SizedBox(height: 6),
           WatchOutlineButton(
             label: 'System Settings',
-            onPressed: launcher.openSystemSettings,
+            onPressed: widget.launcher.openSystemSettings,
+          ),
+          const SizedBox(height: 8),
+          _DeviceCodePanel(
+            code: _activationCode,
+            expiresAt: _activationExpiresAt,
+            error: _activationError,
+            busy: _regenerating,
+            onRegenerate: _confirmRegenerate,
           ),
           const Spacer(),
           WatchPrimaryButton(
             label: 'Re-pair Device',
             color: EyeColors.orange,
             onPressed: () async {
-              await services.push.revokeToken();
-              await services.pairing.unpair();
+              await widget.services.push.revokeToken();
+              await widget.services.pairing.unpair();
               if (!context.mounted) return;
               Navigator.pushNamedAndRemoveUntil(
                 context,
@@ -112,9 +131,9 @@ class SettingsScreen extends StatelessWidget {
             label: 'Unpair & Wipe',
             color: EyeColors.danger,
             onPressed: () async {
-              await services.push.revokeToken();
-              await services.pairing.unpair();
-              await services.credentials.wipe();
+              await widget.services.push.revokeToken();
+              await widget.services.pairing.unpair();
+              await widget.services.credentials.wipe();
               if (!context.mounted) return;
               Navigator.pushNamedAndRemoveUntil(
                 context,
@@ -124,6 +143,115 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
           const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmRegenerate() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Regenerate Device Code'),
+        content: const Text(
+          'Use this if THE EYE was reinstalled or this watch needs to be paired again. Generating a new code will invalidate the previous activation code.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Regenerate Code'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _regenerating = true;
+      _activationError = null;
+    });
+    try {
+      final result = await widget.services.pairing.regenerateActivationCode();
+      if (!mounted) return;
+      setState(() {
+        _activationCode = result.code;
+        _activationExpiresAt = result.expiresAt;
+        _regenerating = false;
+      });
+    } on WatchApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _activationError = error.statusCode == 401 || error.statusCode == 403
+            ? 'Activation locked for security. Too many unsuccessful activation attempts were detected. Contact an authorized administrator or use the approved recovery process.'
+            : 'Internet connection is required to generate a new device code.';
+        _regenerating = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _activationError =
+            'Internet connection is required to generate a new device code.';
+        _regenerating = false;
+      });
+    }
+  }
+}
+
+class _DeviceCodePanel extends StatelessWidget {
+  const _DeviceCodePanel({
+    required this.code,
+    required this.expiresAt,
+    required this.error,
+    required this.busy,
+    required this.onRegenerate,
+  });
+
+  final String? code;
+  final DateTime? expiresAt;
+  final String? error;
+  final bool busy;
+  final VoidCallback onRegenerate;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayCode = code == null || code!.length != 6
+        ? code
+        : '${code!.substring(0, 3)} ${code!.substring(3)}';
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        border: Border.all(color: EyeColors.green.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Device & Pairing', style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 4),
+          if (displayCode != null) ...[
+            Text(
+              displayCode,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            ),
+            if (expiresAt != null)
+              Text(
+                'Expires ${TimeOfDay.fromDateTime(expiresAt!).format(context)}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 10),
+              ),
+            const SizedBox(height: 4),
+          ],
+          if (error != null)
+            Text(error!,
+                style: const TextStyle(color: EyeColors.danger, fontSize: 10)),
+          WatchOutlineButton(
+            label: busy ? 'Generating...' : 'Regenerate Device Code',
+            onPressed: busy ? null : onRegenerate,
+          ),
         ],
       ),
     );

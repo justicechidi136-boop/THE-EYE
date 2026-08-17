@@ -239,6 +239,15 @@ export class FieldDevicesService {
     if (device.registrationStatus === FieldDeviceRegistrationStatus.Suspended) {
       throw new ForbiddenException({ code: FIELD_ERROR_CODES.DEVICE_SUSPENDED, message: "Device suspended" });
     }
+    if (
+      device.registrationStatus === FieldDeviceRegistrationStatus.Deactivated ||
+      device.registrationStatus === FieldDeviceRegistrationStatus.Disabled
+    ) {
+      throw new ForbiddenException({
+        code: FIELD_ERROR_CODES.DEVICE_SECURITY_DEACTIVATED,
+        message: "Device security verification required",
+      });
+    }
     if (device.isLost || device.registrationStatus === FieldDeviceRegistrationStatus.Lost) {
       throw new ForbiddenException({ code: FIELD_ERROR_CODES.DEVICE_MARKED_LOST, message: "Device marked lost" });
     }
@@ -282,6 +291,7 @@ export class FieldDevicesService {
     isLost: boolean;
     isRevoked: boolean;
     requiresRePair: boolean;
+    activationStatus?: string | null;
     isRootRiskDetected?: boolean;
     approvedAt: Date | null;
     registeredAt: Date;
@@ -324,6 +334,7 @@ export class FieldDevicesService {
       isLost: device.isLost,
       isRevoked: device.isRevoked,
       requiresRePair: device.requiresRePair,
+      activationStatus: device.activationStatus ?? "USABLE",
       isRootRiskDetected: device.isRootRiskDetected ?? false,
       approvedAt: device.approvedAt?.toISOString() ?? null,
       registeredAt: device.registeredAt.toISOString(),

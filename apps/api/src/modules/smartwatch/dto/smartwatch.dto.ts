@@ -165,6 +165,11 @@ export type AdminIssueSmartwatchActivationDto = {
   connectivityMode?: SmartwatchConnectivityMode;
 };
 
+export type RegenerateWatchActivationCodeDto = {
+  deviceSecret?: string;
+  firebaseEnv?: string;
+};
+
 const modes = new Set<string>(Object.values(SmartwatchConnectivityMode));
 const pairingMethods = new Set<string>(Object.values(SmartwatchPairingMethod));
 const emergencyModes = new Set<string>(Object.values(SmartwatchEmergencyMode));
@@ -276,5 +281,11 @@ export function validateAdminIssueActivationDto(dto: AdminIssueSmartwatchActivat
   }
   if (dto.connectivityMode && !modes.has(dto.connectivityMode)) {
     throw new BadRequestException("Unsupported connectivity mode");
+  }
+}
+
+export function validateRegenerateWatchActivationCodeDto(dto: RegenerateWatchActivationCodeDto) {
+  if (dto.firebaseEnv && !firebaseEnvs.has(dto.firebaseEnv)) {
+    throw new BadRequestException("Unsupported firebaseEnv");
   }
 }

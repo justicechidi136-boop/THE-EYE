@@ -6,6 +6,7 @@ import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { FieldAuthService } from "./field-auth.service";
+import { FieldDevicePairingService } from "./field-device-pairing.service";
 import { FieldDevicesAdminService } from "./field-devices-admin.service";
 import { FieldDevicesService } from "./field-devices.service";
 import { FieldLauncherPolicyService, type LauncherPolicyPatch } from "./field-launcher-policy.service";
@@ -24,6 +25,7 @@ export class FieldDevicesController {
   constructor(
     private readonly devices: FieldDevicesService,
     private readonly launcherPolicy: FieldLauncherPolicyService,
+    private readonly pairing: FieldDevicePairingService,
   ) {}
 
   @Post("challenge")
@@ -67,6 +69,14 @@ export class FieldDevicesController {
     @Body() body: { action?: string; packageName?: string; ok?: boolean; environment?: string },
   ) {
     return this.launcherPolicy.recordLauncherAudit(request.user as never, body);
+  }
+
+  @Post("me/activation-code/regenerate")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @RateLimit("fieldPairing")
+  regenerateMyActivationCode(@Req() request: { user: unknown }, @Body() dto: { ttlMinutes?: number }) {
+    return this.pairing.regenerateForAuthenticatedDevice(request.user as never, dto ?? {});
   }
 
   @Post(":publicDeviceId/heartbeat")

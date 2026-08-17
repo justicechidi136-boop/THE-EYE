@@ -133,6 +133,32 @@ class PairingService {
     _state = const PairingState(phase: PairingPhase.unpaired);
   }
 
+  Future<WatchActivationCode> regenerateActivationCode() async {
+    final deviceId = await _credentials.readDeviceId();
+    final deviceSecret = await _credentials.readDeviceSecret();
+    if (deviceId == null || deviceId.isEmpty || deviceSecret == null) {
+      throw StateError('Device credentials unavailable');
+    }
+    final response = await _api.post(
+      WatchApiPaths.regenerateActivationCode(deviceId),
+      body: {
+        'deviceSecret': deviceSecret,
+        'firebaseEnv': WatchFlavor.envName,
+      },
+    );
+    final data = response['data'] as Map<String, dynamic>? ?? response;
+    final code = data['activationCode']?.toString() ?? '';
+    final expiresAt = data['expiresAt']?.toString() ?? '';
+    if (code.isEmpty || expiresAt.isEmpty) {
+      throw StateError('Activation code response incomplete');
+    }
+    await _preferences.savePairingCode(code);
+    return WatchActivationCode(
+      code: code,
+      expiresAt: DateTime.parse(expiresAt).toLocal(),
+    );
+  }
+
   void dispose() => _stopPairingPoll();
 
   void _startPairingPoll(String deviceId) {
@@ -147,6 +173,10 @@ class PairingService {
           if (secret.isNotEmpty) {
             await completePairing(deviceSecret: secret);
           }
+        } else if (status == 'locked') {
+          await markFailed(
+            'Activation locked for security. Too many unsuccessful activation attempts were detected. Contact an authorized administrator or use the approved recovery process.',
+          );
         } else if (status == 'expired') {
           await markFailed('Pairing code expired. Generate a new code.');
         }
@@ -177,4 +207,11 @@ class PairingService {
   String _generatePairingCode() {
     return List.generate(6, (_) => _random.nextInt(10)).join();
   }
+}
+
+class WatchActivationCode {
+  const WatchActivationCode({required this.code, required this.expiresAt});
+
+  final String code;
+  final DateTime expiresAt;
 }

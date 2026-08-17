@@ -45,6 +45,9 @@ abstract final class WatchApiPaths {
   static String pairingStatus(String deviceId) =>
       '/smartwatch/devices/$deviceId/pairing-status';
 
+  static String regenerateActivationCode(String deviceId) =>
+      '/smartwatch/devices/$deviceId/activation-code/regenerate';
+
   static const featureFlags = '/devices/watch/feature-flags';
 
   static const telemetry = '/devices/watch/telemetry';

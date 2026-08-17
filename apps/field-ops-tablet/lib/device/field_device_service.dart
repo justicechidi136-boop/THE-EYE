@@ -14,6 +14,7 @@ class FieldDeviceRecord {
     this.manufacturer,
     this.model,
     this.requiresRePair = false,
+    this.activationStatus = 'USABLE',
     this.isLost = false,
     this.isRevoked = false,
     this.lastSeenAt,
@@ -29,6 +30,7 @@ class FieldDeviceRecord {
       manufacturer: data['manufacturer'] as String?,
       model: data['model'] as String?,
       requiresRePair: data['requiresRePair'] as bool? ?? false,
+      activationStatus: data['activationStatus'] as String? ?? 'USABLE',
       isLost: data['isLost'] as bool? ?? false,
       isRevoked: data['isRevoked'] as bool? ?? false,
       lastSeenAt: data['lastSeenAt'] as String?,
@@ -38,7 +40,14 @@ class FieldDeviceRecord {
   bool get isPendingApproval => registrationStatus == 'PendingApproval';
   bool get isActive => registrationStatus == 'Active';
   bool get isBlocked =>
-      isRevoked || isLost || registrationStatus == 'Suspended';
+      isRevoked ||
+      isLost ||
+      registrationStatus == 'Suspended' ||
+      registrationStatus == 'Deactivated' ||
+      registrationStatus == 'Disabled';
+  bool get isSecurityDeactivated =>
+      registrationStatus == 'Deactivated' || registrationStatus == 'Disabled';
+  bool get isActivationLocked => activationStatus == 'LOCKED';
 
   final String id;
   final String publicDeviceId;
@@ -47,6 +56,7 @@ class FieldDeviceRecord {
   final String? manufacturer;
   final String? model;
   final bool requiresRePair;
+  final String activationStatus;
   final bool isLost;
   final bool isRevoked;
   final String? lastSeenAt;
@@ -58,10 +68,10 @@ class FieldDeviceService {
     required SecureSessionStore session,
     required DeviceKeystoreService keystore,
     required FieldAuthService auth,
-  })  : _api = api,
-        _session = session,
-        _keystore = keystore,
-        _auth = auth;
+  }) : _api = api,
+       _session = session,
+       _keystore = keystore,
+       _auth = auth;
 
   final FieldApiClient _api;
   final SecureSessionStore _session;
@@ -79,10 +89,12 @@ class FieldDeviceService {
     String? appVersion,
   }) async {
     await _keystore.ensureKeyPair();
-    final installationId =
-        await FieldAuthService.ensureInstallationId(_session);
-    final installationIdHash =
-        await FieldAuthService.hashInstallationId(installationId);
+    final installationId = await FieldAuthService.ensureInstallationId(
+      _session,
+    );
+    final installationIdHash = await FieldAuthService.hashInstallationId(
+      installationId,
+    );
     final publicKey = await _keystore.readPublicKeyBase64();
     if (publicKey == null || publicKey.isEmpty) {
       throw StateError('Device public key unavailable');
@@ -117,7 +129,8 @@ class FieldDeviceService {
   }) async {
     final resolvedPublicId =
         publicDeviceId ?? await _session.readPublicDeviceId();
-    final resolvedInstallationId = installationIdHash ??
+    final resolvedInstallationId =
+        installationIdHash ??
         await FieldAuthService.hashInstallationId(
           await FieldAuthService.ensureInstallationId(_session),
         );
@@ -170,4 +183,32 @@ class FieldDeviceService {
       },
     );
   }
+
+  Future<FieldActivationCode> regenerateActivationCode() async {
+    await _auth.restoreApiToken();
+    final response = await _api.post(
+      FieldApiPaths.deviceActivationCodeRegenerate,
+      body: const {'ttlMinutes': 15},
+    );
+    final data = response['data'] as Map<String, dynamic>? ?? response;
+    final shortCode =
+        data['shortCode']?.toString() ??
+        data['activationCode']?.toString() ??
+        '';
+    final expiresAt = data['expiresAt']?.toString() ?? '';
+    if (shortCode.isEmpty || expiresAt.isEmpty) {
+      throw StateError('Activation code response incomplete');
+    }
+    return FieldActivationCode(
+      code: shortCode,
+      expiresAt: DateTime.parse(expiresAt).toLocal(),
+    );
+  }
+}
+
+class FieldActivationCode {
+  const FieldActivationCode({required this.code, required this.expiresAt});
+
+  final String code;
+  final DateTime expiresAt;
 }

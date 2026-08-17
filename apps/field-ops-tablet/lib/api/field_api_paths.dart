@@ -25,6 +25,8 @@ abstract final class FieldApiPaths {
   /// Server-authoritative launcher / kiosk policy for this device session.
   static const devicePolicyMe = '/field/devices/me/policy';
   static const deviceLauncherAudit = '/field/devices/me/launcher-audit';
+  static const deviceActivationCodeRegenerate =
+      '/field/devices/me/activation-code/regenerate';
 
   // Auth
   static const authLogin = '/field/auth/login';

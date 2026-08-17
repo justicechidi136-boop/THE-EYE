@@ -67,4 +67,11 @@ export class FieldDeviceProvisioningAdminController {
   regeneratePairing(@Param("id") id: string, @Req() request: { user: unknown }, @Body() dto: IssuePairingCodeDto) {
     return this.pairing.regeneratePairing(request.user as never, id, dto ?? {});
   }
+
+  @Post(":id/recover-activation-lock")
+  @RequirePermissions("field:device:approve")
+  @RateLimit("fieldPairing")
+  recoverActivationLock(@Param("id") id: string, @Req() request: { user: unknown }, @Body() dto: IssuePairingCodeDto) {
+    return this.pairing.recoverActivationLock(request.user as never, id, dto ?? {});
+  }
 }

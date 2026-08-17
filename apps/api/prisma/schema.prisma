@@ -2033,6 +2033,14 @@ model SmartwatchDevice {
   isOnline                   Boolean                               @default(false) @map("is_online")
   remoteDisabledAt           DateTime?                             @map("remote_disabled_at") @db.Timestamptz(6)
   remoteWipedAt              DateTime?                             @map("remote_wiped_at") @db.Timestamptz(6)
+  deactivationReason         String?                               @map("deactivation_reason")
+  securityDeactivatedAt      DateTime?                             @map("security_deactivated_at") @db.Timestamptz(6)
+  failedActivationAttempts   Int                                   @default(0) @map("failed_activation_attempts")
+  firstFailedActivationAt    DateTime?                             @map("first_failed_activation_at") @db.Timestamptz(6)
+  lastFailedActivationAt     DateTime?                             @map("last_failed_activation_at") @db.Timestamptz(6)
+  activationStatus           String                                @default("USABLE") @map("activation_status")
+  activationLockedAt         DateTime?                             @map("activation_locked_at") @db.Timestamptz(6)
+  activationLockReason       String?                               @map("activation_lock_reason")
   currentOwnerType           String                                @default("UNASSIGNED_INVENTORY") @map("current_owner_type")
   currentOwnerId             String?                               @map("current_owner_id") @db.Uuid
   currentAssigneeId          String?                               @map("current_assignee_id") @db.Uuid
@@ -2070,6 +2078,7 @@ model SmartwatchDevice {
   @@index([inventoryStatus])
   @@index([connectivityMode, isActive])
   @@index([isOnline, lastSeenAt])
+  @@index([activationStatus])
   @@index([serialNumber])
   @@index([imei])
   @@index([eid])
@@ -2082,6 +2091,13 @@ model SmartwatchPairingSession {
   id                String    @id @default(uuid()) @db.Uuid
   deviceId          String    @unique @map("device_id")
   pairingCodeHash   String    @map("pairing_code_hash")
+  status            String    @default("ACTIVE")
+  failedActivationAttempts Int     @default(0) @map("failed_activation_attempts")
+  firstFailedActivationAt DateTime? @map("first_failed_activation_at") @db.Timestamptz(6)
+  lastFailedActivationAt DateTime? @map("last_failed_activation_at") @db.Timestamptz(6)
+  activationStatus String    @default("USABLE") @map("activation_status")
+  activationLockedAt DateTime? @map("activation_locked_at") @db.Timestamptz(6)
+  activationLockReason String? @map("activation_lock_reason")
   firebaseEnv       String    @map("firebase_env")
   expiresAt         DateTime  @map("expires_at") @db.Timestamptz(6)
   usedAt            DateTime? @map("used_at") @db.Timestamptz(6)
@@ -2089,6 +2105,7 @@ model SmartwatchPairingSession {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([expiresAt])
+  @@index([activationStatus])
   @@map("smartwatch_pairing_sessions")
 }
 
@@ -3723,6 +3740,8 @@ enum FieldDeviceRegistrationStatus {
   PendingApproval
   Active
   Suspended
+  Deactivated
+  Disabled
   Lost
   Revoked
   Retired
@@ -3801,6 +3820,14 @@ model FieldDevice {
   revokeReason           String?                       @map("revoke_reason")
   requiresRePair         Boolean                       @default(false) @map("requires_re_pair")
   requiresRepair         Boolean                       @default(false) @map("requires_repair")
+  deactivationReason     String?                       @map("deactivation_reason")
+  securityDeactivatedAt  DateTime?                     @map("security_deactivated_at") @db.Timestamptz(6)
+  failedActivationAttempts Int                         @default(0) @map("failed_activation_attempts")
+  firstFailedActivationAt DateTime?                    @map("first_failed_activation_at") @db.Timestamptz(6)
+  lastFailedActivationAt  DateTime?                    @map("last_failed_activation_at") @db.Timestamptz(6)
+  activationStatus        String                       @default("USABLE") @map("activation_status")
+  activationLockedAt      DateTime?                    @map("activation_locked_at") @db.Timestamptz(6)
+  activationLockReason    String?                      @map("activation_lock_reason")
   tokenVersion           Int                           @default(1) @map("token_version")
   packageName            String?                       @map("package_name")
   appEnvironment         String?                       @map("app_environment")
@@ -3833,6 +3860,7 @@ model FieldDevice {
   @@index([lastSeenAt])
   @@index([isLost])
   @@index([isRevoked])
+  @@index([activationStatus])
   @@index([provisioningMode, preProvisionStatus])
   @@index([permissionProfileId])
   @@map("field_devices")
