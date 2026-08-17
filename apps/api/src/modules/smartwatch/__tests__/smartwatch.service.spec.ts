@@ -478,11 +478,11 @@ describe("SmartwatchService", () => {
         }),
       }),
     );
-    expect(prisma.smartwatchDevice.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.not.objectContaining({ isActive: false }),
-      }),
-    );
+    expect(
+      prisma.smartwatchDevice.update.mock.calls.some(
+        ([arg]: [{ data?: Record<string, unknown> }]) => arg.data?.isActive === false,
+      ),
+    ).toBe(false);
     expect(prisma.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ action: "DEVICE_ACTIVATION_BRUTE_FORCE_LOCKED" }),

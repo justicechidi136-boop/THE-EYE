@@ -393,7 +393,7 @@ describe("FieldDevicePairingService", () => {
         installationIdHash: null,
         activationStatus: "LOCKED",
       });
-      prisma.fieldDevicePairingToken.count.mockResolvedValue(0);
+      prisma.fieldDevicePairingToken.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
 
       const result = await service.recoverActivationLock(actor, "device-1", {});
 
