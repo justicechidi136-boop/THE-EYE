@@ -19,6 +19,7 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
     id: "session-1",
     deviceId: "EYE-WATCH-001",
     pairingCodeHash: hashToken("123456"),
+    status: "ACTIVE",
     firebaseEnv: "staging",
     expiresAt: new Date(Date.now() + 60_000),
     usedAt: null,
@@ -283,15 +284,41 @@ describe("SmartwatchService", () => {
     }));
   });
 
+  it("regenerates one active smartwatch activation code without exposing device secrets", async () => {
+    const { service, prisma, auditService } = buildService({
+      config: { FCM_PROJECT_ID: "the-eye-2stg" },
+    });
+    prisma.smartwatchPairingSession.upsert = jest.fn().mockResolvedValue({ id: "session-1", deviceId: "EYE-WATCH-001" });
+
+    const result = await service.regenerateActivationCode("EYE-WATCH-001", { deviceSecret: "watch-secret", firebaseEnv: "staging" });
+
+    expect(result.data.deviceId).toBe("EYE-WATCH-001");
+    expect(result.data.activationCode).toMatch(/^\d{6}$/);
+    expect((result.data as Record<string, unknown>).deviceSecret).toBeUndefined();
+    expect(prisma.smartwatchPairingSession.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deviceId: "EYE-WATCH-001" },
+        update: expect.objectContaining({ status: "ACTIVE", usedAt: null, deviceSecretPlain: null }),
+        create: expect.objectContaining({ status: "ACTIVE" }),
+      }),
+    );
+    expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "DEVICE_ACTIVATION_CODE_REGENERATED",
+    }));
+  });
+
   it("revokes pairing session and records audit log", async () => {
     const { service, prisma, auditService } = buildService();
     prisma.smartwatchPairingSession.findUnique = jest.fn().mockResolvedValue({ id: "session-1", deviceId: "EYE-WATCH-001" });
-    prisma.smartwatchPairingSession.delete = jest.fn().mockResolvedValue({ id: "session-1" });
+    prisma.smartwatchPairingSession.update = jest.fn().mockResolvedValue({ id: "session-1" });
     const actor = { typ: "admin", sub: "admin-1", role: AdminRoleName.SuperAdmin } as any;
 
     const result = await service.adminRevokePairingSession("EYE-WATCH-001", actor);
 
     expect(result).toEqual({ revoked: true, deviceId: "EYE-WATCH-001" });
+    expect(prisma.smartwatchPairingSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "REVOKED", deviceSecretPlain: null }) }),
+    );
     expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "smartwatch.activation_secret_revoked",
     }));

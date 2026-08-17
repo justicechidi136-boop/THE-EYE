@@ -19,6 +19,7 @@ describe("FieldDevicePairingService", () => {
   function createService() {
     const prisma = {
       fieldDevicePairingToken: {
+        count: jest.fn().mockResolvedValue(1),
         create: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -28,7 +29,12 @@ describe("FieldDevicePairingService", () => {
         update: jest.fn(),
         findUnique: jest.fn(),
       },
+      fieldDeviceSession: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      auditLog: { create: jest.fn().mockResolvedValue({ id: "audit-1" }) },
+      $transaction: jest.fn(),
+      $queryRawUnsafe: jest.fn(),
     };
+    prisma.$transaction.mockImplementation((callback: any) => callback(prisma));
     const audit = { record: jest.fn() };
     const devices = {
       createRegistrationChallenge: jest.fn(),
@@ -102,6 +108,78 @@ describe("FieldDevicePairingService", () => {
       expect(result.data.shortCode).toMatch(/^EYE-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
       expect(typeof result.data.pairingToken).toBe("string");
       expect(result.data.pairingToken.length).toBeGreaterThan(0);
+    });
+
+    it("atomically revokes the old active pairing code before creating a replacement", async () => {
+      const { service, devicesAdmin, prisma } = createService();
+      devicesAdmin.requireScopedDevice.mockResolvedValue({
+        id: "device-1",
+        publicDeviceId: "fd_abc123",
+        provisioningMode: FieldProvisioningMode.PreProvisioned,
+        permissionProfileId: "profile-1",
+        publicKey: null,
+        installationIdHash: null,
+        preProvisionStatus: "AwaitingPairing",
+      });
+      prisma.fieldDevicePairingToken.count
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(1);
+
+      await service.regeneratePairing(actor, "device-1", {});
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.fieldDevicePairingToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            fieldDeviceId: "device-1",
+            status: expect.objectContaining({ in: [FieldPairingTokenStatus.Issued, FieldPairingTokenStatus.Claimed] }),
+          }),
+          data: expect.objectContaining({ status: FieldPairingTokenStatus.Revoked, revokedReason: "superseded" }),
+        }),
+      );
+      expect(prisma.fieldDevicePairingToken.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("deactivates the device and revokes all active codes when duplicates are detected", async () => {
+      const { service, devicesAdmin, prisma } = createService();
+      devicesAdmin.requireScopedDevice.mockResolvedValue({
+        id: "device-1",
+        publicDeviceId: "fd_abc123",
+        provisioningMode: FieldProvisioningMode.PreProvisioned,
+        permissionProfileId: "profile-1",
+        publicKey: null,
+        installationIdHash: null,
+      });
+      prisma.fieldDevicePairingToken.count.mockResolvedValueOnce(2);
+
+      await expect(service.regeneratePairing(actor, "device-1", {})).rejects.toMatchObject({
+        response: expect.objectContaining({ code: FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID }),
+      });
+
+      expect(prisma.fieldDevice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            registrationStatus: "Deactivated",
+            deactivationReason: "DUPLICATE_ACTIVE_ACTIVATION_CODES",
+            requiresRePair: true,
+          }),
+        }),
+      );
+      expect(prisma.fieldDevicePairingToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: FieldPairingTokenStatus.Revoked,
+            revokedReason: "DUPLICATE_ACTIVE_ACTIVATION_CODES",
+          }),
+        }),
+      );
+      expect(prisma.fieldDeviceSession.updateMany).toHaveBeenCalled();
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: "DEVICE_DUPLICATE_ACTIVE_CODE_DETECTED" }),
+        }),
+      );
+      expect(prisma.fieldDevicePairingToken.create).not.toHaveBeenCalled();
     });
   });
 

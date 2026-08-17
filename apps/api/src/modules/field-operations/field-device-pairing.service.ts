@@ -33,6 +33,8 @@ const DEFAULT_PAIRING_TTL_MINUTES = 15;
 const MIN_PAIRING_TTL_MINUTES = 5;
 const MAX_PAIRING_TTL_MINUTES = 24 * 60;
 const MAX_CLAIM_ATTEMPTS = 5;
+const DUPLICATE_ACTIVE_CODE_REASON = "DUPLICATE_ACTIVE_ACTIVATION_CODES";
+const ACTIVE_PAIRING_STATUSES = [FieldPairingTokenStatus.Issued, FieldPairingTokenStatus.Claimed] as const;
 
 type PairingTokenRow = {
   id: string;
@@ -72,6 +74,19 @@ export class FieldDevicePairingService {
     return this.issueOrRegenerate(actor, deviceId, dto, "field.device.pairing_regenerated");
   }
 
+  async regenerateForAuthenticatedDevice(actor: JwtPayload, dto: IssuePairingCodeDto) {
+    if (actor.typ !== "field" || !actor.fieldDeviceId) {
+      throw new ForbiddenException("Field device session required");
+    }
+    return this.issueOrRegenerate(
+      actor,
+      actor.fieldDeviceId,
+      dto,
+      "field.device.activation_code_regenerated",
+      { allowBoundRecovery: true },
+    );
+  }
+
   async cancelPairing(actor: JwtPayload, deviceId: string, dto: CancelPairingDto) {
     this.devicesAdmin.assertSupervisor(actor);
     const device = await this.devicesAdmin.requireScopedDevice(deviceId, actor);
@@ -89,44 +104,85 @@ export class FieldDevicePairingService {
     return { data: { cancelled: cancelledCount } };
   }
 
-  private async issueOrRegenerate(actor: JwtPayload, deviceId: string, dto: IssuePairingCodeDto, auditAction: string) {
-    this.devicesAdmin.assertSupervisor(actor);
-    const device = await this.devicesAdmin.requireScopedDevice(deviceId, actor);
+  private async issueOrRegenerate(
+    actor: JwtPayload,
+    deviceId: string,
+    dto: IssuePairingCodeDto,
+    auditAction: string,
+    options: { allowBoundRecovery?: boolean } = {},
+  ) {
+    let device;
+    if (options.allowBoundRecovery) {
+      device = await this.prisma.fieldDevice.findUnique({ where: { id: deviceId } });
+      if (!device) throw new NotFoundException("Device not found");
+      this.devices.assertDeviceCanAuthenticate(device);
+    } else {
+      this.devicesAdmin.assertSupervisor(actor);
+      device = await this.devicesAdmin.requireScopedDevice(deviceId, actor);
+    }
     if (device.provisioningMode !== FieldProvisioningMode.PreProvisioned) {
       throw new BadRequestException("Pairing codes are only issued for pre-provisioned devices");
     }
     if (!device.permissionProfileId) {
       throw new BadRequestException("Assign a permission profile before issuing a pairing code");
     }
-    if (device.publicKey || device.installationIdHash) {
+    if (!options.allowBoundRecovery && (device.publicKey || device.installationIdHash)) {
       throw new BadRequestException("Device is already bound — use require-re-pair instead");
     }
-
-    await this.revokeActiveTokens(device.id, actor.sub, "superseded");
 
     const ttlMinutes = this.resolveTtlMinutes(dto.ttlMinutes);
     const token = randomToken(32);
     const shortCode = this.generateShortCode();
     const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
 
-    await this.prisma.fieldDevicePairingToken.create({
-      data: {
-        fieldDeviceId: device.id,
-        tokenHash: hashToken(token),
-        shortCodeHash: hashToken(normalizeFieldPairingShortCode(shortCode)),
-        status: FieldPairingTokenStatus.Issued,
-        issuedById: actor.sub,
-        expiresAt,
-        maxAttempts: MAX_CLAIM_ATTEMPTS,
-      },
-    });
+    await this.withTransaction(async (tx) => {
+      await this.lockFieldDevice(tx, device.id);
+      const activeCodeCount = await this.countActiveTokens(tx, device.id);
+      if (activeCodeCount > 1) {
+        await this.deactivateDeviceForDuplicateCodes(tx, device.id, actor, activeCodeCount, device.publicDeviceId);
+        throw new ForbiddenException({
+          code: FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID,
+          message: "Device activation security conflict detected. Administrator review is required.",
+        });
+      }
 
-    if (device.preProvisionStatus === FieldPreProvisionStatus.Draft) {
-      await this.prisma.fieldDevice.update({
-        where: { id: device.id },
-        data: { preProvisionStatus: FieldPreProvisionStatus.AwaitingPairing },
+      if (activeCodeCount === 1) {
+        await this.revokeActiveTokensWithClient(device.id, actor.sub, "superseded", tx);
+      }
+
+      await tx.fieldDevicePairingToken.create({
+        data: {
+          fieldDeviceId: device.id,
+          tokenHash: hashToken(token),
+          shortCodeHash: hashToken(normalizeFieldPairingShortCode(shortCode)),
+          status: FieldPairingTokenStatus.Issued,
+          issuedById: actor.sub,
+          expiresAt,
+          maxAttempts: MAX_CLAIM_ATTEMPTS,
+        },
       });
-    }
+
+      if (device.preProvisionStatus === FieldPreProvisionStatus.Draft) {
+        await tx.fieldDevice.update({
+          where: { id: device.id },
+          data: { preProvisionStatus: FieldPreProvisionStatus.AwaitingPairing },
+        });
+      } else if (options.allowBoundRecovery) {
+        await tx.fieldDevice.update({
+          where: { id: device.id },
+          data: { requiresRePair: true },
+        });
+      }
+
+      const finalActiveCount = await this.countActiveTokens(tx, device.id);
+      if (finalActiveCount !== 1) {
+        await this.deactivateDeviceForDuplicateCodes(tx, device.id, actor, finalActiveCount, device.publicDeviceId);
+        throw new ForbiddenException({
+          code: FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID,
+          message: "Device activation security conflict detected. Administrator review is required.",
+        });
+      }
+    });
 
     await this.audit.record({
       actor,
@@ -148,11 +204,81 @@ export class FieldDevicePairingService {
   }
 
   private async revokeActiveTokens(fieldDeviceId: string, cancelledById: string, reason: string) {
-    const result = await this.prisma.fieldDevicePairingToken.updateMany({
-      where: { fieldDeviceId, status: { in: [FieldPairingTokenStatus.Issued, FieldPairingTokenStatus.Claimed] } },
+    return this.revokeActiveTokensWithClient(fieldDeviceId, cancelledById, reason, this.prisma);
+  }
+
+  private async revokeActiveTokensWithClient(fieldDeviceId: string, cancelledById: string, reason: string, client: any = this.prisma) {
+    const result = await client.fieldDevicePairingToken.updateMany({
+      where: { fieldDeviceId, status: { in: [...ACTIVE_PAIRING_STATUSES] } },
       data: { status: FieldPairingTokenStatus.Revoked, cancelledAt: new Date(), cancelledById, revokedReason: reason },
     });
     return result.count;
+  }
+
+  private async countActiveTokens(client: any, fieldDeviceId: string) {
+    return client.fieldDevicePairingToken.count({
+      where: { fieldDeviceId, status: { in: [...ACTIVE_PAIRING_STATUSES] } },
+    });
+  }
+
+  private async lockFieldDevice(client: any, fieldDeviceId: string) {
+    if (typeof client.$queryRawUnsafe !== "function") return;
+    await client.$queryRawUnsafe('SELECT "id" FROM "field_devices" WHERE "id" = $1::uuid FOR UPDATE', fieldDeviceId);
+  }
+
+  private async deactivateDeviceForDuplicateCodes(
+    client: any,
+    fieldDeviceId: string,
+    actor: JwtPayload,
+    activeCodeCount: number,
+    publicDeviceId?: string,
+  ) {
+    const now = new Date();
+    await client.fieldDevice.update({
+      where: { id: fieldDeviceId },
+      data: {
+        registrationStatus: FieldDeviceRegistrationStatus.Deactivated,
+        deactivationReason: DUPLICATE_ACTIVE_CODE_REASON,
+        securityDeactivatedAt: now,
+        requiresRePair: true,
+        tokenVersion: { increment: 1 },
+      } as never,
+    });
+    await client.fieldDevicePairingToken.updateMany({
+      where: { fieldDeviceId, status: { in: [...ACTIVE_PAIRING_STATUSES] } },
+      data: {
+        status: FieldPairingTokenStatus.Revoked,
+        cancelledAt: now,
+        revokedReason: DUPLICATE_ACTIVE_CODE_REASON,
+      },
+    });
+    await client.fieldDeviceSession.updateMany?.({
+      where: { fieldDeviceId, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    await client.auditLog.create?.({
+      data: {
+        actorType: "system",
+        action: "DEVICE_DUPLICATE_ACTIVE_CODE_DETECTED",
+        entityType: "field_device",
+        entityId: fieldDeviceId,
+        reason: DUPLICATE_ACTIVE_CODE_REASON,
+        metadata: {
+          deviceType: "field_tablet",
+          publicDeviceId,
+          actorId: actor.sub,
+          activeCodeCount,
+          result: "DEVICE_DEACTIVATED_ALL_CODES_REVOKED",
+        },
+      } as never,
+    });
+  }
+
+  private async withTransaction<T>(callback: (client: any) => Promise<T>): Promise<T> {
+    if (typeof (this.prisma as any).$transaction !== "function") {
+      return callback(this.prisma as any);
+    }
+    return (this.prisma as any).$transaction(callback);
   }
 
   private resolveTtlMinutes(requested?: number) {
@@ -175,6 +301,7 @@ export class FieldDevicePairingService {
 
   async claim(dto: ClaimFieldPairingDto) {
     const token = await this.findToken(dto);
+    await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
     this.assertTokenClaimable(token);
 
     if (token.status === FieldPairingTokenStatus.Issued) {
@@ -199,6 +326,7 @@ export class FieldDevicePairingService {
 
   async challenge(dto: FieldPairingChallengeDto) {
     const token = await this.findToken(dto);
+    await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
     this.assertTokenClaimable(token);
     if (token.status !== FieldPairingTokenStatus.Claimed) {
       throw new ForbiddenException({
@@ -211,6 +339,7 @@ export class FieldDevicePairingService {
 
   async complete(dto: CompleteFieldPairingClaimDto) {
     const token = await this.findToken(dto);
+    await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
     this.assertTokenClaimable(token);
     if (token.status !== FieldPairingTokenStatus.Claimed) {
       throw new ForbiddenException({
@@ -244,7 +373,7 @@ export class FieldDevicePairingService {
 
     const device = await this.prisma.fieldDevice.findUnique({ where: { id: token.fieldDeviceId } });
     if (!device) throw new NotFoundException("Device not found");
-    if (device.publicKey || device.installationIdHash) {
+    if ((device.publicKey || device.installationIdHash) && !device.requiresRePair) {
       throw new ForbiddenException({ code: FIELD_PAIRING_ERROR_CODES.DEVICE_ALREADY_BOUND, message: "Device already bound" });
     }
 
@@ -310,6 +439,7 @@ export class FieldDevicePairingService {
 
   async status(query: FieldPairingStatusQuery) {
     const token = await this.findToken(query);
+    await this.assertSingleActiveTokenOrDeactivate(token.fieldDeviceId);
     return {
       data: {
         status: token.status,
@@ -333,6 +463,23 @@ export class FieldDevicePairingService {
       throw new UnauthorizedException({ code: FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID, message: "Invalid pairing code" });
     }
     return token;
+  }
+
+  private async assertSingleActiveTokenOrDeactivate(fieldDeviceId: string) {
+    const activeCodeCount = await this.countActiveTokens(this.prisma, fieldDeviceId);
+    if (activeCodeCount <= 1) return;
+    const device = await this.prisma.fieldDevice.findUnique({ where: { id: fieldDeviceId } });
+    await this.deactivateDeviceForDuplicateCodes(
+      this.prisma,
+      fieldDeviceId,
+      { sub: "system", typ: "admin", permissions: [] } as never,
+      activeCodeCount,
+      device?.publicDeviceId,
+    );
+    throw new ForbiddenException({
+      code: FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID,
+      message: "Device activation security conflict detected. Administrator review is required.",
+    });
   }
 
   private assertTokenClaimable(token: PairingTokenRow) {

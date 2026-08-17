@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException, BadRequestException, Optional, ConflictException, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { randomInt } from "crypto";
 import {
   AdminRoleName,
   EmergencyCategory,
@@ -30,6 +31,7 @@ import {
   SmartwatchSosDto,
   SmartwatchStandaloneLoginDto,
   ActivateWatchWithCodeDto,
+  RegenerateWatchActivationCodeDto,
   validateActivateWatchWithCodeDto,
   normalizeWatchPairingCode,
   WatchAccessibilityPreferencesDto,
@@ -43,6 +45,7 @@ import {
   validateIssuePairingCodeDto,
   validateOfflineSyncDto,
   validateRegisterSmartwatchDeviceDto,
+  validateRegenerateWatchActivationCodeDto,
   validateStandaloneLoginDto,
   validateSmartwatchGpsDto,
   validateSmartwatchSosDto,
@@ -57,6 +60,10 @@ import {
 } from "./watch-accessibility-preferences";
 
 const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
+const WATCH_ACTIVATION_STATUS_ACTIVE = "ACTIVE";
+const WATCH_ACTIVATION_STATUS_USED = "USED";
+const WATCH_ACTIVATION_STATUS_REVOKED = "REVOKED";
+const WATCH_SECURITY_DEACTIVATION_REASON = "DUPLICATE_ACTIVE_ACTIVATION_CODES";
 
 @Injectable()
 export class SmartwatchService {
@@ -210,6 +217,7 @@ export class SmartwatchService {
       where: { deviceId: dto.deviceId },
       update: {
         pairingCodeHash: hashToken(dto.pairingCode),
+        status: WATCH_ACTIVATION_STATUS_ACTIVE,
         firebaseEnv,
         expiresAt,
         usedAt: null,
@@ -218,6 +226,7 @@ export class SmartwatchService {
       create: {
         deviceId: dto.deviceId,
         pairingCodeHash: hashToken(dto.pairingCode),
+        status: WATCH_ACTIVATION_STATUS_ACTIVE,
         firebaseEnv,
         expiresAt,
       },
@@ -236,6 +245,9 @@ export class SmartwatchService {
   async getPairingStatus(deviceId: string) {
     const session = await (this.prisma as any).smartwatchPairingSession.findUnique({ where: { deviceId } });
     if (!session) return { data: { status: "not_found" } };
+    if ((session as any).status === WATCH_ACTIVATION_STATUS_REVOKED) {
+      return { data: { status: "revoked" } };
+    }
     if (session.usedAt && session.deviceSecretPlain) {
       const secret = session.deviceSecretPlain as string;
       await (this.prisma as any).smartwatchPairingSession.update({
@@ -244,11 +256,54 @@ export class SmartwatchService {
       });
       return { data: { status: "paired", deviceSecret: secret } };
     }
-    if (session.usedAt) return { data: { status: "paired" } };
+    if (session.usedAt || (session as any).status === WATCH_ACTIVATION_STATUS_USED) return { data: { status: "paired" } };
     if (new Date(session.expiresAt).getTime() < Date.now()) {
       return { data: { status: "expired" } };
     }
     return { data: { status: "pending", expiresAt: session.expiresAt } };
+  }
+
+  async regenerateActivationCode(deviceLookup: string, dto: RegenerateWatchActivationCodeDto, actor?: JwtPayload) {
+    validateRegenerateWatchActivationCodeDto(dto);
+    const device = await this.findAuthorizedDevice(deviceLookup, dto.deviceSecret, actor);
+    if ((device as any).securityDeactivatedAt || (device as any).deactivationReason === WATCH_SECURITY_DEACTIVATION_REASON) {
+      throw new ForbiddenException("Device security verification required");
+    }
+    const firebaseEnv = dto.firebaseEnv ?? this.defaultFirebaseEnv();
+    const pairingCode = this.generateSixDigitCode();
+    const expiresAt = new Date(Date.now() + PAIRING_CODE_TTL_MS);
+    const session = await (this.prisma as any).smartwatchPairingSession.upsert({
+      where: { deviceId: device.deviceId },
+      update: {
+        pairingCodeHash: hashToken(pairingCode),
+        status: WATCH_ACTIVATION_STATUS_ACTIVE,
+        firebaseEnv,
+        expiresAt,
+        usedAt: null,
+        deviceSecretPlain: null,
+      },
+      create: {
+        deviceId: device.deviceId,
+        pairingCodeHash: hashToken(pairingCode),
+        status: WATCH_ACTIVATION_STATUS_ACTIVE,
+        firebaseEnv,
+        expiresAt,
+      },
+    });
+    await this.recordDeviceAudit({
+      action: "DEVICE_ACTIVATION_CODE_REGENERATED",
+      entityType: "smartwatch_pairing_sessions",
+      entityId: session.id,
+      actorUserId: device.userId ?? undefined,
+      metadata: { deviceId: device.deviceId, firebaseEnv, expiresAt: expiresAt.toISOString() },
+    });
+    return {
+      data: {
+        deviceId: device.deviceId,
+        activationCode: pairingCode,
+        expiresAt: expiresAt.toISOString(),
+      },
+    };
   }
 
   async standaloneLogin(dto: SmartwatchStandaloneLoginDto) {
@@ -325,7 +380,7 @@ export class SmartwatchService {
       device = await this.prisma.smartwatchDevice.upsert({
         where: { deviceId: dto.deviceId },
         update: {
-          deviceSecretHash: hashToken(deviceSecret),
+        deviceSecretHash: hashToken(deviceSecret),
           connectivityMode: "StandaloneCellular",
           preferredMode: "StandaloneCellular",
           pairingMethod: SmartwatchPairingMethod.PairingCode,
@@ -390,6 +445,7 @@ export class SmartwatchService {
       where: { deviceId: dto.deviceId },
       data: {
         usedAt: now,
+        status: WATCH_ACTIVATION_STATUS_USED,
         deviceSecretPlain: deviceSecret,
       },
     });
@@ -973,11 +1029,12 @@ export class SmartwatchService {
     const firebaseEnv = this.defaultFirebaseEnv();
     const ttlMinutes = dto.ttlMinutes ?? 10;
     const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
-    const pairingCode = String(Math.floor(100000 + Math.random() * 900000));
+    const pairingCode = this.generateSixDigitCode();
     const session = await (this.prisma as any).smartwatchPairingSession.upsert({
       where: { deviceId: dto.deviceId },
       update: {
         pairingCodeHash: hashToken(pairingCode),
+        status: WATCH_ACTIVATION_STATUS_ACTIVE,
         firebaseEnv,
         expiresAt,
         usedAt: null,
@@ -986,6 +1043,7 @@ export class SmartwatchService {
       create: {
         deviceId: dto.deviceId,
         pairingCodeHash: hashToken(pairingCode),
+        status: WATCH_ACTIVATION_STATUS_ACTIVE,
         firebaseEnv,
         expiresAt,
       },
@@ -1020,7 +1078,10 @@ export class SmartwatchService {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can revoke activation secrets");
     const session = await (this.prisma as any).smartwatchPairingSession.findUnique({ where: { deviceId } });
     if (!session) throw new NotFoundException("Pairing session not found");
-    await (this.prisma as any).smartwatchPairingSession.delete({ where: { deviceId } });
+    await (this.prisma as any).smartwatchPairingSession.update({
+      where: { deviceId },
+      data: { status: WATCH_ACTIVATION_STATUS_REVOKED, usedAt: null, deviceSecretPlain: null },
+    });
     await this.audit(actor, "smartwatch.activation_secret_revoked", "smartwatch_pairing_sessions", session.id, { deviceId });
     return { revoked: true, deviceId };
   }
@@ -1254,6 +1315,9 @@ export class SmartwatchService {
     const session = await (this.prisma as any).smartwatchPairingSession.findUnique({ where: { deviceId: dto.deviceId } });
     if (!session) throw new BadRequestException("No active pairing session for this device");
     if (session.usedAt) throw new BadRequestException("Pairing code has already been used");
+    if ((session as any).status && (session as any).status !== WATCH_ACTIVATION_STATUS_ACTIVE) {
+      throw new BadRequestException("Pairing code is not active");
+    }
     if (new Date(session.expiresAt).getTime() < Date.now()) throw new BadRequestException("Pairing code has expired");
 
     const env = dto.firebaseEnv ?? this.defaultFirebaseEnv();
@@ -1267,8 +1331,12 @@ export class SmartwatchService {
   private async completePairingSession(deviceId: string, deviceSecret: string) {
     await (this.prisma as any).smartwatchPairingSession.updateMany({
       where: { deviceId, usedAt: null },
-      data: { usedAt: new Date(), deviceSecretPlain: deviceSecret },
+      data: { usedAt: new Date(), status: WATCH_ACTIVATION_STATUS_USED, deviceSecretPlain: deviceSecret },
     });
+  }
+
+  private generateSixDigitCode() {
+    return String(randomInt(100000, 1000000));
   }
 }
 

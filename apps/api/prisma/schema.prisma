@@ -2033,6 +2033,8 @@ model SmartwatchDevice {
   isOnline                   Boolean                               @default(false) @map("is_online")
   remoteDisabledAt           DateTime?                             @map("remote_disabled_at") @db.Timestamptz(6)
   remoteWipedAt              DateTime?                             @map("remote_wiped_at") @db.Timestamptz(6)
+  deactivationReason         String?                               @map("deactivation_reason")
+  securityDeactivatedAt      DateTime?                             @map("security_deactivated_at") @db.Timestamptz(6)
   currentOwnerType           String                                @default("UNASSIGNED_INVENTORY") @map("current_owner_type")
   currentOwnerId             String?                               @map("current_owner_id") @db.Uuid
   currentAssigneeId          String?                               @map("current_assignee_id") @db.Uuid
@@ -2082,6 +2084,7 @@ model SmartwatchPairingSession {
   id                String    @id @default(uuid()) @db.Uuid
   deviceId          String    @unique @map("device_id")
   pairingCodeHash   String    @map("pairing_code_hash")
+  status            String    @default("ACTIVE")
   firebaseEnv       String    @map("firebase_env")
   expiresAt         DateTime  @map("expires_at") @db.Timestamptz(6)
   usedAt            DateTime? @map("used_at") @db.Timestamptz(6)
@@ -3723,6 +3726,8 @@ enum FieldDeviceRegistrationStatus {
   PendingApproval
   Active
   Suspended
+  Deactivated
+  Disabled
   Lost
   Revoked
   Retired
@@ -3801,6 +3806,8 @@ model FieldDevice {
   revokeReason           String?                       @map("revoke_reason")
   requiresRePair         Boolean                       @default(false) @map("requires_re_pair")
   requiresRepair         Boolean                       @default(false) @map("requires_repair")
+  deactivationReason     String?                       @map("deactivation_reason")
+  securityDeactivatedAt  DateTime?                     @map("security_deactivated_at") @db.Timestamptz(6)
   tokenVersion           Int                           @default(1) @map("token_version")
   packageName            String?                       @map("package_name")
   appEnvironment         String?                       @map("app_environment")

@@ -19,7 +19,9 @@ class DeviceStatusScreen extends StatefulWidget {
 class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
   FieldDeviceRecord? _device;
   String? _error;
+  FieldActivationCode? _activationCode;
   bool _busy = true;
+  bool _regenerating = false;
 
   @override
   void initState() {
@@ -61,6 +63,63 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
     ).showSnackBar(SnackBar(content: Text(l10n.heartbeatSent)));
   }
 
+  Future<void> _regenerateActivationCode() async {
+    final device = _device;
+    if (device == null) return;
+    if (device.isSecurityDeactivated) {
+      setState(() {
+        _error = 'Device deactivated. Security verification required.';
+      });
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Regenerate Activation Code'),
+            content: const Text(
+              'Generate a new activation code for this device? The previous unused activation code will stop working.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Regenerate'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _regenerating = true;
+      _error = null;
+    });
+    try {
+      final code = await widget.services.devices.regenerateActivationCode();
+      if (!mounted) return;
+      setState(() {
+        _activationCode = code;
+        _regenerating = false;
+      });
+    } on FieldApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.message;
+        _regenerating = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            'Internet connection is required to generate a new device code.';
+        _regenerating = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = FieldLocalizations.of(context);
@@ -83,6 +142,11 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                       style: const TextStyle(color: FieldColors.danger),
                     ),
                   if (_device != null) ...[
+                    Text(
+                      'Device Management',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 12),
                     _StatusTile(
                       label: l10n.publicDeviceId,
                       value: _device!.publicDeviceId,
@@ -100,6 +164,22 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                       label: l10n.lastSeen,
                       value: _device!.lastSeenAt ?? l10n.unknown,
                     ),
+                    if (_device!.isSecurityDeactivated)
+                      const Card(
+                        child: ListTile(
+                          title: Text('Device deactivated'),
+                          subtitle: Text('Security verification required'),
+                        ),
+                      ),
+                    if (_activationCode != null)
+                      Card(
+                        child: ListTile(
+                          title: const Text('Activation Code'),
+                          subtitle: Text(
+                            '${_activationCode!.code}\nExpires ${TimeOfDay.fromDateTime(_activationCode!.expiresAt).format(context)}',
+                          ),
+                        ),
+                      ),
                   ],
                   const SizedBox(height: 24),
                   OutlinedButton.icon(
@@ -114,6 +194,21 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                   ElevatedButton(
                     onPressed: _device == null ? null : _sendHeartbeat,
                     child: Text(l10n.sendHeartbeat),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed:
+                        _device == null ||
+                                _device!.isSecurityDeactivated ||
+                                _regenerating
+                            ? null
+                            : _regenerateActivationCode,
+                    icon: const Icon(Icons.password),
+                    label: Text(
+                      _regenerating
+                          ? 'Generating...'
+                          : 'Regenerate Activation Code',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton(onPressed: _load, child: Text(l10n.refresh)),
