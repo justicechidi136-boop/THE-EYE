@@ -63,33 +63,34 @@ export function BroadcastActions({
         </p>
       ) : null}
       {dispatchFailureReason ? <InlineAlert tone="error">{dispatchFailureReason}</InlineAlert> : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
         {(status === "Pending approval" || status === "Draft") && requiresApproval ? (
           <>
-            <Button disabled={busy !== null} onClick={() => runAction("approve", { note: "Approved from admin dashboard" })}>
+            <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("approve", { note: "Approved from admin dashboard" })}>
               Approve
             </Button>
-            <Button disabled={busy !== null} variant="danger" onClick={() => runAction("reject", { reason: "Rejected from admin dashboard" })}>
+            <Button className="w-full whitespace-nowrap" disabled={busy !== null} variant="danger" onClick={() => runAction("reject", { reason: "Rejected from admin dashboard" })}>
               Reject
             </Button>
           </>
         ) : null}
         {status === "Published" ? (
           <>
-            <Button disabled={busy !== null} onClick={() => runAction("dispatch")}>Dispatch</Button>
-            <Button disabled={busy !== null} onClick={() => runAction("retry")}>Retry failed</Button>
-            <Button disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
+            <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("dispatch")}>Dispatch</Button>
+            <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("retry")}>Retry failed</Button>
+            <Button className="w-full whitespace-nowrap" disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
               Cancel
             </Button>
           </>
         ) : null}
         {status === "Scheduled" || status === "DispatchQueued" || status === "Failed" ? (
-          <Button disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
+          <Button className="w-full whitespace-nowrap" disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
             Cancel schedule
           </Button>
         ) : null}
         {status === "Draft" || status === "Pending approval" || status === "Scheduled" || status === "Failed" ? (
           <Button
+            className="w-full whitespace-nowrap"
             disabled={busy !== null}
             onClick={() =>
               runAction("schedule", {
@@ -100,9 +101,9 @@ export function BroadcastActions({
             Schedule +1h
           </Button>
         ) : null}
-        <Button disabled={busy !== null} onClick={() => runAction("preview")}>Preview</Button>
-        <Button disabled={busy !== null} onClick={() => runAction("estimate")}>Estimate</Button>
-        <Button disabled={busy !== null} onClick={() => runAction("progress")}>Progress</Button>
+        <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("preview")}>Preview</Button>
+        <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("estimate")}>Estimate</Button>
+        <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("progress")}>Progress</Button>
       </div>
       {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}

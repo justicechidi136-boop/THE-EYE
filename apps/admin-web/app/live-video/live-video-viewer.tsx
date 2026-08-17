@@ -21,6 +21,17 @@ type LiveOverlay = {
   signedLocationPath: string;
 };
 
+function mapHref(latitude: number, longitude: number) {
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`
+    : "#";
+}
+
+function safeLocationHref(candidate: string | null | undefined, latitude: number, longitude: number) {
+  if (candidate && candidate !== "#" && !candidate.startsWith("/live-video/sessions/")) return candidate;
+  return mapHref(latitude, longitude);
+}
+
 export function LiveVideoViewer({ sessions }: Props) {
   const [selectedId, setSelectedId] = useState(sessions[0]?.id ?? "");
   const [playerState, setPlayerState] = useState<LivekitPlayerState>("idle");
@@ -53,7 +64,7 @@ export function LiveVideoViewer({ sessions }: Props) {
     accuracy: selected.accuracy,
     reporter: selected.reporter,
     connectionStatus: playerState === "connected" ? "Connected" : selected.connectionStatus,
-    signedLocationPath: selected.signedLocationPath,
+    signedLocationPath: safeLocationHref(selected.signedLocationPath, selected.latitude, selected.longitude),
   }), [playerState, selected]);
 
   const displayOverlay = overlay ?? fallbackOverlay;
@@ -84,7 +95,7 @@ export function LiveVideoViewer({ sessions }: Props) {
           accuracy: evidence.accuracy ?? selected.accuracy,
           reporter: evidence.reporter ?? selected.reporter,
           connectionStatus: playerState === "connected" ? "Connected" : playerState === "reconnecting" ? "Reconnecting" : selected.connectionStatus,
-          signedLocationPath: payload.signedOpenLocationUrl ?? selected.signedLocationPath,
+          signedLocationPath: safeLocationHref(payload.signedOpenLocationUrl ?? selected.signedLocationPath, selected.latitude, selected.longitude),
         });
       } catch {
         // Keep the last known overlay during temporary network failure.
@@ -122,7 +133,7 @@ export function LiveVideoViewer({ sessions }: Props) {
                 <p className="mt-3 text-xs text-emerald-200">Server-side recording is configured for this session.</p>
               ) : null}
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <a className="rounded-md bg-surface px-3 py-2 text-center text-xs font-bold text-command" href={displayOverlay.signedLocationPath}>Open Location</a>
+                <a className="rounded-md bg-white px-3 py-2 text-center text-xs font-bold text-command hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" href={displayOverlay.signedLocationPath}>Open Location</a>
                 <button className="rounded-md border border-white/30 px-3 py-2 text-xs font-bold text-white" onClick={() => navigator.clipboard.writeText(gps)}>Copy Coordinates</button>
               </div>
             </div>
@@ -132,10 +143,10 @@ export function LiveVideoViewer({ sessions }: Props) {
         <div className="grid gap-5">
           <Panel title="Latest live GPS">
             <div className="grid gap-3">
-              <a className="rounded-lg border border-line bg-surfaceMuted p-3 font-semibold text-eye" href={displayOverlay.signedLocationPath}>{gps}</a>
+              <a className="rounded-lg border border-line bg-surfaceMuted p-3 font-semibold text-ink underline decoration-eye decoration-2 underline-offset-4 hover:text-eyeDeep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye" href={displayOverlay.signedLocationPath}>{gps}</a>
               <p className="text-sm text-muted">Accuracy {displayOverlay.accuracy}</p>
               <div className="grid gap-2 sm:grid-cols-2">
-                <a className="rounded-md bg-eye px-4 py-3 text-center text-sm font-semibold text-white" href={displayOverlay.signedLocationPath}>Open Live Location</a>
+                <a className="rounded-md bg-eye px-4 py-3 text-center text-sm font-semibold text-white hover:bg-eyeDeep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye" href={displayOverlay.signedLocationPath}>Open Live Location</a>
                 <button className="rounded-md border border-line px-4 py-3 text-center text-sm font-semibold" onClick={() => navigator.clipboard.writeText(gps)}>Copy Coordinates</button>
               </div>
             </div>
@@ -148,7 +159,7 @@ export function LiveVideoViewer({ sessions }: Props) {
                   key={session.id}
                   type="button"
                   onClick={() => setSelectedId(session.id)}
-                  className={`rounded-lg border p-3 text-left ${selectedId === session.id ? "border-eye bg-emerald-50" : "border-line bg-surfaceMuted"}`}
+                  className={`rounded-lg border p-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye ${selectedId === session.id ? "border-eye bg-eye/10 ring-2 ring-eye/30" : "border-line bg-surfaceMuted hover:border-eye/60"}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>

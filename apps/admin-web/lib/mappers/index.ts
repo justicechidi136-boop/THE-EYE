@@ -30,6 +30,7 @@ import type {
   ResidentView,
   WitnessConfirmationView,
 } from "../types/admin-views";
+import { normalizeBroadcastAttachments } from "../admin-media";
 
 function priorityLabel(priority: string): Incident["priority"] {
   if (priority === "P1LifeThreatening") return "P1";
@@ -145,6 +146,30 @@ function broadcastSightingsCount(record: Record<string, unknown>) {
   return Array.isArray(record.sightings) ? record.sightings.length : 0;
 }
 
+function toEvidenceItems(record: Record<string, unknown>) {
+  const incident = (record.incident ?? record) as Record<string, unknown>;
+  const media = Array.isArray(incident.media) ? incident.media : [];
+  return media.map((item) => {
+    const mediaItem = item as Record<string, unknown>;
+    return {
+      id: String(mediaItem.id ?? ""),
+      type: String(mediaItem.mediaType ?? "Media"),
+      name: mediaItem.contentType ? String(mediaItem.contentType) : String(mediaItem.mediaType ?? "Evidence"),
+      hash: mediaItem.fileHash ? String(mediaItem.fileHash).slice(0, 12) : "pending",
+      contentType: mediaItem.contentType ? String(mediaItem.contentType) : undefined,
+      durationSeconds: mediaItem.durationSeconds != null ? Number(mediaItem.durationSeconds) : null,
+      transcriptionStatus: mediaItem.transcriptionStatus ? String(mediaItem.transcriptionStatus) : null,
+      transcript: mediaItem.transcript ? String(mediaItem.transcript) : null,
+      translatedTranscript: mediaItem.translatedTranscript ? String(mediaItem.translatedTranscript) : null,
+      selectedLanguage: mediaItem.selectedLanguage ? String(mediaItem.selectedLanguage) : null,
+      detectedLanguage: mediaItem.detectedLanguage ? String(mediaItem.detectedLanguage) : null,
+      transcriptionConfidence:
+        mediaItem.transcriptionConfidence != null ? Number(mediaItem.transcriptionConfidence) : null,
+      uploadedAt: mediaItem.uploadedAt ? String(mediaItem.uploadedAt) : null,
+    };
+  });
+}
+
 function broadcastRecipientCount(record: Record<string, unknown>) {
   const count = record._count as { deliveries?: number } | undefined;
   if (typeof count?.deliveries === "number") return count.deliveries;
@@ -218,6 +243,7 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
 
 export function toBroadcastDetailView(record: Record<string, unknown>): BroadcastDetailView {
   const sightingsRaw = Array.isArray(record.sightings) ? record.sightings : [];
+  const metadata = (record.metadata as Record<string, unknown> | undefined) ?? {};
   return {
     ...toBroadcastView(record),
     body: String(record.body ?? ""),
@@ -225,6 +251,7 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
     publishedAt: record.publishedAt ? String(record.publishedAt) : null,
     resolvedAt: record.resolvedAt ? String(record.resolvedAt) : null,
     suspendedAt: record.suspendedAt ? String(record.suspendedAt) : null,
+    attachments: normalizeBroadcastAttachments(metadata.attachments),
     sightings: sightingsRaw.map((entry) => {
       const row = entry as Record<string, unknown>;
       const metadata = (row.metadata as Record<string, unknown> | undefined) ?? {};
@@ -823,6 +850,7 @@ export function toMissingPersonCaseView(record: Record<string, unknown>): Missin
     createdAt: incident.createdAt ? String(incident.createdAt) : undefined,
     latitude: report?.latitude == null ? toNumber(incident.latitude, NaN) || undefined : Number(report.latitude),
     longitude: report?.longitude == null ? toNumber(incident.longitude, NaN) || undefined : Number(report.longitude),
+    evidence: toEvidenceItems(record),
   };
 }
 
@@ -849,6 +877,7 @@ export function toStolenVehicleCaseView(record: Record<string, unknown>): Stolen
     createdAt: incident.createdAt ? String(incident.createdAt) : undefined,
     latitude: report?.latitude == null ? toNumber(incident.latitude, NaN) || undefined : Number(report.latitude),
     longitude: report?.longitude == null ? toNumber(incident.longitude, NaN) || undefined : Number(report.longitude),
+    evidence: toEvidenceItems(record),
   };
 }
 

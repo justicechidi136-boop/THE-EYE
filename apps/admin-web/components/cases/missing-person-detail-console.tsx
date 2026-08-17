@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { IncidentAdminActions } from "../incident-admin-actions";
+import { EvidenceGallery } from "../admin-media";
 import { Button, FormField, InlineAlert, TextInput } from "../form-primitives";
 import { Panel, StatusBadge } from "../ui";
 import type { MissingPersonCaseView } from "../../lib/types/admin-views";
@@ -103,6 +104,9 @@ export function MissingPersonDetailConsole({ caseView }: { caseView: MissingPers
           </div>
         </Panel>
         <IncidentAdminActions incidentId={caseView.incidentId} currentStatus={caseView.incidentStatus} />
+        <Panel title="Persisted evidence">
+          <EvidenceGallery incidentId={caseView.incidentId} items={caseView.evidence} />
+        </Panel>
       </div>
     </div>
   );

@@ -35,11 +35,11 @@ export type UpdateStolenVehicleCaseDto = {
   reportStatus?: string;
 };
 
-export type AdminCreateMissingPersonDto = Pick<ReportIncidentDto, "description" | "latitude" | "longitude" | "manualLatitude" | "manualLongitude" | "manualAddress" | "address" | "title" | "priority" | "occurredAt"> & {
+export type AdminCreateMissingPersonDto = Pick<ReportIncidentDto, "description" | "latitude" | "longitude" | "manualLatitude" | "manualLongitude" | "manualAddress" | "address" | "title" | "priority" | "occurredAt" | "media"> & {
   missingPerson: NonNullable<ReportIncidentDto["missingPerson"]>;
 };
 
-export type AdminCreateStolenVehicleDto = Pick<ReportIncidentDto, "description" | "latitude" | "longitude" | "manualLatitude" | "manualLongitude" | "manualAddress" | "address" | "title" | "priority" | "occurredAt"> & {
+export type AdminCreateStolenVehicleDto = Pick<ReportIncidentDto, "description" | "latitude" | "longitude" | "manualLatitude" | "manualLongitude" | "manualAddress" | "address" | "title" | "priority" | "occurredAt" | "media"> & {
   stolenVehicle: NonNullable<ReportIncidentDto["stolenVehicle"]>;
 };
 
