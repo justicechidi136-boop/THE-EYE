@@ -612,7 +612,7 @@ export class FieldDevicePairingService {
     });
   }
 
-  private genericActivationFailure(code = FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID) {
+  private genericActivationFailure(code: string = FIELD_PAIRING_ERROR_CODES.TOKEN_INVALID) {
     return new UnauthorizedException({
       code,
       message: "Device activation could not be completed.",
