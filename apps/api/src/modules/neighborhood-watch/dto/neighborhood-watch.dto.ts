@@ -35,6 +35,7 @@ export type CreateCommunityPostDto = {
     | "Discussion"
     | "LocalWarning"
     | "RoadHazard"
+    | "RoadTraffic"
     | "CommunityQuestion";
   title: string;
   body: string;
@@ -310,6 +311,7 @@ export const NW_DISCUSSION_POST_TYPES = new Set<CreateCommunityPostDto["type"]>(
   "CommunityQuestion",
   "LocalWarning",
   "RoadHazard",
+  "RoadTraffic",
   "SuspiciousActivity",
 ]);
 

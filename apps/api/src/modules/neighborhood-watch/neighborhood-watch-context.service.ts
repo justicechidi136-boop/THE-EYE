@@ -489,7 +489,7 @@ export class NeighborhoodWatchContextService {
       this.prisma.communityPost.count({
         where: {
           communityId,
-          type: "RoadHazard",
+          type: { in: ["RoadHazard", "RoadTraffic"] } as never,
           hiddenAt: null,
           hazardStatus: { in: ["Open", "Verified", "Ongoing"] },
           createdAt: { gte: since },
@@ -533,7 +533,7 @@ export class NeighborhoodWatchContextService {
       this.prisma.communityPost.count({
         where: {
           ...base,
-          type: "RoadHazard",
+          type: { in: ["RoadHazard", "RoadTraffic"] } as never,
           hazardStatus: { in: ["Open", "Verified", "Ongoing"] },
         } as never,
       }),

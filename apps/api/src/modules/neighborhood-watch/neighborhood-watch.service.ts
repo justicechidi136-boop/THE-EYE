@@ -699,7 +699,9 @@ export class NeighborhoodWatchService {
       }
     }
     const hazardStatus =
-      dto.type === "RoadHazard" || dto.type === "LocalWarning"
+      dto.type === "RoadHazard" ||
+      dto.type === "RoadTraffic" ||
+      dto.type === "LocalWarning"
         ? (dto.hazardStatus ?? "Open")
         : undefined;
     const post = await this.prisma.communityPost.create({
@@ -764,7 +766,9 @@ export class NeighborhoodWatchService {
       }
     }
     const hazardStatus =
-      dto.type === "RoadHazard" || dto.type === "LocalWarning"
+      dto.type === "RoadHazard" ||
+      dto.type === "RoadTraffic" ||
+      dto.type === "LocalWarning"
         ? (dto.hazardStatus ?? "Open")
         : undefined;
     const post = await this.prisma.communityPost.create({

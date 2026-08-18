@@ -360,6 +360,34 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
     ).toThrow(BadRequestException);
   });
 
+  it("keeps RoadTraffic distinct from RoadHazard while using hazard lifecycle", async () => {
+    validatePost({
+      type: "RoadTraffic",
+      title: "Heavy traffic at Stadium Road",
+      body: "Unusual congestion is blocking one lane near the junction.",
+      hazardStatus: "Ongoing",
+    });
+    const { service, prisma } = buildService();
+    await service.createPost(
+      "community-a",
+      {
+        type: "RoadTraffic",
+        title: "Heavy traffic at Stadium Road",
+        body: "Unusual congestion is blocking one lane near the junction.",
+        hazardStatus: "Ongoing",
+      },
+      traveler,
+    );
+    expect(prisma.communityPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "RoadTraffic",
+          hazardStatus: "Ongoing",
+        }),
+      }),
+    );
+  });
+
   it("12) another eligible user comments on a discussion", async () => {
     const { service, notifications } = buildService({
       communityMembership: {

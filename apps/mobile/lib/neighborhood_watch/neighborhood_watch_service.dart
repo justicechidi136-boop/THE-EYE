@@ -507,6 +507,7 @@ const neighborhoodWatchPostTypeLabels = {
   "Discussion": "Discussion",
   "LocalWarning": "Local warning",
   "RoadHazard": "Road hazard",
+  "RoadTraffic": "Road traffic",
   "CommunityQuestion": "Community question",
 };
 

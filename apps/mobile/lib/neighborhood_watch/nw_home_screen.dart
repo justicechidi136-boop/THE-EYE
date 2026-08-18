@@ -496,6 +496,15 @@ class _NeighborhoodWatchHomeScreenState
           label: const Text("Report Road Hazard"),
         ),
         const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).pushNamed(
+            NeighborhoodWatchDestinations.create,
+            arguments: const {"type": "RoadTraffic"},
+          ),
+          icon: const Icon(Icons.traffic_outlined),
+          label: const Text("Report Road Traffic"),
+        ),
+        const SizedBox(height: 8),
       ],
       FilledButton.icon(
         style: FilledButton.styleFrom(

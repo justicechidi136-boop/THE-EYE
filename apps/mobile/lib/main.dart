@@ -2095,6 +2095,7 @@ class AppController extends SessionAccessor
                 "SuspiciousActivity",
                 "LocalWarning",
                 "RoadHazard",
+                "RoadTraffic",
                 "CrimeAlert",
                 "AccidentAlert",
                 "FireAlert",
@@ -8174,6 +8175,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       "CommunityQuestion" => "Community Question",
       "LocalWarning" => "Local Warning",
       "RoadHazard" => "Road / Environmental Hazard",
+      "RoadTraffic" => "Road Traffic",
       "SuspiciousActivity" => "Suspicious Activity",
       _ => type,
     };
@@ -8302,6 +8304,7 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
     "Community Question": "CommunityQuestion",
     "Local Warning": "LocalWarning",
     "Road / Environmental Hazard": "RoadHazard",
+    "Road Traffic": "RoadTraffic",
     "Suspicious Activity": "SuspiciousActivity",
   };
 

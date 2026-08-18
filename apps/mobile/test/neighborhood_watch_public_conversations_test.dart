@@ -273,10 +273,15 @@ void main() {
         "Community Question": "CommunityQuestion",
         "Local Warning": "LocalWarning",
         "Road / Environmental Hazard": "RoadHazard",
+        "Road Traffic": "RoadTraffic",
         "Suspicious Activity": "SuspiciousActivity",
       };
-      expect(typeMap.length, 6);
-      expect(typeMap.values.toSet().length, 6);
+      expect(typeMap.length, 7);
+      expect(typeMap.values.toSet().length, 7);
+      expect(
+        typeMap["Road Traffic"],
+        isNot(typeMap["Road / Environmental Hazard"]),
+      );
     });
   });
 
