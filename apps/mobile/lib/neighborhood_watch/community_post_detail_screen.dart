@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
+import "package:url_launcher/url_launcher.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_enums.dart";
@@ -59,6 +60,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
   late String _resolvedCommunityId;
   late String _resolvedTitle;
   int _authoritativeCommentCount = 0;
+  CommunityPostItem? _post;
 
   String get _communityId => _resolvedCommunityId;
 
@@ -92,6 +94,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
         if (post.title.trim().isNotEmpty) {
           _resolvedTitle = post.title;
         }
+        _post = post;
         _authoritativeCommentCount = post.commentCount;
       });
     } catch (_) {
@@ -176,6 +179,18 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
 
   void _clearVoiceDraft() {
     setState(() => _voiceDraft = null);
+  }
+
+  Future<void> _openRemoteMedia(CommunityPostMediaReference media) async {
+    final url = media.signedGetUrl?.trim();
+    if (url == null || url.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Media preview is temporarily unavailable.")),
+      );
+      return;
+    }
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
   Future<void> _addComment() async {
@@ -412,6 +427,13 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
+                  if (_post != null) ...[
+                    _PostSummaryCard(
+                      post: _post!,
+                      openMedia: _openRemoteMedia,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (_loading && _comments.isEmpty)
                     const Center(child: CircularProgressIndicator())
                   else if (_error != null && _comments.isEmpty)
@@ -578,6 +600,109 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PostSummaryCard extends StatelessWidget {
+  const _PostSummaryCard({
+    required this.post,
+    required this.openMedia,
+  });
+
+  final CommunityPostItem post;
+  final Future<void> Function(CommunityPostMediaReference media) openMedia;
+
+  String _typeLabel(String type) {
+    return switch (type) {
+      "SafetyTip" => "Security Tip",
+      "SuspiciousActivity" => "Report Activity",
+      "RoadHazard" => "Road Hazard",
+      _ => type,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _typeLabel(post.type),
+              style: theme.textTheme.labelLarge,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              post.title,
+              style: theme.textTheme.titleMedium,
+            ),
+            if (post.body.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(post.body),
+            ],
+            if (post.displayLocation != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Icon(Icons.place_outlined, size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(post.displayLocation!)),
+                ],
+              ),
+            ],
+            if (post.media.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                "Attachments",
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              ...post.media.map(
+                (media) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    media.isImage
+                        ? Icons.image_outlined
+                        : media.isVideo
+                            ? Icons.videocam_outlined
+                            : media.isAudio
+                                ? Icons.audiotrack
+                                : Icons.attach_file,
+                  ),
+                  title: Text(
+                    media.isImage
+                        ? "Photo"
+                        : media.isVideo
+                            ? "Video"
+                            : media.isAudio
+                                ? "Audio"
+                                : "Attachment",
+                  ),
+                  subtitle: Text(
+                    media.signedGetUrl == null || media.signedGetUrl!.isEmpty
+                        ? "Preview unavailable right now"
+                        : "Open attachment",
+                  ),
+                  trailing: media.signedGetUrl == null || media.signedGetUrl!.isEmpty
+                      ? null
+                      : const Icon(Icons.open_in_new),
+                  onTap: media.signedGetUrl == null || media.signedGetUrl!.isEmpty
+                      ? null
+                      : () => unawaited(openMedia(media)),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -325,4 +325,55 @@ void main() {
     final service = NeighborhoodWatchService(apiClient: apiClient);
     await service.listCommunities(accessToken: "token");
   });
+
+  test("communityFeed parses media and attached location fields", () async {
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.url.path, contains("/feed"));
+        return http.Response(
+          jsonEncode({
+            "data": [
+              {
+                "id": "post-1",
+                "title": "Security Tip: Lock estate gate",
+                "body": "Lock the estate gate after 10 PM.",
+                "type": "SafetyTip",
+                "verificationStatus": "PendingVerification",
+                "confidenceScore": 18,
+                "commentCount": 3,
+                "latitude": 4.8156,
+                "longitude": 7.0498,
+                "hasApproximateLocation": true,
+                "media": [
+                  {
+                    "id": "media-1",
+                    "mediaType": "Image",
+                    "bucket": "the-eye",
+                    "objectKey": "evidence/community-a/photo-1.jpg",
+                    "contentType": "image/jpeg",
+                    "fileHash": "hash-1",
+                    "signedGetUrl": "https://storage.test/photo-1.jpg",
+                  }
+                ],
+              }
+            ],
+            "nextCursor": null,
+          }),
+          200,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+    final page = await service.communityFeed(
+      accessToken: "token",
+      communityId: "community-a",
+    );
+    expect(page.items, hasLength(1));
+    expect(page.items.first.media, hasLength(1));
+    expect(page.items.first.media.first.signedGetUrl,
+        "https://storage.test/photo-1.jpg");
+    expect(page.items.first.displayLocation, "4.8156, 7.0498");
+  });
 }

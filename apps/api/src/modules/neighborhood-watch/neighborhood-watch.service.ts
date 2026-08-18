@@ -12,7 +12,7 @@ import {
 } from "../../common/pagination/cursor-pagination";
 import { BroadcastsService } from "../broadcasts/broadcasts.service";
 import { AuditService } from "../audit/audit.service";
-import { assertEvidenceObjectKey, createStorageUploadUrl, evidenceObjectKey, getConfiguredStorageBucket, validateEvidenceUpload } from "../../common/storage/s3-presign";
+import { assertEvidenceObjectKey, createStorageDownloadUrl, createStorageUploadUrl, evidenceObjectKey, getConfiguredStorageBucket, validateEvidenceUpload } from "../../common/storage/s3-presign";
 import { communityRoleCan, isCommunityAdminRole, isModeratorRole, platformAdminCan } from "./community-permissions";
 import { DangerZoneGeoService } from "../danger-zones/danger-zone-geo.service";
 import { IncidentsService } from "../incidents/incidents.service";
@@ -740,7 +740,7 @@ export class NeighborhoodWatchService {
     );
     await this.audit(actor, "community.post_created", "community_posts", post.id, { communityId, type: dto.type });
     return {
-      data: this.toPublicPostPayload({
+      data: await this.toPublicPostPayload({
         ...scored,
         ...(authorLabel ? { authorLabel } : {}),
         targetType: "COMMUNITY",
@@ -808,7 +808,7 @@ export class NeighborhoodWatchService {
       type: dto.type,
     });
     return {
-      data: this.toPublicPostPayload({
+      data: await this.toPublicPostPayload({
         ...scored,
         authorLabel: "Current Area Visitor",
         targetType: "DYNAMIC_AREA",
@@ -845,13 +845,13 @@ export class NeighborhoodWatchService {
     const page = buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
     return {
       ...page,
-      data: page.data.map((row) =>
+      data: await Promise.all(page.data.map((row) =>
         this.toPublicPostPayload({
           ...row,
           authorLabel: "Current Area Visitor",
           commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
         }),
-      ),
+      )),
       meta: {
         targetType: "DYNAMIC_AREA",
         dynamicAreaKey: presence.areaKey,
@@ -1038,11 +1038,15 @@ export class NeighborhoodWatchService {
     );
     return {
       ...page,
-      data: page.data.map((row) => ({
-        ...row,
-        ...(labels.has(row.authorId) ? { authorLabel: labels.get(row.authorId) } : {}),
-        commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
-      })),
+      data: await Promise.all(
+        page.data.map((row) =>
+          this.toPublicPostPayload({
+            ...row,
+            ...(labels.has(row.authorId) ? { authorLabel: labels.get(row.authorId) } : {}),
+            commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
+          }),
+        ),
+      ),
     };
   }
 
@@ -1880,7 +1884,7 @@ export class NeighborhoodWatchService {
       this.prisma.communityPostComment.count({ where: { postId } }),
     ]);
     return {
-      data: this.toPublicPostPayload({
+      data: await this.toPublicPostPayload({
         ...post,
         ...(authorLabel ? { authorLabel } : {}),
         commentCount,
@@ -2093,13 +2097,14 @@ export class NeighborhoodWatchService {
 
   /** Strip exact GPS from public community feed payloads. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private toPublicPostPayload(post: Record<string, unknown>): any {
+  private async toPublicPostPayload(post: Record<string, unknown>): Promise<any> {
     const {
       latitude: _lat,
       longitude: _lng,
       gpsLocation: _gps,
       ...rest
     } = post as Record<string, unknown>;
+    const mediaRows = Array.isArray(rest.media) ? rest.media : [];
     const areaLabel =
       typeof rest.areaLabel === "string" && rest.areaLabel.trim()
         ? rest.areaLabel
@@ -2110,10 +2115,26 @@ export class NeighborhoodWatchService {
               lgaCode: typeof rest.areaLga === "string" ? rest.areaLga : null,
             })
           : undefined;
+    const media = await Promise.all(
+      mediaRows.map(async (row) => {
+        const entry = { ...(row as Record<string, unknown>) };
+        const objectKey = typeof entry.objectKey === "string" ? entry.objectKey : "";
+        if (!objectKey) return entry;
+        try {
+          entry.signedGetUrl = (await createStorageDownloadUrl(objectKey, 300)).url;
+        } catch {
+          entry.signedGetUrl = undefined;
+        }
+        return entry;
+      }),
+    );
     return {
       ...rest,
+      media,
       ...(areaLabel ? { approximateLocationLabel: areaLabel } : {}),
       hasApproximateLocation: _lat != null && _lng != null,
+      ...(_lat != null ? { latitude: Number(_lat) } : {}),
+      ...(_lng != null ? { longitude: Number(_lng) } : {}),
     };
   }
 
