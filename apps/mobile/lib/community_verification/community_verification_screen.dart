@@ -1,9 +1,11 @@
 import "package:flutter/material.dart";
 import "package:flutter/semantics.dart";
 import "package:flutter/services.dart";
+import "package:url_launcher/url_launcher.dart";
 
 import "../brand.dart";
 import "../design_system/components/eye_primary_button.dart";
+import "../incidents/incident_submission_service.dart";
 import "../widgets/eye_scaffold.dart";
 import "community_verification_service.dart";
 
@@ -60,6 +62,12 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
       if (!mounted) return;
       setState(() {
         _payload = payload;
+        _loading = false;
+      });
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.userMessage;
         _loading = false;
       });
     } catch (error) {
@@ -128,6 +136,52 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
     Navigator.of(context).pushNamedAndRemoveUntil("/home", (route) => false);
   }
 
+  Future<void> _openEvidence(CommunityVerificationEvidencePreview preview) async {
+    final url = preview.previewUrl?.trim();
+    if (url == null || url.isEmpty) return;
+    if (preview.isImage) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: InteractiveViewer(
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text("Photo preview is unavailable right now."),
+                    ),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text("Close"),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  String _formatReportedTime(String raw) {
+    final parsed = DateTime.tryParse(raw)?.toLocal();
+    if (parsed == null) return raw;
+    final hour24 = parsed.hour;
+    final hour12 = hour24 == 0 ? 12 : (hour24 > 12 ? hour24 - 12 : hour24);
+    final suffix = hour24 >= 12 ? "PM" : "AM";
+    final minute = parsed.minute.toString().padLeft(2, "0");
+    return "${parsed.day}/${parsed.month}/${parsed.year} $hour12:$minute $suffix";
+  }
+
   @override
   Widget build(BuildContext context) {
     return EyeScaffold(
@@ -180,15 +234,86 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
           Semantics(
             header: true,
             child: Text(
-              "Nearby ${payload.categoryDisplayLabel} Reported",
+              "Verification Detail",
               style: Theme.of(context).textTheme.headlineSmall,
             ),
           ),
           const SizedBox(height: 8),
+          Text(
+            payload.categoryDisplayLabel,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
           Text("${payload.approximateArea} • ${payload.approximateDistance}"),
-          Text("Reported ${payload.reportTime}"),
+          Text("Reported ${_formatReportedTime(payload.reportTime)}"),
           const SizedBox(height: 12),
           Text(payload.sanitizedDescription),
+          if (payload.approvedEvidencePreviews.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            Text("Evidence", style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ...payload.approvedEvidencePreviews.map(
+              (preview) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: BrandColors.lightBorder),
+                  ),
+                  leading: preview.isImage
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: preview.previewUrl == null || preview.previewUrl!.isEmpty
+                                ? const ColoredBox(
+                                    color: Color(0xFFF3F4F6),
+                                    child: Icon(Icons.image_not_supported_outlined),
+                                  )
+                                : Image.network(
+                                    preview.previewUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const ColoredBox(
+                                      color: Color(0xFFF3F4F6),
+                                      child: Icon(Icons.broken_image_outlined),
+                                    ),
+                                  ),
+                          ),
+                        )
+                      : Icon(
+                          preview.isVideo
+                              ? Icons.videocam_outlined
+                              : preview.isAudio
+                                  ? Icons.audiotrack
+                                  : Icons.attach_file,
+                        ),
+                  title: Text(
+                    preview.isImage
+                        ? "Photo evidence"
+                        : preview.isVideo
+                            ? "Video evidence"
+                            : preview.isAudio
+                                ? "Audio evidence"
+                                : "Evidence",
+                  ),
+                  subtitle: Text(
+                    preview.previewUrl == null || preview.previewUrl!.isEmpty
+                        ? "Preview unavailable right now"
+                        : preview.isImage
+                            ? "Tap to view"
+                            : "Tap to open",
+                  ),
+                  trailing: preview.previewUrl == null || preview.previewUrl!.isEmpty
+                      ? null
+                      : const Icon(Icons.open_in_new),
+                  onTap: preview.previewUrl == null || preview.previewUrl!.isEmpty
+                      ? null
+                      : () => _openEvidence(preview),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
@@ -202,15 +327,25 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
           const SizedBox(height: 12),
           EyePrimaryButton(label: "Listen to summary", onPressed: _announceSummary),
           const SizedBox(height: 20),
-          ...actions.map(
-            (action) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Semantics(
-                button: true,
-                label: action.label,
-                child: EyePrimaryButton(
+          if (actions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                "This request can only be reviewed safely later. You can skip it for now.",
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )
+          else
+            ...actions.map(
+              (action) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Semantics(
+                  button: true,
                   label: action.label,
-                  onPressed: _submitting ? null : () => _submit(action.type),
+                  child: EyePrimaryButton(
+                    label: action.label,
+                    onPressed: _submitting ? null : () => _submit(action.type),
+                  ),
                 ),
               ),
             ),
@@ -225,10 +360,6 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
     const labels = {
       "Confirmed": "Confirm Incident",
       "NotFound": "Incident Not Found",
-      "StillOngoing": "Still Ongoing",
-      "AppearsResolved": "Appears Resolved",
-      "UnsafeToVerify": "Unsafe to Verify",
-      "Unsure": "Unsure",
     };
     return allowed
         .where((type) => labels.containsKey(type))
