@@ -37,7 +37,7 @@ void main() {
         lga: "Rumuola",
       );
       final communities = [
-        _community(id: "obio", name: "Obio-Akpor Watch"),
+        _community(id: "obio", name: "Obio-Akpor Watch", lga: "Obio-Akpor"),
         _community(id: "rumuola", name: "Rumuola Watch", lga: "Rumuola"),
         _community(
           id: "mine",
