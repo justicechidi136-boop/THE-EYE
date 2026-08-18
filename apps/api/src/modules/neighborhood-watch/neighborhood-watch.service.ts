@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { BroadcastType, IncidentPriority, IncidentType } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
@@ -54,6 +54,8 @@ import {
 import { MAX_LOCATION_AGE_MS } from "./neighborhood-watch-context.service";
 import { publicAreaDisplayLabel } from "./dynamic-public-area";
 
+export const NEIGHBORHOOD_WATCH_SIGN_DOWNLOAD_URL = Symbol("NEIGHBORHOOD_WATCH_SIGN_DOWNLOAD_URL");
+
 @Injectable()
 export class NeighborhoodWatchService {
   constructor(
@@ -63,6 +65,7 @@ export class NeighborhoodWatchService {
     private readonly notifications: NotificationsService,
     private readonly auditService: AuditService,
     private readonly dangerZoneGeo: DangerZoneGeoService,
+    @Inject(NEIGHBORHOOD_WATCH_SIGN_DOWNLOAD_URL)
     private readonly createSignedDownloadUrl: typeof createStorageDownloadUrl = createStorageDownloadUrl,
   ) {}
 
