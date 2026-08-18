@@ -30,6 +30,11 @@ void main() {
         NeighborhoodWatchDestinations.privateCommunityMembership("priv-1"),
         "/neighborhood-watch/private/priv-1/membership",
       );
+
+      expect(
+        NeighborhoodWatchDestinations.requestCommunity,
+        "/neighborhood-watch/request-community",
+      );
     });
 
     test("detects dynamic route prefixes", () {
