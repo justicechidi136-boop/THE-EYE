@@ -170,4 +170,47 @@ describe("NeighborhoodWatchService", () => {
     await service.createPostComment("post-1", { body: "Thanks for the update" }, userActor);
     expect(prisma.communityPostComment.create).toHaveBeenCalled();
   });
+
+  it("returns privacy-safe patrol data only to approved members", async () => {
+    const { service, prisma } = buildService({
+      patrolSchedule: {
+        findMany: jest.fn().mockResolvedValue([{
+          id: "patrol-1",
+          communityId: "community-1",
+          title: "Evening walk",
+          status: "Scheduled",
+          startsAt: new Date("2026-08-20T18:00:00.000Z"),
+          endsAt: new Date("2026-08-20T20:00:00.000Z"),
+          assignments: [{ userId: "user-1" }, { userId: "user-2" }],
+        }]),
+      },
+    });
+    const result = await service.listPatrols("community-1", userActor);
+    expect(result.data[0]).toEqual(expect.objectContaining({
+      participantCount: 2,
+      isParticipant: true,
+      canJoin: true,
+    }));
+    expect(
+      Object.prototype.hasOwnProperty.call(result.data[0], "checkpoints"),
+    ).toBe(false);
+    expect(prisma.patrolSchedule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        assignments: {
+          select: {
+            userId: true,
+          },
+        },
+      }),
+    }));
+  });
+
+  it("rejects patrol list access for non-members", async () => {
+    const { service } = buildService({
+      communityMembership: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+    });
+    await expect(service.listPatrols("community-1", userActor)).rejects.toThrow("Approved community membership is required");
+  });
 });

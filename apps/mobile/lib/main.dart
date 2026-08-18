@@ -9454,6 +9454,21 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
     }
   }
 
+  Future<void> _openPatrol(PatrolScheduleItem patrol) async {
+    final controller = appOf(context);
+    final accessToken = controller.accessToken;
+    if (accessToken == null || accessToken.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => PatrolDetailSheet(
+        accessToken: accessToken,
+        patrol: patrol,
+      ),
+    );
+    if (mounted) await controller.loadCommunityPatrols();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
@@ -9510,6 +9525,11 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
                   subtitle: highlighted
                       ? "${patrol.status} • ${patrol.startsAt ?? "TBD"} • Deep link match"
                       : "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
+                  trailing: Text(
+                    "${patrol.participantCount} members",
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  onTap: () => _openPatrol(patrol),
                 );
               }),
             ],
@@ -9520,6 +9540,151 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class PatrolDetailSheet extends StatefulWidget {
+  const PatrolDetailSheet({
+    required this.accessToken,
+    required this.patrol,
+    super.key,
+  });
+
+  final String accessToken;
+  final PatrolScheduleItem patrol;
+
+  @override
+  State<PatrolDetailSheet> createState() => _PatrolDetailSheetState();
+}
+
+class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
+  late PatrolScheduleItem _patrol = widget.patrol;
+  bool _loading = true;
+  bool _joining = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final patrol = await NeighborhoodWatchService().getPatrol(
+        accessToken: widget.accessToken,
+        scheduleId: widget.patrol.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _patrol = patrol;
+        _loading = false;
+      });
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.userMessage;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Patrol unavailable.";
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _join() async {
+    if (_joining || !_patrol.canJoin || _patrol.isParticipant) return;
+    setState(() => _joining = true);
+    try {
+      await NeighborhoodWatchService().joinPatrol(
+        accessToken: widget.accessToken,
+        scheduleId: _patrol.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _joining = false;
+        _patrol = PatrolScheduleItem(
+          id: _patrol.id,
+          title: _patrol.title,
+          status: _patrol.status,
+          startsAt: _patrol.startsAt,
+          endsAt: _patrol.endsAt,
+          communityId: _patrol.communityId,
+          routeDescription: _patrol.routeDescription,
+          participantCount: _patrol.participantCount + 1,
+          isParticipant: true,
+          canJoin: _patrol.canJoin,
+        );
+      });
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _joining = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.userMessage)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _joining = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to join patrol.")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        child: _loading
+            ? const SizedBox(
+                height: 220,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : _error != null
+                ? SizedBox(
+                    height: 220,
+                    child: Center(child: Text(_error!)),
+                  )
+                : ListView(
+                    shrinkWrap: true,
+                    children: [
+                      Text(
+                        _patrol.title,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 12),
+                      Text("Status: ${_patrol.status}"),
+                      Text("Starts: ${_patrol.startsAt ?? "TBD"}"),
+                      Text("Ends: ${_patrol.endsAt ?? "TBD"}"),
+                      Text(
+                        "Participating members: ${_patrol.participantCount}",
+                      ),
+                      const SizedBox(height: 12),
+                      Text(_patrol.routeDescription ??
+                          "General route information is available to approved community members."),
+                      const SizedBox(height: 12),
+                      const Text("Follow community safety instructions. Do not confront suspicious persons. Report immediate danger through THE EYE Emergency."),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: _patrol.isParticipant ||
+                                !_patrol.canJoin ||
+                                _joining
+                            ? null
+                            : _join,
+                        child: Text(_patrol.isParticipant
+                            ? "Joined"
+                            : _joining
+                                ? "Joining..."
+                                : "Join Patrol"),
+                      ),
+                    ],
+                  ),
       ),
     );
   }

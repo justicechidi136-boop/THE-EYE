@@ -312,6 +312,43 @@ void main() {
     await service.setHomeCommunity(accessToken: "token", communityId: "c1");
   });
 
+  test("listPatrols parses member participation and safe summary", () async {
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.url.path,
+            endsWith(TheEyeApiPaths.neighborhoodWatchCommunityPatrols("c1")));
+        return http.Response(
+          jsonEncode({
+            "data": [
+              {
+                "id": "patrol-1",
+                "communityId": "c1",
+                "title": "Evening walk",
+                "status": "Scheduled",
+                "startsAt": "2026-08-20T18:00:00.000Z",
+                "endsAt": "2026-08-20T20:00:00.000Z",
+                "routeDescription": "General community patrol route",
+                "participantCount": 2,
+                "isParticipant": true,
+                "canJoin": true,
+              },
+            ],
+          }),
+          200,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final patrol = (await NeighborhoodWatchService(apiClient: apiClient)
+            .listPatrols(accessToken: "token", communityId: "c1"))
+        .single;
+    expect(patrol.status, "Scheduled");
+    expect(patrol.participantCount, 2);
+    expect(patrol.isParticipant, isTrue);
+    expect(patrol.canJoin, isTrue);
+  });
+
   test("uses configured API client instead of compile-time localhost default",
       () async {
     const stagingBase = "https://staging-api.theeye.com.ng/v1";

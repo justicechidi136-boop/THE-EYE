@@ -319,7 +319,6 @@ export class NeighborhoodWatchService {
   }
 
   async getPatrolSchedule(scheduleId: string, actor: JwtPayload) {
-    await this.assertDispatchReader(actor);
     const schedule = await this.prisma.patrolSchedule.findUnique({
       where: { id: scheduleId },
       include: {
@@ -333,8 +332,8 @@ export class NeighborhoodWatchService {
       await this.assertAdminJurisdiction(actor, schedule.community.country, schedule.community.state ?? undefined, schedule.community.lga ?? undefined);
       return { data: schedule };
     }
-    await this.assertCommunityVisible(schedule.communityId, actor);
-    return { data: schedule };
+    await this.assertApprovedMember(schedule.communityId, actor.sub);
+    return { data: this.toMemberPatrolPayload(schedule, actor.sub) };
   }
 
   private assertDispatchReader(actor: JwtPayload) {
@@ -1824,14 +1823,40 @@ export class NeighborhoodWatchService {
   }
 
   async listPatrols(communityId: string, actor: JwtPayload) {
-    await this.assertCommunityVisible(communityId, actor);
+    if (actor.typ !== "admin") await this.assertApprovedMember(communityId, actor.sub);
+    const schedules = await this.prisma.patrolSchedule.findMany({
+      where: { communityId },
+      select: {
+        id: true,
+        communityId: true,
+        title: true,
+        status: true,
+        startsAt: true,
+        endsAt: true,
+        assignments: { select: { userId: true } },
+      },
+      orderBy: { startsAt: "desc" },
+      take: 50,
+    });
     return {
-      data: await this.prisma.patrolSchedule.findMany({
-        where: { communityId },
-        include: { checkpoints: true, assignments: { include: { user: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } } } },
-        orderBy: { startsAt: "desc" },
-        take: 50,
-      }),
+      data: schedules.map((schedule) =>
+        actor.typ === "admin" ? schedule : this.toMemberPatrolPayload(schedule, actor.sub),
+      ),
+    };
+  }
+
+  private toMemberPatrolPayload(schedule: { id: string; communityId: string; title: string; status: string; startsAt: Date; endsAt: Date; assignments: Array<{ userId: string }> }, userId: string) {
+    return {
+      id: schedule.id,
+      communityId: schedule.communityId,
+      title: schedule.title,
+      status: schedule.status,
+      startsAt: schedule.startsAt,
+      endsAt: schedule.endsAt,
+      routeDescription: "General community patrol route",
+      participantCount: schedule.assignments.length,
+      isParticipant: schedule.assignments.some((assignment) => assignment.userId === userId),
+      canJoin: ["Scheduled", "Active"].includes(String(schedule.status)),
     };
   }
 
