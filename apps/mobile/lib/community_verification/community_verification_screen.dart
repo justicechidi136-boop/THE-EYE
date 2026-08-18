@@ -349,7 +349,6 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
                 ),
               ),
             ),
-          ),
           TextButton(onPressed: _submitting ? null : _skip, child: const Text("Skip")),
         ],
       ),
