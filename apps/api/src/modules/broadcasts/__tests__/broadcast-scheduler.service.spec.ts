@@ -156,6 +156,34 @@ describe("BroadcastsService citizen feed", () => {
       }),
     );
   });
+
+  it("scopes the canonical feed to an approved community jurisdiction", async () => {
+    const prisma = {
+      community: {
+        findUnique: jest.fn().mockResolvedValue({
+          country: "NG",
+          state: "LA",
+          lga: "Ikeja",
+        }),
+      },
+      communityMembership: {
+        findUnique: jest.fn().mockResolvedValue({ status: "Approved" }),
+      },
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+    };
+    const { service } = buildService(prisma);
+    const result = await service.nearbyForUser("user-1", 0, 0, {
+      communityId: "community-1",
+      limit: 10,
+    });
+    expect(result.data).toEqual([]);
+    expect(prisma.communityMembership.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { communityId_userId: { communityId: "community-1", userId: "user-1" } },
+      }),
+    );
+    expect(String(prisma.$queryRawUnsafe.mock.calls[0]?.[0])).toContain("$5::text IS NOT NULL");
+  });
 });
 
 describe("BroadcastQueueService enqueue", () => {

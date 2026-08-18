@@ -40,6 +40,7 @@ export type RejectBroadcastDto = {
 export type NearbyBroadcastsQuery = {
   latitude?: string;
   longitude?: string;
+  communityId?: string;
   radiusMeters?: string;
   cursor?: string;
   limit?: string;

@@ -1,8 +1,14 @@
+import "dart:convert";
+
 import "package:flutter_test/flutter_test.dart";
+import "package:http/http.dart" as http;
+import "package:http/testing.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
 import "package:the_eye_mobile/broadcasts/broadcast_feed_cache.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_feed_service.dart";
+import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
+import "package:the_eye_mobile/contracts/the_eye_api_paths.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +27,24 @@ void main() {
     expect(item.id, "b1");
     expect(item.deepLink, "/broadcasts/b1");
     expect(item.read, isFalse);
+  });
+
+  test("forwards selected community scope to the canonical feed", () async {
+    final client = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.url.path, endsWith(TheEyeApiPaths.broadcastsNearby));
+        expect(request.url.queryParameters["communityId"], "community-1");
+        return http.Response(jsonEncode({"data": []}), 200);
+      }),
+    );
+    final page = await BroadcastFeedService(apiClient: client).listNearby(
+      accessToken: "token",
+      latitude: 0,
+      longitude: 0,
+      communityId: "community-1",
+    );
+    expect(page.items, isEmpty);
   });
 
   test("broadcast feed cache is scoped per user key", () async {

@@ -8,6 +8,7 @@ abstract final class NeighborhoodWatchDestinations {
   static const alerts = "/neighborhood-watch/alerts";
 
   static const patrols = "/neighborhood-watch/patrols";
+  static const broadcasts = "/neighborhood-watch/broadcasts";
 
   static const communities = "/neighborhood-watch/communities";
 

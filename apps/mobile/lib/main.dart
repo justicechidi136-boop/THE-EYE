@@ -1134,6 +1134,8 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/neighborhood-watch/chat": (_) => const CommunityChatScreen(),
               "/neighborhood-watch/volunteers": (_) => const VolunteersScreen(),
               "/neighborhood-watch/patrols": (_) => const PatrolsScreen(),
+              "/neighborhood-watch/broadcasts": (_) =>
+                  const NeighborhoodWatchBroadcastsScreen(),
               "/neighborhood-watch/alerts": (_) =>
                   const CommunityAlertsScreen(),
               "/neighborhood-watch/members": (context) {
@@ -9685,6 +9687,152 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
                       ),
                     ],
                   ),
+      ),
+    );
+  }
+}
+
+class NeighborhoodWatchBroadcastsScreen extends StatefulWidget {
+  const NeighborhoodWatchBroadcastsScreen({super.key});
+
+  @override
+  State<NeighborhoodWatchBroadcastsScreen> createState() =>
+      _NeighborhoodWatchBroadcastsScreenState();
+}
+
+class _NeighborhoodWatchBroadcastsScreenState
+    extends State<NeighborhoodWatchBroadcastsScreen> {
+  final BroadcastFeedService _service = BroadcastFeedService();
+  List<BroadcastFeedItem> _items = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_load());
+    });
+  }
+
+  Future<void> _load() async {
+    final controller = appOf(context);
+    final token = controller.accessToken;
+    if (!controller.isAuthenticated || token == null) {
+      if (mounted) Navigator.of(context).pushReplacementNamed("/login");
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final selected = controller.selectedCommunity;
+    final current = controller.currentAreaCommunity;
+    final communityId = selected != null &&
+            selected.isMember &&
+            (current == null || current.id != selected.id)
+        ? selected.id
+        : null;
+    double latitude = 0;
+    double longitude = 0;
+    try {
+      final location = await captureLocationOutcome();
+      if (location.position != null) {
+        latitude = location.position!.latitude;
+        longitude = location.position!.longitude;
+      } else if (communityId == null) {
+        throw StateError("Location is required to load broadcasts.");
+      }
+      final page = await _service.listNearby(
+        accessToken: token,
+        latitude: latitude,
+        longitude: longitude,
+        communityId: communityId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = page.items;
+        _loading = false;
+      });
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.userMessage;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error is StateError
+            ? error.message
+            : "Unable to load broadcasts.";
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafetyScaffold(
+      title: "Broadcasts",
+      selectedIndex: 3,
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: _loading && _items.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 140),
+                  Center(child: CircularProgressIndicator()),
+                ],
+              )
+            : _error != null && _items.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      const ListTile(
+                        leading: Icon(Icons.cloud_off),
+                        title: Text("Unable to load broadcasts."),
+                      ),
+                      Text(_error!),
+                      const SizedBox(height: 12),
+                      FilledButton(onPressed: _load, child: const Text("Retry")),
+                    ],
+                  )
+                : _items.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        children: const [
+                          SectionCard(
+                            title: "No active broadcasts in this area",
+                            child: Text("There are no active safety broadcasts to show right now."),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                        itemCount: _items.length,
+                        itemBuilder: (context, index) {
+                          final item = _items[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: ListTileCard(
+                              leading: const Icon(Icons.campaign_outlined),
+                              title: item.title,
+                              subtitle: "${item.type} • ${item.status}\n${item.body}",
+                              onTap: () {
+                                final route = broadcastDetailRoute(item.id);
+                                if (route != null) {
+                                  Navigator.of(context).pushNamed(route);
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
       ),
     );
   }
