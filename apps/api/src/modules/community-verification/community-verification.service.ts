@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -33,6 +34,8 @@ import type {
 
 const TERMINAL_REQUEST_STATUSES = new Set(["Responded", "Skipped", "Expired", "Revoked", "Cancelled"]);
 
+export const COMMUNITY_VERIFICATION_SIGN_DOWNLOAD_URL = Symbol("COMMUNITY_VERIFICATION_SIGN_DOWNLOAD_URL");
+
 @Injectable()
 export class CommunityVerificationService {
   constructor(
@@ -42,6 +45,7 @@ export class CommunityVerificationService {
     private readonly scoring: CommunityVerificationScoringService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
+    @Inject(COMMUNITY_VERIFICATION_SIGN_DOWNLOAD_URL)
     private readonly signDownloadUrl: typeof createStorageDownloadUrl = createStorageDownloadUrl,
   ) {}
 
