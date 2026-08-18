@@ -195,7 +195,13 @@ describe("NeighborhoodWatchService", () => {
       Object.prototype.hasOwnProperty.call(result.data[0], "checkpoints"),
     ).toBe(false);
     expect(prisma.patrolSchedule.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      select: expect.objectContaining({ assignments: expect.anything() }),
+      select: expect.objectContaining({
+        assignments: {
+          select: {
+            userId: true,
+          },
+        },
+      }),
     }));
   });
 
