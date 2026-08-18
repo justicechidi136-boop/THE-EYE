@@ -98,6 +98,7 @@ import "broadcasts/stolen_vehicle_broadcast_draft_store.dart";
 import "broadcasts/broadcast_submission_service.dart";
 import "community_verification/community_verification_screen.dart";
 import "community_verification/community_verification_service.dart";
+import "neighborhood_watch/community_access_status.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
 import "neighborhood_watch/neighborhood_watch_destinations.dart";
 import "neighborhood_watch/neighborhood_watch_session.dart";
@@ -2254,6 +2255,12 @@ class AppController extends SessionAccessor
   /// Community id last confirmed via NW `/context` with posting permission.
   String? nwContextCommunityId;
   bool nwContextCanPost = false;
+
+  CommunityAccessStatus get selectedCommunityAccessStatus =>
+      communityAccessStatus(
+        selectedCommunity: selectedCommunity,
+        currentAreaCommunityId: nwContextCommunityId,
+      );
 
   /// Public: approved members, or presence participants confirmed by context.
   /// Private: approved membership still required.
@@ -8028,8 +8035,14 @@ class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
               ...memberships.map((community) => ListTileCard(
                     leading: const Icon(Icons.groups),
                     title: community.name,
-                    subtitle:
-                        "${community.visibility} • ${community.membershipStatus ?? "Unknown"}",
+                    subtitle: [
+                      "${community.visibility} • ${community.membershipStatus ?? "Unknown"}",
+                      if (communityAccessStatus(
+                        selectedCommunity: community,
+                        currentAreaCommunityId: controller.nwContextCommunityId,
+                      ).isOutsideCurrentArea)
+                        "You are currently outside this community.",
+                    ].join("\n"),
                     onTap: () {
                       controller.selectCommunity(community);
                       Navigator.of(context).pop();
@@ -8383,6 +8396,26 @@ class _RequestCommunityScreenState extends State<RequestCommunityScreen> {
   }
 }
 
+class OutsideCurrentAreaNotice extends StatelessWidget {
+  const OutsideCurrentAreaNotice({required this.status, super.key});
+
+  final CommunityAccessStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!status.isOutsideCurrentArea) return const SizedBox.shrink();
+    final semantics = EyeSemanticColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ListTileCard(
+        leading: Icon(Icons.travel_explore, color: semantics.warning),
+        title: status.title,
+        subtitle: status.message,
+      ),
+    );
+  }
+}
+
 class CommunityFeedScreen extends StatefulWidget {
   const CommunityFeedScreen({super.key});
 
@@ -8455,6 +8488,9 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
+            OutsideCurrentAreaNotice(
+              status: controller.selectedCommunityAccessStatus,
+            ),
             if (canStart)
               FilledButton.icon(
                 onPressed: () => Navigator.of(context)
@@ -8735,7 +8771,8 @@ class _CommunityMapScreenState extends State<CommunityMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final community = appOf(context).selectedCommunity;
+    final controller = appOf(context);
+    final community = controller.selectedCommunity;
     final semantics = EyeSemanticColors.of(context);
     return SafetyScaffold(
       title: "Community Map",
@@ -8743,6 +8780,9 @@ class _CommunityMapScreenState extends State<CommunityMapScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
+          OutsideCurrentAreaNotice(
+            status: controller.selectedCommunityAccessStatus,
+          ),
           if (_locationNotice != null) ...[
             LocationDeniedBanner(
               message: _locationNotice!,
@@ -8812,27 +8852,30 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final channels = appOf(context).selectedCommunity?.channels ?? const [];
+    final controller = appOf(context);
+    final channels = controller.selectedCommunity?.channels ?? const [];
     return SafetyScaffold(
       title: "Community Chat",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: channels.isEmpty
-            ? const [
-                ListTileCard(
-                  leading: Icon(Icons.forum),
-                  title: "No channels available",
-                  subtitle: "Join an approved community to access channels.",
-                ),
-              ]
-            : channels
-                .map((channel) => ListTileCard(
-                      leading: const Icon(Icons.forum),
-                      title: channel.name,
-                      subtitle: channel.type,
-                    ))
-                .toList(),
+        children: [
+          OutsideCurrentAreaNotice(
+            status: controller.selectedCommunityAccessStatus,
+          ),
+          if (channels.isEmpty)
+            const ListTileCard(
+              leading: Icon(Icons.forum),
+              title: "No channels available",
+              subtitle: "Join an approved community to access channels.",
+            )
+          else
+            ...channels.map((channel) => ListTileCard(
+                  leading: const Icon(Icons.forum),
+                  title: channel.name,
+                  subtitle: channel.type,
+                )),
+        ],
       ),
     );
   }
@@ -8888,12 +8931,16 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final controller = appOf(context);
     return SafetyScaffold(
       title: "Volunteers",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
+          OutsideCurrentAreaNotice(
+            status: controller.selectedCommunityAccessStatus,
+          ),
           FilledButton.icon(
             onPressed: _registering ? null : _register,
             icon: const Icon(Icons.volunteer_activism),
@@ -9009,6 +9056,9 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
+            OutsideCurrentAreaNotice(
+              status: controller.selectedCommunityAccessStatus,
+            ),
             if (controller.loadingCommunityPatrols &&
                 controller.communityPatrols.isEmpty)
               const Center(child: CircularProgressIndicator())
@@ -9100,6 +9150,9 @@ class _CommunityAlertsScreenState extends State<CommunityAlertsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
+            OutsideCurrentAreaNotice(
+              status: controller.selectedCommunityAccessStatus,
+            ),
             if (controller.loadingCommunityAlerts &&
                 controller.communityAlerts.isEmpty)
               const Center(child: CircularProgressIndicator())
