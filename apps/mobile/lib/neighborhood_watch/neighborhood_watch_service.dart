@@ -466,6 +466,11 @@ class PatrolScheduleItem {
     required this.status,
     required this.startsAt,
     required this.endsAt,
+    this.communityId,
+    this.routeDescription,
+    this.participantCount = 0,
+    this.isParticipant = false,
+    this.canJoin = false,
   });
 
   final String id;
@@ -473,6 +478,11 @@ class PatrolScheduleItem {
   final String status;
   final DateTime? startsAt;
   final DateTime? endsAt;
+  final String? communityId;
+  final String? routeDescription;
+  final int participantCount;
+  final bool isParticipant;
+  final bool canJoin;
 
   factory PatrolScheduleItem.fromJson(Map<String, dynamic> json) {
     return PatrolScheduleItem(
@@ -481,6 +491,13 @@ class PatrolScheduleItem {
       status: (json["status"] as String?) ?? "Scheduled",
       startsAt: DateTime.tryParse((json["startsAt"] as String?) ?? ""),
       endsAt: DateTime.tryParse((json["endsAt"] as String?) ?? ""),
+      communityId: json["communityId"] as String?,
+      routeDescription: json["routeDescription"] as String?,
+      participantCount: (json["participantCount"] as num?)?.toInt() ??
+          ((json["_count"] as Map?)?["assignments"] as num?)?.toInt() ??
+          0,
+      isParticipant: json["isParticipant"] == true,
+      canJoin: json["canJoin"] == true,
     );
   }
 }
@@ -1127,6 +1144,22 @@ class NeighborhoodWatchService {
       accessToken: accessToken,
     );
     _ensureSuccess(response);
+  }
+
+  Future<PatrolScheduleItem> getPatrol({
+    required String accessToken,
+    required String scheduleId,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.neighborhoodWatchPatrol(scheduleId),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map && decoded["data"] is Map
+        ? decoded["data"] as Map
+        : decoded as Map;
+    return PatrolScheduleItem.fromJson(Map<String, dynamic>.from(data));
   }
 
   Future<void> createPatrolObservation({

@@ -169,6 +169,8 @@ abstract final class TheEyeApiPaths {
       "/neighborhood-watch/communities/$communityId/map";
   static String neighborhoodWatchPatrolCheckpoint(String scheduleId) =>
       "/neighborhood-watch/patrols/$scheduleId/checkpoints";
+  static String neighborhoodWatchPatrol(String scheduleId) =>
+      "/neighborhood-watch/patrols/$scheduleId";
   static String neighborhoodWatchChannelMessages(String channelId) =>
       "/neighborhood-watch/channels/$channelId/messages";
   static String neighborhoodWatchPostComments(String postId) =>
