@@ -587,7 +587,7 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
     expect(prisma.communityPostReaction.upsert).toHaveBeenCalled();
   });
 
-  it("returns signed media URLs and coordinates for persisted post rendering", async () => {
+  it("returns signed media URLs without exposing exact coordinates", async () => {
     const { service } = buildService({
       communityPost: {
         findUnique: jest.fn().mockResolvedValue({
@@ -625,8 +625,8 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
 
     const result = await service.getPost("post-77", traveler);
 
-    expect(result.data.latitude).toBe(4.8156);
-    expect(result.data.longitude).toBe(7.0498);
+    expect(result.data.latitude).toBeUndefined();
+    expect(result.data.longitude).toBeUndefined();
     expect(result.data.hasApproximateLocation).toBe(true);
     expect(result.data.media[0].signedGetUrl).toBe(
       "https://storage.test/signed-object",
