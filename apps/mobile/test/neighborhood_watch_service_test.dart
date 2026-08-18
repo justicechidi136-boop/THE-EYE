@@ -40,6 +40,83 @@ void main() {
     expect(page.items.first.isMember, isTrue);
   });
 
+  test("createCommunityRequest posts jurisdiction request", () async {
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.method, "POST");
+        expect(request.url.path,
+            endsWith(TheEyeApiPaths.neighborhoodWatchCommunityRequests));
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body["name"], "Trans-Amadi Residents");
+        expect(body["country"], "Nigeria");
+        expect(body["state"], "Rivers");
+        expect(body["lga"], "Port Harcourt");
+        expect(body["visibility"], "Private");
+        expect(body.containsKey("ward"), isFalse);
+        return http.Response(
+          jsonEncode({
+            "data": {
+              "id": "req1",
+              "name": "Trans-Amadi Residents",
+              "country": "Nigeria",
+              "state": "Rivers",
+              "lga": "Port Harcourt",
+              "visibility": "Private",
+              "status": "Pending",
+              "createdAt": "2026-08-18T10:00:00.000Z",
+            },
+          }),
+          201,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+    final request = await service.createCommunityRequest(
+      accessToken: "token",
+      name: "Trans-Amadi Residents",
+      country: "Nigeria",
+      state: "Rivers",
+      lga: "Port Harcourt",
+      ward: "",
+      visibility: "Private",
+    );
+    expect(request.id, "req1");
+    expect(request.status, "Pending");
+    expect(request.visibility, "Private");
+  });
+
+  test("listCommunityRequests parses requester history", () async {
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.method, "GET");
+        expect(request.url.path,
+            endsWith(TheEyeApiPaths.neighborhoodWatchCommunityRequests));
+        return http.Response(
+          jsonEncode({
+            "data": [
+              {
+                "id": "req1",
+                "name": "Estate Watch",
+                "country": "Nigeria",
+                "status": "Pending",
+              },
+            ],
+          }),
+          200,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+    final requests = await service.listCommunityRequests(accessToken: "token");
+    expect(requests, hasLength(1));
+    expect(requests.first.name, "Estate Watch");
+    expect(requests.first.status, "Pending");
+  });
+
   test("listMembers parses badges and pagination cursor", () async {
     final apiClient = TheEyeApiClient(
       baseUrl: "https://api.test/v1",

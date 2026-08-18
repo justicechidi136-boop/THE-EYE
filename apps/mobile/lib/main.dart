@@ -1115,6 +1115,8 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/neighborhood-watch/communities": (_) =>
                   const MyCommunitiesScreen(),
               "/neighborhood-watch/join": (_) => const JoinCommunityScreen(),
+              "/neighborhood-watch/request-community": (_) =>
+                  const RequestCommunityScreen(),
               "/neighborhood-watch/feed": (_) => const CommunityFeedScreen(),
               "/neighborhood-watch/create": (_) =>
                   const CreateCommunityPostScreen(),
@@ -2164,6 +2166,41 @@ class AppController extends SessionAccessor
       return error.userMessage;
     } catch (_) {
       return "Unable to join community.";
+    }
+  }
+
+  Future<String?> requestCommunity({
+    required String name,
+    required String country,
+    String? description,
+    String? state,
+    String? lga,
+    String? ward,
+    String? estate,
+    String? street,
+    required String visibility,
+  }) async {
+    if (!isAuthenticated || accessToken == null) return "Sign in required";
+    try {
+      await _neighborhoodWatchService.createCommunityRequest(
+        accessToken: accessToken!,
+        name: name,
+        country: country,
+        description: description,
+        state: state,
+        lga: lga,
+        ward: ward,
+        estate: estate,
+        street: street,
+        visibility: visibility,
+      );
+      communityActionMessage = "Community request submitted for review";
+      notifyListeners();
+      return null;
+    } on IncidentApiException catch (error) {
+      return error.userMessage;
+    } catch (_) {
+      return "Unable to request community.";
     }
   }
 
@@ -8110,6 +8147,14 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
                 labelText: "Search country, state, LGA, estate, or street"),
             onChanged: (_) => setState(() {}),
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).pushNamed(
+              NeighborhoodWatchDestinations.requestCommunity,
+            ),
+            icon: const Icon(Icons.add_home_work_outlined),
+            label: const Text("Request community"),
+          ),
           if (_actionError != null) ...[
             const SizedBox(height: 8),
             Text(_actionError!, style: TextStyle(color: Colors.red.shade700)),
@@ -8137,6 +8182,201 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
                         community.visibility == "Private" ? "Request" : "Join"),
                   ),
                 )),
+        ],
+      ),
+    );
+  }
+}
+
+class RequestCommunityScreen extends StatefulWidget {
+  const RequestCommunityScreen({super.key});
+
+  @override
+  State<RequestCommunityScreen> createState() => _RequestCommunityScreenState();
+}
+
+class _RequestCommunityScreenState extends State<RequestCommunityScreen> {
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _countryController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _lgaController = TextEditingController();
+  final _wardController = TextEditingController();
+  final _estateController = TextEditingController();
+  final _streetController = TextEditingController();
+  String _visibility = "Public";
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = appOf(context);
+      if (!controller.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed("/login");
+        return;
+      }
+      final profile = await controller.loadCitizenProfile();
+      if (!mounted) return;
+      _prefillFromProfile(profile);
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _countryController.dispose();
+    _stateController.dispose();
+    _lgaController.dispose();
+    _wardController.dispose();
+    _estateController.dispose();
+    _streetController.dispose();
+    super.dispose();
+  }
+
+  void _prefillFromProfile(CitizenProfile? profile) {
+    final details = profile?.profile;
+    setState(() {
+      _countryController.text = details?.country?.trim() ?? "";
+      _stateController.text = details?.state?.trim() ?? "";
+      _lgaController.text = details?.lga?.trim() ?? "";
+    });
+  }
+
+  String? _required(String value, String label) {
+    return value.trim().isEmpty ? "$label is required" : null;
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    final country = _countryController.text.trim();
+    final nameError = _required(name, "Community name");
+    final countryError = _required(country, "Country");
+    if (nameError != null || countryError != null) {
+      setState(() => _error = nameError ?? countryError);
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final error = await appOf(context).requestCommunity(
+      name: name,
+      country: country,
+      description: _descriptionController.text.trim(),
+      state: _stateController.text.trim(),
+      lga: _lgaController.text.trim(),
+      ward: _wardController.text.trim(),
+      estate: _estateController.text.trim(),
+      street: _streetController.text.trim(),
+      visibility: _visibility,
+    );
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      _error = error;
+    });
+    if (error == null) {
+      showAppSnackBar(context, "Community request submitted");
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafetyScaffold(
+      title: "Request Community",
+      selectedIndex: 3,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: [
+          const ListTileCard(
+            leading: Icon(Icons.verified_user_outlined),
+            title: "Reviewed before activation",
+            subtitle:
+                "Requests use your verified country, state, and LGA so duplicate or out-of-area communities can be checked.",
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: "Community name"),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _descriptionController,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: "Description",
+              hintText: "Estate, street cluster, ward, or local safety group",
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _visibility,
+            decoration: const InputDecoration(labelText: "Visibility"),
+            items: const [
+              DropdownMenuItem(value: "Public", child: Text("Public")),
+              DropdownMenuItem(value: "Private", child: Text("Private")),
+            ],
+            onChanged: _submitting
+                ? null
+                : (value) => setState(() => _visibility = value ?? "Public"),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _countryController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: "Country"),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _stateController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: "State"),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _lgaController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: "LGA"),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _wardController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: "Ward"),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _estateController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: "Estate"),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _streetController,
+            decoration: const InputDecoration(labelText: "Street"),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: const TextStyle(color: BrandColors.danger)),
+          ],
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _submitting ? null : _submit,
+            icon: _submitting
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send),
+            label: Text(_submitting ? "Submitting..." : "Submit request"),
+          ),
         ],
       ),
     );
