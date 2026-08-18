@@ -113,6 +113,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Verification Detail"), findsOneWidget);
+    expect(find.text("Immediate danger? Report Emergency"), findsOneWidget);
     expect(find.text("Confirm Incident"), findsOneWidget);
     expect(find.text("Incident Not Found"), findsOneWidget);
     expect(find.text("Skip"), findsOneWidget);

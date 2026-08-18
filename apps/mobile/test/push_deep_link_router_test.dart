@@ -37,5 +37,10 @@ void main() {
           "/neighborhood-watch/private/community-123/membership"),
       isTrue,
     );
+    expect(
+      PushDeepLinkRouter.resolveRoute(
+          {"route": "/neighborhood-watch/broadcasts"}),
+      "/neighborhood-watch/broadcasts",
+    );
   });
 }
