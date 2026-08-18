@@ -258,25 +258,49 @@ void main() {
       const title = "No community discussions yet";
       const subtitle =
           "Be the first to start a safety conversation in this area.";
-      const cta = "Start Conversation";
+      const cta = "Share First Security Tip";
       expect(title, contains("discussions"));
       expect(subtitle, contains("first"));
-      expect(cta, "Start Conversation");
+      expect(cta, "Share First Security Tip");
     });
   });
 
   group("conversation type map", () {
     test("maps required UI labels to CommunityPost types", () {
       const typeMap = {
-        "Safety Discussion": "Discussion",
         "Security Tip": "SafetyTip",
-        "Community Question": "CommunityQuestion",
-        "Local Warning": "LocalWarning",
-        "Road / Environmental Hazard": "RoadHazard",
-        "Suspicious Activity": "SuspiciousActivity",
+        "Report Activity": "SuspiciousActivity",
+        "Road Hazard": "RoadHazard",
       };
-      expect(typeMap.length, 6);
-      expect(typeMap.values.toSet().length, 6);
+      expect(typeMap.length, 3);
+      expect(typeMap.values.toSet().length, 3);
+    });
+
+    test("post model exposes persisted media and location", () {
+      final post = CommunityPostItem.fromJson({
+        "id": "p4",
+        "title": "Road Hazard: Tree across lane",
+        "body": "Fallen tree near the junction.",
+        "type": "RoadHazard",
+        "verificationStatus": "PendingVerification",
+        "confidenceScore": 12,
+        "latitude": 4.8156,
+        "longitude": 7.0498,
+        "hasApproximateLocation": true,
+        "media": [
+          {
+            "id": "m1",
+            "mediaType": "Video",
+            "bucket": "the-eye",
+            "objectKey": "evidence/community-a/tree.mp4",
+            "contentType": "video/mp4",
+            "fileHash": "hash-video-1",
+            "signedGetUrl": "https://storage.test/tree.mp4",
+          }
+        ],
+      });
+      expect(post.displayLocation, "4.8156, 7.0498");
+      expect(post.media.single.isVideo, isTrue);
     });
   });
 

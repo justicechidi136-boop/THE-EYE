@@ -59,6 +59,7 @@ import "emergency/active_emergency_store.dart";
 import "incidents/pending_submission_store.dart";
 import "location/location_permission_settings_section.dart";
 import "location/location_permission_service.dart";
+import "location/location_reverse_geocode.dart";
 import "l10n/generated/app_localizations.dart";
 import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
@@ -2332,6 +2333,8 @@ class AppController extends SessionAccessor
     required String body,
     List<LocalEvidenceAttachment> attachments = const [],
     CommunityMediaUploadProgress? onMediaProgress,
+    double? latitude,
+    double? longitude,
   }) async {
     final community = selectedCommunity;
     if (community == null) {
@@ -2345,7 +2348,6 @@ class AppController extends SessionAccessor
     }
     if (!isAuthenticated || accessToken == null) return "Sign in required";
     try {
-      final location = await captureLocationOutcome();
       var media = const <CommunityPostMediaItem>[];
       if (attachments.isNotEmpty) {
         try {
@@ -2365,8 +2367,8 @@ class AppController extends SessionAccessor
         type: type,
         title: title,
         body: body,
-        latitude: location.position?.latitude,
-        longitude: location.position?.longitude,
+        latitude: latitude,
+        longitude: longitude,
         media: media,
       );
       await loadCommunityFeed(refresh: true);
@@ -8768,6 +8770,24 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     return "$hour:$minute $suffix";
   }
 
+  String _mediaSummary(CommunityPostItem post) {
+    if (post.media.isEmpty) return "";
+    var photoCount = 0;
+    var videoCount = 0;
+    var audioCount = 0;
+    for (final item in post.media) {
+      if (item.isImage) photoCount += 1;
+      if (item.isVideo) videoCount += 1;
+      if (item.isAudio) audioCount += 1;
+    }
+    final labels = <String>[
+      if (photoCount > 0) "$photoCount photo${photoCount == 1 ? "" : "s"}",
+      if (videoCount > 0) "$videoCount video${videoCount == 1 ? "" : "s"}",
+      if (audioCount > 0) "$audioCount audio",
+    ];
+    return labels.join(" • ");
+  }
+
   void _openDiscussion(AppController controller, CommunityPostItem post) {
     final community = controller.selectedCommunity;
     if (community == null) return;
@@ -8799,16 +8819,41 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
               status: controller.selectedCommunityAccessStatus,
             ),
             if (canStart)
-              FilledButton.icon(
-                onPressed: () => Navigator.of(context)
-                    .pushNamed(NeighborhoodWatchDestinations.create),
-                icon: const Icon(Icons.forum_outlined),
-                label: const Text("Start Conversation"),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(context).pushNamed(
+                      NeighborhoodWatchDestinations.create,
+                      arguments: const {"type": "SafetyTip"},
+                    ),
+                    icon: const Icon(Icons.tips_and_updates_outlined),
+                    label: const Text("Share Security Tip"),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).pushNamed(
+                      NeighborhoodWatchDestinations.create,
+                      arguments: const {"type": "SuspiciousActivity"},
+                    ),
+                    icon: const Icon(Icons.report_outlined),
+                    label: const Text("Report Activity"),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).pushNamed(
+                      NeighborhoodWatchDestinations.create,
+                      arguments: const {"type": "RoadHazard"},
+                    ),
+                    icon: const Icon(Icons.warning_amber_outlined),
+                    label: const Text("Report Road Hazard"),
+                  ),
+                ],
               )
             else
               const ListTileCard(
                 leading: Icon(Icons.lock_outline),
-                title: "Start Conversation unavailable",
+                title: "Community posting unavailable",
                 subtitle:
                     "Sign in and confirm your current location to participate in this area.",
               ),
@@ -8843,9 +8888,11 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                   if (canStart) ...[
                     const SizedBox(height: 12),
                     FilledButton(
-                      onPressed: () => Navigator.of(context)
-                          .pushNamed(NeighborhoodWatchDestinations.create),
-                      child: const Text("Start Conversation"),
+                      onPressed: () => Navigator.of(context).pushNamed(
+                        NeighborhoodWatchDestinations.create,
+                        arguments: const {"type": "SafetyTip"},
+                      ),
+                      child: const Text("Share First Security Tip"),
                     ),
                   ],
                 ],
@@ -8854,11 +8901,18 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
               ...controller.communityFeed.map((post) {
                 final time = _formatPostTime(post.createdAt);
                 final comments = post.commentCount;
+                final mediaSummary = _mediaSummary(post);
+                final detailLines = <String>[
+                  post.body.isEmpty ? "Media attachment" : post.body,
+                  if (post.displayLocation != null) "Location: ${post.displayLocation}",
+                  if (mediaSummary.isNotEmpty) mediaSummary,
+                  "${post.displayAuthor}${time.isEmpty ? "" : " · $time"}",
+                  "$comments comment${comments == 1 ? "" : "s"} · View Discussion",
+                ];
                 return ListTileCard(
                   leading: const Icon(Icons.forum_outlined),
                   title: "${_conversationTypeLabel(post.type)}\n${post.title}",
-                  subtitle:
-                      "${post.body.isEmpty ? "Voice discussion" : post.body}\n${post.displayAuthor}${time.isEmpty ? "" : " · $time"}\n$comments comment${comments == 1 ? "" : "s"} · View Discussion",
+                  subtitle: detailLines.join("\n"),
                   onTap: () => _openDiscussion(controller, post),
                 );
               }),
@@ -8867,6 +8921,18 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       ),
     );
   }
+}
+
+class _SelectedCommunityLocation {
+  const _SelectedCommunityLocation({
+    required this.latitude,
+    required this.longitude,
+    required this.label,
+  });
+
+  final double latitude;
+  final double longitude;
+  final String label;
 }
 
 class CreateCommunityPostScreen extends StatefulWidget {
@@ -8878,57 +8944,96 @@ class CreateCommunityPostScreen extends StatefulWidget {
 }
 
 class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
-  /// User-facing conversation categories mapped to existing CommunityPost types.
   static const _typeMap = {
-    "Safety Discussion": "Discussion",
     "Security Tip": "SafetyTip",
-    "Community Question": "CommunityQuestion",
-    "Local Warning": "LocalWarning",
-    "Road / Environmental Hazard": "RoadHazard",
-    "Suspicious Activity": "SuspiciousActivity",
+    "Report Activity": "SuspiciousActivity",
+    "Road Hazard": "RoadHazard",
   };
 
-  String _selectedType = "Safety Discussion";
-  final _titleController = TextEditingController();
+  String _selectedType = "Security Tip";
   final _bodyController = TextEditingController();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
-  VoiceRecordingResult? _voiceDraft;
+  final LocationReverseGeocoder _reverseGeocoder =
+      const PlatformLocationReverseGeocoder();
+  _SelectedCommunityLocation? _selectedLocation;
   bool _submitting = false;
+  bool _capturingLocation = false;
 
   @override
   void dispose() {
-    _titleController.dispose();
     _bodyController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final title = _titleController.text.trim();
-    final body = _bodyController.text.trim();
-    final evidence = _evidenceSectionKey.currentState?.attachments ?? const [];
-    final voice = _voiceDraft?.attachment;
-    final attachments = <LocalEvidenceAttachment>[
-      ...evidence,
-      if (voice != null) voice,
-    ];
-    if (title.length < 4) {
-      showAppSnackBar(context, "Add a short conversation title", isError: true);
-      return;
+  String _buildGeneratedTitle(String body) {
+    final prefix = _selectedType;
+    final normalized = body.replaceAll(RegExp(r"\s+"), " ").trim();
+    if (normalized.isEmpty) return prefix;
+    final snippet =
+        normalized.length > 48 ? "${normalized.substring(0, 48).trim()}..." : normalized;
+    return "$prefix: $snippet";
+  }
+
+  Future<void> _attachLocation() async {
+    setState(() => _capturingLocation = true);
+    try {
+      final outcome = await captureLocationOutcome();
+      if (!mounted) return;
+      if (outcome.result != LocationCaptureResult.granted ||
+          outcome.position == null) {
+        showAppSnackBar(
+          context,
+          locationFailureMessage(outcome.result),
+          isError: true,
+        );
+        return;
+      }
+      final position = outcome.position!;
+      final geocode = await _reverseGeocoder.lookup(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      if (!mounted) return;
+      final labelParts = [
+        geocode.locality,
+        geocode.state,
+        geocode.country,
+      ].whereType<String>().where((item) => item.trim().isNotEmpty).toList();
+      final label = labelParts.isEmpty
+          ? "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}"
+          : labelParts.join(", ");
+      setState(() {
+        _selectedLocation = _SelectedCommunityLocation(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          label: label,
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _capturingLocation = false);
     }
+  }
+
+  Future<void> _submit() async {
+    final body = _bodyController.text.trim();
+    final attachments = _evidenceSectionKey.currentState?.attachments ?? const [];
     if (!hasValidReportNarrative(description: body, localMedia: attachments)) {
       showAppSnackBar(
         context,
-        "Add text, a voice note, or a photo/video before posting",
+        "Add a message, voice note, photo, or video before posting",
         isError: true,
       );
       return;
     }
+    final title = _buildGeneratedTitle(body);
     setState(() => _submitting = true);
     final error = await appOf(context).createCommunityPost(
-      type: _typeMap[_selectedType] ?? "Discussion",
+      type: _typeMap[_selectedType] ?? "SafetyTip",
       title: title,
       body: body,
       attachments: attachments,
+      latitude: _selectedLocation?.latitude,
+      longitude: _selectedLocation?.longitude,
       onMediaProgress: (localId, progress) =>
           _evidenceSectionKey.currentState?.markUploading(localId, progress),
     );
@@ -8952,7 +9057,7 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
       if (type is String) {
         for (final entry in _typeMap.entries) {
           if (entry.value == type && entry.key != _selectedType) {
-            _selectedType = entry.key;
+            setState(() => _selectedType = entry.key);
             break;
           }
         }
@@ -8963,9 +9068,8 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
   @override
   Widget build(BuildContext context) {
     final types = _typeMap.keys.toList();
-    final voice = _voiceDraft;
     return SafetyScaffold(
-      title: "Start Conversation",
+      title: "Share With Community",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
@@ -8984,51 +9088,51 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                 .toList(),
             onChanged: (value) =>
                 setState(() => _selectedType = value ?? _selectedType),
-            decoration: const InputDecoration(labelText: "Conversation type"),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _titleController,
-            decoration: const InputDecoration(labelText: "Title"),
+            decoration: const InputDecoration(labelText: "Post type"),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _bodyController,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: "Details (optional if you add voice)",
+              labelText: "Message",
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            "Voice note",
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "Record → Stop → Preview → Play → Delete/Re-record → Post",
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          VoiceRecorder(
-            onRecordingReady: (result) {
-              setState(() => _voiceDraft = result);
-            },
-            onRecordingRemoved: () {
-              setState(() => _voiceDraft = null);
-            },
-          ),
-          if (voice != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              "Voice note ready (${formatVoiceDuration(voice.durationSeconds)}) — preview above, then post.",
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
           const SizedBox(height: 12),
           ManagedEvidenceSection(
             key: _evidenceSectionKey,
             lowDataMode: appOf(context).lowDataMode,
+          ),
+          const SizedBox(height: 12),
+          ListTileCard(
+            leading: const Icon(Icons.place_outlined),
+            title: _selectedLocation == null
+                ? "Attach location"
+                : "Location attached",
+            subtitle: _selectedLocation == null
+                ? "Optional. Add the relevant place for this post."
+                : _selectedLocation!.label,
+            trailing: _capturingLocation
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    icon: Icon(
+                      _selectedLocation == null
+                          ? Icons.add_location_alt_outlined
+                          : Icons.close,
+                    ),
+                    onPressed: _selectedLocation == null
+                        ? _attachLocation
+                        : () => setState(() => _selectedLocation = null),
+                  ),
+            onTap: _capturingLocation
+                ? null
+                : (_selectedLocation == null
+                    ? _attachLocation
+                    : () => setState(() => _selectedLocation = null)),
           ),
           const SizedBox(height: 12),
           FilledButton(
@@ -9038,7 +9142,7 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Post conversation"),
+                : const Text("Submit post"),
           ),
         ],
       ),

@@ -143,6 +143,11 @@ class CommunityPostItem {
     this.authorName,
     this.authorLabel,
     this.commentCount = 0,
+    this.media = const [],
+    this.hasApproximateLocation = false,
+    this.approximateLocationLabel,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -156,6 +161,11 @@ class CommunityPostItem {
   final String? authorName;
   final String? authorLabel;
   final int commentCount;
+  final List<CommunityPostMediaReference> media;
+  final bool hasApproximateLocation;
+  final String? approximateLocationLabel;
+  final double? latitude;
+  final double? longitude;
 
   String get displayAuthor {
     final label = authorLabel?.trim();
@@ -166,9 +176,20 @@ class CommunityPostItem {
     return "Community member";
   }
 
+  String? get displayLocation {
+    final label = approximateLocationLabel?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    if (latitude != null && longitude != null) {
+      return "${latitude!.toStringAsFixed(4)}, ${longitude!.toStringAsFixed(4)}";
+    }
+    if (hasApproximateLocation) return "Location attached";
+    return null;
+  }
+
   factory CommunityPostItem.fromJson(Map<String, dynamic> json) {
     final author = json["author"] as Map<String, dynamic>?;
     final profile = author?["profile"] as Map<String, dynamic>?;
+    final mediaRaw = json["media"];
     final authorName = profile == null
         ? (author?["displayName"] as String?)
         : [profile["firstName"], profile["lastName"]]
@@ -191,6 +212,56 @@ class CommunityPostItem {
       authorName: authorName,
       authorLabel: json["authorLabel"] as String?,
       commentCount: commentCount,
+      media: mediaRaw is List
+          ? mediaRaw
+              .whereType<Map>()
+              .map((item) => CommunityPostMediaReference.fromJson(
+                  Map<String, dynamic>.from(item)))
+              .toList(growable: false)
+          : const [],
+      hasApproximateLocation: json["hasApproximateLocation"] == true,
+      approximateLocationLabel: json["approximateLocationLabel"] as String?,
+      latitude: (json["latitude"] as num?)?.toDouble(),
+      longitude: (json["longitude"] as num?)?.toDouble(),
+    );
+  }
+}
+
+class CommunityPostMediaReference {
+  const CommunityPostMediaReference({
+    required this.id,
+    required this.mediaType,
+    required this.bucket,
+    required this.objectKey,
+    required this.contentType,
+    required this.fileHash,
+    this.createdAt,
+    this.signedGetUrl,
+  });
+
+  final String id;
+  final String mediaType;
+  final String bucket;
+  final String objectKey;
+  final String contentType;
+  final String fileHash;
+  final DateTime? createdAt;
+  final String? signedGetUrl;
+
+  bool get isImage => mediaType == IncidentMediaType.image;
+  bool get isVideo => mediaType == IncidentMediaType.video;
+  bool get isAudio => mediaType == IncidentMediaType.audio;
+
+  factory CommunityPostMediaReference.fromJson(Map<String, dynamic> json) {
+    return CommunityPostMediaReference(
+      id: (json["id"] as String?) ?? "",
+      mediaType: (json["mediaType"] as String?) ?? "",
+      bucket: (json["bucket"] as String?) ?? "",
+      objectKey: (json["objectKey"] as String?) ?? "",
+      contentType: (json["contentType"] as String?) ?? "",
+      fileHash: (json["fileHash"] as String?) ?? "",
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      signedGetUrl: json["signedGetUrl"] as String?,
     );
   }
 }

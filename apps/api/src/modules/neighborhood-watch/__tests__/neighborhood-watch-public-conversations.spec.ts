@@ -88,6 +88,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
         objectKey: data?.objectKey,
       })),
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     communityPostReaction: {
       upsert: jest.fn().mockResolvedValue({ id: "reaction-1", type: "Confirm" }),
@@ -107,6 +108,11 @@ function buildService(overrides: Record<string, unknown> = {}) {
   const notifications = { enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }) } as any;
   const auditService = { record: jest.fn().mockResolvedValue({ id: "audit-1" }) } as any;
   const dangerZoneGeo = { findActiveZonesNearPoint: jest.fn().mockResolvedValue([]) } as any;
+  const createSignedDownloadUrl = jest.fn().mockResolvedValue({
+    bucket: "the-eye",
+    url: "https://storage.test/signed-object",
+    expiresInSeconds: 300,
+  });
 
   return {
     service: new NeighborhoodWatchService(
@@ -116,10 +122,12 @@ function buildService(overrides: Record<string, unknown> = {}) {
       notifications,
       auditService,
       dangerZoneGeo,
+      createSignedDownloadUrl,
     ),
     prisma,
     notifications,
     auditService,
+    createSignedDownloadUrl,
   };
 }
 
@@ -577,5 +585,51 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
     });
     await service.createPostReaction("post-1", { type: "Confirm" }, traveler);
     expect(prisma.communityPostReaction.upsert).toHaveBeenCalled();
+  });
+
+  it("returns signed media URLs and coordinates for persisted post rendering", async () => {
+    const { service } = buildService({
+      communityPost: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "post-77",
+          communityId: "community-a",
+          authorId: "traveler-1",
+          type: "RoadHazard",
+          title: "Blocked junction",
+          body: "Tree has fallen across one lane.",
+          latitude: 4.8156,
+          longitude: 7.0498,
+          media: [
+            {
+              id: "media-1",
+              mediaType: "Image",
+              bucket: "the-eye",
+              objectKey: "evidence/community-community-a/tree.jpg",
+              contentType: "image/jpeg",
+              fileHash: "img-hash-1",
+              createdAt: new Date("2026-08-18T09:00:00.000Z"),
+            },
+          ],
+          reactions: [],
+          comments: [],
+          author: {
+            id: "traveler-1",
+            profile: { firstName: "Ada", lastName: "Traveler" },
+          },
+        }),
+        create: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+
+    const result = await service.getPost("post-77", traveler);
+
+    expect(result.data.latitude).toBe(4.8156);
+    expect(result.data.longitude).toBe(7.0498);
+    expect(result.data.hasApproximateLocation).toBe(true);
+    expect(result.data.media[0].signedGetUrl).toBe(
+      "https://storage.test/signed-object",
+    );
   });
 });
