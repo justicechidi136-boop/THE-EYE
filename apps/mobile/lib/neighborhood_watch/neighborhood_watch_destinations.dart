@@ -13,6 +13,8 @@ abstract final class NeighborhoodWatchDestinations {
 
   static const join = "/neighborhood-watch/join";
 
+  static const requestCommunity = "/neighborhood-watch/request-community";
+
   static const create = "/neighborhood-watch/create";
 
   static const members = "/neighborhood-watch/members";

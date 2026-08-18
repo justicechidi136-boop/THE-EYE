@@ -83,6 +83,53 @@ class CommunityChannelSummary {
   }
 }
 
+class CommunityRequestItem {
+  const CommunityRequestItem({
+    required this.id,
+    required this.name,
+    required this.country,
+    required this.status,
+    this.description,
+    this.state,
+    this.lga,
+    this.ward,
+    this.estate,
+    this.street,
+    this.visibility,
+    this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final String country;
+  final String status;
+  final String? description;
+  final String? state;
+  final String? lga;
+  final String? ward;
+  final String? estate;
+  final String? street;
+  final String? visibility;
+  final DateTime? createdAt;
+
+  factory CommunityRequestItem.fromJson(Map<String, dynamic> json) {
+    return CommunityRequestItem(
+      id: (json["id"] as String?) ?? "",
+      name: (json["name"] as String?) ?? "",
+      country: (json["country"] as String?) ?? "",
+      status: (json["status"] as String?) ?? "Pending",
+      description: json["description"] as String?,
+      state: json["state"] as String?,
+      lga: json["lga"] as String?,
+      ward: json["ward"] as String?,
+      estate: json["estate"] as String?,
+      street: json["street"] as String?,
+      visibility: json["visibility"] as String?,
+      createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+    );
+  }
+}
+
 class CommunityPostItem {
   const CommunityPostItem({
     required this.id,
@@ -1082,6 +1129,67 @@ class NeighborhoodWatchService {
     final decoded = jsonDecode(response.body);
     final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
     return CommunitySummary.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<CommunityRequestItem> createCommunityRequest({
+    required String accessToken,
+    required String name,
+    required String country,
+    String? description,
+    String? state,
+    String? lga,
+    String? ward,
+    String? estate,
+    String? street,
+    String visibility = "Public",
+    double? latitude,
+    double? longitude,
+  }) async {
+    final response = await _apiClient.postJson(
+      TheEyeApiPaths.neighborhoodWatchCommunityRequests,
+      {
+        "name": name,
+        "country": country,
+        "visibility": visibility,
+        if (description != null && description.isNotEmpty)
+          "description": description,
+        if (state != null && state.isNotEmpty) "state": state,
+        if (lga != null && lga.isNotEmpty) "lga": lga,
+        if (ward != null && ward.isNotEmpty) "ward": ward,
+        if (estate != null && estate.isNotEmpty) "estate": estate,
+        if (street != null && street.isNotEmpty) "street": street,
+        if (latitude != null) "latitude": latitude,
+        if (longitude != null) "longitude": longitude,
+      },
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
+    return CommunityRequestItem.fromJson(
+      Map<String, dynamic>.from(data as Map),
+    );
+  }
+
+  Future<List<CommunityRequestItem>> listCommunityRequests({
+    required String accessToken,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.neighborhoodWatchCommunityRequests,
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final rows = decoded is Map && decoded["data"] is List
+        ? decoded["data"] as List
+        : decoded is List
+            ? decoded
+            : const [];
+    return rows
+        .whereType<Map>()
+        .map((item) =>
+            CommunityRequestItem.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
   }
 
   Future<void> joinCommunity({
