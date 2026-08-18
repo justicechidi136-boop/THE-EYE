@@ -88,6 +88,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
         objectKey: data?.objectKey,
       })),
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     communityPostReaction: {
       upsert: jest.fn().mockResolvedValue({ id: "reaction-1", type: "Confirm" }),
