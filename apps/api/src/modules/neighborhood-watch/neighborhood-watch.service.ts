@@ -63,6 +63,7 @@ export class NeighborhoodWatchService {
     private readonly notifications: NotificationsService,
     private readonly auditService: AuditService,
     private readonly dangerZoneGeo: DangerZoneGeoService,
+    private readonly createSignedDownloadUrl: typeof createStorageDownloadUrl = createStorageDownloadUrl,
   ) {}
 
   async listCommunities(actor: JwtPayload, query: ListCommunitiesQuery = {}) {
@@ -2121,7 +2122,7 @@ export class NeighborhoodWatchService {
         const objectKey = typeof entry.objectKey === "string" ? entry.objectKey : "";
         if (!objectKey) return entry;
         try {
-          entry.signedGetUrl = (await createStorageDownloadUrl(objectKey, 300)).url;
+          entry.signedGetUrl = (await this.createSignedDownloadUrl(objectKey, 300)).url;
         } catch {
           entry.signedGetUrl = undefined;
         }

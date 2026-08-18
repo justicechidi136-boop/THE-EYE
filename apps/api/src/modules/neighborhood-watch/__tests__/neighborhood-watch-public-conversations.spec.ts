@@ -4,19 +4,6 @@ import { validatePost } from "../dto/neighborhood-watch.dto";
 import { buildNeighborhoodWatchNotificationMetadata } from "../../notifications/notification-routing.schema";
 import { MAX_LOCATION_AGE_MS } from "../neighborhood-watch-context.service";
 
-jest.mock("../../../common/storage/s3-presign", () => ({
-  assertEvidenceObjectKey: jest.fn(),
-  createStorageUploadUrl: jest.fn(),
-  createStorageDownloadUrl: jest.fn().mockResolvedValue({
-    bucket: "the-eye",
-    url: "https://storage.test/signed-object",
-    expiresInSeconds: 300,
-  }),
-  evidenceObjectKey: jest.fn((prefix: string, fileName: string) => `${prefix}/${fileName}`),
-  getConfiguredStorageBucket: jest.fn(() => "the-eye"),
-  validateEvidenceUpload: jest.fn(),
-}));
-
 const traveler = { typ: "user", sub: "traveler-1", role: "Citizen" } as any;
 const resident = { typ: "user", sub: "resident-1", role: "Citizen" } as any;
 const outsider = { typ: "user", sub: "outsider-1", role: "Citizen" } as any;
@@ -120,6 +107,11 @@ function buildService(overrides: Record<string, unknown> = {}) {
   const notifications = { enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }) } as any;
   const auditService = { record: jest.fn().mockResolvedValue({ id: "audit-1" }) } as any;
   const dangerZoneGeo = { findActiveZonesNearPoint: jest.fn().mockResolvedValue([]) } as any;
+  const createSignedDownloadUrl = jest.fn().mockResolvedValue({
+    bucket: "the-eye",
+    url: "https://storage.test/signed-object",
+    expiresInSeconds: 300,
+  });
 
   return {
     service: new NeighborhoodWatchService(
@@ -129,10 +121,12 @@ function buildService(overrides: Record<string, unknown> = {}) {
       notifications,
       auditService,
       dangerZoneGeo,
+      createSignedDownloadUrl,
     ),
     prisma,
     notifications,
     auditService,
+    createSignedDownloadUrl,
   };
 }
 
