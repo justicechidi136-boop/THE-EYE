@@ -35,6 +35,11 @@ void main() {
         NeighborhoodWatchDestinations.requestCommunity,
         "/neighborhood-watch/request-community",
       );
+
+      expect(
+        NeighborhoodWatchDestinations.previewCommunity,
+        "/neighborhood-watch/preview-community",
+      );
     });
 
     test("detects dynamic route prefixes", () {

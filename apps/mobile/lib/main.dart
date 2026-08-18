@@ -99,6 +99,7 @@ import "broadcasts/broadcast_submission_service.dart";
 import "community_verification/community_verification_screen.dart";
 import "community_verification/community_verification_service.dart";
 import "neighborhood_watch/community_access_status.dart";
+import "neighborhood_watch/community_discovery_presentation.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
 import "neighborhood_watch/neighborhood_watch_destinations.dart";
 import "neighborhood_watch/neighborhood_watch_session.dart";
@@ -1118,6 +1119,13 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/neighborhood-watch/join": (_) => const JoinCommunityScreen(),
               "/neighborhood-watch/request-community": (_) =>
                   const RequestCommunityScreen(),
+              "/neighborhood-watch/preview-community": (context) {
+                final args = ModalRoute.of(context)?.settings.arguments;
+                return CommunityPreviewScreen(
+                  initialCommunity:
+                      args is CommunitySummary ? args : null,
+                );
+              },
               "/neighborhood-watch/feed": (_) => const CommunityFeedScreen(),
               "/neighborhood-watch/create": (_) =>
                   const CreateCommunityPostScreen(),
@@ -1501,6 +1509,7 @@ class AppController extends SessionAccessor
   final CommunityMediaUploadService _communityMediaUploadService;
   final List<CommunitySummary> communities = [];
   CommunitySummary? selectedCommunity;
+  CommunitySummary? currentAreaCommunity;
   bool loadingCommunities = false;
   String? communityLoadError;
   CommunityStatistics? communityStatistics;
@@ -1631,6 +1640,7 @@ class AppController extends SessionAccessor
     broadcastUnreadCount = 0;
     communities.clear();
     selectedCommunity = null;
+    currentAreaCommunity = null;
     nwContextCommunityId = null;
     nwContextCanPost = false;
     communityLoadError = null;
@@ -1995,6 +2005,7 @@ class AppController extends SessionAccessor
     if (!isAuthenticated || accessToken == null) {
       communities.clear();
       selectedCommunity = null;
+      currentAreaCommunity = null;
       communityLoadError = null;
       notifyListeners();
       return;
@@ -2009,18 +2020,21 @@ class AppController extends SessionAccessor
       communities
         ..clear()
         ..addAll(page.items);
-      selectedCommunity = communities.firstWhere(
-        (community) => community.isMember,
-        orElse: () => communities.isNotEmpty
-            ? communities.first
-            : CommunitySummary(
-                id: "",
-                name: "",
-                visibility: "Public",
-                memberCount: 0,
-                activeAlertsCount: 0,
-              ),
-      );
+      final current = currentAreaCommunity;
+      selectedCommunity ??= current != null && current.id.isNotEmpty
+          ? current
+          : communities.firstWhere(
+              (community) => community.isMember,
+              orElse: () => communities.isNotEmpty
+                  ? communities.first
+                  : CommunitySummary(
+                      id: "",
+                      name: "",
+                      visibility: "Public",
+                      memberCount: 0,
+                      activeAlertsCount: 0,
+                    ),
+            );
       if (selectedCommunity?.id.isEmpty ?? true) selectedCommunity = null;
     } on IncidentApiException catch (error) {
       communityLoadError = error.userMessage;
@@ -2042,6 +2056,7 @@ class AppController extends SessionAccessor
     required CommunitySummary community,
     required bool canPost,
   }) {
+    currentAreaCommunity = community;
     selectedCommunity = community;
     nwContextCommunityId = community.id;
     nwContextCanPost = canPost;
@@ -2050,6 +2065,7 @@ class AppController extends SessionAccessor
 
   @override
   void clearNeighborhoodWatchParticipationContext() {
+    currentAreaCommunity = null;
     nwContextCommunityId = null;
     nwContextCanPost = false;
     notifyListeners();
@@ -2168,6 +2184,44 @@ class AppController extends SessionAccessor
     } catch (_) {
       return "Unable to join community.";
     }
+  }
+
+  Future<CommunitySummary> joinCommunityAndRefresh(String communityId) async {
+    if (!isAuthenticated || accessToken == null) {
+      throw StateError("Sign in required");
+    }
+    await _neighborhoodWatchService.joinCommunity(
+      accessToken: accessToken!,
+      communityId: communityId,
+    );
+    final updated = await _neighborhoodWatchService.getCommunity(
+      accessToken: accessToken!,
+      communityId: communityId,
+    );
+    final index = communities.indexWhere((item) => item.id == communityId);
+    if (index >= 0) {
+      communities[index] = updated;
+    } else {
+      communities.add(updated);
+    }
+    if (updated.isMember || updated.isPending) {
+      selectedCommunity = updated;
+    }
+    communityActionMessage = updated.isPending
+        ? "Community join request submitted"
+        : "Community joined";
+    notifyListeners();
+    return updated;
+  }
+
+  Future<CommunitySummary> getCommunityPreview(String communityId) async {
+    if (!isAuthenticated || accessToken == null) {
+      throw StateError("Sign in required");
+    }
+    return _neighborhoodWatchService.getCommunity(
+      accessToken: accessToken!,
+      communityId: communityId,
+    );
   }
 
   Future<String?> requestCommunity({
@@ -8108,6 +8162,7 @@ class JoinCommunityScreen extends StatefulWidget {
 class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
   final _searchController = TextEditingController();
   String? _actionError;
+  String? _joiningCommunityId;
 
   @override
   void initState() {
@@ -8128,36 +8183,80 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
     super.dispose();
   }
 
-  Future<void> _join(String communityId) async {
-    final error = await appOf(context).joinSelectedCommunity(communityId);
-    if (!mounted) return;
-    setState(() => _actionError = error);
-    if (error == null) {
-      showAppSnackBar(context, "Join request submitted");
+  Future<void> _join(CommunitySummary community) async {
+    if (!communityJoinActionEnabled(community) ||
+        _joiningCommunityId != null) {
+      return;
     }
+    setState(() {
+      _joiningCommunityId = community.id;
+      _actionError = null;
+    });
+    try {
+      final updated =
+          await appOf(context).joinCommunityAndRefresh(community.id);
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        updated.isPending
+            ? "Request pending"
+            : "Community joined",
+      );
+      setState(() => _joiningCommunityId = null);
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _joiningCommunityId = null;
+        _actionError = error.userMessage;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _joiningCommunityId = null;
+        _actionError = error is StateError
+            ? error.message
+            : "Unable to submit join request.";
+      });
+    }
+  }
+
+  void _openPreview(CommunitySummary community) {
+    Navigator.of(context).pushNamed(
+      NeighborhoodWatchDestinations.previewCommunity,
+      arguments: community,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
-    final query = _searchController.text.trim().toLowerCase();
-    final items = controller.communities.where((community) {
-      if (community.isMember || community.isPending) return false;
-      if (query.isEmpty) return true;
-      return community.name.toLowerCase().contains(query) ||
-          (community.lga ?? "").toLowerCase().contains(query) ||
-          (community.state ?? "").toLowerCase().contains(query);
-    }).toList();
+    final currentArea = controller.currentAreaCommunity;
+    final items = discoverableCommunitiesForArea(
+      communities: controller.communities,
+      currentArea: currentArea,
+      search: _searchController.text,
+    );
     return SafetyScaffold(
-      title: "Join Community",
+      title: "Discover Communities",
       selectedIndex: 3,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
+          ListTileCard(
+            leading: const Icon(Icons.my_location),
+            title: currentArea == null
+                ? "Current area"
+                : "Current area: ${currentArea.name}",
+            subtitle: currentArea == null
+                ? "Open Neighborhood Watch Home to refresh your live area."
+                : communityLocationLabel(currentArea),
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _searchController,
             decoration: const InputDecoration(
-                labelText: "Search country, state, LGA, estate, or street"),
+              labelText: "Search community, country, state, or LGA",
+            ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
@@ -8174,12 +8273,25 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
           ],
           const SizedBox(height: 16),
           if (controller.loadingCommunities && items.isEmpty)
-            const Center(child: CircularProgressIndicator())
+            const ListTileCard(
+              leading: SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              title: "Loading communities...",
+              subtitle: "Finding registered communities for this area.",
+            )
+          else if (controller.communityLoadError != null && items.isEmpty)
+            ListTileCard(
+              leading: const Icon(Icons.cloud_off),
+              title: "Unable to load nearby communities",
+              subtitle: controller.communityLoadError ?? "Try again.",
+            )
           else if (items.isEmpty)
             const ListTileCard(
               leading: Icon(Icons.search_off),
-              title: "No communities found",
-              subtitle: "Try another search or request a new community.",
+              title: "No registered community in this area yet",
+              subtitle: "Start a Community when your area is not listed.",
             )
           else
             ...items.map((community) => ListTileCard(
@@ -8188,13 +8300,208 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
                       : Icons.public),
                   title: community.name,
                   subtitle:
-                      "${community.visibility} • ${community.memberCount} members",
+                      "${communityLocationLabel(community)}\n${community.memberCount} members • ${communitySafetyStateLabel(community)}",
+                  onTap: () => _openPreview(community),
                   trailing: FilledButton(
-                    onPressed: () => _join(community.id),
-                    child: Text(
-                        community.visibility == "Private" ? "Request" : "Join"),
+                    onPressed: !communityJoinActionEnabled(community) ||
+                            _joiningCommunityId != null
+                        ? null
+                        : () => _join(community),
+                    child: Text(_joiningCommunityId == community.id
+                        ? "Submitting..."
+                        : communityJoinButtonLabel(community)),
                   ),
                 )),
+        ],
+      ),
+    );
+  }
+}
+
+class CommunityPreviewScreen extends StatefulWidget {
+  const CommunityPreviewScreen({this.initialCommunity, super.key});
+
+  final CommunitySummary? initialCommunity;
+
+  @override
+  State<CommunityPreviewScreen> createState() => _CommunityPreviewScreenState();
+}
+
+class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
+  CommunitySummary? _community;
+  bool _loading = false;
+  bool _joining = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _community = widget.initialCommunity;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPreview());
+  }
+
+  Future<void> _loadPreview() async {
+    final initial = widget.initialCommunity;
+    final controller = appOf(context);
+    if (!controller.isAuthenticated) {
+      Navigator.of(context).pushReplacementNamed("/login");
+      return;
+    }
+    if (initial == null || initial.id.isEmpty) {
+      setState(() => _error = "Community unavailable.");
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final community = await controller.getCommunityPreview(initial.id);
+      if (!mounted) return;
+      setState(() {
+        _community = community;
+        _loading = false;
+      });
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.userMessage;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = "Community unavailable.";
+      });
+    }
+  }
+
+  Future<void> _join() async {
+    final community = _community;
+    if (community == null ||
+        !communityJoinActionEnabled(community) ||
+        _joining) {
+      return;
+    }
+    setState(() {
+      _joining = true;
+      _error = null;
+    });
+    try {
+      final updated =
+          await appOf(context).joinCommunityAndRefresh(community.id);
+      if (!mounted) return;
+      setState(() {
+        _community = updated;
+        _joining = false;
+      });
+      showAppSnackBar(
+        context,
+        updated.isPending ? "Request pending" : "Community joined",
+      );
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _joining = false;
+        _error = error.userMessage;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _joining = false;
+        _error = error is StateError
+            ? error.message
+            : "Unable to submit join request.";
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final community = _community;
+    return SafetyScaffold(
+      title: "Community Preview",
+      selectedIndex: 3,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: [
+          if (_loading && community == null)
+            const ListTileCard(
+              leading: SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              title: "Loading community...",
+              subtitle: "Preparing the public preview.",
+            )
+          else if (community == null)
+            ListTileCard(
+              leading: const Icon(Icons.cloud_off),
+              title: "Community unavailable",
+              subtitle: _error ?? "Try again later.",
+            )
+          else ...[
+            SectionCard(
+              title: community.name,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(communityLocationLabel(community)),
+                  const SizedBox(height: 8),
+                  Text("${community.memberCount} members"),
+                  const SizedBox(height: 8),
+                  Text(communitySafetyStateLabel(community)),
+                  if ((community.description ?? "").trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(community.description!.trim()),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SectionCard(
+              title: "Community rules",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text("Share verified local safety information."),
+                  SizedBox(height: 6),
+                  Text("Do not post private personal or patrol details."),
+                  SizedBox(height: 6),
+                  Text("Report emergencies through the Emergency workflow."),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SectionCard(
+              title: "Recent public activity",
+              child: Text(
+                community.latestActivityAt == null
+                    ? "No recent public activity is available in preview."
+                    : "Latest public activity is available from this community.",
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: BrandColors.danger)),
+            ],
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _joining || !communityJoinActionEnabled(community)
+                  ? null
+                  : _join,
+              icon: _joining
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.group_add),
+              label: Text(
+                _joining ? "Submitting..." : communityJoinButtonLabel(community),
+              ),
+            ),
+          ],
         ],
       ),
     );

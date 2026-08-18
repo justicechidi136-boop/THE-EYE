@@ -15,6 +15,8 @@ abstract final class NeighborhoodWatchDestinations {
 
   static const requestCommunity = "/neighborhood-watch/request-community";
 
+  static const previewCommunity = "/neighborhood-watch/preview-community";
+
   static const create = "/neighborhood-watch/create";
 
   static const members = "/neighborhood-watch/members";
