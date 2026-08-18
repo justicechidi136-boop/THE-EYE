@@ -2159,8 +2159,6 @@ export class NeighborhoodWatchService {
       media,
       ...(areaLabel ? { approximateLocationLabel: areaLabel } : {}),
       hasApproximateLocation: _lat != null && _lng != null,
-      ...(_lat != null ? { latitude: Number(_lat) } : {}),
-      ...(_lng != null ? { longitude: Number(_lng) } : {}),
     };
   }
 
