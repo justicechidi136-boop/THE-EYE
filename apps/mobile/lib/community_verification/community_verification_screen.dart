@@ -325,6 +325,12 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
             child: Text(payload.safetyNotice.isNotEmpty ? payload.safetyNotice : kCommunityVerificationSafetyWarning),
           ),
           const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
+            icon: const Icon(Icons.emergency_outlined),
+            label: const Text("Immediate danger? Report Emergency"),
+          ),
+          const SizedBox(height: 12),
           EyePrimaryButton(label: "Listen to summary", onPressed: _announceSummary),
           const SizedBox(height: 20),
           if (actions.isEmpty)

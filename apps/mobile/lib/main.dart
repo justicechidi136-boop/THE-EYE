@@ -9673,6 +9673,12 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
                       const SizedBox(height: 12),
                       const Text("Follow community safety instructions. Do not confront suspicious persons. Report immediate danger through THE EYE Emergency."),
                       const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
+                        icon: const Icon(Icons.emergency_outlined),
+                        label: const Text("Immediate danger? Report Emergency"),
+                      ),
+                      const SizedBox(height: 8),
                       FilledButton(
                         onPressed: _patrol.isParticipant ||
                                 !_patrol.canJoin ||

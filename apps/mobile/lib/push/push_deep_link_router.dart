@@ -12,6 +12,7 @@ abstract final class PushDeepLinkRouter {
     "/stolen-vehicle",
     "/neighborhood-watch",
     "/neighborhood-watch/alerts",
+    "/neighborhood-watch/broadcasts",
     "/live-video",
     "/report/emergency",
     "/active-emergency",
