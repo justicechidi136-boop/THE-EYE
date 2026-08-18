@@ -620,6 +620,7 @@ export class BroadcastsService {
     longitude: number,
     query: {
       radiusMeters?: number;
+      communityId?: string;
       cursor?: string;
       limit?: number;
       category?: string;
@@ -632,8 +633,31 @@ export class BroadcastsService {
     const cursor = decodeDateIdCursor(query.cursor);
     const radiusMeters = query.radiusMeters ?? 10000;
 
-    const params: unknown[] = [longitude, latitude, radiusMeters, userId];
-    let paramIndex = 5;
+    let communityScope: { country: string; state: string | null; lga: string | null } | null = null;
+    if (query.communityId) {
+      const community = await this.prisma.community.findUnique({
+        where: { id: query.communityId },
+        select: { country: true, state: true, lga: true },
+      });
+      const membership = await this.prisma.communityMembership.findUnique({
+        where: { communityId_userId: { communityId: query.communityId, userId } },
+        select: { status: true },
+      });
+      if (!community || membership?.status !== "Approved") {
+        throw new ForbiddenException("Approved community membership is required");
+      }
+      communityScope = community;
+    }
+    const params: unknown[] = [
+      longitude,
+      latitude,
+      radiusMeters,
+      userId,
+      communityScope?.country ?? null,
+      communityScope?.state ?? null,
+      communityScope?.lga ?? null,
+    ];
+    let paramIndex = 8;
     let filterSql = "";
 
     if (query.category) {
@@ -705,11 +729,24 @@ export class BroadcastsService {
               AND b.country = p.country
             )
             OR (
+              $5::text IS NOT NULL
+              AND b.country = $5
+              AND ($6::text IS NULL OR b.state = $6)
+              AND ($7::text IS NULL OR b.lga = $7)
+            )
+            OR (
               p.user_id IS NOT NULL
               AND j.id IS NOT NULL
               AND j.country = p.country
               AND j.state = p.state
               AND j.lga = p.lga
+            )
+            OR (
+              $5::text IS NOT NULL
+              AND j.id IS NOT NULL
+              AND j.country = $5
+              AND ($6::text IS NULL OR j.state = $6)
+              AND ($7::text IS NULL OR j.lga = $7)
             )
           )
           ${filterSql}

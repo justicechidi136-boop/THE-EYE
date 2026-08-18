@@ -76,6 +76,7 @@ export class BroadcastsController {
   nearby(@Query() query: NearbyBroadcastsQuery, @Req() request: any) {
     return this.broadcastsService.nearbyForUser(request.user.sub, Number(query.latitude), Number(query.longitude), {
       radiusMeters: query.radiusMeters ? Number(query.radiusMeters) : undefined,
+      communityId: query.communityId,
       cursor: query.cursor,
       limit: query.limit ? Number(query.limit) : undefined,
       category: query.category,

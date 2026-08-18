@@ -546,6 +546,13 @@ class _NeighborhoodWatchHomeScreenState
               onTap: () => Navigator.of(context)
                   .pushNamed(NeighborhoodWatchDestinations.patrols),
             ),
+            _NavTile(
+              label: "Broadcasts",
+              icon: Icons.campaign_outlined,
+              color: semantics.interactiveText,
+              onTap: () => Navigator.of(context)
+                  .pushNamed(NeighborhoodWatchDestinations.broadcasts),
+            ),
           ],
         ),
       ),
