@@ -13,6 +13,11 @@ import { buildCommunityVerificationNotificationMetadata } from "../../notificati
 const userActor = { typ: "user", sub: "user-verifier-1" } as const;
 const otherUser = { typ: "user", sub: "user-other-2" } as const;
 const adminActor = { typ: "admin", sub: "admin-1", permissions: ["incident:update", "incident:read"] } as const;
+const signDownloadUrl = jest.fn(async (objectKey: string) => ({
+  bucket: "the-eye-2stg.firebasestorage.app",
+  url: `https://storage.googleapis.com/the-eye-2stg.firebasestorage.app/${objectKey}`,
+  expiresInSeconds: 300,
+}));
 
 function buildPrismaMock(overrides: Record<string, unknown> = {}) {
   const store = {
@@ -148,6 +153,7 @@ describe("CommunityVerificationService", () => {
       new CommunityVerificationScoringService(prisma as never),
       { enqueue: jest.fn() } as never,
       { record: jest.fn() } as never,
+      signDownloadUrl,
     );
     await expect(service.getSafePayload("req-1", otherUser as never)).rejects.toBeInstanceOf(NotFoundException);
   });
@@ -162,7 +168,10 @@ describe("CommunityVerificationService", () => {
       expiresAt: new Date(Date.now() + 60_000),
       approximateDistanceMeters: 200,
       distanceBand: "WITHIN_250_M",
-      incident: store.incidents.get("inc-1"),
+      incident: {
+        ...store.incidents.get("inc-1"),
+        media: [{ id: "media-1", mediaType: "image", objectKey: "evidence/inc-1/photo.jpg" }],
+      },
       response: null,
     });
     const service = new CommunityVerificationService(
@@ -172,12 +181,20 @@ describe("CommunityVerificationService", () => {
       new CommunityVerificationScoringService(prisma as never),
       { enqueue: jest.fn() } as never,
       { record: jest.fn() } as never,
+      signDownloadUrl,
     );
     const payload = await service.getSafePayload("req-1", userActor as never);
     expect(payload.requestId).toBe("req-1");
     expect(payload.sanitizedDescription).toContain("[location redacted]");
     expect(JSON.stringify(payload)).not.toContain("reporter-1");
     expect(JSON.stringify(payload)).not.toContain("6.5244");
+    expect(payload.approvedEvidencePreviews).toEqual([
+      expect.objectContaining({
+        id: "media-1",
+        mediaType: "image",
+        previewUrl: "https://storage.googleapis.com/the-eye-2stg.firebasestorage.app/evidence/inc-1/photo.jpg",
+      }),
+    ]);
   });
 
   it("blocks reporter self-verification", async () => {
@@ -200,6 +217,7 @@ describe("CommunityVerificationService", () => {
       new CommunityVerificationScoringService(prisma as never),
       { enqueue: jest.fn() } as never,
       { record: jest.fn() } as never,
+      signDownloadUrl,
     );
     await expect(
       service.respond(
@@ -230,6 +248,7 @@ describe("CommunityVerificationService", () => {
       new CommunityVerificationScoringService(prisma as never),
       { enqueue: jest.fn() } as never,
       { record: jest.fn() } as never,
+      signDownloadUrl,
     );
     const dto = { responseType: "Confirmed", clientActionId: "action-1", confidence: "High" };
     const first = await service.respond("req-1", dto, userActor as never);
@@ -260,6 +279,7 @@ describe("CommunityVerificationService", () => {
       new CommunityVerificationScoringService(prisma as never),
       { enqueue: jest.fn() } as never,
       { record: jest.fn() } as never,
+      signDownloadUrl,
     );
 
     await service.issueRequests("inc-accident");

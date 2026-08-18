@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { createStorageDownloadUrl } from "../../common/storage/s3-presign";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { buildCommunityVerificationNotificationMetadata } from "../notifications/notification-routing.schema";
 import { verifyActiveIncidentNotificationCopyForType } from "../notifications/citizen-notification-copy";
@@ -41,6 +42,7 @@ export class CommunityVerificationService {
     private readonly scoring: CommunityVerificationScoringService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
+    private readonly signDownloadUrl: typeof createStorageDownloadUrl = createStorageDownloadUrl,
   ) {}
 
   async issueRequests(incidentId: string, dto: IssueCommunityVerificationDto = {}, actor?: JwtPayload) {
@@ -175,7 +177,7 @@ export class CommunityVerificationService {
       take: 20,
     });
     return {
-      data: rows.map((row) => this.buildPayloadForRequest(row)),
+      data: await Promise.all(rows.map((row) => this.buildPayloadForRequest(row))),
     };
   }
 
@@ -485,7 +487,7 @@ export class CommunityVerificationService {
     return request;
   }
 
-  private buildPayloadForRequest(request: {
+  private async buildPayloadForRequest(request: {
     id: string;
     status: string;
     expiresAt: Date;
@@ -500,13 +502,30 @@ export class CommunityVerificationService {
       lga: string;
       submittedAt: Date;
       assignments: unknown[];
-      media: Array<{ id: string; mediaType: unknown }>;
+      media: Array<{ id: string; mediaType: unknown; objectKey?: string | null }>;
     };
   }) {
     const isExpired = request.expiresAt.getTime() <= Date.now() || request.status === "Expired";
     const passiveOnly = this.safePayload.isPassiveOnly(
       String(request.incident.type),
       request.incident.assignments.length > 0,
+    );
+    const evidencePreviews = await Promise.all(
+      request.incident.media.map(async (item) => {
+        let previewUrl: string | null = null;
+        if (item.objectKey) {
+          try {
+            previewUrl = (await this.signDownloadUrl(item.objectKey, 300)).url;
+          } catch {
+            previewUrl = null;
+          }
+        }
+        return {
+          id: item.id,
+          mediaType: String(item.mediaType),
+          previewUrl,
+        };
+      }),
     );
     return this.safePayload.buildSafePayload({
       requestId: request.id,
@@ -522,10 +541,7 @@ export class CommunityVerificationService {
       passiveOnly,
       alreadyResponded: Boolean(request.response) || TERMINAL_REQUEST_STATUSES.has(String(request.status)),
       isExpired,
-      evidencePreviews: request.incident.media.map((item) => ({
-        id: item.id,
-        mediaType: String(item.mediaType),
-      })),
+      evidencePreviews,
     });
   }
 

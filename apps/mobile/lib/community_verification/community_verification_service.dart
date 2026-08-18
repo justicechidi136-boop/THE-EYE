@@ -4,6 +4,30 @@ import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
 import "../incidents/incident_submission_service.dart";
 
+class CommunityVerificationEvidencePreview {
+  const CommunityVerificationEvidencePreview({
+    required this.id,
+    required this.mediaType,
+    this.previewUrl,
+  });
+
+  final String id;
+  final String mediaType;
+  final String? previewUrl;
+
+  bool get isImage => mediaType.toLowerCase() == "image";
+  bool get isVideo => mediaType.toLowerCase() == "video";
+  bool get isAudio => mediaType.toLowerCase() == "audio";
+
+  factory CommunityVerificationEvidencePreview.fromJson(Map<String, dynamic> json) {
+    return CommunityVerificationEvidencePreview(
+      id: json["id"]?.toString() ?? "",
+      mediaType: json["mediaType"]?.toString() ?? "",
+      previewUrl: json["previewUrl"]?.toString(),
+    );
+  }
+}
+
 class CommunityVerificationPayload {
   const CommunityVerificationPayload({
     required this.requestId,
@@ -37,7 +61,7 @@ class CommunityVerificationPayload {
   final String expiry;
   final bool alreadyResponded;
   final bool isExpired;
-  final List<Map<String, dynamic>> approvedEvidencePreviews;
+  final List<CommunityVerificationEvidencePreview> approvedEvidencePreviews;
 
   factory CommunityVerificationPayload.fromJson(Map<String, dynamic> json) {
     return CommunityVerificationPayload(
@@ -58,7 +82,7 @@ class CommunityVerificationPayload {
       alreadyResponded: json["alreadyResponded"] == true,
       isExpired: json["isExpired"] == true,
       approvedEvidencePreviews: (json["approvedEvidencePreviews"] as List<dynamic>? ?? const [])
-          .map((item) => Map<String, dynamic>.from(item as Map))
+          .map((item) => CommunityVerificationEvidencePreview.fromJson(Map<String, dynamic>.from(item as Map)))
           .toList(),
     );
   }
