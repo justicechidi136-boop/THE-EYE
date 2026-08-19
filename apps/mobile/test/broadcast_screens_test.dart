@@ -546,7 +546,10 @@ void main() {
       400,
       scrollable: scrollable,
     );
-    await tester.tap(find.text("Submit sighting"));
+    final submitFinder = find.text("Submit sighting");
+    await tester.ensureVisible(submitFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(submitFinder);
     await tester.pumpAndSettle();
 
     expect(find.text("Sighting submitted"), findsOneWidget);
@@ -609,7 +612,10 @@ void main() {
       400,
       scrollable: scrollable,
     );
-    await tester.tap(find.text("Submit sighting"));
+    final submitFinder = find.text("Submit sighting");
+    await tester.ensureVisible(submitFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(submitFinder);
     await tester.pumpAndSettle();
 
     expect(payload?["locationMode"], "MANUAL");
