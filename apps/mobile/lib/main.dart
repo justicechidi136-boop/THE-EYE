@@ -101,6 +101,7 @@ import "community_verification/community_verification_screen.dart";
 import "community_verification/community_verification_service.dart";
 import "neighborhood_watch/community_access_status.dart";
 import "neighborhood_watch/community_discovery_presentation.dart";
+import "neighborhood_watch/neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch/neighborhood_watch_service.dart";
 import "neighborhood_watch/neighborhood_watch_destinations.dart";
 import "neighborhood_watch/neighborhood_watch_session.dart";
@@ -1123,8 +1124,7 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/neighborhood-watch/preview-community": (context) {
                 final args = ModalRoute.of(context)?.settings.arguments;
                 return CommunityPreviewScreen(
-                  initialCommunity:
-                      args is CommunitySummary ? args : null,
+                  initialCommunity: args is CommunitySummary ? args : null,
                 );
               },
               "/neighborhood-watch/feed": (_) => const CommunityFeedScreen(),
@@ -8188,8 +8188,7 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
   }
 
   Future<void> _join(CommunitySummary community) async {
-    if (!communityJoinActionEnabled(community) ||
-        _joiningCommunityId != null) {
+    if (!communityJoinActionEnabled(community) || _joiningCommunityId != null) {
       return;
     }
     setState(() {
@@ -8202,9 +8201,7 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
       if (!mounted) return;
       showAppSnackBar(
         context,
-        updated.isPending
-            ? "Request pending"
-            : "Community joined",
+        updated.isPending ? "Request pending" : "Community joined",
       );
       setState(() => _joiningCommunityId = null);
     } on IncidentApiException catch (error) {
@@ -8240,13 +8237,16 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
       currentArea: currentArea,
       search: _searchController.text,
     );
-    return SafetyScaffold(
+    return NwPrototypeScaffold(
       title: "Discover Communities",
-      selectedIndex: 3,
+      leading: NwPrototypeIconButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
-          ListTileCard(
+          NwPrototypeListCard(
             leading: const Icon(Icons.my_location),
             title: currentArea == null
                 ? "Current area"
@@ -8256,28 +8256,38 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
                 : communityLocationLabel(currentArea),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _searchController,
-            decoration: const InputDecoration(
-              labelText: "Search community, country, state, or LGA",
+          NwPrototypeCard(
+            child: TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                labelText: "Search community, country, state, or LGA",
+              ),
+              onChanged: (_) => setState(() {}),
             ),
-            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).pushNamed(
-              NeighborhoodWatchDestinations.requestCommunity,
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pushNamed(
+                NeighborhoodWatchDestinations.requestCommunity,
+              ),
+              icon: const Icon(Icons.add_home_work_outlined),
+              label: const Text("Request community"),
             ),
-            icon: const Icon(Icons.add_home_work_outlined),
-            label: const Text("Request community"),
           ),
           if (_actionError != null) ...[
             const SizedBox(height: 8),
-            Text(_actionError!, style: TextStyle(color: Colors.red.shade700)),
+            NwPrototypeNotice(
+              title: "Join unavailable",
+              message: _actionError!,
+              icon: Icons.error_outline,
+              color: BrandColors.danger,
+            ),
           ],
           const SizedBox(height: 16),
           if (controller.loadingCommunities && items.isEmpty)
-            const ListTileCard(
+            const NwPrototypeListCard(
               leading: SizedBox.square(
                 dimension: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
@@ -8286,36 +8296,52 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
               subtitle: "Finding registered communities for this area.",
             )
           else if (controller.communityLoadError != null && items.isEmpty)
-            ListTileCard(
+            NwPrototypeListCard(
               leading: const Icon(Icons.cloud_off),
               title: "Unable to load nearby communities",
               subtitle: controller.communityLoadError ?? "Try again.",
             )
           else if (items.isEmpty)
-            const ListTileCard(
+            const NwPrototypeListCard(
               leading: Icon(Icons.search_off),
               title: "No registered community in this area yet",
               subtitle: "Start a Community when your area is not listed.",
             )
           else
-            ...items.map((community) => ListTileCard(
-                  leading: Icon(community.visibility == "Private"
-                      ? Icons.lock
-                      : Icons.public),
+            ...items.map(
+              (community) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: NwPrototypeListCard(
+                  leading: Icon(
+                    community.visibility == "Private"
+                        ? Icons.lock_outline
+                        : Icons.public,
+                  ),
                   title: community.name,
                   subtitle:
                       "${communityLocationLabel(community)}\n${community.memberCount} members • ${communitySafetyStateLabel(community)}",
+                  badge: NwPrototypePill(
+                    label: community.visibility,
+                    selected: community.visibility == "Private",
+                    color: community.visibility == "Private"
+                        ? BrandColors.orange
+                        : BrandColors.green,
+                  ),
                   onTap: () => _openPreview(community),
                   trailing: FilledButton(
                     onPressed: !communityJoinActionEnabled(community) ||
                             _joiningCommunityId != null
                         ? null
                         : () => _join(community),
-                    child: Text(_joiningCommunityId == community.id
-                        ? "Submitting..."
-                        : communityJoinButtonLabel(community)),
+                    child: Text(
+                      _joiningCommunityId == community.id
+                          ? "Submitting..."
+                          : communityJoinButtonLabel(community),
+                    ),
                   ),
-                )),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -8424,14 +8450,17 @@ class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     final community = _community;
-    return SafetyScaffold(
+    return NwPrototypeScaffold(
       title: "Community Preview",
-      selectedIndex: 3,
+      leading: NwPrototypeIconButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           if (_loading && community == null)
-            const ListTileCard(
+            const NwPrototypeListCard(
               leading: SizedBox.square(
                 dimension: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
@@ -8440,17 +8469,37 @@ class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
               subtitle: "Preparing the public preview.",
             )
           else if (community == null)
-            ListTileCard(
+            NwPrototypeListCard(
               leading: const Icon(Icons.cloud_off),
               title: "Community unavailable",
               subtitle: _error ?? "Try again later.",
             )
           else ...[
-            SectionCard(
-              title: community.name,
+            NwPrototypeCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          community.name,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      NwPrototypePill(
+                        label: communityJoinButtonLabel(community),
+                        selected: community.isMember || community.isPending,
+                        color: community.isPending
+                            ? BrandColors.orange
+                            : BrandColors.green,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   Text(communityLocationLabel(community)),
                   const SizedBox(height: 8),
                   Text("${community.memberCount} members"),
@@ -8464,11 +8513,12 @@ class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            SectionCard(
-              title: "Community rules",
+            NwPrototypeCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: const [
+                  NwPrototypeSectionHeading(title: "Community rules"),
+                  SizedBox(height: 10),
                   Text("Share verified local safety information."),
                   SizedBox(height: 6),
                   Text("Do not post private personal or patrol details."),
@@ -8478,8 +8528,7 @@ class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            SectionCard(
-              title: "Recent public activity",
+            NwPrototypeCard(
               child: Text(
                 community.latestActivityAt == null
                     ? "No recent public activity is available in preview."
@@ -8488,21 +8537,31 @@ class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: BrandColors.danger)),
+              NwPrototypeNotice(
+                title: "Preview unavailable",
+                message: _error!,
+                icon: Icons.error_outline,
+                color: BrandColors.danger,
+              ),
             ],
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _joining || !communityJoinActionEnabled(community)
-                  ? null
-                  : _join,
-              icon: _joining
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.group_add),
-              label: Text(
-                _joining ? "Submitting..." : communityJoinButtonLabel(community),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _joining || !communityJoinActionEnabled(community)
+                    ? null
+                    : _join,
+                icon: _joining
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.group_add),
+                label: Text(
+                  _joining
+                      ? "Submitting..."
+                      : communityJoinButtonLabel(community),
+                ),
               ),
             ),
           ],
@@ -8808,9 +8867,12 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
   Widget build(BuildContext context) {
     final controller = appOf(context);
     final canStart = controller.canStartCommunityConversation;
-    return SafetyScaffold(
-      title: "Community Discussions",
-      selectedIndex: 3,
+    return NwPrototypeScaffold(
+      title: "Community Feed",
+      leading: NwPrototypeIconButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       body: RefreshIndicator(
         onRefresh: () => controller.loadCommunityFeed(refresh: true),
         child: ListView(
@@ -8822,49 +8884,59 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
             ),
             if (canStart)
               Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed(
-                      NeighborhoodWatchDestinations.create,
-                      arguments: const {"type": "SafetyTip"},
-                    ),
-                    icon: const Icon(Icons.tips_and_updates_outlined),
-                    label: const Text("Share Security Tip"),
+                  Row(
+                    children: [
+                      NwPrototypeActionTile(
+                        icon: Icons.tips_and_updates_outlined,
+                        label: "Share Security Tip",
+                        primary: true,
+                        onTap: () => Navigator.of(context).pushNamed(
+                          NeighborhoodWatchDestinations.create,
+                          arguments: const {"type": "SafetyTip"},
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      NwPrototypeActionTile(
+                        icon: Icons.report_outlined,
+                        label: "Report Activity",
+                        color: const Color(0xFF4A9DFF),
+                        onTap: () => Navigator.of(context).pushNamed(
+                          NeighborhoodWatchDestinations.create,
+                          arguments: const {"type": "SuspiciousActivity"},
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      NwPrototypeActionTile(
+                        icon: Icons.warning_amber_outlined,
+                        label: "Road Hazard",
+                        color: BrandColors.green,
+                        onTap: () => Navigator.of(context).pushNamed(
+                          NeighborhoodWatchDestinations.create,
+                          arguments: const {"type": "RoadHazard"},
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed(
-                      NeighborhoodWatchDestinations.create,
-                      arguments: const {"type": "SuspiciousActivity"},
-                    ),
-                    icon: const Icon(Icons.report_outlined),
-                    label: const Text("Report Activity"),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed(
-                      NeighborhoodWatchDestinations.create,
-                      arguments: const {"type": "RoadHazard"},
-                    ),
-                    icon: const Icon(Icons.warning_amber_outlined),
-                    label: const Text("Report Road Hazard"),
-                  ),
+                  const SizedBox(height: 12),
                 ],
               )
             else
-              const ListTileCard(
+              const NwPrototypeListCard(
                 leading: Icon(Icons.lock_outline),
                 title: "Community posting unavailable",
                 subtitle:
                     "Sign in and confirm your current location to participate in this area.",
               ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () =>
-                  Navigator.of(context).pushNamed("/report/emergency"),
-              icon: const Icon(Icons.emergency),
-              label: const Text("Report Emergency"),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    Navigator.of(context).pushNamed("/report/emergency"),
+                icon: const Icon(Icons.emergency),
+                label: const Text("Report Emergency"),
+              ),
             ),
             const SizedBox(height: 16),
             if (controller.loadingCommunityFeed &&
@@ -8872,7 +8944,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
               const Center(child: CircularProgressIndicator())
             else if (controller.communityFeedError != null &&
                 controller.communityFeed.isEmpty)
-              ListTileCard(
+              NwPrototypeListCard(
                 leading: const Icon(Icons.cloud_off),
                 title: "Feed unavailable",
                 subtitle: controller.communityFeedError ?? "Unknown error",
@@ -8881,7 +8953,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const ListTileCard(
+                  const NwPrototypeListCard(
                     leading: Icon(Icons.forum_outlined),
                     title: "No community discussions yet",
                     subtitle:
@@ -8906,16 +8978,41 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                 final mediaSummary = _mediaSummary(post);
                 final detailLines = <String>[
                   post.body.isEmpty ? "Media attachment" : post.body,
-                  if (post.displayLocation != null) "Location: ${post.displayLocation}",
+                  if (post.displayLocation != null)
+                    "Location: ${post.displayLocation}",
                   if (mediaSummary.isNotEmpty) mediaSummary,
                   "${post.displayAuthor}${time.isEmpty ? "" : " · $time"}",
                   "$comments comment${comments == 1 ? "" : "s"} · View Discussion",
                 ];
-                return ListTileCard(
-                  leading: const Icon(Icons.forum_outlined),
-                  title: "${_conversationTypeLabel(post.type)}\n${post.title}",
-                  subtitle: detailLines.join("\n"),
-                  onTap: () => _openDiscussion(controller, post),
+                final verificationTone = switch (post.verificationStatus) {
+                  "Verified" => BrandColors.green,
+                  "Confirmed" => const Color(0xFF4A9DFF),
+                  _ => EyeSemanticColors.of(context).secondaryText,
+                };
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: NwPrototypeListCard(
+                    leading: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: verificationTone.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child:
+                          Icon(Icons.forum_outlined, color: verificationTone),
+                    ),
+                    title:
+                        "${_conversationTypeLabel(post.type)}\n${post.title}",
+                    subtitle: detailLines.join("\n"),
+                    badge: NwPrototypePill(
+                      label: post.verificationStatus,
+                      selected:
+                          post.verificationStatus != "PendingVerification",
+                      color: verificationTone,
+                    ),
+                    onTap: () => _openDiscussion(controller, post),
+                  ),
                 );
               }),
           ],
@@ -8971,8 +9068,9 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
     final prefix = _selectedType;
     final normalized = body.replaceAll(RegExp(r"\s+"), " ").trim();
     if (normalized.isEmpty) return prefix;
-    final snippet =
-        normalized.length > 48 ? "${normalized.substring(0, 48).trim()}..." : normalized;
+    final snippet = normalized.length > 48
+        ? "${normalized.substring(0, 48).trim()}..."
+        : normalized;
     return "$prefix: $snippet";
   }
 
@@ -9018,7 +9116,8 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
 
   Future<void> _submit() async {
     final body = _bodyController.text.trim();
-    final attachments = _evidenceSectionKey.currentState?.attachments ?? const [];
+    final attachments =
+        _evidenceSectionKey.currentState?.attachments ?? const [];
     if (!hasValidReportNarrative(description: body, localMedia: attachments)) {
       showAppSnackBar(
         context,
@@ -9070,43 +9169,55 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
   @override
   Widget build(BuildContext context) {
     final types = _typeMap.keys.toList();
-    return SafetyScaffold(
+    return NwPrototypeScaffold(
       title: "Share With Community",
-      selectedIndex: 3,
+      leading: NwPrototypeIconButton(
+        icon: Icons.close,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
-          OutlinedButton.icon(
-            onPressed: () =>
-                Navigator.of(context).pushNamed("/report/emergency"),
-            icon: const Icon(Icons.emergency),
-            label: const Text("Report Emergency"),
+          NwPrototypeNotice(
+            title: "Switch to Active Emergency",
+            message:
+                "Use the emergency flow for immediate danger instead of posting into the community feed.",
+            icon: Icons.emergency_outlined,
+            color: BrandColors.danger,
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _selectedType,
-            items: types
-                .map((type) => DropdownMenuItem(value: type, child: Text(type)))
-                .toList(),
-            onChanged: (value) =>
-                setState(() => _selectedType = value ?? _selectedType),
-            decoration: const InputDecoration(labelText: "Post type"),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _bodyController,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: "Message",
+          NwPrototypeCard(
+            child: DropdownButtonFormField<String>(
+              value: _selectedType,
+              items: types
+                  .map(
+                    (type) => DropdownMenuItem(value: type, child: Text(type)),
+                  )
+                  .toList(),
+              onChanged: (value) =>
+                  setState(() => _selectedType = value ?? _selectedType),
+              decoration: const InputDecoration(labelText: "Post type"),
             ),
           ),
           const SizedBox(height: 12),
-          ManagedEvidenceSection(
-            key: _evidenceSectionKey,
-            lowDataMode: appOf(context).lowDataMode,
+          NwPrototypeCard(
+            child: TextField(
+              controller: _bodyController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: "Message",
+              ),
+            ),
           ),
           const SizedBox(height: 12),
-          ListTileCard(
+          NwPrototypeCard(
+            child: ManagedEvidenceSection(
+              key: _evidenceSectionKey,
+              lowDataMode: appOf(context).lowDataMode,
+            ),
+          ),
+          const SizedBox(height: 12),
+          NwPrototypeListCard(
             leading: const Icon(Icons.place_outlined),
             title: _selectedLocation == null
                 ? "Attach location"
@@ -9137,14 +9248,18 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                     : () => setState(() => _selectedLocation = null)),
           ),
           const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Submit post"),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _submitting ? null : _submit,
+              child: _submitting
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text("Submit post"),
+            ),
           ),
         ],
       ),
@@ -9475,9 +9590,12 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
   Widget build(BuildContext context) {
     final controller = appOf(context);
     final activePatrols = _activePatrols(controller.communityPatrols);
-    return SafetyScaffold(
+    return NwPrototypeScaffold(
       title: "Patrols",
-      selectedIndex: 3,
+      leading: NwPrototypeIconButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       body: RefreshIndicator(
         onRefresh: () => controller.loadCommunityPatrols(),
         child: ListView(
@@ -9492,20 +9610,20 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
               const Center(child: CircularProgressIndicator())
             else if (controller.communityPatrolError != null &&
                 controller.communityPatrols.isEmpty)
-              ListTileCard(
+              NwPrototypeListCard(
                 leading: const Icon(Icons.cloud_off),
                 title: "Patrol schedules unavailable",
                 subtitle: controller.communityPatrolError ?? "Unknown error",
               )
             else if (controller.communityPatrols.isEmpty)
-              const ListTileCard(
+              const NwPrototypeListCard(
                 leading: Icon(Icons.security),
                 title: "No patrol schedules",
                 subtitle: "Community patrols will appear here when scheduled.",
               )
             else ...[
               if (activePatrols.isEmpty)
-                const ListTileCard(
+                const NwPrototypeListCard(
                   leading: Icon(Icons.info_outline),
                   title: "No active patrol right now",
                   subtitle:
@@ -9514,31 +9632,49 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
               ...controller.communityPatrols.map((patrol) {
                 final highlighted = widget.highlightScheduleId != null &&
                     widget.highlightScheduleId == patrol.id;
-                return ListTileCard(
-                  leading: Icon(
-                    patrol.status.toLowerCase() == "active"
-                        ? Icons.play_circle
-                        : Icons.route,
-                    color: highlighted
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
+                final isActive = patrol.status.toLowerCase() == "active";
+                final tone =
+                    isActive ? BrandColors.green : const Color(0xFF4A9DFF);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: NwPrototypeListCard(
+                    leading: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: tone.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isActive ? Icons.play_circle : Icons.route,
+                        color: tone,
+                      ),
+                    ),
+                    title: patrol.title,
+                    subtitle: highlighted
+                        ? "${patrol.status} • ${patrol.startsAt ?? "TBD"} • Deep link match"
+                        : "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
+                    badge: NwPrototypePill(
+                      label: patrol.status,
+                      selected: isActive,
+                      color: tone,
+                    ),
+                    trailing: Text(
+                      "${patrol.participantCount} members",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    onTap: () => _openPatrol(patrol),
                   ),
-                  title: patrol.title,
-                  subtitle: highlighted
-                      ? "${patrol.status} • ${patrol.startsAt ?? "TBD"} • Deep link match"
-                      : "${patrol.status} • ${patrol.startsAt ?? "TBD"}",
-                  trailing: Text(
-                    "${patrol.participantCount} members",
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  onTap: () => _openPatrol(patrol),
                 );
               }),
             ],
-            FilledButton.icon(
-              onPressed: activePatrols.isEmpty ? null : _logCheckpoint,
-              icon: const Icon(Icons.add_location_alt),
-              label: const Text("Log patrol checkpoint"),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: activePatrols.isEmpty ? null : _logCheckpoint,
+                icon: const Icon(Icons.add_location_alt),
+                label: const Text("Log patrol checkpoint"),
+              ),
             ),
           ],
         ),
@@ -9653,45 +9789,66 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
                     height: 220,
                     child: Center(child: Text(_error!)),
                   )
-                : ListView(
-                    shrinkWrap: true,
-                    children: [
-                      Text(
-                        _patrol.title,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 12),
-                      Text("Status: ${_patrol.status}"),
-                      Text("Starts: ${_patrol.startsAt ?? "TBD"}"),
-                      Text("Ends: ${_patrol.endsAt ?? "TBD"}"),
-                      Text(
-                        "Participating members: ${_patrol.participantCount}",
-                      ),
-                      const SizedBox(height: 12),
-                      Text(_patrol.routeDescription ??
-                          "General route information is available to approved community members."),
-                      const SizedBox(height: 12),
-                      const Text("Follow community safety instructions. Do not confront suspicious persons. Report immediate danger through THE EYE Emergency."),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
-                        icon: const Icon(Icons.emergency_outlined),
-                        label: const Text("Immediate danger? Report Emergency"),
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton(
-                        onPressed: _patrol.isParticipant ||
-                                !_patrol.canJoin ||
-                                _joining
-                            ? null
-                            : _join,
-                        child: Text(_patrol.isParticipant
-                            ? "Joined"
-                            : _joining
-                                ? "Joining..."
-                                : "Join Patrol"),
-                      ),
-                    ],
+                : NwPrototypeCard(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _patrol.title,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            NwPrototypePill(
+                              label: _patrol.status,
+                              selected:
+                                  _patrol.status.toLowerCase() == "active",
+                              color: _patrol.status.toLowerCase() == "active"
+                                  ? BrandColors.green
+                                  : const Color(0xFF4A9DFF),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text("Starts: ${_patrol.startsAt ?? "TBD"}"),
+                        Text("Ends: ${_patrol.endsAt ?? "TBD"}"),
+                        Text(
+                          "Participating members: ${_patrol.participantCount}",
+                        ),
+                        const SizedBox(height: 12),
+                        Text(_patrol.routeDescription ??
+                            "General route information is available to approved community members."),
+                        const SizedBox(height: 12),
+                        const Text(
+                            "Follow community safety instructions. Do not confront suspicious persons. Report immediate danger through THE EYE Emergency."),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () => Navigator.of(context)
+                              .pushNamed("/report/emergency"),
+                          icon: const Icon(Icons.emergency_outlined),
+                          label:
+                              const Text("Immediate danger? Report Emergency"),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton(
+                          onPressed: _patrol.isParticipant ||
+                                  !_patrol.canJoin ||
+                                  _joining
+                              ? null
+                              : _join,
+                          child: Text(_patrol.isParticipant
+                              ? "Joined"
+                              : _joining
+                                  ? "Joining..."
+                                  : "Join Patrol"),
+                        ),
+                      ],
+                    ),
                   ),
       ),
     );
@@ -9769,9 +9926,8 @@ class _NeighborhoodWatchBroadcastsScreenState
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error is StateError
-            ? error.message
-            : "Unable to load broadcasts.";
+        _error =
+            error is StateError ? error.message : "Unable to load broadcasts.";
         _loading = false;
       });
     }
@@ -9779,9 +9935,12 @@ class _NeighborhoodWatchBroadcastsScreenState
 
   @override
   Widget build(BuildContext context) {
-    return SafetyScaffold(
+    return NwPrototypeScaffold(
       title: "Broadcasts",
-      selectedIndex: 3,
+      leading: NwPrototypeIconButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: _loading && _items.isEmpty
@@ -9797,13 +9956,15 @@ class _NeighborhoodWatchBroadcastsScreenState
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(24),
                     children: [
-                      const ListTile(
+                      const NwPrototypeListCard(
                         leading: Icon(Icons.cloud_off),
                         title: Text("Unable to load broadcasts."),
+                        subtitle: "Try again in a moment.",
                       ),
                       Text(_error!),
                       const SizedBox(height: 12),
-                      FilledButton(onPressed: _load, child: const Text("Retry")),
+                      FilledButton(
+                          onPressed: _load, child: const Text("Retry")),
                     ],
                   )
                 : _items.isEmpty
@@ -9811,9 +9972,11 @@ class _NeighborhoodWatchBroadcastsScreenState
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.all(24),
                         children: const [
-                          SectionCard(
+                          NwPrototypeListCard(
+                            leading: Icon(Icons.campaign_outlined),
                             title: "No active broadcasts in this area",
-                            child: Text("There are no active safety broadcasts to show right now."),
+                            subtitle:
+                                "There are no active safety broadcasts to show right now.",
                           ),
                         ],
                       )
@@ -9825,10 +9988,29 @@ class _NeighborhoodWatchBroadcastsScreenState
                           final item = _items[index];
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
-                            child: ListTileCard(
-                              leading: const Icon(Icons.campaign_outlined),
+                            child: NwPrototypeListCard(
+                              leading: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: const Color(0x144A9DFF),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.campaign_outlined,
+                                  color: Color(0xFF4A9DFF),
+                                ),
+                              ),
                               title: item.title,
-                              subtitle: "${item.type} • ${item.status}\n${item.body}",
+                              subtitle:
+                                  "${item.type} • ${item.status}\n${item.body}",
+                              badge: NwPrototypePill(
+                                label: item.status,
+                                selected: item.status.toLowerCase() == "active",
+                                color: item.status.toLowerCase() == "active"
+                                    ? BrandColors.green
+                                    : const Color(0xFF4A9DFF),
+                              ),
                               onTap: () {
                                 final route = broadcastDetailRoute(item.id);
                                 if (route != null) {

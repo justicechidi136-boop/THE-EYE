@@ -6,9 +6,9 @@ import "package:url_launcher/url_launcher.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_enums.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "neighborhood_watch_prototype_chrome.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
-import "../widgets/eye_scaffold.dart";
 import "community_media_upload_service.dart";
 import "community_members_screen.dart";
 import "neighborhood_watch_service.dart";
@@ -186,7 +186,8 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
     if (url == null || url.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Media preview is temporarily unavailable.")),
+        const SnackBar(
+            content: Text("Media preview is temporarily unavailable.")),
       );
       return;
     }
@@ -393,12 +394,15 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
     final voiceDraft = _voiceDraft;
-    return EyeScaffold(
+    return NwPrototypeScaffold(
       title: _resolvedTitle,
-      useNavigateBackOrHome: true,
+      leading: NwPrototypeIconButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.flag_outlined),
+        NwPrototypeIconButton(
+          icon: Icons.flag_outlined,
           onPressed: () {
             Navigator.of(context).pushNamed(
               "/neighborhood-watch/report",
@@ -437,34 +441,36 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
                   if (_loading && _comments.isEmpty)
                     const Center(child: CircularProgressIndicator())
                   else if (_error != null && _comments.isEmpty)
-                    ListTile(
+                    NwPrototypeListCard(
                       leading: const Icon(Icons.cloud_off),
-                      title: const Text("Comments unavailable"),
-                      subtitle: Text(_error!),
+                      title: "Comments unavailable",
+                      subtitle: _error!,
                     )
                   else if (_comments.isEmpty)
-                    const ListTile(
+                    const NwPrototypeListCard(
                       leading: Icon(Icons.chat_bubble_outline),
-                      title: Text("No comments yet"),
+                      title: "No comments yet",
+                      subtitle: "Be the first to respond to this update.",
                     )
                   else
                     ..._comments.map((comment) {
                       final own = _isOwnComment(comment);
-                      return Card(
-                        child: ListTile(
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: NwPrototypeListCard(
                           leading: comment.isVoiceComment
                               ? const Icon(Icons.mic_none)
                               : null,
-                          title: Text(comment.authorName),
-                          subtitle: Column(
+                          title: comment.authorName,
+                          subtitle: comment.displayBody,
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(comment.displayBody),
                               if (comment.pending)
                                 Text(
                                   _voiceUploadProgress > 0
-                                      ? "Uploading voice…"
-                                      : "Sending…",
+                                      ? "Uploading voice..."
+                                      : "Sending...",
                                   style: const TextStyle(fontSize: 12),
                                 ),
                               if (comment.failed)
@@ -475,7 +481,8 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
                                     }
                                     setState(
                                       () => _comments.removeWhere(
-                                          (item) => item.id == comment.id),
+                                        (item) => item.id == comment.id,
+                                      ),
                                     );
                                   },
                                   child: const Text("Retry"),
@@ -504,11 +511,17 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
                                   itemBuilder: (context) => [
                                     if (!comment.isVoiceComment)
                                       const PopupMenuItem(
-                                          value: "edit", child: Text("Edit")),
+                                        value: "edit",
+                                        child: Text("Edit"),
+                                      ),
                                     const PopupMenuItem(
-                                        value: "delete", child: Text("Delete")),
+                                      value: "delete",
+                                      child: Text("Delete"),
+                                    ),
                                     const PopupMenuItem(
-                                        value: "report", child: Text("Report")),
+                                      value: "report",
+                                      child: Text("Report"),
+                                    ),
                                   ],
                                 )
                               : IconButton(
@@ -565,7 +578,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
             LinearProgressIndicator(value: _voiceUploadProgress),
           SafeArea(
             child: Container(
-              color: semantics.surface,
+              color: semantics.elevatedSurface,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Row(
                 children: [
@@ -626,49 +639,53 @@ class _PostSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _typeLabel(post.type),
-              style: theme.textTheme.labelLarge,
+    return NwPrototypeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NwPrototypePill(
+            label: _typeLabel(post.type),
+            selected: true,
+            color: post.verificationStatus == "Verified"
+                ? BrandColors.green
+                : BrandColors.orange,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            post.title,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
-            const SizedBox(height: 6),
-            Text(
-              post.title,
-              style: theme.textTheme.titleMedium,
+          ),
+          if (post.body.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(post.body),
+          ],
+          if (post.displayLocation != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.place_outlined, size: 18),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(post.displayLocation!)),
+              ],
             ),
-            if (post.body.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(post.body),
-            ],
-            if (post.displayLocation != null) ...[
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Icon(Icons.place_outlined, size: 18),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(post.displayLocation!)),
-                ],
-              ),
-            ],
-            if (post.media.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                "Attachments",
-                style: theme.textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              ...post.media.map(
-                (media) => ListTile(
-                  contentPadding: EdgeInsets.zero,
+          ],
+          if (post.media.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              "Attachments",
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            ...post.media.map(
+              (media) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: NwPrototypeListCard(
                   leading: Icon(
                     media.isImage
                         ? Icons.image_outlined
@@ -678,31 +695,30 @@ class _PostSummaryCard extends StatelessWidget {
                                 ? Icons.audiotrack
                                 : Icons.attach_file,
                   ),
-                  title: Text(
-                    media.isImage
-                        ? "Photo"
-                        : media.isVideo
-                            ? "Video"
-                            : media.isAudio
-                                ? "Audio"
-                                : "Attachment",
-                  ),
-                  subtitle: Text(
-                    media.signedGetUrl == null || media.signedGetUrl!.isEmpty
-                        ? "Preview unavailable right now"
-                        : "Open attachment",
-                  ),
-                  trailing: media.signedGetUrl == null || media.signedGetUrl!.isEmpty
-                      ? null
-                      : const Icon(Icons.open_in_new),
-                  onTap: media.signedGetUrl == null || media.signedGetUrl!.isEmpty
-                      ? null
-                      : () => unawaited(openMedia(media)),
+                  title: media.isImage
+                      ? "Photo"
+                      : media.isVideo
+                          ? "Video"
+                          : media.isAudio
+                              ? "Audio"
+                              : "Attachment",
+                  subtitle:
+                      media.signedGetUrl == null || media.signedGetUrl!.isEmpty
+                          ? "Preview unavailable right now"
+                          : "Open attachment",
+                  trailing:
+                      media.signedGetUrl == null || media.signedGetUrl!.isEmpty
+                          ? null
+                          : const Icon(Icons.open_in_new),
+                  onTap:
+                      media.signedGetUrl == null || media.signedGetUrl!.isEmpty
+                          ? null
+                          : () => unawaited(openMedia(media)),
                 ),
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
