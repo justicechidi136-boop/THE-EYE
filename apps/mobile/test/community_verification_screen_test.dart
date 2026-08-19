@@ -69,7 +69,8 @@ Widget _wrap(Widget child) {
 }
 
 void main() {
-  testWidgets("renders formal verification actions and evidence previews", (tester) async {
+  testWidgets("renders formal verification actions and evidence previews",
+      (tester) async {
     final service = _FakeCommunityVerificationService(
       payload: CommunityVerificationPayload(
         requestId: "req-1",
@@ -156,7 +157,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text("Skip"));
+    final skipFinder = find.text("Skip");
+    await tester.ensureVisible(skipFinder);
+    await tester.pumpAndSettle();
+
+    await tester.tap(skipFinder);
     await tester.pumpAndSettle();
 
     expect(service.skipCalled, isTrue);

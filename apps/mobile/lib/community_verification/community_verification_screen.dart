@@ -356,7 +356,7 @@ class _CommunityVerificationScreenState
           ],
           const SizedBox(height: 16),
           NwPrototypeNotice(
-            title: "Immediate danger? Report Emergency",
+            title: "Stay safe",
             message: payload.safetyNotice.isNotEmpty
                 ? payload.safetyNotice
                 : kCommunityVerificationSafetyWarning,
