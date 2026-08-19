@@ -40,7 +40,10 @@ class NwPrototypeScaffold extends StatelessWidget {
                   Expanded(
                     child: Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontSize: 19,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0,
                           ),
@@ -85,13 +88,13 @@ class NwPrototypeIconButton extends StatelessWidget {
         children: [
           InkWell(
             onTap: onPressed,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(17),
             child: Container(
-              width: 36,
-              height: 36,
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
                 color: semantics.elevatedSurface,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(17),
                 border: Border.all(color: semantics.divider),
               ),
               child: Icon(icon, size: 18),
@@ -120,13 +123,13 @@ class NwPrototypeSegmentTabs extends StatelessWidget {
   const NwPrototypeSegmentTabs({
     required this.labels,
     required this.selectedIndex,
-    required this.onSelected,
+    this.onSelected,
     super.key,
   });
 
   final List<String> labels;
   final int selectedIndex;
-  final ValueChanged<int> onSelected;
+  final ValueChanged<int>? onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -137,10 +140,10 @@ class NwPrototypeSegmentTabs extends StatelessWidget {
           if (i > 0) const SizedBox(width: 6),
           Expanded(
             child: InkWell(
-              onTap: () => onSelected(i),
+              onTap: onSelected == null ? null : () => onSelected!(i),
               borderRadius: BorderRadius.circular(10),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 9),
                 decoration: BoxDecoration(
                   color: i == selectedIndex
                       ? const Color(0x22FF9933)
@@ -152,15 +155,20 @@ class NwPrototypeSegmentTabs extends StatelessWidget {
                         : semantics.divider,
                   ),
                 ),
-                child: Text(
-                  labels[i],
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: i == selectedIndex
-                            ? const Color(0xFFFF9933)
-                            : semantics.secondaryText,
-                      ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    labels[i],
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: i == selectedIndex
+                              ? const Color(0xFFFF9933)
+                              : semantics.secondaryText,
+                        ),
+                  ),
                 ),
               ),
             ),
@@ -230,6 +238,7 @@ class NwPrototypePill extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              fontSize: 11,
               fontWeight: FontWeight.w700,
               color: selected ? accent : semantics.secondaryText,
             ),
@@ -258,6 +267,7 @@ class NwPrototypeSectionHeading extends StatelessWidget {
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),
           ),
@@ -304,6 +314,7 @@ class NwPrototypeStatTile extends StatelessWidget {
             Text(
               value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: accent,
                   ),
@@ -312,6 +323,7 @@ class NwPrototypeStatTile extends StatelessWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
                     color: semantics.secondaryText,
                   ),
             ),
@@ -378,7 +390,9 @@ class NwPrototypeActionTile extends StatelessWidget {
                 label,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
+                      height: 1.2,
                     ),
               ),
             ],
@@ -441,6 +455,7 @@ class NwPrototypeListCard extends StatelessWidget {
                           title,
                           style:
                               Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w700,
                                   ),
                         ),
@@ -455,8 +470,9 @@ class NwPrototypeListCard extends StatelessWidget {
                   Text(
                     subtitle,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: 12,
                           color: semantics.secondaryText,
-                          height: 1.45,
+                          height: 1.4,
                         ),
                   ),
                   if (child != null) ...[
@@ -508,15 +524,53 @@ class NwPrototypeNotice extends StatelessWidget {
                 Text(
                   title,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: accent,
                       ),
                 ),
                 const SizedBox(height: 4),
-                Text(message),
+                Text(message, style: const TextStyle(fontSize: 12)),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class NwPrototypeFilterChips extends StatelessWidget {
+  const NwPrototypeFilterChips({
+    required this.labels,
+    required this.selectedLabel,
+    required this.onSelected,
+    super.key,
+  });
+
+  final List<String> labels;
+  final String selectedLabel;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            ChoiceChip(
+              label: Text(labels[i]),
+              labelStyle: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+              selected: labels[i] == selectedLabel,
+              onSelected: (_) => onSelected(labels[i]),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
         ],
       ),
     );

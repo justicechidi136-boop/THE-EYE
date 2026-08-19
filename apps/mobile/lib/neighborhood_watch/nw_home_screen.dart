@@ -249,7 +249,7 @@ class _NeighborhoodWatchHomeScreenState
         ),
       ],
       tabs: NwPrototypeSegmentTabs(
-        labels: const ["Home", "Feed", "Broadcasts", "Group"],
+        labels: const ["Home", "Feed", "Broadcasts", "Community"],
         selectedIndex: 0,
         onSelected: (index) {
           final route = switch (index) {
@@ -258,7 +258,9 @@ class _NeighborhoodWatchHomeScreenState
             3 => NeighborhoodWatchDestinations.communities,
             _ => null,
           };
-          if (route != null) Navigator.of(context).pushNamed(route);
+          if (route != null) {
+            Navigator.of(context).pushReplacementNamed(route);
+          }
         },
       ),
       body: RefreshIndicator(
@@ -392,7 +394,6 @@ class _NeighborhoodWatchHomeScreenState
       NwPrototypeSegmentTabs(
         labels: const ["Ambient", "Not joined", "Member"],
         selectedIndex: modeIndex,
-        onSelected: (_) {},
       ),
       const SizedBox(height: 14),
       NwPrototypeCard(
@@ -602,7 +603,7 @@ class _NeighborhoodWatchHomeScreenState
             const SizedBox(width: 10),
             NwPrototypeActionTile(
               icon: Icons.warning_amber_outlined,
-              label: "Road Hazard",
+              label: "Report Road Hazard",
               color: semantics.success,
               onTap: () => Navigator.of(context).pushNamed(
                 NeighborhoodWatchDestinations.create,

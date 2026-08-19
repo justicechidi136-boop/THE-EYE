@@ -226,6 +226,32 @@ Widget _buildActiveEmergencyRoute(BuildContext context,
 
 Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
   final name = settings.name ?? "";
+  if (name == NeighborhoodWatchDestinations.create) {
+    return PageRouteBuilder<void>(
+      settings: settings,
+      opaque: false,
+      barrierDismissible: true,
+      barrierColor: Colors.black54,
+      barrierLabel: "Close community composer",
+      transitionDuration: const Duration(milliseconds: 240),
+      reverseTransitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (context, animation, secondaryAnimation) =>
+          const CreateCommunityPostScreen(),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          )),
+          child: child,
+        );
+      },
+    );
+  }
   if (name.startsWith("/incident-detail/") && name.endsWith("/messages")) {
     final incidentId = name
         .substring("/incident-detail/".length, name.length - "/messages".length)
@@ -1128,8 +1154,6 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 );
               },
               "/neighborhood-watch/feed": (_) => const CommunityFeedScreen(),
-              "/neighborhood-watch/create": (_) =>
-                  const CreateCommunityPostScreen(),
               "/neighborhood-watch/map": (_) => const CommunityMapScreen(),
               "/neighborhood-watch/chat": (_) => const CommunityChatScreen(),
               "/neighborhood-watch/volunteers": (_) => const VolunteersScreen(),
@@ -8043,6 +8067,41 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   }
 }
 
+Widget _neighborhoodWatchPrimaryTabs(
+  BuildContext context, {
+  required int selectedIndex,
+}) {
+  return NwPrototypeSegmentTabs(
+    labels: const ["Home", "Feed", "Broadcasts", "Community"],
+    selectedIndex: selectedIndex,
+    onSelected: (index) {
+      if (index == selectedIndex) return;
+      final route = switch (index) {
+        0 => NeighborhoodWatchDestinations.home,
+        1 => NeighborhoodWatchDestinations.feed,
+        2 => NeighborhoodWatchDestinations.broadcasts,
+        _ => NeighborhoodWatchDestinations.communities,
+      };
+      Navigator.of(context).pushReplacementNamed(route);
+    },
+  );
+}
+
+List<Widget> _neighborhoodWatchHeaderActions(BuildContext context) {
+  return [
+    NwPrototypeIconButton(
+      icon: Icons.groups_2_outlined,
+      onPressed: () => Navigator.of(context)
+          .pushNamed(NeighborhoodWatchDestinations.communities),
+    ),
+    NwPrototypeIconButton(
+      icon: Icons.notifications_none,
+      hasDot: true,
+      onPressed: () => Navigator.of(context).pushNamed("/notifications"),
+    ),
+  ];
+}
+
 class MyCommunitiesScreen extends StatefulWidget {
   const MyCommunitiesScreen({super.key});
 
@@ -8072,83 +8131,106 @@ class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
             community.membershipStatus == "Approved" ||
             community.membershipStatus == "Pending")
         .toList();
-    return SafetyScaffold(
-      title: "My Communities",
-      selectedIndex: 3,
+    return NwPrototypeScaffold(
+      title: "Neighborhood Watch",
+      actions: _neighborhoodWatchHeaderActions(context),
+      tabs: _neighborhoodWatchPrimaryTabs(context, selectedIndex: 3),
       body: RefreshIndicator(
         onRefresh: () => controller.loadCommunitiesFromApi(refresh: true),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
+            const NwPrototypeSectionHeading(title: "My Communities"),
+            const SizedBox(height: 8),
             if (controller.loadingCommunities && memberships.isEmpty)
               const Center(child: CircularProgressIndicator())
             else if (memberships.isEmpty)
-              const ListTileCard(
+              const NwPrototypeListCard(
                 leading: Icon(Icons.groups),
                 title: "No communities yet",
                 subtitle: "Join a community to appear here.",
               )
             else
-              ...memberships.map((community) => ListTileCard(
-                    leading: const Icon(Icons.groups),
-                    title: community.name,
-                    subtitle: [
-                      "${community.visibility} • ${community.membershipStatus ?? "Unknown"}",
-                      if (communityAccessStatus(
-                        selectedCommunity: community,
-                        currentAreaCommunityId: controller.nwContextCommunityId,
-                      ).isOutsideCurrentArea)
-                        "You are currently outside this community.",
-                    ].join("\n"),
-                    onTap: () {
-                      controller.selectCommunity(community);
-                      Navigator.of(context).pop();
-                    },
-                    trailing: community.membershipStatus == "Approved"
-                        ? IconButton(
-                            icon: const Icon(Icons.logout),
-                            tooltip: "Leave community",
-                            onPressed: () async {
-                              controller.selectCommunity(community);
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text("Leave community"),
-                                  content: const Text(
-                                    "Leave this community? Owners and moderators must transfer responsibilities first.",
+              ...memberships.map(
+                (community) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: NwPrototypeListCard(
+                      leading: const Icon(Icons.groups),
+                      title: community.name,
+                      subtitle: [
+                        "${community.visibility} • ${community.membershipStatus ?? "Unknown"}",
+                        if (communityAccessStatus(
+                          selectedCommunity: community,
+                          currentAreaCommunityId:
+                              controller.nwContextCommunityId,
+                        ).isOutsideCurrentArea)
+                          "You are currently outside this community.",
+                      ].join("\n"),
+                      onTap: () {
+                        controller.selectCommunity(community);
+                        Navigator.of(context).pushReplacementNamed(
+                          NeighborhoodWatchDestinations.home,
+                        );
+                      },
+                      trailing: community.membershipStatus == "Approved"
+                          ? IconButton(
+                              icon: const Icon(Icons.logout),
+                              tooltip: "Leave community",
+                              onPressed: () async {
+                                controller.selectCommunity(community);
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text("Leave community"),
+                                    content: const Text(
+                                      "Leave this community? Owners and moderators must transfer responsibilities first.",
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text("Cancel"),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text("Leave"),
+                                      ),
+                                    ],
                                   ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: const Text("Cancel"),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      child: const Text("Leave"),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed != true || !context.mounted) return;
-                              final error =
-                                  await controller.leaveSelectedCommunity();
-                              if (!context.mounted) return;
-                              if (error != null) {
-                                showAppSnackBar(context, error, isError: true);
-                              } else {
-                                showAppSnackBar(
-                                    context, "You left the community");
-                                await controller.loadCommunitiesFromApi(
-                                    refresh: true);
-                                setState(() {});
-                              }
-                            },
-                          )
-                        : null,
-                  )),
+                                );
+                                if (confirmed != true || !context.mounted) {
+                                  return;
+                                }
+                                final error =
+                                    await controller.leaveSelectedCommunity();
+                                if (!context.mounted) return;
+                                if (error != null) {
+                                  showAppSnackBar(context, error,
+                                      isError: true);
+                                } else {
+                                  showAppSnackBar(
+                                      context, "You left the community");
+                                  await controller.loadCommunitiesFromApi(
+                                      refresh: true);
+                                  setState(() {});
+                                }
+                              },
+                            )
+                          : null),
+                ),
+              ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context)
+                    .pushNamed(NeighborhoodWatchDestinations.join),
+                icon: const Icon(Icons.travel_explore),
+                label: const Text("Discover Communities"),
+              ),
+            ),
           ],
         ),
       ),
@@ -8794,6 +8876,8 @@ class CommunityFeedScreen extends StatefulWidget {
 }
 
 class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
+  String _selectedFilter = "All";
+
   @override
   void initState() {
     super.initState();
@@ -8849,6 +8933,18 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     return labels.join(" • ");
   }
 
+  bool _matchesFeedFilter(CommunityPostItem post) {
+    return switch (_selectedFilter) {
+      "Discussions" =>
+        post.type == "Discussion" || post.type == "CommunityQuestion",
+      "Tips" => post.type == "SafetyTip",
+      "Traffic" => post.type == "Traffic" || post.type == "LocalWarning",
+      "Activity" => post.type == "SuspiciousActivity",
+      "Hazards" => post.type == "RoadHazard",
+      _ => true,
+    };
+  }
+
   void _openDiscussion(AppController controller, CommunityPostItem post) {
     final community = controller.selectedCommunity;
     if (community == null) return;
@@ -8867,12 +8963,12 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
   Widget build(BuildContext context) {
     final controller = appOf(context);
     final canStart = controller.canStartCommunityConversation;
+    final visiblePosts =
+        controller.communityFeed.where(_matchesFeedFilter).toList();
     return NwPrototypeScaffold(
-      title: "Community Feed",
-      leading: NwPrototypeIconButton(
-        icon: Icons.arrow_back,
-        onPressed: () => Navigator.of(context).maybePop(),
-      ),
+      title: "Neighborhood Watch",
+      actions: _neighborhoodWatchHeaderActions(context),
+      tabs: _neighborhoodWatchPrimaryTabs(context, selectedIndex: 1),
       body: RefreshIndicator(
         onRefresh: () => controller.loadCommunityFeed(refresh: true),
         child: ListView(
@@ -8909,7 +9005,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                       const SizedBox(width: 10),
                       NwPrototypeActionTile(
                         icon: Icons.warning_amber_outlined,
-                        label: "Road Hazard",
+                        label: "Report Road Hazard",
                         color: BrandColors.green,
                         onTap: () => Navigator.of(context).pushNamed(
                           NeighborhoodWatchDestinations.create,
@@ -8939,6 +9035,19 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            NwPrototypeFilterChips(
+              labels: const [
+                "All",
+                "Discussions",
+                "Tips",
+                "Traffic",
+                "Activity",
+                "Hazards",
+              ],
+              selectedLabel: _selectedFilter,
+              onSelected: (value) => setState(() => _selectedFilter = value),
+            ),
+            const SizedBox(height: 14),
             if (controller.loadingCommunityFeed &&
                 controller.communityFeed.isEmpty)
               const Center(child: CircularProgressIndicator())
@@ -8971,8 +9080,14 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                   ],
                 ],
               )
+            else if (visiblePosts.isEmpty)
+              NwPrototypeListCard(
+                leading: const Icon(Icons.filter_alt_off_outlined),
+                title: "No $_selectedFilter posts",
+                subtitle: "Try another feed filter.",
+              )
             else
-              ...controller.communityFeed.map((post) {
+              ...visiblePosts.map((post) {
                 final time = _formatPostTime(post.createdAt);
                 final comments = post.commentCount;
                 final mediaSummary = _mediaSummary(post);
@@ -9050,6 +9165,7 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
   };
 
   String _selectedType = "Security Tip";
+  final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final LocationReverseGeocoder _reverseGeocoder =
@@ -9057,9 +9173,11 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
   _SelectedCommunityLocation? _selectedLocation;
   bool _submitting = false;
   bool _capturingLocation = false;
+  bool _urgent = false;
 
   @override
   void dispose() {
+    _titleController.dispose();
     _bodyController.dispose();
     super.dispose();
   }
@@ -9126,7 +9244,9 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
       );
       return;
     }
-    final title = _buildGeneratedTitle(body);
+    final title = _titleController.text.trim().isEmpty
+        ? _buildGeneratedTitle(body)
+        : _titleController.text.trim();
     setState(() => _submitting = true);
     final error = await appOf(context).createCommunityPost(
       type: _typeMap[_selectedType] ?? "SafetyTip",
@@ -9168,100 +9288,185 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final types = _typeMap.keys.toList();
-    return NwPrototypeScaffold(
-      title: "Share With Community",
-      leading: NwPrototypeIconButton(
-        icon: Icons.close,
-        onPressed: () => Navigator.of(context).maybePop(),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          NwPrototypeNotice(
-            title: "Switch to Active Emergency",
-            message:
-                "Use the emergency flow for immediate danger instead of posting into the community feed.",
-            icon: Icons.emergency_outlined,
-            color: BrandColors.danger,
-          ),
-          const SizedBox(height: 12),
-          NwPrototypeCard(
-            child: DropdownButtonFormField<String>(
-              value: _selectedType,
-              items: types
-                  .map(
-                    (type) => DropdownMenuItem(value: type, child: Text(type)),
-                  )
-                  .toList(),
-              onChanged: (value) =>
-                  setState(() => _selectedType = value ?? _selectedType),
-              decoration: const InputDecoration(labelText: "Post type"),
-            ),
-          ),
-          const SizedBox(height: 12),
-          NwPrototypeCard(
-            child: TextField(
-              controller: _bodyController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: "Message",
+    final semantics = EyeSemanticColors.of(context);
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: FractionallySizedBox(
+            heightFactor: 0.9,
+            widthFactor: 1,
+            child: ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
+              child: NwPrototypeScaffold(
+                title: "Share With Community",
+                leading: NwPrototypeIconButton(
+                  icon: Icons.close,
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+                body: ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: semantics.divider,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        NwPrototypeActionTile(
+                          icon: Icons.tips_and_updates_outlined,
+                          label: "Security Tip",
+                          primary: _selectedType == "Security Tip",
+                          onTap: () =>
+                              setState(() => _selectedType = "Security Tip"),
+                        ),
+                        const SizedBox(width: 8),
+                        NwPrototypeActionTile(
+                          icon: Icons.report_outlined,
+                          label: "Report Activity",
+                          color: const Color(0xFF4A9DFF),
+                          primary: _selectedType == "Report Activity",
+                          onTap: () =>
+                              setState(() => _selectedType = "Report Activity"),
+                        ),
+                        const SizedBox(width: 8),
+                        NwPrototypeActionTile(
+                          icon: Icons.warning_amber_outlined,
+                          label: "Road Hazard",
+                          color: semantics.success,
+                          primary: _selectedType == "Road Hazard",
+                          onTap: () =>
+                              setState(() => _selectedType = "Road Hazard"),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    NwPrototypeCard(
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _titleController,
+                            maxLength: 120,
+                            decoration:
+                                const InputDecoration(labelText: "Title"),
+                          ),
+                          TextField(
+                            controller: _bodyController,
+                            minLines: 3,
+                            maxLines: 5,
+                            decoration:
+                                const InputDecoration(labelText: "Details"),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    CheckboxListTile(
+                      value: _urgent,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: const Text("This is an immediate danger"),
+                      subtitle: const Text(
+                        "Switch to Emergency Reporting for urgent help.",
+                      ),
+                      onChanged: (value) =>
+                          setState(() => _urgent = value ?? false),
+                    ),
+                    if (_urgent) ...[
+                      NwPrototypeNotice(
+                        title: "Switch to Active Emergency",
+                        message:
+                            "Use the emergency flow for immediate danger instead of posting into the community feed.",
+                        icon: Icons.emergency_outlined,
+                        color: BrandColors.danger,
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: semantics.error,
+                            foregroundColor: semantics.textOnPrimary,
+                          ),
+                          onPressed: () => Navigator.of(context)
+                              .pushNamed("/report/emergency"),
+                          icon: const Icon(Icons.emergency),
+                          label: const Text("Report Emergency"),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    NwPrototypeCard(
+                      child: ManagedEvidenceSection(
+                        key: _evidenceSectionKey,
+                        lowDataMode: appOf(context).lowDataMode,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    NwPrototypeListCard(
+                      leading: const Icon(Icons.place_outlined),
+                      title: _selectedLocation == null
+                          ? "Attach location"
+                          : "Location attached",
+                      subtitle: _selectedLocation == null
+                          ? "Optional. Add the relevant place for this post."
+                          : _selectedLocation!.label,
+                      trailing: _capturingLocation
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : IconButton(
+                              icon: Icon(
+                                _selectedLocation == null
+                                    ? Icons.add_location_alt_outlined
+                                    : Icons.close,
+                              ),
+                              onPressed: _selectedLocation == null
+                                  ? _attachLocation
+                                  : () =>
+                                      setState(() => _selectedLocation = null),
+                            ),
+                      onTap: _capturingLocation
+                          ? null
+                          : (_selectedLocation == null
+                              ? _attachLocation
+                              : () => setState(() => _selectedLocation = null)),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _submitting ? null : _submit,
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text("Submit post"),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          NwPrototypeCard(
-            child: ManagedEvidenceSection(
-              key: _evidenceSectionKey,
-              lowDataMode: appOf(context).lowDataMode,
-            ),
-          ),
-          const SizedBox(height: 12),
-          NwPrototypeListCard(
-            leading: const Icon(Icons.place_outlined),
-            title: _selectedLocation == null
-                ? "Attach location"
-                : "Location attached",
-            subtitle: _selectedLocation == null
-                ? "Optional. Add the relevant place for this post."
-                : _selectedLocation!.label,
-            trailing: _capturingLocation
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : IconButton(
-                    icon: Icon(
-                      _selectedLocation == null
-                          ? Icons.add_location_alt_outlined
-                          : Icons.close,
-                    ),
-                    onPressed: _selectedLocation == null
-                        ? _attachLocation
-                        : () => setState(() => _selectedLocation = null),
-                  ),
-            onTap: _capturingLocation
-                ? null
-                : (_selectedLocation == null
-                    ? _attachLocation
-                    : () => setState(() => _selectedLocation = null)),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _submitting ? null : _submit,
-              child: _submitting
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text("Submit post"),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -9867,6 +10072,7 @@ class _NeighborhoodWatchBroadcastsScreenState
     extends State<NeighborhoodWatchBroadcastsScreen> {
   final BroadcastFeedService _service = BroadcastFeedService();
   List<BroadcastFeedItem> _items = const [];
+  String _selectedFilter = "All";
   bool _loading = true;
   String? _error;
 
@@ -9933,94 +10139,103 @@ class _NeighborhoodWatchBroadcastsScreenState
     }
   }
 
+  bool _matchesBroadcastFilter(BroadcastFeedItem item) {
+    return switch (_selectedFilter) {
+      "Active" => item.status.toLowerCase() == "active" && !item.expired,
+      "Resolved" => item.status.toLowerCase() == "resolved" || item.expired,
+      "Official" => item.adminVerified,
+      _ => true,
+    };
+  }
+
+  Widget _buildBroadcastList() {
+    final visibleItems = _items.where(_matchesBroadcastFilter).toList();
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+      children: [
+        NwPrototypeFilterChips(
+          labels: const ["All", "Active", "Resolved", "Official"],
+          selectedLabel: _selectedFilter,
+          onSelected: (value) => setState(() => _selectedFilter = value),
+        ),
+        const SizedBox(height: 14),
+        if (_loading && _items.isEmpty) ...[
+          const SizedBox(height: 120),
+          const Center(child: CircularProgressIndicator()),
+        ] else if (_error != null && _items.isEmpty) ...[
+          const NwPrototypeListCard(
+            leading: Icon(Icons.cloud_off),
+            title: "Unable to load broadcasts.",
+            subtitle: "Try again in a moment.",
+          ),
+          const SizedBox(height: 8),
+          Text(_error!),
+          const SizedBox(height: 12),
+          FilledButton(onPressed: _load, child: const Text("Retry")),
+        ] else if (_items.isEmpty) ...[
+          const NwPrototypeListCard(
+            leading: Icon(Icons.campaign_outlined),
+            title: "No active broadcasts in this area",
+            subtitle:
+                "There are no active safety broadcasts to show right now.",
+          ),
+        ] else if (visibleItems.isEmpty) ...[
+          NwPrototypeListCard(
+            leading: const Icon(Icons.filter_alt_off_outlined),
+            title: "No $_selectedFilter broadcasts",
+            subtitle: "Try another broadcast filter.",
+          ),
+        ] else
+          ...visibleItems.map((item) {
+            final active =
+                item.status.toLowerCase() == "active" && !item.expired;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: NwPrototypeListCard(
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0x144A9DFF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.campaign_outlined,
+                    color: Color(0xFF4A9DFF),
+                  ),
+                ),
+                title: item.title,
+                subtitle: "${item.type} • ${item.status}\n${item.body}",
+                badge: NwPrototypePill(
+                  label: item.adminVerified ? "Official" : item.status,
+                  selected: active || item.adminVerified,
+                  color: active
+                      ? BrandColors.green
+                      : item.adminVerified
+                          ? const Color(0xFFFF9933)
+                          : const Color(0xFF4A9DFF),
+                ),
+                onTap: () {
+                  final route = broadcastDetailRoute(item.id);
+                  if (route != null) Navigator.of(context).pushNamed(route);
+                },
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return NwPrototypeScaffold(
-      title: "Broadcasts",
-      leading: NwPrototypeIconButton(
-        icon: Icons.arrow_back,
-        onPressed: () => Navigator.of(context).maybePop(),
-      ),
+      title: "Neighborhood Watch",
+      actions: _neighborhoodWatchHeaderActions(context),
+      tabs: _neighborhoodWatchPrimaryTabs(context, selectedIndex: 2),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _items.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 140),
-                  Center(child: CircularProgressIndicator()),
-                ],
-              )
-            : _error != null && _items.isEmpty
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(24),
-                    children: [
-                      const NwPrototypeListCard(
-                        leading: Icon(Icons.cloud_off),
-                        title: "Unable to load broadcasts.",
-                        subtitle: "Try again in a moment.",
-                      ),
-                      Text(_error!),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                          onPressed: _load, child: const Text("Retry")),
-                    ],
-                  )
-                : _items.isEmpty
-                    ? ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
-                        children: const [
-                          NwPrototypeListCard(
-                            leading: Icon(Icons.campaign_outlined),
-                            title: "No active broadcasts in this area",
-                            subtitle:
-                                "There are no active safety broadcasts to show right now.",
-                          ),
-                        ],
-                      )
-                    : ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-                        itemCount: _items.length,
-                        itemBuilder: (context, index) {
-                          final item = _items[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: NwPrototypeListCard(
-                              leading: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: const Color(0x144A9DFF),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(
-                                  Icons.campaign_outlined,
-                                  color: Color(0xFF4A9DFF),
-                                ),
-                              ),
-                              title: item.title,
-                              subtitle:
-                                  "${item.type} • ${item.status}\n${item.body}",
-                              badge: NwPrototypePill(
-                                label: item.status,
-                                selected: item.status.toLowerCase() == "active",
-                                color: item.status.toLowerCase() == "active"
-                                    ? BrandColors.green
-                                    : const Color(0xFF4A9DFF),
-                              ),
-                              onTap: () {
-                                final route = broadcastDetailRoute(item.id);
-                                if (route != null) {
-                                  Navigator.of(context).pushNamed(route);
-                                }
-                              },
-                            ),
-                          );
-                        },
-                      ),
+        child: _buildBroadcastList(),
       ),
     );
   }
