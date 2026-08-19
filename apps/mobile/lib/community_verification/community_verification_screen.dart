@@ -6,7 +6,7 @@ import "package:url_launcher/url_launcher.dart";
 import "../brand.dart";
 import "../design_system/components/eye_primary_button.dart";
 import "../incidents/incident_submission_service.dart";
-import "../widgets/eye_scaffold.dart";
+import "../neighborhood_watch/neighborhood_watch_prototype_chrome.dart";
 import "community_verification_service.dart";
 
 const kCommunityVerificationSafetyWarning =
@@ -14,11 +14,11 @@ const kCommunityVerificationSafetyWarning =
 
 class CommunityVerificationScreen extends StatefulWidget {
   const CommunityVerificationScreen({
-    super.key,
     required this.requestId,
     required this.service,
     required this.accessToken,
     this.highContrast = false,
+    super.key,
   });
 
   final String requestId;
@@ -27,10 +27,12 @@ class CommunityVerificationScreen extends StatefulWidget {
   final bool highContrast;
 
   @override
-  State<CommunityVerificationScreen> createState() => _CommunityVerificationScreenState();
+  State<CommunityVerificationScreen> createState() =>
+      _CommunityVerificationScreenState();
 }
 
-class _CommunityVerificationScreenState extends State<CommunityVerificationScreen> {
+class _CommunityVerificationScreenState
+    extends State<CommunityVerificationScreen> {
   CommunityVerificationPayload? _payload;
   CommunityVerificationCompletion? _completion;
   String? _error;
@@ -70,7 +72,7 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
         _error = error.userMessage;
         _loading = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _error = "Unable to load verification request.";
@@ -88,7 +90,8 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
         requestId: widget.requestId,
         accessToken: widget.accessToken,
         responseType: responseType,
-        clientActionId: "${widget.requestId}-${DateTime.now().millisecondsSinceEpoch}",
+        clientActionId:
+            "${widget.requestId}-${DateTime.now().millisecondsSinceEpoch}",
         confidence: responseType == "Confirmed" ? "High" : "Medium",
       );
       if (!mounted) return;
@@ -101,7 +104,9 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Unable to submit response. Try again when online.")),
+        const SnackBar(
+          content: Text("Unable to submit response. Try again when online."),
+        ),
       );
     }
   }
@@ -113,7 +118,8 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
       final completion = await widget.service.skip(
         requestId: widget.requestId,
         accessToken: widget.accessToken,
-        clientActionId: "${widget.requestId}-skip-${DateTime.now().millisecondsSinceEpoch}",
+        clientActionId:
+            "${widget.requestId}-skip-${DateTime.now().millisecondsSinceEpoch}",
       );
       if (!mounted) return;
       setState(() {
@@ -127,7 +133,8 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
   }
 
   void _announceSummary() {
-    final text = _payload?.spokenSummaryTemplate ?? kCommunityVerificationSafetyWarning;
+    final text =
+        _payload?.spokenSummaryTemplate ?? kCommunityVerificationSafetyWarning;
     SemanticsService.announce(text, TextDirection.ltr);
     HapticFeedback.selectionClick();
   }
@@ -136,7 +143,8 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
     Navigator.of(context).pushNamedAndRemoveUntil("/home", (route) => false);
   }
 
-  Future<void> _openEvidence(CommunityVerificationEvidencePreview preview) async {
+  Future<void> _openEvidence(
+      CommunityVerificationEvidencePreview preview) async {
     final url = preview.previewUrl?.trim();
     if (url == null || url.isEmpty) return;
     if (preview.isImage) {
@@ -184,12 +192,26 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
 
   @override
   Widget build(BuildContext context) {
-    return EyeScaffold(
+    return NwPrototypeScaffold(
       title: _payload?.categoryDisplayLabel ?? "Community Verification",
+      leading: NwPrototypeIconButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: NwPrototypeNotice(
+                      title: "Verification unavailable",
+                      message: _error!,
+                      icon: Icons.error_outline,
+                      color: BrandColors.danger,
+                    ),
+                  ),
+                )
               : _completion != null
                   ? _buildThankYou(_completion!)
                   : _buildForm(_payload!),
@@ -201,15 +223,23 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
       label: completion.message,
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Icon(Icons.check_circle_outline, size: 72, color: BrandColors.green),
-            const SizedBox(height: 16),
-            Text(completion.message, style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
-            const Spacer(),
-            EyePrimaryButton(label: "Return home", onPressed: _finish),
-          ],
+        child: NwPrototypeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle_outline,
+                  size: 72, color: BrandColors.green),
+              const SizedBox(height: 16),
+              Text(
+                completion.message,
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              EyePrimaryButton(label: "Return home", onPressed: _finish),
+            ],
+          ),
         ),
       ),
     );
@@ -220,7 +250,11 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(payload.isExpired ? "This verification request has expired." : "You already responded."),
+          child: Text(
+            payload.isExpired
+                ? "This verification request has expired."
+                : "You already responded.",
+          ),
         ),
       );
     }
@@ -231,50 +265,70 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(
-            header: true,
-            child: Text(
-              "Verification Detail",
-              style: Theme.of(context).textTheme.headlineSmall,
+          NwPrototypeCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    "Verification Detail",
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  payload.categoryDisplayLabel,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                    "${payload.approximateArea} • ${payload.approximateDistance}"),
+                Text("Reported ${_formatReportedTime(payload.reportTime)}"),
+                const SizedBox(height: 12),
+                Text(payload.sanitizedDescription),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            payload.categoryDisplayLabel,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 6),
-          Text("${payload.approximateArea} • ${payload.approximateDistance}"),
-          Text("Reported ${_formatReportedTime(payload.reportTime)}"),
-          const SizedBox(height: 12),
-          Text(payload.sanitizedDescription),
           if (payload.approvedEvidencePreviews.isNotEmpty) ...[
             const SizedBox(height: 18),
-            Text("Evidence", style: Theme.of(context).textTheme.titleMedium),
+            const NwPrototypeSectionHeading(title: "Evidence"),
             const SizedBox(height: 8),
             ...payload.approvedEvidencePreviews.map(
               (preview) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: const BorderSide(color: BrandColors.lightBorder),
-                  ),
+                child: NwPrototypeListCard(
+                  title: preview.isImage
+                      ? "Photo evidence"
+                      : preview.isVideo
+                          ? "Video evidence"
+                          : preview.isAudio
+                              ? "Audio evidence"
+                              : "Evidence",
+                  subtitle:
+                      preview.previewUrl == null || preview.previewUrl!.isEmpty
+                          ? "Preview unavailable right now"
+                          : preview.isImage
+                              ? "Tap to view"
+                              : "Tap to open",
                   leading: preview.isImage
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: SizedBox(
                             width: 52,
                             height: 52,
-                            child: preview.previewUrl == null || preview.previewUrl!.isEmpty
+                            child: preview.previewUrl == null ||
+                                    preview.previewUrl!.isEmpty
                                 ? const ColoredBox(
                                     color: Color(0xFFF3F4F6),
-                                    child: Icon(Icons.image_not_supported_outlined),
+                                    child: Icon(
+                                        Icons.image_not_supported_outlined),
                                   )
                                 : Image.network(
                                     preview.previewUrl!,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const ColoredBox(
+                                    errorBuilder: (_, __, ___) =>
+                                        const ColoredBox(
                                       color: Color(0xFFF3F4F6),
                                       child: Icon(Icons.broken_image_outlined),
                                     ),
@@ -288,50 +342,37 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
                                   ? Icons.audiotrack
                                   : Icons.attach_file,
                         ),
-                  title: Text(
-                    preview.isImage
-                        ? "Photo evidence"
-                        : preview.isVideo
-                            ? "Video evidence"
-                            : preview.isAudio
-                                ? "Audio evidence"
-                                : "Evidence",
-                  ),
-                  subtitle: Text(
-                    preview.previewUrl == null || preview.previewUrl!.isEmpty
-                        ? "Preview unavailable right now"
-                        : preview.isImage
-                            ? "Tap to view"
-                            : "Tap to open",
-                  ),
-                  trailing: preview.previewUrl == null || preview.previewUrl!.isEmpty
-                      ? null
-                      : const Icon(Icons.open_in_new),
-                  onTap: preview.previewUrl == null || preview.previewUrl!.isEmpty
-                      ? null
-                      : () => _openEvidence(preview),
+                  trailing:
+                      preview.previewUrl == null || preview.previewUrl!.isEmpty
+                          ? null
+                          : const Icon(Icons.open_in_new),
+                  onTap:
+                      preview.previewUrl == null || preview.previewUrl!.isEmpty
+                          ? null
+                          : () => _openEvidence(preview),
                 ),
               ),
             ),
           ],
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: widget.highContrast ? Colors.black : BrandColors.orange.withValues(alpha: 0.12),
-              border: Border.all(color: BrandColors.orange),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(payload.safetyNotice.isNotEmpty ? payload.safetyNotice : kCommunityVerificationSafetyWarning),
+          NwPrototypeNotice(
+            title: "Stay safe",
+            message: payload.safetyNotice.isNotEmpty
+                ? payload.safetyNotice
+                : kCommunityVerificationSafetyWarning,
+            icon: Icons.emergency_outlined,
+            color: BrandColors.orange,
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
+            onPressed: () =>
+                Navigator.of(context).pushNamed("/report/emergency"),
             icon: const Icon(Icons.emergency_outlined),
             label: const Text("Immediate danger? Report Emergency"),
           ),
           const SizedBox(height: 12),
-          EyePrimaryButton(label: "Listen to summary", onPressed: _announceSummary),
+          EyePrimaryButton(
+              label: "Listen to summary", onPressed: _announceSummary),
           const SizedBox(height: 20),
           if (actions.isEmpty)
             Padding(
@@ -355,7 +396,10 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
                 ),
               ),
             ),
-          TextButton(onPressed: _submitting ? null : _skip, child: const Text("Skip")),
+          TextButton(
+            onPressed: _submitting ? null : _skip,
+            child: const Text("Skip"),
+          ),
         ],
       ),
     );
@@ -375,6 +419,7 @@ class _CommunityVerificationScreenState extends State<CommunityVerificationScree
 
 class _ResponseAction {
   const _ResponseAction({required this.type, required this.label});
+
   final String type;
   final String label;
 }

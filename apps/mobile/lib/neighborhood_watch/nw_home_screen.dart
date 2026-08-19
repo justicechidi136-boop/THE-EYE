@@ -2,12 +2,12 @@ import "package:flutter/material.dart";
 import "package:geolocator/geolocator.dart";
 
 import "../app/app_scope.dart";
-import "../design_system/components/eye_page_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../location/location_permission_service.dart";
 import "../theme/the_eye_theme.dart";
 import "../widgets/section_card.dart";
 import "../incidents/incident_submission_service.dart";
+import "neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch_destinations.dart";
 import "neighborhood_watch_service.dart";
 import "neighborhood_watch_session.dart";
@@ -234,39 +234,58 @@ class _NeighborhoodWatchHomeScreenState
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
-    return Scaffold(
-      backgroundColor: semantics.background,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const EyePageHeader.root(title: "NEIGHBORHOOD WATCH"),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refreshContext,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  if (_contextIsStale && _contextCachedAt != null)
-                    _StaleContextBanner(cachedAt: _contextCachedAt!),
-                  if (_loading && _context == null)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_loadError != null && _context == null)
-                    _LocationIssueCard(
-                      title: "Unable to load neighborhood watch",
-                      message: _loadError!,
-                      onRetry: _refreshContext,
-                    )
-                  else if (_context != null)
-                    ..._buildContextBody(context, _context!, semantics),
-                ],
-              ),
-            ),
-          ),
-        ],
+    return NwPrototypeScaffold(
+      title: "Neighborhood Watch",
+      actions: [
+        NwPrototypeIconButton(
+          icon: Icons.groups_2_outlined,
+          onPressed: () => Navigator.of(context)
+              .pushNamed(NeighborhoodWatchDestinations.communities),
+        ),
+        NwPrototypeIconButton(
+          icon: Icons.notifications_none,
+          hasDot: true,
+          onPressed: () => Navigator.of(context).pushNamed("/notifications"),
+        ),
+      ],
+      tabs: NwPrototypeSegmentTabs(
+        labels: const ["Home", "Feed", "Broadcasts", "Community"],
+        selectedIndex: 0,
+        onSelected: (index) {
+          final route = switch (index) {
+            1 => NeighborhoodWatchDestinations.feed,
+            2 => NeighborhoodWatchDestinations.broadcasts,
+            3 => NeighborhoodWatchDestinations.communities,
+            _ => null,
+          };
+          if (route != null) {
+            Navigator.of(context).pushReplacementNamed(route);
+          }
+        },
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshContext,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            if (_contextIsStale && _contextCachedAt != null)
+              _StaleContextBanner(cachedAt: _contextCachedAt!),
+            if (_loading && _context == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_loadError != null && _context == null)
+              _LocationIssueCard(
+                title: "Unable to load neighborhood watch",
+                message: _loadError!,
+                onRetry: _refreshContext,
+              )
+            else if (_context != null)
+              ..._buildContextBody(context, _context!, semantics),
+          ],
+        ),
       ),
     );
   }
@@ -298,26 +317,31 @@ class _NeighborhoodWatchHomeScreenState
           ),
         if (ctx.privateCommunitiesNearby.isNotEmpty) ...[
           const SizedBox(height: 16),
-          SectionCard(
-            title: "Private communities nearby",
+          NwPrototypeCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: ctx.privateCommunitiesNearby
-                  .map(
-                    (item) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(item.name),
-                      subtitle: Text(
-                        "${item.approximateDistanceMeters}m away • ${item.accessHint ?? "Membership required"}",
-                      ),
-                      trailing: const Icon(Icons.lock_outline),
+              children: [
+                const NwPrototypeSectionHeading(
+                  title: "Private communities nearby",
+                ),
+                const SizedBox(height: 10),
+                ...ctx.privateCommunitiesNearby.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: NwPrototypeListCard(
+                      leading:
+                          Icon(Icons.lock_outline, color: semantics.warning),
+                      title: item.name,
+                      subtitle:
+                          "${item.approximateDistanceMeters}m away • ${item.accessHint ?? "Membership required"}",
                       onTap: () => Navigator.of(context).pushNamed(
                         NeighborhoodWatchDestinations
                             .privateCommunityMembership(item.id),
                       ),
                     ),
-                  )
-                  .toList(),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -338,22 +362,77 @@ class _NeighborhoodWatchHomeScreenState
         community != null &&
         ctx.homeCommunity?.id == community.id;
     final canPost = !_contextIsStale && ctx.permissions.canPost;
+    final modeIndex = isDynamic ? 0 : (canPost ? 2 : 1);
+    final areaBadgeLabel = _contextIsStale
+        ? "Saved context"
+        : isDynamic
+            ? "Ambient area"
+            : canPost
+                ? "Member area"
+                : "Not joined";
+    final areaBadgeColor = _contextIsStale
+        ? semantics.warning
+        : isDynamic
+            ? semantics.secondaryText
+            : canPost
+                ? semantics.success
+                : semantics.warning;
 
     return [
       if (!_contextIsStale &&
           presence?.switchMessage != null &&
           presence!.switchMessage!.isNotEmpty)
-        _AreaChangedBanner(message: presence.switchMessage!),
-      SectionCard(
-        title: "Current area",
+        Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: NwPrototypeNotice(
+            title: "Area updated",
+            message: presence.switchMessage!,
+            icon: Icons.swap_horiz,
+            color: const Color(0xFF4A9DFF),
+          ),
+        ),
+      NwPrototypeSegmentTabs(
+        labels: const ["Ambient", "Not joined", "Member"],
+        selectedIndex: modeIndex,
+      ),
+      const SizedBox(height: 14),
+      NwPrototypeCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            NwPrototypeSectionHeading(
+              title: "Current area",
+              actionLabel: !isDynamic && community != null ? "Preview" : null,
+              onAction: !isDynamic && community != null
+                  ? () => Navigator.of(context).pushNamed(
+                        NeighborhoodWatchDestinations.previewCommunity,
+                        arguments: community.toCommunitySummary(
+                          activeAlertsCount: ctx.safetySummary.activeAlerts,
+                        ),
+                      )
+                  : null,
+            ),
+            const SizedBox(height: 10),
+            NwPrototypePill(
+              label: areaBadgeLabel,
+              selected: true,
+              color: areaBadgeColor,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isDynamic ? "CURRENT AREA" : "REGISTERED COMMUNITY",
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: semantics.secondaryText,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
+            ),
+            const SizedBox(height: 4),
             Text(
               areaTitle,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: semantics.bodyText,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w800,
                   ),
             ),
             if (areaSubtitle.isNotEmpty) ...[
@@ -368,20 +447,12 @@ class _NeighborhoodWatchHomeScreenState
                 style: TextStyle(color: semantics.mutedText),
               ),
             ],
-            const SizedBox(height: 8),
-            _StatusChip(
-              label: _contextIsStale
-                  ? "STALE"
-                  : (isDynamic
-                      ? "Dynamic public area"
-                      : nwLocationStatusLabel(ctx.locationStatus)),
-              tone: _contextIsStale
-                  ? _StatusChipTone.warning
-                  : _StatusChipTone.success,
-            ),
             if (!_contextIsStale && presence?.accuracyM != null) ...[
               const SizedBox(height: 8),
-              Text("GPS accuracy: ${presence!.accuracyM!.round()}m"),
+              Text(
+                "GPS accuracy: ${presence!.accuracyM!.round()}m",
+                style: TextStyle(color: semantics.mutedText),
+              ),
             ],
             if (_contextIsStale && _contextCachedAt != null) ...[
               const SizedBox(height: 8),
@@ -392,9 +463,10 @@ class _NeighborhoodWatchHomeScreenState
             ],
             if (isHomeCommunity) ...[
               const SizedBox(height: 8),
-              Text(
-                "Home community",
-                style: TextStyle(color: semantics.success),
+              NwPrototypePill(
+                label: "Home community",
+                selected: true,
+                color: semantics.success,
               ),
             ],
           ],
@@ -405,19 +477,23 @@ class _NeighborhoodWatchHomeScreenState
           community != null &&
           !isHomeCommunity) ...[
         const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed:
-              _settingHomeCommunity ? null : () => _setHomeCommunity(community),
-          icon: _settingHomeCommunity
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.home_outlined),
-          label: Text(_settingHomeCommunity
-              ? "Saving home community..."
-              : "Set as home community"),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _settingHomeCommunity
+                ? null
+                : () => _setHomeCommunity(community),
+            icon: _settingHomeCommunity
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.home_outlined),
+            label: Text(_settingHomeCommunity
+                ? "Saving home community..."
+                : "Set as home community"),
+          ),
         ),
         if (_homeCommunityMessage != null) ...[
           const SizedBox(height: 8),
@@ -425,11 +501,12 @@ class _NeighborhoodWatchHomeScreenState
         ],
       ],
       const SizedBox(height: 16),
-      SectionCard(
-        title: "Safety summary",
+      NwPrototypeCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const NwPrototypeSectionHeading(title: "Safety summary"),
+            const SizedBox(height: 10),
             if (_contextIsStale)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -441,12 +518,50 @@ class _NeighborhoodWatchHomeScreenState
                   ),
                 ),
               ),
-            Text("Active alerts: ${summary.activeAlerts}"),
-            Text("Verified incidents (7d): ${summary.recentVerifiedIncidents}"),
-            Text("Road hazards: ${summary.roadHazards}"),
-            Text("Community warnings: ${summary.communityWarnings}"),
-            if (summary.publicBroadcasts > 0)
-              Text("Public broadcasts: ${summary.publicBroadcasts}"),
+            Row(
+              children: [
+                Expanded(
+                  child: NwPrototypeStatTile(
+                    value: "${summary.activeAlerts}",
+                    label: "Active alerts",
+                    accent: const Color(0xFFFF9933),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: NwPrototypeStatTile(
+                    value: "${summary.recentVerifiedIncidents}",
+                    label: "Verified incidents (7d)",
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: NwPrototypeStatTile(
+                    value: "${summary.roadHazards}",
+                    label: "Road hazards",
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: NwPrototypeStatTile(
+                    value: "${summary.communityWarnings}",
+                    label: "Warnings",
+                  ),
+                ),
+              ],
+            ),
+            if (summary.publicBroadcasts > 0) ...[
+              const SizedBox(height: 10),
+              NwPrototypeStatTile(
+                value: "${summary.publicBroadcasts}",
+                label: "Public broadcasts",
+                accent: const Color(0xFF4A9DFF),
+              ),
+            ],
             if (summary.activeAlerts == 0 &&
                 summary.roadHazards == 0 &&
                 summary.communityWarnings == 0)
@@ -462,54 +577,90 @@ class _NeighborhoodWatchHomeScreenState
       ),
       const SizedBox(height: 16),
       if (canPost) ...[
-        FilledButton.icon(
-          onPressed: () => Navigator.of(context)
-              .pushNamed(NeighborhoodWatchDestinations.create),
-          icon: const Icon(Icons.forum_outlined),
-          label: const Text("Start Conversation"),
+        const NwPrototypeSectionHeading(title: "Share with your area"),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            NwPrototypeActionTile(
+              icon: Icons.tips_and_updates_outlined,
+              label: "Share Security Tip",
+              primary: true,
+              onTap: () => Navigator.of(context).pushNamed(
+                NeighborhoodWatchDestinations.create,
+                arguments: const {"type": "SafetyTip"},
+              ),
+            ),
+            const SizedBox(width: 10),
+            NwPrototypeActionTile(
+              icon: Icons.report_outlined,
+              label: "Report Activity",
+              color: const Color(0xFF4A9DFF),
+              onTap: () => Navigator.of(context).pushNamed(
+                NeighborhoodWatchDestinations.create,
+                arguments: const {"type": "SuspiciousActivity"},
+              ),
+            ),
+            const SizedBox(width: 10),
+            NwPrototypeActionTile(
+              icon: Icons.warning_amber_outlined,
+              label: "Report Road Hazard",
+              color: semantics.success,
+              onTap: () => Navigator.of(context).pushNamed(
+                NeighborhoodWatchDestinations.create,
+                arguments: const {"type": "RoadHazard"},
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).pushNamed(
-            NeighborhoodWatchDestinations.create,
-            arguments: const {"type": "SafetyTip"},
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => Navigator.of(context)
+                .pushNamed(NeighborhoodWatchDestinations.create),
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text("Start Conversation"),
           ),
-          icon: const Icon(Icons.tips_and_updates_outlined),
-          label: const Text("Share Security Tip"),
         ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).pushNamed(
-            NeighborhoodWatchDestinations.create,
-            arguments: const {"type": "SuspiciousActivity"},
-          ),
-          icon: const Icon(Icons.report_outlined),
-          label: const Text("Report Activity"),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).pushNamed(
-            NeighborhoodWatchDestinations.create,
-            arguments: const {"type": "RoadHazard"},
-          ),
-          icon: const Icon(Icons.warning_amber_outlined),
-          label: const Text("Report Road Hazard"),
-        ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
       ],
-      FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: semantics.error,
-          foregroundColor: semantics.textOnPrimary,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+      NwPrototypeCard(
+        highlight: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Switch to Active Emergency",
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: semantics.error,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "If the situation is immediate or dangerous, move into the canonical emergency reporting flow.",
+              style: TextStyle(color: semantics.mutedText),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: semantics.error,
+                  foregroundColor: semantics.textOnPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: () =>
+                    Navigator.of(context).pushNamed("/report/emergency"),
+                icon: const Icon(Icons.emergency),
+                label: const Text("Report Emergency"),
+              ),
+            ),
+          ],
         ),
-        onPressed: () => Navigator.of(context).pushNamed("/report/emergency"),
-        icon: const Icon(Icons.emergency),
-        label: const Text("Report Emergency"),
       ),
       const SizedBox(height: 16),
-      SectionCard(
-        title: "Explore",
+      NwPrototypeCard(
         child: GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -558,25 +709,29 @@ class _NeighborhoodWatchHomeScreenState
       ),
       if (ctx.privateCommunitiesNearby.isNotEmpty) ...[
         const SizedBox(height: 16),
-        SectionCard(
-          title: "Private community nearby",
+        NwPrototypeCard(
           child: Column(
-            children: ctx.privateCommunitiesNearby
-                .map(
-                  (item) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(item.name),
-                    subtitle: Text(
-                      "${item.approximateDistanceMeters}m away • Request membership",
-                    ),
-                    trailing: const Icon(Icons.lock_outline),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const NwPrototypeSectionHeading(
+                  title: "Private community nearby"),
+              const SizedBox(height: 10),
+              ...ctx.privateCommunitiesNearby.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: NwPrototypeListCard(
+                    leading: Icon(Icons.lock_outline, color: semantics.warning),
+                    title: item.name,
+                    subtitle:
+                        "${item.approximateDistanceMeters}m away • Request membership",
                     onTap: () => Navigator.of(context).pushNamed(
                       NeighborhoodWatchDestinations.privateCommunityMembership(
                           item.id),
                     ),
                   ),
-                )
-                .toList(),
+                ),
+              ),
+            ],
           ),
         ),
       ],
