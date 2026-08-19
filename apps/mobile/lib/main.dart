@@ -9958,7 +9958,7 @@ class _NeighborhoodWatchBroadcastsScreenState
                     children: [
                       const NwPrototypeListCard(
                         leading: Icon(Icons.cloud_off),
-                        title: Text("Unable to load broadcasts."),
+                        title: "Unable to load broadcasts.",
                         subtitle: "Try again in a moment.",
                       ),
                       Text(_error!),

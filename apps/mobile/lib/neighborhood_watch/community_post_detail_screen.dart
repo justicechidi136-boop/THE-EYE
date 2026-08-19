@@ -639,6 +639,7 @@ class _PostSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final semantics = EyeSemanticColors.of(context);
     return NwPrototypeCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,8 +648,8 @@ class _PostSummaryCard extends StatelessWidget {
             label: _typeLabel(post.type),
             selected: true,
             color: post.verificationStatus == "Verified"
-                ? BrandColors.green
-                : BrandColors.orange,
+                ? semantics.verified
+                : semantics.warning,
           ),
           const SizedBox(height: 8),
           Text(
