@@ -100,7 +100,14 @@ export const BROADCAST_REPORT_REASONS = [
 
 export type BroadcastReportReason = (typeof BROADCAST_REPORT_REASONS)[number];
 
-const BROADCAST_REPORT_REASON_CATALOG: Record<BroadcastType, readonly BroadcastReportReason[]> = {
+type TypeSpecificReportableBroadcast =
+  | BroadcastType.MissingPerson
+  | BroadcastType.StolenVehicle;
+
+const BROADCAST_REPORT_REASON_CATALOG: Record<
+  TypeSpecificReportableBroadcast,
+  readonly BroadcastReportReason[]
+> = {
   [BroadcastType.MissingPerson]: [
     "FalseOrMisleading",
     "PersonInformationIncorrect",
@@ -123,6 +130,12 @@ const BROADCAST_REPORT_REASON_CATALOG: Record<BroadcastType, readonly BroadcastR
   ],
 } as const;
 
+function isTypeSpecificReportableBroadcast(
+  type: BroadcastType,
+): type is TypeSpecificReportableBroadcast {
+  return type === BroadcastType.MissingPerson || type === BroadcastType.StolenVehicle;
+}
+
 const citizenTypes = new Set<BroadcastType>([
   BroadcastType.MissingPerson,
   BroadcastType.StolenVehicle,
@@ -135,7 +148,9 @@ export function assertCitizenBroadcastType(type: BroadcastType) {
 }
 
 export function getAllowedBroadcastReportReasons(type: BroadcastType): readonly BroadcastReportReason[] {
-  return BROADCAST_REPORT_REASON_CATALOG[type] ?? [];
+  return isTypeSpecificReportableBroadcast(type)
+    ? BROADCAST_REPORT_REASON_CATALOG[type]
+    : [];
 }
 
 export function validateBroadcastReportReason(type: BroadcastType, dto: ReportBroadcastDto) {

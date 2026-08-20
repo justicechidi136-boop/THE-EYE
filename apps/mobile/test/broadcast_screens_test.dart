@@ -217,6 +217,18 @@ void main() {
     );
   }
 
+  Future<void> scrollToReportControl(
+    WidgetTester tester,
+    Finder finder,
+  ) async {
+    await tester.scrollUntilVisible(
+      finder,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(finder, findsOneWidget);
+  }
+
   test("ParsedBroadcastRoute resolves detail and sub-routes", () {
     expect(
       ParsedBroadcastRoute.parse("/broadcasts/b1")?.kind,
@@ -612,11 +624,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Additional details"), findsNothing);
-    await tester.tap(find.text("Other"));
+    final otherFinder = find.text("Other");
+    await scrollToReportControl(tester, otherFinder);
+    await tester.tap(otherFinder);
     await tester.pumpAndSettle();
     expect(find.text("Additional details"), findsOneWidget);
 
-    await tester.tap(find.text("Duplicate"));
+    final duplicateFinder = find.text("Duplicate");
+    await scrollToReportControl(tester, duplicateFinder);
+    await tester.tap(duplicateFinder);
     await tester.pumpAndSettle();
     expect(find.text("Additional details"), findsNothing);
   });
@@ -644,9 +660,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text("Other"));
+    final otherFinder = find.text("Other");
+    await scrollToReportControl(tester, otherFinder);
+    await tester.tap(otherFinder);
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Submit report"));
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
     await tester.pumpAndSettle();
 
     expect(find.text("Additional details are required."), findsOneWidget);
@@ -681,7 +701,9 @@ void main() {
 
     await tester.tap(find.text("Vehicle information is incorrect"));
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Submit report"));
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
     await tester.pumpAndSettle();
 
     expect(payload?["broadcastId"], "b-stolen");
@@ -717,7 +739,9 @@ void main() {
 
     await tester.tap(find.text("Person already found"));
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Submit report"));
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
     await tester.pumpAndSettle();
 
     expect(payload?["broadcastId"], "b-missing");
@@ -751,7 +775,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text("Submit report"));
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
     await tester.pump();
     await tester.pumpAndSettle();
 
@@ -784,7 +810,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text("Submit report"));
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
     await tester.pump();
     await tester.tap(find.text("Submit report"), warnIfMissed: false);
     await tester.pump();
