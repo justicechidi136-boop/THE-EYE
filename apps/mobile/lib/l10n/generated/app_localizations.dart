@@ -227,7 +227,7 @@ abstract class AppLocalizations {
   /// No description provided for @reportSighting.
   ///
   /// In en, this message translates to:
-  /// **'Report sighting'**
+  /// **'Report Sighting'**
   String get reportSighting;
 
   /// No description provided for @useCurrentLocation.
@@ -421,6 +421,176 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'View communication history'**
   String get viewCommunicationHistory;
+
+  /// No description provided for @broadcastSelectedVehicle.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected vehicle'**
+  String get broadcastSelectedVehicle;
+
+  /// No description provided for @broadcastChangeVehicle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change vehicle'**
+  String get broadcastChangeVehicle;
+
+  /// No description provided for @broadcastShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get broadcastShare;
+
+  /// No description provided for @broadcastComments.
+  ///
+  /// In en, this message translates to:
+  /// **'Comments'**
+  String get broadcastComments;
+
+  /// No description provided for @broadcastResolve.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolve'**
+  String get broadcastResolve;
+
+  /// No description provided for @broadcastWithdraw.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdraw'**
+  String get broadcastWithdraw;
+
+  /// No description provided for @broadcastReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Report Broadcast'**
+  String get broadcastReport;
+
+  /// No description provided for @broadcastMissingPersonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing person'**
+  String get broadcastMissingPersonLabel;
+
+  /// No description provided for @broadcastStolenVehicleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Stolen vehicle'**
+  String get broadcastStolenVehicleLabel;
+
+  /// No description provided for @broadcastSafetyUpdateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety update'**
+  String get broadcastSafetyUpdateLabel;
+
+  /// No description provided for @broadcastSafetyUpdateSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Open this safety update for more information.'**
+  String get broadcastSafetyUpdateSummary;
+
+  /// No description provided for @broadcastVehicleFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Vehicle'**
+  String get broadcastVehicleFallback;
+
+  /// No description provided for @broadcastPersonFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Person'**
+  String get broadcastPersonFallback;
+
+  /// No description provided for @broadcastStolenVehicleFallbackSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'A vehicle was reported stolen.'**
+  String get broadcastStolenVehicleFallbackSummary;
+
+  /// No description provided for @broadcastMissingPersonFallbackSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Open this missing person alert for more information.'**
+  String get broadcastMissingPersonFallbackSummary;
+
+  /// No description provided for @broadcastStatusActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get broadcastStatusActive;
+
+  /// No description provided for @broadcastStatusUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated'**
+  String get broadcastStatusUpdated;
+
+  /// No description provided for @broadcastStatusResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved'**
+  String get broadcastStatusResolved;
+
+  /// No description provided for @broadcastStatusWithdrawn.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdrawn'**
+  String get broadcastStatusWithdrawn;
+
+  /// No description provided for @broadcastStatusSuspended.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get broadcastStatusSuspended;
+
+  /// No description provided for @broadcastStatusExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get broadcastStatusExpired;
+
+  /// No description provided for @broadcastStatusUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get broadcastStatusUnavailable;
+
+  /// No description provided for @broadcastMissingPersonTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing person: {name}'**
+  String broadcastMissingPersonTitle(Object name);
+
+  /// No description provided for @broadcastStolenVehicleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stolen vehicle: {subject}'**
+  String broadcastStolenVehicleTitle(Object subject);
+
+  /// No description provided for @broadcastStolenVehicleTitleWithPlate.
+  ///
+  /// In en, this message translates to:
+  /// **'Stolen vehicle: {subject} ({plate})'**
+  String broadcastStolenVehicleTitleWithPlate(Object plate, Object subject);
+
+  /// No description provided for @broadcastStolenVehicleSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{subject} reported stolen on {date}.'**
+  String broadcastStolenVehicleSummary(Object date, Object subject);
+
+  /// No description provided for @broadcastMissingPersonExactSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{age}-year-old {name} was last seen on {date}.'**
+  String broadcastMissingPersonExactSummary(
+      Object age, Object date, Object name);
+
+  /// No description provided for @broadcastMissingPersonRangeSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, approximately {age} years old, was last seen on {date}.'**
+  String broadcastMissingPersonRangeSummary(
+      Object age, Object date, Object name);
 }
 
 class _AppLocalizationsDelegate
