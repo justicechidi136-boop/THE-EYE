@@ -813,8 +813,7 @@ void main() {
     final submitFinder = find.widgetWithText(FilledButton, "Submit report");
     await scrollToReportControl(tester, submitFinder);
     await tester.tap(submitFinder);
-    await tester.pump();
-    await tester.tap(find.text("Submit report"), warnIfMissed: false);
+    await tester.tap(submitFinder);
     await tester.pump();
 
     expect(submissionService.reportCalls, 1);

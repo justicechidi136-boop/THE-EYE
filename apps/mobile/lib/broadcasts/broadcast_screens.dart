@@ -1260,6 +1260,7 @@ class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     final session = BroadcastSession.require(context);
     if (session.accessToken == null) return;
     final trimmedDetails = _detailsController.text.trim();
