@@ -119,6 +119,12 @@ class BroadcastCommentItem {
     required this.id,
     required this.body,
     required this.createdAt,
+    this.updatedAt,
+    this.parentId,
+    this.authorUserId,
+    this.authorName = "Citizen",
+    this.helpfulReactions = 0,
+    this.thanksReactions = 0,
     this.isSighting = false,
     this.isPinned = false,
   });
@@ -126,6 +132,12 @@ class BroadcastCommentItem {
   final String id;
   final String body;
   final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final String? parentId;
+  final String? authorUserId;
+  final String authorName;
+  final int helpfulReactions;
+  final int thanksReactions;
   final bool isSighting;
   final bool isPinned;
 
@@ -136,6 +148,16 @@ class BroadcastCommentItem {
       id: (json["id"] as String?) ?? "",
       body: (json["body"] as String?) ?? "",
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
+      updatedAt: DateTime.tryParse((json["updatedAt"] as String?) ?? ""),
+      parentId: json["parentId"] as String?,
+      authorUserId: json["authorUserId"] as String?,
+      authorName: (json["authorName"] as String?)?.trim().isNotEmpty == true
+          ? json["authorName"] as String
+          : "Citizen",
+      helpfulReactions:
+          ((json["reactions"] as Map?)?["Helpful"] as num?)?.toInt() ?? 0,
+      thanksReactions:
+          ((json["reactions"] as Map?)?["Thanks"] as num?)?.toInt() ?? 0,
       isSighting: isSighting || json["isSighting"] == true,
       isPinned: json["isPinned"] == true,
     );

@@ -7,6 +7,7 @@ import { BROADCASTS_QUEUE_NAME } from "../../common/queue/queue-names";
 import { AuditModule } from "../audit/audit.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
+import { VoiceAttachmentsModule } from "../voice-attachments/voice-attachments.module";
 import { AdminBroadcastsController } from "./admin-broadcasts.controller";
 import { BroadcastAdminService } from "./broadcast-admin.service";
 import { BroadcastCitizenService } from "./broadcast-citizen.service";
@@ -24,6 +25,7 @@ import { PublicBroadcastShareController } from "./public-broadcast-share.control
     PrismaModule,
     NotificationsModule,
     AuditModule,
+    VoiceAttachmentsModule,
     ...(shouldRegisterBullMq() ? [BullModule.registerQueue({ name: BROADCASTS_QUEUE_NAME })] : []),
   ],
   controllers: [BroadcastsController, AdminBroadcastsController, PublicBroadcastShareController],

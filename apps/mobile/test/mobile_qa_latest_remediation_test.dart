@@ -28,14 +28,49 @@ void main() {
       expect(citizenIncidentCategoryLabel("Fire"), "Fire");
       expect(citizenIncidentCategoryLabel("Accident"), "Accident");
       // Adding live video later must not rename a normal Emergency.
-      expect(citizenIncidentCategoryLabel("Emergency"), isNot("Live Emergency Video"));
+      expect(citizenIncidentCategoryLabel("Emergency"),
+          isNot("Live Emergency Video"));
     });
   });
 
   group("UX-027 / FUNC-020 citizen time", () {
     test("formats AM/PM", () {
-      expect(formatCitizenTimeOfDay(const TimeOfDay(hour: 5, minute: 35)), "5:35 AM");
-      expect(formatCitizenTimeOfDay(const TimeOfDay(hour: 17, minute: 35)), "5:35 PM");
+      expect(formatCitizenTimeOfDay(const TimeOfDay(hour: 5, minute: 35)),
+          "5:35 AM");
+      expect(formatCitizenTimeOfDay(const TimeOfDay(hour: 17, minute: 35)),
+          "5:35 PM");
+    });
+
+    testWidgets("Last Seen picker is dial-only on a small large-text screen",
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(320, 568),
+              textScaler: TextScaler.linear(1.6),
+            ),
+            child: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => showCitizenTimePicker(
+                    context,
+                    initialTime: const TimeOfDay(hour: 14, minute: 45),
+                  ),
+                  child: const Text("Last Seen Time"),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text("Last Seen Time"));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      expect(find.byIcon(Icons.keyboard_outlined), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -143,7 +178,8 @@ void main() {
 
   group("FUNC-010 / FUNC-0XX vehicle image persist", () {
     test("helper is wired for content-uri safe persistence", () {
-      final source = File("lib/vehicles/vehicle_image_persist.dart").readAsStringSync();
+      final source =
+          File("lib/vehicles/vehicle_image_persist.dart").readAsStringSync();
       expect(source.contains("readAsBytes"), isTrue);
       expect(source.contains("content://"), isTrue);
       final main = File("lib/main.dart").readAsStringSync();
@@ -158,7 +194,8 @@ void main() {
       expect(source.contains('title: "My Vehicles"'), isTrue);
       expect(source.contains('labelText: "Vehicle Description"'), isTrue);
       expect(source.contains('"My Cars"'), isFalse);
-      expect(source.contains('_VehiclePhotoUploadState.local => "LOCAL"'), isFalse);
+      expect(source.contains('_VehiclePhotoUploadState.local => "LOCAL"'),
+          isFalse);
       expect(source.contains('"Vehicle saved."'), isTrue);
     });
   });

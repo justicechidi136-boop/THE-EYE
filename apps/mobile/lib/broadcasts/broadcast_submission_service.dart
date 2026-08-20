@@ -278,6 +278,46 @@ class BroadcastSubmissionService {
     return BroadcastCommentItem.fromJson(row);
   }
 
+  Future<void> updateComment({
+    required String accessToken,
+    required String broadcastId,
+    required String commentId,
+    required String body,
+  }) async {
+    final response = await _apiClient.patchJson(
+      TheEyeApiPaths.broadcastComment(broadcastId, commentId),
+      {"body": body.trim()},
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+  }
+
+  Future<void> deleteComment({
+    required String accessToken,
+    required String broadcastId,
+    required String commentId,
+  }) async {
+    final response = await _apiClient.deleteJson(
+      TheEyeApiPaths.broadcastComment(broadcastId, commentId),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+  }
+
+  Future<void> reactToComment({
+    required String accessToken,
+    required String broadcastId,
+    required String commentId,
+    required String reaction,
+  }) async {
+    final response = await _apiClient.postJson(
+      TheEyeApiPaths.broadcastCommentReactions(broadcastId, commentId),
+      {"reaction": reaction},
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+  }
+
   Future<SightingSubmissionResult> submitSighting({
     required String accessToken,
     required String broadcastId,

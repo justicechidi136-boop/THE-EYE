@@ -975,7 +975,7 @@ export class BroadcastsService {
         : adminVerified
           ? "Verified by Admin"
           : "Admin Broadcast";
-    const metadata = await this.projectCitizenMetadata(row.metadata);
+    const metadata = await this.projectCitizenMetadata(row.metadata, String(row.id));
     return {
       id: String(row.id),
       type: String(row.type),
@@ -1001,7 +1001,7 @@ export class BroadcastsService {
     };
   }
 
-  private async projectCitizenMetadata(raw: unknown): Promise<Record<string, unknown>> {
+  private async projectCitizenMetadata(raw: unknown, broadcastId?: string): Promise<Record<string, unknown>> {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const source = raw as Record<string, unknown>;
     const allowedKeys = [
@@ -1016,18 +1016,54 @@ export class BroadcastsService {
       "vehicleType",
       "make",
       "model",
+      "year",
       "colour",
       "registrationMasked",
+      "vinLastFour",
       "stolenAt",
+      "lastSeenAt",
       "distinguishingFeatures",
+      "theftDescription",
       "lastKnownLocation",
     ] as const;
     const projected: Record<string, unknown> = {};
     for (const key of allowedKeys) {
       if (source[key] != null && source[key] !== "") projected[key] = source[key];
     }
+    const mediaClient = (this.prisma as any).broadcastMedia;
+    if (broadcastId && typeof mediaClient?.findMany === "function") {
+      const rows = await mediaClient.findMany({
+        where: { broadcastId, sightingId: null, deletedAt: null },
+        orderBy: { createdAt: "asc" },
+      });
+      const projectedMedia = await Promise.all(rows.map(async (row: Record<string, unknown>) => {
+        let url = "";
+        try {
+          url = (await createStorageDownloadUrl(String(row.objectKey), 600)).url;
+        } catch {
+          url = "";
+        }
+        return {
+          id: String(row.id),
+          mediaType: String(row.mediaType).toLowerCase(),
+          objectKey: String(row.objectKey),
+          bucket: String(row.bucket),
+          contentType: String(row.contentType),
+          durationSeconds: row.durationSeconds == null ? null : Number(row.durationSeconds),
+          transcriptionStatus: row.transcriptionStatus ?? null,
+          selectedLanguage: row.selectedLanguage ?? null,
+          detectedLanguage: row.detectedLanguage ?? null,
+          role: String(row.role),
+          url,
+        };
+      }));
+      const incidentEvidence = projectedMedia.filter((row) => row.role === "IncidentEvidence");
+      const vehiclePhotos = projectedMedia.filter((row) => row.role === "VehiclePhoto");
+      if (incidentEvidence.length > 0) projected.attachments = incidentEvidence;
+      if (vehiclePhotos.length > 0) projected.vehiclePhotos = vehiclePhotos;
+    }
     const attachmentsRaw = source.attachments;
-    if (Array.isArray(attachmentsRaw)) {
+    if (!projected.attachments && Array.isArray(attachmentsRaw)) {
       const attachments: Array<Record<string, string>> = [];
       let photoCount = 0;
       let videoCount = 0;

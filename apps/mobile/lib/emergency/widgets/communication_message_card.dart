@@ -9,11 +9,13 @@ class CommunicationMessageCard extends StatelessWidget {
     super.key,
     required this.message,
     this.onPlayVoice,
+    this.aiVoice,
     this.queued = false,
   });
 
   final IncidentThreadMessage message;
   final VoidCallback? onPlayVoice;
+  final Widget? aiVoice;
   final bool queued;
 
   bool get _isYou =>
@@ -135,7 +137,7 @@ class CommunicationMessageCard extends StatelessWidget {
               if (isVoice)
                 Padding(
                   padding: const EdgeInsets.only(left: 37),
-                  child: _VoiceRow(onPlay: onPlayVoice),
+                  child: aiVoice ?? _VoiceRow(onPlay: onPlayVoice),
                 )
               else if (isPhoto)
                 Padding(

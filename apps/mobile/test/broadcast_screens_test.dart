@@ -531,8 +531,8 @@ void main() {
         "model": "Corolla",
         "year": "2022",
         "colour": "Red",
-        "registrationNumber": "ABC-123XY",
-        "vin": "JT2BG22K8V0123456",
+        "registrationMasked": "*****3XY",
+        "vinLastFour": "3456",
         "stolenAt": "2026-08-01T13:10:00.000Z",
         "lastKnownLocation": "Ikeja under bridge",
         "theftDescription": "Taken from parking lot",
@@ -541,6 +541,13 @@ void main() {
             "mediaType": "image",
             "label": "Photo 1",
             "url": "https://example.com/car.jpg",
+          }
+        ],
+        "vehiclePhotos": [
+          {
+            "mediaType": "image",
+            "label": "Vehicle photo 1",
+            "url": "https://example.com/vehicle.jpg",
           }
         ],
       },
@@ -555,18 +562,22 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text("STOLEN VEHICLE"), findsOneWidget);
-    expect(find.text("Toyota Corolla"), findsOneWidget);
+    expect(
+        find.text("Stolen Vehicle: Toyota Corolla *****3XY"), findsOneWidget);
+    expect(find.text("Vehicle Information"), findsOneWidget);
     expect(find.text("Year"), findsOneWidget);
     expect(find.text("2022"), findsOneWidget);
     expect(find.text("Plate"), findsOneWidget);
-    expect(find.text("ABC-123XY"), findsOneWidget);
+    expect(find.text("*****3XY"), findsWidgets);
     expect(find.text("VIN"), findsOneWidget);
-    expect(find.text("JT2BG22K8V0123456"), findsOneWidget);
-    expect(find.text("Last seen"), findsOneWidget);
+    expect(find.text("3456"), findsOneWidget);
+    expect(find.text("Vehicle Photos"), findsOneWidget);
+    expect(find.text("Vehicle photo 1"), findsOneWidget);
+    expect(find.text("Last Seen"), findsOneWidget);
     expect(find.textContaining("PM"), findsWidgets);
-    expect(find.text("Theft description"), findsOneWidget);
+    expect(find.text("Description of Theft"), findsOneWidget);
     expect(find.text("Taken from parking lot"), findsOneWidget);
-    expect(find.text("Evidence"), findsOneWidget);
+    expect(find.text("Incident Evidence"), findsOneWidget);
     expect(find.text("Photo 1"), findsOneWidget);
   });
 

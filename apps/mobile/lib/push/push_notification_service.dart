@@ -61,6 +61,7 @@ class PushNotificationService {
   bool _initialized = false;
   String? _lastRegisteredTokenSuffix;
   final Set<String> _relayedAlertIds = <String>{};
+  final Set<String> _shownLogicalNotificationIds = <String>{};
 
   FirebaseMessaging get _messagingClient {
     final messaging = _messaging;
@@ -280,10 +281,18 @@ class PushNotificationService {
 
     final navigation = PushNavigationRequest.fromMessageData(data);
     final route = navigation?.route ?? "/notifications";
-    final relayedDangerAlert = DangerAlertPhoneHandler.shouldRelayToWatch(data) &&
-        DangerAlertPhoneHandler.hasTrustedAlertCode(data);
+    final relayedDangerAlert =
+        DangerAlertPhoneHandler.shouldRelayToWatch(data) &&
+            DangerAlertPhoneHandler.hasTrustedAlertCode(data);
     final silent = (navigation?.silent ?? false) || relayedDangerAlert;
     final notificationId = data["notificationId"]?.toString() ?? "";
+    final logicalId =
+        data["idempotencyKey"]?.toString().trim().isNotEmpty == true
+            ? data["idempotencyKey"].toString()
+            : notificationId;
+    if (logicalId.isNotEmpty && !_shownLogicalNotificationIds.add(logicalId)) {
+      return;
+    }
     if (notificationId.isNotEmpty) {
       unawaited(_deliveryAck.acknowledge(
         notificationId: notificationId,
@@ -324,7 +333,8 @@ class PushNotificationService {
                   : Priority.high,
         ),
       ),
-      payload: navigation == null ? route : _encodeNavigationPayload(navigation),
+      payload:
+          navigation == null ? route : _encodeNavigationPayload(navigation),
     );
   }
 
@@ -347,7 +357,8 @@ class PushNotificationService {
     return jsonEncode({
       "route": request.route,
       if (request.incidentId != null) "incidentId": request.incidentId,
-      if (request.conversationId != null) "conversationId": request.conversationId,
+      if (request.conversationId != null)
+        "conversationId": request.conversationId,
       "silent": request.silent,
     });
   }

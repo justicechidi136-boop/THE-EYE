@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
@@ -6,14 +6,17 @@ import { RequirePermissions } from "../../common/auth/permissions.decorator";
 import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { BroadcastCitizenService } from "./broadcast-citizen.service";
 import { BroadcastsService } from "./broadcasts.service";
+import { VoiceAttachmentsService } from "../voice-attachments/voice-attachments.service";
 import { CreateBroadcastDto, NearbyBroadcastsQuery, RejectBroadcastDto, ReviewBroadcastDto, ScheduleBroadcastDto } from "./dto/broadcast.dto";
 import {
   CreateCitizenBroadcastCommentDto,
   CreateMissingPersonBroadcastDto,
   CreateStolenVehicleBroadcastDto,
+  ReactToCitizenBroadcastCommentDto,
   ReportBroadcastDto,
   ResolveBroadcastDto,
   SubmitBroadcastSightingDto,
+  UpdateCitizenBroadcastCommentDto,
   WithdrawBroadcastDto,
 } from "./dto/citizen-broadcast.dto";
 
@@ -25,6 +28,7 @@ export class BroadcastsController {
   constructor(
     private readonly broadcastsService: BroadcastsService,
     private readonly broadcastCitizen: BroadcastCitizenService,
+    private readonly voiceAttachments: VoiceAttachmentsService,
   ) {}
 
   @Get("mine")
@@ -158,6 +162,67 @@ export class BroadcastsController {
   @RequirePermissions("incident:read")
   listComments(@Param("id") id: string) {
     return this.broadcastCitizen.listComments(id);
+  }
+
+  @Get(":id/media/:mediaId/voice")
+  @RequirePermissions("incident:read")
+  getBroadcastVoice(
+    @Param("id") id: string,
+    @Param("mediaId") mediaId: string,
+    @Query("targetLocale") targetLocale: string | undefined,
+    @Req() request: any,
+  ) {
+    return this.voiceAttachments.getBroadcastVoice(id, mediaId, request.user, targetLocale);
+  }
+
+  @Post(":id/media/:mediaId/voice/translations")
+  @RequirePermissions("incident:read")
+  requestBroadcastVoiceTranslation(
+    @Param("id") id: string,
+    @Param("mediaId") mediaId: string,
+    @Body() body: { targetLocale?: string },
+    @Req() request: any,
+  ) {
+    return this.voiceAttachments.requestBroadcastTranslation(id, mediaId, body.targetLocale, request.user);
+  }
+
+  @Post(":id/media/:mediaId/voice/synthesis")
+  @RequirePermissions("incident:read")
+  requestBroadcastVoiceSynthesis(
+    @Param("id") id: string,
+    @Param("mediaId") mediaId: string,
+    @Body() body: { targetLocale?: string },
+    @Req() request: any,
+  ) {
+    return this.voiceAttachments.requestBroadcastSynthesis(id, mediaId, body.targetLocale, request.user);
+  }
+
+  @Patch(":id/comments/:commentId")
+  @RequirePermissions("incident:read")
+  updateComment(
+    @Param("id") id: string,
+    @Param("commentId") commentId: string,
+    @Body() dto: UpdateCitizenBroadcastCommentDto,
+    @Req() request: any,
+  ) {
+    return this.broadcastCitizen.updateComment(id, commentId, dto, request.user);
+  }
+
+  @Delete(":id/comments/:commentId")
+  @RequirePermissions("incident:read")
+  deleteComment(@Param("id") id: string, @Param("commentId") commentId: string, @Req() request: any) {
+    return this.broadcastCitizen.deleteComment(id, commentId, request.user);
+  }
+
+  @Post(":id/comments/:commentId/reactions")
+  @RequirePermissions("incident:read")
+  reactToComment(
+    @Param("id") id: string,
+    @Param("commentId") commentId: string,
+    @Body() dto: ReactToCitizenBroadcastCommentDto,
+    @Req() request: any,
+  ) {
+    return this.broadcastCitizen.reactToComment(id, commentId, dto, request.user);
   }
 
   @Get(":id")

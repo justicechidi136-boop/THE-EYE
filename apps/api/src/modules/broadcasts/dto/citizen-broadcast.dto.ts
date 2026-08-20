@@ -39,10 +39,12 @@ export type CreateStolenVehicleBroadcastDto = {
   state?: string;
   lga?: string;
   stolenAt: string;
+  lastSeenAt?: string;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   lastKnownLocation?: string;
   distinguishingFeatures: string;
+  theftDescription?: string;
   policeReportReference?: string;
   contactMethod: string;
   vinLastFour?: string;
@@ -55,6 +57,14 @@ export type CreateCitizenBroadcastCommentDto = {
   body: string;
   parentId?: string;
   isSighting?: boolean;
+};
+
+export type UpdateCitizenBroadcastCommentDto = {
+  body: string;
+};
+
+export type ReactToCitizenBroadcastCommentDto = {
+  reaction: "Helpful" | "Thanks";
 };
 
 export type ReportBroadcastDto = {
@@ -202,7 +212,15 @@ export function validateStolenVehicleBroadcastDto(dto: CreateStolenVehicleBroadc
   if (!dto.colour?.trim()) throw new BadRequestException("colour is required");
   if (!dto.registrationNumber?.trim()) throw new BadRequestException("registrationNumber is required");
   if (!dto.stolenAt) throw new BadRequestException("stolenAt is required");
+  if (!dto.lastSeenAt) throw new BadRequestException("lastSeenAt is required");
+  const lastSeen = new Date(dto.lastSeenAt);
+  if (Number.isNaN(lastSeen.getTime())) throw new BadRequestException("lastSeenAt must be a valid date-time");
+  if (!/[Tt ]\d{1,2}:\d{2}/.test(dto.lastSeenAt)) {
+    throw new BadRequestException("lastSeenAt must include both date and time");
+  }
+  if (!dto.lastKnownLocation?.trim()) throw new BadRequestException("lastKnownLocation is required");
   if (!dto.distinguishingFeatures?.trim()) throw new BadRequestException("distinguishingFeatures is required");
+  if (!dto.theftDescription?.trim()) throw new BadRequestException("theftDescription is required");
   if (!dto.contactMethod?.trim()) throw new BadRequestException("contactMethod is required");
   if (dto.year !== undefined && dto.year !== null && `${dto.year}`.trim().length > 0) {
     const parsedYear = Number.parseInt(`${dto.year}`, 10);

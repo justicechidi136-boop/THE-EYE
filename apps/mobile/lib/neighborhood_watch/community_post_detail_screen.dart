@@ -10,6 +10,8 @@ import "../design_system/eye_semantic_colors.dart";
 import "neighborhood_watch_prototype_chrome.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
+import "../voice/ai_voice_note_card.dart";
+import "../voice/ai_voice_service.dart";
 import "community_media_upload_service.dart";
 import "community_members_screen.dart";
 import "neighborhood_watch_service.dart";
@@ -446,6 +448,9 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
                     _PostSummaryCard(
                       post: _post!,
                       openMedia: _openRemoteMedia,
+                      accessToken: widget.accessToken,
+                      targetLocale:
+                          Localizations.localeOf(context).languageCode,
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -633,10 +638,14 @@ class _PostSummaryCard extends StatelessWidget {
   const _PostSummaryCard({
     required this.post,
     required this.openMedia,
+    required this.accessToken,
+    required this.targetLocale,
   });
 
   final CommunityPostItem post;
   final Future<void> Function(CommunityPostMediaReference media) openMedia;
+  final String accessToken;
+  final String targetLocale;
 
   String _typeLabel(String type) {
     return switch (type) {
@@ -697,36 +706,60 @@ class _PostSummaryCard extends StatelessWidget {
             ...post.media.map(
               (media) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: NwPrototypeListCard(
-                  leading: Icon(
-                    media.isImage
-                        ? Icons.image_outlined
-                        : media.isVideo
-                            ? Icons.videocam_outlined
-                            : media.isAudio
-                                ? Icons.audiotrack
-                                : Icons.attach_file,
-                  ),
-                  title: media.isImage
-                      ? "Photo"
-                      : media.isVideo
-                          ? "Video"
-                          : media.isAudio
-                              ? "Audio"
-                              : "Attachment",
-                  subtitle:
-                      media.signedGetUrl == null || media.signedGetUrl!.isEmpty
-                          ? "Preview unavailable right now"
-                          : "Open attachment",
-                  trailing:
-                      media.signedGetUrl == null || media.signedGetUrl!.isEmpty
-                          ? null
-                          : const Icon(Icons.open_in_new),
-                  onTap:
-                      media.signedGetUrl == null || media.signedGetUrl!.isEmpty
-                          ? null
-                          : () => unawaited(openMedia(media)),
-                ),
+                child: media.isAudio
+                    ? AiVoiceNoteCard(
+                        initialOriginalUrl: media.signedGetUrl,
+                        load: () => AiVoiceService().getCommunityPostVoice(
+                          accessToken: accessToken,
+                          postId: post.id,
+                          mediaId: media.id,
+                          targetLocale: targetLocale,
+                        ),
+                        requestTranslation: () =>
+                            AiVoiceService().requestCommunityPostTranslation(
+                          accessToken: accessToken,
+                          postId: post.id,
+                          mediaId: media.id,
+                          targetLocale: targetLocale,
+                        ),
+                        requestSynthesis: () =>
+                            AiVoiceService().requestCommunityPostSynthesis(
+                          accessToken: accessToken,
+                          postId: post.id,
+                          mediaId: media.id,
+                          targetLocale: targetLocale,
+                        ),
+                      )
+                    : NwPrototypeListCard(
+                        leading: Icon(
+                          media.isImage
+                              ? Icons.image_outlined
+                              : media.isVideo
+                                  ? Icons.videocam_outlined
+                                  : media.isAudio
+                                      ? Icons.audiotrack
+                                      : Icons.attach_file,
+                        ),
+                        title: media.isImage
+                            ? "Photo"
+                            : media.isVideo
+                                ? "Video"
+                                : media.isAudio
+                                    ? "Audio"
+                                    : "Attachment",
+                        subtitle: media.signedGetUrl == null ||
+                                media.signedGetUrl!.isEmpty
+                            ? "Preview unavailable right now"
+                            : "Open attachment",
+                        trailing: media.signedGetUrl == null ||
+                                media.signedGetUrl!.isEmpty
+                            ? null
+                            : const Icon(Icons.open_in_new),
+                        onTap: media.signedGetUrl == null ||
+                                media.signedGetUrl!.isEmpty
+                            ? null
+                            : () => unawaited(openMedia(media)),
+                      ),
               ),
             ),
           ],

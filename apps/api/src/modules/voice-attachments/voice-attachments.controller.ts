@@ -6,7 +6,7 @@ import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { IncidentScopeGuard } from "../../common/auth/incident-scope.guard";
 import { VoiceAttachmentsService } from "./voice-attachments.service";
 
-@Controller("v1/incidents")
+@Controller("incidents")
 export class VoiceAttachmentsController {
   constructor(private readonly voice: VoiceAttachmentsService) {}
 
@@ -46,6 +46,18 @@ export class VoiceAttachmentsController {
     @Req() request: any,
   ) {
     return this.voice.requestTranslation(id, mediaId, body.targetLocale, request.user);
+  }
+
+  @Post(":id/media/:mediaId/voice/synthesis")
+  @UseGuards(JwtAuthGuard, IncidentScopeGuard, PermissionsGuard)
+  @RequirePermissions("incident:read")
+  synthesize(
+    @Param("id") id: string,
+    @Param("mediaId") mediaId: string,
+    @Body() body: { targetLocale?: string },
+    @Req() request: any,
+  ) {
+    return this.voice.requestIncidentSynthesis(id, mediaId, body.targetLocale, request.user);
   }
 
   @Put(":id/media/:mediaId/voice/transcript")

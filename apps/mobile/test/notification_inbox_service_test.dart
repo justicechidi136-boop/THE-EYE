@@ -46,4 +46,35 @@ void main() {
     await cache.clear("user-a");
     expect(await cache.load("user-a"), isEmpty);
   });
+
+  test("duplicate sighting delivery is one logical inbox item", () {
+    final items = [
+      InboxNotificationItem.fromJson({
+        "id": "push-row",
+        "type": "BroadcastSightingAlert",
+        "title": "New sighting",
+        "body": "Possible sighting",
+        "priority": "High",
+        "createdAt": "2026-08-20T10:00:00.000Z",
+        "metadata": {
+          "idempotencyKey": "broadcast-sighting:sighting-1:owner-1",
+        },
+      }),
+      InboxNotificationItem.fromJson({
+        "id": "retry-row",
+        "type": "BroadcastSightingAlert",
+        "title": "New sighting",
+        "body": "Possible sighting",
+        "priority": "High",
+        "createdAt": "2026-08-20T10:00:01.000Z",
+        "metadata": {
+          "idempotencyKey": "broadcast-sighting:sighting-1:owner-1",
+        },
+      }),
+    ];
+
+    final deduped = deduplicateLogicalNotifications(items);
+    expect(deduped, hasLength(1));
+    expect(deduped.single.id, "push-row");
+  });
 }

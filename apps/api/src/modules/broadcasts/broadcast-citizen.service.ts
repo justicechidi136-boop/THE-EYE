@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import {
   BroadcastAuthorType,
@@ -24,6 +25,7 @@ import { BroadcastQueueService } from "./broadcast-queue.service";
 import { BroadcastLifecycleService } from "./broadcast-lifecycle.service";
 import { BroadcastShareService } from "./broadcast-share.service";
 import { BroadcastsService, LIVE_BROADCAST_STATUSES } from "./broadcasts.service";
+import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
 import { buildMissingPersonBroadcastPreview } from "../notifications/citizen-notification-copy";
 import {
   CreateCitizenBroadcastCommentDto,
@@ -31,8 +33,10 @@ import {
   CreateStolenVehicleBroadcastDto,
   maskRegistrationNumber,
   ReportBroadcastDto,
+  ReactToCitizenBroadcastCommentDto,
   ResolveBroadcastDto,
   SubmitBroadcastSightingDto,
+  UpdateCitizenBroadcastCommentDto,
   validateBroadcastReportReason,
   validateMissingPersonBroadcastDto,
   validateStolenVehicleBroadcastDto,
@@ -79,6 +83,10 @@ function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string
     if (Number.isInteger(sizeBytes) && sizeBytes > 0) sanitized.sizeBytes = sizeBytes;
     const durationSeconds = Number(row.durationSeconds);
     if (Number.isInteger(durationSeconds) && durationSeconds > 0) sanitized.durationSeconds = durationSeconds;
+    const selectedLanguage = String(row.selectedLanguage ?? "").trim();
+    if (selectedLanguage) sanitized.selectedLanguage = selectedLanguage;
+    const capturedAt = String(row.capturedAt ?? "").trim();
+    if (capturedAt && !Number.isNaN(new Date(capturedAt).getTime())) sanitized.capturedAt = capturedAt;
     attachments.push(sanitized);
     if (attachments.length >= 8) break;
   }
@@ -114,6 +122,7 @@ export class BroadcastCitizenService {
     private readonly broadcastQueue: BroadcastQueueService,
     private readonly lifecycle: BroadcastLifecycleService,
     private readonly share: BroadcastShareService,
+    @Optional() private readonly voiceTranscription?: VoiceTranscriptionService,
   ) {}
 
   async presignMedia(
@@ -177,7 +186,11 @@ export class BroadcastCitizenService {
       typeof safeMetadata.sourceVehicleId === "string" && safeMetadata.sourceVehicleId.trim().length > 0
         ? safeMetadata.sourceVehicleId.trim()
         : undefined;
-    const vehiclePhotoObjectKeys = sanitizeVehiclePhotoObjectKeys(safeMetadata.vehiclePhotoObjectKeys);
+    const vehiclePhotos = sanitizeBroadcastAttachments(safeMetadata.vehiclePhotos)
+      .filter((attachment) => attachment.mediaType === "image");
+    const vehiclePhotoObjectKeys = vehiclePhotos.length > 0
+      ? vehiclePhotos.map((attachment) => String(attachment.objectKey))
+      : sanitizeVehiclePhotoObjectKeys(safeMetadata.vehiclePhotoObjectKeys);
     const normalizedYear = normalizeVehicleYear(dto.year ?? safeMetadata.year);
     const vinLastFour = dto.vinLastFour?.trim() || (typeof safeMetadata.vinLastFour === "string"
       ? safeMetadata.vinLastFour.trim()
@@ -195,11 +208,15 @@ export class BroadcastCitizenService {
         registrationMasked: maskRegistrationNumber(dto.registrationNumber),
         registrationNumber: dto.registrationNumber.trim(),
         stolenAt: dto.stolenAt,
+        lastSeenAt: dto.lastSeenAt,
+        lastKnownLocation: dto.lastKnownLocation,
         distinguishingFeatures: dto.distinguishingFeatures,
+        theftDescription: dto.theftDescription,
         policeReportReference: dto.policeReportReference,
         ...(vinLastFour ? { vinLastFour } : {}),
         ...(sourceVehicleId ? { sourceVehicleId } : {}),
         ...(vehiclePhotoObjectKeys.length > 0 ? { vehiclePhotoObjectKeys } : {}),
+        ...(vehiclePhotos.length > 0 ? { vehiclePhotos } : {}),
         directionOfTravel: dto.directionOfTravel,
         rewardNotice: dto.rewardNotice,
         ...(attachments.length > 0 ? { attachments } : {}),
@@ -303,18 +320,26 @@ export class BroadcastCitizenService {
 
   async addComment(id: string, dto: CreateCitizenBroadcastCommentDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
-    if (!dto.body?.trim()) throw new BadRequestException("Comment body is required");
+    const body = dto.body?.trim();
+    if (!body) throw new BadRequestException("Comment body is required");
+    if (body.length > 2000) throw new BadRequestException("Comment body must not exceed 2000 characters");
     const broadcast = await this.prisma.broadcast.findFirst({
       where: { id, deletedAt: null, commentsLocked: false },
     });
     if (!broadcast || !LIVE_BROADCAST_STATUSES.has(String(broadcast.status))) {
       throw new NotFoundException("Broadcast not available for comments");
     }
+    if (dto.parentId) {
+      const parent = await this.prisma.broadcastComment.findFirst({
+        where: { id: dto.parentId, broadcastId: id, hiddenAt: null },
+      });
+      if (!parent) throw new BadRequestException("Reply parent must belong to this broadcast");
+    }
     const comment = await this.prisma.broadcastComment.create({
       data: {
         broadcastId: id,
         authorUserId: actor.sub,
-        body: dto.body.trim(),
+        body,
         parentId: dto.parentId,
         metadata: dto.isSighting ? { isSighting: true } : {},
       } as never,
@@ -326,10 +351,63 @@ export class BroadcastCitizenService {
   async listComments(id: string) {
     const comments = await this.prisma.broadcastComment.findMany({
       where: { broadcastId: id, hiddenAt: null },
+      include: {
+        authorUser: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        authorAdmin: { select: { id: true, displayName: true } },
+        reactions: { select: { reaction: true, userId: true } },
+      },
       orderBy: [{ isPinned: "desc" }, { createdAt: "asc" }],
       take: 100,
     });
     return { data: comments.map((comment) => this.toPublicComment(comment)) };
+  }
+
+  async updateComment(
+    id: string,
+    commentId: string,
+    dto: UpdateCitizenBroadcastCommentDto,
+    actor: JwtPayload,
+  ) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    const body = dto.body?.trim();
+    if (!body) throw new BadRequestException("Comment body is required");
+    if (body.length > 2000) throw new BadRequestException("Comment body must not exceed 2000 characters");
+    const comment = await this.prisma.broadcastComment.findFirst({ where: { id: commentId, broadcastId: id, hiddenAt: null } });
+    if (!comment) throw new NotFoundException("Comment not found");
+    if (comment.authorUserId !== actor.sub) throw new ForbiddenException("Only the author can edit this comment");
+    const updated = await this.prisma.broadcastComment.update({ where: { id: commentId }, data: { body } });
+    await this.recordAudit(actor, "broadcast.comment_updated", id, { commentId });
+    return { data: updated };
+  }
+
+  async deleteComment(id: string, commentId: string, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    const comment = await this.prisma.broadcastComment.findFirst({ where: { id: commentId, broadcastId: id, hiddenAt: null } });
+    if (!comment) throw new NotFoundException("Comment not found");
+    if (comment.authorUserId !== actor.sub) throw new ForbiddenException("Only the author can delete this comment");
+    await this.prisma.broadcastComment.update({ where: { id: commentId }, data: { hiddenAt: new Date() } });
+    await this.recordAudit(actor, "broadcast.comment_deleted", id, { commentId });
+    return { data: { id: commentId, deleted: true } };
+  }
+
+  async reactToComment(
+    id: string,
+    commentId: string,
+    dto: ReactToCitizenBroadcastCommentDto,
+    actor: JwtPayload,
+  ) {
+    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    if (!new Set(["Helpful", "Thanks"]).has(dto.reaction)) {
+      throw new BadRequestException("Unsupported comment reaction");
+    }
+    const comment = await this.prisma.broadcastComment.findFirst({ where: { id: commentId, broadcastId: id, hiddenAt: null } });
+    if (!comment) throw new NotFoundException("Comment not found");
+    const reaction = await (this.prisma as any).broadcastCommentReaction.upsert({
+      where: { commentId_userId_reaction: { commentId, userId: actor.sub, reaction: dto.reaction } },
+      update: {},
+      create: { commentId, userId: actor.sub, reaction: dto.reaction },
+    });
+    return { data: reaction };
   }
 
   async submitSighting(id: string, dto: SubmitBroadcastSightingDto, actor: JwtPayload) {
@@ -411,6 +489,13 @@ export class BroadcastCitizenService {
         },
       } as never,
     });
+    await this.persistBroadcastMedia({
+      broadcastId: id,
+      sightingId: sighting.id,
+      uploaderId: actor.sub,
+      role: "SightingEvidence",
+      attachments,
+    });
     await this.recordAudit(actor, "broadcast.sighting_submitted", id, { sightingId: sighting.id });
     await this.notifyBroadcastOwnerOfSighting(broadcast, sighting.id);
     await this.recordAudit(actor, "broadcast.sighting_authority_routed", id, {
@@ -473,8 +558,13 @@ export class BroadcastCitizenService {
       { isAdmin },
     );
     const metadata = (sighting.metadata as Record<string, unknown> | null) ?? {};
+    const mediaClient = (this.prisma as any).broadcastMedia;
+    const persistedMedia = typeof mediaClient?.findMany === "function"
+      ? await mediaClient.findMany({ where: { sightingId, broadcastId: id, deletedAt: null }, orderBy: { createdAt: "asc" } })
+      : [];
+    const attachmentSource = persistedMedia.length > 0 ? persistedMedia : (Array.isArray(metadata.attachments) ? metadata.attachments : []);
     const attachments = await Promise.all(
-      (Array.isArray(metadata.attachments) ? metadata.attachments : [])
+      attachmentSource
         .filter((item) => item && typeof item === "object")
         .map(async (item) => {
           const row = item as Record<string, unknown>;
@@ -482,10 +572,14 @@ export class BroadcastCitizenService {
           if (!objectKey || objectKey.includes("..") || !objectKey.startsWith("evidence/broadcast-")) return null;
           const signed = await createStorageDownloadUrl(objectKey, 300);
           return {
-            mediaType: String(row.mediaType ?? ""),
+            id: row.id ? String(row.id) : null,
+            mediaType: String(row.mediaType ?? "").toLowerCase(),
             label: String(row.label ?? "").trim() || "Attachment",
             contentType: String(row.contentType ?? ""),
             durationSeconds: Number(row.durationSeconds) || null,
+            transcriptionStatus: row.transcriptionStatus ?? null,
+            selectedLanguage: row.selectedLanguage ?? null,
+            detectedLanguage: row.detectedLanguage ?? null,
             url: signed.url,
           };
         }),
@@ -521,14 +615,79 @@ export class BroadcastCitizenService {
       : metadata.isSighting === true
         ? "Verified Sighting"
         : "User Comment";
+    const authorUser = comment.authorUser as Record<string, unknown> | null | undefined;
+    const authorAdmin = comment.authorAdmin as Record<string, unknown> | null | undefined;
+    const profile = authorUser?.profile as Record<string, unknown> | null | undefined;
+    const citizenName = [profile?.firstName, profile?.lastName]
+      .map((part) => String(part ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+    const reactions = Array.isArray(comment.reactions)
+      ? comment.reactions as Array<Record<string, unknown>>
+      : [];
+    const reactionCounts = reactions.reduce<Record<string, number>>((counts, reaction) => {
+      const key = String(reaction.reaction ?? "");
+      if (key) counts[key] = (counts[key] ?? 0) + 1;
+      return counts;
+    }, {});
     return {
       id: comment.id,
       body: comment.body,
       label,
+      parentId: comment.parentId ?? null,
+      authorUserId: comment.authorUserId ?? null,
+      authorName: isOfficial
+        ? String(authorAdmin?.displayName ?? "Official Admin")
+        : citizenName || "Citizen",
       isOfficial,
       isPinned: comment.isPinned === true,
+      reactions: reactionCounts,
       createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt,
     };
+  }
+
+  private async persistBroadcastMedia(input: {
+    broadcastId: string;
+    sightingId?: string;
+    uploaderId: string;
+    role: "VehiclePhoto" | "IncidentEvidence" | "SightingEvidence";
+    attachments: Array<Record<string, string | number>>;
+  }) {
+    for (const attachment of input.attachments) {
+      const objectKey = String(attachment.objectKey ?? "");
+      if (!objectKey) continue;
+      const mediaType = String(attachment.mediaType ?? "").toLowerCase();
+      const prismaMediaType = mediaType === "image" ? "Image" : mediaType === "video" ? "Video" : "Audio";
+      const created = await (this.prisma as any).broadcastMedia.upsert({
+        where: { objectKey },
+        update: {},
+        create: {
+          broadcastId: input.broadcastId,
+          sightingId: input.sightingId,
+          uploaderId: input.uploaderId,
+          role: input.role,
+          mediaType: prismaMediaType,
+          bucket: String(attachment.bucket ?? ""),
+          objectKey,
+          contentType: String(attachment.contentType ?? ""),
+          fileHash: String(attachment.fileHash ?? "").trim() || null,
+          sizeBytes: Number.isFinite(Number(attachment.sizeBytes))
+            ? BigInt(Number(attachment.sizeBytes))
+            : null,
+          capturedAt: attachment.capturedAt ? new Date(String(attachment.capturedAt)) : null,
+          durationSeconds: Number.isFinite(Number(attachment.durationSeconds))
+            ? Number(attachment.durationSeconds)
+            : null,
+          clientAttachmentId: String(attachment.clientAttachmentId ?? "").trim() || null,
+          selectedLanguage: String(attachment.selectedLanguage ?? "").trim() || null,
+          transcriptionStatus: mediaType === "audio" ? "Uploaded" : null,
+        },
+      });
+      if (mediaType === "audio") {
+        await this.voiceTranscription?.enqueueBroadcastMediaTranscription(String(created.id));
+      }
+    }
   }
 
   private async createCitizenBroadcast(
@@ -591,6 +750,20 @@ export class BroadcastCitizenService {
         expiresAt,
         duplicateOfId: duplicateWarning?.existingBroadcastId,
       } as never,
+    });
+
+    await this.persistBroadcastMedia({
+      broadcastId: broadcast.id,
+      uploaderId: actor.sub,
+      role: "IncidentEvidence",
+      attachments: sanitizeBroadcastAttachments(payload.metadata.attachments),
+    });
+    await this.persistBroadcastMedia({
+      broadcastId: broadcast.id,
+      uploaderId: actor.sub,
+      role: "VehiclePhoto",
+      attachments: sanitizeBroadcastAttachments(payload.metadata.vehiclePhotos)
+        .filter((attachment) => attachment.mediaType === "image"),
     });
 
     if (payload.latitude !== undefined && payload.longitude !== undefined) {
@@ -801,12 +974,13 @@ export class BroadcastCitizenService {
       broadcastId: String(broadcast.id),
       type: "BroadcastSightingAlert",
       priority: "High",
-      channels: ["push", "in_app"],
+      channels: ["push"],
       title: "New sighting reported",
       body: `Someone reported a possible sighting for your ${subject} broadcast.`,
       metadata: {
         broadcastId: String(broadcast.id),
         sightingId,
+        idempotencyKey: `broadcast-sighting:${sightingId}:${ownerUserId}`,
         deepLink: `/broadcasts/${String(broadcast.id)}/sightings/${sightingId}`,
       },
     });
