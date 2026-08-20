@@ -16,6 +16,8 @@ class EvidenceAudioPreviewPlayer {
   bool isPlaying(String localId) =>
       _playingLocalId == localId && _player.playing;
 
+  Stream<bool> get playingStream => _player.playingStream;
+
   Future<void> toggle(String localId, String filePath) async {
     if (_playingLocalId == localId && _player.playing) {
       await pause();
