@@ -21,6 +21,7 @@ import {
   isTerminalIncidentStatus,
 } from "../incident-lifecycle";
 import { buildIncidentPresentation, TERMINAL_ROUTE_TYPE } from "../incident-presentation.mapper";
+import { getConfiguredStorageBucket } from "../../../common/storage/s3-presign";
 
 const reporter = { sub: "user-1", typ: "user" as const, permissions: ["incident:create", "incident:read"] };
 const otherCitizen = { sub: "user-2", typ: "user" as const, permissions: ["incident:read"] };
@@ -528,6 +529,131 @@ describe("ActiveEmergencyService contract", () => {
     expect(result.allowedActions.confirmResolved).toBe(true);
     expect(result.allowedActions.confirmStillOngoing).toBe(true);
     expect(result.allowedActions.requestCancellation).toBe(true);
+  });
+
+  it("returns confirmed image video and audio on the immediate active read", async () => {
+    const bucket = getConfiguredStorageBucket();
+    const mediaRows: any[] = [];
+    const incidentMedia = {
+      findUnique: jest.fn().mockImplementation(async ({ where }: any) =>
+        mediaRows.find((item) => item.fileHash === where.fileHash) ?? null,
+      ),
+      create: jest.fn().mockImplementation(async ({ data }: any) => {
+        const media = {
+          ...data,
+          id: `media-${mediaRows.length + 1}`,
+          uploadedAt: new Date(`2026-08-05T10:00:1${mediaRows.length}.000Z`),
+        };
+        mediaRows.push(media);
+        return media;
+      }),
+    };
+    const { service: incidents } = buildIncidentsService({
+      prisma: {
+        incident: {
+          findFirst: jest.fn().mockResolvedValue(activeIncident),
+        },
+        incidentMedia,
+        incidentTimeline: { create: jest.fn().mockResolvedValue({ id: "timeline-1" }) },
+      },
+      deps: {
+        voiceTranscription: {
+          enqueueIncidentMediaTranscription: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+    const { service: active, prisma } = buildActiveEmergencyService();
+    prisma.incident.findFirst.mockResolvedValue({ id: "inc-1" });
+    prisma.incident.findUnique.mockImplementation(async () => ({
+      ...activeIncident,
+      media: [...mediaRows],
+    }));
+
+    const drafts = [
+      {
+        mediaType: "Image",
+        contentType: "image/jpeg",
+        objectKey: "evidence/inc-1/11111111-1111-4111-8111-111111111111.jpg",
+        fileHash: "sha256:image",
+      },
+      {
+        mediaType: "Video",
+        contentType: "video/mp4",
+        objectKey: "evidence/inc-1/22222222-2222-4222-8222-222222222222.mp4",
+        fileHash: "sha256:video",
+        durationSeconds: 24,
+      },
+      {
+        mediaType: "Audio",
+        contentType: "audio/mp4",
+        objectKey: "evidence/inc-1/33333333-3333-4333-8333-333333333333.m4a",
+        fileHash: "sha256:audio",
+        durationSeconds: 12,
+      },
+    ];
+
+    for (const draft of drafts) {
+      await incidents.confirmMedia(
+        "inc-1",
+        {
+          ...draft,
+          bucket,
+          capturedAt: "2026-08-05T10:00:00.000Z",
+          clientAttachmentId: `client-${draft.mediaType.toLowerCase()}`,
+        } as any,
+        reporter,
+      );
+    }
+
+    const result = await active.getActiveEmergency("inc-1", reporter);
+    expect(result.evidenceItems.length).toBe(3);
+    expect(result.evidenceSummary.totalCount).toBe(3);
+    expect(result.evidenceSummary.photos).toBe(1);
+    expect(result.evidenceSummary.videos).toBe(1);
+    expect(result.evidenceSummary.voice).toBe(1);
+    expect(result.statusVersion).toBe(activeIncident.statusVersion);
+    expect(result.lastUpdatedAt).toBe(activeIncident.updatedAt.toISOString());
+  });
+
+  it("returns the canonical row when media confirmation is retried", async () => {
+    const bucket = getConfiguredStorageBucket();
+    const canonical = {
+      id: "media-1",
+      incidentId: "inc-1",
+      mediaType: "Image",
+      bucket,
+      objectKey: "evidence/inc-1/44444444-4444-4444-8444-444444444444.jpg",
+      contentType: "image/jpeg",
+      fileHash: "sha256:duplicate",
+      uploadedAt: new Date("2026-08-05T10:00:10.000Z"),
+    };
+    const incidentMedia = {
+      findUnique: jest.fn().mockResolvedValue(canonical),
+      create: jest.fn(),
+    };
+    const { service } = buildIncidentsService({
+      prisma: {
+        incident: {
+          findFirst: jest.fn().mockResolvedValue(activeIncident),
+        },
+        incidentMedia,
+      },
+    });
+
+    const result = await service.confirmMedia(
+      "inc-1",
+      {
+        mediaType: "Image",
+        bucket,
+        objectKey: canonical.objectKey,
+        contentType: "image/jpeg",
+        fileHash: canonical.fileHash,
+      },
+      reporter,
+    );
+
+    expect(result.id).toBe("media-1");
+    expect(incidentMedia.create).not.toHaveBeenCalled();
   });
 });
 

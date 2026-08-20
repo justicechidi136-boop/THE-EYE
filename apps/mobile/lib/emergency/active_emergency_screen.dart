@@ -94,15 +94,15 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
     }
   }
 
-  Future<void> _refresh({bool initial = false}) async {
+  Future<bool> _refresh({bool initial = false}) async {
     if (widget.incidentId.isEmpty) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _errorLabel = activeEmergencyErrorLabel(
           ActiveEmergencyErrorCode.malformedContract,
         );
       });
-      return;
+      return false;
     }
 
     final generation = widget.service.refreshCoordinator.beginRefresh();
@@ -112,12 +112,14 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
         widget.accessToken,
         silent: widget.silent,
       );
-      if (contract == null || !mounted) return;
-      if (!widget.service.refreshCoordinator.isCurrent(generation)) return;
+      if (contract == null || !mounted) return false;
+      if (!widget.service.refreshCoordinator.isCurrent(generation)) {
+        return false;
+      }
 
       if (contract is ActiveEmergencyTerminalContract) {
         await widget.onStopLocationTracking?.call();
-        if (!mounted) return;
+        if (!mounted) return false;
         setState(() {
           _contract = contract;
           _cachedActive = null;
@@ -126,7 +128,7 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
         });
         await ActiveEmergencyNavigation.handleTerminalContract(
             context, contract);
-        return;
+        return true;
       }
 
       final active = contract as ActiveEmergencyActiveContract;
@@ -138,31 +140,34 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
             currentStatusVersion: _cachedActive!.statusVersion,
             currentUpdatedAt: _cachedActive!.lastUpdatedAt,
           )) {
-        return;
+        return false;
       }
 
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _contract = active;
         _cachedActive = active;
         _errorLabel = null;
         _isStale = false;
       });
+      return true;
     } on ActiveEmergencyContractException catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _errorLabel = activeEmergencyErrorLabel(error.code);
         _isStale = error.code == ActiveEmergencyErrorCode.networkTemporary ||
             _cachedActive != null;
       });
+      return false;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _errorLabel = activeEmergencyErrorLabel(
           ActiveEmergencyErrorCode.networkTemporary,
         );
         _isStale = _cachedActive != null;
       });
+      return false;
     }
   }
 
@@ -376,9 +381,12 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                   allowedActions: active.allowedActions,
                   apiClient: widget.apiClient,
                   accessibilityVoiceGuidance: true,
-                  onUploaded: () async {
-                    Navigator.of(context).maybePop();
-                    await _refresh();
+                  onUploaded: ({required bool closeSheet}) async {
+                    final refreshed = await _refresh();
+                    if (closeSheet && refreshed && context.mounted) {
+                      await Navigator.of(context).maybePop();
+                    }
+                    return refreshed;
                   },
                 ),
               ],
@@ -440,7 +448,9 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
             ),
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () => _refresh(),
+                onRefresh: () async {
+                  await _refresh();
+                },
                 child: active == null
                     ? (_errorLabel != null
                         ? ListView(

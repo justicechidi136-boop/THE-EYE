@@ -11,6 +11,13 @@ import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
 import "active_emergency_contract.dart";
 
+typedef ActiveEmergencyUploadCallback = Future<bool> Function({
+  required bool closeSheet,
+});
+
+bool shouldRefreshAfterEvidenceUpload(EvidenceUploadBatchResult batch) =>
+    batch.uploaded.isNotEmpty;
+
 class ActiveEmergencyEvidenceActions extends StatefulWidget {
   const ActiveEmergencyEvidenceActions({
     super.key,
@@ -27,7 +34,7 @@ class ActiveEmergencyEvidenceActions extends StatefulWidget {
   final String accessToken;
   final ActiveEmergencyAllowedActions allowedActions;
   final TheEyeApiClient apiClient;
-  final Future<void> Function() onUploaded;
+  final ActiveEmergencyUploadCallback onUploaded;
   final bool lowDataMode;
   final bool accessibilityVoiceGuidance;
 
@@ -118,16 +125,27 @@ class _ActiveEmergencyEvidenceActionsState
       }
 
       if (mounted) {
+        var refreshed = true;
         if (batch.isFullSuccess) {
           HapticFeedback.lightImpact();
           setState(() => _statusMessage = "Evidence uploaded.");
-          await widget.onUploaded();
         } else if (batch.isPartialSuccess) {
           setState(() => _statusMessage =
               "${batch.uploaded.length} uploaded, ${batch.failures.length} failed. Retry queued items.");
         } else {
           setState(
               () => _statusMessage = "Upload failed. Will retry when online.");
+        }
+        if (shouldRefreshAfterEvidenceUpload(batch)) {
+          refreshed = await widget.onUploaded(
+            closeSheet: batch.isFullSuccess,
+          );
+        }
+        if (!refreshed && mounted) {
+          setState(() {
+            _statusMessage =
+                "Evidence uploaded, but the latest incident view could not be refreshed. Pull to refresh.";
+          });
         }
       }
     } catch (error) {
@@ -197,8 +215,12 @@ class _ActiveEmergencyEvidenceActionsState
         accessToken: widget.accessToken,
       );
       HapticFeedback.lightImpact();
-      await widget.onUploaded();
-      if (mounted) setState(() => _statusMessage = "Update sent.");
+      final refreshed = await widget.onUploaded(closeSheet: true);
+      if (mounted) {
+        setState(() => _statusMessage = refreshed
+            ? "Update sent."
+            : "Update sent, but the latest incident view could not be refreshed. Pull to refresh.");
+      }
     } catch (_) {
       if (mounted) setState(() => _statusMessage = "Unable to send update.");
     } finally {
@@ -209,8 +231,7 @@ class _ActiveEmergencyEvidenceActionsState
   @override
   Widget build(BuildContext context) {
     final actions = widget.allowedActions;
-    final showEvidence =
-        actions.addEvidence ||
+    final showEvidence = actions.addEvidence ||
         actions.uploadPhoto ||
         actions.uploadVideo ||
         actions.uploadVoice;

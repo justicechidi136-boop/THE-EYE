@@ -476,6 +476,40 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
     final cancellation = json["cancellationSummary"] as Map<String, dynamic>?;
     final resolution = json["resolutionSummary"] as Map<String, dynamic>?;
     final evidenceItemsRaw = json["evidenceItems"];
+    if (evidenceItemsRaw is! List) {
+      throw ActiveEmergencyContractException(
+        ActiveEmergencyErrorCode.malformedContract,
+        "Missing required field evidenceItems",
+      );
+    }
+    final evidenceItems = <ActiveEmergencyEvidenceItem>[];
+    for (final item in evidenceItemsRaw) {
+      if (item is! Map<String, dynamic>) {
+        throw ActiveEmergencyContractException(
+          ActiveEmergencyErrorCode.malformedContract,
+          "Invalid evidenceItems entry",
+        );
+      }
+      evidenceItems.add(ActiveEmergencyEvidenceItem.fromJson(item));
+    }
+    final evidenceSummary = ActiveEmergencyEvidenceSummary.fromJson(
+      _requiredMap(json, "evidenceSummary"),
+    );
+    final imageCount =
+        evidenceItems.where((item) => item.mediaType == "Image").length;
+    final videoCount =
+        evidenceItems.where((item) => item.mediaType == "Video").length;
+    final audioCount =
+        evidenceItems.where((item) => item.mediaType == "Audio").length;
+    if (evidenceSummary.totalCount != evidenceItems.length ||
+        evidenceSummary.photos != imageCount ||
+        evidenceSummary.videos != videoCount ||
+        evidenceSummary.voice != audioCount) {
+      throw ActiveEmergencyContractException(
+        ActiveEmergencyErrorCode.malformedContract,
+        "Evidence summary does not match evidence items",
+      );
+    }
 
     return ActiveEmergencyActiveContract(
       incidentId: _requiredString(json, "incidentId"),
@@ -492,15 +526,8 @@ class ActiveEmergencyActiveContract extends ActiveEmergencyContract {
       reportedLocation: ActiveEmergencyLocation.fromJson(
         _requiredMap(json, "reportedLocation"),
       ),
-      evidenceSummary: ActiveEmergencyEvidenceSummary.fromJson(
-        _requiredMap(json, "evidenceSummary"),
-      ),
-      evidenceItems: evidenceItemsRaw is List
-          ? evidenceItemsRaw
-              .whereType<Map<String, dynamic>>()
-              .map(ActiveEmergencyEvidenceItem.fromJson)
-              .toList(growable: false)
-          : const [],
+      evidenceSummary: evidenceSummary,
+      evidenceItems: List.unmodifiable(evidenceItems),
       progressStep: _requiredInt(json, "progressStep"),
       progressStages: progressStagesRaw
           .whereType<Map<String, dynamic>>()
