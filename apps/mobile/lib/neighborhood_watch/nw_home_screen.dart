@@ -9,6 +9,7 @@ import "../widgets/section_card.dart";
 import "../incidents/incident_submission_service.dart";
 import "neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch_destinations.dart";
+import "neighborhood_community_state.dart";
 import "neighborhood_watch_service.dart";
 import "neighborhood_watch_session.dart";
 import "nw_context_cache.dart";
@@ -35,6 +36,8 @@ class _NeighborhoodWatchHomeScreenState
   DateTime? _contextCachedAt;
   bool _settingHomeCommunity = false;
   String? _homeCommunityMessage;
+  bool _joiningCommunity = false;
+  String? _membershipMessage;
 
   @override
   void initState() {
@@ -56,12 +59,13 @@ class _NeighborhoodWatchHomeScreenState
     }
     final cached = await _contextCache.load(_userScope() ?? "anonymous");
     if (cached != null && mounted) {
+      final staleContext = stripLivePresence(cached.context);
       setState(() {
-        _context = stripLivePresence(cached.context);
+        _context = staleContext;
         _contextIsStale = true;
         _contextCachedAt = cached.cachedAt;
       });
-      _syncSelectedCommunity(cached.context);
+      _syncSelectedCommunity(staleContext);
     }
     await _refreshContext();
   }
@@ -73,11 +77,14 @@ class _NeighborhoodWatchHomeScreenState
 
     if (!session.online) {
       if (_context != null) {
+        final staleContext = stripLivePresence(_context!);
         if (!mounted) return;
         setState(() {
+          _context = staleContext;
           _contextIsStale = true;
           _loadError = null;
         });
+        _syncSelectedCommunity(staleContext);
       } else {
         if (!mounted) return;
         setState(() {
@@ -143,10 +150,13 @@ class _NeighborhoodWatchHomeScreenState
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       if (_context != null) {
+        final staleContext = stripLivePresence(_context!);
         setState(() {
+          _context = staleContext;
           _contextIsStale = true;
           _loadError = error.userMessage;
         });
+        _syncSelectedCommunity(staleContext);
       } else {
         setState(() {
           _context = null;
@@ -156,10 +166,13 @@ class _NeighborhoodWatchHomeScreenState
     } catch (_) {
       if (!mounted) return;
       if (_context != null) {
+        final staleContext = stripLivePresence(_context!);
         setState(() {
+          _context = staleContext;
           _contextIsStale = true;
           _loadError = "Unable to refresh neighborhood context.";
         });
+        _syncSelectedCommunity(staleContext);
       } else {
         setState(() {
           _context = null;
@@ -198,6 +211,35 @@ class _NeighborhoodWatchHomeScreenState
       setState(() => _homeCommunityMessage = "Unable to set home community.");
     } finally {
       if (mounted) setState(() => _settingHomeCommunity = false);
+    }
+  }
+
+  Future<void> _joinCurrentCommunity(
+    NwPublicCommunityCard community,
+  ) async {
+    final token = AppScope.of(context).accessToken;
+    if (token == null || _joiningCommunity) return;
+    setState(() {
+      _joiningCommunity = true;
+      _membershipMessage = null;
+    });
+    try {
+      await _service.joinCommunity(
+        accessToken: token,
+        communityId: community.id,
+      );
+      if (!mounted) return;
+      setState(() => _membershipMessage = "Community membership updated.");
+      await _refreshContext();
+    } on IncidentApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _membershipMessage = error.userMessage);
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+          () => _membershipMessage = "Unable to update community membership.");
+    } finally {
+      if (mounted) setState(() => _joiningCommunity = false);
     }
   }
 
@@ -348,35 +390,25 @@ class _NeighborhoodWatchHomeScreenState
       ];
     }
 
-    final isDynamic = ctx.isDynamicPublicArea;
+    final presentation = NeighborhoodWatchContextPresentation.from(
+      ctx,
+      isStale: _contextIsStale,
+    );
+    final isDynamic = presentation.isAmbient;
     final community = ctx.publicCommunity;
-    final dynamicArea = ctx.dynamicArea;
-    final areaTitle = isDynamic
-        ? (dynamicArea?.areaLabel ?? "Current Area")
-        : (community?.name ?? "Current Area");
-    final areaSubtitle =
-        isDynamic ? "LOCAL PUBLIC SAFETY AREA" : (community?.areaLabel ?? "");
+    final areaTitle = presentation.areaTitle;
+    final areaSubtitle = presentation.areaSubtitle;
     final summary = ctx.safetySummary;
     final presence = _contextIsStale ? null : ctx.presence;
     final isHomeCommunity = !isDynamic &&
         community != null &&
         ctx.homeCommunity?.id == community.id;
     final canPost = !_contextIsStale && ctx.permissions.canPost;
-    final modeIndex = isDynamic ? 0 : (canPost ? 2 : 1);
-    final areaBadgeLabel = _contextIsStale
-        ? "Saved context"
-        : isDynamic
-            ? "Ambient area"
-            : canPost
-                ? "Member area"
-                : "Not joined";
-    final areaBadgeColor = _contextIsStale
-        ? semantics.warning
-        : isDynamic
-            ? semantics.secondaryText
-            : canPost
-                ? semantics.success
-                : semantics.warning;
+    final areaBadgeColor = presentation.isAmbient
+        ? semantics.secondaryText
+        : presentation.isMember
+            ? semantics.success
+            : semantics.warning;
 
     return [
       if (!_contextIsStale &&
@@ -391,17 +423,12 @@ class _NeighborhoodWatchHomeScreenState
             color: const Color(0xFF4A9DFF),
           ),
         ),
-      NwPrototypeSegmentTabs(
-        labels: const ["Ambient", "Not joined", "Member"],
-        selectedIndex: modeIndex,
-      ),
-      const SizedBox(height: 14),
       NwPrototypeCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             NwPrototypeSectionHeading(
-              title: "Current area",
+              title: isDynamic ? "Current area" : "Current community",
               actionLabel: !isDynamic && community != null ? "Preview" : null,
               onAction: !isDynamic && community != null
                   ? () => Navigator.of(context).pushNamed(
@@ -414,10 +441,18 @@ class _NeighborhoodWatchHomeScreenState
             ),
             const SizedBox(height: 10),
             NwPrototypePill(
-              label: areaBadgeLabel,
+              label: presentation.stateLabel,
               selected: true,
               color: areaBadgeColor,
             ),
+            if (_contextIsStale) ...[
+              const SizedBox(height: 8),
+              NwPrototypePill(
+                label: "Saved context",
+                selected: true,
+                color: semantics.warning,
+              ),
+            ],
             const SizedBox(height: 10),
             Text(
               isDynamic ? "CURRENT AREA" : "REGISTERED COMMUNITY",
@@ -442,15 +477,8 @@ class _NeighborhoodWatchHomeScreenState
             if (isDynamic) ...[
               const SizedBox(height: 8),
               Text(
-                "No formal public community has been mapped here yet.\n"
+                "No registered community has been created for this area yet.\n"
                 "You can still participate in Neighborhood Watch for your current area.",
-                style: TextStyle(color: semantics.mutedText),
-              ),
-            ],
-            if (!_contextIsStale && presence?.accuracyM != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                "GPS accuracy: ${presence!.accuracyM!.round()}m",
                 style: TextStyle(color: semantics.mutedText),
               ),
             ],
@@ -472,6 +500,57 @@ class _NeighborhoodWatchHomeScreenState
           ],
         ),
       ),
+      if (!_contextIsStale && isDynamic) ...[
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).pushNamed(
+              NeighborhoodWatchDestinations.requestCommunity,
+            ),
+            icon: const Icon(Icons.add_home_work_outlined),
+            label: const Text("Request community"),
+          ),
+        ),
+      ],
+      if (!_contextIsStale && !isDynamic && community != null) ...[
+        if (!presentation.isMember) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: presentation.canJoin && !_joiningCommunity
+                  ? () => _joinCurrentCommunity(community)
+                  : null,
+              icon: _joiningCommunity
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      presentation.joinPending
+                          ? Icons.schedule
+                          : presentation.membershipRestricted
+                              ? Icons.block
+                              : Icons.group_add_outlined,
+                    ),
+              label: Text(
+                _joiningCommunity
+                    ? "Joining..."
+                    : presentation.joinPending
+                        ? "Request pending"
+                        : presentation.membershipRestricted
+                            ? "Membership unavailable"
+                            : "Join community",
+              ),
+            ),
+          ),
+        ],
+        if (_membershipMessage != null) ...[
+          const SizedBox(height: 8),
+          Text(_membershipMessage!),
+        ],
+      ],
       if (!_contextIsStale &&
           !isDynamic &&
           community != null &&

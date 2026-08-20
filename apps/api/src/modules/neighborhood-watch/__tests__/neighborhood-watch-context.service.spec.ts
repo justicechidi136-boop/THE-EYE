@@ -36,6 +36,37 @@ describe("NeighborhoodWatchContextService", () => {
     );
   }
 
+  function mockMappedCommunityContext(
+    membership: { status: string; role?: { name: string } | null } | null,
+    homeCommunity: Record<string, unknown> | null = null,
+  ) {
+    prisma.$queryRawUnsafe = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          name: "Trans-Amadi",
+          visibility: "Public",
+          status: "Active",
+          country: "Nigeria",
+          state: "Rivers",
+          lga: "Port Harcourt",
+          description: "Public safety zone",
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    prisma.communityPresence.findFirst = jest.fn().mockResolvedValue(null);
+    prisma.communityPresence.upsert = jest.fn().mockResolvedValue({});
+    prisma.communityMembership.findUnique = jest.fn().mockResolvedValue(membership);
+    prisma.communityMembership.findMany = jest.fn().mockResolvedValue([]);
+    prisma.communityAlert.count = jest.fn().mockResolvedValue(1);
+    prisma.communityPost.count = jest.fn().mockResolvedValue(0);
+    prisma.profile.findUnique = jest
+      .fn()
+      .mockResolvedValue(homeCommunity ? { homeCommunity } : null);
+    audit.record = jest.fn().mockResolvedValue(undefined);
+  }
+
   it("returns LOCATION_REQUIRED when coords missing", async () => {
     const result = await buildService().resolveContext(citizen as any, {});
     expect(result.locationStatus).toBe("LOCATION_REQUIRED");
@@ -69,25 +100,7 @@ describe("NeighborhoodWatchContextService", () => {
   });
 
   it("returns MAPPED_PUBLIC_COMMUNITY when a public community contains the point", async () => {
-    prisma.$queryRawUnsafe = jest
-      .fn()
-      .mockResolvedValueOnce([
-        {
-          id: "22222222-2222-4222-8222-222222222222",
-          name: "Trans-Amadi",
-          visibility: "Public",
-          status: "Active",
-          country: "Nigeria",
-          state: "Rivers",
-          lga: "Port Harcourt",
-          description: "Public safety zone",
-        },
-      ])
-      .mockResolvedValueOnce([]);
-    prisma.communityPresence.findFirst = jest.fn().mockResolvedValue(null);
-    prisma.communityPresence.upsert = jest.fn().mockResolvedValue({});
-    prisma.communityMembership.findUnique = jest.fn().mockResolvedValue(null);
-    prisma.communityAlert.count = jest.fn().mockResolvedValue(1);
+    mockMappedCommunityContext(null);
 
     const result = await buildService().resolveContext(citizen as any, {
       lat: "4.8156",
@@ -101,8 +114,66 @@ describe("NeighborhoodWatchContextService", () => {
     expect(result.publicCommunity?.name).toBe("Trans-Amadi");
     expect(result.dynamicArea).toBe(null);
     expect(result.presence?.mode).toBe("LOCATION_PARTICIPANT");
+    expect(result.publicCommunity?.membershipStatus).toBe(null);
     expect(result.permissions.canPost).toBe(true);
     expect(prisma.communityPresence.upsert).toHaveBeenCalled();
+  });
+
+  it("projects pending membership independently from public participation permissions", async () => {
+    mockMappedCommunityContext({ status: "Pending", role: null });
+
+    const result = await buildService().resolveContext(citizen as any, {
+      lat: "4.8156",
+      lng: "7.0498",
+      accuracy: "25",
+      capturedAt: new Date().toISOString(),
+    });
+
+    expect(result.publicCommunity?.membershipStatus).toBe("Pending");
+    expect(result.permissions.canPost).toBe(true);
+    expect(result.permissions.canViewPrivateFeed).toBe(false);
+  });
+
+  it("projects approved membership while permissions remain independently calculated", async () => {
+    mockMappedCommunityContext({
+      status: "Approved",
+      role: { name: "Resident" },
+    });
+
+    const result = await buildService().resolveContext(citizen as any, {
+      lat: "4.8156",
+      lng: "7.0498",
+      accuracy: "25",
+      capturedAt: new Date().toISOString(),
+    });
+
+    expect(result.publicCommunity?.membershipStatus).toBe("Approved");
+    expect(result.permissions.canViewPrivateFeed).toBe(true);
+    expect(result.permissions.canModerate).toBe(false);
+  });
+
+  it("uses current mapped membership instead of a different home community", async () => {
+    mockMappedCommunityContext(null, {
+      id: "home-community",
+      name: "Home Community",
+      visibility: "Public",
+      country: "Nigeria",
+      state: "Lagos",
+      lga: "Ikeja",
+    });
+
+    const result = await buildService().resolveContext(citizen as any, {
+      lat: "4.8156",
+      lng: "7.0498",
+      accuracy: "25",
+      capturedAt: new Date().toISOString(),
+    });
+
+    expect(result.publicCommunity?.id).toBe(
+      "22222222-2222-4222-8222-222222222222",
+    );
+    expect(result.publicCommunity?.membershipStatus).toBe(null);
+    expect(result.homeCommunity?.id).toBe("home-community");
   });
 
   it("returns DYNAMIC_PUBLIC_AREA when GPS is valid but no mapped public community exists", async () => {
