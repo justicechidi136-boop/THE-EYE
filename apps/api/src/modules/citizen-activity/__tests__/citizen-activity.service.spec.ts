@@ -201,7 +201,19 @@ describe("CitizenActivityService", () => {
       resolutionReason: "Safe now",
       assignedAgency: { name: "Police" },
       reporter: { profile: { firstName: "Ada", lastName: "Okoro" } },
-      media: [],
+      media: [
+        {
+          id: "media-1",
+          mediaType: "Image",
+          capturedAt: new Date("2026-08-01T09:01:00.000Z"),
+          uploadedAt: new Date("2026-08-01T09:02:00.000Z"),
+          contentType: "image/jpeg",
+          durationSeconds: null,
+          fileHash: "internal-hash",
+          sizeBytes: null,
+          transcript: null,
+        },
+      ],
       verifications: [],
       broadcasts: [],
       notifications: [],
@@ -211,6 +223,11 @@ describe("CitizenActivityService", () => {
     const archive = await service.getIncidentArchive("inc-1", citizen as any);
     expect(archive.data.readOnly).toBe(true);
     expect(archive.data.incidentId).toBe("inc-1");
+    expect(archive.data.publicReference).toBe("EYE-260801-INC1");
+    expect(archive.data.verificationStatus).toBe("Not verified");
+    expect(archive.data.evidenceGallery[0].fileHash).toBeUndefined();
+    expect(archive.data.auditSummary).toBeUndefined();
+    expect(archive.data.notificationsSent).toBeUndefined();
     expect(archive.data.communityVerificationSummary.requestsSent).toBe(2);
     expect(prisma.incident.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "inc-1", reporterId: "user-1" } }),

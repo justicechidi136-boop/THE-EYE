@@ -82,10 +82,12 @@ class _IncidentCommunicationScreenState
         ActiveEmergencyService(apiClient: widget.apiClient);
     _uploadService = EvidenceUploadService(apiClient: widget.apiClient);
     unawaited(_refresh(initial: true));
-    _pollTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => unawaited(_refresh()),
-    );
+    if (!widget.readOnly) {
+      _pollTimer = Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => unawaited(_refresh()),
+      );
+    }
   }
 
   @override
@@ -109,11 +111,13 @@ class _IncidentCommunicationScreenState
     if (!mounted) return;
     if (initial) setState(() => _loading = true);
     try {
-      await _service.flushQueue(
-        widget.incidentId,
-        widget.accessToken,
-        uploadService: _uploadService,
-      );
+      if (!widget.readOnly) {
+        await _service.flushQueue(
+          widget.incidentId,
+          widget.accessToken,
+          uploadService: _uploadService,
+        );
+      }
       final conversation = await _service.fetchConversation(
         widget.incidentId,
         widget.accessToken,
@@ -122,7 +126,9 @@ class _IncidentCommunicationScreenState
         widget.incidentId,
         widget.accessToken,
       );
-      final queue = await _service.loadQueue();
+      final queue = widget.readOnly
+          ? const <QueuedIncidentMessage>[]
+          : await _service.loadQueue();
       if (!mounted) return;
       setState(() {
         _messages = messages.reversed.toList(growable: false);
@@ -143,7 +149,7 @@ class _IncidentCommunicationScreenState
         _stale = false;
         _loading = false;
       });
-      await _markOfficialMessagesRead(_messages);
+      if (!widget.readOnly) await _markOfficialMessagesRead(_messages);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -586,7 +592,9 @@ class _IncidentCommunicationScreenState
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 28),
                               child: Text(
-                                "No messages yet.\nIf responders need more information, their messages will appear here. You can also send an update about your emergency.",
+                                readOnly
+                                    ? "No communication history was recorded for this incident."
+                                    : "No messages yet.\nIf responders need more information, their messages will appear here. You can also send an update about your emergency.",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: colors.mutedText,

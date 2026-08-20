@@ -224,24 +224,203 @@ abstract class AppLocalizations {
   /// **'Save and continue'**
   String get saveAndContinue;
 
+  /// No description provided for @reportSighting.
+  ///
+  /// In en, this message translates to:
+  /// **'Report sighting'**
   String get reportSighting;
+
+  /// No description provided for @useCurrentLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Use current location'**
   String get useCurrentLocation;
+
+  /// No description provided for @enterManually.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter manually'**
   String get enterManually;
+
+  /// No description provided for @stateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'State'**
   String get stateLabel;
+
+  /// No description provided for @cityTown.
+  ///
+  /// In en, this message translates to:
+  /// **'City/Town'**
   String get cityTown;
+
+  /// No description provided for @cityTownName.
+  ///
+  /// In en, this message translates to:
+  /// **'City/Town name'**
   String get cityTownName;
+
+  /// No description provided for @streetRoadAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Street/Road Address'**
   String get streetRoadAddress;
+
+  /// No description provided for @sightingDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Sighting Details'**
   String get sightingDetails;
+
+  /// No description provided for @newSightingReported.
+  ///
+  /// In en, this message translates to:
+  /// **'New sighting reported'**
   String get newSightingReported;
+
+  /// No description provided for @reportedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported'**
   String get reportedLabel;
+
+  /// No description provided for @observedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Observed'**
   String get observedLabel;
+
+  /// No description provided for @locationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
   String get locationLabel;
+
+  /// No description provided for @whatWasObserved.
+  ///
+  /// In en, this message translates to:
+  /// **'What was observed'**
   String get whatWasObserved;
+
+  /// No description provided for @evidenceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Evidence'**
   String get evidenceLabel;
+
+  /// No description provided for @noEvidenceAttached.
+  ///
+  /// In en, this message translates to:
+  /// **'No evidence attached.'**
   String get noEvidenceAttached;
+
+  /// No description provided for @viewOriginalBroadcast.
+  ///
+  /// In en, this message translates to:
+  /// **'View original Broadcast'**
   String get viewOriginalBroadcast;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
   String get retry;
+
+  /// No description provided for @capturedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Captured'**
   String get capturedLabel;
+
+  /// No description provided for @incidentArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Incident archive'**
+  String get incidentArchive;
+
+  /// No description provided for @completedEmergency.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed emergency'**
+  String get completedEmergency;
+
+  /// No description provided for @incidentResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Incident resolved'**
+  String get incidentResolved;
+
+  /// No description provided for @incidentCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Incident cancelled'**
+  String get incidentCancelled;
+
+  /// No description provided for @incidentClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Incident closed'**
+  String get incidentClosed;
+
+  /// No description provided for @incidentOverview.
+  ///
+  /// In en, this message translates to:
+  /// **'Incident overview'**
+  String get incidentOverview;
+
+  /// No description provided for @completedResponseProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed response progress'**
+  String get completedResponseProgress;
+
+  /// No description provided for @finalStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Final status'**
+  String get finalStatus;
+
+  /// No description provided for @resolutionReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolution reason'**
+  String get resolutionReason;
+
+  /// No description provided for @cancellationReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancellation reason'**
+  String get cancellationReason;
+
+  /// No description provided for @communicationHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Communication history'**
+  String get communicationHistory;
+
+  /// No description provided for @readOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Read only'**
+  String get readOnly;
+
+  /// No description provided for @noEvidenceSubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'No evidence submitted.'**
+  String get noEvidenceSubmitted;
+
+  /// No description provided for @noDispatchActivityRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'No dispatch activity recorded.'**
+  String get noDispatchActivityRecorded;
+
+  /// No description provided for @viewCommunicationHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'View communication history'**
+  String get viewCommunicationHistory;
 }
 
 class _AppLocalizationsDelegate
