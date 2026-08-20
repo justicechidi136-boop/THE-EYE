@@ -541,15 +541,14 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen heading east");
+    final submitButton =
+        find.widgetWithText(FilledButton, "Submit sighting");
     await tester.scrollUntilVisible(
-      find.text("Submit sighting"),
-      400,
+      submitButton,
+      250,
       scrollable: scrollable,
     );
-    final submitFinder = find.text("Submit sighting");
-    await tester.ensureVisible(submitFinder);
-    await tester.pumpAndSettle();
-    await tester.tap(submitFinder);
+    await tester.tap(submitButton);
     await tester.pumpAndSettle();
 
     expect(find.text("Sighting submitted"), findsOneWidget);
@@ -607,15 +606,14 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen near the roundabout");
+    final submitButton =
+        find.widgetWithText(FilledButton, "Submit sighting");
     await tester.scrollUntilVisible(
-      find.text("Submit sighting"),
-      400,
+      submitButton,
+      250,
       scrollable: scrollable,
     );
-    final submitFinder = find.text("Submit sighting");
-    await tester.ensureVisible(submitFinder);
-    await tester.pumpAndSettle();
-    await tester.tap(submitFinder);
+    await tester.tap(submitButton);
     await tester.pumpAndSettle();
 
     expect(payload?["locationMode"], "MANUAL");
