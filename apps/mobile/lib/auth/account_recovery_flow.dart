@@ -39,6 +39,8 @@ class _AccountRecoveryRequestScreenState
   }
 
   Future<void> _submit() async {
+    if (submitting) return;
+
     final email = _emailController.text.trim();
     if (!isValidEmail(email)) {
       setState(() =>
@@ -49,13 +51,24 @@ class _AccountRecoveryRequestScreenState
       submitting = true;
       errorMessage = null;
     });
-    final result = await widget.authService.requestAccountRecovery(email);
-    if (!mounted) return;
-    setState(() {
-      submitting = false;
-      sent = result.isSuccess;
-      errorMessage = result.isSuccess ? null : result.userMessage;
-    });
+    try {
+      final result = await widget.authService.requestAccountRecovery(email);
+      if (!mounted) return;
+      setState(() {
+        sent = result.isSuccess;
+        errorMessage = result.isSuccess ? null : result.userMessage;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        sent = false;
+        errorMessage = "We couldn’t process your request right now.";
+      });
+    } finally {
+      if (mounted) {
+        setState(() => submitting = false);
+      }
+    }
   }
 
   @override

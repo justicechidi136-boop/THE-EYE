@@ -3221,7 +3221,12 @@ class AccountStatusScreen extends StatelessWidget {
 }
 
 class LoginRegisterScreen extends StatefulWidget {
-  const LoginRegisterScreen({super.key});
+  const LoginRegisterScreen({
+    super.key,
+    this.authService,
+  });
+
+  final AuthService? authService;
 
   @override
   State<LoginRegisterScreen> createState() => _LoginRegisterScreenState();
@@ -3401,50 +3406,54 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     if (submitting || forgotPasswordBusy || socialBusy) return;
 
     final parsed = parseLoginIdentifier(_identifierController.text);
-    final controller = appOf(context);
-
-    if (parsed.kind == LoginIdentifierKind.phone &&
-        isValidPhoneNumber(_identifierController.text)) {
-      setState(() {
-        forgotPasswordBusy = true;
-        formError = null;
-        formSuccess = null;
-      });
-      final result =
-          await controller.authService.requestPhoneOtp(parsed.phone!);
-      if (!mounted) return;
-      setState(() => forgotPasswordBusy = false);
-      if (!result.isSuccess) {
-        setState(() => formError = result.userMessage);
-        return;
-      }
-      Navigator.of(context).pushNamed(
-        "/otp-verification",
-        arguments: OtpVerificationArgs(phone: parsed.phone!),
-      );
-      return;
-    }
+    final authService = widget.authService ?? appOf(context).authService;
 
     setState(() {
       forgotPasswordBusy = true;
       formError = null;
       formSuccess = null;
     });
-    final result = await controller.authService
-        .requestPasswordReset(_identifierController.text);
-    if (!mounted) return;
-    setState(() {
-      forgotPasswordBusy = false;
-      if (result.isSuccess) {
-        formSuccess = result.userMessage ??
-            "If an account matches that email, password-reset instructions have been sent.";
-        formError = null;
-      } else {
-        formError =
-            result.userMessage ?? "We couldn’t process your request right now.";
-        formSuccess = null;
+    try {
+      if (parsed.kind == LoginIdentifierKind.phone &&
+          isValidPhoneNumber(_identifierController.text)) {
+        final result = await authService.requestPhoneOtp(parsed.phone!);
+        if (!mounted) return;
+        if (!result.isSuccess) {
+          setState(() => formError = result.userMessage);
+          return;
+        }
+        Navigator.of(context).pushNamed(
+          "/otp-verification",
+          arguments: OtpVerificationArgs(phone: parsed.phone!),
+        );
+        return;
       }
-    });
+
+      final result =
+          await authService.requestPasswordReset(_identifierController.text);
+      if (!mounted) return;
+      setState(() {
+        if (result.isSuccess) {
+          formSuccess = result.userMessage ??
+              "If an account matches that email, password-reset instructions have been sent.";
+          formError = null;
+        } else {
+          formError = result.userMessage ??
+              "We couldn’t process your request right now.";
+          formSuccess = null;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        formError = "We couldn’t process your request right now.";
+        formSuccess = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => forgotPasswordBusy = false);
+      }
+    }
   }
 
   @override

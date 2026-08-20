@@ -199,12 +199,14 @@ class AuthService {
       );
     } on AuthApiException catch (error) {
       return _mapRecoveryRequestException(error);
+    } on TimeoutException {
+      return _recoveryNetworkFailure();
     } on SocketException {
-      return const AuthRequestResult(
-        status: AuthRequestStatus.networkError,
-        userMessage:
-            "We couldn’t send recovery instructions right now. Please try again.",
-      );
+      return _recoveryNetworkFailure();
+    } on http.ClientException {
+      return _recoveryNetworkFailure();
+    } catch (_) {
+      return _recoveryUnexpectedFailure();
     }
   }
 
@@ -227,12 +229,14 @@ class AuthService {
       );
     } on AuthApiException catch (error) {
       return _mapRecoveryRequestException(error);
+    } on TimeoutException {
+      return _recoveryNetworkFailure();
     } on SocketException {
-      return const AuthRequestResult(
-        status: AuthRequestStatus.networkError,
-        userMessage:
-            "We couldn’t send recovery instructions right now. Please try again.",
-      );
+      return _recoveryNetworkFailure();
+    } on http.ClientException {
+      return _recoveryNetworkFailure();
+    } catch (_) {
+      return _recoveryUnexpectedFailure();
     }
   }
 
@@ -545,6 +549,21 @@ class AuthService {
             "We couldn’t send recovery instructions right now. Please try again.",
       );
     }
+    return const AuthRequestResult(
+      status: AuthRequestStatus.serverError,
+      userMessage: "We couldn’t process your request right now.",
+    );
+  }
+
+  AuthRequestResult _recoveryNetworkFailure() {
+    return const AuthRequestResult(
+      status: AuthRequestStatus.networkError,
+      userMessage:
+          "We couldn’t send recovery instructions right now. Please try again.",
+    );
+  }
+
+  AuthRequestResult _recoveryUnexpectedFailure() {
     return const AuthRequestResult(
       status: AuthRequestStatus.serverError,
       userMessage: "We couldn’t process your request right now.",
