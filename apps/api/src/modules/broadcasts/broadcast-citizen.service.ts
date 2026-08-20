@@ -12,6 +12,7 @@ import {
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
+  createStorageDownloadUrl,
   createStorageUploadUrl,
   evidenceObjectKey,
   validateEvidenceUpload,
@@ -41,7 +42,15 @@ import {
 const DEFAULT_EXPIRY_DAYS = 30;
 
 const BROADCAST_MEDIA_TYPES = new Set(["image", "video", "audio"]);
-const SIGHTING_LOCATION_MODES = new Set(["CURRENT_GPS", "MANUAL", "NOT_PROVIDED"]);
+const SIGHTING_LOCATION_MODES = new Set(["CURRENT_GPS", "MANUAL"]);
+
+function normalizedOptionalText(value: unknown, maxLength: number) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text.length > maxLength) {
+    throw new BadRequestException(`Location text must not exceed ${maxLength} characters`);
+  }
+  return text || undefined;
+}
 
 function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string | number>> {
   if (!Array.isArray(raw)) return [];
@@ -326,9 +335,9 @@ export class BroadcastCitizenService {
   async submitSighting(id: string, dto: SubmitBroadcastSightingDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
     if (!dto.description?.trim()) throw new BadRequestException("Sighting description is required");
-    const locationMode = String(dto.locationMode ?? "NOT_PROVIDED").trim().toUpperCase();
+    const locationMode = String(dto.locationMode ?? "").trim().toUpperCase();
     if (!SIGHTING_LOCATION_MODES.has(locationMode)) {
-      throw new BadRequestException("locationMode must be CURRENT_GPS, MANUAL, or NOT_PROVIDED");
+      throw new BadRequestException("locationMode must be CURRENT_GPS or MANUAL");
     }
     if ((dto.latitude === undefined) !== (dto.longitude === undefined)) {
       throw new BadRequestException("latitude and longitude must be supplied together");
@@ -336,18 +345,27 @@ export class BroadcastCitizenService {
     if (locationMode === "CURRENT_GPS" && (dto.latitude === undefined || dto.longitude === undefined)) {
       throw new BadRequestException("Current GPS location mode requires latitude and longitude");
     }
-    if (locationMode === "NOT_PROVIDED" && (dto.latitude !== undefined || dto.longitude !== undefined)) {
-      throw new BadRequestException("Do not send coordinates when locationMode is NOT_PROVIDED");
-    }
-    if (dto.latitude !== undefined && (Number.isNaN(dto.latitude) || dto.latitude < -90 || dto.latitude > 90)) {
+    if (dto.latitude !== undefined && (!Number.isFinite(dto.latitude) || dto.latitude < -90 || dto.latitude > 90)) {
       throw new BadRequestException("latitude must be between -90 and 90");
     }
-    if (dto.longitude !== undefined && (Number.isNaN(dto.longitude) || dto.longitude < -180 || dto.longitude > 180)) {
+    if (dto.longitude !== undefined && (!Number.isFinite(dto.longitude) || dto.longitude < -180 || dto.longitude > 180)) {
       throw new BadRequestException("longitude must be between -180 and 180");
     }
     const observedAt = dto.observedAt ? new Date(dto.observedAt) : new Date();
     if (Number.isNaN(observedAt.getTime())) {
       throw new BadRequestException("observedAt must be a valid date-time");
+    }
+    const capturedAt = dto.capturedAt ? new Date(dto.capturedAt) : undefined;
+    if (capturedAt && Number.isNaN(capturedAt.getTime())) {
+      throw new BadRequestException("capturedAt must be a valid date-time");
+    }
+    const state = normalizedOptionalText(dto.state, 100);
+    const cityTown = normalizedOptionalText(dto.cityTown, 100);
+    const streetAddress = normalizedOptionalText(dto.streetAddress, 200);
+    const countryCode = normalizedOptionalText(dto.countryCode, 2)?.toUpperCase();
+    const displayAddress = normalizedOptionalText(dto.displayAddress, 300);
+    if (locationMode === "MANUAL" && (!state || !cityTown || !streetAddress)) {
+      throw new BadRequestException("Manual location requires State, City/Town, and Street/Road Address");
     }
     const attachments = sanitizeBroadcastAttachments(dto.attachments);
     const broadcast = await this.prisma.broadcast.findFirst({
@@ -381,6 +399,14 @@ export class BroadcastCitizenService {
         metadata: {
           ...(dto.clientSightingId ? { clientSightingId: dto.clientSightingId } : {}),
           locationMode,
+          location: {
+            ...(countryCode ? { countryCode } : {}),
+            ...(state ? { state } : {}),
+            ...(cityTown ? { cityTown } : {}),
+            ...(streetAddress ? { streetAddress } : {}),
+            ...(displayAddress ? { displayAddress } : {}),
+            ...(capturedAt ? { capturedAt: capturedAt.toISOString() } : {}),
+          },
           ...(attachments.length > 0 ? { attachments } : {}),
         },
       } as never,
@@ -418,6 +444,72 @@ export class BroadcastCitizenService {
     });
     return {
       data: sightings.map((sighting) => this.toSightingProjection(sighting as unknown as Record<string, unknown>, { isAdmin })),
+    };
+  }
+
+  async getSighting(id: string, sightingId: string, actor: JwtPayload) {
+    const broadcast = await this.prisma.broadcast.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        creatorUserId: true,
+        type: true,
+        title: true,
+        metadata: true,
+      },
+    });
+    if (!broadcast) throw new NotFoundException("Broadcast not found");
+    const isAdmin = actor.typ === "admin";
+    const isOwner = actor.typ === "user" && actor.sub === broadcast.creatorUserId;
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException("You are not allowed to view this sighting");
+    }
+    const sighting = await this.prisma.broadcastSighting.findFirst({
+      where: { id: sightingId, broadcastId: id },
+    });
+    if (!sighting) throw new NotFoundException("Sighting not found");
+    const projection = this.toSightingProjection(
+      sighting as unknown as Record<string, unknown>,
+      { isAdmin },
+    );
+    const metadata = (sighting.metadata as Record<string, unknown> | null) ?? {};
+    const attachments = await Promise.all(
+      (Array.isArray(metadata.attachments) ? metadata.attachments : [])
+        .filter((item) => item && typeof item === "object")
+        .map(async (item) => {
+          const row = item as Record<string, unknown>;
+          const objectKey = String(row.objectKey ?? "").trim();
+          if (!objectKey || objectKey.includes("..") || !objectKey.startsWith("evidence/broadcast-")) return null;
+          const signed = await createStorageDownloadUrl(objectKey, 300);
+          return {
+            mediaType: String(row.mediaType ?? ""),
+            label: String(row.label ?? "").trim() || "Attachment",
+            contentType: String(row.contentType ?? ""),
+            durationSeconds: Number(row.durationSeconds) || null,
+            url: signed.url,
+          };
+        }),
+    );
+    const broadcastMetadata = (broadcast.metadata as Record<string, unknown> | null) ?? {};
+    const vehicleSummary = [broadcastMetadata.colour, broadcastMetadata.make, broadcastMetadata.model]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+    const registration = String(broadcastMetadata.registrationNumber ?? "").trim();
+    const subjectSummary = vehicleSummary
+      ? `${vehicleSummary}${registration ? ` (${maskRegistrationNumber(registration)})` : ""}`
+      : String(broadcastMetadata.fullName ?? broadcast.title);
+    return {
+      data: {
+        ...projection,
+        attachments: attachments.filter(Boolean),
+        broadcast: {
+          id: broadcast.id,
+          type: broadcast.type,
+          title: broadcast.title,
+          subjectSummary,
+        },
+      },
     };
   }
 
@@ -676,8 +768,11 @@ export class BroadcastCitizenService {
 
     return {
       id: sighting.id,
+      broadcastId: sighting.broadcastId,
+      reportedAt: sighting.createdAt,
       observedAt: sighting.observedAt,
       locationMode: String(metadata.locationMode ?? "NOT_PROVIDED"),
+      location: metadata.location && typeof metadata.location === "object" ? metadata.location : null,
       approximateArea: sighting.approximateArea ?? null,
       description: sighting.description,
       confidence: sighting.confidence ?? null,
@@ -698,18 +793,21 @@ export class BroadcastCitizenService {
     const make = String(metadata.make ?? "").trim();
     const model = String(metadata.model ?? "").trim();
     const vehicleName = [make, model].filter(Boolean).join(" ").trim() || "vehicle";
+    const subject = String(broadcast.type) === BroadcastType.MissingPerson
+      ? "missing person"
+      : vehicleName;
     await this.notificationsService.create({
       userId: ownerUserId,
       broadcastId: String(broadcast.id),
       type: "BroadcastSightingAlert",
       priority: "High",
       channels: ["push", "in_app"],
-      title: "New Sighting Report",
-      body: `Someone reported a possible sighting of your stolen ${vehicleName}.`,
+      title: "New sighting reported",
+      body: `Someone reported a possible sighting for your ${subject} broadcast.`,
       metadata: {
         broadcastId: String(broadcast.id),
         sightingId,
-        deepLink: `/broadcasts/${String(broadcast.id)}`,
+        deepLink: `/broadcasts/${String(broadcast.id)}/sightings/${sightingId}`,
       },
     });
   }

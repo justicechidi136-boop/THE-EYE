@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
+import "package:url_launcher/url_launcher.dart";
 
 import "../brand.dart";
 import "../design_system/components/eye_page_header.dart";
@@ -10,7 +11,11 @@ import "../design_system/tokens.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_policy.dart";
 import "../incidents/incident_submission_service.dart";
-import "../location/location_permission_service.dart";
+import "../l10n/generated/app_localizations.dart";
+import "../location/device_location_service.dart";
+import "../location/device_location_state.dart";
+import "../location/nigeria_location_catalog.dart";
+import "../presentation/citizen_location_presentation.dart";
 import "../presentation/citizen_presentation.dart";
 import "../presentation/citizen_time_picker.dart";
 import "../theme/the_eye_theme.dart";
@@ -19,6 +24,7 @@ import "broadcast_feed_service.dart";
 import "broadcast_media_upload_service.dart";
 import "broadcast_navigation.dart";
 import "broadcast_session.dart";
+import "broadcast_sighting_service.dart";
 import "broadcast_submission_service.dart";
 import "broadcast_ui_helpers.dart";
 import "../incidents/incident_draft_factory.dart";
@@ -1486,9 +1492,16 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
 }
 
 class SubmitSightingScreen extends StatefulWidget {
-  const SubmitSightingScreen({required this.broadcastId, super.key});
+  const SubmitSightingScreen({
+    required this.broadcastId,
+    this.currentLocationProbe,
+    this.locationProvider = const NigeriaLocationCatalog(),
+    super.key,
+  });
 
   final String broadcastId;
+  final Future<DeviceLocationState> Function()? currentLocationProbe;
+  final LocationSelectionProvider locationProvider;
 
   @override
   State<SubmitSightingScreen> createState() => _SubmitSightingScreenState();
@@ -1497,17 +1510,17 @@ class SubmitSightingScreen extends StatefulWidget {
 class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _descriptionController = TextEditingController();
-  final _areaController = TextEditingController();
-  final _manualLatitudeController = TextEditingController();
-  final _manualLongitudeController = TextEditingController();
+  final _streetAddressController = TextEditingController();
+  final _customCityController = TextEditingController();
   final _uploadService = BroadcastMediaUploadService();
   final String _clientActionId = createClientSubmissionId();
   DateTime _observedAt = DateTime.now();
-  _SightingLocationMode _locationMode = _SightingLocationMode.notProvided;
+  _SightingLocationMode? _locationMode;
   bool _submitting = false;
   BroadcastFeedItem? _headerItem;
-  double? _manualLatitude;
-  double? _manualLongitude;
+  DeviceLocationState? _capturedLocation;
+  String? _selectedState;
+  String? _selectedCity;
   String? _locationStatus;
 
   @override
@@ -1525,38 +1538,28 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   @override
   void dispose() {
     _descriptionController.dispose();
-    _areaController.dispose();
-    _manualLatitudeController.dispose();
-    _manualLongitudeController.dispose();
+    _streetAddressController.dispose();
+    _customCityController.dispose();
     super.dispose();
   }
 
   Future<void> _captureLocation() async {
-    final outcome = await captureLocationOutcome();
+    setState(() => _locationStatus = "Finding your current location...");
+    final outcome = await (widget.currentLocationProbe ??
+        DeviceLocationService().probeCurrentLocation)();
     if (!mounted) return;
-    if (outcome.result != LocationCaptureResult.granted ||
-        outcome.position == null) {
+    if (!outcome.isAcquired || !outcome.hasCoordinates) {
       setState(() {
-        _locationStatus = locationFailureMessage(outcome.result);
+        _capturedLocation = null;
+        _locationStatus = outcome.message ??
+            "Current location is unavailable. Enter the location manually.";
       });
       return;
     }
     setState(() {
-      _manualLatitude = outcome.position?.latitude;
-      _manualLongitude = outcome.position?.longitude;
-      _manualLatitudeController.text =
-          _manualLatitude?.toStringAsFixed(6) ?? "";
-      _manualLongitudeController.text =
-          _manualLongitude?.toStringAsFixed(6) ?? "";
-      _locationStatus = "Current location captured.";
+      _capturedLocation = outcome;
+      _locationStatus = null;
     });
-  }
-
-  double? _parseCoordinate(String value,
-      {required double min, required double max}) {
-    final parsed = double.tryParse(value.trim());
-    if (parsed == null || parsed < min || parsed > max) return null;
-    return parsed;
   }
 
   Future<void> _pickObservedDate() async {
@@ -1596,37 +1599,38 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     final description = _descriptionController.text.trim();
     if (description.isEmpty) {
       showBroadcastSnackBar(context, "Describe what you saw.", isError: true);
       return;
     }
+    if (_locationMode == null) {
+      showBroadcastSnackBar(context, "Choose a sighting location.",
+          isError: true);
+      return;
+    }
     if (_locationMode == _SightingLocationMode.currentGps &&
-        (_manualLatitude == null || _manualLongitude == null)) {
+        (_capturedLocation?.hasCoordinates != true)) {
       showBroadcastSnackBar(
         context,
-        "Capture your current location or choose another location mode.",
+        "Capture your current location or enter it manually.",
         isError: true,
       );
       return;
     }
-    double? latitude = _manualLatitude;
-    double? longitude = _manualLongitude;
+    final usesOtherCity = _selectedCity == NigeriaLocationCatalog.otherCityTown;
+    final cityTown = usesOtherCity
+        ? _customCityController.text.trim()
+        : _selectedCity?.trim();
     if (_locationMode == _SightingLocationMode.manual) {
-      latitude = _parseCoordinate(
-        _manualLatitudeController.text,
-        min: -90,
-        max: 90,
-      );
-      longitude = _parseCoordinate(
-        _manualLongitudeController.text,
-        min: -180,
-        max: 180,
-      );
-      if (latitude == null || longitude == null) {
+      if (_selectedState == null ||
+          cityTown == null ||
+          cityTown.isEmpty ||
+          _streetAddressController.text.trim().length < 2) {
         showBroadcastSnackBar(
           context,
-          "Enter valid latitude and longitude.",
+          "Enter State, City/Town, and Street/Road Address.",
           isError: true,
         );
         return;
@@ -1646,18 +1650,37 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
         clientActionId: _clientActionId,
         description: description,
         observedAt: _observedAt.toUtc().toIso8601String(),
-        locationMode: _locationMode.apiValue,
-        latitude: _locationMode == _SightingLocationMode.currentGps ||
-                _locationMode == _SightingLocationMode.manual
-            ? latitude
+        locationMode: _locationMode!.apiValue,
+        latitude: _locationMode == _SightingLocationMode.currentGps
+            ? _capturedLocation!.latitude
             : null,
-        longitude: _locationMode == _SightingLocationMode.currentGps ||
-                _locationMode == _SightingLocationMode.manual
-            ? longitude
+        longitude: _locationMode == _SightingLocationMode.currentGps
+            ? _capturedLocation!.longitude
             : null,
-        approximateArea: _areaController.text.trim().isEmpty
-            ? null
-            : _areaController.text.trim(),
+        countryCode: "NG",
+        state: _locationMode == _SightingLocationMode.manual
+            ? _selectedState
+            : _capturedLocation?.state,
+        cityTown: _locationMode == _SightingLocationMode.manual
+            ? cityTown
+            : _capturedLocation?.locality,
+        streetAddress: _locationMode == _SightingLocationMode.manual
+            ? _streetAddressController.text.trim()
+            : _capturedLocation?.street,
+        displayAddress: _locationMode == _SightingLocationMode.currentGps
+            ? CitizenLocationPresentation(
+                streetAddress: _capturedLocation?.street,
+                subLocality: _capturedLocation?.subLocality,
+                cityTown: _capturedLocation?.locality,
+                lga: _capturedLocation?.lga,
+                state: _capturedLocation?.state,
+              ).lines.join(", ")
+            : CitizenLocationPresentation(
+                streetAddress: _streetAddressController.text,
+                cityTown: cityTown,
+                state: _selectedState,
+              ).lines.join(", "),
+        capturedAt: _capturedLocation?.capturedAt?.toUtc().toIso8601String(),
         confidence: "ReporterProvided",
         attachments: attachments,
       );
@@ -1685,6 +1708,7 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final headerTitle = _headerItem == null
         ? "Report Sighting"
         : [
@@ -1697,7 +1721,7 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                 _headerItem!.metadata["model"],
               ].whereType<String>().join(" ");
     return _BroadcastShell(
-      title: "Report sighting",
+      title: l10n.reportSighting,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
@@ -1742,58 +1766,104 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                     onChanged: _submitting
                         ? null
                         : (value) async {
-                            setState(
-                                () => _locationMode = value ?? _locationMode);
+                            setState(() => _locationMode = value);
                             await _captureLocation();
                           },
-                    title: const Text("Use current location"),
+                    title: Text(l10n.useCurrentLocation),
                   ),
                   RadioListTile<_SightingLocationMode>(
                     value: _SightingLocationMode.manual,
                     groupValue: _locationMode,
                     onChanged: _submitting
                         ? null
-                        : (value) => setState(
-                            () => _locationMode = value ?? _locationMode),
-                    title: const Text("Enter manually"),
+                        : (value) => setState(() => _locationMode = value),
+                    title: Text(l10n.enterManually),
                   ),
                   if (_locationMode == _SightingLocationMode.manual) ...[
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: _manualLatitudeController,
-                      enabled: !_submitting,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        signed: true,
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: "Latitude",
-                        helperText: "Example: 6.524379",
-                      ),
+                    DropdownButtonFormField<String>(
+                      value: _selectedState,
+                      decoration: InputDecoration(labelText: l10n.stateLabel),
+                      items: widget.locationProvider.states
+                          .map((state) => DropdownMenuItem(
+                                value: state,
+                                child: Text(state),
+                              ))
+                          .toList(growable: false),
+                      onChanged: _submitting
+                          ? null
+                          : (value) => setState(() {
+                                _selectedState = value;
+                                _selectedCity = null;
+                                _customCityController.clear();
+                              }),
                     ),
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: _manualLongitudeController,
-                      enabled: !_submitting,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        signed: true,
-                        decimal: true,
+                    DropdownButtonFormField<String>(
+                      value: _selectedCity,
+                      decoration: InputDecoration(labelText: l10n.cityTown),
+                      items: _selectedState == null
+                          ? const []
+                          : widget.locationProvider
+                              .citiesForState(_selectedState!)
+                              .map((city) => DropdownMenuItem(
+                                    value: city,
+                                    child: Text(city),
+                                  ))
+                              .toList(growable: false),
+                      onChanged: _submitting || _selectedState == null
+                          ? null
+                          : (value) => setState(() => _selectedCity = value),
+                    ),
+                    if (_selectedCity ==
+                        NigeriaLocationCatalog.otherCityTown) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _customCityController,
+                        enabled: !_submitting,
+                        decoration:
+                            InputDecoration(labelText: l10n.cityTownName),
                       ),
-                      decoration: const InputDecoration(
-                        labelText: "Longitude",
-                        helperText: "Example: 3.379206",
+                    ],
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _streetAddressController,
+                      enabled: !_submitting,
+                      decoration: InputDecoration(
+                        labelText: l10n.streetRoadAddress,
+                        helperText: "Example: Stadium Road or Rumuola Junction",
                       ),
                     ),
                   ],
-                  RadioListTile<_SightingLocationMode>(
-                    value: _SightingLocationMode.notProvided,
-                    groupValue: _locationMode,
-                    onChanged: _submitting
-                        ? null
-                        : (value) => setState(
-                            () => _locationMode = value ?? _locationMode),
-                    title: const Text("Skip"),
-                  ),
+                  if (_capturedLocation?.hasCoordinates == true)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          CitizenLocationPresentation(
+                            streetAddress: _capturedLocation?.street,
+                            subLocality: _capturedLocation?.subLocality,
+                            cityTown: _capturedLocation?.locality,
+                            lga: _capturedLocation?.lga,
+                            state: _capturedLocation?.state,
+                          ).label,
+                        ),
+                      ),
+                    ),
+                  if (_capturedLocation?.capturedAt != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          "${l10n.capturedLabel}: ${CitizenDateTimeFormatter.formatDateTime(_capturedLocation!.capturedAt!)}",
+                          style: TextStyle(
+                            color: EyeSemanticColors.of(context).mutedText,
+                          ),
+                        ),
+                      ),
+                    ),
                   if (_locationStatus != null)
                     Align(
                       alignment: Alignment.centerLeft,
@@ -1815,13 +1885,6 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
             maxLines: 4,
             decoration: const InputDecoration(
               labelText: "What did you observe?",
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _areaController,
-            decoration: const InputDecoration(
-              labelText: "Approximate area (optional)",
             ),
           ),
           const SizedBox(height: 16),
@@ -1859,11 +1922,191 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
 
 enum _SightingLocationMode {
   currentGps("CURRENT_GPS"),
-  manual("MANUAL"),
-  notProvided("NOT_PROVIDED");
+  manual("MANUAL");
 
   const _SightingLocationMode(this.apiValue);
   final String apiValue;
+}
+
+class SightingDetailsScreen extends StatefulWidget {
+  const SightingDetailsScreen({
+    required this.broadcastId,
+    required this.sightingId,
+    this.service,
+    super.key,
+  });
+
+  final String broadcastId;
+  final String sightingId;
+  final BroadcastSightingService? service;
+
+  @override
+  State<SightingDetailsScreen> createState() => _SightingDetailsScreenState();
+}
+
+class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
+  BroadcastSightingDetail? _detail;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_load()));
+  }
+
+  Future<void> _load() async {
+    setState(() => _error = null);
+    try {
+      final session = BroadcastSession.require(context);
+      final token = session.accessToken;
+      if (token == null) throw StateError("Authentication required");
+      final detail =
+          await (widget.service ?? BroadcastSightingService()).getDetail(
+        accessToken: token,
+        broadcastId: widget.broadcastId,
+        sightingId: widget.sightingId,
+      );
+      if (mounted) setState(() => _detail = detail);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = "Unable to load sighting details.");
+      }
+    }
+  }
+
+  Future<void> _openEvidence(Map<String, dynamic> attachment) async {
+    final url = Uri.tryParse(attachment["url"]?.toString() ?? "");
+    if (url == null) return;
+    if (attachment["mediaType"] == "image" && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          child: InteractiveViewer(child: Image.network(url.toString())),
+        ),
+      );
+      return;
+    }
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final detail = _detail;
+    final location = detail?.location ?? const <String, dynamic>{};
+    final locationLabel = CitizenLocationPresentation(
+      streetAddress: location["streetAddress"]?.toString(),
+      subLocality: location["subLocality"]?.toString(),
+      cityTown: location["cityTown"]?.toString(),
+      lga: location["lga"]?.toString(),
+      state: location["state"]?.toString(),
+      country: location["country"]?.toString(),
+    ).label;
+    return _BroadcastShell(
+      title: l10n.sightingDetails,
+      child: detail == null
+          ? Center(
+              child: _error == null
+                  ? const CircularProgressIndicator()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!),
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: _load,
+                          child: Text(l10n.retry),
+                        ),
+                      ],
+                    ),
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+              children: [
+                Text(
+                  l10n.newSightingReported,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(detail.subjectSummary),
+                const SizedBox(height: 16),
+                SectionCard(
+                  title: "Sighting",
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (detail.reportedAt != null)
+                        Text(
+                            "${l10n.reportedLabel}: ${CitizenDateTimeFormatter.formatDateTime(detail.reportedAt!)}"),
+                      if (detail.observedAt != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                            "${l10n.observedLabel}: ${CitizenDateTimeFormatter.formatDateTime(detail.observedAt!)}"),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(l10n.locationLabel,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text(location["displayAddress"]
+                                  ?.toString()
+                                  .trim()
+                                  .isNotEmpty ==
+                              true
+                          ? location["displayAddress"].toString()
+                          : locationLabel),
+                      const SizedBox(height: 12),
+                      Text(l10n.whatWasObserved,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text(detail.description),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SectionCard(
+                  title: l10n.evidenceLabel,
+                  child: detail.attachments.isEmpty
+                      ? Text(l10n.noEvidenceAttached)
+                      : Column(
+                          children: detail.attachments.map((attachment) {
+                            final mediaType =
+                                attachment["mediaType"]?.toString();
+                            final url = attachment["url"]?.toString() ?? "";
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: mediaType == "image" && url.isNotEmpty
+                                  ? Image.network(url,
+                                      width: 64, height: 64, fit: BoxFit.cover)
+                                  : Icon(mediaType == "audio"
+                                      ? Icons.audiotrack
+                                      : Icons.play_circle_outline),
+                              title: Text(attachment["label"]?.toString() ??
+                                  "Attachment"),
+                              subtitle: attachment["durationSeconds"] == null
+                                  ? null
+                                  : Text(
+                                      "${attachment["durationSeconds"]} seconds"),
+                              onTap: url.isEmpty
+                                  ? null
+                                  : () => unawaited(_openEvidence(attachment)),
+                            );
+                          }).toList(growable: false),
+                        ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pushNamed(
+                    broadcastDetailRoute(detail.broadcastId)!,
+                  ),
+                  icon: const Icon(Icons.campaign_outlined),
+                  label: Text(l10n.viewOriginalBroadcast),
+                ),
+              ],
+            ),
+    );
+  }
 }
 
 class _SightingSubmittedScreen extends StatelessWidget {

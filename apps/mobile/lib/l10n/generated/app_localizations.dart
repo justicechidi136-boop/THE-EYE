@@ -223,6 +223,25 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save and continue'**
   String get saveAndContinue;
+
+  String get reportSighting;
+  String get useCurrentLocation;
+  String get enterManually;
+  String get stateLabel;
+  String get cityTown;
+  String get cityTownName;
+  String get streetRoadAddress;
+  String get sightingDetails;
+  String get newSightingReported;
+  String get reportedLabel;
+  String get observedLabel;
+  String get locationLabel;
+  String get whatWasObserved;
+  String get evidenceLabel;
+  String get noEvidenceAttached;
+  String get viewOriginalBroadcast;
+  String get retry;
+  String get capturedLabel;
 }
 
 class _AppLocalizationsDelegate

@@ -9,9 +9,27 @@ import "package:the_eye_mobile/broadcasts/broadcast_public_share.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_screens.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_session.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_submission_service.dart";
+import "package:the_eye_mobile/broadcasts/broadcast_sighting_service.dart";
 import "package:the_eye_mobile/app/app_scope.dart";
 import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
+import "package:the_eye_mobile/l10n/generated/app_localizations.dart";
+import "package:the_eye_mobile/location/nigeria_location_catalog.dart";
+import "package:the_eye_mobile/location/device_location_state.dart";
+
+class _TestLocationProvider implements LocationSelectionProvider {
+  const _TestLocationProvider();
+
+  @override
+  List<String> get states => const ["Lagos", "Rivers"];
+
+  @override
+  List<String> citiesForState(String state) => switch (state) {
+        "Lagos" => const ["Lagos"],
+        "Rivers" => const ["Port Harcourt"],
+        _ => const [],
+      };
+}
 
 class _FakeBroadcastFeedService extends BroadcastFeedService {
   _FakeBroadcastFeedService({
@@ -60,6 +78,20 @@ class _FakeBroadcastFeedService extends BroadcastFeedService {
     }
     return listMineItems;
   }
+}
+
+class _FakeBroadcastSightingService extends BroadcastSightingService {
+  _FakeBroadcastSightingService(this.detail);
+
+  final BroadcastSightingDetail detail;
+
+  @override
+  Future<BroadcastSightingDetail> getDetail({
+    required String accessToken,
+    required String broadcastId,
+    required String sightingId,
+  }) async =>
+      detail;
 }
 
 class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
@@ -154,6 +186,12 @@ class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
     double? latitude,
     double? longitude,
     String? approximateArea,
+    String? countryCode,
+    String? state,
+    String? cityTown,
+    String? streetAddress,
+    String? displayAddress,
+    String? capturedAt,
     String? confidence,
     bool anonymousToReviewers = false,
     String? directionOfTravel,
@@ -167,6 +205,12 @@ class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
       "locationMode": locationMode,
       "latitude": latitude,
       "longitude": longitude,
+      "countryCode": countryCode,
+      "state": state,
+      "cityTown": cityTown,
+      "streetAddress": streetAddress,
+      "displayAddress": displayAddress,
+      "capturedAt": capturedAt,
       "attachmentsCount": attachments.length,
     });
     return const SightingSubmissionResult(id: "s-1");
@@ -196,6 +240,8 @@ void main() {
     _FakeBroadcastSession? session,
   }) {
     return MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(
         brightness: Brightness.dark,
         extensions: const [EyeSemanticColors.dark],
@@ -238,6 +284,10 @@ void main() {
       ParsedBroadcastRoute.parse("/broadcasts/b1/comments")?.kind,
       BroadcastRouteKind.comments,
     );
+    final sighting = ParsedBroadcastRoute.parse("/broadcasts/b1/sightings/s1");
+    expect(sighting?.kind, BroadcastRouteKind.sightingDetail);
+    expect(sighting?.broadcastId, "b1");
+    expect(sighting?.sightingId, "s1");
     expect(
       ParsedBroadcastRoute.parse("/broadcasts/create")?.kind,
       BroadcastRouteKind.createHub,
@@ -842,7 +892,10 @@ void main() {
     );
     await tester.pumpWidget(
       wrap(
-        const SubmitSightingScreen(broadcastId: "b1"),
+        const SubmitSightingScreen(
+          broadcastId: "b1",
+          locationProvider: _TestLocationProvider(),
+        ),
         session: session,
       ),
     );
@@ -850,7 +903,23 @@ void main() {
 
     expect(find.text("Use current location"), findsOneWidget);
     expect(find.text("Enter manually"), findsOneWidget);
-    expect(find.text("Skip"), findsOneWidget);
+    expect(find.text("Skip"), findsNothing);
+    expect(find.text("Latitude"), findsNothing);
+    expect(find.text("Longitude"), findsNothing);
+    await tester.tap(find.text("Enter manually"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("State"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Lagos").last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text("City/Town"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("City/Town"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Lagos").last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextField, "Street/Road Address"), "Allen Avenue");
     final scrollable = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(find.text("EVIDENCE"), 400,
         scrollable: scrollable);
@@ -866,8 +935,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen heading east");
-    final submitButton =
-        find.widgetWithText(FilledButton, "Submit sighting");
+    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
     await tester.scrollUntilVisible(
       submitButton,
       250,
@@ -885,7 +953,7 @@ void main() {
     expect(find.text("Broadcast Detail"), findsOneWidget);
   });
 
-  testWidgets("manual sighting location submits entered coordinates",
+  testWidgets("manual sighting location submits a structured address",
       (tester) async {
     Map<String, dynamic>? payload;
     final submitService = _FakeBroadcastSubmissionService(
@@ -907,7 +975,10 @@ void main() {
 
     await tester.pumpWidget(
       wrap(
-        const SubmitSightingScreen(broadcastId: "b1"),
+        const SubmitSightingScreen(
+          broadcastId: "b1",
+          locationProvider: _TestLocationProvider(),
+        ),
         session: session,
       ),
     );
@@ -915,10 +986,18 @@ void main() {
 
     await tester.tap(find.text("Enter manually"));
     await tester.pumpAndSettle();
+    await tester.tap(find.text("State"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Rivers").last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text("City/Town"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("City/Town"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Port Harcourt").last);
+    await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextField, "Latitude"), "6.524379");
-    await tester.enterText(
-        find.widgetWithText(TextField, "Longitude"), "3.379206");
+        find.widgetWithText(TextField, "Street/Road Address"), "Stadium Road");
 
     final scrollable = find.byType(Scrollable).first;
     final descriptionField = find.byWidgetPredicate(
@@ -931,8 +1010,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen near the roundabout");
-    final submitButton =
-        find.widgetWithText(FilledButton, "Submit sighting");
+    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
     await tester.scrollUntilVisible(
       submitButton,
       250,
@@ -942,7 +1020,108 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(payload?["locationMode"], "MANUAL");
-    expect(payload?["latitude"], 6.524379);
-    expect(payload?["longitude"], 3.379206);
+    expect(payload?["latitude"], isNull);
+    expect(payload?["longitude"], isNull);
+    expect(payload?["state"], "Rivers");
+    expect(payload?["cityTown"], "Port Harcourt");
+    expect(payload?["streetAddress"], "Stadium Road");
+  });
+
+  testWidgets("current location submits coordinates but displays an address",
+      (tester) async {
+    Map<String, dynamic>? payload;
+    final submitService = _FakeBroadcastSubmissionService(
+      onSubmit: (value) async => payload = value,
+    );
+    final session = _FakeBroadcastSession(
+      detail: BroadcastFeedItem(
+        id: "b1",
+        type: "StolenVehicle",
+        title: "Stolen vehicle alert",
+        body: "body",
+        priority: "P2Urgent",
+        read: false,
+        publishedAt: DateTime.utc(2026, 8, 1),
+      ),
+      submissionService: submitService,
+    );
+    await tester.pumpWidget(
+      wrap(
+        SubmitSightingScreen(
+          broadcastId: "b1",
+          currentLocationProbe: () async => DeviceLocationState(
+            status: DeviceLocationStatus.acquired,
+            latitude: 4.86,
+            longitude: 7.01,
+            capturedAt: DateTime.utc(2026, 8, 20, 8, 30),
+            street: "Stadium Road",
+            subLocality: "Rumuola",
+            locality: "Port Harcourt",
+            state: "Rivers",
+          ),
+        ),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Use current location"));
+    await tester.pumpAndSettle();
+    expect(find.textContaining("Stadium Road"), findsOneWidget);
+    expect(find.text("Latitude"), findsNothing);
+    expect(find.text("Longitude"), findsNothing);
+
+    final scrollable = find.byType(Scrollable).first;
+    final descriptionField = find.widgetWithText(
+      TextField,
+      "What did you observe?",
+    );
+    await tester.scrollUntilVisible(descriptionField, 350,
+        scrollable: scrollable);
+    await tester.enterText(descriptionField, "Vehicle heading east");
+    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
+    await tester.scrollUntilVisible(submitButton, 250, scrollable: scrollable);
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+
+    expect(payload?["locationMode"], "CURRENT_GPS");
+    expect(payload?["latitude"], 4.86);
+    expect(payload?["longitude"], 7.01);
+    expect(payload?["displayAddress"], contains("Stadium Road"));
+  });
+
+  testWidgets("sighting details prioritizes the persisted sighting",
+      (tester) async {
+    final detail = BroadcastSightingDetail(
+      id: "s1",
+      broadcastId: "b1",
+      subjectSummary: "Blue Toyota Corolla (***1234)",
+      description: "Vehicle heading towards Stadium Road",
+      reportedAt: DateTime.utc(2026, 8, 20, 9, 30),
+      observedAt: DateTime.utc(2026, 8, 20, 9, 20),
+      location: const {
+        "streetAddress": "Stadium Road",
+        "cityTown": "Port Harcourt",
+        "state": "Rivers",
+      },
+      attachments: const [],
+    );
+    await tester.pumpWidget(
+      wrap(
+        SightingDetailsScreen(
+          broadcastId: "b1",
+          sightingId: "s1",
+          service: _FakeBroadcastSightingService(detail),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("New sighting reported"), findsOneWidget);
+    expect(find.textContaining("Blue Toyota Corolla"), findsOneWidget);
+    expect(find.textContaining("Stadium Road"), findsWidgets);
+    expect(find.text("Vehicle heading towards Stadium Road"), findsOneWidget);
+    expect(find.text("No evidence attached."), findsOneWidget);
+    expect(find.text("View original Broadcast"), findsOneWidget);
   });
 }
