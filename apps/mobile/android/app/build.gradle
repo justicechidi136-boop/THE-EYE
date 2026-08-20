@@ -27,6 +27,9 @@ def hasStagingReleaseSigning =
         stagingStorePassword &&
         stagingKeyAlias &&
         stagingKeyPassword
+def stagingReleaseRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.toLowerCase().contains("stagingrelease")
+}
 
 android {
     namespace = "com.theeye.app"
@@ -102,7 +105,7 @@ androidComponents {
                 variant.signingConfig?.setConfig(android.signingConfigs.debug)
                 return
             }
-            if (!hasStagingReleaseSigning) {
+            if (!hasStagingReleaseSigning && stagingReleaseRequested) {
                 throw new GradleException(
                     "Staging release signing is not configured. " +
                     "Set THE_EYE_STAGING_KEYSTORE_PATH, THE_EYE_STAGING_KEYSTORE_PASSWORD, " +
@@ -110,6 +113,9 @@ androidComponents {
                     "(or android/key.properties staging* entries). " +
                     "Emergency override only: THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true"
                 )
+            }
+            if (!hasStagingReleaseSigning) {
+                return
             }
             variant.signingConfig?.setConfig(android.signingConfigs.stagingRelease)
             return
