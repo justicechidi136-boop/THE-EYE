@@ -17,13 +17,37 @@ class ResponseProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = EyeSemanticColors.of(context);
     final steps = collapseActiveEmergencyProgress(active.progressStages);
     final note = activeEmergencyProgressNote(
       steps: steps,
       assignedAgencyName: active.assignedAgencyName,
       witnessSummary: active.witnessSummary,
     );
+    return EmergencyResponseProgressCard(
+      steps: steps,
+      note: note,
+      onViewDetails: onViewDetails,
+    );
+  }
+}
+
+class EmergencyResponseProgressCard extends StatelessWidget {
+  const EmergencyResponseProgressCard({
+    super.key,
+    required this.steps,
+    required this.note,
+    this.title = "Response progress",
+    this.onViewDetails,
+  });
+
+  final List<ActiveEmergencyCitizenProgressStep> steps;
+  final String note;
+  final String title;
+  final VoidCallback? onViewDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
     final activeIndex = steps.indexWhere(
       (step) => step.state == ActiveEmergencyProgressStageState.current,
     );
@@ -47,7 +71,7 @@ class ResponseProgressCard extends StatelessWidget {
                 child: Semantics(
                   header: true,
                   child: Text(
-                    "Response progress",
+                    title,
                     style: TextStyle(
                       color: colors.bodyText,
                       fontSize: 14.5,

@@ -39,5 +39,20 @@
   "noEvidenceAttached": "No evidence attached.",
   "viewOriginalBroadcast": "View original Broadcast",
   "retry": "Retry",
-  "capturedLabel": "Captured"
+  "capturedLabel": "Captured",
+  "incidentArchive": "Incident archive",
+  "completedEmergency": "Completed emergency",
+  "incidentResolved": "Incident resolved",
+  "incidentCancelled": "Incident cancelled",
+  "incidentClosed": "Incident closed",
+  "incidentOverview": "Incident overview",
+  "completedResponseProgress": "Completed response progress",
+  "finalStatus": "Final status",
+  "resolutionReason": "Resolution reason",
+  "cancellationReason": "Cancellation reason",
+  "communicationHistory": "Communication history",
+  "readOnly": "Read only",
+  "noEvidenceSubmitted": "No evidence submitted.",
+  "noDispatchActivityRecorded": "No dispatch activity recorded.",
+  "viewCommunicationHistory": "View communication history"
 }

@@ -97,6 +97,8 @@ abstract final class TheEyeApiPaths {
   static const usersMeActivityHistory = "/users/me/activity-history";
   static String incidentArchive(String incidentId) =>
       "/incidents/$incidentId/archive";
+  static String incidentMediaView(String incidentId, String mediaId) =>
+      "/incidents/$incidentId/media/$mediaId/view";
   static String broadcastArchive(String broadcastId) =>
       "/broadcasts/$broadcastId/archive";
   static String notificationDetail(String notificationId) =>

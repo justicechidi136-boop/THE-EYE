@@ -2,7 +2,7 @@ import "dart:convert";
 
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
-import "../incidents/incident_submission_service.dart";
+import "incident_archive_contract.dart";
 
 class ActivityTimelineEntry {
   const ActivityTimelineEntry({
@@ -108,16 +108,19 @@ class ActivityHistoryItem {
     if (rawPreview is List) {
       for (final entry in rawPreview) {
         if (entry is Map) {
-          preview.add(ActivityTimelineEntry.fromJson(Map<String, dynamic>.from(entry)));
+          preview.add(
+              ActivityTimelineEntry.fromJson(Map<String, dynamic>.from(entry)));
         }
       }
     }
     final latest = json["latestUpdate"];
     final latestMap = latest is Map ? Map<String, dynamic>.from(latest) : null;
     final thumbnail = json["thumbnail"];
-    final thumbnailMap = thumbnail is Map ? Map<String, dynamic>.from(thumbnail) : null;
+    final thumbnailMap =
+        thumbnail is Map ? Map<String, dynamic>.from(thumbnail) : null;
     final location = json["location"];
-    final locationMap = location is Map ? Map<String, dynamic>.from(location) : null;
+    final locationMap =
+        location is Map ? Map<String, dynamic>.from(location) : null;
     return ActivityHistoryItem(
       sourceType: json["sourceType"]?.toString() ?? "incident",
       kind: json["kind"]?.toString() ?? "EmergencyReport",
@@ -125,7 +128,8 @@ class ActivityHistoryItem {
       category: json["category"]?.toString() ?? "Incident",
       status: json["status"]?.toString() ?? "",
       lifecycle: json["lifecycle"]?.toString() ?? "active",
-      statusBadge: json["statusBadge"]?.toString() ?? json["status"]?.toString() ?? "",
+      statusBadge:
+          json["statusBadge"]?.toString() ?? json["status"]?.toString() ?? "",
       occurredAt: json["occurredAt"]?.toString() ?? "",
       dateLabel: json["dateLabel"]?.toString() ?? "",
       timeLabel: json["timeLabel"]?.toString() ?? "",
@@ -135,18 +139,26 @@ class ActivityHistoryItem {
           ? (json["verificationConfidence"] as num).round()
           : null,
       verificationStatus: json["verificationStatus"]?.toString() ?? "Pending",
-      broadcastReach: json["broadcastReach"] is num ? (json["broadcastReach"] as num).round() : null,
+      broadcastReach: json["broadcastReach"] is num
+          ? (json["broadcastReach"] as num).round()
+          : null,
       latestUpdateLabel: latestMap?["label"]?.toString(),
       latestUpdateAt: latestMap?["at"]?.toString(),
-      unreadUpdatesCount: json["unreadUpdatesCount"] is num ? (json["unreadUpdatesCount"] as num).round() : 0,
+      unreadUpdatesCount: json["unreadUpdatesCount"] is num
+          ? (json["unreadUpdatesCount"] as num).round()
+          : 0,
       thumbnailMediaType: thumbnailMap?["mediaType"]?.toString(),
       timelinePreview: preview,
       navigation: ActivityNavigationTarget.fromJson(
-        json["navigation"] is Map ? Map<String, dynamic>.from(json["navigation"] as Map) : null,
+        json["navigation"] is Map
+            ? Map<String, dynamic>.from(json["navigation"] as Map)
+            : null,
       ),
       isActive: json["isActive"] == true,
       isTerminal: json["isTerminal"] == true,
-      title: json["title"]?.toString() ?? json["category"]?.toString() ?? "Activity",
+      title: json["title"]?.toString() ??
+          json["category"]?.toString() ??
+          "Activity",
       missingPersonName: json["missingPersonName"]?.toString(),
       vehiclePlate: json["vehiclePlate"]?.toString(),
     );
@@ -193,7 +205,8 @@ class ActivityHistoryService {
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! Map) {
-      throw IncidentApiException(response.statusCode, "Unexpected activity history response.");
+      throw IncidentApiException(
+          response.statusCode, "Unexpected activity history response.");
     }
     final map = Map<String, dynamic>.from(decoded);
     final rows = map["data"];
@@ -201,7 +214,8 @@ class ActivityHistoryService {
     if (rows is List) {
       for (final row in rows) {
         if (row is Map) {
-          items.add(ActivityHistoryItem.fromJson(Map<String, dynamic>.from(row)));
+          items.add(
+              ActivityHistoryItem.fromJson(Map<String, dynamic>.from(row)));
         }
       }
     }
@@ -225,9 +239,51 @@ class ActivityHistoryService {
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! Map || decoded["data"] is! Map) {
-      throw IncidentApiException(response.statusCode, "Unexpected incident archive response.");
+      throw IncidentApiException(
+          response.statusCode, "Unexpected incident archive response.");
     }
     return Map<String, dynamic>.from(decoded["data"] as Map);
+  }
+
+  Future<IncidentArchiveContract> getIncidentArchiveContract({
+    required String accessToken,
+    required String incidentId,
+  }) async {
+    final data = await getIncidentArchive(
+      accessToken: accessToken,
+      incidentId: incidentId,
+    );
+    try {
+      return IncidentArchiveContract.fromJson(data);
+    } on FormatException {
+      throw IncidentApiException(502, "Unable to read incident archive.");
+    }
+  }
+
+  Future<Uri> getIncidentEvidenceViewUrl({
+    required String accessToken,
+    required String incidentId,
+    required String mediaId,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.incidentMediaView(incidentId, mediaId),
+      accessToken: accessToken,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw IncidentApiException.fromResponse(response);
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw IncidentApiException(
+          response.statusCode, "Evidence is unavailable.");
+    }
+    final signedUrl = decoded["signedUrl"]?.toString();
+    final uri = signedUrl == null ? null : Uri.tryParse(signedUrl);
+    if (uri == null || uri.scheme != "https") {
+      throw IncidentApiException(
+          response.statusCode, "Evidence is unavailable.");
+    }
+    return uri;
   }
 
   Future<Map<String, dynamic>> getBroadcastArchive({
@@ -243,7 +299,8 @@ class ActivityHistoryService {
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! Map || decoded["data"] is! Map) {
-      throw IncidentApiException(response.statusCode, "Unexpected broadcast archive response.");
+      throw IncidentApiException(
+          response.statusCode, "Unexpected broadcast archive response.");
     }
     return Map<String, dynamic>.from(decoded["data"] as Map);
   }

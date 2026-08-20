@@ -7,6 +7,7 @@ import {
 import {
   BroadcastType,
   IncidentStatus,
+  buildIncidentPublicReference,
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
@@ -125,12 +126,6 @@ export class CitizenActivityService {
         assignedAgency: true,
         reporter: { include: { profile: true } },
         broadcasts: { where: { deletedAt: null }, select: { id: true, type: true, title: true, status: true } },
-        notifications: {
-          where: { userId: actor.sub },
-          orderBy: { createdAt: "desc" },
-          take: 20,
-          select: { id: true, type: true, title: true, createdAt: true, readAt: true, channel: true },
-        },
         assignments: {
           orderBy: { createdAt: "asc" },
           include: { agency: true, responder: true },
@@ -140,33 +135,51 @@ export class CitizenActivityService {
     if (!incident) throw new NotFoundException("Incident archive not found");
 
     const metadata = (incident.metadata ?? {}) as Record<string, unknown>;
-    const [timeline, communityVerificationSummary, auditCount, liveVideoSessions] = await Promise.all([
+    const [timeline, communityVerificationSummary] = await Promise.all([
       this.incidentTimeline.buildTimeline(id, "citizen", actor),
       this.communityVerification.getIncidentAggregate(id),
-      this.prisma.auditLog.count({ where: { entityType: "incidents", entityId: id } }),
-      this.prisma.liveVideoSession.findMany({
-        where: { incidentId: id },
-        orderBy: { startedAt: "desc" },
-        take: 5,
-        select: {
-          id: true,
-          status: true,
-          startedAt: true,
-          endedAt: true,
-          recordingMediaId: true,
-        },
-      }),
     ]);
 
-    const mediaStats = this.buildMediaStats(incident.media);
     const latestVerification = incident.verifications.at(-1);
     const arrivalAssignment = incident.assignments.find((row) => row.arrivedAt);
+    const archiveTimeline: Array<Record<string, unknown>> = [
+      ...(timeline.data ?? []),
+    ];
+    if (
+      incident.cancelledAt &&
+      !archiveTimeline.some((entry) => String(entry.type).toLowerCase().includes("cancel"))
+    ) {
+      archiveTimeline.push({
+        at: incident.cancelledAt,
+        type: "incident.cancelled",
+        label: incident.cancellationReason
+          ? `Incident cancelled: ${incident.cancellationReason}`
+          : "Incident cancelled",
+      });
+    }
+    if (
+      incident.closedAt &&
+      !archiveTimeline.some((entry) => String(entry.type).toLowerCase().includes("closed"))
+    ) {
+      archiveTimeline.push({
+        at: incident.closedAt,
+        type: "incident.closed",
+        label: "Incident closed",
+      });
+    }
+    archiveTimeline.sort(
+      (a, b) => new Date(String(a.at)).getTime() - new Date(String(b.at)).getTime(),
+    );
 
     return {
       data: {
         archive: true,
         readOnly: true,
         incidentId: incident.id,
+        publicReference: buildIncidentPublicReference({
+          incidentId: incident.id,
+          submittedAt: incident.submittedAt,
+        }),
         category: incident.type,
         kind: classifyIncidentKind(String(incident.type), metadata),
         reporter: incident.isAnonymous
@@ -201,8 +214,6 @@ export class CitizenActivityService {
           uploadedAt: item.uploadedAt.toISOString(),
           contentType: item.contentType,
           durationSeconds: item.durationSeconds,
-          fileHash: item.fileHash,
-          transcript: item.transcript,
         })),
         videos: incident.media
           .filter((item) => String(item.mediaType).toLowerCase().includes("video"))
@@ -215,7 +226,7 @@ export class CitizenActivityService {
             transcript: item.transcript,
             durationSeconds: item.durationSeconds,
           })),
-        timeline: timeline.data,
+        timeline: archiveTimeline,
         dispatchTimeline: incident.assignments.flatMap((assignment) => {
           const events: Array<Record<string, unknown>> = [
             { at: assignment.createdAt.toISOString(), label: "Agency assigned", agency: assignment.agency?.name },
@@ -227,28 +238,17 @@ export class CitizenActivityService {
           return events;
         }),
         communityVerificationSummary,
+        verificationStatus: latestVerification?.result ?? "Not verified",
         agency: incident.assignedAgency?.name ?? null,
         responderArrivalAt: arrivalAssignment?.arrivedAt?.toISOString() ?? null,
         resolutionSource: incident.resolutionSource,
-        resolutionNotes: incident.resolutionReason,
+        resolutionNotes:
+          String(incident.status).toLowerCase().includes("cancel")
+            ? incident.cancellationReason
+            : incident.resolutionReason,
         finalOutcome: incident.status,
         broadcastReferences: incident.broadcasts,
-        notificationsSent: incident.notifications.map((item) => ({
-          id: item.id,
-          type: item.type,
-          title: item.title,
-          channel: item.channel,
-          createdAt: item.createdAt.toISOString(),
-          read: Boolean(item.readAt),
-        })),
         nearbyVerificationSummary: communityVerificationSummary,
-        liveVideoSummary: liveVideoSessions,
-        mediaStatistics: mediaStats,
-        evidenceHashSummary: mediaStats.hashes,
-        auditSummary: {
-          eventCount: auditCount,
-          readOnly: true,
-        },
       },
     };
   }
@@ -613,21 +613,4 @@ export class CitizenActivityService {
     return map;
   }
 
-  private buildMediaStats(media: Array<{ mediaType: unknown; fileHash: string; sizeBytes: bigint | null }>) {
-    const byType: Record<string, number> = {};
-    const hashes: string[] = [];
-    let totalBytes = 0;
-    for (const item of media) {
-      const key = String(item.mediaType);
-      byType[key] = (byType[key] ?? 0) + 1;
-      hashes.push(item.fileHash);
-      totalBytes += Number(item.sizeBytes ?? 0);
-    }
-    return {
-      totalItems: media.length,
-      byType,
-      totalBytes,
-      hashes,
-    };
-  }
 }
