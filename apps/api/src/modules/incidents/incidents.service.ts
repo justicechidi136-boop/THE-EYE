@@ -1,5 +1,6 @@
 ﻿import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -384,6 +385,20 @@ export class IncidentsService {
     validateMediaDraft(dto);
     assertEvidenceObjectKey(id, dto.objectKey, dto.bucket, dto.contentType);
     await this.get(id, actor);
+
+    const existing = await (this.prisma as any).incidentMedia.findUnique({
+      where: { fileHash: dto.fileHash },
+    });
+    if (existing) {
+      if (
+        existing.incidentId !== id ||
+        existing.objectKey !== dto.objectKey ||
+        existing.bucket !== dto.bucket
+      ) {
+        throw new ConflictException("Evidence is already associated with another upload");
+      }
+      return existing;
+    }
 
     const media = await (this.prisma as any).incidentMedia.create({
       data: await this.buildIncidentMediaCreateData(id, dto, actor),

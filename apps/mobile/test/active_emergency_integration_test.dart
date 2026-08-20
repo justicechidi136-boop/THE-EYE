@@ -27,8 +27,8 @@ const activeFixture = {
   },
   "evidenceSummary": {
     "totalCount": 1,
-    "photos": 1,
-    "videos": 0,
+    "photos": 0,
+    "videos": 1,
     "voice": 0,
   },
   "evidenceItems": [
@@ -118,8 +118,75 @@ void main() {
     expect(active.allowedActions.requestCancellation, isFalse);
   });
 
+  test("decodes image video and audio evidence with matching summary", () {
+    final fixture = Map<String, dynamic>.from(activeFixture)
+      ..["evidenceSummary"] = {
+        "totalCount": 3,
+        "photos": 1,
+        "videos": 1,
+        "voice": 1,
+      }
+      ..["evidenceItems"] = [
+        {
+          "id": "media-image",
+          "mediaType": "Image",
+          "uploadedAt": "2026-08-05T10:00:10.000Z",
+          "durationSeconds": null,
+        },
+        {
+          "id": "media-video",
+          "mediaType": "Video",
+          "uploadedAt": "2026-08-05T10:00:11.000Z",
+          "durationSeconds": 24,
+        },
+        {
+          "id": "media-audio",
+          "mediaType": "Audio",
+          "uploadedAt": "2026-08-05T10:00:12.000Z",
+          "durationSeconds": 12,
+        },
+      ];
+
+    final active = ActiveEmergencyContract.fromJson(fixture)
+        as ActiveEmergencyActiveContract;
+
+    expect(active.evidenceItems, hasLength(3));
+    expect(active.evidenceSummary.totalCount, 3);
+    expect(active.evidenceSummary.photos, 1);
+    expect(active.evidenceSummary.videos, 1);
+    expect(active.evidenceSummary.voice, 1);
+    expect(active.evidenceItems.first.durationSeconds, isNull);
+  });
+
+  test("rejects missing evidence items instead of rendering an empty state",
+      () {
+    final fixture = Map<String, dynamic>.from(activeFixture)
+      ..remove("evidenceItems");
+
+    expect(
+      () => ActiveEmergencyContract.fromJson(fixture),
+      throwsA(isA<ActiveEmergencyContractException>()),
+    );
+  });
+
+  test("rejects evidence summary and item count mismatch", () {
+    final fixture = Map<String, dynamic>.from(activeFixture)
+      ..["evidenceSummary"] = {
+        "totalCount": 2,
+        "photos": 0,
+        "videos": 1,
+        "voice": 0,
+      };
+
+    expect(
+      () => ActiveEmergencyContract.fromJson(fixture),
+      throwsA(isA<ActiveEmergencyContractException>()),
+    );
+  });
+
   test("fails when required contract field is missing", () {
-    final broken = Map<String, dynamic>.from(activeFixture)..remove("displayLabel");
+    final broken = Map<String, dynamic>.from(activeFixture)
+      ..remove("displayLabel");
     expect(
       () => ActiveEmergencyContract.fromJson(broken),
       throwsA(isA<ActiveEmergencyContractException>()),
@@ -143,6 +210,51 @@ void main() {
         incomingUpdatedAt: DateTime.parse("2026-08-05T10:00:00.000Z"),
         currentStatusVersion: 3,
         currentUpdatedAt: DateTime.parse("2026-08-05T10:05:00.000Z"),
+      ),
+      isFalse,
+    );
+  });
+
+  test("refresh coordinator accepts new content without a status change", () {
+    final coordinator = ActiveEmergencyRefreshCoordinator();
+    final generation = coordinator.beginRefresh();
+    final updatedAt = DateTime.parse("2026-08-05T10:05:00.000Z");
+
+    expect(
+      coordinator.shouldAccept(
+        generation: generation,
+        incomingStatusVersion: 3,
+        incomingUpdatedAt: updatedAt,
+        currentStatusVersion: 3,
+        currentUpdatedAt: updatedAt,
+      ),
+      isTrue,
+    );
+  });
+
+  test("late empty refresh cannot overwrite a newer evidence refresh", () {
+    final coordinator = ActiveEmergencyRefreshCoordinator();
+    final olderGeneration = coordinator.beginRefresh();
+    final evidenceGeneration = coordinator.beginRefresh();
+    final updatedAt = DateTime.parse("2026-08-05T10:05:00.000Z");
+
+    expect(
+      coordinator.shouldAccept(
+        generation: evidenceGeneration,
+        incomingStatusVersion: 3,
+        incomingUpdatedAt: updatedAt,
+        currentStatusVersion: 3,
+        currentUpdatedAt: updatedAt,
+      ),
+      isTrue,
+    );
+    expect(
+      coordinator.shouldAccept(
+        generation: olderGeneration,
+        incomingStatusVersion: 3,
+        incomingUpdatedAt: updatedAt,
+        currentStatusVersion: 3,
+        currentUpdatedAt: updatedAt,
       ),
       isFalse,
     );
