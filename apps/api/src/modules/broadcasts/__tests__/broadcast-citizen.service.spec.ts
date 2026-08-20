@@ -31,7 +31,7 @@ describe("BroadcastCitizenService", () => {
     },
     profile: { findUnique: jest.fn() },
     jurisdiction: { findFirst: jest.fn() },
-    broadcastReport: { create: jest.fn() },
+    broadcastReport: { findFirst: jest.fn(), create: jest.fn() },
     broadcastComment: { create: jest.fn(), findMany: jest.fn() },
     broadcastSighting: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     $executeRawUnsafe: jest.fn(),
@@ -55,6 +55,10 @@ describe("BroadcastCitizenService", () => {
     prisma.broadcastSighting.findFirst.mock.calls = [];
     prisma.broadcastSighting.findMany.mock.calls = [];
     prisma.broadcastSighting.create.mock.calls = [];
+    prisma.broadcastReport.findFirst.mock.calls = [];
+    prisma.broadcastReport.findFirst.mockResolvedValue(null);
+    prisma.broadcastReport.create.mock.calls = [];
+    prisma.broadcastReport.create.mockResolvedValue({ id: "report-1", status: "Open" });
     audit.record.mock.calls = [];
     notificationsService.create.mock.calls = [];
     broadcastQueue.enqueueCountryDelivery.mock.calls = [];
@@ -232,6 +236,105 @@ describe("BroadcastCitizenService", () => {
       "MISSING_PERSON_FOUND",
       reporter,
     );
+  });
+
+  it("submits stolen vehicle report with stable reason", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      type: BroadcastType.StolenVehicle,
+      status: BroadcastStatus.Active,
+      creatorUserId: "owner-1",
+    });
+
+    const result = await service.report(
+      "broadcast-1",
+      {
+        reason: "VehicleInformationIncorrect",
+      },
+      reporter,
+    );
+
+    expect(result.data.status).toBe("Open");
+    expect(prisma.broadcastReport.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          broadcastId: "broadcast-1",
+          reason: "VehicleInformationIncorrect",
+          details: undefined,
+        }),
+      }),
+    );
+  });
+
+  it("submits missing person report with stable reason", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      type: BroadcastType.MissingPerson,
+      status: BroadcastStatus.Active,
+      creatorUserId: "owner-1",
+    });
+
+    const result = await service.report(
+      "broadcast-1",
+      {
+        reason: "PersonAlreadyFound",
+      },
+      reporter,
+    );
+
+    expect(result.data.status).toBe("Open");
+    expect(prisma.broadcastReport.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reason: "PersonAlreadyFound",
+        }),
+      }),
+    );
+  });
+
+  it("rejects invalid type and reason combinations server-side", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      type: BroadcastType.MissingPerson,
+      status: BroadcastStatus.Active,
+      creatorUserId: "owner-1",
+    });
+
+    await expect(
+      service.report(
+        "broadcast-1",
+        {
+          reason: "VehicleAlreadyRecovered",
+        },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.broadcastReport.create).not.toHaveBeenCalled();
+  });
+
+  it("requires details when other report reason is selected", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      type: BroadcastType.StolenVehicle,
+      status: BroadcastStatus.Active,
+      creatorUserId: "owner-1",
+    });
+
+    await expect(
+      service.report(
+        "broadcast-1",
+        {
+          reason: "Other",
+          details: "   ",
+        },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.broadcastReport.create).not.toHaveBeenCalled();
   });
 
   it("submits sighting for live broadcast with metadata and owner notification", async () => {

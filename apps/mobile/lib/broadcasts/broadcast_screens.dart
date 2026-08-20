@@ -602,9 +602,10 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                                     ? null
                                     : () => Navigator.of(context).pushNamed(
                                           "${BroadcastRoutes.center}/${widget.broadcastId}/report",
+                                          arguments: item,
                                         ),
                                 icon: const Icon(Icons.flag_outlined),
-                                label: const Text("Report"),
+                                label: const Text("Report Broadcast"),
                               ),
                             if (_isOwner &&
                                 (item?.status == "Active" ||
@@ -1225,31 +1226,32 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
 }
 
 class BroadcastReportScreen extends StatefulWidget {
-  const BroadcastReportScreen({required this.broadcastId, super.key});
+  const BroadcastReportScreen({
+    required this.broadcastId,
+    this.source,
+    super.key,
+  });
 
   final String broadcastId;
+  final BroadcastFeedItem? source;
 
   @override
   State<BroadcastReportScreen> createState() => _BroadcastReportScreenState();
 }
 
 class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
-  static const _reasons = [
-    "FalseOrMisleading",
-    "Duplicate",
-    "Harassment",
-    "PrivacyViolation",
-    "Impersonation",
-    "GraphicContent",
-    "Spam",
-    "PersonAlreadyFound",
-    "VehicleAlreadyRecovered",
-    "Other",
-  ];
-
-  String _reason = _reasons.first;
+  late BroadcastReportContent _content;
+  late String _reason;
   final _detailsController = TextEditingController();
   bool _submitting = false;
+  String? _detailsError;
+
+  @override
+  void initState() {
+    super.initState();
+    _content = broadcastReportContentForType(widget.source?.type);
+    _reason = _content.reasons.first.code;
+  }
 
   @override
   void dispose() {
@@ -1258,8 +1260,14 @@ class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     final session = BroadcastSession.require(context);
     if (session.accessToken == null) return;
+    final trimmedDetails = _detailsController.text.trim();
+    if (_reason == "Other" && trimmedDetails.isEmpty) {
+      setState(() => _detailsError = "Additional details are required.");
+      return;
+    }
     setState(() => _submitting = true);
     try {
       await session.broadcastSubmissionService.report(
@@ -1267,15 +1275,13 @@ class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
         broadcastId: widget.broadcastId,
         reason: _reason,
         details: _reason == "Other"
-            ? _detailsController.text.trim()
-            : (_detailsController.text.trim().isEmpty
-                ? null
-                : _detailsController.text.trim()),
+            ? trimmedDetails
+            : (trimmedDetails.isEmpty ? null : trimmedDetails),
       );
       if (!mounted) return;
       showBroadcastSnackBar(
         context,
-        "Thank you. This broadcast has been reported for review.",
+        "Broadcast reported. Thank you. Our moderation team will review this report.",
       );
       Navigator.of(context).pop();
     } on IncidentApiException catch (error) {
@@ -1291,36 +1297,47 @@ class _BroadcastReportScreenState extends State<BroadcastReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showAdditionalDetails = _reason == "Other";
     return _BroadcastShell(
-      title: "Report broadcast",
+      title: "Report Broadcast",
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
-          const SectionCard(
-            title: "Why are you reporting this?",
-            child: Text(
+          SectionCard(
+            title: _content.heading,
+            child: const Text(
               "Reports are reviewed by moderators. Misuse may affect account standing.",
             ),
           ),
           const SizedBox(height: 16),
-          ..._reasons.map(
+          ..._content.reasons.map(
             (reason) => RadioListTile<String>(
-              value: reason,
+              value: reason.code,
               groupValue: _reason,
               onChanged: _submitting
                   ? null
-                  : (value) => setState(() => _reason = value ?? _reason),
-              title: Text(broadcastReportReasonLabels[reason] ?? reason),
+                  : (value) => setState(() {
+                        _reason = value ?? _reason;
+                        _detailsError = null;
+                      }),
+              title: Text(reason.label),
             ),
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _detailsController,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: "Additional details (optional)",
+          if (showAdditionalDetails) ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: _detailsController,
+              maxLines: 4,
+              onChanged: (_) {
+                if (_detailsError == null) return;
+                setState(() => _detailsError = null);
+              },
+              decoration: InputDecoration(
+                labelText: "Additional details",
+                errorText: _detailsError,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _submitting ? null : _submit,

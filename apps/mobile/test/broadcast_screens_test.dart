@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -131,10 +133,15 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
 }
 
 class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
-  _FakeBroadcastSubmissionService({this.onSubmit});
+  _FakeBroadcastSubmissionService({
+    this.onSubmit,
+    this.onReport,
+  });
 
   int submitCalls = 0;
+  int reportCalls = 0;
   final Future<void> Function(Map<String, dynamic> payload)? onSubmit;
+  final Future<void> Function(Map<String, dynamic> payload)? onReport;
 
   @override
   Future<SightingSubmissionResult> submitSighting({
@@ -163,6 +170,21 @@ class _FakeBroadcastSubmissionService extends BroadcastSubmissionService {
       "attachmentsCount": attachments.length,
     });
     return const SightingSubmissionResult(id: "s-1");
+  }
+
+  @override
+  Future<void> report({
+    required String accessToken,
+    required String broadcastId,
+    required String reason,
+    String? details,
+  }) async {
+    reportCalls += 1;
+    await onReport?.call({
+      "broadcastId": broadcastId,
+      "reason": reason,
+      "details": details,
+    });
   }
 }
 
@@ -193,6 +215,18 @@ void main() {
       },
       onGenerateRoute: (settings) => resolveBroadcastRoute(settings),
     );
+  }
+
+  Future<void> scrollToReportControl(
+    WidgetTester tester,
+    Finder finder,
+  ) async {
+    await tester.scrollUntilVisible(
+      finder,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(finder, findsOneWidget);
   }
 
   test("ParsedBroadcastRoute resolves detail and sub-routes", () {
@@ -231,20 +265,68 @@ void main() {
     expect(find.text("My broadcasts"), findsOneWidget);
   });
 
-  testWidgets("BroadcastReportScreen renders report reasons", (tester) async {
+  testWidgets("stolen vehicle report screen shows report broadcast reasons",
+      (tester) async {
     await tester.pumpWidget(
-      wrap(const BroadcastReportScreen(broadcastId: "b1")),
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b1",
+          source: BroadcastFeedItem(
+            id: "b1",
+            type: "StolenVehicle",
+            title: "Stolen vehicle alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text("Report broadcast"), findsOneWidget);
+    expect(find.text("Report Broadcast"), findsOneWidget);
     expect(find.text("False or misleading"), findsOneWidget);
+    expect(find.text("Vehicle information is incorrect"), findsOneWidget);
+    expect(find.text("Vehicle already recovered"), findsOneWidget);
+    expect(find.text("Person information is incorrect"), findsNothing);
+    expect(find.text("Person already found"), findsNothing);
     await tester.scrollUntilVisible(
       find.text("Submit report"),
       120,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text("Submit report"), findsOneWidget);
+  });
+
+  testWidgets("missing person report screen shows report broadcast reasons",
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b1",
+          source: BroadcastFeedItem(
+            id: "b1",
+            type: "MissingPerson",
+            title: "Missing person alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text("Why are you reporting this missing person broadcast?"),
+      findsOneWidget,
+    );
+    expect(find.text("Person information is incorrect"), findsOneWidget);
+    expect(find.text("Person already found"), findsOneWidget);
+    expect(find.text("Vehicle information is incorrect"), findsNothing);
+    expect(find.text("Vehicle already recovered"), findsNothing);
   });
 
   test("BroadcastSharePayload builds public-safe share text", () {
@@ -468,6 +550,32 @@ void main() {
     expect(find.text("Report sighting"), findsNothing);
   });
 
+  testWidgets("broadcast detail uses report broadcast label for moderation",
+      (tester) async {
+    final stolen = BroadcastFeedItem(
+      id: "b-stolen",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-stolen"),
+        detail: stolen,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text("Report Broadcast"), findsOneWidget);
+    expect(find.text("Report"), findsNothing);
+    expect(find.text("Report sighting"), findsOneWidget);
+  });
+
   testWidgets("broadcast detail groups available action buttons",
       (tester) async {
     final stolen = BroadcastFeedItem(
@@ -493,7 +601,224 @@ void main() {
     expect(find.text("Share"), findsOneWidget);
     expect(find.text("Report sighting"), findsOneWidget);
     expect(find.text("Comments"), findsOneWidget);
-    expect(find.text("Report"), findsOneWidget);
+    expect(find.text("Report Broadcast"), findsOneWidget);
+  });
+
+  testWidgets("selecting other reveals additional details", (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b1",
+          source: BroadcastFeedItem(
+            id: "b1",
+            type: "MissingPerson",
+            title: "Missing person alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Additional details"), findsNothing);
+    final otherFinder = find.text("Other");
+    await scrollToReportControl(tester, otherFinder);
+    await tester.tap(otherFinder);
+    await tester.pumpAndSettle();
+    expect(find.text("Additional details"), findsOneWidget);
+
+    final duplicateFinder = find.text("Duplicate");
+    await scrollToReportControl(tester, duplicateFinder);
+    await tester.tap(duplicateFinder);
+    await tester.pumpAndSettle();
+    expect(find.text("Additional details"), findsNothing);
+  });
+
+  testWidgets("other reason requires non-empty additional details",
+      (tester) async {
+    final submissionService = _FakeBroadcastSubmissionService();
+    final session = _FakeBroadcastSession(submissionService: submissionService);
+    await tester.pumpWidget(
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b1",
+          source: BroadcastFeedItem(
+            id: "b1",
+            type: "StolenVehicle",
+            title: "Stolen vehicle alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final otherFinder = find.text("Other");
+    await scrollToReportControl(tester, otherFinder);
+    await tester.tap(otherFinder);
+    await tester.pumpAndSettle();
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.text("Additional details are required."), findsOneWidget);
+    expect(submissionService.reportCalls, 0);
+  });
+
+  testWidgets("stolen vehicle report submission sends stable reason",
+      (tester) async {
+    Map<String, dynamic>? payload;
+    final submissionService = _FakeBroadcastSubmissionService(
+      onReport: (value) async => payload = value,
+    );
+    final session = _FakeBroadcastSession(submissionService: submissionService);
+    await tester.pumpWidget(
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b-stolen",
+          source: BroadcastFeedItem(
+            id: "b-stolen",
+            type: "StolenVehicle",
+            title: "Stolen vehicle alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Vehicle information is incorrect"));
+    await tester.pumpAndSettle();
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
+    await tester.pumpAndSettle();
+
+    expect(payload?["broadcastId"], "b-stolen");
+    expect(payload?["reason"], "VehicleInformationIncorrect");
+    expect(payload?["details"], isNull);
+  });
+
+  testWidgets("missing person report submission sends stable reason",
+      (tester) async {
+    Map<String, dynamic>? payload;
+    final submissionService = _FakeBroadcastSubmissionService(
+      onReport: (value) async => payload = value,
+    );
+    final session = _FakeBroadcastSession(submissionService: submissionService);
+    await tester.pumpWidget(
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b-missing",
+          source: BroadcastFeedItem(
+            id: "b-missing",
+            type: "MissingPerson",
+            title: "Missing person alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Person already found"));
+    await tester.pumpAndSettle();
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
+    await tester.pumpAndSettle();
+
+    expect(payload?["broadcastId"], "b-missing");
+    expect(payload?["reason"], "PersonAlreadyFound");
+    expect(payload?["details"], isNull);
+  });
+
+  testWidgets("report submission failure exits loading state", (tester) async {
+    final submissionService = _FakeBroadcastSubmissionService(
+      onReport: (_) async {
+        throw IncidentApiException(500, "Please try again.");
+      },
+    );
+    final session = _FakeBroadcastSession(submissionService: submissionService);
+    await tester.pumpWidget(
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b1",
+          source: BroadcastFeedItem(
+            id: "b1",
+            type: "MissingPerson",
+            title: "Missing person alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text("Please try again."), findsOneWidget);
+    expect(find.text("Submit report"), findsOneWidget);
+  });
+
+  testWidgets("report submit button guards rapid repeat taps", (tester) async {
+    final completer = Completer<void>();
+    final submissionService = _FakeBroadcastSubmissionService(
+      onReport: (_) => completer.future,
+    );
+    final session = _FakeBroadcastSession(submissionService: submissionService);
+    await tester.pumpWidget(
+      wrap(
+        BroadcastReportScreen(
+          broadcastId: "b1",
+          source: BroadcastFeedItem(
+            id: "b1",
+            type: "StolenVehicle",
+            title: "Stolen vehicle alert",
+            body: "body",
+            priority: "P2Urgent",
+            read: false,
+            publishedAt: DateTime.utc(2026, 8, 1),
+          ),
+        ),
+        session: session,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final submitFinder = find.widgetWithText(FilledButton, "Submit report");
+    await scrollToReportControl(tester, submitFinder);
+    await tester.tap(submitFinder);
+    await tester.tap(submitFinder);
+    await tester.pump();
+
+    expect(submissionService.reportCalls, 1);
+    completer.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets(
