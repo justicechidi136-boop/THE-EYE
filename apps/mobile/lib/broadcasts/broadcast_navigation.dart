@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "broadcast_feed_service.dart";
 import "broadcast_screens.dart";
 
 abstract final class BroadcastRoutes {
@@ -177,10 +178,14 @@ Route<dynamic>? resolveBroadcastRoute(
         ),
       );
     case BroadcastRouteKind.report:
+      final source = settings.arguments is BroadcastFeedItem
+          ? settings.arguments as BroadcastFeedItem
+          : null;
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => BroadcastReportScreen(
           broadcastId: parsed.broadcastId!,
+          source: source,
         ),
       );
     case BroadcastRouteKind.share:

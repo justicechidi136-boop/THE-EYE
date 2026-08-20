@@ -87,11 +87,11 @@ export type SubmitBroadcastSightingDto = {
 
 export const BROADCAST_REPORT_REASONS = [
   "FalseOrMisleading",
+  "VehicleInformationIncorrect",
+  "PersonInformationIncorrect",
   "Duplicate",
-  "Harassment",
   "PrivacyViolation",
   "Impersonation",
-  "GraphicContent",
   "Spam",
   "PersonAlreadyFound",
   "VehicleAlreadyRecovered",
@@ -99,6 +99,29 @@ export const BROADCAST_REPORT_REASONS = [
 ] as const;
 
 export type BroadcastReportReason = (typeof BROADCAST_REPORT_REASONS)[number];
+
+const BROADCAST_REPORT_REASON_CATALOG: Record<BroadcastType, readonly BroadcastReportReason[]> = {
+  [BroadcastType.MissingPerson]: [
+    "FalseOrMisleading",
+    "PersonInformationIncorrect",
+    "PersonAlreadyFound",
+    "Duplicate",
+    "Impersonation",
+    "PrivacyViolation",
+    "Spam",
+    "Other",
+  ],
+  [BroadcastType.StolenVehicle]: [
+    "FalseOrMisleading",
+    "VehicleInformationIncorrect",
+    "VehicleAlreadyRecovered",
+    "Duplicate",
+    "Impersonation",
+    "PrivacyViolation",
+    "Spam",
+    "Other",
+  ],
+} as const;
 
 const citizenTypes = new Set<BroadcastType>([
   BroadcastType.MissingPerson,
@@ -108,6 +131,22 @@ const citizenTypes = new Set<BroadcastType>([
 export function assertCitizenBroadcastType(type: BroadcastType) {
   if (!citizenTypes.has(type)) {
     throw new BadRequestException("Citizens may only create Missing Person or Stolen Vehicle broadcasts");
+  }
+}
+
+export function getAllowedBroadcastReportReasons(type: BroadcastType): readonly BroadcastReportReason[] {
+  return BROADCAST_REPORT_REASON_CATALOG[type] ?? [];
+}
+
+export function validateBroadcastReportReason(type: BroadcastType, dto: ReportBroadcastDto) {
+  const reason = dto.reason?.trim();
+  if (!reason) throw new BadRequestException("Report reason is required");
+  const allowedReasons = getAllowedBroadcastReportReasons(type);
+  if (!allowedReasons.includes(reason as BroadcastReportReason)) {
+    throw new BadRequestException("Unsupported report reason");
+  }
+  if (reason === "Other" && !dto.details?.trim()) {
+    throw new BadRequestException("Additional details are required for Other");
   }
 }
 

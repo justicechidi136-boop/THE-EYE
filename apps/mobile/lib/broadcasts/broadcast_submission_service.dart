@@ -74,18 +74,70 @@ class BroadcastSightingUnavailableException extends IncidentApiException {
   }
 }
 
-const broadcastReportReasonLabels = <String, String>{
-  "FalseOrMisleading": "False or misleading",
-  "Duplicate": "Duplicate",
-  "Harassment": "Harassment",
-  "PrivacyViolation": "Privacy violation",
-  "Impersonation": "Impersonation",
-  "GraphicContent": "Graphic content",
-  "Spam": "Spam",
-  "PersonAlreadyFound": "Person already found",
-  "VehicleAlreadyRecovered": "Vehicle already recovered",
-  "Other": "Other",
-};
+class BroadcastReportReasonOption {
+  const BroadcastReportReasonOption({
+    required this.code,
+    required this.label,
+  });
+
+  final String code;
+  final String label;
+}
+
+class BroadcastReportContent {
+  const BroadcastReportContent({
+    required this.heading,
+    required this.reasons,
+  });
+
+  final String heading;
+  final List<BroadcastReportReasonOption> reasons;
+}
+
+BroadcastReportContent broadcastReportContentForType(String? broadcastType) {
+  final normalized = broadcastType?.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
+  if (normalized.contains("stolenvehicle")) {
+    return const BroadcastReportContent(
+      heading: "Why are you reporting this stolen vehicle broadcast?",
+      reasons: [
+        BroadcastReportReasonOption(code: "FalseOrMisleading", label: "False or misleading"),
+        BroadcastReportReasonOption(code: "VehicleInformationIncorrect", label: "Vehicle information is incorrect"),
+        BroadcastReportReasonOption(code: "VehicleAlreadyRecovered", label: "Vehicle already recovered"),
+        BroadcastReportReasonOption(code: "Duplicate", label: "Duplicate"),
+        BroadcastReportReasonOption(code: "Impersonation", label: "Impersonation"),
+        BroadcastReportReasonOption(code: "PrivacyViolation", label: "Privacy violation"),
+        BroadcastReportReasonOption(code: "Spam", label: "Spam"),
+        BroadcastReportReasonOption(code: "Other", label: "Other"),
+      ],
+    );
+  }
+  if (normalized.contains("missingperson")) {
+    return const BroadcastReportContent(
+      heading: "Why are you reporting this missing person broadcast?",
+      reasons: [
+        BroadcastReportReasonOption(code: "FalseOrMisleading", label: "False or misleading"),
+        BroadcastReportReasonOption(code: "PersonInformationIncorrect", label: "Person information is incorrect"),
+        BroadcastReportReasonOption(code: "PersonAlreadyFound", label: "Person already found"),
+        BroadcastReportReasonOption(code: "Duplicate", label: "Duplicate"),
+        BroadcastReportReasonOption(code: "Impersonation", label: "Impersonation"),
+        BroadcastReportReasonOption(code: "PrivacyViolation", label: "Privacy violation"),
+        BroadcastReportReasonOption(code: "Spam", label: "Spam"),
+        BroadcastReportReasonOption(code: "Other", label: "Other"),
+      ],
+    );
+  }
+  return const BroadcastReportContent(
+    heading: "Why are you reporting this broadcast?",
+    reasons: [
+      BroadcastReportReasonOption(code: "FalseOrMisleading", label: "False or misleading"),
+      BroadcastReportReasonOption(code: "Duplicate", label: "Duplicate"),
+      BroadcastReportReasonOption(code: "Impersonation", label: "Impersonation"),
+      BroadcastReportReasonOption(code: "PrivacyViolation", label: "Privacy violation"),
+      BroadcastReportReasonOption(code: "Spam", label: "Spam"),
+      BroadcastReportReasonOption(code: "Other", label: "Other"),
+    ],
+  );
+}
 
 class BroadcastSubmissionService {
   BroadcastSubmissionService({TheEyeApiClient? apiClient})

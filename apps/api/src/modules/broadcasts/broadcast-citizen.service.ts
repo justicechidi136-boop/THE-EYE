@@ -25,7 +25,6 @@ import { BroadcastShareService } from "./broadcast-share.service";
 import { BroadcastsService, LIVE_BROADCAST_STATUSES } from "./broadcasts.service";
 import { buildMissingPersonBroadcastPreview } from "../notifications/citizen-notification-copy";
 import {
-  BROADCAST_REPORT_REASONS,
   CreateCitizenBroadcastCommentDto,
   CreateMissingPersonBroadcastDto,
   CreateStolenVehicleBroadcastDto,
@@ -33,6 +32,7 @@ import {
   ReportBroadcastDto,
   ResolveBroadcastDto,
   SubmitBroadcastSightingDto,
+  validateBroadcastReportReason,
   validateMissingPersonBroadcastDto,
   validateStolenVehicleBroadcastDto,
   WithdrawBroadcastDto,
@@ -269,27 +269,26 @@ export class BroadcastCitizenService {
 
   async report(id: string, dto: ReportBroadcastDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
-    if (!dto.reason?.trim()) throw new BadRequestException("Report reason is required");
-    if (!BROADCAST_REPORT_REASONS.includes(dto.reason as never)) {
-      throw new BadRequestException("Unsupported report reason");
-    }
     const broadcast = await this.prisma.broadcast.findFirst({
       where: { id, deletedAt: null, status: { not: BroadcastStatus.DeletedByAdmin as never } },
     });
     if (!broadcast) throw new NotFoundException("Broadcast not found");
+    validateBroadcastReportReason(broadcast.type as BroadcastType, dto);
+    const normalizedReason = dto.reason.trim();
+    const normalizedDetails = dto.details?.trim();
     const existing = await this.prisma.broadcastReport.findFirst({
-      where: { broadcastId: id, reporterUserId: actor.sub, reason: dto.reason.trim(), status: "Open" },
+      where: { broadcastId: id, reporterUserId: actor.sub, reason: normalizedReason, status: "Open" },
     });
     if (existing) return { data: { id: existing.id, status: existing.status, duplicate: true } };
     const report = await this.prisma.broadcastReport.create({
       data: {
         broadcastId: id,
         reporterUserId: actor.sub,
-        reason: dto.reason.trim(),
-        details: dto.details?.trim(),
+        reason: normalizedReason,
+        details: normalizedDetails,
       } as never,
     });
-    await this.recordAudit(actor, "broadcast.reported", id, { reportId: report.id, reason: dto.reason });
+    await this.recordAudit(actor, "broadcast.reported", id, { reportId: report.id, reason: normalizedReason });
     return { data: { id: report.id, status: report.status } };
   }
 
