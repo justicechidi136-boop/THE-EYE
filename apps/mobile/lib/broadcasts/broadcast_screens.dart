@@ -16,11 +16,13 @@ import "../location/device_location_service.dart";
 import "../location/device_location_state.dart";
 import "../location/nigeria_location_catalog.dart";
 import "../presentation/citizen_location_presentation.dart";
+import "../presentation/citizen_broadcast_presenter.dart";
 import "../presentation/citizen_presentation.dart";
 import "../presentation/citizen_time_picker.dart";
 import "../theme/the_eye_theme.dart";
 import "../widgets/section_card.dart";
 import "broadcast_feed_service.dart";
+import "broadcast_action_policy.dart";
 import "broadcast_media_upload_service.dart";
 import "broadcast_navigation.dart";
 import "broadcast_session.dart";
@@ -270,14 +272,20 @@ class _MyBroadcastsScreenState extends State<MyBroadcastsScreen> {
                                       const SizedBox(height: 12),
                                   itemBuilder: (context, index) {
                                     final item = _items[index];
+                                    final presentation =
+                                        CitizenBroadcastPresenter.present(
+                                      item,
+                                      AppLocalizations.of(context),
+                                    );
                                     return _BroadcastActionTile(
                                       icon: item.type
                                               .toLowerCase()
                                               .contains("vehicle")
                                           ? Icons.directions_car
                                           : Icons.person_search,
-                                      title: item.title,
-                                      subtitle: "${item.status} · ${item.type}",
+                                      title: presentation.title,
+                                      subtitle:
+                                          "${presentation.summary}\n${presentation.metadataLine}",
                                       onTap: () =>
                                           Navigator.of(context).pushNamed(
                                         broadcastDetailRoute(item.id)!,
@@ -314,7 +322,6 @@ class BroadcastDetailScreen extends StatefulWidget {
 
 class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   BroadcastFeedItem? _item;
-  bool _isOwner = false;
   String? _error;
   bool _loading = true;
   bool _actionInFlight = false;
@@ -376,12 +383,8 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
       // Never block detail rendering on read-receipt side effects.
       unawaited(session.markBroadcastRead(broadcastId));
       if (!mounted) return;
-      final profileId = session.cachedCitizenProfile?.id;
       setState(() {
         _item = item;
-        _isOwner = profileId != null &&
-            profileId.isNotEmpty &&
-            item.creatorUserId == profileId;
         _loading = false;
         _error = null;
       });
@@ -520,13 +523,14 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   Widget build(BuildContext context) {
     final item = _item;
     final detailArgs = ModalRoute.of(context)?.settings.arguments;
-    final isLiveStatus = item?.status == "Active" ||
-        item?.status == "Published" ||
-        item?.status == "Updated";
-    final normalizedType =
-        item?.type.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
-    final isStolenVehicle = normalizedType.contains("stolenvehicle");
-    final canReportSighting = isLiveStatus && isStolenVehicle;
+    final policy = item == null
+        ? null
+        : BroadcastActionPolicy.forViewer(
+            broadcast: item,
+            currentUserId:
+                BroadcastSession.require(context).cachedCitizenProfile?.id,
+          );
+    final l10n = AppLocalizations.of(context);
     final returnToCenterOnBack = detailArgs is BroadcastDetailNavigationArgs &&
         detailArgs.returnToCenterOnBack;
     return PopScope(
@@ -573,16 +577,17 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            OutlinedButton.icon(
-                              onPressed: _actionInFlight
-                                  ? null
-                                  : () => Navigator.of(context).pushNamed(
-                                        "${BroadcastRoutes.center}/${widget.broadcastId}/share",
-                                      ),
-                              icon: const Icon(Icons.share_outlined),
-                              label: const Text("Share"),
-                            ),
-                            if (canReportSighting)
+                            if (policy?.canShare == true)
+                              OutlinedButton.icon(
+                                onPressed: _actionInFlight
+                                    ? null
+                                    : () => Navigator.of(context).pushNamed(
+                                          "${BroadcastRoutes.center}/${widget.broadcastId}/share",
+                                        ),
+                                icon: const Icon(Icons.share_outlined),
+                                label: Text(l10n.broadcastShare),
+                              ),
+                            if (policy?.canReportSighting == true)
                               OutlinedButton.icon(
                                 onPressed: _actionInFlight
                                     ? null
@@ -591,18 +596,19 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                                           arguments: item,
                                         ),
                                 icon: const Icon(Icons.visibility_outlined),
-                                label: const Text("Report sighting"),
+                                label: Text(l10n.reportSighting),
                               ),
-                            OutlinedButton.icon(
-                              onPressed: _actionInFlight
-                                  ? null
-                                  : () => Navigator.of(context).pushNamed(
-                                        "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
-                                      ),
-                              icon: const Icon(Icons.chat_bubble_outline),
-                              label: const Text("Comments"),
-                            ),
-                            if (!_isOwner)
+                            if (policy?.canComment == true)
+                              OutlinedButton.icon(
+                                onPressed: _actionInFlight
+                                    ? null
+                                    : () => Navigator.of(context).pushNamed(
+                                          "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
+                                        ),
+                                icon: const Icon(Icons.chat_bubble_outline),
+                                label: Text(l10n.broadcastComments),
+                              ),
+                            if (policy?.canReportBroadcast == true)
                               OutlinedButton.icon(
                                 onPressed: _actionInFlight
                                     ? null
@@ -611,23 +617,20 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                                           arguments: item,
                                         ),
                                 icon: const Icon(Icons.flag_outlined),
-                                label: const Text("Report Broadcast"),
+                                label: Text(l10n.broadcastReport),
                               ),
-                            if (_isOwner &&
-                                (item?.status == "Active" ||
-                                    item?.status == "Published" ||
-                                    item?.status == "Updated")) ...[
+                            if (policy?.canResolve == true)
                               FilledButton.icon(
                                 onPressed: _actionInFlight ? null : _resolve,
                                 icon: const Icon(Icons.check_circle_outline),
-                                label: const Text("Resolve"),
+                                label: Text(l10n.broadcastResolve),
                               ),
+                            if (policy?.canWithdraw == true)
                               OutlinedButton.icon(
                                 onPressed: _actionInFlight ? null : _withdraw,
                                 icon: const Icon(Icons.unpublished_outlined),
-                                label: const Text("Withdraw"),
+                                label: Text(l10n.broadcastWithdraw),
                               ),
-                            ],
                           ],
                         ),
                       ),

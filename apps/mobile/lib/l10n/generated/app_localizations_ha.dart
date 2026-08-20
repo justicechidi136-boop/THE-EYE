@@ -71,7 +71,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get saveAndContinue => 'Ajiye ka ci gaba';
 
   @override
-  String get reportSighting => 'Report sighting';
+  String get reportSighting => 'Report Sighting';
 
   @override
   String get useCurrentLocation => 'Use current location';
@@ -168,4 +168,105 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get viewCommunicationHistory => 'View communication history';
+
+  @override
+  String get broadcastSelectedVehicle => 'Selected vehicle';
+
+  @override
+  String get broadcastChangeVehicle => 'Change vehicle';
+
+  @override
+  String get broadcastShare => 'Share';
+
+  @override
+  String get broadcastComments => 'Comments';
+
+  @override
+  String get broadcastResolve => 'Resolve';
+
+  @override
+  String get broadcastWithdraw => 'Withdraw';
+
+  @override
+  String get broadcastReport => 'Report Broadcast';
+
+  @override
+  String get broadcastMissingPersonLabel => 'Missing person';
+
+  @override
+  String get broadcastStolenVehicleLabel => 'Stolen vehicle';
+
+  @override
+  String get broadcastSafetyUpdateLabel => 'Safety update';
+
+  @override
+  String get broadcastSafetyUpdateSummary =>
+      'Open this safety update for more information.';
+
+  @override
+  String get broadcastVehicleFallback => 'Vehicle';
+
+  @override
+  String get broadcastPersonFallback => 'Person';
+
+  @override
+  String get broadcastStolenVehicleFallbackSummary =>
+      'A vehicle was reported stolen.';
+
+  @override
+  String get broadcastMissingPersonFallbackSummary =>
+      'Open this missing person alert for more information.';
+
+  @override
+  String get broadcastStatusActive => 'Active';
+
+  @override
+  String get broadcastStatusUpdated => 'Updated';
+
+  @override
+  String get broadcastStatusResolved => 'Resolved';
+
+  @override
+  String get broadcastStatusWithdrawn => 'Withdrawn';
+
+  @override
+  String get broadcastStatusSuspended => 'Unavailable';
+
+  @override
+  String get broadcastStatusExpired => 'Expired';
+
+  @override
+  String get broadcastStatusUnavailable => 'Update available';
+
+  @override
+  String broadcastMissingPersonTitle(Object name) {
+    return 'Missing person: $name';
+  }
+
+  @override
+  String broadcastStolenVehicleTitle(Object subject) {
+    return 'Stolen vehicle: $subject';
+  }
+
+  @override
+  String broadcastStolenVehicleTitleWithPlate(Object plate, Object subject) {
+    return 'Stolen vehicle: $subject ($plate)';
+  }
+
+  @override
+  String broadcastStolenVehicleSummary(Object date, Object subject) {
+    return '$subject reported stolen on $date.';
+  }
+
+  @override
+  String broadcastMissingPersonExactSummary(
+      Object age, Object date, Object name) {
+    return '$age-year-old $name was last seen on $date.';
+  }
+
+  @override
+  String broadcastMissingPersonRangeSummary(
+      Object age, Object date, Object name) {
+    return '$name, approximately $age years old, was last seen on $date.';
+  }
 }

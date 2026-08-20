@@ -97,6 +97,7 @@ class _FakeBroadcastSightingService extends BroadcastSightingService {
 class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   _FakeBroadcastSession({
     this.authenticated = true,
+    this.currentUserId,
     BroadcastFeedItem? detail,
     List<BroadcastFeedItem> mineItems = const [],
     Object? listMineError,
@@ -110,6 +111,7 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
             submissionService ?? BroadcastSubmissionService();
 
   final bool authenticated;
+  final String? currentUserId;
 
   @override
   bool get isAuthenticated => authenticated;
@@ -130,7 +132,14 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   Future<void> clearSession() async {}
 
   @override
-  CitizenProfile? get cachedCitizenProfile => null;
+  CitizenProfile? get cachedCitizenProfile => currentUserId == null
+      ? null
+      : CitizenProfile(
+          id: currentUserId!,
+          displayName: "QA Citizen",
+          kycStatus: "Verified",
+          profileComplete: true,
+        );
 
   @override
   Future<CitizenProfile?> loadCitizenProfile(
@@ -557,7 +566,7 @@ void main() {
     expect(find.text("Photo 1"), findsOneWidget);
   });
 
-  testWidgets("report sighting button only shows for live stolen vehicle",
+  testWidgets("report sighting button shows for live safety broadcast",
       (tester) async {
     final stolen = BroadcastFeedItem(
       id: "b-stolen",
@@ -577,27 +586,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text("Report sighting"), findsOneWidget);
-
-    final missing = BroadcastFeedItem(
-      id: "b-missing",
-      type: "MissingPerson",
-      title: "Missing person alert",
-      body: "body",
-      priority: "P2Urgent",
-      read: false,
-      publishedAt: DateTime.utc(2026, 8, 1),
-      status: "Active",
-    );
-    await tester.pumpWidget(
-      wrap(
-        const BroadcastDetailScreen(broadcastId: "b-missing"),
-        detail: missing,
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text("Report sighting"), findsNothing);
+    expect(find.text("Report Sighting"), findsOneWidget);
   });
 
   testWidgets("broadcast detail uses report broadcast label for moderation",
@@ -623,7 +612,7 @@ void main() {
 
     expect(find.text("Report Broadcast"), findsOneWidget);
     expect(find.text("Report"), findsNothing);
-    expect(find.text("Report sighting"), findsOneWidget);
+    expect(find.text("Report Sighting"), findsOneWidget);
   });
 
   testWidgets("broadcast detail groups available action buttons",
@@ -649,9 +638,86 @@ void main() {
 
     expect(find.text("Actions"), findsOneWidget);
     expect(find.text("Share"), findsOneWidget);
-    expect(find.text("Report sighting"), findsOneWidget);
+    expect(find.text("Report Sighting"), findsOneWidget);
     expect(find.text("Comments"), findsOneWidget);
     expect(find.text("Report Broadcast"), findsOneWidget);
+  });
+
+  testWidgets("active broadcast owner receives owner action set",
+      (tester) async {
+    final owned = BroadcastFeedItem(
+      id: "b-owned",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+      creatorUserId: "owner-1",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-owned"),
+        session: _FakeBroadcastSession(
+          currentUserId: "owner-1",
+          detail: owned,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text("Share"), findsOneWidget);
+    expect(find.text("Report Sighting"), findsOneWidget);
+    expect(find.text("Comments"), findsOneWidget);
+    expect(find.text("Resolve"), findsOneWidget);
+    expect(find.text("Withdraw"), findsOneWidget);
+    expect(find.text("Report Broadcast"), findsNothing);
+  });
+
+  testWidgets("My broadcasts uses citizen-friendly card presentation",
+      (tester) async {
+    final item = BroadcastFeedItem(
+      id: "b-mine",
+      type: "StolenVehicle",
+      title: "Citizen Broadcast",
+      body: "P2Urgent",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 19),
+      status: "WithdrawnByAuthor",
+      metadata: const {
+        "make": "Toyota",
+        "model": "Corolla",
+        "colour": "Yellow",
+        "registrationMasked": "****-ABJ",
+        "stolenAt": "2026-08-13T11:56:35.451Z",
+      },
+    );
+    await tester.pumpWidget(
+      wrap(
+        const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: MyBroadcastsScreen(),
+        ),
+        session: _FakeBroadcastSession(mineItems: [item]),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      find.text("Stolen vehicle: Toyota Corolla (****-ABJ)"),
+      findsOneWidget,
+    );
+    expect(find.textContaining("Yellow Toyota Corolla reported stolen"),
+        findsOneWidget);
+    expect(find.textContaining("Withdrawn"), findsWidgets);
+    expect(find.textContaining("StolenVehicle"), findsNothing);
+    expect(find.textContaining("P2Urgent"), findsNothing);
+    expect(find.textContaining("Citizen Broadcast"), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets("selecting other reveals additional details", (tester) async {

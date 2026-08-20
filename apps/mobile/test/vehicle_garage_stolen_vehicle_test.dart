@@ -16,6 +16,7 @@ import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
 import "package:the_eye_mobile/contracts/the_eye_api_paths.dart";
 import "package:the_eye_mobile/incidents/incident_submission_service.dart";
 import "package:the_eye_mobile/incidents/pending_submission_store.dart";
+import "package:the_eye_mobile/l10n/generated/app_localizations.dart";
 import "package:the_eye_mobile/main.dart";
 import "package:the_eye_mobile/profile/car_profile.dart";
 import "package:the_eye_mobile/profile/car_profile_store.dart";
@@ -55,6 +56,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AppScope(
           controller: controller,
           child: const StolenVehicleBroadcastScreen(),
@@ -98,6 +101,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AppScope(
           controller: controller,
           child: const StolenVehicleBroadcastScreen(),
@@ -126,6 +131,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AppScope(
           controller: controller,
           child: const StolenVehicleBroadcastScreen(),
@@ -166,6 +173,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AppScope(
           controller: controller,
           child: const StolenVehicleBroadcastScreen(),
@@ -219,6 +228,10 @@ void main() {
 
     expect(find.text("Select Vehicle"), findsOneWidget);
     expect(find.textContaining("Nissan Altima"), findsOneWidget);
+    expect(find.text("DRAFT-999"), findsNothing);
+
+    await tester.tap(find.text("Enter Vehicle Manually"));
+    await tester.pumpAndSettle();
     expect(find.text("DRAFT-999"), findsOneWidget);
     expect(find.text("DraftMake"), findsOneWidget);
     expect(find.text("DraftModel"), findsOneWidget);
@@ -253,6 +266,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AppScope(
           controller: controller,
           child: const StolenVehicleBroadcastScreen(),
@@ -266,9 +281,71 @@ void main() {
     await tester.tap(find.textContaining("Honda Civic"));
     await tester.pumpAndSettle();
 
+    expect(find.text("Select Vehicle"), findsNothing);
+    expect(find.textContaining("Toyota Corolla"), findsNothing);
+    expect(find.text("Change vehicle"), findsOneWidget);
     expect(find.text("ABC-222"), findsAtLeastNWidgets(1));
     expect(find.text("Honda"), findsAtLeastNWidgets(1));
     expect(find.text("Civic"), findsAtLeastNWidgets(1));
+
+    await tester.tap(find.text("Change vehicle"));
+    await tester.pumpAndSettle();
+    expect(find.text("Select Vehicle"), findsOneWidget);
+    expect(find.textContaining("Toyota Corolla"), findsOneWidget);
+  });
+
+  testWidgets("saved vehicle selection replaces stale manual vehicle fields",
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final themeProvider =
+        ThemeProvider(ThemePreferences(await SharedPreferences.getInstance()));
+    final garage = InMemoryVehicleGarageStore()
+      ..vehicles = const [
+        CarProfile(
+          id: "v2",
+          make: "Honda",
+          model: "Civic",
+          plateNumber: "ABC-222",
+          color: "Black",
+        ),
+      ];
+    final controller = _testController(themeProvider, garage);
+    await tester.pump();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AppScope(
+          controller: controller,
+          child: const StolenVehicleBroadcastScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text("Enter Vehicle Manually"));
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), "DRAFT-999");
+    await tester.enterText(fields.at(1), "DraftMake");
+    await tester.enterText(fields.at(2), "DraftModel");
+    await tester.enterText(fields.at(6), "Stale manual description");
+
+    final savedMode = find.text("Use Saved Vehicle");
+    await tester.ensureVisible(savedMode);
+    await tester.tap(savedMode);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining("Honda Civic"));
+    await tester.pumpAndSettle();
+
+    final populated = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .map((field) => field.controller?.text)
+        .toList();
+    expect(populated.take(3), ["ABC-222", "Honda", "Civic"]);
+    expect(populated[6], isEmpty);
+    expect(find.text("Select Vehicle"), findsNothing);
   });
 
   testWidgets(
@@ -283,6 +360,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AppScope(
           controller: controller,
           child: const StolenVehicleBroadcastScreen(),

@@ -98,6 +98,7 @@ import "broadcasts/broadcast_screens.dart";
 import "broadcasts/broadcast_session.dart";
 import "broadcasts/stolen_vehicle_broadcast_draft_store.dart";
 import "broadcasts/broadcast_submission_service.dart";
+import "presentation/citizen_broadcast_presenter.dart";
 import "community_verification/community_verification_screen.dart";
 import "community_verification/community_verification_service.dart";
 import "neighborhood_watch/community_access_status.dart";
@@ -6593,12 +6594,19 @@ class _StolenVehicleBroadcastScreenState
     colorController.text = profile.color ?? "";
     yearController.text = profile.year?.toString() ?? "";
     vinController.text = profile.vin ?? "";
-    if (profile.notes != null && profile.notes!.isNotEmpty) {
-      descriptionController.text = profile.notes!;
-    }
+    descriptionController.text = profile.notes ?? "";
     savedCarImagePath = profile.imagePath;
     usedSavedCar = true;
     if (notify && mounted) setState(() {});
+  }
+
+  void _switchToManualEntry() {
+    setState(() {
+      _entryMode = _StolenVehicleEntryMode.manualEntry;
+      selectedVehicleId = null;
+      usedSavedCar = false;
+      savedCarImagePath = null;
+    });
   }
 
   List<String> _extractVehiclePhotoObjectKeys(CarProfile? profile) {
@@ -6808,12 +6816,10 @@ class _StolenVehicleBroadcastScreenState
       }
     }
     final hasSavedCar = garageVehicles.isNotEmpty;
-    final hasDraftVehicleDetails = plateController.text.trim().isNotEmpty ||
-        makeController.text.trim().isNotEmpty ||
-        modelController.text.trim().isNotEmpty;
     final showVehicleForm = _entryMode == _StolenVehicleEntryMode.manualEntry ||
         (_entryMode == _StolenVehicleEntryMode.savedVehicle &&
-            (selectedVehicle != null || hasDraftVehicleDetails));
+            selectedVehicle != null);
+    final l10n = AppLocalizations.of(context);
     return SafetyScaffold(
       title: "Stolen vehicle",
       body: ListView(
@@ -6838,26 +6844,50 @@ class _StolenVehicleBroadcastScreenState
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton(
-                    onPressed: () {
-                      setState(() {
-                        _entryMode = _StolenVehicleEntryMode.manualEntry;
-                        usedSavedCar = false;
-                      });
-                    },
+                    onPressed: _switchToManualEntry,
                     child: const Text("Enter Vehicle Manually"),
                   ),
                 ],
                 if (_entryMode == _StolenVehicleEntryMode.savedVehicle) ...[
                   if (!hasSavedCar)
                     _buildNoSavedVehicleState()
+                  else if (selectedVehicle != null)
+                    Semantics(
+                      container: true,
+                      label:
+                          "${l10n.broadcastSelectedVehicle}: ${selectedVehicle.make} ${selectedVehicle.model}",
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ListTile(
+                            leading: _buildVehicleThumb(selectedVehicle),
+                            title: Text(l10n.broadcastSelectedVehicle),
+                            subtitle: Text(
+                              "${selectedVehicle.make} ${selectedVehicle.model}"
+                                  .trim(),
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  selectedVehicleId = null;
+                                  usedSavedCar = false;
+                                  savedCarImagePath = null;
+                                });
+                              },
+                              child: Text(l10n.broadcastChangeVehicle),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
                   else
                     _buildSavedVehicleSelector(garageVehicles, selectedVehicle),
                   const SizedBox(height: 8),
                   OutlinedButton(
-                    onPressed: () {
-                      setState(() =>
-                          _entryMode = _StolenVehicleEntryMode.manualEntry);
-                    },
+                    onPressed: _switchToManualEntry,
                     child: const Text("Enter Vehicle Manually"),
                   ),
                 ],
@@ -6865,8 +6895,12 @@ class _StolenVehicleBroadcastScreenState
                     hasSavedCar) ...[
                   OutlinedButton(
                     onPressed: () {
-                      setState(() =>
-                          _entryMode = _StolenVehicleEntryMode.savedVehicle);
+                      setState(() {
+                        _entryMode = _StolenVehicleEntryMode.savedVehicle;
+                        selectedVehicleId = null;
+                        usedSavedCar = false;
+                        savedCarImagePath = null;
+                      });
                     },
                     child: const Text("Use Saved Vehicle"),
                   ),
@@ -7224,18 +7258,15 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
           ),
           const SizedBox(height: 16),
           ...controller.broadcasts.map((item) {
+            final presentation = CitizenBroadcastPresenter.present(
+              item,
+              AppLocalizations.of(context),
+            );
             final tone = item.priority.contains("P1")
                 ? Colors.red.shade700
                 : item.priority.contains("P2")
                     ? Colors.orange.shade800
                     : EyeSemanticColors.of(context).verified;
-            final subtitle = item.authorLabel != null
-                ? "${item.authorLabel} · ${item.status}"
-                : item.distanceMeters != null
-                    ? "${(item.distanceMeters! / 1000).toStringAsFixed(1)} km away"
-                    : item.expired
-                        ? "Expired"
-                        : "Active alert";
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: ListTileCard(
@@ -7250,8 +7281,9 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
                             : Icons.campaign,
                   ),
                 ),
-                title: item.title,
-                subtitle: "${item.priority} · ${item.type}\n$subtitle",
+                title: presentation.title,
+                subtitle:
+                    "${presentation.summary}\n${presentation.metadataLine}",
                 trailing: item.read
                     ? const Icon(Icons.chevron_right)
                     : const Icon(Icons.fiber_manual_record, size: 12),
@@ -10192,6 +10224,10 @@ class _NeighborhoodWatchBroadcastsScreenState
           ),
         ] else
           ...visibleItems.map((item) {
+            final presentation = CitizenBroadcastPresenter.present(
+              item,
+              AppLocalizations.of(context),
+            );
             final active =
                 item.status.toLowerCase() == "active" && !item.expired;
             return Padding(
@@ -10209,10 +10245,13 @@ class _NeighborhoodWatchBroadcastsScreenState
                     color: Color(0xFF4A9DFF),
                   ),
                 ),
-                title: item.title,
-                subtitle: "${item.type} • ${item.status}\n${item.body}",
+                title: presentation.title,
+                subtitle:
+                    "${presentation.summary}\n${presentation.metadataLine}",
                 badge: NwPrototypePill(
-                  label: item.adminVerified ? "Official" : item.status,
+                  label: item.adminVerified
+                      ? "Official"
+                      : presentation.statusLabel,
                   selected: active || item.adminVerified,
                   color: active
                       ? BrandColors.green
