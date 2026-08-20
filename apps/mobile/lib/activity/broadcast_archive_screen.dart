@@ -3,25 +3,27 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/semantics.dart";
 
-import "../incidents/incident_submission_service.dart";
+import "../contracts/the_eye_api_client.dart";
 import "activity_history_service.dart";
 
 class BroadcastArchiveScreen extends StatefulWidget {
   const BroadcastArchiveScreen({
     required this.broadcastId,
     required this.accessToken,
+    this.apiClient,
     super.key,
   });
 
   final String broadcastId;
   final String accessToken;
+  final TheEyeApiClient? apiClient;
 
   @override
   State<BroadcastArchiveScreen> createState() => _BroadcastArchiveScreenState();
 }
 
 class _BroadcastArchiveScreenState extends State<BroadcastArchiveScreen> {
-  final ActivityHistoryService _service = ActivityHistoryService();
+  late final ActivityHistoryService _service;
   Map<String, dynamic>? _archive;
   String? _error;
   bool _loading = true;
@@ -29,6 +31,7 @@ class _BroadcastArchiveScreenState extends State<BroadcastArchiveScreen> {
   @override
   void initState() {
     super.initState();
+    _service = ActivityHistoryService(apiClient: widget.apiClient);
     unawaited(_load());
   }
 

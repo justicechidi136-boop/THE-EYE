@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:uuid/uuid.dart";
 
+import "../contracts/the_eye_api_client.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
 import "../widgets/eye_scaffold.dart";
@@ -15,18 +16,21 @@ class SupportNewChatScreen extends StatefulWidget {
   const SupportNewChatScreen({
     required this.accessToken,
     this.prefill = const SupportNewChatPrefill(),
+    this.apiClient,
     super.key,
   });
 
   final String accessToken;
   final SupportNewChatPrefill prefill;
+  final TheEyeApiClient? apiClient;
 
   @override
   State<SupportNewChatScreen> createState() => _SupportNewChatScreenState();
 }
 
 class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
-  final _service = SupportService();
+  late final SupportService _service;
+  late final SupportAttachmentUploadService _uploadService;
   final _subjectController = TextEditingController();
   final _bodyController = TextEditingController();
   SupportCategory _category = SupportCategory.other;
@@ -38,6 +42,11 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
   @override
   void initState() {
     super.initState();
+    _service = SupportService(client: widget.apiClient);
+    _uploadService = SupportAttachmentUploadService(
+      supportService: _service,
+      apiClient: widget.apiClient,
+    );
     _category = widget.prefill.category;
     _incidentId = widget.prefill.incidentId;
     if (widget.prefill.subject != null) {
@@ -82,8 +91,7 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
         diagnosticMetadata: widget.prefill.diagnosticMetadata,
       );
       if (_voiceRecording != null) {
-        final uploadService = SupportAttachmentUploadService();
-        final objectKey = await uploadService.uploadVoice(
+        final objectKey = await _uploadService.uploadVoice(
           accessToken: widget.accessToken,
           conversationId: conversation.id,
           attachment: _voiceRecording!.attachment,
@@ -101,7 +109,8 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(
         "/support/conversation",
-        arguments: SupportConversationRouteArgs(conversationId: conversation.id),
+        arguments:
+            SupportConversationRouteArgs(conversationId: conversation.id),
       );
     } catch (_) {
       if (!mounted) return;
@@ -142,7 +151,8 @@ class _SupportNewChatScreenState extends State<SupportNewChatScreen> {
           if (_incidents.isNotEmpty)
             DropdownButtonFormField<String?>(
               initialValue: _incidentId,
-              decoration: const InputDecoration(labelText: "Related incident (optional)"),
+              decoration: const InputDecoration(
+                  labelText: "Related incident (optional)"),
               items: [
                 const DropdownMenuItem(value: null, child: Text("None")),
                 ..._incidents.map(
@@ -194,12 +204,14 @@ class SupportConversationScreen extends StatefulWidget {
     required this.accessToken,
     required this.conversationId,
     this.isOnline = true,
+    this.apiClient,
     super.key,
   });
 
   final String accessToken;
   final String conversationId;
   final bool isOnline;
+  final TheEyeApiClient? apiClient;
 
   @override
   State<SupportConversationScreen> createState() =>
@@ -207,7 +219,7 @@ class SupportConversationScreen extends StatefulWidget {
 }
 
 class _SupportConversationScreenState extends State<SupportConversationScreen> {
-  final _service = SupportService();
+  late final SupportService _service;
   final _composer = TextEditingController();
   SupportConversationDetail? _conversation;
   Timer? _pollTimer;
@@ -218,8 +230,10 @@ class _SupportConversationScreenState extends State<SupportConversationScreen> {
   @override
   void initState() {
     super.initState();
+    _service = SupportService(client: widget.apiClient);
     _refresh();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh(silent: true));
+    _pollTimer = Timer.periodic(
+        const Duration(seconds: 5), (_) => _refresh(silent: true));
   }
 
   @override
@@ -312,7 +326,8 @@ class _SupportConversationScreenState extends State<SupportConversationScreen> {
                   children: [
                     if (!widget.isOnline)
                       MaterialBanner(
-                        content: const Text("Offline — messages will retry when connected"),
+                        content: const Text(
+                            "Offline — messages will retry when connected"),
                         actions: [
                           TextButton(onPressed: () {}, child: const Text("OK")),
                         ],
@@ -325,16 +340,21 @@ class _SupportConversationScreenState extends State<SupportConversationScreen> {
                           final message = _conversation!.messages[index];
                           final isAdmin = message.senderRole == "Admin";
                           return Align(
-                            alignment:
-                                isAdmin ? Alignment.centerLeft : Alignment.centerRight,
+                            alignment: isAdmin
+                                ? Alignment.centerLeft
+                                : Alignment.centerRight,
                             child: Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               padding: const EdgeInsets.all(12),
                               constraints: const BoxConstraints(maxWidth: 320),
                               decoration: BoxDecoration(
                                 color: isAdmin
-                                    ? Theme.of(context).colorScheme.surfaceContainerHighest
-                                    : Theme.of(context).colorScheme.primaryContainer,
+                                    ? Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Column(
@@ -342,15 +362,18 @@ class _SupportConversationScreenState extends State<SupportConversationScreen> {
                                 children: [
                                   Text(
                                     message.senderName,
-                                    semanticsLabel: "Sender ${message.senderName}",
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                    semanticsLabel:
+                                        "Sender ${message.senderName}",
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(message.body),
                                   const SizedBox(height: 4),
                                   Text(
                                     message.createdAt,
-                                    style: Theme.of(context).textTheme.labelSmall,
+                                    style:
+                                        Theme.of(context).textTheme.labelSmall,
                                   ),
                                 ],
                               ),

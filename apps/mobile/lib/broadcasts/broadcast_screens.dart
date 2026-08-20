@@ -1515,7 +1515,7 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   final _descriptionController = TextEditingController();
   final _streetAddressController = TextEditingController();
   final _customCityController = TextEditingController();
-  final _uploadService = BroadcastMediaUploadService();
+  late final BroadcastMediaUploadService _uploadService;
   final String _clientActionId = createClientSubmissionId();
   DateTime _observedAt = DateTime.now();
   _SightingLocationMode? _locationMode;
@@ -1525,6 +1525,17 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
   String? _selectedState;
   String? _selectedCity;
   String? _locationStatus;
+  bool _uploadServiceInitialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_uploadServiceInitialized) return;
+    _uploadServiceInitialized = true;
+    _uploadService = BroadcastMediaUploadService(
+      apiClient: BroadcastSession.require(context).apiClient,
+    );
+  }
 
   @override
   void initState() {
@@ -1963,8 +1974,9 @@ class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
       final session = BroadcastSession.require(context);
       final token = session.accessToken;
       if (token == null) throw StateError("Authentication required");
-      final detail =
-          await (widget.service ?? BroadcastSightingService()).getDetail(
+      final detail = await (widget.service ??
+              BroadcastSightingService(apiClient: session.apiClient))
+          .getDetail(
         accessToken: token,
         broadcastId: widget.broadcastId,
         sightingId: widget.sightingId,

@@ -1,5 +1,6 @@
-import { BadRequestException, ConflictException, HttpException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, UnauthorizedException } from "@nestjs/common";
 import { hashOtp, hashPassword, hashToken } from "../../../common/auth/crypto";
+import { signJwt, verifyJwt } from "../../../common/auth/jwt";
 import { AuthService } from "../auth.service";
 
 function createAuthService(overrides: Record<string, unknown> = {}) {
@@ -314,6 +315,148 @@ describe("AuthService login", () => {
     await expect(
       service.login({ email: "staging.citizen@theeye.local", password }),
     ).rejects.toBeInstanceOf(HttpException);
+  });
+});
+
+describe("AuthService refresh rotation", () => {
+  const refreshSecret = "test-refresh-secret-32-characters-min";
+  const accessSecret = "test-access-secret-32-characters-min";
+
+  function refreshToken() {
+    return signJwt({ sub: "user-1", typ: "user", jti: "refresh-1" }, refreshSecret, "1h");
+  }
+
+  function activeUser(status = "Active") {
+    return {
+      id: "user-1",
+      email: "citizen@theeye.local",
+      phone: null,
+      status,
+      trustedReporter: null,
+      profile: null,
+    };
+  }
+
+  it("rotates a valid refresh token in the same family", async () => {
+    const token = refreshToken();
+    const refreshTokenStore = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "stored-1",
+        userId: "user-1",
+        adminUserId: null,
+        familyId: "family-1",
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      create: jest.fn().mockResolvedValue({}),
+    };
+    const { service } = createAuthService({
+      refreshToken: refreshTokenStore,
+      user: {
+        findUnique: jest.fn().mockResolvedValue(activeUser()),
+      },
+    });
+
+    const session = await service.refresh(token);
+
+    expect(session.accessToken.length).toBeGreaterThan(0);
+    expect(session.refreshToken.length).toBeGreaterThan(0);
+    const revokeArgs = refreshTokenStore.update.mock.calls[0][0];
+    expect(revokeArgs.where.id).toBe("stored-1");
+    expect(revokeArgs.data.revokedAt).toBeInstanceOf(Date);
+    const createArgs = refreshTokenStore.create.mock.calls[0][0];
+    expect(createArgs.data.familyId).toBe("family-1");
+    expect(createArgs.data.userId).toBe("user-1");
+  });
+
+  it("rejects revoked refresh-token reuse and revokes its family", async () => {
+    const refreshTokenStore = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "stored-1",
+        userId: "user-1",
+        familyId: "family-1",
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn(),
+      create: jest.fn(),
+    };
+    const { service } = createAuthService({ refreshToken: refreshTokenStore });
+
+    await expect(service.refresh(refreshToken())).rejects.toBeInstanceOf(UnauthorizedException);
+    const revokeFamilyArgs = refreshTokenStore.updateMany.mock.calls[0][0];
+    expect(revokeFamilyArgs.where).toEqual({ familyId: "family-1", revokedAt: null });
+    expect(revokeFamilyArgs.data.revokedAt).toBeInstanceOf(Date);
+  });
+
+  it("rejects expired refresh tokens", async () => {
+    const { service } = createAuthService({
+      refreshToken: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "stored-1",
+          userId: "user-1",
+          familyId: "family-1",
+          revokedAt: null,
+          expiresAt: new Date(Date.now() - 1_000),
+        }),
+        updateMany: jest.fn(),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+    });
+
+    await expect(service.refresh(refreshToken())).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it("does not refresh a suspended citizen session", async () => {
+    const refreshTokenStore = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "stored-1",
+        userId: "user-1",
+        familyId: "family-1",
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn(),
+      create: jest.fn(),
+    };
+    const { service } = createAuthService({
+      refreshToken: refreshTokenStore,
+      user: { findUnique: jest.fn().mockResolvedValue(activeUser("Suspended")) },
+    });
+
+    await expect(service.refresh(refreshToken())).rejects.toBeInstanceOf(ForbiddenException);
+    expect(refreshTokenStore.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps access and refresh token purposes cryptographically separate", async () => {
+    const accessToken = signJwt({ sub: "user-1", typ: "user" }, accessSecret, "15m");
+    const token = refreshToken();
+
+    expect(() => verifyJwt(accessToken, refreshSecret)).toThrow();
+    expect(() => verifyJwt(token, accessSecret)).toThrow();
+    const verifiedAccess = verifyJwt(accessToken, accessSecret);
+    expect(verifiedAccess.exp - verifiedAccess.iat).toBe(15 * 60);
+  });
+
+  it("logout revokes the supplied refresh token hash", async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const { service } = createAuthService({
+      refreshToken: { updateMany, create: jest.fn() },
+    });
+
+    await service.logout("refresh-to-revoke");
+
+    const logoutArgs = updateMany.mock.calls[0][0];
+    expect(logoutArgs.where).toEqual({
+      tokenHash: hashToken("refresh-to-revoke"),
+      revokedAt: null,
+    });
+    expect(logoutArgs.data.revokedAt).toBeInstanceOf(Date);
   });
 });
 

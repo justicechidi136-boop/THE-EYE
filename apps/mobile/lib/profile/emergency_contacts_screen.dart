@@ -4,7 +4,6 @@ import "package:flutter/material.dart";
 
 import "../app/app_scope.dart";
 import "../brand.dart";
-import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../family/emergency_contact_relationships.dart";
 import "../design_system/eye_input_theme.dart";
@@ -12,7 +11,9 @@ import "../widgets/section_card.dart";
 import "profile_widgets.dart";
 
 class EmergencyContactsScreen extends StatefulWidget {
-  const EmergencyContactsScreen({super.key});
+  const EmergencyContactsScreen({this.apiClient, super.key});
+
+  final TheEyeApiClient? apiClient;
 
   @override
   State<EmergencyContactsScreen> createState() =>
@@ -20,8 +21,7 @@ class EmergencyContactsScreen extends StatefulWidget {
 }
 
 class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
-  final TheEyeApiClient _apiClient =
-      TheEyeApiClient(baseUrl: TheEyeApiConfig.resolveBaseUrl());
+  late final TheEyeApiClient _apiClient;
 
   List<EmergencyContact> _contacts = const [];
   String? _error;
@@ -34,6 +34,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   String? _editingContactId;
 
   bool _loadStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiClient = widget.apiClient ?? TheEyeApiClient();
+  }
 
   @override
   void dispose() {

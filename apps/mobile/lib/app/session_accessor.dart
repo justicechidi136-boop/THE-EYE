@@ -6,6 +6,7 @@ import "../contracts/the_eye_api_client.dart";
 abstract class SessionAccessor extends ChangeNotifier {
   bool get isAuthenticated;
   String? get accessToken;
+  TheEyeApiClient get apiClient;
   bool get lowDataMode;
   bool get online;
 

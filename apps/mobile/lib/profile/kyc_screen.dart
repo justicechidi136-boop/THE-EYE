@@ -2,22 +2,22 @@ import "package:flutter/material.dart";
 
 import "../app/app_scope.dart";
 import "../brand.dart";
-import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_input_theme.dart";
 import "../widgets/section_card.dart";
 import "profile_widgets.dart";
 
 class KycScreen extends StatefulWidget {
-  const KycScreen({super.key});
+  const KycScreen({this.apiClient, super.key});
+
+  final TheEyeApiClient? apiClient;
 
   @override
   State<KycScreen> createState() => _KycScreenState();
 }
 
 class _KycScreenState extends State<KycScreen> {
-  final TheEyeApiClient _apiClient =
-      TheEyeApiClient(baseUrl: TheEyeApiConfig.resolveBaseUrl());
+  late final TheEyeApiClient _apiClient;
   final _documentNumberController = TextEditingController();
 
   String _documentType = "NationalID";
@@ -25,6 +25,12 @@ class _KycScreenState extends State<KycScreen> {
   String? _error;
   bool _loading = true;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiClient = widget.apiClient ?? TheEyeApiClient();
+  }
 
   static const _documentTypes = <String>[
     "NationalID",

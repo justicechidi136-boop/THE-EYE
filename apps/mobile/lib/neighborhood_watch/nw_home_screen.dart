@@ -24,7 +24,7 @@ class NeighborhoodWatchHomeScreen extends StatefulWidget {
 
 class _NeighborhoodWatchHomeScreenState
     extends State<NeighborhoodWatchHomeScreen> {
-  final NeighborhoodWatchService _service = NeighborhoodWatchService();
+  late final NeighborhoodWatchService _service;
   final NwContextCache _contextCache = NwContextCache();
 
   NwContextResponse? _context;
@@ -38,6 +38,17 @@ class _NeighborhoodWatchHomeScreenState
   String? _homeCommunityMessage;
   bool _joiningCommunity = false;
   String? _membershipMessage;
+  bool _serviceInitialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_serviceInitialized) return;
+    _serviceInitialized = true;
+    _service = NeighborhoodWatchService(
+      apiClient: AppScope.of(context).apiClient,
+    );
+  }
 
   @override
   void initState() {

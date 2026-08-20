@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../app/app_scope.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../widgets/eye_scaffold.dart";
 import "neighborhood_watch_service.dart";
@@ -21,16 +22,22 @@ class PrivateCommunityMembershipScreen extends StatefulWidget {
 
 class _PrivateCommunityMembershipScreenState
     extends State<PrivateCommunityMembershipScreen> {
-  final NeighborhoodWatchService _service = NeighborhoodWatchService();
+  late final NeighborhoodWatchService _service;
   CommunitySummary? _community;
   String? _error;
   bool _loading = false;
   bool _joining = false;
   String? _actionMessage;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    _service = NeighborhoodWatchService(
+      apiClient: AppScope.of(context).apiClient,
+    );
     _load();
   }
 

@@ -1,5 +1,5 @@
-import "dart:async";
 import "dart:convert";
+import "dart:async";
 import "dart:io";
 
 import "package:http/http.dart" as http;
@@ -77,7 +77,7 @@ class AuthService {
   final AuthSessionStore _sessionStore;
   final LanguageRegionPreferenceStore? _languageRegionPreferenceStore;
   bool _otpRequestInFlight = false;
-  Completer<AuthSession?>? _refreshInFlight;
+  Future<AuthSession?>? _refreshInFlight;
 
   Future<AuthRequestResult> login({
     required String identifier,
@@ -432,43 +432,35 @@ class AuthService {
   }
 
   /// Coalesces concurrent refresh requests into a single API call.
-  Future<AuthSession?> refreshSessionSingleFlight() async {
+  Future<AuthSession?> refreshSessionSingleFlight() {
     final inFlight = _refreshInFlight;
     if (inFlight != null) {
-      return inFlight.future;
+      return inFlight;
     }
 
-    final completer = Completer<AuthSession?>();
-    _refreshInFlight = completer;
+    final operation = _performSessionRefresh();
+    _refreshInFlight = operation;
+    return operation.whenComplete(() {
+      if (identical(_refreshInFlight, operation)) {
+        _refreshInFlight = null;
+      }
+    });
+  }
+
+  Future<AuthSession?> _performSessionRefresh() async {
+    final session = await _sessionStore.load();
+    if (session == null || session.refreshToken.isEmpty) return null;
     try {
-      final session = await _sessionStore.load();
-      if (session == null || session.refreshToken.isEmpty) {
-        completer.complete(null);
+      final refreshed =
+          await _apiClient.refreshSession(refreshToken: session.refreshToken);
+      await _sessionStore.save(refreshed);
+      return refreshed;
+    } on AuthApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _sessionStore.clear();
         return null;
       }
-
-      try {
-        final refreshed =
-            await _apiClient.refreshSession(refreshToken: session.refreshToken);
-        await _sessionStore.save(refreshed);
-        completer.complete(refreshed);
-        return refreshed;
-      } on AuthApiException catch (error) {
-        if (error.statusCode == 401) {
-          await _sessionStore.clear();
-          completer.complete(null);
-          return null;
-        }
-        completer.completeError(error);
-        rethrow;
-      }
-    } catch (error, stackTrace) {
-      if (!completer.isCompleted) {
-        completer.completeError(error, stackTrace);
-      }
       rethrow;
-    } finally {
-      _refreshInFlight = null;
     }
   }
 
@@ -485,6 +477,12 @@ class AuthService {
       return await action(session.accessToken);
     } on AuthApiException catch (error) {
       if (error.statusCode != 401 || session.refreshToken.isEmpty) rethrow;
+      final currentSession = await _sessionStore.load();
+      if (currentSession != null &&
+          currentSession.accessToken.isNotEmpty &&
+          currentSession.accessToken != session.accessToken) {
+        return action(currentSession.accessToken);
+      }
       final refreshed = await refreshSessionSingleFlight();
       if (refreshed == null) rethrow;
       return action(refreshed.accessToken);
@@ -513,6 +511,16 @@ class AuthService {
       return (session: session, citizenProfile: profile);
     } on AuthApiException catch (error) {
       if (error.statusCode != 401 || session.refreshToken.isEmpty) rethrow;
+      final currentSession = await _sessionStore.load();
+      if (currentSession != null &&
+          currentSession.accessToken.isNotEmpty &&
+          currentSession.accessToken != session.accessToken) {
+        final profile = await _apiClient.fetchCitizenProfile(
+          accessToken: currentSession.accessToken,
+        );
+        await _languageRegionPreferenceStore?.saveFromProfile(profile);
+        return (session: currentSession, citizenProfile: profile);
+      }
       final refreshed = await refreshSessionSingleFlight();
       if (refreshed == null) rethrow;
       final profile = await _apiClient.fetchCitizenProfile(
