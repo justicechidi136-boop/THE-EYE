@@ -127,6 +127,7 @@ void main() {
         "country": "NG",
         "state": "Lagos",
         "lga": "Ikeja",
+        "membershipStatus": "Approved",
       });
 
       final summary = card.toCommunitySummary(activeAlertsCount: 4);
@@ -136,6 +137,8 @@ void main() {
       expect(summary.activeAlertsCount, 4);
 
       expect(card.areaLabel, contains("Ikeja"));
+      expect(card.membershipStatus, "Approved");
+      expect(summary.membershipStatus, "Approved");
     });
   });
 
@@ -148,6 +151,7 @@ void main() {
           "name": "Zone A",
           "visibility": "Public",
           "country": "NG",
+          "membershipStatus": "Approved",
         },
         "presence": {
           "mode": "LOCATION_PARTICIPANT",
@@ -155,7 +159,7 @@ void main() {
           "accuracyM": 18,
           "capturedAt": "2026-08-12T01:00:00.000Z",
         },
-        "permissions": {"canViewPublicFeed": true},
+        "permissions": {"canViewPublicFeed": true, "canPost": true},
         "safetySummary": {"activeAlerts": 1},
       });
 
@@ -164,6 +168,8 @@ void main() {
       expect(stale.presence, isNull);
 
       expect(stale.publicCommunity?.name, "Zone A");
+      expect(stale.publicCommunity?.membershipStatus, "Approved");
+      expect(stale.permissions.canPost, isFalse);
     });
 
     test("labels cached context as STALE", () {

@@ -202,7 +202,10 @@ export class NeighborhoodWatchContextService {
     return {
       locationStatus: "CONFIRMED" as NwLocationStatus,
       contextType: "MAPPED_PUBLIC_COMMUNITY" as NwContextType,
-      publicCommunity: this.toPublicCommunityCard(publicCommunity),
+      publicCommunity: this.toPublicCommunityCard(
+        publicCommunity,
+        membership?.status ? String(membership.status) : null,
+      ),
       dynamicArea: null,
       presence: {
         mode: "LOCATION_PARTICIPANT",
@@ -568,15 +571,18 @@ export class NeighborhoodWatchContextService {
     return this.toPublicCommunityCard(profile.homeCommunity);
   }
 
-  private toPublicCommunityCard(row: {
-    id: string;
-    name: string;
-    country?: string | null;
-    state?: string | null;
-    lga?: string | null;
-    description?: string | null;
-    visibility?: string | null;
-  }) {
+  private toPublicCommunityCard(
+    row: {
+      id: string;
+      name: string;
+      country?: string | null;
+      state?: string | null;
+      lga?: string | null;
+      description?: string | null;
+      visibility?: string | null;
+    },
+    membershipStatus: string | null = null,
+  ) {
     return {
       id: row.id,
       name: row.name,
@@ -586,6 +592,7 @@ export class NeighborhoodWatchContextService {
       lga: row.lga ?? null,
       description: row.description ?? null,
       label: "Public Safety Community",
+      membershipStatus,
     };
   }
 

@@ -655,6 +655,7 @@ class NwPublicCommunityCard {
     this.lga,
     this.description,
     this.label,
+    this.membershipStatus,
   });
 
   final String id;
@@ -665,6 +666,7 @@ class NwPublicCommunityCard {
   final String? lga;
   final String? description;
   final String? label;
+  final String? membershipStatus;
 
   factory NwPublicCommunityCard.fromJson(Map<String, dynamic> json) {
     return NwPublicCommunityCard(
@@ -676,6 +678,7 @@ class NwPublicCommunityCard {
       lga: json["lga"] as String?,
       description: json["description"] as String?,
       label: json["label"] as String?,
+      membershipStatus: json["membershipStatus"] as String?,
     );
   }
 
@@ -688,6 +691,7 @@ class NwPublicCommunityCard {
         if (lga != null) "lga": lga,
         if (description != null) "description": description,
         if (label != null) "label": label,
+        if (membershipStatus != null) "membershipStatus": membershipStatus,
       };
 
   String get areaLabel {
@@ -709,6 +713,7 @@ class NwPublicCommunityCard {
       country: country,
       state: state,
       lga: lga,
+      membershipStatus: membershipStatus,
     );
   }
 }
