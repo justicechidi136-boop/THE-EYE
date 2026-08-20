@@ -78,6 +78,12 @@ export type SubmitBroadcastSightingDto = {
   latitude?: number;
   longitude?: number;
   approximateArea?: string;
+  countryCode?: string;
+  state?: string;
+  cityTown?: string;
+  streetAddress?: string;
+  displayAddress?: string;
+  capturedAt?: string;
   description: string;
   confidence?: string;
   anonymousPublic?: boolean;

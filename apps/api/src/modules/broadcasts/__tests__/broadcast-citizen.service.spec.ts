@@ -402,9 +402,18 @@ describe("BroadcastCitizenService", () => {
       expect.objectContaining({
         userId: "owner-1",
         type: "BroadcastSightingAlert",
-        title: "New Sighting Report",
+        title: "New sighting reported",
+        metadata: expect.objectContaining({
+          broadcastId: "broadcast-1",
+          sightingId: "sighting-1",
+          deepLink: "/broadcasts/broadcast-1/sightings/sighting-1",
+        }),
       }),
     );
+    const notification = notificationsService.create.mock.calls[0]?.[0];
+    expect(JSON.stringify(notification?.metadata)).not.toContain("latitude");
+    expect(JSON.stringify(notification?.metadata)).not.toContain("longitude");
+    expect(JSON.stringify(notification?.metadata)).not.toContain("url");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "broadcast.sighting_authority_routed" }),
     );
@@ -444,7 +453,9 @@ describe("BroadcastCitizenService", () => {
       "broadcast-1",
       {
         clientSightingId: "dup-1",
-        locationMode: "NOT_PROVIDED",
+        locationMode: "CURRENT_GPS",
+        latitude: 6.45,
+        longitude: 3.41,
         description: "Duplicate submit",
       },
       reporter,
@@ -488,6 +499,114 @@ describe("BroadcastCitizenService", () => {
     expect(adminList.data[0].reporter).toEqual({ reporterUserId: "user-44" });
     expect(adminList.data[0].latitude).toBeDefined();
     expect(adminList.data[0].longitude).toBeDefined();
+  });
+
+  it("requires a structured address for manual sightings", async () => {
+    resetCitizenMocks();
+    await expect(
+      service.submitSighting(
+        "broadcast-1",
+        {
+          locationMode: "MANUAL",
+          state: "Rivers",
+          cityTown: "Port Harcourt",
+          streetAddress: "  ",
+          description: "Vehicle seen",
+        },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects invalid current GPS coordinates", async () => {
+    resetCitizenMocks();
+    await expect(
+      service.submitSighting(
+        "broadcast-1",
+        {
+          locationMode: "CURRENT_GPS",
+          latitude: 91,
+          longitude: 3.4,
+          description: "Vehicle seen",
+        },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects new sightings without a meaningful location", async () => {
+    resetCitizenMocks();
+    await expect(
+      service.submitSighting(
+        "broadcast-1",
+        {
+          locationMode: "NOT_PROVIDED",
+          description: "Vehicle seen",
+        },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("returns one authorized sighting with a safe broadcast summary", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      creatorUserId: "user-1",
+      type: BroadcastType.StolenVehicle,
+      title: "Stolen vehicle",
+      metadata: {
+        colour: "Blue",
+        make: "Toyota",
+        model: "Corolla",
+        registrationNumber: "ABC-1234",
+      },
+    });
+    prisma.broadcastSighting.findFirst.mockResolvedValue({
+      id: "sighting-1",
+      broadcastId: "broadcast-1",
+      reporterUserId: "user-2",
+      createdAt: new Date("2026-08-14T11:35:00.000Z"),
+      observedAt: new Date("2026-08-14T11:30:00.000Z"),
+      description: "Seen near Stadium Road",
+      metadata: {
+        locationMode: "MANUAL",
+        location: {
+          state: "Rivers",
+          cityTown: "Port Harcourt",
+          streetAddress: "Stadium Road",
+        },
+      },
+    });
+
+    const result = await service.getSighting(
+      "broadcast-1",
+      "sighting-1",
+      reporter,
+    );
+
+    expect(result.data.location).toEqual(
+      expect.objectContaining({ state: "Rivers", cityTown: "Port Harcourt" }),
+    );
+    expect(result.data.broadcast.subjectSummary).toContain("Blue Toyota Corolla");
+    expect(result.data.latitude).toBeUndefined();
+    expect(JSON.stringify(result.data)).not.toContain("objectKey");
+  });
+
+  it("rejects unrelated citizens opening a sighting detail", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      creatorUserId: "another-user",
+      type: BroadcastType.StolenVehicle,
+      title: "Stolen vehicle",
+      metadata: {},
+    });
+
+    await expect(
+      service.getSighting("broadcast-1", "sighting-1", reporter),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.broadcastSighting.findFirst).not.toHaveBeenCalled();
   });
 
   it("rejects sightings list for unrelated citizen", async () => {

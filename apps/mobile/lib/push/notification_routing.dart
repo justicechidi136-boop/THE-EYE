@@ -6,6 +6,7 @@ class PushNotificationRoute {
     required this.destination,
     this.incidentId,
     this.broadcastId,
+    this.sightingId,
     this.status,
     this.silent = false,
   });
@@ -14,6 +15,7 @@ class PushNotificationRoute {
   final String routeType;
   final String? incidentId;
   final String? broadcastId;
+  final String? sightingId;
   final String? status;
   final String notificationType;
   final String destination;
@@ -49,6 +51,7 @@ abstract final class PushNotificationRouting {
         routeType: data["routeType"]?.toString() ?? "SYSTEM",
         incidentId: data["incidentId"]?.toString(),
         broadcastId: data["broadcastId"]?.toString(),
+        sightingId: data["sightingId"]?.toString(),
         status: data["status"]?.toString(),
         notificationType: data["notificationType"]?.toString() ??
             data["type"]?.toString() ??

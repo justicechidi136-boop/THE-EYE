@@ -39,6 +39,8 @@ class DeviceLocationState {
     this.source = DeviceLocationSourceKind.unavailable,
     this.quality,
     this.locality,
+    this.street,
+    this.subLocality,
     this.lga,
     this.state,
     this.country,
@@ -61,6 +63,8 @@ class DeviceLocationState {
   final DeviceLocationSourceKind source;
   final EmergencyLocationQuality? quality;
   final String? locality;
+  final String? street;
+  final String? subLocality;
   final String? lga;
   final String? state;
   final String? country;
@@ -154,6 +158,8 @@ class DeviceLocationState {
     DeviceLocationSourceKind? source,
     EmergencyLocationQuality? quality,
     String? locality,
+    String? street,
+    String? subLocality,
     String? lga,
     String? state,
     String? country,
@@ -176,6 +182,8 @@ class DeviceLocationState {
       source: source ?? this.source,
       quality: quality ?? this.quality,
       locality: locality ?? this.locality,
+      street: street ?? this.street,
+      subLocality: subLocality ?? this.subLocality,
       lga: lga ?? this.lga,
       state: state ?? this.state,
       country: country ?? this.country,

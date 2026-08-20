@@ -10,11 +10,16 @@ abstract class LocationReverseGeocoder {
 
 class ReverseGeocodeResult {
   const ReverseGeocodeResult({
+    this.street,
+    this.subLocality,
     this.locality,
     this.lga,
     this.state,
     this.country,
   });
+
+  final String? street;
+  final String? subLocality;
 
   final String? locality;
   final String? lga;
@@ -22,6 +27,8 @@ class ReverseGeocodeResult {
   final String? country;
 
   bool get hasAnyLabel =>
+      (street?.trim().isNotEmpty ?? false) ||
+      (subLocality?.trim().isNotEmpty ?? false) ||
       (locality?.trim().isNotEmpty ?? false) ||
       (state?.trim().isNotEmpty ?? false) ||
       (country?.trim().isNotEmpty ?? false);
@@ -56,6 +63,8 @@ class PlatformLocationReverseGeocoder implements LocationReverseGeocoder {
       ]);
       final country = place.country?.trim();
       return ReverseGeocodeResult(
+        street: _firstNonEmpty([place.street, place.thoroughfare]),
+        subLocality: _firstNonEmpty([place.subLocality]),
         locality: locality,
         lga: lga,
         state: state,

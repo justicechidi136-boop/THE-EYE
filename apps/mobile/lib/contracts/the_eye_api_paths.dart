@@ -129,6 +129,8 @@ abstract final class TheEyeApiPaths {
       "/broadcasts/$broadcastId/share";
   static String broadcastSightings(String broadcastId) =>
       "/broadcasts/$broadcastId/sightings";
+  static String broadcastSighting(String broadcastId, String sightingId) =>
+      "/broadcasts/$broadcastId/sightings/$sightingId";
   static String incidentsMediaPresign(String incidentId) =>
       "/incidents/$incidentId/media/presign";
   static String incidentsMediaConfirm(String incidentId) =>

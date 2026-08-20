@@ -60,6 +60,7 @@ import "incidents/pending_submission_store.dart";
 import "location/location_permission_settings_section.dart";
 import "location/location_permission_service.dart";
 import "location/location_reverse_geocode.dart";
+import "presentation/citizen_location_presentation.dart";
 import "l10n/generated/app_localizations.dart";
 import "live_video/live_video_api_models.dart";
 import "live_video/live_video_connection_state.dart";
@@ -9212,14 +9213,17 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
         longitude: position.longitude,
       );
       if (!mounted) return;
-      final labelParts = [
-        geocode.locality,
-        geocode.state,
-        geocode.country,
-      ].whereType<String>().where((item) => item.trim().isNotEmpty).toList();
-      final label = labelParts.isEmpty
-          ? "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}"
-          : labelParts.join(", ");
+      final locationPresentation = CitizenLocationPresentation(
+        streetAddress: geocode.street,
+        subLocality: geocode.subLocality,
+        cityTown: geocode.locality,
+        lga: geocode.lga,
+        state: geocode.state,
+        country: geocode.country,
+      );
+      final label = locationPresentation.lines.isEmpty
+          ? "Location acquired (address unavailable)"
+          : locationPresentation.lines.join(", ");
       setState(() {
         _selectedLocation = _SelectedCommunityLocation(
           latitude: position.latitude,

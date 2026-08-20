@@ -29,10 +29,12 @@ class ParsedBroadcastRoute {
   const ParsedBroadcastRoute._({
     required this.kind,
     this.broadcastId,
+    this.sightingId,
   });
 
   final BroadcastRouteKind kind;
   final String? broadcastId;
+  final String? sightingId;
 
   static ParsedBroadcastRoute? parse(String? routeName) {
     final name = routeName?.split("?").first.trim() ?? "";
@@ -86,6 +88,16 @@ class ParsedBroadcastRoute {
       );
     }
 
+    if (segments.length == 3 &&
+        segments[1] == "sightings" &&
+        _isValidBroadcastId(segments[2])) {
+      return ParsedBroadcastRoute._(
+        kind: BroadcastRouteKind.sightingDetail,
+        broadcastId: broadcastId,
+        sightingId: segments[2],
+      );
+    }
+
     final action = segments[1];
     return switch (action) {
       "comments" when segments.length == 2 => ParsedBroadcastRoute._(
@@ -125,6 +137,7 @@ enum BroadcastRouteKind {
   report,
   share,
   sighting,
+  sightingDetail,
 }
 
 typedef MissingPersonBroadcastBuilder = Widget Function();
@@ -202,7 +215,22 @@ Route<dynamic>? resolveBroadcastRoute(
           broadcastId: parsed.broadcastId!,
         ),
       );
+    case BroadcastRouteKind.sightingDetail:
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => SightingDetailsScreen(
+          broadcastId: parsed.broadcastId!,
+          sightingId: parsed.sightingId!,
+        ),
+      );
   }
+}
+
+String? broadcastSightingDetailRoute(String broadcastId, String sightingId) {
+  final safeBroadcastId = broadcastId.trim();
+  final safeSightingId = sightingId.trim();
+  if (safeBroadcastId.isEmpty || safeSightingId.isEmpty) return null;
+  return "${BroadcastRoutes.center}/$safeBroadcastId/sightings/$safeSightingId";
 }
 
 String? broadcastDetailRoute(String broadcastId) {

@@ -95,17 +95,25 @@ class BroadcastReportContent {
 }
 
 BroadcastReportContent broadcastReportContentForType(String? broadcastType) {
-  final normalized = broadcastType?.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
+  final normalized =
+      broadcastType?.toLowerCase().replaceAll(RegExp(r"[^a-z]"), "") ?? "";
   if (normalized.contains("stolenvehicle")) {
     return const BroadcastReportContent(
       heading: "Why are you reporting this stolen vehicle broadcast?",
       reasons: [
-        BroadcastReportReasonOption(code: "FalseOrMisleading", label: "False or misleading"),
-        BroadcastReportReasonOption(code: "VehicleInformationIncorrect", label: "Vehicle information is incorrect"),
-        BroadcastReportReasonOption(code: "VehicleAlreadyRecovered", label: "Vehicle already recovered"),
+        BroadcastReportReasonOption(
+            code: "FalseOrMisleading", label: "False or misleading"),
+        BroadcastReportReasonOption(
+            code: "VehicleInformationIncorrect",
+            label: "Vehicle information is incorrect"),
+        BroadcastReportReasonOption(
+            code: "VehicleAlreadyRecovered",
+            label: "Vehicle already recovered"),
         BroadcastReportReasonOption(code: "Duplicate", label: "Duplicate"),
-        BroadcastReportReasonOption(code: "Impersonation", label: "Impersonation"),
-        BroadcastReportReasonOption(code: "PrivacyViolation", label: "Privacy violation"),
+        BroadcastReportReasonOption(
+            code: "Impersonation", label: "Impersonation"),
+        BroadcastReportReasonOption(
+            code: "PrivacyViolation", label: "Privacy violation"),
         BroadcastReportReasonOption(code: "Spam", label: "Spam"),
         BroadcastReportReasonOption(code: "Other", label: "Other"),
       ],
@@ -115,12 +123,18 @@ BroadcastReportContent broadcastReportContentForType(String? broadcastType) {
     return const BroadcastReportContent(
       heading: "Why are you reporting this missing person broadcast?",
       reasons: [
-        BroadcastReportReasonOption(code: "FalseOrMisleading", label: "False or misleading"),
-        BroadcastReportReasonOption(code: "PersonInformationIncorrect", label: "Person information is incorrect"),
-        BroadcastReportReasonOption(code: "PersonAlreadyFound", label: "Person already found"),
+        BroadcastReportReasonOption(
+            code: "FalseOrMisleading", label: "False or misleading"),
+        BroadcastReportReasonOption(
+            code: "PersonInformationIncorrect",
+            label: "Person information is incorrect"),
+        BroadcastReportReasonOption(
+            code: "PersonAlreadyFound", label: "Person already found"),
         BroadcastReportReasonOption(code: "Duplicate", label: "Duplicate"),
-        BroadcastReportReasonOption(code: "Impersonation", label: "Impersonation"),
-        BroadcastReportReasonOption(code: "PrivacyViolation", label: "Privacy violation"),
+        BroadcastReportReasonOption(
+            code: "Impersonation", label: "Impersonation"),
+        BroadcastReportReasonOption(
+            code: "PrivacyViolation", label: "Privacy violation"),
         BroadcastReportReasonOption(code: "Spam", label: "Spam"),
         BroadcastReportReasonOption(code: "Other", label: "Other"),
       ],
@@ -129,10 +143,13 @@ BroadcastReportContent broadcastReportContentForType(String? broadcastType) {
   return const BroadcastReportContent(
     heading: "Why are you reporting this broadcast?",
     reasons: [
-      BroadcastReportReasonOption(code: "FalseOrMisleading", label: "False or misleading"),
+      BroadcastReportReasonOption(
+          code: "FalseOrMisleading", label: "False or misleading"),
       BroadcastReportReasonOption(code: "Duplicate", label: "Duplicate"),
-      BroadcastReportReasonOption(code: "Impersonation", label: "Impersonation"),
-      BroadcastReportReasonOption(code: "PrivacyViolation", label: "Privacy violation"),
+      BroadcastReportReasonOption(
+          code: "Impersonation", label: "Impersonation"),
+      BroadcastReportReasonOption(
+          code: "PrivacyViolation", label: "Privacy violation"),
       BroadcastReportReasonOption(code: "Spam", label: "Spam"),
       BroadcastReportReasonOption(code: "Other", label: "Other"),
     ],
@@ -271,6 +288,12 @@ class BroadcastSubmissionService {
     double? latitude,
     double? longitude,
     String? approximateArea,
+    String? countryCode,
+    String? state,
+    String? cityTown,
+    String? streetAddress,
+    String? displayAddress,
+    String? capturedAt,
     String? confidence,
     bool anonymousToReviewers = false,
     String? directionOfTravel,
@@ -288,6 +311,16 @@ class BroadcastSubmissionService {
         if (longitude != null) "longitude": longitude,
         if (approximateArea != null && approximateArea.isNotEmpty)
           "approximateArea": approximateArea,
+        if (countryCode != null && countryCode.isNotEmpty)
+          "countryCode": countryCode,
+        if (state != null && state.isNotEmpty) "state": state,
+        if (cityTown != null && cityTown.isNotEmpty) "cityTown": cityTown,
+        if (streetAddress != null && streetAddress.isNotEmpty)
+          "streetAddress": streetAddress,
+        if (displayAddress != null && displayAddress.isNotEmpty)
+          "displayAddress": displayAddress,
+        if (capturedAt != null && capturedAt.isNotEmpty)
+          "capturedAt": capturedAt,
         if (confidence != null && confidence.isNotEmpty)
           "confidence": confidence,
         "anonymousPublic": anonymousToReviewers,

@@ -160,6 +160,8 @@ class DeviceLocationService {
           : DeviceLocationSourceKind.freshGps,
       quality: fix.quality,
       locality: geocode.locality,
+      street: geocode.street,
+      subLocality: geocode.subLocality,
       lga: geocode.lga,
       state: geocode.state,
       country: geocode.country,

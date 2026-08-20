@@ -3,6 +3,30 @@ import "package:the_eye_mobile/push/notification_routing.dart";
 import "package:the_eye_mobile/push/push_navigation.dart";
 
 void main() {
+  test("sighting notification preserves its exact persistent destination", () {
+    final route = PushNotificationRouting.fromMessageData({
+      "schemaVersion": "1",
+      "routeType": "BROADCAST_DETAILS",
+      "notificationType": "BroadcastSightingAlert",
+      "broadcastId": "b1",
+      "sightingId": "s1",
+      "deepLink": "/broadcasts/b1/sightings/s1",
+    });
+
+    expect(route?.destination, "/broadcasts/b1/sightings/s1");
+    expect(route?.sightingId, "s1");
+    final request = PushNavigationRequest.fromMessageData({
+      "schemaVersion": "1",
+      "routeType": "BROADCAST_DETAILS",
+      "notificationType": "BroadcastSightingAlert",
+      "broadcastId": "b1",
+      "sightingId": "s1",
+      "deepLink": "/broadcasts/b1/sightings/s1",
+    });
+    expect(request?.route, "/broadcasts/b1/sightings/s1");
+    expect(request?.routing?.sightingId, "s1");
+  });
+
   test("schema v1 routes active incident notifications to active emergency",
       () {
     final request = PushNavigationRequest.fromMessageData({

@@ -69,4 +69,40 @@ class AppLocalizationsYo extends AppLocalizations {
 
   @override
   String get saveAndContinue => 'Fi pamole ki o tesiwaju';
+  @override
+  String get reportSighting => 'Report sighting';
+  @override
+  String get useCurrentLocation => 'Use current location';
+  @override
+  String get enterManually => 'Enter manually';
+  @override
+  String get stateLabel => 'State';
+  @override
+  String get cityTown => 'City/Town';
+  @override
+  String get cityTownName => 'City/Town name';
+  @override
+  String get streetRoadAddress => 'Street/Road Address';
+  @override
+  String get sightingDetails => 'Sighting Details';
+  @override
+  String get newSightingReported => 'New sighting reported';
+  @override
+  String get reportedLabel => 'Reported';
+  @override
+  String get observedLabel => 'Observed';
+  @override
+  String get locationLabel => 'Location';
+  @override
+  String get whatWasObserved => 'What was observed';
+  @override
+  String get evidenceLabel => 'Evidence';
+  @override
+  String get noEvidenceAttached => 'No evidence attached.';
+  @override
+  String get viewOriginalBroadcast => 'View original Broadcast';
+  @override
+  String get retry => 'Retry';
+  @override
+  String get capturedLabel => 'Captured';
 }
