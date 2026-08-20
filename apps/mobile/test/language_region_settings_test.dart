@@ -25,6 +25,10 @@ class _FakeSession extends ChangeNotifier implements SessionAccessor {
   String? get accessToken => "token";
 
   @override
+  final TheEyeApiClient apiClient =
+      TheEyeApiClient(baseUrl: "https://example.com");
+
+  @override
   bool get lowDataMode => false;
 
   @override

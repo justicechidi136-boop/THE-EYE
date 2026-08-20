@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:the_eye_mobile/brand.dart";
+import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
 import "package:the_eye_mobile/neighborhood_watch/community_members_screen.dart";
 import "package:the_eye_mobile/neighborhood_watch/community_report_screen.dart";
@@ -35,6 +36,7 @@ void main() {
       wrap(
         CommunityReportScreen(
           accessToken: "token",
+          apiClient: TheEyeApiClient(baseUrl: "https://example.com"),
           args: const CommunityReportRouteArgs(
             communityId: "c1",
             targetType: "Post",

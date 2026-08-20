@@ -253,6 +253,7 @@ export class AuthService {
         include: { trustedReporter: true, profile: true },
       });
       if (!user) throw new UnauthorizedException("User not found");
+      this.assertUserCanSignIn(user);
       return this.issueUserSession(user, stored.familyId);
     }
 

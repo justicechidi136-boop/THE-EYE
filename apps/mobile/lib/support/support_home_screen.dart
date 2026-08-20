@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../widgets/eye_scaffold.dart";
 import "../widgets/section_card.dart";
@@ -43,7 +44,8 @@ class SupportHomeScreen extends StatelessWidget {
                 _ActionTile(
                   icon: Icons.sos,
                   label: "Send SOS",
-                  onTap: () => Navigator.of(context).pushNamed("/report/emergency"),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed("/report/emergency"),
                 ),
                 _ActionTile(
                   icon: Icons.videocam,
@@ -58,7 +60,8 @@ class SupportHomeScreen extends StatelessWidget {
                 _ActionTile(
                   icon: Icons.emergency,
                   label: "Open Active Emergency",
-                  onTap: () => Navigator.of(context).pushNamed("/active-emergency"),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed("/active-emergency"),
                 ),
                 _ActionTile(
                   icon: Icons.support_agent,
@@ -76,7 +79,8 @@ class SupportHomeScreen extends StatelessWidget {
                 _ActionTile(
                   icon: Icons.chat_bubble_outline,
                   label: "Existing conversations",
-                  onTap: () => Navigator.of(context).pushNamed("/support/chats"),
+                  onTap: () =>
+                      Navigator.of(context).pushNamed("/support/chats"),
                 ),
                 _ActionTile(
                   icon: Icons.help_outline,
@@ -112,7 +116,8 @@ class _ActionTile extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         minVerticalPadding: 12,
         leading: Icon(icon, size: 28),
-        title: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        title: Text(label,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
@@ -142,7 +147,8 @@ class SupportFaqScreen extends StatelessWidget {
           ),
           _FaqTile(
             question: "Can I use voice instead of typing?",
-            answer: "Yes. You can send voice messages when starting or replying to a support chat.",
+            answer:
+                "Yes. You can send voice messages when starting or replying to a support chat.",
           ),
         ],
       ),
@@ -161,24 +167,32 @@ class _FaqTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
-        title: Text(question, style: const TextStyle(fontWeight: FontWeight.w600)),
-        children: [Padding(padding: const EdgeInsets.all(16), child: Text(answer))],
+        title:
+            Text(question, style: const TextStyle(fontWeight: FontWeight.w600)),
+        children: [
+          Padding(padding: const EdgeInsets.all(16), child: Text(answer))
+        ],
       ),
     );
   }
 }
 
 class SupportChatListScreen extends StatefulWidget {
-  const SupportChatListScreen({required this.accessToken, super.key});
+  const SupportChatListScreen({
+    required this.accessToken,
+    this.apiClient,
+    super.key,
+  });
 
   final String accessToken;
+  final TheEyeApiClient? apiClient;
 
   @override
   State<SupportChatListScreen> createState() => _SupportChatListScreenState();
 }
 
 class _SupportChatListScreenState extends State<SupportChatListScreen> {
-  final _service = SupportService();
+  late final SupportService _service;
   List<SupportConversationSummary> _items = [];
   String? _error;
   bool _loading = true;
@@ -186,6 +200,7 @@ class _SupportChatListScreenState extends State<SupportChatListScreen> {
   @override
   void initState() {
     super.initState();
+    _service = SupportService(client: widget.apiClient);
     _load();
   }
 
@@ -195,7 +210,8 @@ class _SupportChatListScreenState extends State<SupportChatListScreen> {
       _error = null;
     });
     try {
-      final items = await _service.listConversations(accessToken: widget.accessToken);
+      final items =
+          await _service.listConversations(accessToken: widget.accessToken);
       if (!mounted) return;
       setState(() {
         _items = items;
@@ -233,7 +249,8 @@ class _SupportChatListScreenState extends State<SupportChatListScreen> {
                           final item = _items[index];
                           return ListTile(
                             title: Text(item.subject),
-                            subtitle: Text(item.lastMessagePreview ?? item.reference),
+                            subtitle:
+                                Text(item.lastMessagePreview ?? item.reference),
                             trailing: item.unreadCount > 0
                                 ? CircleAvatar(
                                     radius: 12,
@@ -242,7 +259,8 @@ class _SupportChatListScreenState extends State<SupportChatListScreen> {
                                 : null,
                             onTap: () => Navigator.of(context).pushNamed(
                               "/support/conversation",
-                              arguments: SupportConversationRouteArgs(conversationId: item.id),
+                              arguments: SupportConversationRouteArgs(
+                                  conversationId: item.id),
                             ),
                           );
                         },

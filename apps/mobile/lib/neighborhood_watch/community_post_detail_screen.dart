@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:url_launcher/url_launcher.dart";
 
+import "../app/app_scope.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_enums.dart";
 import "../design_system/eye_semantic_colors.dart";
@@ -45,9 +46,8 @@ class CommunityPostDetailScreen extends StatefulWidget {
 }
 
 class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
-  final NeighborhoodWatchService _service = NeighborhoodWatchService();
-  final CommunityMediaUploadService _mediaUploadService =
-      CommunityMediaUploadService();
+  late final NeighborhoodWatchService _service;
+  late final CommunityMediaUploadService _mediaUploadService;
   final _commentController = TextEditingController();
   final List<CommunityCommentItem> _comments = [];
   String? _nextCursor;
@@ -61,6 +61,7 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
   late String _resolvedTitle;
   int _authoritativeCommentCount = 0;
   CommunityPostItem? _post;
+  bool _servicesInitialized = false;
 
   String get _communityId => _resolvedCommunityId;
 
@@ -69,6 +70,16 @@ class _CommunityPostDetailScreenState extends State<CommunityPostDetailScreen> {
     super.initState();
     _resolvedCommunityId = widget.args.communityId;
     _resolvedTitle = widget.args.postTitle;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_servicesInitialized) return;
+    _servicesInitialized = true;
+    final apiClient = AppScope.of(context).apiClient;
+    _service = NeighborhoodWatchService(apiClient: apiClient);
+    _mediaUploadService = CommunityMediaUploadService(apiClient: apiClient);
     unawaited(_bootstrap());
   }
 

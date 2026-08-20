@@ -2,9 +2,9 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 
+import "../contracts/the_eye_api_client.dart";
 import "../design_system/components/eye_incident_summary_card.dart";
 import "../emergency/active_emergency_navigation.dart";
-import "../incidents/incident_submission_service.dart";
 import "../presentation/citizen_presentation.dart";
 import "activity_history_cache.dart";
 import "activity_history_service.dart";
@@ -14,6 +14,7 @@ class ActivityHistoryScreen extends StatefulWidget {
   const ActivityHistoryScreen({
     required this.accessToken,
     required this.controller,
+    this.apiClient,
     this.onRefreshDrafts,
     this.composeDrafts = const [],
     this.pendingDrafts = const [],
@@ -27,6 +28,7 @@ class ActivityHistoryScreen extends StatefulWidget {
 
   final String? accessToken;
   final ActiveEmergencyNavigationController controller;
+  final TheEyeApiClient? apiClient;
   final Future<void> Function()? onRefreshDrafts;
   final List<dynamic> composeDrafts;
   final List<dynamic> pendingDrafts;
@@ -53,7 +55,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     "StolenVehicles",
   ];
 
-  final ActivityHistoryService _service = ActivityHistoryService();
+  late final ActivityHistoryService _service;
   final ActivityHistoryCache _cache = ActivityHistoryCache();
   final TextEditingController _searchController = TextEditingController();
 
@@ -69,6 +71,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    _service = ActivityHistoryService(apiClient: widget.apiClient);
     unawaited(_load(refresh: true));
     unawaited(widget.onRefreshDrafts?.call());
   }

@@ -27,7 +27,7 @@ class IncidentDetailScreen extends StatefulWidget {
 }
 
 class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
-  final IncidentHistoryService _historyService = IncidentHistoryService();
+  late final IncidentHistoryService _historyService;
   late final IncidentCommunicationService _communicationService;
   IncidentDetail? _detail;
   IncidentCommunicationSummary? _communication;
@@ -37,9 +37,9 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _communicationService = IncidentCommunicationService(
-      widget.apiClient ?? TheEyeApiClient(),
-    );
+    final apiClient = widget.apiClient ?? TheEyeApiClient();
+    _historyService = IncidentHistoryService(apiClient: apiClient);
+    _communicationService = IncidentCommunicationService(apiClient);
     unawaited(_load());
   }
 

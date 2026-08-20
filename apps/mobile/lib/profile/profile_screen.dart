@@ -5,7 +5,6 @@ import "package:image_picker/image_picker.dart";
 
 import "../app/app_scope.dart";
 import "../brand.dart";
-import "../config/the_eye_api_config.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_input_theme.dart";
 import "../l10n/generated/app_localizations.dart";
@@ -17,7 +16,9 @@ import "avatar_upload_service.dart";
 import "profile_widgets.dart";
 
 class ProfileScreenBody extends StatefulWidget {
-  const ProfileScreenBody({super.key});
+  const ProfileScreenBody({this.apiClient, super.key});
+
+  final TheEyeApiClient? apiClient;
 
   @override
   State<ProfileScreenBody> createState() => _ProfileScreenBodyState();
@@ -29,9 +30,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
   final _countryController = TextEditingController();
   final _stateController = TextEditingController();
   final _lgaController = TextEditingController();
-  final _avatarUploadService = AvatarUploadService(
-    apiClient: TheEyeApiClient(baseUrl: TheEyeApiConfig.resolveBaseUrl()),
-  );
+  late final AvatarUploadService _avatarUploadService;
 
   CitizenProfile? _profile;
   String? _error;
@@ -49,6 +48,12 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
   bool _submittingCompletion = false;
   bool _uploadingAvatar = false;
   bool _loadStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _avatarUploadService = AvatarUploadService(apiClient: widget.apiClient);
+  }
 
   @override
   void dispose() {

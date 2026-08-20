@@ -120,6 +120,10 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   String? get accessToken => authenticated ? "test-token" : null;
 
   @override
+  final TheEyeApiClient apiClient =
+      TheEyeApiClient(baseUrl: "https://example.com");
+
+  @override
   bool get lowDataMode => false;
 
   @override

@@ -425,12 +425,15 @@ class TheEyeApiClient {
     String? baseUrl,
     http.Client? httpClient,
     this.onUnauthorizedRefresh,
+    this.accessTokenProvider,
   })  : baseUrl = baseUrl ?? TheEyeApiConfig.resolveBaseUrl(),
         _http = httpClient ?? http.Client();
 
   final String baseUrl;
   final http.Client _http;
-  final Future<String?> Function()? onUnauthorizedRefresh;
+  final Future<String?> Function(String rejectedAccessToken)?
+      onUnauthorizedRefresh;
+  final String? Function()? accessTokenProvider;
 
   static const Set<String> _unauthorizedRefreshExcludedPaths = {
     TheEyeApiPaths.authLogin,
@@ -447,19 +450,29 @@ class TheEyeApiClient {
     return !_unauthorizedRefreshExcludedPaths.contains(normalizedPath);
   }
 
+  String? _currentAccessToken(String? suppliedAccessToken) {
+    if (suppliedAccessToken == null || suppliedAccessToken.isEmpty) {
+      return suppliedAccessToken;
+    }
+    final current = accessTokenProvider?.call();
+    return current == null || current.isEmpty ? suppliedAccessToken : current;
+  }
+
   Future<http.Response> _sendWithUnauthorizedRetry({
     required String path,
     required String? accessToken,
     required Duration timeout,
     required Future<http.Response> Function(String? token) sendRequest,
   }) async {
-    final first = await sendRequest(accessToken).timeout(timeout);
+    final requestAccessToken = _currentAccessToken(accessToken);
+    final first = await sendRequest(requestAccessToken).timeout(timeout);
     if (first.statusCode != 401 ||
-        !_canAttemptUnauthorizedRefresh(path, accessToken)) {
+        !_canAttemptUnauthorizedRefresh(path, requestAccessToken)) {
       return first;
     }
 
-    final refreshedAccessToken = await onUnauthorizedRefresh!.call();
+    final refreshedAccessToken =
+        await onUnauthorizedRefresh!.call(requestAccessToken!);
     if (refreshedAccessToken == null || refreshedAccessToken.isEmpty) {
       return first;
     }

@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../app/app_scope.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../widgets/eye_scaffold.dart";
@@ -12,26 +13,38 @@ class CommunityReportScreen extends StatefulWidget {
   const CommunityReportScreen({
     required this.accessToken,
     required this.args,
+    this.apiClient,
     super.key,
   });
 
   final String accessToken;
   final CommunityReportRouteArgs args;
+  final TheEyeApiClient? apiClient;
 
   @override
   State<CommunityReportScreen> createState() => _CommunityReportScreenState();
 }
 
 class _CommunityReportScreenState extends State<CommunityReportScreen> {
-  final NeighborhoodWatchService _service = NeighborhoodWatchService();
-  final CommunityMediaUploadService _mediaUploadService =
-      CommunityMediaUploadService();
+  late final NeighborhoodWatchService _service;
+  late final CommunityMediaUploadService _mediaUploadService;
   final _noteController = TextEditingController();
   final _evidenceKey = GlobalKey<ManagedEvidenceSectionState>();
   String _reasonCode = communityReportReasons.first;
   bool _submitting = false;
   String? _resultMessage;
   bool _success = false;
+  bool _servicesInitialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_servicesInitialized) return;
+    _servicesInitialized = true;
+    final apiClient = widget.apiClient ?? AppScope.of(context).apiClient;
+    _service = NeighborhoodWatchService(apiClient: apiClient);
+    _mediaUploadService = CommunityMediaUploadService(apiClient: apiClient);
+  }
 
   @override
   void dispose() {

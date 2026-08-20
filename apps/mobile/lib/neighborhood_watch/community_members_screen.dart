@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../app/app_scope.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../widgets/eye_scaffold.dart";
@@ -22,17 +23,23 @@ class CommunityMembersScreen extends StatefulWidget {
 }
 
 class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
-  final NeighborhoodWatchService _service = NeighborhoodWatchService();
+  late final NeighborhoodWatchService _service;
   final _searchController = TextEditingController();
   final List<CommunityMemberItem> _members = [];
   String? _nextCursor;
   String? _error;
   bool _loading = false;
   bool _loadingMore = false;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    _service = NeighborhoodWatchService(
+      apiClient: AppScope.of(context).apiClient,
+    );
     _load(refresh: true);
   }
 

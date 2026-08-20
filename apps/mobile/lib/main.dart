@@ -196,7 +196,7 @@ Widget _buildActiveEmergencyRoute(BuildContext context,
     incidentId: incidentId,
     accessToken: token,
     service: controller.activeEmergencyService,
-    apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+    apiClient: controller.apiClient,
     silent: silent,
     liveVideoErrorMessage: liveVideoError,
     onStopLocationTracking: () async =>
@@ -269,7 +269,7 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
         return IncidentCommunicationScreen(
           incidentId: incidentId,
           accessToken: app.accessToken ?? "",
-          apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+          apiClient: app.apiClient,
           readOnly: true,
           publicReference: detailArgs["publicReference"]?.toString(),
           locationLabel: detailArgs["locationLabel"]?.toString(),
@@ -297,7 +297,7 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
           return IncidentCommunicationScreen(
             incidentId: incidentId,
             accessToken: app.accessToken ?? "",
-            apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+            apiClient: app.apiClient,
             publicReference: messageArgs["publicReference"]?.toString(),
             locationLabel: messageArgs["locationLabel"]?.toString(),
             reportedAt: messageArgs["reportedAt"] is DateTime
@@ -340,8 +340,7 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
         final app = appOf(context);
         return CommunityVerificationScreen(
           requestId: requestId,
-          service: CommunityVerificationService(
-              TheEyeApiClient(baseUrl: theEyeApiUrl)),
+          service: CommunityVerificationService(app.apiClient),
           accessToken: app.accessToken ?? "",
           highContrast: app.highContrastMode,
         );
@@ -356,6 +355,7 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
       builder: (context) => IncidentArchiveScreen(
         incidentId: incidentId,
         accessToken: appOf(context).accessToken ?? "",
+        apiClient: appOf(context).apiClient,
       ),
     );
   }
@@ -367,6 +367,7 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
       builder: (context) => BroadcastArchiveScreen(
         broadcastId: broadcastId,
         accessToken: appOf(context).accessToken ?? "",
+        apiClient: appOf(context).apiClient,
       ),
     );
   }
@@ -609,7 +610,14 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
     AppController? controller;
     final apiClient = TheEyeApiClient(
       baseUrl: theEyeApiUrl,
-      onUnauthorizedRefresh: () async {
+      accessTokenProvider: () => controller?.accessToken,
+      onUnauthorizedRefresh: (rejectedAccessToken) async {
+        final currentAccessToken = controller?.accessToken;
+        if (currentAccessToken != null &&
+            currentAccessToken.isNotEmpty &&
+            currentAccessToken != rejectedAccessToken) {
+          return currentAccessToken;
+        }
         final service = authService;
         if (service == null) return null;
         final refreshed = await service.refreshSessionSingleFlight();
@@ -1139,6 +1147,7 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 return IncidentDetailScreen(
                   incidentId: incidentId,
                   accessToken: token,
+                  apiClient: appOf(context).apiClient,
                 );
               },
               "/family": (_) => const FamilySafetyCircleScreen(),
@@ -1195,6 +1204,7 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                     as CommunityReportRouteArgs?;
                 return CommunityReportScreen(
                   accessToken: controller.accessToken ?? "",
+                  apiClient: controller.apiClient,
                   args: args ??
                       CommunityReportRouteArgs(
                         communityId: controller.selectedCommunity?.id ?? "",
@@ -1207,9 +1217,10 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               },
               "/profile": (_) => const ProfileScreen(),
               "/profile/edit": (_) => const ProfileEditScreen(),
-              "/profile/emergency-contacts": (_) =>
-                  const EmergencyContactsScreen(),
-              "/profile/kyc": (_) => const KycScreen(),
+              "/profile/emergency-contacts": (context) =>
+                  EmergencyContactsScreen(apiClient: appOf(context).apiClient),
+              "/profile/kyc": (context) =>
+                  KycScreen(apiClient: appOf(context).apiClient),
               "/settings": (_) => const SettingsScreen(),
               "/settings/diagnostics": (_) => const BuildDiagnosticsScreen(),
               "/settings/language-region": (_) =>
@@ -1224,10 +1235,12 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 return SupportNewChatScreen(
                   accessToken: appOf(context).accessToken ?? "",
                   prefill: prefill,
+                  apiClient: appOf(context).apiClient,
                 );
               },
               "/support/chats": (context) => SupportChatListScreen(
                     accessToken: appOf(context).accessToken ?? "",
+                    apiClient: appOf(context).apiClient,
                   ),
               "/support/faq": (_) => const SupportFaqScreen(),
               "/support/conversation": (context) {
@@ -1242,6 +1255,7 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                   accessToken: controller.accessToken ?? "",
                   conversationId: args.conversationId,
                   isOnline: controller.online,
+                  apiClient: controller.apiClient,
                 );
               },
               "/your-car": (_) => const YourCarScreen(),
@@ -1557,6 +1571,7 @@ class AppController extends SessionAccessor
 
   ConnectivityService get connectivity => _connectivity;
   AuthService get authService => _authService;
+  @override
   TheEyeApiClient get apiClient => _apiClient;
   BroadcastFeedService get broadcastFeedService => _broadcastFeedService;
   BroadcastSubmissionService get broadcastSubmissionService =>
@@ -1636,6 +1651,10 @@ class AppController extends SessionAccessor
     final session = await _authService.ensureFreshSession();
     if (session == null) {
       clearCachedSession();
+      return;
+    }
+    if (_sessionAccessToken != session.accessToken) {
+      await applyRefreshedSession(session);
       return;
     }
     _cachedSession = session;
@@ -1918,7 +1937,7 @@ class AppController extends SessionAccessor
     locationCoordinator.startTracking(
       incidentId: incidentId,
       accessToken: accessToken!,
-      apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+      apiClient: _apiClient,
       liveVideoSessionId: liveVideoSessionId,
     );
   }
@@ -1929,7 +1948,7 @@ class AppController extends SessionAccessor
 
   ActiveEmergencyService get activeEmergencyService =>
       _activeEmergencyService ??= ActiveEmergencyService(
-        apiClient: TheEyeApiClient(baseUrl: theEyeApiUrl),
+        apiClient: _apiClient,
       );
 
   Future<void> activateActiveEmergency(String incidentId,
@@ -1989,8 +2008,8 @@ class AppController extends SessionAccessor
     if (!forceRefresh && _cachedCitizenProfile != null) {
       return _cachedCitizenProfile;
     }
-    final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
-    final profile = await client.fetchCitizenProfile(accessToken: accessToken!);
+    final profile =
+        await _apiClient.fetchCitizenProfile(accessToken: accessToken!);
     await (await _languageRegionStore()).saveFromProfile(profile);
     _cachedCitizenProfile = profile;
     _setLocaleFromProfile(profile, notify: false);
@@ -2005,8 +2024,7 @@ class AppController extends SessionAccessor
     if (token == null) {
       throw StateError("Authenticated session required to update profile");
     }
-    final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
-    final updated = await client.updateCitizenProfile(
+    final updated = await _apiClient.updateCitizenProfile(
       accessToken: token,
       payload: payload,
     );
@@ -4778,8 +4796,7 @@ class _ReportScreenState extends State<ReportScreen> {
     if (!controller.isAuthenticated || controller.accessToken == null) return;
     setState(() => loadingEmergencyContacts = true);
     try {
-      final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
-      final contacts = await client.listEmergencyContacts(
+      final contacts = await controller.apiClient.listEmergencyContacts(
         accessToken: controller.accessToken!,
       );
       if (!mounted) return;
@@ -5611,7 +5628,7 @@ class LiveEmergencyVideoScreen extends StatefulWidget {
 }
 
 class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
-  final TheEyeApiClient apiClient = TheEyeApiClient(baseUrl: theEyeApiUrl);
+  TheEyeApiClient get apiClient => appOf(context).apiClient;
   late final LiveVideoSessionController liveVideoController =
       LiveVideoSessionController();
   bool lowBandwidth = true;
@@ -7565,6 +7582,7 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
       body: ActivityHistoryScreen(
         accessToken: controller.accessToken,
         controller: controller,
+        apiClient: controller.apiClient,
         onRefreshDrafts: controller.refreshComposeDrafts,
         composeDrafts: controller.composeDrafts,
         pendingDrafts: controller.pendingDrafts,
@@ -7617,7 +7635,7 @@ class SmartwatchDeviceScreen extends StatefulWidget {
 }
 
 class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
-  final TheEyeApiClient apiClient = TheEyeApiClient(baseUrl: theEyeApiUrl);
+  TheEyeApiClient get apiClient => appOf(context).apiClient;
   final TextEditingController deviceIdController = TextEditingController();
   final TextEditingController deviceSecretController = TextEditingController();
   final TextEditingController pairingCodeController = TextEditingController();
@@ -9686,7 +9704,8 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
     setState(() => _registering = true);
     try {
       final location = await captureLocationOutcome();
-      await NeighborhoodWatchService().registerVolunteer(
+      await NeighborhoodWatchService(apiClient: appOf(context).apiClient)
+          .registerVolunteer(
         accessToken: controller.accessToken!,
         communityId: community.id,
         types: _selection.toPayload(),
@@ -9805,7 +9824,8 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
             isError: true);
         return;
       }
-      await NeighborhoodWatchService().logCheckpoint(
+      await NeighborhoodWatchService(apiClient: appOf(context).apiClient)
+          .logCheckpoint(
         accessToken: controller.accessToken!,
         scheduleId: schedule.id,
         label: "Mobile checkpoint",
@@ -9961,7 +9981,9 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
 
   Future<void> _load() async {
     try {
-      final patrol = await NeighborhoodWatchService().getPatrol(
+      final patrol = await NeighborhoodWatchService(
+        apiClient: appOf(context).apiClient,
+      ).getPatrol(
         accessToken: widget.accessToken,
         scheduleId: widget.patrol.id,
       );
@@ -9989,7 +10011,8 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
     if (_joining || !_patrol.canJoin || _patrol.isParticipant) return;
     setState(() => _joining = true);
     try {
-      await NeighborhoodWatchService().joinPatrol(
+      await NeighborhoodWatchService(apiClient: appOf(context).apiClient)
+          .joinPatrol(
         accessToken: widget.accessToken,
         scheduleId: _patrol.id,
       );
@@ -10115,7 +10138,6 @@ class NeighborhoodWatchBroadcastsScreen extends StatefulWidget {
 
 class _NeighborhoodWatchBroadcastsScreenState
     extends State<NeighborhoodWatchBroadcastsScreen> {
-  final BroadcastFeedService _service = BroadcastFeedService();
   List<BroadcastFeedItem> _items = const [];
   String _selectedFilter = "All";
   bool _loading = true;
@@ -10157,7 +10179,7 @@ class _NeighborhoodWatchBroadcastsScreenState
       } else if (communityId == null) {
         throw StateError("Location is required to load broadcasts.");
       }
-      final page = await _service.listNearby(
+      final page = await controller.broadcastFeedService.listNearby(
         accessToken: token,
         latitude: latitude,
         longitude: longitude,
@@ -10367,11 +10389,11 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SafetyScaffold(
+    return SafetyScaffold(
       title: "Profile",
       selectedIndex: 4,
       useFigmaShell: true,
-      body: ProfileScreenBody(),
+      body: ProfileScreenBody(apiClient: appOf(context).apiClient),
     );
   }
 }
@@ -11316,8 +11338,7 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
   if (token == null) return;
 
   try {
-    final client = TheEyeApiClient(baseUrl: theEyeApiUrl);
-    await client.requestAccountDeletion(accessToken: token);
+    await controller.apiClient.requestAccountDeletion(accessToken: token);
     await controller.clearSession();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil("/login", (_) => false);
