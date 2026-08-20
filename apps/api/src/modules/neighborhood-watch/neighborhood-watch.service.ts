@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import { BroadcastType, IncidentPriority, IncidentType } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
@@ -19,6 +19,7 @@ import { IncidentsService } from "../incidents/incidents.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { buildNeighborhoodWatchNotificationMetadata } from "../notifications/notification-routing.schema";
 import { PrismaService } from "../prisma/prisma.service";
+import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
 import {
   CreateCommunityDto,
   CreateCommunityPostDto,
@@ -58,6 +59,8 @@ export const NEIGHBORHOOD_WATCH_SIGN_DOWNLOAD_URL = Symbol("NEIGHBORHOOD_WATCH_S
 
 @Injectable()
 export class NeighborhoodWatchService {
+  private readonly logger = new Logger(NeighborhoodWatchService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly incidents: IncidentsService,
@@ -67,6 +70,7 @@ export class NeighborhoodWatchService {
     private readonly dangerZoneGeo: DangerZoneGeoService,
     @Inject(NEIGHBORHOOD_WATCH_SIGN_DOWNLOAD_URL)
     private readonly createSignedDownloadUrl: typeof createStorageDownloadUrl = createStorageDownloadUrl,
+    @Optional() private readonly voiceTranscription?: VoiceTranscriptionService,
   ) {}
 
   async listCommunities(actor: JwtPayload, query: ListCommunitiesQuery = {}) {
@@ -729,6 +733,7 @@ export class NeighborhoodWatchService {
           : undefined,
       } as never,
     });
+    await this.enqueuePostAudioTranscription(post.id);
     if (dto.latitude !== undefined && dto.longitude !== undefined) await this.writePostLocation(post.id, dto.latitude, dto.longitude);
     const scored = await this.scorePost(post.id, actor.sub, false);
     const authorLabel = await this.resolveAuthorLabel(communityId, actor.sub);
@@ -801,6 +806,7 @@ export class NeighborhoodWatchService {
           : undefined,
       } as never,
     });
+    await this.enqueuePostAudioTranscription(post.id);
     if (dto.latitude !== undefined && dto.longitude !== undefined) {
       await this.writePostLocation(post.id, dto.latitude, dto.longitude);
     }
@@ -2163,6 +2169,21 @@ export class NeighborhoodWatchService {
       ...(areaLabel ? { approximateLocationLabel: areaLabel } : {}),
       hasApproximateLocation: _lat != null && _lng != null,
     };
+  }
+
+  private async enqueuePostAudioTranscription(postId: string) {
+    if (!this.voiceTranscription) return;
+    try {
+      const media = await this.prisma.communityPostMedia.findMany({
+        where: { postId, mediaType: "Audio", deletedAt: null },
+        select: { id: true },
+      });
+      await Promise.allSettled(
+        media.map((item) => this.voiceTranscription!.enqueueCommunityPostMediaTranscription(item.id)),
+      );
+    } catch {
+      this.logger.warn(`Speech enqueue deferred for community post ${postId}`);
+    }
   }
 
   private async resolveAuthorLabel(communityId: string, userId: string): Promise<string | undefined> {

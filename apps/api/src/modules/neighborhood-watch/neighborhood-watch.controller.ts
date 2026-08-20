@@ -34,6 +34,7 @@ import {
 import { NeighborhoodWatchService } from "./neighborhood-watch.service";
 import { NeighborhoodWatchContextService } from "./neighborhood-watch-context.service";
 import { AiIntelligenceService } from "./ai-intelligence.service";
+import { VoiceAttachmentsService } from "../voice-attachments/voice-attachments.service";
 
 @ApiTags("neighborhood-watch")
 @ApiBearerAuth()
@@ -44,6 +45,7 @@ export class NeighborhoodWatchController {
     private readonly neighborhoodWatch: NeighborhoodWatchService,
     private readonly contextService: NeighborhoodWatchContextService,
     private readonly aiIntelligenceService: AiIntelligenceService,
+    private readonly voiceAttachments: VoiceAttachmentsService,
   ) {}
 
   @Get("context")
@@ -187,6 +189,42 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:read")
   getPost(@Param("postId") postId: string, @Req() request: any) {
     return this.neighborhoodWatch.getPost(postId, request.user);
+  }
+
+  @Get("posts/:postId/media/:mediaId/voice")
+  @RequirePermissions("community:read")
+  async getPostVoice(
+    @Param("postId") postId: string,
+    @Param("mediaId") mediaId: string,
+    @Query("targetLocale") targetLocale: string | undefined,
+    @Req() request: any,
+  ) {
+    await this.neighborhoodWatch.getPost(postId, request.user);
+    return this.voiceAttachments.getCommunityPostVoice(postId, mediaId, targetLocale);
+  }
+
+  @Post("posts/:postId/media/:mediaId/voice/translations")
+  @RequirePermissions("community:read")
+  async translatePostVoice(
+    @Param("postId") postId: string,
+    @Param("mediaId") mediaId: string,
+    @Body() body: { targetLocale?: string },
+    @Req() request: any,
+  ) {
+    await this.neighborhoodWatch.getPost(postId, request.user);
+    return this.voiceAttachments.requestCommunityPostTranslation(postId, mediaId, body.targetLocale);
+  }
+
+  @Post("posts/:postId/media/:mediaId/voice/synthesis")
+  @RequirePermissions("community:read")
+  async synthesizePostVoice(
+    @Param("postId") postId: string,
+    @Param("mediaId") mediaId: string,
+    @Body() body: { targetLocale?: string },
+    @Req() request: any,
+  ) {
+    await this.neighborhoodWatch.getPost(postId, request.user);
+    return this.voiceAttachments.requestCommunityPostSynthesis(postId, mediaId, body.targetLocale);
   }
 
   @Get("communities/:communityId/feed")

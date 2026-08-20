@@ -460,8 +460,10 @@ model User {
   broadcastReads            BroadcastRead[]
   broadcastsCreated         Broadcast[]            @relation("BroadcastCitizenCreator")
   broadcastComments         BroadcastComment[]     @relation("BroadcastCommentAuthor")
+  broadcastCommentReactions BroadcastCommentReaction[]
   broadcastReports          BroadcastReport[]      @relation("BroadcastReportReporter")
   broadcastSightings        BroadcastSighting[]      @relation("BroadcastSightingReporter")
+  broadcastMedia            BroadcastMedia[]
   groupMessages             GroupMessage[]
   smartwatchDevices         SmartwatchDevice[]
   sosEvents                 SosEvent[]
@@ -907,6 +909,7 @@ model SpeechArtifact {
   model                       String?
   confidence                  Decimal?                  @db.Decimal(5, 4)
   status                      LanguageProcessingStatus  @default(PENDING)
+  version                     Int                       @default(1)
   errorCode                   String?                   @map("error_code")
   generatedAt                 DateTime?                 @map("generated_at") @db.Timestamptz(6)
   createdAt                   DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -929,16 +932,42 @@ model SpeechTranslation {
   model             String?
   confidence        Decimal?                 @db.Decimal(5, 4)
   status            LanguageProcessingStatus @default(PENDING)
+  version           Int                      @default(1)
   errorCode         String?                  @map("error_code")
   generatedAt       DateTime?                @map("generated_at") @db.Timestamptz(6)
   createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   speechArtifact    SpeechArtifact           @relation(fields: [speechArtifactId], references: [id], onDelete: Cascade)
+  syntheses         SpeechSynthesis[]
 
   @@unique([speechArtifactId, targetLocale])
   @@index([targetLocale])
   @@index([status])
   @@map("speech_translations")
+}
+
+model SpeechSynthesis {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  speechTranslationId String                   @map("speech_translation_id") @db.Uuid
+  targetLocale        String                   @map("target_locale")
+  provenance          String                   @default("SYNTHESIZED_SPEECH")
+  voice               String?
+  bucket              String?
+  objectKey           String?                  @map("object_key")
+  contentType         String?                  @map("content_type")
+  provider            String?
+  model               String?
+  status              LanguageProcessingStatus @default(PENDING)
+  errorCode           String?                  @map("error_code")
+  version             Int                      @default(1)
+  generatedAt         DateTime?                @map("generated_at") @db.Timestamptz(6)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  speechTranslation   SpeechTranslation        @relation(fields: [speechTranslationId], references: [id], onDelete: Cascade)
+
+  @@unique([speechTranslationId, version])
+  @@index([targetLocale, status])
+  @@map("speech_syntheses")
 }
 
 model IncidentVerification {
@@ -1124,6 +1153,7 @@ model Broadcast {
   reads                 BroadcastRead[]
   communityPosts        CommunityPost[]
   comments              BroadcastComment[]
+  media                 BroadcastMedia[]
   reports               BroadcastReport[]
   sightings             BroadcastSighting[]
   operationalSightings  OperationalSighting[]
@@ -1160,9 +1190,24 @@ model BroadcastComment {
   authorAdmin     AdminUser? @relation("BroadcastCommentAdmin", fields: [authorAdminId], references: [id])
   parent          BroadcastComment? @relation("BroadcastCommentThread", fields: [parentId], references: [id])
   replies         BroadcastComment[] @relation("BroadcastCommentThread")
+  reactions       BroadcastCommentReaction[]
 
   @@index([broadcastId, createdAt])
   @@map("broadcast_comments")
+}
+
+model BroadcastCommentReaction {
+  id        String           @id @default(uuid()) @db.Uuid
+  commentId String           @map("comment_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  reaction  String
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  comment   BroadcastComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId, reaction])
+  @@index([commentId, createdAt])
+  @@map("broadcast_comment_reactions")
 }
 
 model BroadcastReport {
@@ -1198,9 +1243,47 @@ model BroadcastSighting {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   broadcast         Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   reporter          User      @relation("BroadcastSightingReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  media             BroadcastMedia[]
 
   @@index([broadcastId, createdAt])
   @@map("broadcast_sightings")
+}
+
+model BroadcastMedia {
+  id                          String                    @id @default(uuid()) @db.Uuid
+  broadcastId                 String                    @map("broadcast_id") @db.Uuid
+  sightingId                  String?                   @map("sighting_id") @db.Uuid
+  uploaderId                  String                    @map("uploader_id") @db.Uuid
+  role                        String
+  mediaType                   MediaType                 @map("media_type")
+  bucket                      String
+  objectKey                   String                    @unique @map("object_key")
+  contentType                 String                    @map("content_type")
+  fileHash                    String?                   @map("file_hash")
+  sizeBytes                   BigInt?                   @map("size_bytes")
+  capturedAt                  DateTime?                 @map("captured_at") @db.Timestamptz(6)
+  durationSeconds             Int?                      @map("duration_seconds")
+  clientAttachmentId          String?                   @map("client_attachment_id")
+  selectedLanguage            String?                   @map("selected_language")
+  detectedLanguage            String?                   @map("detected_language")
+  languageDetectionConfidence Decimal?                  @map("language_detection_confidence") @db.Decimal(5, 4)
+  transcriptionStatus         VoiceTranscriptionStatus? @map("transcription_status")
+  transcript                  String?
+  transcriptionConfidence     Decimal?                  @map("transcription_confidence") @db.Decimal(5, 4)
+  transcriptionProvider       String?                   @map("transcription_provider")
+  transcriptionErrorCode      String?                   @map("transcription_error_code")
+  transcriptionProcessedAt    DateTime?                 @map("transcription_processed_at") @db.Timestamptz(6)
+  deletedAt                   DateTime?                  @map("deleted_at") @db.Timestamptz(6)
+  createdAt                   DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  broadcast                   Broadcast                 @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  sighting                    BroadcastSighting?        @relation(fields: [sightingId], references: [id], onDelete: Cascade)
+  uploader                    User                      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, clientAttachmentId])
+  @@index([broadcastId, role, createdAt])
+  @@index([sightingId, createdAt])
+  @@index([transcriptionStatus])
+  @@map("broadcast_media")
 }
 
 model BroadcastRead {

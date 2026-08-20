@@ -87,6 +87,9 @@ class BroadcastMediaUploadService {
           "label": label,
           "fileHash": attachment.fileHash,
           "sizeBytes": attachment.sizeBytes,
+          "capturedAt": attachment.capturedAt.toUtc().toIso8601String(),
+          if (attachment.metadata["selectedLanguage"] is String)
+            "selectedLanguage": attachment.metadata["selectedLanguage"],
           if (attachment.durationSeconds != null)
             "durationSeconds": attachment.durationSeconds,
         });

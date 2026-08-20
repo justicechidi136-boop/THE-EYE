@@ -38,6 +38,16 @@ class InboxNotificationItem {
   String get area => body;
   String get delivery => deliveryStatus;
   DateTime get receivedAt => createdAt;
+  String get logicalEventKey {
+    final explicit = metadata["idempotencyKey"]?.toString().trim() ?? "";
+    if (explicit.isNotEmpty) return explicit;
+    final eventType = metadata["eventType"]?.toString().trim() ?? "";
+    final sightingId = metadata["sightingId"]?.toString().trim() ?? "";
+    if (eventType.isNotEmpty && sightingId.isNotEmpty) {
+      return "$eventType:$sightingId";
+    }
+    return id;
+  }
 
   factory InboxNotificationItem.fromJson(Map<String, dynamic> json) {
     final rawMetadata = json["metadata"];
@@ -129,7 +139,7 @@ class NotificationInboxService {
           response.statusCode, "Unexpected notification list response.");
     }
     final rows = decoded["data"];
-    final items = rows is List
+    final parsedItems = rows is List
         ? rows
             .whereType<Map>()
             .map((row) =>
@@ -137,6 +147,7 @@ class NotificationInboxService {
             .where((item) => !item.expired)
             .toList()
         : <InboxNotificationItem>[];
+    final items = deduplicateLogicalNotifications(parsedItems);
     final meta = decoded["meta"];
     final unreadCount =
         meta is Map ? (meta["unreadCount"] as num?)?.toInt() ?? 0 : 0;
@@ -204,4 +215,13 @@ class NotificationInboxService {
       throw IncidentApiException.fromResponse(response);
     }
   }
+}
+
+List<InboxNotificationItem> deduplicateLogicalNotifications(
+  Iterable<InboxNotificationItem> items,
+) {
+  final seen = <String>{};
+  return items
+      .where((item) => seen.add(item.logicalEventKey))
+      .toList(growable: false);
 }

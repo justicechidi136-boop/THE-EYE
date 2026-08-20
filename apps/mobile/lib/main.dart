@@ -1727,11 +1727,14 @@ class AppController extends SessionAccessor
       if (refresh || notificationNextCursor == null) {
         notifications
           ..clear()
-          ..addAll(page.items);
+          ..addAll(deduplicateLogicalNotifications(page.items));
       } else {
-        final existingIds = notifications.map((item) => item.id).toSet();
+        final existingKeys =
+            notifications.map((item) => item.logicalEventKey).toSet();
         notifications.addAll(
-          page.items.where((item) => !existingIds.contains(item.id)),
+          page.items.where(
+            (item) => !existingKeys.contains(item.logicalEventKey),
+          ),
         );
       }
       notificationNextCursor = page.nextCursor;
@@ -1770,9 +1773,12 @@ class AppController extends SessionAccessor
         accessToken: accessToken!,
         cursor: notificationNextCursor,
       );
-      final existingIds = notifications.map((item) => item.id).toSet();
+      final existingKeys =
+          notifications.map((item) => item.logicalEventKey).toSet();
       notifications.addAll(
-        page.items.where((item) => !existingIds.contains(item.id)),
+        page.items.where(
+          (item) => !existingKeys.contains(item.logicalEventKey),
+        ),
       );
       notificationNextCursor = page.nextCursor;
       notificationUnreadCount = page.unreadCount;
@@ -1839,6 +1845,11 @@ class AppController extends SessionAccessor
           accessToken: accessToken!,
           notificationId: notificationId,
         );
+        if (notifications.any(
+          (existing) => existing.logicalEventKey == item.logicalEventKey,
+        )) {
+          return;
+        }
         notifications.insert(0, item);
         if (!item.read) notificationUnreadCount += 1;
         notifyListeners();
@@ -6504,6 +6515,9 @@ class _StolenVehicleBroadcastScreenState
   final yearController = TextEditingController();
   final vinController = TextEditingController();
   final descriptionController = TextEditingController();
+  final theftDescriptionController = TextEditingController();
+  final lastKnownLocationController = TextEditingController();
+  final _vehiclePhotosSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _draftStore = StolenVehicleBroadcastDraftStore();
   bool submitting = false;
@@ -6513,6 +6527,15 @@ class _StolenVehicleBroadcastScreenState
   bool usedSavedCar = false;
   String? savedCarImagePath;
   String? selectedVehicleId;
+  DateTime? _lastSeenDate;
+  TimeOfDay? _lastSeenTime;
+
+  DateTime? get _lastSeenAt {
+    final date = _lastSeenDate;
+    final time = _lastSeenTime;
+    if (date == null || time == null) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
 
   @override
   void didChangeDependencies() {
@@ -6576,6 +6599,12 @@ class _StolenVehicleBroadcastScreenState
       colorController.text = draft.color ?? "";
       vinController.text = draft.vin ?? "";
       descriptionController.text = draft.description ?? "";
+      theftDescriptionController.text = draft.theftDescription ?? "";
+      lastKnownLocationController.text = draft.lastKnownLocation ?? "";
+      _lastSeenDate = draft.lastSeenAt;
+      _lastSeenTime = draft.lastSeenAt == null
+          ? null
+          : TimeOfDay.fromDateTime(draft.lastSeenAt!);
     }
     if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
       final vehicle = _findGarageVehicleById(selectedVehicleId!);
@@ -6599,6 +6628,9 @@ class _StolenVehicleBroadcastScreenState
         color: colorController.text,
         vin: vinController.text,
         description: descriptionController.text,
+        theftDescription: theftDescriptionController.text,
+        lastKnownLocation: lastKnownLocationController.text,
+        lastSeenAt: _lastSeenAt,
         updatedAt: DateTime.now().toUtc(),
       ),
     );
@@ -6670,6 +6702,8 @@ class _StolenVehicleBroadcastScreenState
     yearController.dispose();
     vinController.dispose();
     descriptionController.dispose();
+    theftDescriptionController.dispose();
+    lastKnownLocationController.dispose();
     super.dispose();
   }
 
@@ -6681,7 +6715,12 @@ class _StolenVehicleBroadcastScreenState
     yearController.clear();
     vinController.clear();
     descriptionController.clear();
+    theftDescriptionController.clear();
+    lastKnownLocationController.clear();
+    _vehiclePhotosSectionKey.currentState?.clearAttachments();
     _evidenceSectionKey.currentState?.clearAttachments();
+    _lastSeenDate = null;
+    _lastSeenTime = null;
     usedSavedCar = false;
     savedCarImagePath = null;
     selectedVehicleId = null;
@@ -6689,11 +6728,46 @@ class _StolenVehicleBroadcastScreenState
     unawaited(_draftStore.clear(userScope: _draftUserScope));
   }
 
+  Future<void> _pickLastSeenDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _lastSeenDate ?? now,
+      firstDate: now.subtract(const Duration(days: 3650)),
+      lastDate: now,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _lastSeenDate = picked);
+  }
+
+  Future<void> _pickLastSeenTime() async {
+    final picked = await showCitizenTimePicker(
+      context,
+      initialTime: _lastSeenTime ?? TimeOfDay.now(),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _lastSeenTime = picked);
+  }
+
   Future<void> _submit() async {
     if (plateController.text.trim().isEmpty ||
         makeController.text.trim().isEmpty ||
         modelController.text.trim().isEmpty) {
       showAppSnackBar(context, "Plate number, make, and model are required.",
+          isError: true);
+      return;
+    }
+    if (_lastSeenAt == null) {
+      showAppSnackBar(context, "Select the Last Seen date and time.",
+          isError: true);
+      return;
+    }
+    if (lastKnownLocationController.text.trim().isEmpty) {
+      showAppSnackBar(context, "Enter the last known location.", isError: true);
+      return;
+    }
+    if (theftDescriptionController.text.trim().isEmpty) {
+      showAppSnackBar(context, "Describe the circumstances of the theft.",
           isError: true);
       return;
     }
@@ -6727,12 +6801,29 @@ class _StolenVehicleBroadcastScreenState
         selectedVehicleId == null || selectedVehicleId!.isEmpty
             ? null
             : _findGarageVehicleById(selectedVehicleId!);
-    final vehiclePhotoObjectKeys =
+    final savedVehiclePhotoObjectKeys =
         _extractVehiclePhotoObjectKeys(sourceVehicle);
     try {
+      final localVehiclePhotos =
+          _vehiclePhotosSectionKey.currentState?.attachments ?? const [];
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
+      var uploadedVehiclePhotos = const <Map<String, Object?>>[];
       var uploadedEvidence = const <Map<String, Object?>>[];
+      if (localVehiclePhotos.isNotEmpty) {
+        try {
+          uploadedVehiclePhotos =
+              await controller.broadcastMediaUploadService.uploadAttachments(
+            attachments: localVehiclePhotos,
+            accessToken: controller.accessToken!,
+          );
+        } on BroadcastMediaUploadFailure catch (error) {
+          if (!mounted) return;
+          setState(() => submitting = false);
+          showAppSnackBar(context, error.message, isError: true);
+          return;
+        }
+      }
       if (localEvidence.isNotEmpty) {
         try {
           uploadedEvidence =
@@ -6759,12 +6850,14 @@ class _StolenVehicleBroadcastScreenState
           if (year.isNotEmpty) "year": parsedYear ?? year,
           "registrationNumber": plateController.text.trim(),
           "stolenAt": DateTime.now().toUtc().toIso8601String(),
+          "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
           "lastKnownLatitude": outcome.position!.latitude,
           "lastKnownLongitude": outcome.position!.longitude,
           "distinguishingFeatures":
               description.isEmpty ? "See broadcast details" : description,
+          "theftDescription": theftDescriptionController.text.trim(),
           "contactMethod": "in_app",
-          if (description.isNotEmpty) "lastKnownLocation": description,
+          "lastKnownLocation": lastKnownLocationController.text.trim(),
           if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
           "metadata": {
             if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty)
@@ -6775,8 +6868,10 @@ class _StolenVehicleBroadcastScreenState
             "colour": normalizedColor,
             "registrationNumber": plateController.text.trim(),
             if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
-            if (vehiclePhotoObjectKeys.isNotEmpty)
-              "vehiclePhotoObjectKeys": vehiclePhotoObjectKeys,
+            if (savedVehiclePhotoObjectKeys.isNotEmpty)
+              "vehiclePhotoObjectKeys": savedVehiclePhotoObjectKeys,
+            if (uploadedVehiclePhotos.isNotEmpty)
+              "vehiclePhotos": uploadedVehiclePhotos,
             if (uploadedEvidence.isNotEmpty) "attachments": uploadedEvidence,
           },
         },
@@ -6957,10 +7052,11 @@ class _StolenVehicleBroadcastScreenState
                               ),
                       ),
                     ),
-                  TextField(
-                      controller: plateController,
-                      decoration:
-                          const InputDecoration(labelText: "Plate number")),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text("Vehicle Information",
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                       controller: makeController,
@@ -6980,19 +7076,99 @@ class _StolenVehicleBroadcastScreenState
                       decoration: const InputDecoration(labelText: "Color")),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: vinController,
+                      controller: plateController,
                       decoration:
-                          const InputDecoration(labelText: "VIN (optional)")),
+                          const InputDecoration(labelText: "Plate number")),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: vinController,
+                      decoration: const InputDecoration(
+                          labelText: "VIN / Chassis (optional)")),
+                  const SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text("Vehicle Photos",
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  const SizedBox(height: 4),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        "Add clear front, rear, or side reference photos."),
+                  ),
+                  const SizedBox(height: 8),
+                  ManagedEvidenceSection(
+                    key: _vehiclePhotosSectionKey,
+                    lowDataMode: appOf(context).lowDataMode,
+                    policy: EvidencePolicy.vehiclePhotos,
+                  ),
+                  const SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text("Last Seen",
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Last Seen Date"),
+                      subtitle: Text(_lastSeenDate == null
+                          ? "Tap to select date"
+                          : CitizenDateTimeFormatter.formatDate(
+                              _lastSeenDate!)),
+                      trailing: const Icon(Icons.event_outlined),
+                      onTap: submitting ? null : _pickLastSeenDate,
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Last Seen Time"),
+                      subtitle: Text(_lastSeenTime == null
+                          ? "Tap to select time"
+                          : formatCitizenTimeOfDay(_lastSeenTime!)),
+                      trailing: const Icon(Icons.schedule_outlined),
+                      onTap: submitting ? null : _pickLastSeenTime,
+                    ),
+                  ),
+                  TextField(
+                    controller: lastKnownLocationController,
+                    decoration: const InputDecoration(
+                      labelText: "Last Known Location",
+                      hintText: "Street, area, town/city, state",
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text("Description of Theft",
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                      controller: theftDescriptionController,
+                      maxLines: 4,
+                      decoration:
+                          const InputDecoration(labelText: "What happened?")),
                   const SizedBox(height: 12),
                   TextField(
                       controller: descriptionController,
                       maxLines: 3,
-                      decoration:
-                          const InputDecoration(labelText: "Description")),
-                  const SizedBox(height: 12),
+                      decoration: const InputDecoration(
+                          labelText: "Distinguishing features")),
+                  const SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text("Incident Evidence",
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  const SizedBox(height: 8),
                   ManagedEvidenceSection(
                       key: _evidenceSectionKey,
-                      lowDataMode: appOf(context).lowDataMode),
+                      lowDataMode: appOf(context).lowDataMode,
+                      policy: EvidencePolicy.incident),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: submitting ? null : _submit,

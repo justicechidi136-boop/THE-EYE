@@ -10,7 +10,7 @@ Future<TimeOfDay?> showCitizenTimePicker(
   return showTimePicker(
     context: context,
     initialTime: initialTime,
-    initialEntryMode: TimePickerEntryMode.dial,
+    initialEntryMode: TimePickerEntryMode.dialOnly,
     builder: (context, child) {
       if (child == null) return const SizedBox.shrink();
       final media = MediaQuery.of(context);

@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
+import "package:share_plus/share_plus.dart";
 import "package:url_launcher/url_launcher.dart";
 
 import "../brand.dart";
@@ -21,6 +22,8 @@ import "../presentation/citizen_presentation.dart";
 import "../presentation/citizen_time_picker.dart";
 import "../theme/the_eye_theme.dart";
 import "../widgets/section_card.dart";
+import "../voice/ai_voice_note_card.dart";
+import "../voice/ai_voice_service.dart";
 import "broadcast_feed_service.dart";
 import "broadcast_action_policy.dart";
 import "broadcast_media_upload_service.dart";
@@ -676,7 +679,15 @@ class _BroadcastDetailBody extends StatelessWidget {
   }
 
   List<Map<String, dynamic>> get _attachments {
-    final raw = item?.metadata["attachments"];
+    return _metadataAttachments("attachments");
+  }
+
+  List<Map<String, dynamic>> get _vehiclePhotos {
+    return _metadataAttachments("vehiclePhotos");
+  }
+
+  List<Map<String, dynamic>> _metadataAttachments(String key) {
+    final raw = item?.metadata[key];
     if (raw is! List) return const [];
     return raw
         .whereType<Map>()
@@ -684,12 +695,18 @@ class _BroadcastDetailBody extends StatelessWidget {
         .toList(growable: false);
   }
 
-  List<Widget> _buildEvidenceWidgets(BuildContext context, Color muted) {
-    final attachments = _attachments;
+  List<Widget> _buildEvidenceWidgets(
+    BuildContext context,
+    Color muted, {
+    List<Map<String, dynamic>>? source,
+    String emptyMessage =
+        "Broadcast evidence will appear here when media is attached.",
+  }) {
+    final attachments = source ?? _attachments;
     if (attachments.isEmpty) {
       return [
         Text(
-          "Broadcast evidence will appear here when media is attached.",
+          emptyMessage,
           style: TextStyle(color: muted),
         ),
       ];
@@ -723,6 +740,40 @@ class _BroadcastDetailBody extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        );
+      } else if (mediaType == "audio" &&
+          (attachment["id"] as String?)?.isNotEmpty == true &&
+          item?.id.isNotEmpty == true) {
+        final session = BroadcastSession.require(context);
+        final service = AiVoiceService();
+        final mediaId = attachment["id"] as String;
+        final broadcastId = item!.id;
+        final targetLocale =
+            session.cachedCitizenProfile?.effectivePreferredLocale ??
+                session.cachedCitizenProfile?.preferredLocale ??
+                "en";
+        widgets.add(
+          AiVoiceNoteCard(
+            initialOriginalUrl: url,
+            load: () => service.getBroadcastVoice(
+              accessToken: session.accessToken!,
+              broadcastId: broadcastId,
+              mediaId: mediaId,
+              targetLocale: targetLocale,
+            ),
+            requestTranslation: () => service.requestBroadcastTranslation(
+              accessToken: session.accessToken!,
+              broadcastId: broadcastId,
+              mediaId: mediaId,
+              targetLocale: targetLocale,
+            ),
+            requestSynthesis: () => service.requestBroadcastSynthesis(
+              accessToken: session.accessToken!,
+              broadcastId: broadcastId,
+              mediaId: mediaId,
+              targetLocale: targetLocale,
+            ),
           ),
         );
       } else {
@@ -775,11 +826,12 @@ class _BroadcastDetailBody extends StatelessWidget {
     final vehicleYear = _metaAny(const ["year", "vehicleYear"]);
     final vehicleColor = _metaAny(const ["colour", "color", "vehicleColor"]);
     final vehiclePlate = _metaAny(const [
+      "registrationMasked",
       "registrationNumber",
       "plateNumber",
       "licensePlate",
     ]);
-    final vehicleVin = _metaAny(const ["vin", "vinLastFour"]);
+    final vehicleVin = _metaAny(const ["vinLastFour", "vin"]);
     final vehicleLastSeenAt =
         _metaDateAny(const ["lastSeenAt", "stolenAt", "theftAt"]);
     final vehicleLastSeenAddress = _metaAny(
@@ -969,11 +1021,19 @@ class _BroadcastDetailBody extends StatelessWidget {
           const SizedBox(height: 12),
           if (vehicleMake != null || vehicleModel != null)
             Text(
-              [vehicleMake, vehicleModel].whereType<String>().join(" "),
+              [
+                "Stolen Vehicle:",
+                vehicleMake,
+                vehicleModel,
+                vehiclePlate,
+              ].whereType<String>().join(" "),
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
             ),
+          const SizedBox(height: 16),
+          Text("Vehicle Information",
+              style: Theme.of(context).textTheme.titleMedium),
           if (vehicleYear != null) ...[
             const SizedBox(height: 8),
             Text("Year", style: Theme.of(context).textTheme.titleSmall),
@@ -994,25 +1054,30 @@ class _BroadcastDetailBody extends StatelessWidget {
             Text("VIN", style: Theme.of(context).textTheme.titleSmall),
             Text(vehicleVin),
           ],
-          const SizedBox(height: 12),
-          Text(
-            "Last seen",
-            style: Theme.of(context).textTheme.titleSmall,
+          const SizedBox(height: 16),
+          Text("Vehicle Photos",
+              style: Theme.of(context).textTheme.titleMedium),
+          ..._buildEvidenceWidgets(
+            context,
+            muted,
+            source: _vehiclePhotos,
+            emptyMessage: "No vehicle reference photos attached.",
           ),
+          const SizedBox(height: 16),
+          Text("Last Seen", style: Theme.of(context).textTheme.titleMedium),
           if (vehicleLastSeenAt != null)
             Text(_formatDateTimeWithMeridiem(vehicleLastSeenAt)),
           if (vehicleLastSeenAddress != null) Text(vehicleLastSeenAddress),
           if (theftDescription != null ||
               (item?.body ?? "").trim().isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(
-              "Theft description",
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            Text("Description of Theft",
+                style: Theme.of(context).textTheme.titleMedium),
             Text(theftDescription ?? item?.body ?? ""),
           ],
           const SizedBox(height: 12),
-          Text("Evidence", style: Theme.of(context).textTheme.titleSmall),
+          Text("Incident Evidence",
+              style: Theme.of(context).textTheme.titleMedium),
           ..._buildEvidenceWidgets(context, muted),
           if ((item?.commentsCount ?? 0) > 0) ...[
             const SizedBox(height: 12),
@@ -1051,6 +1116,7 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
   List<BroadcastCommentItem> _comments = const [];
   bool _loading = true;
   bool _submitting = false;
+  BroadcastCommentItem? _replyTo;
   String? _error;
 
   @override
@@ -1111,8 +1177,10 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
         body: body,
+        parentId: _replyTo?.id,
       );
       _commentController.clear();
+      setState(() => _replyTo = null);
       await _load();
       if (!mounted) return;
       showBroadcastSnackBar(context, "Comment posted.");
@@ -1124,6 +1192,100 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
       showBroadcastSnackBar(context, "Unable to post comment.", isError: true);
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _edit(BroadcastCommentItem comment) async {
+    final controller = TextEditingController(text: comment.body);
+    final body = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Edit comment"),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 2000,
+          maxLines: 5,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text("Cancel"),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (body == null || body.isEmpty || !mounted) return;
+    final session = BroadcastSession.require(context);
+    try {
+      await session.broadcastSubmissionService.updateComment(
+        accessToken: session.accessToken!,
+        broadcastId: widget.broadcastId,
+        commentId: comment.id,
+        body: body,
+      );
+      await _load();
+    } on IncidentApiException catch (error) {
+      if (mounted) {
+        showBroadcastSnackBar(context, error.userMessage, isError: true);
+      }
+    }
+  }
+
+  Future<void> _delete(BroadcastCommentItem comment) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Delete comment?"),
+            content: const Text("This cannot be undone."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text("Cancel"),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text("Delete"),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    final session = BroadcastSession.require(context);
+    try {
+      await session.broadcastSubmissionService.deleteComment(
+        accessToken: session.accessToken!,
+        broadcastId: widget.broadcastId,
+        commentId: comment.id,
+      );
+      await _load();
+    } on IncidentApiException catch (error) {
+      if (mounted) {
+        showBroadcastSnackBar(context, error.userMessage, isError: true);
+      }
+    }
+  }
+
+  Future<void> _react(BroadcastCommentItem comment, String reaction) async {
+    final session = BroadcastSession.require(context);
+    try {
+      await session.broadcastSubmissionService.reactToComment(
+        accessToken: session.accessToken!,
+        broadcastId: widget.broadcastId,
+        commentId: comment.id,
+        reaction: reaction,
+      );
+      await _load();
+    } on IncidentApiException catch (error) {
+      if (mounted) {
+        showBroadcastSnackBar(context, error.userMessage, isError: true);
+      }
     }
   }
 
@@ -1157,7 +1319,7 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
                                   SectionCard(
                                     title: "No comments yet",
                                     child: Text(
-                                      "Be the first to share helpful information.",
+                                      "Be the first to share relevant information about this broadcast.",
                                     ),
                                   ),
                                 ],
@@ -1170,27 +1332,90 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
                                     const SizedBox(height: 8),
                                 itemBuilder: (context, index) {
                                   final comment = _comments[index];
-                                  return SectionCard(
-                                    title: comment.isSighting
-                                        ? "Sighting report"
-                                        : "Comment",
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(comment.body),
-                                        if (comment.createdAt != null) ...[
+                                  final currentUserId =
+                                      BroadcastSession.require(
+                                    context,
+                                  ).cachedCitizenProfile?.id;
+                                  final isOwner = currentUserId != null &&
+                                      currentUserId == comment.authorUserId;
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                      left: comment.parentId == null ? 0 : 24,
+                                    ),
+                                    child: SectionCard(
+                                      title: comment.authorName,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(comment.body),
+                                          if (comment.createdAt != null) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              formatBroadcastAge(
+                                                comment.createdAt!,
+                                              ),
+                                              style: const TextStyle(
+                                                color:
+                                                    BrandColors.lightTextMuted,
+                                              ),
+                                            ),
+                                          ],
                                           const SizedBox(height: 8),
-                                          Text(
-                                            formatBroadcastAge(
-                                              comment.createdAt!,
-                                            ),
-                                            style: const TextStyle(
-                                              color: BrandColors.lightTextMuted,
-                                            ),
+                                          Wrap(
+                                            spacing: 4,
+                                            runSpacing: 4,
+                                            children: [
+                                              TextButton.icon(
+                                                onPressed: () => unawaited(
+                                                  _react(comment, "Helpful"),
+                                                ),
+                                                icon: const Icon(
+                                                  Icons.thumb_up_outlined,
+                                                ),
+                                                label: Text(
+                                                  "Helpful ${comment.helpfulReactions}",
+                                                ),
+                                              ),
+                                              TextButton.icon(
+                                                onPressed: () => unawaited(
+                                                  _react(comment, "Thanks"),
+                                                ),
+                                                icon: const Icon(
+                                                  Icons
+                                                      .volunteer_activism_outlined,
+                                                ),
+                                                label: Text(
+                                                  "Thanks ${comment.thanksReactions}",
+                                                ),
+                                              ),
+                                              if (comment.parentId == null)
+                                                TextButton(
+                                                  onPressed: () => setState(
+                                                    () => _replyTo = comment,
+                                                  ),
+                                                  child: const Text("Reply"),
+                                                ),
+                                              if (isOwner)
+                                                IconButton(
+                                                  tooltip: "Edit comment",
+                                                  onPressed: () =>
+                                                      unawaited(_edit(comment)),
+                                                  icon: const Icon(
+                                                      Icons.edit_outlined),
+                                                ),
+                                              if (isOwner)
+                                                IconButton(
+                                                  tooltip: "Delete comment",
+                                                  onPressed: () => unawaited(
+                                                      _delete(comment)),
+                                                  icon: const Icon(
+                                                      Icons.delete_outline),
+                                                ),
+                                            ],
                                           ),
                                         ],
-                                      ],
+                                      ),
                                     ),
                                   );
                                 },
@@ -1204,13 +1429,28 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      minLines: 1,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        hintText: "Add a comment",
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_replyTo != null)
+                          InputChip(
+                            label: Text("Replying to ${_replyTo!.authorName}"),
+                            onDeleted: () => setState(() => _replyTo = null),
+                          ),
+                        TextField(
+                          controller: _commentController,
+                          minLines: 1,
+                          maxLines: 3,
+                          maxLength: 2000,
+                          decoration: InputDecoration(
+                            hintText: _replyTo == null
+                                ? "Add a comment"
+                                : "Write a reply",
+                            counterText: "",
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1368,11 +1608,13 @@ class BroadcastShareScreen extends StatefulWidget {
   const BroadcastShareScreen({
     required this.broadcastId,
     this.fallbackSource,
+    this.shareInvoker,
     super.key,
   });
 
   final String broadcastId;
   final BroadcastFeedItem? fallbackSource;
+  final Future<void> Function(BroadcastSharePayload payload)? shareInvoker;
 
   @override
   State<BroadcastShareScreen> createState() => _BroadcastShareScreenState();
@@ -1382,6 +1624,7 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
   BroadcastSharePayload? _payload;
   bool _loading = true;
   String? _error;
+  bool _shareOpened = false;
 
   @override
   void initState() {
@@ -1407,6 +1650,7 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
         _payload = payload;
         _loading = false;
       });
+      await _openNativeShare(payload);
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1419,6 +1663,30 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
         _error = "Unable to prepare share content.";
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _openNativeShare(BroadcastSharePayload payload) async {
+    if (_shareOpened) return;
+    _shareOpened = true;
+    try {
+      final invoker = widget.shareInvoker;
+      if (invoker != null) {
+        await invoker(payload);
+      } else {
+        await SharePlus.instance.share(
+          ShareParams(text: payload.shareText, subject: payload.title),
+        );
+      }
+    } catch (_) {
+      _shareOpened = false;
+      if (mounted) {
+        showBroadcastSnackBar(
+          context,
+          "Unable to open the share sheet. You can copy the share text instead.",
+          isError: true,
+        );
+      }
     }
   }
 
@@ -1484,8 +1752,19 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
+                      onPressed: payload == null
+                          ? null
+                          : () {
+                              _shareOpened = false;
+                              unawaited(_openNativeShare(payload));
+                            },
+                      icon: const Icon(Icons.share_outlined),
+                      label: const Text("Share"),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
                       onPressed: _copyShareText,
-                      icon: const Icon(Icons.copy),
+                      icon: const Icon(Icons.copy_outlined),
                       label: const Text("Copy share text"),
                     ),
                   ],

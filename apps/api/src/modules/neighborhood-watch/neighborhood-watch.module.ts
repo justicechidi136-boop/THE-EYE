@@ -8,6 +8,7 @@ import { DangerZonesModule } from "../danger-zones/danger-zones.module";
 import { IncidentsModule } from "../incidents/incidents.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
+import { VoiceAttachmentsModule } from "../voice-attachments/voice-attachments.module";
 import { NeighborhoodWatchController } from "./neighborhood-watch.controller";
 import {
   NEIGHBORHOOD_WATCH_SIGN_DOWNLOAD_URL,
@@ -17,7 +18,7 @@ import { NeighborhoodWatchContextService } from "./neighborhood-watch-context.se
 import { AiIntelligenceService } from "./ai-intelligence.service";
 
 @Module({
-  imports: [PrismaModule, AuditModule, IncidentsModule, BroadcastsModule, NotificationsModule, DangerZonesModule],
+  imports: [PrismaModule, AuditModule, IncidentsModule, BroadcastsModule, NotificationsModule, DangerZonesModule, VoiceAttachmentsModule],
   controllers: [NeighborhoodWatchController],
   providers: [
     NeighborhoodWatchService,

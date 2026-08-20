@@ -9,26 +9,32 @@ import {
 } from "@the-eye/shared";
 import { shouldRegisterBullMq } from "../../common/queue/queue-config";
 import {
+  buildSpeechSynthesisJobId,
   buildSpeechTranslationJobId,
   buildVoiceTranscriptionJobId,
+  SPEECH_SYNTHESIS_JOB_NAME,
   SPEECH_TRANSLATION_JOB_NAME,
   VOICE_TRANSCRIPTION_JOB_NAME,
 } from "../../common/queue/queue-jobs";
+import { randomUUID } from "crypto";
+import { createStorageUploadUrl } from "../../common/storage/s3-presign";
 import { safeQueueAdd } from "../../common/queue/safe-queue-add";
 import { VOICE_TRANSCRIPTION_QUEUE_NAME } from "../../common/queue/queue-names";
 import { PrismaService } from "../prisma/prisma.service";
 import type { ConfigService } from "@nestjs/config";
 import { GoogleTranscriptionProvider, GoogleTranslationProvider } from "./google-speech.provider";
-import { OpenAiTranscriptionProvider, OpenAiTranslationProvider } from "./openai-speech.provider";
+import { OpenAiTranscriptionProvider, OpenAiTranslationProvider, OpenAiTtsProvider } from "./openai-speech.provider";
 import { resolveSpeechRuntimeConfig, type SpeechRuntimeConfig } from "./speech-runtime.config";
 import { StubTranscriptionProvider } from "./stub-transcription.provider";
 import { StubTranslationProvider } from "./stub-translation.provider";
+import { StubTtsProvider } from "./stub-tts.provider";
 import type { VoiceTranscriptionProvider } from "./transcription-provider.interface";
 import type { SpeechTranslationProvider } from "./translation-provider.interface";
+import type { SpeechSynthesisProvider } from "./tts-provider.interface";
 
 export type VoiceTranscriptionJobPayload = {
   attachmentId: string;
-  resourceType: "incident_media" | "community_post_media";
+  resourceType: "incident_media" | "community_post_media" | "broadcast_media";
   idempotencyKey: string;
 };
 
@@ -38,16 +44,24 @@ export type SpeechTranslationJobPayload = {
   idempotencyKey: string;
 };
 
-export type SpeechLanguageJobPayload = VoiceTranscriptionJobPayload | SpeechTranslationJobPayload;
+export type SpeechSynthesisJobPayload = {
+  translationId: string;
+  version: number;
+  idempotencyKey: string;
+};
+
+export type SpeechLanguageJobPayload = VoiceTranscriptionJobPayload | SpeechTranslationJobPayload | SpeechSynthesisJobPayload;
 
 const TRANSCRIPTION_TIMEOUT_MS = 30_000;
 const TRANSLATION_TIMEOUT_MS = 15_000;
+const SYNTHESIS_TIMEOUT_MS = 30_000;
 
 @Injectable()
 export class VoiceTranscriptionService {
   private readonly logger = new Logger(VoiceTranscriptionService.name);
   private readonly transcriptionProvider: VoiceTranscriptionProvider;
   private readonly translationProvider: SpeechTranslationProvider;
+  private readonly ttsProvider: SpeechSynthesisProvider;
   private readonly runtimeConfig: SpeechRuntimeConfig;
 
   constructor(
@@ -60,10 +74,13 @@ export class VoiceTranscriptionService {
     @Optional() private readonly openAiTranslationProvider?: OpenAiTranslationProvider,
     @Optional() private readonly googleTranscriptionProvider?: GoogleTranscriptionProvider,
     @Optional() private readonly googleTranslationProvider?: GoogleTranslationProvider,
+    @Optional() private readonly stubTtsProvider?: StubTtsProvider,
+    @Optional() private readonly openAiTtsProvider?: OpenAiTtsProvider,
   ) {
     this.runtimeConfig = resolveSpeechRuntimeConfig(this.config);
     this.transcriptionProvider = this.resolveTranscriptionProvider();
     this.translationProvider = this.resolveTranslationProvider();
+    this.ttsProvider = this.resolveTtsProvider();
   }
 
   async enqueueIncidentMediaTranscription(attachmentId: string) {
@@ -110,6 +127,24 @@ export class VoiceTranscriptionService {
     await this.enqueue({
       attachmentId,
       resourceType: "community_post_media",
+      idempotencyKey: buildVoiceTranscriptionJobId(attachmentId),
+    });
+  }
+
+  async enqueueBroadcastMediaTranscription(attachmentId: string) {
+    if (!this.runtimeConfig.runtimeEnabled) {
+      this.logger.warn(`Speech AI runtime disabled; not enqueueing transcription for ${attachmentId}`);
+      return;
+    }
+    const media = await (this.prisma as any).broadcastMedia.findUnique({ where: { id: attachmentId } });
+    if (!media || String(media.mediaType) !== "Audio" || media.deletedAt) return;
+    await (this.prisma as any).broadcastMedia.update({
+      where: { id: attachmentId },
+      data: { transcriptionStatus: "Queued" },
+    });
+    await this.enqueue({
+      attachmentId,
+      resourceType: "broadcast_media",
       idempotencyKey: buildVoiceTranscriptionJobId(attachmentId),
     });
   }
@@ -237,10 +272,16 @@ export class VoiceTranscriptionService {
 
   async processJob(payload: SpeechLanguageJobPayload) {
     if (!this.runtimeConfig.runtimeEnabled) {
+      if ("translationId" in payload) {
+        return { status: "runtime_disabled" as const, translationId: payload.translationId };
+      }
       if ("speechArtifactId" in payload) {
         return { status: "runtime_disabled" as const, speechArtifactId: payload.speechArtifactId };
       }
       return this.markTranscriptionUnsupported(payload.resourceType, payload.attachmentId, "LANGUAGE_AI_RUNTIME_DISABLED");
+    }
+    if ("translationId" in payload) {
+      return this.processSynthesis(payload.translationId, payload.version);
     }
     if ("speechArtifactId" in payload) {
       return this.processTranslation(payload.speechArtifactId, payload.targetLocale);
@@ -250,6 +291,9 @@ export class VoiceTranscriptionService {
     }
     if (payload.resourceType === "community_post_media") {
       return this.processCommunityPostMedia(payload.attachmentId);
+    }
+    if (payload.resourceType === "broadcast_media") {
+      return this.processBroadcastMedia(payload.attachmentId);
     }
     return { status: "unsupported_resource" as const };
   }
@@ -438,6 +482,89 @@ export class VoiceTranscriptionService {
     }
   }
 
+  private async processBroadcastMedia(attachmentId: string) {
+    const media = await (this.prisma as any).broadcastMedia.findUnique({ where: { id: attachmentId } });
+    if (!media || String(media.mediaType) !== "Audio" || media.deletedAt) {
+      return { status: "skipped" as const };
+    }
+    const existingArtifact = await this.findTranscriptArtifact("broadcast_media", attachmentId);
+    if (existingArtifact?.status === "COMPLETED") {
+      return { status: "duplicate" as const, attachmentId, speechArtifactId: existingArtifact.id };
+    }
+    await (this.prisma as any).broadcastMedia.update({
+      where: { id: attachmentId },
+      data: { transcriptionStatus: "Processing" },
+    });
+    try {
+      await this.markArtifactProcessing("broadcast_media", attachmentId, media.fileHash ?? media.objectKey);
+      const result = await this.withTimeout(
+        this.transcriptionProvider.transcribe({
+          attachmentId,
+          storageKey: media.objectKey,
+          contentType: media.contentType,
+          selectedLanguage: media.selectedLanguage,
+          durationSeconds: media.durationSeconds,
+        }),
+        TRANSCRIPTION_TIMEOUT_MS,
+        "TRANSCRIPTION_TIMEOUT",
+      );
+      const sourceLocale = this.supportedLocaleOrNull(result.detectedLanguage ?? media.selectedLanguage);
+      const artifact = await (this.prisma as any).speechArtifact.upsert({
+        where: { sourceType_sourceId_provenance: { sourceType: "broadcast_media", sourceId: attachmentId, provenance: "TRANSCRIPT" } },
+        update: {
+          sourceLocale,
+          detectedLocale: result.detectedLanguage,
+          languageConfidence: result.languageDetectionConfidence,
+          content: result.transcript,
+          sourceHash: result.sourceHash ?? media.fileHash ?? media.objectKey,
+          provider: this.transcriptionProvider.name,
+          model: result.model,
+          confidence: result.transcriptionConfidence,
+          status: "COMPLETED",
+          errorCode: null,
+          generatedAt: new Date(),
+        },
+        create: {
+          sourceType: "broadcast_media",
+          sourceId: attachmentId,
+          provenance: "TRANSCRIPT",
+          sourceLocale,
+          detectedLocale: result.detectedLanguage,
+          languageConfidence: result.languageDetectionConfidence,
+          content: result.transcript,
+          sourceHash: result.sourceHash ?? media.fileHash ?? media.objectKey,
+          provider: this.transcriptionProvider.name,
+          model: result.model,
+          confidence: result.transcriptionConfidence,
+          status: "COMPLETED",
+          generatedAt: new Date(),
+        },
+      });
+      await (this.prisma as any).broadcastMedia.update({
+        where: { id: attachmentId },
+        data: {
+          transcriptionStatus: result.lowConfidence ? "LowConfidence" : "Completed",
+          transcript: result.transcript,
+          detectedLanguage: result.detectedLanguage,
+          languageDetectionConfidence: result.languageDetectionConfidence,
+          transcriptionConfidence: result.transcriptionConfidence,
+          transcriptionProvider: this.transcriptionProvider.name,
+          transcriptionProcessedAt: new Date(),
+          transcriptionErrorCode: null,
+        },
+      });
+      return { status: result.lowConfidence ? "LowConfidence" : "Completed", attachmentId, speechArtifactId: artifact.id };
+    } catch (error) {
+      const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
+      await this.markArtifactFailed("broadcast_media", attachmentId, code);
+      await (this.prisma as any).broadcastMedia.update({
+        where: { id: attachmentId },
+        data: { transcriptionStatus: "Failed", transcriptionErrorCode: code, transcriptionProcessedAt: new Date() },
+      });
+      throw error;
+    }
+  }
+
   private async processTranslation(speechArtifactId: string, targetLocale: string) {
     const artifact = await (this.prisma as any).speechArtifact.findUnique({ where: { id: speechArtifactId } });
     if (!artifact || artifact.provenance !== "TRANSCRIPT" || artifact.status !== "COMPLETED" || !artifact.content) {
@@ -510,14 +637,118 @@ export class VoiceTranscriptionService {
     }
   }
 
-  private findTranscriptArtifact(sourceType: "incident_media" | "community_post_media", sourceId: string) {
+  async enqueueSynthesis(translationId: string) {
+    if (!this.runtimeConfig.runtimeEnabled || !this.runtimeConfig.ttsEnabled) {
+      return { status: "runtime_disabled" as const };
+    }
+    const translation = await (this.prisma as any).speechTranslation.findUnique({ where: { id: translationId } });
+    if (!translation || translation.status !== "COMPLETED" || !translation.translatedText) {
+      return { status: "translation_unavailable" as const };
+    }
+    const version = Number(translation.version ?? 1);
+    const synthesis = await (this.prisma as any).speechSynthesis.upsert({
+      where: { speechTranslationId_version: { speechTranslationId: translationId, version } },
+      update: { status: "PENDING", errorCode: null },
+      create: {
+        speechTranslationId: translationId,
+        targetLocale: translation.targetLocale,
+        voice: this.runtimeConfig.openaiTtsVoice,
+        provider: this.ttsProvider.name,
+        model: this.runtimeConfig.openaiTtsModel,
+        status: "PENDING",
+        version,
+      },
+    });
+    const idempotencyKey = buildSpeechSynthesisJobId(translationId, version);
+    if (!shouldRegisterBullMq() || !this.queue) {
+      return { status: "queued" as const, synthesis };
+    }
+    const existing = await this.queue.getJob(idempotencyKey);
+    if (!existing) {
+      await safeQueueAdd(
+        this.queue,
+        SPEECH_SYNTHESIS_JOB_NAME,
+        { translationId, version, idempotencyKey },
+        {
+          jobId: idempotencyKey,
+          attempts: 5,
+          backoff: { type: "exponential", delay: 15_000 },
+          removeOnComplete: 100,
+          removeOnFail: 500,
+        },
+        { translationId, targetLocale: translation.targetLocale },
+      );
+    }
+    return { status: "queued" as const, synthesis };
+  }
+
+  private async processSynthesis(translationId: string, version: number) {
+    const translation = await (this.prisma as any).speechTranslation.findUnique({ where: { id: translationId } });
+    if (!translation || translation.status !== "COMPLETED" || !translation.translatedText) {
+      return { status: "translation_unavailable" as const };
+    }
+    const existing = await (this.prisma as any).speechSynthesis.findUnique({
+      where: { speechTranslationId_version: { speechTranslationId: translationId, version } },
+    });
+    if (existing?.status === "COMPLETED" && existing.objectKey) {
+      return { status: "duplicate" as const, synthesisId: existing.id };
+    }
+    await (this.prisma as any).speechSynthesis.update({
+      where: { id: existing.id },
+      data: { status: "PROCESSING", errorCode: null },
+    });
+    try {
+      const result = await this.withTimeout(
+        this.ttsProvider.synthesize({
+          translationId,
+          text: translation.translatedText,
+          locale: translation.targetLocale,
+          voice: existing.voice ?? this.runtimeConfig.openaiTtsVoice,
+        }),
+        SYNTHESIS_TIMEOUT_MS,
+        "SYNTHESIS_TIMEOUT",
+      );
+      const objectKey = `evidence/ai-voice/${randomUUID()}.mp3`;
+      const signed = await createStorageUploadUrl(objectKey, 300, result.contentType);
+      const uploaded = await fetch(signed.url, {
+        method: "PUT",
+        headers: { "content-type": result.contentType },
+        body: Buffer.from(result.audio),
+      });
+      if (!uploaded.ok) throw new Error(`SYNTHESIS_STORAGE_UPLOAD_FAILED_${uploaded.status}`);
+      const completed = await (this.prisma as any).speechSynthesis.update({
+        where: { id: existing.id },
+        data: {
+          provenance: "SYNTHESIZED_SPEECH",
+          bucket: signed.bucket,
+          objectKey,
+          contentType: result.contentType,
+          voice: result.voice,
+          provider: this.ttsProvider.name,
+          model: result.model,
+          status: "COMPLETED",
+          generatedAt: new Date(),
+        },
+      });
+      return { status: "COMPLETED" as const, synthesisId: completed.id };
+    } catch (error) {
+      const code = error instanceof Error ? error.name || error.message : "SYNTHESIS_FAILED";
+      await (this.prisma as any).speechSynthesis.update({
+        where: { id: existing.id },
+        data: { status: "FAILED", errorCode: code, generatedAt: new Date() },
+      });
+      throw error;
+    }
+  }
+
+  private findTranscriptArtifact(sourceType: "incident_media" | "community_post_media" | "broadcast_media", sourceId: string) {
     return (this.prisma as any).speechArtifact.findUnique({
       where: { sourceType_sourceId_provenance: { sourceType, sourceId, provenance: "TRANSCRIPT" } },
       include: { translations: true },
     });
   }
 
-  private async markArtifactProcessing(sourceType: "incident_media" | "community_post_media", sourceId: string, sourceHash: string) {
+  private async markArtifactProcessing(sourceType: "incident_media" | "community_post_media" | "broadcast_media", sourceId: string, sourceHash: string) {
     await (this.prisma as any).speechArtifact.upsert({
       where: { sourceType_sourceId_provenance: { sourceType, sourceId, provenance: "TRANSCRIPT" } },
       update: { status: "PROCESSING", errorCode: null },
@@ -525,7 +756,7 @@ export class VoiceTranscriptionService {
     });
   }
 
-  private async markArtifactFailed(sourceType: "incident_media" | "community_post_media", sourceId: string, errorCode: string) {
+  private async markArtifactFailed(sourceType: "incident_media" | "community_post_media" | "broadcast_media", sourceId: string, errorCode: string) {
     await (this.prisma as any).speechArtifact.upsert({
       where: { sourceType_sourceId_provenance: { sourceType, sourceId, provenance: "TRANSCRIPT" } },
       update: { status: "FAILED", errorCode, generatedAt: new Date() },
@@ -538,6 +769,8 @@ export class VoiceTranscriptionService {
       await this.prisma.incidentMedia.update({ where: { id: sourceId }, data: { translatedTranscript: translatedText } });
     } else if (sourceType === "community_post_media") {
       await this.prisma.communityPostMedia.update({ where: { id: sourceId }, data: { translatedTranscript: translatedText } });
+    } else if (sourceType === "broadcast_media") {
+      // Per-locale text remains canonical in SpeechTranslation; the media row keeps only the source transcript.
     }
   }
 
@@ -558,8 +791,19 @@ export class VoiceTranscriptionService {
     return this.stubTranslationProvider;
   }
 
+  private resolveTtsProvider(): SpeechSynthesisProvider {
+    if (this.runtimeConfig.ttsProvider === "openai" && this.openAiTtsProvider) return this.openAiTtsProvider;
+    if (this.stubTtsProvider) return this.stubTtsProvider;
+    return {
+      name: "disabled",
+      synthesize: async () => {
+        throw new Error("SYNTHESIS_PROVIDER_UNAVAILABLE");
+      },
+    };
+  }
+
   private async markTranscriptionUnsupported(
-    sourceType: "incident_media" | "community_post_media",
+    sourceType: "incident_media" | "community_post_media" | "broadcast_media",
     attachmentId: string,
     errorCode: string,
   ) {

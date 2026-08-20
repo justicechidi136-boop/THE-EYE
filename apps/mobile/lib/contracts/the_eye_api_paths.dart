@@ -99,6 +99,12 @@ abstract final class TheEyeApiPaths {
       "/incidents/$incidentId/archive";
   static String incidentMediaView(String incidentId, String mediaId) =>
       "/incidents/$incidentId/media/$mediaId/view";
+  static String incidentVoice(String incidentId, String mediaId) =>
+      "/incidents/$incidentId/media/$mediaId/voice/transcript";
+  static String incidentVoiceTranslation(String incidentId, String mediaId) =>
+      "/incidents/$incidentId/media/$mediaId/voice/translations";
+  static String incidentVoiceSynthesis(String incidentId, String mediaId) =>
+      "/incidents/$incidentId/media/$mediaId/voice/synthesis";
   static String broadcastArchive(String broadcastId) =>
       "/broadcasts/$broadcastId/archive";
   static String notificationDetail(String notificationId) =>
@@ -127,6 +133,11 @@ abstract final class TheEyeApiPaths {
       "/broadcasts/$broadcastId/report";
   static String broadcastComments(String broadcastId) =>
       "/broadcasts/$broadcastId/comments";
+  static String broadcastComment(String broadcastId, String commentId) =>
+      "/broadcasts/$broadcastId/comments/$commentId";
+  static String broadcastCommentReactions(
+          String broadcastId, String commentId) =>
+      "/broadcasts/$broadcastId/comments/$commentId/reactions";
   static String broadcastShare(String broadcastId) =>
       "/broadcasts/$broadcastId/share";
   static String broadcastSightings(String broadcastId) =>

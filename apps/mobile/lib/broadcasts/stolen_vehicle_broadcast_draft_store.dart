@@ -14,6 +14,9 @@ class StolenVehicleBroadcastDraft {
     this.color,
     this.vin,
     this.description,
+    this.theftDescription,
+    this.lastKnownLocation,
+    this.lastSeenAt,
     this.updatedAt,
   });
 
@@ -27,6 +30,9 @@ class StolenVehicleBroadcastDraft {
   final String? color;
   final String? vin;
   final String? description;
+  final String? theftDescription;
+  final String? lastKnownLocation;
+  final DateTime? lastSeenAt;
   final DateTime? updatedAt;
 
   Map<String, dynamic> toJson() => {
@@ -40,6 +46,9 @@ class StolenVehicleBroadcastDraft {
         if (color != null) "color": color,
         if (vin != null) "vin": vin,
         if (description != null) "description": description,
+        if (theftDescription != null) "theftDescription": theftDescription,
+        if (lastKnownLocation != null) "lastKnownLocation": lastKnownLocation,
+        if (lastSeenAt != null) "lastSeenAt": lastSeenAt!.toIso8601String(),
         if (updatedAt != null) "updatedAt": updatedAt!.toIso8601String(),
       };
 
@@ -55,6 +64,9 @@ class StolenVehicleBroadcastDraft {
       color: json["color"] as String?,
       vin: json["vin"] as String?,
       description: json["description"] as String?,
+      theftDescription: json["theftDescription"] as String?,
+      lastKnownLocation: json["lastKnownLocation"] as String?,
+      lastSeenAt: DateTime.tryParse((json["lastSeenAt"] as String?) ?? ""),
       updatedAt: DateTime.tryParse((json["updatedAt"] as String?) ?? ""),
     );
   }

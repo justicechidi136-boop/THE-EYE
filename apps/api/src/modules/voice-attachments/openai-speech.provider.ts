@@ -5,9 +5,11 @@ import { resolveSpeechRuntimeConfig } from "./speech-runtime.config";
 import { SpeechProviderError } from "./speech-provider.errors";
 import type { TranscriptionInput, TranscriptionResult, VoiceTranscriptionProvider } from "./transcription-provider.interface";
 import type { SpeechTranslationProvider, TranslationInput, TranslationResult } from "./translation-provider.interface";
+import type { SpeechSynthesisInput, SpeechSynthesisProvider, SpeechSynthesisResult } from "./tts-provider.interface";
 
 const OPENAI_AUDIO_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const OPENAI_AUDIO_SPEECH_URL = "https://api.openai.com/v1/audio/speech";
 
 type FetchLike = typeof fetch;
 
@@ -136,6 +138,44 @@ export class OpenAiTranslationProvider implements SpeechTranslationProvider {
       translatedText,
       providerReference: typeof body.id === "string" ? body.id : undefined,
       model: runtime.openaiTranslationModel,
+      processingDurationMs: Date.now() - started,
+    };
+  }
+}
+
+@Injectable()
+export class OpenAiTtsProvider implements SpeechSynthesisProvider {
+  readonly name = "openai";
+
+  constructor(@Optional() private readonly config?: ConfigService) {}
+
+  async synthesize(input: SpeechSynthesisInput): Promise<SpeechSynthesisResult> {
+    const runtime = resolveSpeechRuntimeConfig(this.config);
+    if (!runtime.openaiApiKey) {
+      throw new SpeechProviderError("PROVIDER_AUTH_FAILED", "OpenAI API key is not configured");
+    }
+    const started = Date.now();
+    const response = await fetch(OPENAI_AUDIO_SPEECH_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${runtime.openaiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: runtime.openaiTtsModel,
+        voice: input.voice ?? runtime.openaiTtsVoice,
+        input: input.text,
+        response_format: "mp3",
+      }),
+    });
+    if (!response.ok) {
+      throw new SpeechProviderError(normalizeOpenAiError(response.status), `OpenAI speech synthesis failed: ${response.status}`);
+    }
+    return {
+      audio: new Uint8Array(await response.arrayBuffer()),
+      contentType: "audio/mpeg",
+      voice: input.voice ?? runtime.openaiTtsVoice,
+      model: runtime.openaiTtsModel,
       processingDurationMs: Date.now() - started,
     };
   }

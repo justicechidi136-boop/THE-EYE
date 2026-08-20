@@ -3,18 +3,24 @@ import { resolveAppEnvironment } from "../../common/auth/firebase-environment";
 
 export type SpeechSttProviderName = "stub" | "openai" | "google";
 export type SpeechTranslationProviderName = "stub" | "openai" | "google";
+export type SpeechTtsProviderName = "stub" | "openai";
 
 export const SPEECH_STT_PROVIDER_VALUES: SpeechSttProviderName[] = ["stub", "openai", "google"];
 export const SPEECH_TRANSLATION_PROVIDER_VALUES: SpeechTranslationProviderName[] = ["stub", "openai", "google"];
+export const SPEECH_TTS_PROVIDER_VALUES: SpeechTtsProviderName[] = ["stub", "openai"];
 
 export type SpeechRuntimeConfig = {
   runtimeEnabled: boolean;
   appEnvironment: string;
   sttProvider: SpeechSttProviderName;
   translationProvider: SpeechTranslationProviderName;
+  ttsEnabled: boolean;
+  ttsProvider: SpeechTtsProviderName;
   openaiApiKey?: string;
   openaiSttModel: string;
   openaiTranslationModel: string;
+  openaiTtsModel: string;
+  openaiTtsVoice: string;
   googleAccessToken?: string;
   googleProjectId?: string;
   googleLocation: string;
@@ -64,9 +70,18 @@ export function resolveSpeechRuntimeConfig(
       "stub",
       "SPEECH_TRANSLATION_PROVIDER",
     ),
+    ttsEnabled: readBoolean(config, "SPEECH_TTS_ENABLED", false),
+    ttsProvider: readProvider(
+      readConfigValue(config, "SPEECH_TTS_PROVIDER"),
+      SPEECH_TTS_PROVIDER_VALUES,
+      "stub",
+      "SPEECH_TTS_PROVIDER",
+    ),
     openaiApiKey: readConfigValue(config, "OPENAI_API_KEY"),
     openaiSttModel: readConfigValue(config, "OPENAI_STT_MODEL") ?? "gpt-4o-mini-transcribe",
     openaiTranslationModel: readConfigValue(config, "OPENAI_TRANSLATION_MODEL") ?? "gpt-4o-mini",
+    openaiTtsModel: readConfigValue(config, "OPENAI_TTS_MODEL") ?? "gpt-4o-mini-tts",
+    openaiTtsVoice: readConfigValue(config, "OPENAI_TTS_VOICE") ?? "alloy",
     googleAccessToken: readConfigValue(config, "GOOGLE_CLOUD_ACCESS_TOKEN"),
     googleProjectId: readConfigValue(config, "GOOGLE_CLOUD_PROJECT") ?? readConfigValue(config, "GOOGLE_PROJECT_ID"),
     googleLocation: readConfigValue(config, "GOOGLE_CLOUD_LOCATION") ?? "us-central1",
@@ -92,9 +107,15 @@ export function assertSpeechRuntimeConfiguration(config: ConfigService | Record<
         "SPEECH_TRANSLATION_PROVIDER=stub is not allowed when LANGUAGE_AI_RUNTIME_ENABLED=true in staging/production",
       );
     }
+    if (resolved.ttsEnabled && resolved.ttsProvider === "stub") {
+      throw new Error("SPEECH_TTS_PROVIDER=stub is not allowed when SPEECH_TTS_ENABLED=true in staging/production");
+    }
   }
 
-  if ((resolved.sttProvider === "openai" || resolved.translationProvider === "openai") && !resolved.openaiApiKey) {
+  if ((resolved.sttProvider === "openai" ||
+      resolved.translationProvider === "openai" ||
+      (resolved.ttsEnabled && resolved.ttsProvider === "openai")) &&
+    !resolved.openaiApiKey) {
     throw new Error("OPENAI_API_KEY is required when an OpenAI speech provider is selected");
   }
 

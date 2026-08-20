@@ -1,9 +1,10 @@
-import { buildSpeechTranslationJobId, buildVoiceTranscriptionJobId } from "../../../common/queue/queue-jobs";
+import { buildSpeechSynthesisJobId, buildSpeechTranslationJobId, buildVoiceTranscriptionJobId } from "../../../common/queue/queue-jobs";
 import { GoogleTranscriptionProvider } from "../google-speech.provider";
 import { OpenAiTranscriptionProvider, OpenAiTranslationProvider } from "../openai-speech.provider";
 import { assertSpeechRuntimeConfiguration } from "../speech-runtime.config";
 import { StubTranscriptionProvider } from "../stub-transcription.provider";
 import { StubTranslationProvider } from "../stub-translation.provider";
+import { StubTtsProvider } from "../stub-tts.provider";
 import { VoiceTranscriptionService } from "../voice-transcription.service";
 
 describe("voice transcription foundation", () => {
@@ -15,6 +16,21 @@ describe("voice transcription foundation", () => {
     const translationJobId = buildSpeechTranslationJobId("artifact-123", "ha");
     expect(translationJobId).toBe("speech-translation-artifact-123-ha");
     expect(translationJobId.includes(":")).toBe(false);
+
+    const synthesisJobId = buildSpeechSynthesisJobId("translation-123", 1);
+    expect(synthesisJobId).toBe("speech-synthesis-translation-123-1");
+    expect(synthesisJobId.includes(":")).toBe(false);
+  });
+
+  it("keeps synthesized output explicitly derived from translated text", async () => {
+    const result = await new StubTtsProvider().synthesize({
+      translationId: "translation-1",
+      text: "I need help",
+      locale: "en",
+    });
+    expect(result.audio.length).toBeGreaterThan(0);
+    expect(result.contentType).toBe("audio/mpeg");
+    expect(result.model).toBe("stub-tts");
   });
 
   it("stub provider never deletes audio and returns low-confidence transcript", async () => {
@@ -66,8 +82,12 @@ describe("Wave 6 speech artifact processing", () => {
         }),
       },
       communityPostMedia: {
-        findUnique: jest.fn(async () => null),
-        update: jest.fn(),
+        findUnique: jest.fn(async () => state.media),
+        update: jest.fn(async ({ data }) => {
+          state.media = { ...state.media, ...data };
+          state.updatedMedia.push(data);
+          return state.media;
+        }),
       },
       speechArtifact: {
         findUnique: jest.fn(async () => state.artifact),
@@ -173,6 +193,30 @@ describe("Wave 6 speech artifact processing", () => {
     expect(state.artifact.provenance).toBe("TRANSCRIPT");
     expect(state.artifact.sourceLocale).toBe("ha");
     expect(state.artifact.content).toBe("Ina bukatar taimako");
+  });
+
+  it("Neighborhood Watch audio uses the shared STT artifact pipeline", async () => {
+    const provider = new StubTranscriptionProvider();
+    provider.transcribe = jest.fn().mockResolvedValue({
+      transcript: "E jowo ran wa lowo",
+      detectedLanguage: "yo",
+      languageDetectionConfidence: 0.9,
+      transcriptionConfidence: 0.86,
+      model: "test-stt",
+    });
+    const { service, state } = buildHarness({ provider });
+
+    const result = await service.processJob({
+      attachmentId: "media-1",
+      resourceType: "community_post_media",
+      idempotencyKey: "voice-transcription-media-1",
+    });
+
+    expect(result.status).toBe("Completed");
+    expect(state.media.objectKey).toBe("evidence/inc-1/audio.m4a");
+    expect(state.artifact.provenance).toBe("TRANSCRIPT");
+    expect(state.artifact.sourceType).toBe("community_post_media");
+    expect(state.artifact.sourceLocale).toBe("yo");
   });
 
   it("non-audio is ignored", async () => {
@@ -359,6 +403,20 @@ describe("speech provider readiness configuration", () => {
         LANGUAGE_AI_RUNTIME_ENABLED: "true",
         SPEECH_STT_PROVIDER: "openai",
         SPEECH_TRANSLATION_PROVIDER: "openai",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects stub translated TTS in staging when enabled", () => {
+    expect(() =>
+      assertSpeechRuntimeConfiguration({
+        THE_EYE_APP_ENV: "staging",
+        LANGUAGE_AI_RUNTIME_ENABLED: "true",
+        SPEECH_STT_PROVIDER: "openai",
+        SPEECH_TRANSLATION_PROVIDER: "openai",
+        SPEECH_TTS_ENABLED: "true",
+        SPEECH_TTS_PROVIDER: "stub",
+        OPENAI_API_KEY: "test-key",
       }),
     ).toThrow();
   });

@@ -11,6 +11,8 @@ import "../evidence/evidence_upload_service.dart";
 import "../evidence/local_evidence_attachment.dart";
 import "../voice/voice_recorder.dart";
 import "../voice/voice_report_validation.dart";
+import "../voice/ai_voice_note_card.dart";
+import "../voice/ai_voice_service.dart";
 import "active_emergency_contract.dart";
 import "active_emergency_service.dart";
 import "incident_communication_contract.dart";
@@ -72,6 +74,7 @@ class _IncidentCommunicationScreenState
   Timer? _pollTimer;
   String _conversationStatus = "Active";
   late final EvidenceUploadService _uploadService;
+  late final AiVoiceService _aiVoiceService;
   CommunicationThreadTab _tab = CommunicationThreadTab.all;
 
   @override
@@ -81,6 +84,7 @@ class _IncidentCommunicationScreenState
     _activeEmergencyService =
         ActiveEmergencyService(apiClient: widget.apiClient);
     _uploadService = EvidenceUploadService(apiClient: widget.apiClient);
+    _aiVoiceService = AiVoiceService(apiClient: widget.apiClient);
     unawaited(_refresh(initial: true));
     if (!widget.readOnly) {
       _pollTimer = Timer.periodic(
@@ -607,6 +611,39 @@ class _IncidentCommunicationScreenState
                             for (final message in filtered) ...[
                               CommunicationMessageCard(
                                 message: message,
+                                aiVoice: message.messageType == "Voice" &&
+                                        message.attachmentId != null
+                                    ? AiVoiceNoteCard(
+                                        load: () =>
+                                            _aiVoiceService.getIncidentVoice(
+                                          accessToken: widget.accessToken,
+                                          incidentId: widget.incidentId,
+                                          mediaId: message.attachmentId!,
+                                          targetLocale:
+                                              Localizations.localeOf(context)
+                                                  .languageCode,
+                                        ),
+                                        requestTranslation: () =>
+                                            _aiVoiceService
+                                                .requestIncidentTranslation(
+                                          accessToken: widget.accessToken,
+                                          incidentId: widget.incidentId,
+                                          mediaId: message.attachmentId!,
+                                          targetLocale:
+                                              Localizations.localeOf(context)
+                                                  .languageCode,
+                                        ),
+                                        requestSynthesis: () => _aiVoiceService
+                                            .requestIncidentSynthesis(
+                                          accessToken: widget.accessToken,
+                                          incidentId: widget.incidentId,
+                                          mediaId: message.attachmentId!,
+                                          targetLocale:
+                                              Localizations.localeOf(context)
+                                                  .languageCode,
+                                        ),
+                                      )
+                                    : null,
                                 onPlayVoice: message.messageType == "Voice"
                                     ? () => _onPlayVoice(message)
                                     : null,

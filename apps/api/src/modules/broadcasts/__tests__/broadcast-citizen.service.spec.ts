@@ -32,8 +32,15 @@ describe("BroadcastCitizenService", () => {
     profile: { findUnique: jest.fn() },
     jurisdiction: { findFirst: jest.fn() },
     broadcastReport: { findFirst: jest.fn(), create: jest.fn() },
-    broadcastComment: { create: jest.fn(), findMany: jest.fn() },
+    broadcastComment: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
+    broadcastCommentReaction: { upsert: jest.fn() },
     broadcastSighting: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn() },
+    broadcastMedia: { upsert: jest.fn() },
     $executeRawUnsafe: jest.fn(),
     $queryRawUnsafe: jest.fn().mockResolvedValue([]),
   } as any;
@@ -55,6 +62,8 @@ describe("BroadcastCitizenService", () => {
     prisma.broadcastSighting.findFirst.mock.calls = [];
     prisma.broadcastSighting.findMany.mock.calls = [];
     prisma.broadcastSighting.create.mock.calls = [];
+    prisma.broadcastMedia.upsert.mock.calls = [];
+    prisma.broadcastMedia.upsert.mockResolvedValue({ id: "broadcast-media-1", mediaType: "Image" });
     prisma.broadcastReport.findFirst.mock.calls = [];
     prisma.broadcastReport.findFirst.mockResolvedValue(null);
     prisma.broadcastReport.create.mock.calls = [];
@@ -190,6 +199,9 @@ describe("BroadcastCitizenService", () => {
         colour: "Blue",
         registrationNumber: "ABC-1234",
         stolenAt: "2026-08-06T10:00:00.000Z",
+        lastSeenAt: "2026-08-06T09:30:00.000Z",
+        lastKnownLocation: "Allen Avenue, Ikeja",
+        theftDescription: "Vehicle was taken from a secured parking area.",
         distinguishingFeatures: "Rear bumper dent",
         contactMethod: "in_app",
         vinLastFour: "1A2B",
@@ -210,6 +222,11 @@ describe("BroadcastCitizenService", () => {
     expect(metadata?.colour).toBe("Blue");
     expect(metadata?.registrationNumber).toBe("ABC-1234");
     expect(metadata?.vinLastFour).toBe("1A2B");
+    expect(metadata?.lastSeenAt).toBe("2026-08-06T09:30:00.000Z");
+    expect(metadata?.lastKnownLocation).toBe("Allen Avenue, Ikeja");
+    expect(metadata?.theftDescription).toBe(
+      "Vehicle was taken from a secured parking area.",
+    );
     expect(metadata?.vehiclePhotoObjectKeys).toEqual([
       "garage/vehicle-42/photo-1.jpg",
     ]);
@@ -236,6 +253,48 @@ describe("BroadcastCitizenService", () => {
       "MISSING_PERSON_FOUND",
       reporter,
     );
+  });
+
+  it("enforces comment ownership and cross-broadcast reply security", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      status: BroadcastStatus.Active,
+      commentsLocked: false,
+    });
+    prisma.broadcastComment.findFirst.mockResolvedValueOnce(null);
+    await expect(
+      service.addComment(
+        "broadcast-1",
+        { body: "Reply", parentId: "comment-other-broadcast" },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    prisma.broadcastComment.findFirst.mockResolvedValueOnce({
+      id: "comment-1",
+      broadcastId: "broadcast-1",
+      authorUserId: "another-user",
+      hiddenAt: null,
+    });
+    await expect(
+      service.updateComment(
+        "broadcast-1",
+        "comment-1",
+        { body: "Changed" },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    prisma.broadcastComment.findFirst.mockResolvedValueOnce({
+      id: "comment-1",
+      broadcastId: "broadcast-1",
+      authorUserId: "another-user",
+      hiddenAt: null,
+    });
+    await expect(
+      service.deleteComment("broadcast-1", "comment-1", reporter),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("submits stolen vehicle report with stable reason", async () => {
@@ -403,9 +462,11 @@ describe("BroadcastCitizenService", () => {
         userId: "owner-1",
         type: "BroadcastSightingAlert",
         title: "New sighting reported",
+        channels: ["push"],
         metadata: expect.objectContaining({
           broadcastId: "broadcast-1",
           sightingId: "sighting-1",
+          idempotencyKey: "broadcast-sighting:sighting-1:owner-1",
           deepLink: "/broadcasts/broadcast-1/sightings/sighting-1",
         }),
       }),

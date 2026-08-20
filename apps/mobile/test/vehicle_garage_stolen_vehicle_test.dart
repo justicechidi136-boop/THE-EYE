@@ -327,10 +327,10 @@ void main() {
     await tester.tap(find.text("Enter Vehicle Manually"));
     await tester.pumpAndSettle();
     final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), "DRAFT-999");
-    await tester.enterText(fields.at(1), "DraftMake");
-    await tester.enterText(fields.at(2), "DraftModel");
-    await tester.enterText(fields.at(6), "Stale manual description");
+    await tester.enterText(fields.at(0), "DraftMake");
+    await tester.enterText(fields.at(1), "DraftModel");
+    await tester.enterText(fields.at(4), "DRAFT-999");
+    await tester.enterText(fields.at(8), "Stale manual description");
 
     final savedMode = find.text("Use Saved Vehicle");
     await tester.ensureVisible(savedMode);
@@ -343,8 +343,10 @@ void main() {
         .widgetList<TextField>(find.byType(TextField))
         .map((field) => field.controller?.text)
         .toList();
-    expect(populated.take(3), ["ABC-222", "Honda", "Civic"]);
-    expect(populated[6], isEmpty);
+    expect(populated[0], "Honda");
+    expect(populated[1], "Civic");
+    expect(populated[4], "ABC-222");
+    expect(populated[8], isEmpty);
     expect(find.text("Select Vehicle"), findsNothing);
   });
 
