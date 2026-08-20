@@ -5,6 +5,7 @@ import "package:flutter/material.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/components/eye_cancellation_reason_sheet.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "../navigation/navigate_back_or_home.dart";
 import "../presentation/citizen_presentation.dart";
 import "active_emergency_contract.dart";
 import "active_emergency_errors.dart";
@@ -436,6 +437,9 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
 
     return PopScope(
       canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) navigateBackOrHome(context);
+      },
       child: Scaffold(
         backgroundColor: colors.background,
         body: Column(
@@ -443,6 +447,7 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
             ActiveEmergencyHeader(
               title: widget.silent ? "Status" : "Active Emergency",
               subtitle: incidentTypeLabel,
+              onBack: () => navigateBackOrHome(context),
               refreshEnabled: !_actionInFlight,
               onRefresh: () => unawaited(_refresh()),
             ),
