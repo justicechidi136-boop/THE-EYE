@@ -86,3 +86,11 @@ export function resolveVoiceTranscriptionQueueNameFromConfig(config: Record<stri
 export const VOICE_TRANSCRIPTION_QUEUE_NAME = resolveVoiceTranscriptionQueueNameFromConfig(
   process.env as Record<string, unknown>,
 );
+
+export function resolveDangerDetectionQueueName(appEnvironment: AppEnvironment): string {
+  return `the-eye-${appEnvironment}-danger-detection`;
+}
+
+export const DANGER_DETECTION_QUEUE_NAME = resolveDangerDetectionQueueName(
+  resolveAppEnvironment(process.env as Record<string, unknown>),
+);

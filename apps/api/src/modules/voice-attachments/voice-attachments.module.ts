@@ -12,11 +12,13 @@ import { StubTtsProvider } from "./stub-tts.provider";
 import { VoiceAttachmentsController } from "./voice-attachments.controller";
 import { VoiceAttachmentsService } from "./voice-attachments.service";
 import { VoiceTranscriptionService } from "./voice-transcription.service";
+import { DangerDetectionModule } from "../danger-detection/danger-detection.module";
 
 @Module({
   imports: [
     AuditModule,
     PrismaModule,
+    DangerDetectionModule,
     ...(shouldRegisterBullMq()
       ? [BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE_NAME })]
       : []),

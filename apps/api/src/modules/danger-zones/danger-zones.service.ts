@@ -102,6 +102,7 @@ export class DangerZonesService {
       entityId: zone.id,
       metadata: { incidentId: incident.id, eligibility },
     });
+    await this.syncDetectionState(zone.id, incident.id, "POTENTIAL", "DANGER_ZONE_PENDING_BACKEND_REVIEW");
 
     if (eligibility.autoActivate) {
       await this.activate(zone.id, actor, { skipApproval: true });
@@ -189,6 +190,7 @@ export class DangerZonesService {
       data: { status, activationTime: new Date(), reviewedByAdminId: actor.sub, lastReviewedAt: new Date() },
     });
     await this.delivery.enqueueZoneActivation(id);
+    await this.syncDetectionState(id, zone.incidentId, "CONFIRMED", "DANGER_ZONE_CONFIRMED_BY_BACKEND_RULES");
     await this.audit.record({ actor, action: "danger_zone.activated", entityType: "danger_zones", entityId: id, metadata: { status } });
     return { data: updated };
   }
@@ -220,7 +222,7 @@ export class DangerZonesService {
 
   async allClear(id: string, dto: AllClearDangerZoneDto, actor: JwtPayload) {
     this.assertManage(actor);
-    await this.getRecord(id, actor);
+    const zone = await this.getRecord(id, actor);
     const updated = await (this.prisma as any).dangerZone.update({
       where: { id },
       data: {
@@ -230,6 +232,12 @@ export class DangerZonesService {
       },
     });
     const delivery = await this.delivery.deliverAllClear(id, actor.sub, dto.status, dto.reason);
+    await this.syncDetectionState(
+      id,
+      zone.incidentId,
+      dto.status === "FalseAlertCancelled" ? "REJECTED" : "RESOLVED",
+      dto.status === "FalseAlertCancelled" ? "DANGER_ZONE_REJECTED_BY_BACKEND" : "DANGER_ZONE_RESOLVED_BY_BACKEND",
+    );
     await this.audit.record({
       actor,
       action: "danger_zone.all_clear",
@@ -336,6 +344,15 @@ export class DangerZonesService {
     if (!zone) throw new NotFoundException("Danger zone not found");
     if (!this.adminCanAccessZone(zone, actor)) throw new ForbiddenException("Danger zone is outside your scope");
     return zone;
+  }
+
+  private async syncDetectionState(dangerZoneId: string, incidentId: string, state: string, resultingAction: string) {
+    const assessments = (this.prisma as any).dangerDetectionAssessment;
+    if (!assessments?.updateMany) return;
+    await assessments.updateMany({
+      where: { incidentId, state: { not: "FAILED" } },
+      data: { dangerZoneId, state, resultingAction },
+    });
   }
 
   private assertManage(actor: JwtPayload) {
