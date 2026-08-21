@@ -203,30 +203,23 @@ class BroadcastFeedService {
 
   final TheEyeApiClient _apiClient;
 
-  Future<BroadcastFeedPage> listNearby({
+  Future<BroadcastFeedPage> listCountryWide({
     required String accessToken,
-    required double latitude,
-    required double longitude,
     String? cursor,
     int limit = 25,
     bool unreadOnly = false,
     String? category,
     String? severity,
-    String? communityId,
   }) async {
     final query = <String, String>{
-      "latitude": "$latitude",
-      "longitude": "$longitude",
       "limit": "$limit",
       if (cursor != null) "cursor": cursor,
       if (unreadOnly) "unreadOnly": "true",
       if (category != null && category.isNotEmpty) "category": category,
       if (severity != null && severity.isNotEmpty) "severity": severity,
-      if (communityId != null && communityId.isNotEmpty)
-        "communityId": communityId,
     };
     final response = await _apiClient.getJson(
-      TheEyeApiPaths.broadcastsNearby,
+      TheEyeApiPaths.broadcastsCountry,
       accessToken: accessToken,
       query: query,
     );

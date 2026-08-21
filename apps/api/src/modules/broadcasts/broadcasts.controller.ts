@@ -78,9 +78,13 @@ export class BroadcastsController {
   @Get("nearby")
   @RequirePermissions("incident:read")
   nearby(@Query() query: NearbyBroadcastsQuery, @Req() request: any) {
-    return this.broadcastsService.nearbyForUser(request.user.sub, Number(query.latitude), Number(query.longitude), {
-      radiusMeters: query.radiusMeters ? Number(query.radiusMeters) : undefined,
-      communityId: query.communityId,
+    return this.countryFeed(query, request);
+  }
+
+  @Get("country")
+  @RequirePermissions("incident:read")
+  countryFeed(@Query() query: NearbyBroadcastsQuery, @Req() request: any) {
+    return this.broadcastsService.countryFeedForUser(request.user.sub, {
       cursor: query.cursor,
       limit: query.limit ? Number(query.limit) : undefined,
       category: query.category,

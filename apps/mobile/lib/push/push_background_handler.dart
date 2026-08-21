@@ -1,7 +1,9 @@
 import "package:firebase_core/firebase_core.dart";
 import "package:firebase_messaging/firebase_messaging.dart";
+import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
+import "../auth/auth_session_store.dart";
 import "../config/app_flavor.dart";
 import "../config/firebase_bootstrap.dart";
 import "../contracts/the_eye_api_client.dart";
@@ -24,7 +26,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final ackKey = "$_backgroundAckPrefix$notificationId";
   if (prefs.getBool(ackKey) == true) return;
 
-  final accessToken = prefs.getString("the_eye.auth.access_token");
+  final accessToken = await const FlutterSecureStorage().read(
+    key: SecureAuthSessionStore.accessTokenKey,
+  );
   if (accessToken == null || accessToken.isEmpty) return;
 
   final apiBaseUrl = prefs.getString("the_eye.api.base_url");
@@ -51,7 +55,10 @@ Future<void> persistBackgroundPushContext({
   required String apiBaseUrl,
 }) async {
   final prefs = await SharedPreferences.getInstance();
-  await prefs.setString("the_eye.auth.access_token", accessToken);
+  await const FlutterSecureStorage().write(
+    key: SecureAuthSessionStore.accessTokenKey,
+    value: accessToken,
+  );
   await prefs.setString("the_eye.api.base_url", apiBaseUrl);
   await resolveMobileDeviceId();
   if (Firebase.apps.isEmpty) {

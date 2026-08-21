@@ -29,20 +29,20 @@ void main() {
     expect(item.read, isFalse);
   });
 
-  test("forwards selected community scope to the canonical feed", () async {
+  test("loads the country-wide feed without location or community scope",
+      () async {
     final client = TheEyeApiClient(
       baseUrl: "https://api.test/v1",
       httpClient: MockClient((request) async {
-        expect(request.url.path, endsWith(TheEyeApiPaths.broadcastsNearby));
-        expect(request.url.queryParameters["communityId"], "community-1");
+        expect(request.url.path, endsWith(TheEyeApiPaths.broadcastsCountry));
+        expect(request.url.queryParameters.containsKey("latitude"), isFalse);
+        expect(request.url.queryParameters.containsKey("longitude"), isFalse);
+        expect(request.url.queryParameters.containsKey("communityId"), isFalse);
         return http.Response(jsonEncode({"data": []}), 200);
       }),
     );
-    final page = await BroadcastFeedService(apiClient: client).listNearby(
+    final page = await BroadcastFeedService(apiClient: client).listCountryWide(
       accessToken: "token",
-      latitude: 0,
-      longitude: 0,
-      communityId: "community-1",
     );
     expect(page.items, isEmpty);
   });
