@@ -44,6 +44,7 @@ import {
   toDroneHealthView,
 } from "../mappers";
 import { buildJurisdictionRows } from "../jurisdiction-tree";
+import { loadSmartwatchManagementDevices, toWatchInventoryRowView } from "../smartwatch-management";
 import type {
   AuditLogView,
   BroadcastView,
@@ -811,38 +812,6 @@ function toWatchOwnerSummaryView(record: Record<string, unknown>): WatchOwnerSum
   };
 }
 
-function toWatchInventoryRowView(record: Record<string, unknown>): WatchInventoryRowView {
-  return {
-    id: String(record.id ?? ""),
-    watchName: String(record.watchName ?? ""),
-    deviceId: String(record.deviceId ?? ""),
-    serialNumber: record.serialNumber ? String(record.serialNumber) : null,
-    imei: record.imei ? String(record.imei) : null,
-    eid: record.eid ? String(record.eid) : null,
-    model: record.model ? String(record.model) : null,
-    manufacturer: record.manufacturer ? String(record.manufacturer) : null,
-    firmwareVersion: record.firmwareVersion ? String(record.firmwareVersion) : null,
-    appVersion: record.appVersion ? String(record.appVersion) : null,
-    currentOwner: String(record.currentOwner ?? ""),
-    currentAssignee: record.currentAssignee ? String(record.currentAssignee) : null,
-    organization: record.organization ? String(record.organization) : null,
-    department: record.department ? String(record.department) : null,
-    pairingStatus: String(record.pairingStatus ?? ""),
-    ownershipStatus: String(record.ownershipStatus ?? ""),
-    inventoryStatus: String(record.inventoryStatus ?? ""),
-    onlineStatus: String(record.onlineStatus ?? ""),
-    batteryLevel: record.batteryLevel != null ? Number(record.batteryLevel) : null,
-    connectivityType: String(record.connectivityType ?? ""),
-    lastSeen: record.lastSeen ? String(record.lastSeen) : null,
-    lastSync: record.lastSync ? String(record.lastSync) : null,
-    lastKnownState: record.lastKnownState ? String(record.lastKnownState) : null,
-    lastKnownLga: record.lastKnownLga ? String(record.lastKnownLga) : null,
-    lastSos: record.lastSos ? String(record.lastSos) : null,
-    lastEmergencyAlert: record.lastEmergencyAlert ? String(record.lastEmergencyAlert) : null,
-    lastLiveVideoSession: record.lastLiveVideoSession ? String(record.lastLiveVideoSession) : null,
-  };
-}
-
 export async function fetchWatchOwnerSummaries(query: Record<string, string | undefined> = {}): Promise<PaginatedResponse<WatchOwnerSummaryView>> {
   return withToken(async (token) => {
     const params = new URLSearchParams();
@@ -871,6 +840,11 @@ export async function fetchWatchInventory(query: Record<string, string | undefin
       data: response.data.map(toWatchInventoryRowView),
     };
   }, { data: [], nextCursor: null, hasMore: false, limit: 50 });
+}
+
+export async function fetchSmartwatchManagementDevices(query: Record<string, string | undefined> = {}) {
+  const token = await getAccessToken();
+  return loadSmartwatchManagementDevices(token, query, apiRequest);
 }
 
 export async function fetchWatchOwnerDetail(ownerType: string, ownerId: string): Promise<WatchOwnerDetailView> {

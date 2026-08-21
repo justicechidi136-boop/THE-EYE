@@ -332,6 +332,8 @@ describe("SmartwatchService", () => {
     prisma.smartwatchDevice.findFirst = jest.fn().mockResolvedValue({
       id: "device-uuid",
       deviceId: "EYE-WATCH-001",
+      deviceSecretHash: "must-not-be-returned",
+      pairingCodeHash: "must-not-be-returned",
       user: { profile: { country: "NG", state: "LA", lga: "Ikeja" } },
       sosEvents: [],
       gpsTracks: [],
@@ -342,6 +344,8 @@ describe("SmartwatchService", () => {
     const result = await service.adminGetDevice("EYE-WATCH-001", actor);
 
     expect(result.data.deviceId).toBe("EYE-WATCH-001");
+    expect(Object.prototype.hasOwnProperty.call(result.data, "deviceSecretHash")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(result.data, "pairingCodeHash")).toBe(false);
     expect(prisma.smartwatchDevice.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { deviceId: "EYE-WATCH-001" },
     }));

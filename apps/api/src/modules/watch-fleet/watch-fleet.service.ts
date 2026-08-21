@@ -41,6 +41,8 @@ export type WatchInventoryQuery = CursorPageQuery & {
   assignmentStatus?: string;
   inventoryStatus?: string;
   pairingStatus?: string;
+  activationStatus?: string;
+  deviceStatus?: string;
   onlineStatus?: string;
   search?: string;
   serialNumber?: string;
@@ -186,6 +188,12 @@ export class WatchFleetService {
     if (query.ownershipStatus) where.ownershipStatus = query.ownershipStatus;
     if (query.assignmentStatus) where.assignmentStatus = query.assignmentStatus;
     if (query.inventoryStatus) where.inventoryStatus = query.inventoryStatus;
+    if (query.pairingStatus?.toLowerCase() === "paired") where.userId = { not: null };
+    if (query.pairingStatus?.toLowerCase() === "unpaired") where.userId = null;
+    if (query.activationStatus) where.activationStatus = query.activationStatus.toUpperCase();
+    if (query.deviceStatus?.toLowerCase() === "active") where.isActive = true;
+    if (query.deviceStatus?.toLowerCase() === "deactivated") where.isActive = false;
+    if (query.deviceStatus?.toLowerCase() === "locked") where.activationStatus = "LOCKED";
     if (query.onlineStatus === "online") where.isOnline = true;
     if (query.onlineStatus === "offline") where.isOnline = false;
     if (query.serialNumber) where.serialNumber = query.serialNumber;
@@ -402,11 +410,17 @@ export class WatchFleetService {
       organization: device.currentOrganization?.name ?? null,
       department: device.currentDepartment?.name ?? null,
       pairingStatus: device.userId ? "PAIRED" : "UNPAIRED",
+      activationStatus: device.activationStatus ?? "USABLE",
+      activationLockedAt: device.activationLockedAt ?? null,
+      isActive: device.isActive !== false,
+      deactivatedAt: device.securityDeactivatedAt ?? device.remoteDisabledAt ?? null,
+      deactivationReason: device.deactivationReason ?? null,
       ownershipStatus: device.ownershipStatus,
       inventoryStatus: device.inventoryStatus,
       replacementPending: device.ownershipStatus === WatchOwnershipStatus.ReplacementPending,
       onlineStatus: device.isOnline ? "Online" : "Offline",
       batteryLevel: device.batteryLevel,
+      signalStrength: device.signalStrength,
       connectivityType: device.connectivityMode,
       lastSeen: device.lastSeenAt,
       lastSync: device.lastSyncAt,
