@@ -6,6 +6,7 @@ import { DangerDetectionService } from "../danger-detection.service";
 import { DangerSourceLoader } from "../danger-source.loader";
 import { OpenAiDangerClassifier } from "../openai-danger-classifier";
 import { RiskDecisionEngine } from "../risk-decision.engine";
+import { DangerZonesService } from "../../danger-zones/danger-zones.service";
 
 const activeCritical: DangerClassification = {
   dangerLevel: "CRITICAL",
@@ -96,6 +97,63 @@ describe("danger detection risk decisions", () => {
     });
     expect(result.resultingAction).toBe("NONE");
   });
+
+  for (const scenario of [
+    { category: "KIDNAPPING_IN_PROGRESS", dangerLevel: "CRITICAL" },
+    { category: "FIRE_WITH_LIFE_RISK", dangerLevel: "CRITICAL" },
+    { category: "BOMB_OR_EXPLOSIVE_THREAT", dangerLevel: "HIGH" },
+  ] as const) {
+    it(`routes active ${scenario.category} to a potential event`, () => {
+      const result = engine.decide({
+        classification: { ...activeCritical, category: scenario.category, dangerLevel: scenario.dangerLevel },
+        sourceId: scenario.category,
+        latitude: 6.5,
+        longitude: 3.3,
+        candidates: [],
+        confidenceThreshold: 0.82,
+        correlationRadiusMeters: 1500,
+        minimumCorrelatedSources: 2,
+      });
+      expect(result.state).toBe("POTENTIAL");
+    });
+  }
+
+  it("keeps an ordinary suspicious-person report out of potential danger state", () => {
+    const result = engine.decide({
+      classification: {
+        ...activeCritical,
+        dangerLevel: "LOW",
+        category: "OTHER_IMMEDIATE_LIFE_THREAT",
+        immediateThreat: false,
+        activeIncident: false,
+        confidence: 0.75,
+      },
+      sourceId: "suspicious-person",
+      latitude: 6.5,
+      longitude: 3.3,
+      candidates: [],
+      confidenceThreshold: 0.82,
+      correlationRadiusMeters: 1500,
+      minimumCorrelatedSources: 2,
+    });
+    expect(result.state).toBe("DETECTED");
+    expect(result.resultingAction).toBe("NONE");
+  });
+
+  it("does not correlate geographically distant incidents", () => {
+    const result = engine.decide({
+      classification: { ...activeCritical, confidence: 0.7 },
+      sourceId: "lagos-source",
+      latitude: 6.5244,
+      longitude: 3.3792,
+      candidates: [{ sourceId: "abuja-source", latitude: 9.0765, longitude: 7.3986 }],
+      confidenceThreshold: 0.82,
+      correlationRadiusMeters: 1500,
+      minimumCorrelatedSources: 2,
+    });
+    expect(result.correlatedSourceCount).toBe(1);
+    expect(result.state).toBe("DETECTED");
+  });
 });
 
 describe("danger detection multilingual contract", () => {
@@ -140,6 +198,17 @@ describe("danger detection source scope", () => {
     } as any;
     const source = await new DangerSourceLoader(prisma).load("INCIDENT_AUDIO", "media-1");
     expect(source).toBe(null);
+  });
+
+  it("uses a completed voice transcript as derived classifier input without replacing audio", async () => {
+    const prisma = {
+      speechArtifact: { findUnique: jest.fn().mockResolvedValue({ id: "artifact-1", status: "COMPLETED", content: "They are forcing people into a vehicle now", sourceLocale: "pcm" }) },
+      incidentMedia: { findUnique: jest.fn().mockResolvedValue({ id: "media-1", incidentId: "incident-1", deletedAt: null, createdAt: new Date(), objectKey: "evidence/incident-1/original.m4a", incident: { id: "incident-1", latitude: 6.5, longitude: 3.3 } }) },
+    } as any;
+    const source = await new DangerSourceLoader(prisma).load("INCIDENT_AUDIO", "media-1");
+    expect(source?.text).toBe("They are forcing people into a vehicle now");
+    expect(source?.sourceLocale).toBe("pcm");
+    expect(JSON.stringify(source).includes("original.m4a")).toBe(false);
   });
 });
 
@@ -213,5 +282,29 @@ describe("danger detection processing", () => {
   it("does not call the network when OpenAI credentials are absent", async () => {
     const provider = new OpenAiDangerClassifier({ get: (key: string) => key === "OPENAI_API_KEY" ? "" : undefined } as any);
     await expect(provider.classify({ sourceType: "INCIDENT", sourceId: "incident-1", text: "help" })).rejects.toThrow("DANGER_CLASSIFIER_NOT_CONFIGURED");
+  });
+});
+
+describe("backend-owned danger state transitions", () => {
+  it("moves assessments to confirmed only through authorized Danger Zone activation", async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      dangerZone: {
+        findUnique: jest.fn().mockResolvedValue({ id: "zone-1", incidentId: "incident-1", status: "PendingVerification", severity: "P1Immediate", country: "Nigeria", state: "Lagos", lga: "Ikeja" }),
+        update: jest.fn().mockResolvedValue({ id: "zone-1", status: "ActiveCritical" }),
+      },
+      dangerDetectionAssessment: { updateMany },
+    } as any;
+    const service = new DangerZonesService(
+      prisma,
+      {} as any,
+      { enqueueZoneActivation: jest.fn().mockResolvedValue({}) } as any,
+      { record: jest.fn().mockResolvedValue({}) } as any,
+    );
+    await service.activate("zone-1", { typ: "admin", sub: "admin-1", role: "Super Admin", permissions: ["broadcast:publish"] } as any);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ incidentId: "incident-1" }),
+      data: expect.objectContaining({ state: "CONFIRMED", dangerZoneId: "zone-1" }),
+    }));
   });
 });
