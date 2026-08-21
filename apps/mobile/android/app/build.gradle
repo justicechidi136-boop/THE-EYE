@@ -27,8 +27,19 @@ def hasStagingReleaseSigning =
         stagingStorePassword &&
         stagingKeyAlias &&
         stagingKeyPassword
-def stagingReleaseRequested = gradle.startParameter.taskNames.any { taskName ->
-    taskName.toLowerCase().contains("stagingrelease")
+
+def validateStagingReleaseSigning = tasks.register("validateStagingReleaseSigning") {
+    doLast {
+        if (!hasStagingReleaseSigning && !allowDebugStagingRelease) {
+            throw new GradleException(
+                "Staging release signing is not configured. " +
+                "Set THE_EYE_STAGING_KEYSTORE_PATH, THE_EYE_STAGING_KEYSTORE_PASSWORD, " +
+                "THE_EYE_STAGING_KEY_ALIAS, and THE_EYE_STAGING_KEY_PASSWORD " +
+                "(or android/key.properties staging* entries). " +
+                "Emergency override only: THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true"
+            )
+        }
+    }
 }
 
 android {
@@ -105,15 +116,6 @@ androidComponents {
                 variant.signingConfig?.setConfig(android.signingConfigs.debug)
                 return
             }
-            if (!hasStagingReleaseSigning && stagingReleaseRequested) {
-                throw new GradleException(
-                    "Staging release signing is not configured. " +
-                    "Set THE_EYE_STAGING_KEYSTORE_PATH, THE_EYE_STAGING_KEYSTORE_PASSWORD, " +
-                    "THE_EYE_STAGING_KEY_ALIAS, and THE_EYE_STAGING_KEY_PASSWORD " +
-                    "(or android/key.properties staging* entries). " +
-                    "Emergency override only: THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true"
-                )
-            }
             if (!hasStagingReleaseSigning) {
                 return
             }
@@ -123,6 +125,18 @@ androidComponents {
 
         // development/production release — unchanged until dedicated release keys land.
         variant.signingConfig?.setConfig(android.signingConfigs.debug)
+    }
+}
+
+tasks.configureEach { task ->
+    def createsStagingReleaseArtifact =
+            task.name == "preStagingReleaseBuild" ||
+            task.name == "assembleStagingRelease" ||
+            task.name.startsWith("packageStagingRelease") ||
+            task.name == "bundleStagingRelease" ||
+            task.name == "signStagingReleaseBundle"
+    if (createsStagingReleaseArtifact) {
+        task.dependsOn(validateStagingReleaseSigning)
     }
 }
 
