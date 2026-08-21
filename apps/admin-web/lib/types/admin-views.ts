@@ -390,10 +390,16 @@ export type WatchInventoryRowView = {
   organization: string | null;
   department: string | null;
   pairingStatus: string;
+  activationStatus: string;
+  activationLockedAt: string | null;
+  isActive: boolean;
+  deactivatedAt: string | null;
+  deactivationReason: string | null;
   ownershipStatus: string;
   inventoryStatus: string;
   onlineStatus: string;
   batteryLevel: number | null;
+  signalStrength: number | null;
   connectivityType: string;
   lastSeen: string | null;
   lastSync: string | null;

@@ -1008,7 +1008,9 @@ export class SmartwatchService {
       take: 100,
     });
     return {
-      data: devices.filter((device) => this.adminCanAccessUserProfile(device.user?.profile, actor)),
+      data: devices
+        .filter((device) => this.adminCanAccessUserProfile(device.user?.profile, actor))
+        .map((device) => sanitizeAdminSmartwatchDevice(device as unknown as Record<string, unknown>)),
     };
   }
 
@@ -1025,7 +1027,7 @@ export class SmartwatchService {
     });
     if (!device) throw new NotFoundException("Smartwatch device not found");
     if (!this.adminCanAccessUserProfile(device.user?.profile, actor)) throw new ForbiddenException("Device is outside your scope");
-    return { data: device };
+    return { data: sanitizeAdminSmartwatchDevice(device as unknown as Record<string, unknown>) };
   }
 
   async adminListFirmware(actor: JwtPayload) {
@@ -1511,4 +1513,16 @@ export function smartwatchDeviceLookupWhere(deviceLookup: string): {
     return { OR: [{ id: lookup }, { deviceId: lookup }] };
   }
   return { deviceId: lookup };
+}
+
+export function sanitizeAdminSmartwatchDevice(device: Record<string, unknown>) {
+  const {
+    deviceSecretHash: _deviceSecretHash,
+    pairingCodeHash: _pairingCodeHash,
+    deviceCertificate: _deviceCertificate,
+    publicKey: _publicKey,
+    metadata: _metadata,
+    ...safeDevice
+  } = device;
+  return safeDevice;
 }
