@@ -37,6 +37,7 @@ import { IncidentCommunicationsModule } from "./incident-communications/incident
 import { CitizenActivityModule } from "./citizen-activity/citizen-activity.module";
 import { FieldOperationsModule } from "./field-operations/field-operations.module";
 import { AgenciesModule } from "./agencies/agencies.module";
+import { DangerDetectionModule } from "./danger-detection/danger-detection.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -97,6 +98,7 @@ const redisDisabled = !shouldRegisterBullMq();
     CitizenActivityModule,
     FieldOperationsModule,
     AgenciesModule,
+    DangerDetectionModule,
   ],
   controllers: [HealthController],
   providers: [

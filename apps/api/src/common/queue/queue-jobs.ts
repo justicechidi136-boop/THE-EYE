@@ -87,6 +87,7 @@ export function buildWatchDangerAlertJobId(alertId: string, userId: string): str
 export const VOICE_TRANSCRIPTION_JOB_NAME = "speech.transcribe";
 export const SPEECH_TRANSLATION_JOB_NAME = "speech.translate";
 export const SPEECH_SYNTHESIS_JOB_NAME = "speech.synthesize";
+export const DANGER_DETECTION_JOB_NAME = "danger.classify";
 
 export function buildVoiceTranscriptionJobId(attachmentId: string): string {
   return buildBullJobId("voice-transcription", attachmentId);
@@ -98,6 +99,10 @@ export function buildSpeechTranslationJobId(speechArtifactId: string, targetLoca
 
 export function buildSpeechSynthesisJobId(translationId: string, version = 1): string {
   return buildBullJobId("speech-synthesis", translationId, String(version));
+}
+
+export function buildDangerDetectionJobId(sourceType: string, sourceId: string): string {
+  return buildBullJobId("danger-detection", sourceType, sourceId);
 }
 
 export type BroadcastAutoDispatchJobPayload = {

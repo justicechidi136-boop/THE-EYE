@@ -107,6 +107,48 @@ enum LanguageProcessingStatus {
   UNSUPPORTED
 }
 
+enum DangerDetectionSourceType {
+  INCIDENT
+  COMMUNITY_POST
+  COMMUNITY_COMMENT
+  BROADCAST_SIGHTING
+  INCIDENT_AUDIO
+  COMMUNITY_POST_AUDIO
+  BROADCAST_SIGHTING_AUDIO
+}
+
+enum DangerDetectionState {
+  DETECTED
+  POTENTIAL
+  VERIFYING
+  CONFIRMED
+  RESOLVED
+  REJECTED
+  FAILED
+}
+
+enum DangerLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum DangerCategory {
+  ACTIVE_SHOOTING
+  ARMED_ATTACK
+  ARMED_ROBBERY
+  KIDNAPPING_IN_PROGRESS
+  EXPLOSION
+  FIRE_WITH_LIFE_RISK
+  BOMB_OR_EXPLOSIVE_THREAT
+  VIOLENT_MOB_OR_RIOT
+  VEHICLE_ATTACK
+  SERIOUS_WEAPON_ASSAULT
+  MAJOR_HAZARDOUS_RELEASE
+  OTHER_IMMEDIATE_LIFE_THREAT
+}
+
 enum BroadcastStatus {
   Draft
   PendingApproval
@@ -944,6 +986,45 @@ model SpeechTranslation {
   @@index([targetLocale])
   @@index([status])
   @@map("speech_translations")
+}
+
+model DangerDetectionAssessment {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  sourceType            DangerDetectionSourceType @map("source_type")
+  sourceId              String                     @map("source_id") @db.Uuid
+  contentHash           String                     @map("content_hash")
+  incidentId            String?                    @map("incident_id") @db.Uuid
+  speechArtifactId      String?                    @map("speech_artifact_id") @db.Uuid
+  dangerZoneId          String?                    @map("danger_zone_id") @db.Uuid
+  sourceLocale          String?                    @map("source_locale")
+  classifierProvider    String                     @map("classifier_provider")
+  classifierModel       String?                    @map("classifier_model")
+  classifierVersion     Int                        @default(1) @map("classifier_version")
+  dangerLevel           DangerLevel                @map("danger_level")
+  category              DangerCategory
+  immediateThreat       Boolean                    @map("immediate_threat")
+  activeIncident        Boolean                    @map("active_incident")
+  confidence            Decimal                    @db.Decimal(5, 4)
+  requiresVerification  Boolean                    @map("requires_verification")
+  locationUsable        Boolean                    @default(false) @map("location_usable")
+  latitude              Decimal?                   @db.Decimal(9, 6)
+  longitude             Decimal?                   @db.Decimal(9, 6)
+  occurredAt            DateTime?                  @map("occurred_at") @db.Timestamptz(6)
+  state                 DangerDetectionState       @default(DETECTED)
+  clusterKey            String?                    @map("cluster_key")
+  correlatedSourceCount Int                        @default(1) @map("correlated_source_count")
+  resultingAction       String                     @default("NONE") @map("resulting_action")
+  errorCode             String?                    @map("error_code")
+  metadata              Json                       @default("{}")
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([sourceType, sourceId, contentHash])
+  @@index([state, dangerLevel, createdAt])
+  @@index([incidentId, createdAt])
+  @@index([clusterKey, createdAt])
+  @@index([dangerZoneId])
+  @@map("danger_detection_assessments")
 }
 
 model SpeechSynthesis {

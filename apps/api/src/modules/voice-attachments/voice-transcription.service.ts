@@ -31,6 +31,7 @@ import { StubTtsProvider } from "./stub-tts.provider";
 import type { VoiceTranscriptionProvider } from "./transcription-provider.interface";
 import type { SpeechTranslationProvider } from "./translation-provider.interface";
 import type { SpeechSynthesisProvider } from "./tts-provider.interface";
+import { DangerDetectionService } from "../danger-detection/danger-detection.service";
 
 export type VoiceTranscriptionJobPayload = {
   attachmentId: string;
@@ -76,6 +77,7 @@ export class VoiceTranscriptionService {
     @Optional() private readonly googleTranslationProvider?: GoogleTranslationProvider,
     @Optional() private readonly stubTtsProvider?: StubTtsProvider,
     @Optional() private readonly openAiTtsProvider?: OpenAiTtsProvider,
+    @Optional() private readonly dangerDetection?: DangerDetectionService,
   ) {
     this.runtimeConfig = resolveSpeechRuntimeConfig(this.config);
     this.transcriptionProvider = this.resolveTranscriptionProvider();
@@ -376,6 +378,8 @@ export class VoiceTranscriptionService {
         },
       });
 
+      void this.dangerDetection?.enqueueSource("INCIDENT_AUDIO", attachmentId).catch(() => undefined);
+
       return { status, attachmentId, speechArtifactId: artifact.id };
     } catch (error) {
       const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
@@ -466,6 +470,7 @@ export class VoiceTranscriptionService {
           transcriptionErrorCode: null,
         },
       });
+      void this.dangerDetection?.enqueueSource("COMMUNITY_POST_AUDIO", attachmentId).catch(() => undefined);
       return { status: result.lowConfidence ? "LowConfidence" : "Completed", attachmentId, speechArtifactId: artifact.id };
     } catch (error) {
       const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";
@@ -553,6 +558,7 @@ export class VoiceTranscriptionService {
           transcriptionErrorCode: null,
         },
       });
+      void this.dangerDetection?.enqueueSource("BROADCAST_SIGHTING_AUDIO", attachmentId).catch(() => undefined);
       return { status: result.lowConfidence ? "LowConfidence" : "Completed", attachmentId, speechArtifactId: artifact.id };
     } catch (error) {
       const code = error instanceof Error ? error.name : "TRANSCRIPTION_FAILED";

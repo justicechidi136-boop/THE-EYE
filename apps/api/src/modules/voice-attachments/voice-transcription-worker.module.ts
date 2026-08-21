@@ -10,11 +10,13 @@ import { StubTranscriptionProvider } from "./stub-transcription.provider";
 import { StubTranslationProvider } from "./stub-translation.provider";
 import { VoiceTranscriptionProcessor } from "./voice-transcription.processor";
 import { VoiceTranscriptionService } from "./voice-transcription.service";
+import { DangerDetectionModule } from "../danger-detection/danger-detection.module";
 
 @Module({
   imports: [
     MetricsModule,
     PrismaModule,
+    DangerDetectionModule,
     ...(shouldRegisterBullMq()
       ? [BullModule.registerQueue({ name: VOICE_TRANSCRIPTION_QUEUE_NAME })]
       : []),

@@ -68,6 +68,7 @@ import {
 } from "./dto/report-incident.dto";
 import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
 import { IncidentCommunicationsService } from "../incident-communications/incident-communications.service";
+import { DangerDetectionService } from "../danger-detection/danger-detection.service";
 
 @Injectable()
 export class IncidentsService {
@@ -86,6 +87,7 @@ export class IncidentsService {
     private readonly jurisdictionResolution: JurisdictionResolutionService,
     private readonly voiceTranscription: VoiceTranscriptionService,
     @Optional() private readonly incidentCommunications?: IncidentCommunicationsService,
+    @Optional() private readonly dangerDetection?: DangerDetectionService,
   ) {}
 
   async list(
@@ -330,6 +332,7 @@ export class IncidentsService {
 
     void this.verification.verifyIncident(incident.id).catch(() => undefined);
     void this.dispatchService.runTriageForIncident(incident.id, actor).catch(() => undefined);
+    void this.dangerDetection?.enqueueSource("INCIDENT", incident.id).catch(() => undefined);
 
     if (!isAnonymous && actor?.typ === "user") {
       void runNonCriticalWrite(

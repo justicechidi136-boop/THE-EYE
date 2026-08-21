@@ -20,6 +20,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { buildNeighborhoodWatchNotificationMetadata } from "../notifications/notification-routing.schema";
 import { PrismaService } from "../prisma/prisma.service";
 import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
+import { DangerDetectionService } from "../danger-detection/danger-detection.service";
 import {
   CreateCommunityDto,
   CreateCommunityPostDto,
@@ -71,6 +72,7 @@ export class NeighborhoodWatchService {
     @Inject(NEIGHBORHOOD_WATCH_SIGN_DOWNLOAD_URL)
     private readonly createSignedDownloadUrl: typeof createStorageDownloadUrl = createStorageDownloadUrl,
     @Optional() private readonly voiceTranscription?: VoiceTranscriptionService,
+    @Optional() private readonly dangerDetection?: DangerDetectionService,
   ) {}
 
   async listCommunities(actor: JwtPayload, query: ListCommunitiesQuery = {}) {
@@ -747,6 +749,7 @@ export class NeighborhoodWatchService {
       { postId: post.id },
     );
     await this.audit(actor, "community.post_created", "community_posts", post.id, { communityId, type: dto.type });
+    void this.dangerDetection?.enqueueSource("COMMUNITY_POST", post.id).catch(() => undefined);
     return {
       data: await this.toPublicPostPayload({
         ...scored,
@@ -816,6 +819,7 @@ export class NeighborhoodWatchService {
       areaKey: presence.areaKey,
       type: dto.type,
     });
+    void this.dangerDetection?.enqueueSource("COMMUNITY_POST", post.id).catch(() => undefined);
     return {
       data: await this.toPublicPostPayload({
         ...scored,
@@ -1689,6 +1693,7 @@ export class NeighborhoodWatchService {
         durationSeconds: hasVoice ? dto.durationSeconds : undefined,
       },
     });
+    void this.dangerDetection?.enqueueSource("COMMUNITY_COMMENT", comment.id).catch(() => undefined);
     await this.audit(actor, "community.comment_created", "community_post_comments", comment.id, {
       postId,
       hasVoice,

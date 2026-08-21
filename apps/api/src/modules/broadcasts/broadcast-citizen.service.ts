@@ -26,6 +26,7 @@ import { BroadcastLifecycleService } from "./broadcast-lifecycle.service";
 import { BroadcastShareService } from "./broadcast-share.service";
 import { BroadcastsService, LIVE_BROADCAST_STATUSES } from "./broadcasts.service";
 import { VoiceTranscriptionService } from "../voice-attachments/voice-transcription.service";
+import { DangerDetectionService } from "../danger-detection/danger-detection.service";
 import { buildMissingPersonBroadcastPreview } from "../notifications/citizen-notification-copy";
 import {
   CreateCitizenBroadcastCommentDto,
@@ -123,6 +124,7 @@ export class BroadcastCitizenService {
     private readonly lifecycle: BroadcastLifecycleService,
     private readonly share: BroadcastShareService,
     @Optional() private readonly voiceTranscription?: VoiceTranscriptionService,
+    @Optional() private readonly dangerDetection?: DangerDetectionService,
   ) {}
 
   async presignMedia(
@@ -507,6 +509,7 @@ export class BroadcastCitizenService {
       assignedAgencyId: broadcast.incident?.assignedAgencyId ?? null,
       authorityRouting: "owner_notified_and_audited",
     });
+    void this.dangerDetection?.enqueueSource("BROADCAST_SIGHTING", sighting.id).catch(() => undefined);
     return { data: { id: sighting.id, status: "Received" } };
   }
 
