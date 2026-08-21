@@ -701,6 +701,7 @@ describe("BroadcastAdminService", () => {
   const service = new BroadcastAdminService(prisma, audit, broadcastsService, broadcastQueue, lifecycle);
 
   function resetAdminMocks() {
+    prisma.broadcast.findMany.mock.calls = [];
     prisma.broadcast.findFirst.mock.calls = [];
     prisma.broadcast.create.mock.calls = [];
     prisma.broadcast.update.mock.calls = [];
@@ -718,6 +719,21 @@ describe("BroadcastAdminService", () => {
     prisma.broadcast.create.mockResolvedValue({ id: "admin-broadcast-1" });
     prisma.broadcast.findUnique.mockResolvedValue({ id: "admin-broadcast-1", status: BroadcastStatus.Active });
   }
+
+  it("lists national broadcasts across states within the admin country", async () => {
+    resetAdminMocks();
+    prisma.broadcast.findMany.mockResolvedValue([]);
+
+    await service.list(countryAdmin);
+
+    const where = prisma.broadcast.findMany.mock.calls[0]?.[0]?.where;
+    expect(where.OR).toEqual([
+      { country: "NG" },
+      { jurisdiction: { country: "NG" } },
+    ]);
+    expect(JSON.stringify(where).includes("Lagos")).toBe(false);
+    expect(JSON.stringify(where).includes("Ikeja")).toBe(false);
+  });
 
   it("blocks unauthorized admin jurisdiction mutation", async () => {
     resetAdminMocks();

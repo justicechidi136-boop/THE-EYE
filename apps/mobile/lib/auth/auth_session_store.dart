@@ -1,3 +1,4 @@
+import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
 class AuthSession {
@@ -23,23 +24,44 @@ abstract class AuthSessionStore {
   Future<void> clear();
 }
 
-class SharedPreferencesAuthSessionStore implements AuthSessionStore {
-  SharedPreferencesAuthSessionStore(this._preferences);
+class SecureAuthSessionStore implements AuthSessionStore {
+  SecureAuthSessionStore({
+    required FlutterSecureStorage secureStorage,
+    required SharedPreferences legacyPreferences,
+  })  : _secureStorage = secureStorage,
+        _legacyPreferences = legacyPreferences;
 
   static const accessTokenKey = "the_eye_access_token";
   static const refreshTokenKey = "the_eye_refresh_token";
 
-  final SharedPreferences _preferences;
+  final FlutterSecureStorage _secureStorage;
+  final SharedPreferences _legacyPreferences;
 
-  static Future<SharedPreferencesAuthSessionStore> create() async {
-    return SharedPreferencesAuthSessionStore(
-        await SharedPreferences.getInstance());
+  static Future<SecureAuthSessionStore> create() async {
+    return SecureAuthSessionStore(
+      secureStorage: const FlutterSecureStorage(),
+      legacyPreferences: await SharedPreferences.getInstance(),
+    );
   }
 
   @override
   Future<AuthSession?> load() async {
-    final accessToken = _preferences.getString(accessTokenKey);
-    final refreshToken = _preferences.getString(refreshTokenKey);
+    var accessToken = await _secureStorage.read(key: accessTokenKey);
+    var refreshToken = await _secureStorage.read(key: refreshTokenKey);
+    if ((accessToken == null || refreshToken == null) &&
+        _legacyPreferences.containsKey(accessTokenKey)) {
+      accessToken = _legacyPreferences.getString(accessTokenKey);
+      refreshToken = _legacyPreferences.getString(refreshTokenKey);
+      if (accessToken != null &&
+          accessToken.isNotEmpty &&
+          refreshToken != null &&
+          refreshToken.isNotEmpty) {
+        await save(
+          AuthSession(accessToken: accessToken, refreshToken: refreshToken),
+        );
+      }
+      await _clearLegacyValues();
+    }
     if (accessToken == null ||
         accessToken.isEmpty ||
         refreshToken == null ||
@@ -51,14 +73,27 @@ class SharedPreferencesAuthSessionStore implements AuthSessionStore {
 
   @override
   Future<void> save(AuthSession session) async {
-    await _preferences.setString(accessTokenKey, session.accessToken);
-    await _preferences.setString(refreshTokenKey, session.refreshToken);
+    await _secureStorage.write(
+      key: accessTokenKey,
+      value: session.accessToken,
+    );
+    await _secureStorage.write(
+      key: refreshTokenKey,
+      value: session.refreshToken,
+    );
+    await _clearLegacyValues();
   }
 
   @override
   Future<void> clear() async {
-    await _preferences.remove(accessTokenKey);
-    await _preferences.remove(refreshTokenKey);
+    await _secureStorage.delete(key: accessTokenKey);
+    await _secureStorage.delete(key: refreshTokenKey);
+    await _clearLegacyValues();
+  }
+
+  Future<void> _clearLegacyValues() async {
+    await _legacyPreferences.remove(accessTokenKey);
+    await _legacyPreferences.remove(refreshTokenKey);
   }
 }
 

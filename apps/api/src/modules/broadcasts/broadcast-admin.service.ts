@@ -286,10 +286,8 @@ export class BroadcastAdminService {
     if (actor.role === "Super Admin") return {};
     return {
       OR: [
-        { country: actor.country, state: actor.state, lga: actor.lga },
-        { country: actor.country, state: actor.state, lga: null },
-        { country: actor.country, state: null, lga: null },
-        { jurisdiction: { country: actor.country, state: actor.state, lga: actor.lga } },
+        { country: actor.country },
+        { jurisdiction: { country: actor.country } },
       ],
     } as never;
   }

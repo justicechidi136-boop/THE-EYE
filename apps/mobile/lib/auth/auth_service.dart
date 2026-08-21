@@ -401,9 +401,29 @@ class AuthService {
         );
       }
       return const SessionRestoreResult(status: SessionRestoreStatus.failed);
+    } on TimeoutException {
+      return SessionRestoreResult(
+        status: SessionRestoreStatus.restored,
+        session: session,
+      );
+    } on AuthApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _sessionStore.clear();
+        return const SessionRestoreResult(
+          status: SessionRestoreStatus.unauthenticated,
+        );
+      }
+      return SessionRestoreResult(
+        status: SessionRestoreStatus.restored,
+        session: session,
+      );
     } catch (_) {
-      await _sessionStore.clear();
-      return const SessionRestoreResult(status: SessionRestoreStatus.failed);
+      // An unclassified startup failure is not proof that a valid refresh
+      // session was revoked. Preserve it for the next authenticated retry.
+      return SessionRestoreResult(
+        status: SessionRestoreStatus.restored,
+        session: session,
+      );
     }
   }
 

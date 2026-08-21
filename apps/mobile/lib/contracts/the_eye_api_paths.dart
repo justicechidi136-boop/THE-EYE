@@ -112,6 +112,7 @@ abstract final class TheEyeApiPaths {
   static String notificationRead(String notificationId) =>
       "/notifications/$notificationId/read";
   static const broadcastsNearby = "/broadcasts/nearby";
+  static const broadcastsCountry = "/broadcasts/country";
   static const broadcastsMine = "/broadcasts/mine";
   static const broadcastMediaPresign = "/broadcasts/media/presign";
   static const broadcastMissingPerson = "/broadcasts/missing-person";

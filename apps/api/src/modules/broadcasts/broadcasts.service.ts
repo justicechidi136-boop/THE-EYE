@@ -508,7 +508,7 @@ export class BroadcastsService {
       publishedAt?: Date | null;
     },
     id: string,
-    recipient: { user_id: string; distance_meters: number },
+    recipient: { user_id: string; distance_meters: number | null },
     routingContext?: { countryCode: string; eventType: string },
   ) {
     const issuedAt = (broadcast.publishedAt ?? new Date()).toISOString();
@@ -614,13 +614,9 @@ export class BroadcastsService {
     return this.dispatch(broadcast.id, { typ: "admin", sub: systemAdmin.id, permissions: ["broadcast:publish"] } as JwtPayload, "broadcast.auto_published");
   }
 
-  async nearbyForUser(
+  async countryFeedForUser(
     userId: string,
-    latitude: number,
-    longitude: number,
     query: {
-      radiusMeters?: number;
-      communityId?: string;
       cursor?: string;
       limit?: number;
       category?: string;
@@ -628,36 +624,10 @@ export class BroadcastsService {
       unreadOnly?: boolean;
     } = {},
   ) {
-    if (Number.isNaN(latitude) || Number.isNaN(longitude)) throw new BadRequestException("latitude and longitude are required");
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
-    const radiusMeters = query.radiusMeters ?? 10000;
-
-    let communityScope: { country: string; state: string | null; lga: string | null } | null = null;
-    if (query.communityId) {
-      const community = await this.prisma.community.findUnique({
-        where: { id: query.communityId },
-        select: { country: true, state: true, lga: true },
-      });
-      const membership = await this.prisma.communityMembership.findUnique({
-        where: { communityId_userId: { communityId: query.communityId, userId } },
-        select: { status: true },
-      });
-      if (!community || membership?.status !== "Approved") {
-        throw new ForbiddenException("Approved community membership is required");
-      }
-      communityScope = community;
-    }
-    const params: unknown[] = [
-      longitude,
-      latitude,
-      radiusMeters,
-      userId,
-      communityScope?.country ?? null,
-      communityScope?.state ?? null,
-      communityScope?.lga ?? null,
-    ];
-    let paramIndex = 8;
+    const params: unknown[] = [userId];
+    let paramIndex = 2;
     let filterSql = "";
 
     if (query.category) {
@@ -670,10 +640,10 @@ export class BroadcastsService {
     }
     if (query.unreadOnly) {
       filterSql += ` AND NOT (
-        EXISTS (SELECT 1 FROM broadcast_reads br WHERE br.broadcast_id = b.id AND br.user_id = $4::uuid)
+        EXISTS (SELECT 1 FROM broadcast_reads br WHERE br.broadcast_id = b.id AND br.user_id = $1::uuid)
         OR EXISTS (
           SELECT 1 FROM broadcast_deliveries bd
-          WHERE bd.broadcast_id = b.id AND bd.user_id = $4::uuid AND bd.read_at IS NOT NULL
+          WHERE bd.broadcast_id = b.id AND bd.user_id = $1::uuid AND bd.read_at IS NOT NULL
         )
       )`;
     }
@@ -698,57 +668,23 @@ export class BroadcastsService {
               b.published_at,
               b.expires_at,
               (SELECT COUNT(*)::int FROM broadcast_comments bc WHERE bc.broadcast_id = b.id AND bc.hidden_at IS NULL) AS comments_count,
-              ST_Distance(
-                COALESCE(b.target_center, ST_Centroid(b.target_area::geometry)::geography),
-                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-              ) AS distance_meters,
+              NULL::double precision AS distance_meters,
               CASE
-                WHEN EXISTS (SELECT 1 FROM broadcast_reads br WHERE br.broadcast_id = b.id AND br.user_id = $4::uuid) THEN TRUE
+                WHEN EXISTS (SELECT 1 FROM broadcast_reads br WHERE br.broadcast_id = b.id AND br.user_id = $1::uuid) THEN TRUE
                 WHEN EXISTS (
                   SELECT 1 FROM broadcast_deliveries bd
-                  WHERE bd.broadcast_id = b.id AND bd.user_id = $4::uuid AND bd.read_at IS NOT NULL
+                  WHERE bd.broadcast_id = b.id AND bd.user_id = $1::uuid AND bd.read_at IS NOT NULL
                 ) THEN TRUE
                 ELSE FALSE
               END AS read
          FROM broadcasts b
-         LEFT JOIN profiles p ON p.user_id = $4::uuid
+         LEFT JOIN profiles p ON p.user_id = $1::uuid
          LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
         WHERE b.status IN (${LIVE_BROADCAST_STATUS_SQL})
           AND b.deleted_at IS NULL
           AND (b.expires_at IS NULL OR b.expires_at > NOW())
-          AND (
-            ST_DWithin(
-              COALESCE(b.target_center, ST_Centroid(b.target_area::geometry)::geography),
-              ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-              $3
-            )
-            OR EXISTS (SELECT 1 FROM broadcast_deliveries bd WHERE bd.broadcast_id = b.id AND bd.user_id = $4::uuid)
-            OR (
-              p.user_id IS NOT NULL
-              AND b.country IS NOT NULL
-              AND b.country = p.country
-            )
-            OR (
-              $5::text IS NOT NULL
-              AND b.country = $5
-              AND ($6::text IS NULL OR b.state = $6)
-              AND ($7::text IS NULL OR b.lga = $7)
-            )
-            OR (
-              p.user_id IS NOT NULL
-              AND j.id IS NOT NULL
-              AND j.country = p.country
-              AND j.state = p.state
-              AND j.lga = p.lga
-            )
-            OR (
-              $5::text IS NOT NULL
-              AND j.id IS NOT NULL
-              AND j.country = $5
-              AND ($6::text IS NULL OR j.state = $6)
-              AND ($7::text IS NULL OR j.lga = $7)
-            )
-          )
+          AND p.user_id IS NOT NULL
+          AND COALESCE(b.country, j.country) = p.country
           ${filterSql}
         ORDER BY ${PRIORITY_ORDER_SQL}
         LIMIT $${paramIndex}`,
@@ -809,8 +745,6 @@ export class BroadcastsService {
                 JOIN jurisdictions j ON j.id = b.jurisdiction_id
                WHERE p.user_id = $1::uuid
                  AND j.country = p.country
-                 AND j.state = p.state
-                 AND j.lga = p.lga
             )
           )
           AND NOT EXISTS (SELECT 1 FROM broadcast_reads br WHERE br.broadcast_id = b.id AND br.user_id = $1::uuid)
@@ -868,11 +802,11 @@ export class BroadcastsService {
   private scopeWhere(actor: JwtPayload) {
     if (actor.typ !== "admin") return { notifications: { some: { userId: actor.sub } } } as never;
     if (actor.role === "Super Admin") return {};
-    if (actor.agencyId) return { OR: [{ creatorAdminId: actor.sub }, { incident: { assignedAgencyId: actor.agencyId } }] } as never;
     return {
       OR: [
         { creatorAdminId: actor.sub },
-        { jurisdiction: { country: actor.country, state: actor.state, lga: actor.lga } },
+        { country: actor.country },
+        { jurisdiction: { country: actor.country } },
       ],
     } as never;
   }
@@ -929,7 +863,7 @@ export class BroadcastsService {
       publishedAt?: Date | null;
     },
     id: string,
-    recipients: Array<{ user_id: string; distance_meters: number }>,
+    recipients: Array<{ user_id: string; distance_meters: number | null }>,
     actor: JwtPayload,
     action: string,
     routingContext?: { countryCode: string; eventType: string; batchNumber?: number },
@@ -948,7 +882,7 @@ export class BroadcastsService {
   }
 
   private async expandRecipients(broadcastId: string) {
-    return this.findGeofencedRecipients(broadcastId);
+    return this.findCountryRecipients(broadcastId);
   }
 
   private parseUtcTimestamp(value: string, label: string) {
@@ -1135,20 +1069,8 @@ export class BroadcastsService {
             OR (
               b.status IN (${LIVE_BROADCAST_STATUS_SQL})
               AND (b.expires_at IS NULL OR b.expires_at > NOW())
-              AND (
-                (
-                  p.user_id IS NOT NULL
-                  AND b.country IS NOT NULL
-                  AND b.country = p.country
-                )
-                OR (
-                  p.user_id IS NOT NULL
-                  AND j.id IS NOT NULL
-                  AND j.country = p.country
-                  AND j.state = p.state
-                  AND j.lga = p.lga
-                )
-              )
+              AND p.user_id IS NOT NULL
+              AND COALESCE(b.country, j.country) = p.country
             )
           )
         LIMIT 1`,
@@ -1158,24 +1080,18 @@ export class BroadcastsService {
     return rows[0] ?? null;
   }
 
-  private async findGeofencedRecipients(broadcastId: string) {
+  private async findCountryRecipients(broadcastId: string) {
     return this.prisma.$queryRawUnsafe(
-      `WITH latest_user_location AS (
-          SELECT DISTINCT ON (u.id) u.id AS user_id,
-                 COALESCE(i.gps_location, s.gps_location) AS gps_location
-            FROM users u
-            LEFT JOIN incidents i ON i.reporter_id = u.id
-            LEFT JOIN sos_events s ON s.user_id = u.id
-           WHERE COALESCE(i.gps_location, s.gps_location) IS NOT NULL
-           ORDER BY u.id, i.created_at DESC NULLS LAST, s.triggered_at DESC NULLS LAST
-        )
-        SELECT lul.user_id,
-               ST_Distance(lul.gps_location, COALESCE(b.target_center, ST_Centroid(b.target_area::geometry)::geography)) AS distance_meters
+      `SELECT u.id AS user_id,
+              NULL::double precision AS distance_meters
           FROM broadcasts b
-          JOIN latest_user_location lul ON ST_Intersects(lul.gps_location, b.target_area)
-         WHERE b.id = $1::uuid`,
+          LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
+          JOIN profiles p ON p.country = COALESCE(b.country, j.country)
+          JOIN users u ON u.id = p.user_id AND u.status = 'Active'
+         WHERE b.id = $1::uuid
+         ORDER BY u.created_at ASC`,
       broadcastId,
-    ) as Promise<Array<{ user_id: string; distance_meters: number }>>;
+    ) as Promise<Array<{ user_id: string; distance_meters: number | null }>>;
   }
 
   private typeFromIncident(type: string) {
@@ -1224,7 +1140,7 @@ export class BroadcastsService {
     await this.deliverToRecipients(
       broadcast,
       payload.broadcastId,
-      recipients.map((userId) => ({ user_id: userId, distance_meters: 0 })),
+      recipients.map((userId) => ({ user_id: userId, distance_meters: null })),
       BROADCAST_SYSTEM_ACTOR,
       "broadcast.country_delivery_batch",
       {
@@ -1249,11 +1165,6 @@ export class BroadcastsService {
          JOIN profiles p ON p.user_id = u.id
         WHERE p.country = $1
           AND u.status = 'Active'
-          AND EXISTS (
-            SELECT 1 FROM user_push_tokens t
-             WHERE t.user_id = u.id
-               AND t.is_active = TRUE
-          )
         ORDER BY u.created_at ASC
         LIMIT $2 OFFSET $3`,
       countryCode,

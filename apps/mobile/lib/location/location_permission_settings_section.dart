@@ -299,7 +299,7 @@ class _LocationPermissionSettingsSectionState
               leading: const Icon(Icons.location_on_outlined),
               title: Text(_permissionLabel(_permission)),
               subtitle: const Text(
-                "Location is required for SOS, broadcasts, and nearby police.",
+                "Location is required for SOS, Neighborhood Watch, and nearby police.",
               ),
             ),
             Wrap(

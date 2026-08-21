@@ -146,7 +146,7 @@ describe("BroadcastsService citizen feed", () => {
       ]),
     };
     const { service } = buildService(prisma);
-    const result = await service.nearbyForUser("user-1", 6.5, 3.3, { limit: 10 });
+    const result = await service.countryFeedForUser("user-1", { limit: 10 });
     expect(result.data).toHaveLength(1);
     expect(result.data[0]).toEqual(
       expect.objectContaining({
@@ -157,32 +157,75 @@ describe("BroadcastsService citizen feed", () => {
     );
   });
 
-  it("scopes the canonical feed to an approved community jurisdiction", async () => {
+  it("keeps the national feed independent of location and community state", async () => {
     const prisma = {
-      community: {
-        findUnique: jest.fn().mockResolvedValue({
-          country: "NG",
-          state: "LA",
-          lga: "Ikeja",
-        }),
-      },
-      communityMembership: {
-        findUnique: jest.fn().mockResolvedValue({ status: "Approved" }),
-      },
       $queryRawUnsafe: jest.fn().mockResolvedValue([]),
     };
     const { service } = buildService(prisma);
-    const result = await service.nearbyForUser("user-1", 0, 0, {
-      communityId: "community-1",
-      limit: 10,
-    });
+    const result = await service.countryFeedForUser("user-1", { limit: 10 });
     expect(result.data).toEqual([]);
-    expect(prisma.communityMembership.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { communityId_userId: { communityId: "community-1", userId: "user-1" } },
-      }),
+    const sql = String(prisma.$queryRawUnsafe.mock.calls[0]?.[0]);
+    expect(sql).toContain("COALESCE(b.country, j.country) = p.country");
+    expect(sql.includes("ST_DWithin")).toBe(false);
+    expect(sql.includes("community_memberships")).toBe(false);
+    expect(sql.includes("gps_location")).toBe(false);
+  });
+
+  it("uses the same broadcast id for every country-scoped citizen context", async () => {
+    const row = {
+      id: "national-broadcast-1",
+      type: "Emergency",
+      title: "National alert",
+      body: "Body",
+      priority: "P1LifeThreatening",
+      country: "NG",
+      published_at: new Date().toISOString(),
+      expires_at: null,
+      read: false,
+    };
+    const prisma = { $queryRawUnsafe: jest.fn().mockResolvedValue([row]) };
+    const { service } = buildService(prisma);
+    const contexts = [
+      "same-state",
+      "other-state",
+      "other-lga",
+      "different-community",
+      "no-community",
+      "nw-never-initialized",
+      "location-denied",
+      "gps-unavailable",
+      "left-community",
+      "moved-area",
+    ];
+    const ids = [];
+    for (const context of contexts) {
+      const result = await service.countryFeedForUser(`user-${context}`);
+      ids.push(result.data[0]?.id);
+    }
+    expect(ids).toEqual(contexts.map(() => "national-broadcast-1"));
+  });
+
+  it("selects national notification recipients without push or neighborhood prerequisites", async () => {
+    const prisma = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([
+        { user_id: "user-with-push" },
+        { user_id: "user-without-push" },
+      ]),
+    };
+    const { service } = buildService(prisma);
+
+    const recipients = await (service as any).findCountryRecipientBatch(
+      "NG",
+      100,
+      0,
     );
-    expect(String(prisma.$queryRawUnsafe.mock.calls[0]?.[0])).toContain("$5::text IS NOT NULL");
+
+    expect(recipients).toEqual(["user-with-push", "user-without-push"]);
+    const sql = String(prisma.$queryRawUnsafe.mock.calls[0]?.[0]);
+    expect(sql).toContain("p.country = $1");
+    expect(sql.includes("user_push_tokens")).toBe(false);
+    expect(sql.includes("community")).toBe(false);
+    expect(sql.includes("gps")).toBe(false);
   });
 });
 

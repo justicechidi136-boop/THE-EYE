@@ -18,6 +18,37 @@ void main() {
     expect(source.contains("apiClient: controller.apiClient"), isTrue);
   });
 
+  test(
+      "startup keeps credentials in secure storage and hydrates before routing",
+      () {
+    final mainSource = File("lib/main.dart").readAsStringSync();
+    final storeSource =
+        File("lib/auth/auth_session_store.dart").readAsStringSync();
+    final backgroundPushSource =
+        File("lib/push/push_background_handler.dart").readAsStringSync();
+
+    expect(mainSource.contains("SecureAuthSessionStore.create()"), isTrue);
+    expect(
+      storeSource.contains("FlutterSecureStorage"),
+      isTrue,
+    );
+    expect(storeSource.contains("setString(accessTokenKey"), isFalse);
+    expect(storeSource.contains("setString(refreshTokenKey"), isFalse);
+    expect(
+      backgroundPushSource.contains("FlutterSecureStorage"),
+      isTrue,
+    );
+    expect(
+      backgroundPushSource.contains("the_eye.auth.access_token"),
+      isFalse,
+    );
+    expect(
+      mainSource.indexOf("final restore = await controller.restoreSession()") <
+          mainSource.indexOf("SessionRestoreStatus.restored => \"/home\""),
+      isTrue,
+    );
+  });
+
   test("authenticated feature screens do not construct default services", () {
     final sources = [
       "lib/activity/activity_history_screen.dart",

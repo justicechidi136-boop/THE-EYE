@@ -15,6 +15,7 @@ import "package:url_launcher/url_launcher.dart";
 
 import "auth/auth_service.dart";
 import "auth/account_recovery_flow.dart";
+import "auth/auth_persistence_preference_store.dart";
 import "auth/auth_session_store.dart";
 import "auth/auth_validation.dart";
 import "auth/social_auth_service.dart";
@@ -593,8 +594,13 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
 
     final pendingStore = await SharedPreferencesPendingSubmissionStore.create()
         .timeout(const Duration(seconds: 5));
-    final authSessionStore = await SharedPreferencesAuthSessionStore.create()
+    final authSessionStore = await SecureAuthSessionStore.create()
         .timeout(const Duration(seconds: 5));
+    final authPersistencePreferenceStore =
+        await AuthPersistencePreferenceStore.create()
+            .timeout(const Duration(seconds: 5));
+    await authPersistencePreferenceStore
+        .applyColdLaunchPolicy(authSessionStore);
     final vehicleGarageStore =
         await SharedPreferencesVehicleGarageStore.create()
             .timeout(const Duration(seconds: 5));
@@ -657,6 +663,7 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
         sessionStore: authSessionStore,
       ),
       authSessionStore: authSessionStore,
+      authPersistencePreferenceStore: authPersistencePreferenceStore,
       themeProvider: themeProvider,
       vehicleGarageStore: vehicleGarageStore,
       initialLocale: initialLocale,
@@ -1464,6 +1471,7 @@ class AppController extends SessionAccessor
     required AuthService authService,
     required SocialAuthService socialAuthService,
     required AuthSessionStore authSessionStore,
+    AuthPersistencePreferenceStore? authPersistencePreferenceStore,
     required ThemeProvider themeProvider,
     required VehicleGarageStore vehicleGarageStore,
     Locale initialLocale = TheEyeLocaleCatalog.defaultLocale,
@@ -1486,6 +1494,9 @@ class AppController extends SessionAccessor
         _authService = authService,
         _socialAuthService = socialAuthService,
         _authSessionStore = authSessionStore,
+        _authPersistencePreferenceStore = authPersistencePreferenceStore,
+        _remainSignedIn =
+            authPersistencePreferenceStore?.remainSignedIn ?? true,
         _themeProvider = themeProvider,
         _vehicleGarageStore = vehicleGarageStore,
         _locale = initialLocale,
@@ -1513,6 +1524,8 @@ class AppController extends SessionAccessor
   final AuthService _authService;
   final SocialAuthService _socialAuthService;
   final AuthSessionStore _authSessionStore;
+  final AuthPersistencePreferenceStore? _authPersistencePreferenceStore;
+  bool _remainSignedIn;
   final ThemeProvider _themeProvider;
   final VehicleGarageStore _vehicleGarageStore;
   Locale _locale;
@@ -1612,6 +1625,14 @@ class AppController extends SessionAccessor
   }
 
   AuthSession? get session => _cachedSession;
+  bool get remainSignedIn => _remainSignedIn;
+
+  Future<void> setRemainSignedIn(bool value) async {
+    if (_remainSignedIn == value) return;
+    await _authPersistencePreferenceStore?.setRemainSignedIn(value);
+    _remainSignedIn = value;
+    notifyListeners();
+  }
 
   Future<void> loadPersistedSession() async {
     final session = await _authSessionStore.load();
@@ -2455,15 +2476,8 @@ class AppController extends SessionAccessor
     broadcastLoadError = null;
     notifyListeners();
     try {
-      final location = await captureLocationOutcome();
-      if (location.result != LocationCaptureResult.granted ||
-          location.position == null) {
-        throw StateError(locationFailureMessage(location.result));
-      }
-      final page = await _broadcastFeedService.listNearby(
+      final page = await _broadcastFeedService.listCountryWide(
         accessToken: accessToken!,
-        latitude: location.position!.latitude,
-        longitude: location.position!.longitude,
         cursor: refresh ? null : broadcastNextCursor,
       );
       if (refresh || broadcastNextCursor == null) {
@@ -2512,15 +2526,8 @@ class AppController extends SessionAccessor
     loadingMoreBroadcasts = true;
     notifyListeners();
     try {
-      final location = await captureLocationOutcome();
-      if (location.result != LocationCaptureResult.granted ||
-          location.position == null) {
-        return;
-      }
-      final page = await _broadcastFeedService.listNearby(
+      final page = await _broadcastFeedService.listCountryWide(
         accessToken: accessToken!,
-        latitude: location.position!.latitude,
-        longitude: location.position!.longitude,
         cursor: broadcastNextCursor,
       );
       final existingIds = broadcasts.map((item) => item.id).toSet();
@@ -7405,9 +7412,9 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           const SectionCard(
-            title: "Alerts for your location",
+            title: "National safety broadcasts",
             child: Text(
-              "Verified emergency and government alerts are targeted using your profile jurisdiction and current location.",
+              "Country-wide emergency and public-safety alerts remain available wherever you are.",
             ),
           ),
           const SizedBox(height: 16),
@@ -7431,9 +7438,9 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: const [
           SectionCard(
-            title: "Alerts for your location",
+            title: "National safety broadcasts",
             child: Text(
-                "No active safety broadcasts match your location right now."),
+                "There are no active country-wide safety broadcasts right now."),
           ),
         ],
       );
@@ -10338,28 +10345,9 @@ class _NeighborhoodWatchBroadcastsScreenState
       _loading = true;
       _error = null;
     });
-    final selected = controller.selectedCommunity;
-    final current = controller.currentAreaCommunity;
-    final communityId = selected != null &&
-            selected.isMember &&
-            (current == null || current.id != selected.id)
-        ? selected.id
-        : null;
-    double latitude = 0;
-    double longitude = 0;
     try {
-      final location = await captureLocationOutcome();
-      if (location.position != null) {
-        latitude = location.position!.latitude;
-        longitude = location.position!.longitude;
-      } else if (communityId == null) {
-        throw StateError("Location is required to load broadcasts.");
-      }
-      final page = await controller.broadcastFeedService.listNearby(
+      final page = await controller.broadcastFeedService.listCountryWide(
         accessToken: token,
-        latitude: latitude,
-        longitude: longitude,
-        communityId: communityId,
       );
       if (!mounted) return;
       setState(() {
@@ -11578,6 +11566,19 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).pushNamed("/profile"),
                 ),
                 if (authenticated) ...[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Icon(
+                      Icons.lock_clock_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text("Remain signed in"),
+                    subtitle: const Text(
+                      "Keep me signed in when I close THE EYE.",
+                    ),
+                    value: controller.remainSignedIn,
+                    onChanged: controller.setRemainSignedIn,
+                  ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(

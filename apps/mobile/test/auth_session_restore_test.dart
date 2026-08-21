@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:convert";
 import "dart:io";
 
@@ -145,7 +146,7 @@ void main() {
       final service = AuthService(apiClient: client, sessionStore: store);
       final result = await service.restorePersistedSession();
 
-      expect(result.status, SessionRestoreStatus.failed);
+      expect(result.status, SessionRestoreStatus.unauthenticated);
       expect(await store.load(), isNull);
     });
 
@@ -221,6 +222,48 @@ void main() {
       final result = await service.restorePersistedSession();
       expect(result.status, SessionRestoreStatus.restored);
       expect(result.session?.accessToken, "access-token");
+    });
+
+    test("preserves session after a transient server failure", () async {
+      final store = InMemoryAuthSessionStore();
+      const session = AuthSession(
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+      );
+      await store.save(session);
+      final service = AuthService(
+        apiClient: TheEyeApiClient(
+          httpClient: MockClient(
+            (_) async => http.Response(jsonEncode({"message": "Unavailable"}), 503),
+          ),
+        ),
+        sessionStore: store,
+      );
+
+      final result = await service.restorePersistedSession();
+
+      expect(result.status, SessionRestoreStatus.restored);
+      expect((await store.load())?.refreshToken, session.refreshToken);
+    });
+
+    test("preserves session after a startup timeout", () async {
+      final store = InMemoryAuthSessionStore();
+      const session = AuthSession(
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+      );
+      await store.save(session);
+      final service = AuthService(
+        apiClient: TheEyeApiClient(
+          httpClient: MockClient((_) async => throw TimeoutException("timeout")),
+        ),
+        sessionStore: store,
+      );
+
+      final result = await service.restorePersistedSession();
+
+      expect(result.status, SessionRestoreStatus.restored);
+      expect((await store.load())?.accessToken, session.accessToken);
     });
 
     test("logout clears local session after restart simulation", () async {
