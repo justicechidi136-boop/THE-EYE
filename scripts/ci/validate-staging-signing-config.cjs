@@ -15,6 +15,13 @@ const required = [
   "androidComponents {",
   "onVariants(selector().withBuildType(\"release\"))",
   "envFlavor == \"staging\"",
+  "tasks.register(\"validateStagingReleaseSigning\")",
+  "task.name == \"preStagingReleaseBuild\"",
+  "task.name == \"assembleStagingRelease\"",
+  "task.name.startsWith(\"packageStagingRelease\")",
+  "task.name == \"bundleStagingRelease\"",
+  "task.name == \"signStagingReleaseBundle\"",
+  "task.dependsOn(validateStagingReleaseSigning)",
   "Staging release signing is not configured",
   "variant.signingConfig?.setConfig(android.signingConfigs.stagingRelease)",
 ];
@@ -23,6 +30,7 @@ const forbidden = [
   "productFlavors {\n        staging {\n            dimension = \"environment\"\n            applicationIdSuffix = \".staging\"\n            resValue \"string\", \"app_name\", \"THE EYE Staging\"\n            signingConfig = signingConfigs.debug",
   "afterEvaluate {\n    android.applicationVariants.configureEach",
   "variant.signingConfig = android.signingConfigs.stagingRelease",
+  "gradle.startParameter.taskNames",
 ];
 
 const missing = required.filter((needle) => !buildGradle.includes(needle));
