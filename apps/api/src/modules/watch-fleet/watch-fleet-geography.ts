@@ -14,7 +14,10 @@ export function buildGeographyDeviceWhere(scope: GeographyScope | null): Record<
 
   return {
     OR: [
-      { currentOwnerType: WatchOwnerType.UnassignedInventory },
+      {
+        currentOwnerType: WatchOwnerType.UnassignedInventory,
+        currentInventoryLocation: profileWhere,
+      },
       {
         currentOwnerType: WatchOwnerType.Person,
         user: { profile: profileWhere },

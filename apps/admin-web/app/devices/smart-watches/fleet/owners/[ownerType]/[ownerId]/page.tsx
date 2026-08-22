@@ -11,10 +11,46 @@ export const dynamic = "force-dynamic";
 
 type Params = Promise<{ ownerType: string; ownerId: string }>;
 
+function HistoryRows({ rows, empty }: { rows: unknown[]; empty: string }) {
+  if (!rows.length) return <p className="text-sm text-muted">{empty}</p>;
+  return (
+    <div className="divide-y divide-line">
+      {rows.slice(0, 10).map((entry, index) => {
+        const row = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+        const label = String(row.action ?? row.ownershipStatus ?? row.assignmentStatus ?? row.status ?? "Recorded change");
+        const occurredAt = row.transferredAt ?? row.assignedAt ?? row.validFrom ?? row.createdAt;
+        const deviceId = row.deviceId ? String(row.deviceId) : null;
+        return (
+          <div key={String(row.id ?? index)} className="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-ink">{label.replaceAll("_", " ")}</p>
+              {deviceId ? <p className="font-mono text-xs text-muted">Device {deviceId.slice(0, 12)}</p> : null}
+            </div>
+            <time className="text-xs text-muted">{occurredAt ? new Date(String(occurredAt)).toLocaleString() : "Time unavailable"}</time>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default async function WatchOwnerDetailPage({ params }: { params: Params }) {
   const { ownerType, ownerId } = await params;
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
+  if (!canManage) {
+    return (
+      <AppShell>
+        <PageHeader eyebrow="Devices" title="Fleet access" />
+        <SmartwatchSubnav canManage={false} />
+        <Panel title="Owner profile">
+          <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            Your admin account does not have permission to view smartwatch ownership records.
+          </div>
+        </Panel>
+      </AppShell>
+    );
+  }
   const detail = await fetchWatchOwnerDetail(ownerType, ownerId);
   const inventory = await fetchWatchInventory({ ownerType, ownerId, limit: "25" });
 
@@ -70,17 +106,17 @@ export default async function WatchOwnerDetailPage({ params }: { params: Params 
         </div>
         <div className="lg:col-span-2">
         <Panel title="Ownership history">
-          <pre className="max-h-64 overflow-auto rounded bg-surfaceMuted p-3 text-xs">{JSON.stringify(detail.ownershipHistory?.slice(0, 10) ?? [], null, 2)}</pre>
+          <HistoryRows rows={detail.ownershipHistory ?? []} empty="No ownership changes have been recorded." />
         </Panel>
         </div>
         <div className="lg:col-span-2">
         <Panel title="Assignment history">
-          <pre className="max-h-64 overflow-auto rounded bg-surfaceMuted p-3 text-xs">{JSON.stringify(detail.assignmentHistory?.slice(0, 10) ?? [], null, 2)}</pre>
+          <HistoryRows rows={detail.assignmentHistory ?? []} empty="No assignment changes have been recorded." />
         </Panel>
         </div>
         <div className="lg:col-span-2">
         <Panel title="Transfer history">
-          <pre className="max-h-64 overflow-auto rounded bg-surfaceMuted p-3 text-xs">{JSON.stringify(detail.transferHistory?.slice(0, 10) ?? [], null, 2)}</pre>
+          <HistoryRows rows={detail.transferHistory ?? []} empty="No transfers have been recorded." />
         </Panel>
         </div>
       </div>

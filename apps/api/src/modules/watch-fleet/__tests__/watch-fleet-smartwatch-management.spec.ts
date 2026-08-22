@@ -74,6 +74,30 @@ describe("watch fleet smartwatch management", () => {
     expect(Object.prototype.hasOwnProperty.call(device, "pairingCodeHash")).toBe(false);
   });
 
+  it("does not report a stale heartbeat as online", async () => {
+    const { service } = buildService([
+      {
+        id: "watch-stale",
+        deviceId: "EYE-WATCH-STALE",
+        userId: null,
+        user: null,
+        currentOrganization: null,
+        currentDepartment: null,
+        isActive: true,
+        isOnline: true,
+        lastSeenAt: new Date(Date.now() - 11 * 60 * 1000),
+        metadata: null,
+        ownershipStatus: "UNASSIGNED_INVENTORY",
+        inventoryStatus: "IN_STOCK",
+        connectivityMode: "StandaloneCellular",
+        createdAt: new Date(),
+      },
+    ]);
+
+    const result = await service.watchInventory(superAdmin, {});
+    expect(result.data[0].onlineStatus).toBe("Offline");
+  });
+
   it("applies pairing, lock and geography filters in the Prisma query", async () => {
     const { service, prisma } = buildService();
     await service.watchInventory(

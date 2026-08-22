@@ -4,7 +4,7 @@ import { SmartwatchSubnav } from "../../../../components/smartwatch/smartwatch-s
 import { PageHeader, Panel, StatusBadge } from "../../../../components/ui";
 import { fetchSosEvents } from "../../../../lib/api/data";
 import { getAdminSession } from "../../../../lib/session";
-import { canManageSmartwatches } from "../../../../lib/smartwatch-permissions";
+import { canManageSmartwatches, canViewSmartwatchSos } from "../../../../lib/smartwatch-permissions";
 import type { SosEventView } from "../../../../lib/types/admin-views";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +12,19 @@ export const dynamic = "force-dynamic";
 export default async function SmartWatchSosHistoryPage() {
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
-  const events = await fetchSosEvents();
+  const canViewSos = canViewSmartwatchSos(session);
+  const events = canViewSos ? await fetchSosEvents() : [];
 
   return (
     <AppShell>
       <PageHeader eyebrow="Devices" title="SOS history" action={<StatusBadge tone="info">{events.length} events</StatusBadge>} />
       <SmartwatchSubnav canManage={canManage} />
       <Panel title="Recent SOS events">
+        {!canViewSos ? (
+          <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            Your admin account does not have permission to view smartwatch SOS events.
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-surfaceMuted text-xs uppercase text-muted">
@@ -37,7 +43,11 @@ export default async function SmartWatchSosHistoryPage() {
                 <tr key={event.id} id={event.id}>
                   <td className="px-4 py-3">
                     <p className="font-semibold">{event.id}</p>
-                    <p className="text-xs text-muted">{event.incidentId}</p>
+                    {event.incidentId !== "-" ? (
+                      <Link href={`/incidents/${encodeURIComponent(event.incidentId)}`} className="text-xs font-semibold text-eye hover:underline">
+                        Open incident {event.incidentId.slice(0, 8)}
+                      </Link>
+                    ) : <p className="text-xs text-muted">No linked incident</p>}
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/devices/smart-watches/${event.deviceId}`} className="font-semibold text-eye hover:underline">{event.deviceId}</Link>
@@ -59,6 +69,7 @@ export default async function SmartWatchSosHistoryPage() {
             </tbody>
           </table>
         </div>
+        )}
       </Panel>
     </AppShell>
   );

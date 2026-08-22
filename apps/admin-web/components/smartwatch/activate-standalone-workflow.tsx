@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PairingQrCode } from "../field-operations/pairing-qr-code";
 import { Button, InlineAlert } from "../form-primitives";
 
 type ActivationResult = {
@@ -49,32 +50,39 @@ export function ActivateStandaloneWorkflow({ canManage }: { canManage: boolean }
     }
   }
 
-  const qrUrl = result ? `https://quickchart.io/qr?text=${encodeURIComponent(result.qrPayload)}&size=220&margin=1` : null;
-
   return (
     <div className="grid gap-4">
       <form className="grid gap-3 lg:grid-cols-[1fr_120px_180px]" onSubmit={issueSecret}>
-        <input
-          className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye"
-          placeholder="Standalone device ID (e.g. EYE-WATCH-001)"
-          value={deviceId}
-          onChange={(event) => setDeviceId(event.target.value)}
-          required
-        />
-        <input
-          className="h-11 rounded-md border border-line px-3 outline-none focus:border-eye"
-          placeholder="TTL min"
-          value={ttlMinutes}
-          onChange={(event) => setTtlMinutes(event.target.value)}
-        />
+        <label className="grid gap-1 text-xs font-semibold text-muted">
+          Device ID
+          <input
+            className="h-11 rounded-md border border-line bg-surface px-3 text-sm text-ink outline-none focus:border-eye"
+            placeholder="EYE-WATCH-001"
+            value={deviceId}
+            onChange={(event) => setDeviceId(event.target.value)}
+            required
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-muted">
+          Valid for
+          <select
+            className="h-11 rounded-md border border-line bg-surface px-3 text-sm text-ink outline-none focus:border-eye"
+            value={ttlMinutes}
+            onChange={(event) => setTtlMinutes(event.target.value)}
+          >
+            <option value="10">10 min</option>
+            <option value="30">30 min</option>
+            <option value="60">1 hour</option>
+          </select>
+        </label>
         <Button type="submit" disabled={busy}>
-          Generate activation secret
+          {busy ? "Generating..." : "Generate code"}
         </Button>
       </form>
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       {result ? (
         <div className="grid gap-4 rounded-lg border border-line bg-surfaceMuted p-4 lg:grid-cols-[220px_1fr]">
-          {qrUrl ? <img src={qrUrl} alt={`Activation QR for ${result.deviceId}`} className="rounded-md border border-line bg-white p-2" /> : null}
+          <PairingQrCode value={result.qrPayload} alt={`Activation QR for ${result.deviceId}`} />
           <div className="grid gap-2 text-sm">
             <p><span className="font-semibold">Device ID:</span> {result.deviceId}</p>
             <p><span className="font-semibold">One-time pairing code:</span> {result.pairingCode}</p>

@@ -393,6 +393,8 @@ export class WatchFleetService {
   private mapDeviceRow(device: Record<string, any>, permitted: boolean) {
     const profile = device.user?.profile;
     const assigneeName = profile ? `${profile.firstName} ${profile.lastName}` : null;
+    const lastSeenAt = device.lastSeenAt ? new Date(device.lastSeenAt).getTime() : Number.NaN;
+    const heartbeatFresh = Number.isFinite(lastSeenAt) && Date.now() - lastSeenAt <= 10 * 60 * 1000;
     return {
       id: device.id,
       watchName: device.displayName ?? device.deviceId,
@@ -418,7 +420,7 @@ export class WatchFleetService {
       ownershipStatus: device.ownershipStatus,
       inventoryStatus: device.inventoryStatus,
       replacementPending: device.ownershipStatus === WatchOwnershipStatus.ReplacementPending,
-      onlineStatus: device.isOnline ? "Online" : "Offline",
+      onlineStatus: device.isOnline && heartbeatFresh ? "Online" : "Offline",
       batteryLevel: device.batteryLevel,
       signalStrength: device.signalStrength,
       connectivityType: device.connectivityMode,

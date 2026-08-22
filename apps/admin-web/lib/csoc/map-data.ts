@@ -123,16 +123,18 @@ export async function fetchCsocMapLayers(): Promise<CsocMapLayers> {
       status: s.agencyType,
       detail: s.address,
     })),
-    devices: devices
-      .filter((d) => d.lastGps.lat && d.lastGps.lng)
-      .map((d) => ({
-        id: d.id,
+    devices: devices.flatMap((device) => {
+      const { lat, lng } = device.lastGps;
+      if (lat == null || lng == null) return [];
+      return [{
+        id: device.id,
         type: "smartwatch",
-        label: d.owner,
-        lat: d.lastGps.lat,
-        lng: d.lastGps.lng,
-        status: d.status,
-        detail: d.deviceId,
-      })),
+        label: device.owner,
+        lat,
+        lng,
+        status: device.status,
+        detail: device.deviceId,
+      }];
+    }),
   };
 }

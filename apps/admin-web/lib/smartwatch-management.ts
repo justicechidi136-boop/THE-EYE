@@ -107,5 +107,7 @@ export async function loadSmartwatchManagementDevices(
 export function smartwatchDeviceState(device: WatchInventoryRowView) {
   if (device.activationStatus.toUpperCase() === "LOCKED") return "Locked";
   if (!device.isActive || device.deactivatedAt) return "Deactivated";
-  return device.onlineStatus === "Online" ? "Online" : "Offline";
+  const lastSeen = device.lastSeen ? new Date(device.lastSeen).getTime() : Number.NaN;
+  const heartbeatFresh = Number.isFinite(lastSeen) && Date.now() - lastSeen <= 10 * 60 * 1000;
+  return device.onlineStatus === "Online" && heartbeatFresh ? "Online" : "Offline";
 }

@@ -813,33 +813,33 @@ function toWatchOwnerSummaryView(record: Record<string, unknown>): WatchOwnerSum
 }
 
 export async function fetchWatchOwnerSummaries(query: Record<string, string | undefined> = {}): Promise<PaginatedResponse<WatchOwnerSummaryView>> {
-  return withToken(async (token) => {
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(query)) {
-      if (value) params.set(key, value);
-    }
-    const path = `/watch-fleet/owners${params.size ? `?${params.toString()}` : ""}`;
-    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>(path, { token });
-    return {
-      ...response,
-      data: response.data.map(toWatchOwnerSummaryView),
-    };
-  }, { data: [], nextCursor: null, hasMore: false, limit: 50 });
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value) params.set(key, value);
+  }
+  const path = `/watch-fleet/owners${params.size ? `?${params.toString()}` : ""}`;
+  const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>(path, { token });
+  return {
+    ...response,
+    data: response.data.map(toWatchOwnerSummaryView),
+  };
 }
 
 export async function fetchWatchInventory(query: Record<string, string | undefined> = {}): Promise<PaginatedResponse<WatchInventoryRowView>> {
-  return withToken(async (token) => {
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(query)) {
-      if (value) params.set(key, value);
-    }
-    const path = `/watch-fleet/inventory${params.size ? `?${params.toString()}` : ""}`;
-    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>(path, { token });
-    return {
-      ...response,
-      data: response.data.map(toWatchInventoryRowView),
-    };
-  }, { data: [], nextCursor: null, hasMore: false, limit: 50 });
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value) params.set(key, value);
+  }
+  const path = `/watch-fleet/inventory${params.size ? `?${params.toString()}` : ""}`;
+  const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>(path, { token });
+  return {
+    ...response,
+    data: response.data.map(toWatchInventoryRowView),
+  };
 }
 
 export async function fetchSmartwatchManagementDevices(query: Record<string, string | undefined> = {}) {
@@ -848,47 +848,21 @@ export async function fetchSmartwatchManagementDevices(query: Record<string, str
 }
 
 export async function fetchWatchOwnerDetail(ownerType: string, ownerId: string): Promise<WatchOwnerDetailView> {
-  return withToken(async (token) => {
-    const response = await apiRequest<{ data: Record<string, unknown> }>(
-      `/watch-fleet/owners/${encodeURIComponent(ownerType)}/${encodeURIComponent(ownerId)}`,
-      { token },
-    );
-    const base = toWatchOwnerSummaryView(response.data);
-    return {
-      ...base,
-      ownershipHistory: (response.data.ownershipHistory as unknown[]) ?? [],
-      assignmentHistory: (response.data.assignmentHistory as unknown[]) ?? [],
-      transferHistory: (response.data.transferHistory as unknown[]) ?? [],
-      auditHistory: (response.data.auditHistory as unknown[]) ?? [],
-      departments: (response.data.departments as unknown[]) ?? [],
-    };
-  }, {
-    ownerKey: "",
-    ownerType: "",
-    ownerId: null,
-    ownerName: "",
-    phone: null,
-    email: null,
-    organization: null,
-    department: null,
-    currentAssignee: null,
-    totalWatches: 0,
-    onlineWatches: 0,
-    offlineWatches: 0,
-    lowBatteryWatches: 0,
-    sosActiveWatches: 0,
-    unassignedWatches: 0,
-    lostStolenWatches: 0,
-    replacementPendingWatches: 0,
-    retiredWatches: 0,
-    lastDeviceActivity: null,
-    accountStatus: null,
-    ownershipHistory: [],
-    assignmentHistory: [],
-    transferHistory: [],
-    auditHistory: [],
-    departments: [],
-  });
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  const response = await apiRequest<{ data: Record<string, unknown> }>(
+    `/watch-fleet/owners/${encodeURIComponent(ownerType)}/${encodeURIComponent(ownerId)}`,
+    { token },
+  );
+  const base = toWatchOwnerSummaryView(response.data);
+  return {
+    ...base,
+    ownershipHistory: (response.data.ownershipHistory as unknown[]) ?? [],
+    assignmentHistory: (response.data.assignmentHistory as unknown[]) ?? [],
+    transferHistory: (response.data.transferHistory as unknown[]) ?? [],
+    auditHistory: (response.data.auditHistory as unknown[]) ?? [],
+    departments: (response.data.departments as unknown[]) ?? [],
+  };
 }
 
 export async function fetchSmartwatchDevice(id: string): Promise<SmartwatchDeviceView | null> {
@@ -897,15 +871,15 @@ export async function fetchSmartwatchDevice(id: string): Promise<SmartwatchDevic
 }
 
 export async function fetchSmartwatchDeviceDetail(id: string): Promise<SmartwatchDeviceDetailView | null> {
-  return withToken(async (token) => {
-    try {
-      const response = await apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/admin/devices/${encodeURIComponent(id)}`, { token });
-      return toSmartwatchDeviceDetailView(response.data);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return null;
-      throw error;
-    }
-  }, null);
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  try {
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/smartwatch/admin/devices/${encodeURIComponent(id)}`, { token });
+    return toSmartwatchDeviceDetailView(response.data);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export async function fetchPairingSessions(): Promise<PairingSessionView[]> {

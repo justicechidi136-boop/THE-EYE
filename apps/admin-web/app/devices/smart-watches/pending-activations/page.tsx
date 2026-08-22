@@ -12,15 +12,22 @@ export const dynamic = "force-dynamic";
 export default async function PendingActivationsPage() {
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
-  const sessions = await fetchPairingSessions();
+  const sessions = canManage ? await fetchPairingSessions() : [];
   const pending = sessions.filter((sessionRow) => sessionRow.status === "pending");
-  const history = await fetchActivationHistory();
+  const history = canManage ? await fetchActivationHistory() : [];
 
   return (
     <AppShell>
       <PageHeader eyebrow="Devices" title="Pending activations" action={<StatusBadge tone="info">{pending.length} pending</StatusBadge>} />
       <SmartwatchSubnav canManage={canManage} />
       <div className="grid gap-5">
+        {!canManage ? (
+          <Panel title="Activation access">
+            <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+              Your admin account does not have permission to issue, approve, or revoke smartwatch activation material.
+            </div>
+          </Panel>
+        ) : null}
         <Panel title="Issue standalone activation">
           <ActivateStandaloneWorkflow canManage={canManage} />
         </Panel>

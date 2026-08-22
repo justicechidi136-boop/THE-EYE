@@ -1,7 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import { AdminRoleName } from "@the-eye/shared";
 import { hashToken } from "../../../common/auth/crypto";
-import { SmartwatchConnectivityMode, SmartwatchOfflineEventType, SmartwatchPairingMethod } from "@the-eye/shared";
+import { SmartwatchConnectivityMode, SmartwatchOfflineEventType, SmartwatchPairingMethod, WatchOwnerType } from "@the-eye/shared";
 import { SmartwatchService, smartwatchDeviceLookupWhere } from "../smartwatch.service";
 
 function buildService(overrides: { config?: Record<string, string>; pairingSession?: any } = {}) {
@@ -35,6 +35,7 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
     },
     smartwatchPairingSession: {
       findUnique: jest.fn().mockResolvedValue(pairingSession),
+      findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn().mockResolvedValue(pairingSession),
       update: jest.fn(),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -51,7 +52,10 @@ function buildService(overrides: { config?: Record<string, string>; pairingSessi
       findMany: jest.fn().mockResolvedValue([{ name: "Family", phone: "+2348000000000", priority: 1 }]),
     },
     incidentTimeline: { create: jest.fn().mockResolvedValue({ id: "timeline-1" }) },
-    auditLog: { create: jest.fn().mockResolvedValue({ id: "audit-1" }) },
+    auditLog: {
+      create: jest.fn().mockResolvedValue({ id: "audit-1" }),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     watchOwnershipRecord: { create: jest.fn().mockResolvedValue({ id: "ownership-1" }) },
     watchAssignmentRecord: { create: jest.fn().mockResolvedValue({ id: "assignment-1" }) },
     watchPairingHistoryRecord: { create: jest.fn().mockResolvedValue({ id: "pairing-history-1" }) },
@@ -281,10 +285,20 @@ describe("SmartwatchService", () => {
 
     expect(result.data.deviceId).toBe("EYE-WATCH-NEW");
     expect(result.data.pairingCode).toMatch(/^\d{6}$/);
-    expect(result.data.qrPayload).toContain("the-eye-smartwatch-activation");
+    expect(JSON.parse(result.data.qrPayload)).toEqual({
+      type: "the-eye-smartwatch-activation",
+      deviceId: "EYE-WATCH-NEW",
+      pairingCode: result.data.pairingCode,
+      firebaseEnv: "development",
+      connectivityMode: "StandaloneCellular",
+      expiresAt: result.data.expiresAt,
+    });
     expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "smartwatch.activation_secret_issued",
     }));
+    const auditInput = auditService.record.mock.calls[0][0] as Record<string, any>;
+    expect(Object.prototype.hasOwnProperty.call(auditInput.metadata, "pairingCode")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(auditInput.metadata, "qrPayload")).toBe(false);
   });
 
   it("regenerates one active smartwatch activation code without exposing device secrets", async () => {
@@ -325,6 +339,100 @@ describe("SmartwatchService", () => {
     expect(auditService.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "smartwatch.activation_secret_revoked",
     }));
+  });
+
+  it("scopes pairing sessions by state and country while allowing super admins", async () => {
+    const { service, prisma } = buildService();
+    prisma.smartwatchPairingSession.findMany.mockResolvedValue([
+      { id: "session-lagos", deviceId: "EYE-LAGOS", expiresAt: new Date(Date.now() + 60_000) },
+      { id: "session-abuja", deviceId: "EYE-ABUJA", expiresAt: new Date(Date.now() + 60_000) },
+      { id: "session-unregistered", deviceId: "EYE-UNREGISTERED", expiresAt: new Date(Date.now() + 60_000) },
+    ]);
+    prisma.smartwatchDevice.findMany.mockResolvedValue([
+      {
+        id: "lagos",
+        deviceId: "EYE-LAGOS",
+        currentOwnerType: WatchOwnerType.Person,
+        user: { profile: { country: "NG", state: "Lagos", lga: "Ikeja" } },
+      },
+      {
+        id: "abuja",
+        deviceId: "EYE-ABUJA",
+        currentOwnerType: WatchOwnerType.Person,
+        user: { profile: { country: "NG", state: "FCT", lga: "AMAC" } },
+      },
+    ]);
+
+    const stateResult = await service.adminListPairingSessions({
+      typ: "admin", sub: "state-admin", role: AdminRoleName.StateAdmin, country: "NG", state: "Lagos",
+    } as any);
+    expect(stateResult.data.map((row: any) => row.deviceId)).toEqual(["EYE-LAGOS"]);
+
+    const countryResult = await service.adminListPairingSessions({
+      typ: "admin", sub: "country-admin", role: AdminRoleName.CountryAdmin, country: "NG",
+    } as any);
+    expect(countryResult.data.map((row: any) => row.deviceId)).toEqual(["EYE-LAGOS", "EYE-ABUJA"]);
+
+    const superResult = await service.adminListPairingSessions({
+      typ: "admin", sub: "super-admin", role: AdminRoleName.SuperAdmin,
+    } as any);
+    expect(superResult.data.length).toBe(3);
+  });
+
+  it("fails closed for unlocated inventory and cross-state pairing revocation", async () => {
+    const { service, prisma } = buildService();
+    const stateAdmin = {
+      typ: "admin", sub: "state-admin", role: AdminRoleName.StateAdmin, country: "NG", state: "Lagos",
+    } as any;
+    prisma.smartwatchPairingSession.findUnique.mockResolvedValue({ id: "session-1", deviceId: "EYE-WATCH-001" });
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce({
+      id: "device-uuid",
+      deviceId: "EYE-WATCH-001",
+      currentOwnerType: WatchOwnerType.UnassignedInventory,
+      currentInventoryLocation: null,
+      user: null,
+      currentOrganization: null,
+    });
+
+    await expect(service.adminRevokePairingSession("EYE-WATCH-001", stateAdmin)).rejects.toMatchObject({ status: 403 });
+    expect(prisma.smartwatchPairingSession.update).not.toHaveBeenCalled();
+
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce({
+      id: "device-uuid",
+      deviceId: "EYE-WATCH-001",
+      currentOwnerType: WatchOwnerType.Person,
+      user: { profile: { country: "NG", state: "FCT", lga: "AMAC" } },
+      currentOrganization: null,
+      currentInventoryLocation: null,
+    });
+    await expect(service.adminRevokePairingSession("EYE-WATCH-001", stateAdmin)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("filters activation audit history through device geography", async () => {
+    const { service, prisma } = buildService();
+    prisma.auditLog.findMany.mockResolvedValue([
+      { id: "log-lagos", entityType: "smartwatch_devices", entityId: "lagos", metadata: { deviceId: "EYE-LAGOS" } },
+      { id: "log-fct", entityType: "smartwatch_devices", entityId: "fct", metadata: { deviceId: "EYE-FCT" } },
+    ]);
+    prisma.smartwatchDevice.findMany.mockResolvedValue([
+      {
+        id: "lagos",
+        deviceId: "EYE-LAGOS",
+        currentOwnerType: WatchOwnerType.Person,
+        user: { profile: { country: "NG", state: "Lagos", lga: "Ikeja" } },
+      },
+      {
+        id: "fct",
+        deviceId: "EYE-FCT",
+        currentOwnerType: WatchOwnerType.Person,
+        user: { profile: { country: "NG", state: "FCT", lga: "AMAC" } },
+      },
+    ]);
+
+    const result = await service.adminActivationHistory({
+      typ: "admin", sub: "state-admin", role: AdminRoleName.StateAdmin, country: "NG", state: "Lagos",
+    } as any);
+    expect(result.data.map((row: any) => row.id)).toEqual(["log-lagos"]);
   });
 
   it("returns device detail for admin lookup by public device id", async () => {
@@ -374,6 +482,7 @@ describe("SmartwatchService", () => {
 
     expect(prisma.smartwatchDevice.findFirst).toHaveBeenCalledWith({
       where: { deviceId: "EYE-WATCH-001" },
+      include: { user: { include: { profile: true } }, currentOrganization: true, currentInventoryLocation: true },
     });
   });
 
@@ -553,6 +662,55 @@ describe("SmartwatchService", () => {
         }),
       }),
     );
+  });
+
+  it("prevents scoped admins from issuing codes for unregistered watches", async () => {
+    const { service, prisma } = buildService();
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce(null);
+
+    await expect(service.adminIssueActivation(
+      { deviceId: "EYE-WATCH-UNREGISTERED", ttlMinutes: 10 },
+      {
+        typ: "admin",
+        sub: "admin-state",
+        role: AdminRoleName.StateAdmin,
+        country: "NG",
+        state: "Lagos",
+      } as any,
+    )).rejects.toMatchObject({ status: 403 });
+
+    expect(prisma.smartwatchPairingSession.upsert).not.toHaveBeenCalled();
+  });
+
+  it("blocks cross-state remote watch actions while allowing in-scope devices", async () => {
+    const { service, prisma } = buildService();
+    const actor = {
+      typ: "admin",
+      sub: "admin-state",
+      role: AdminRoleName.StateAdmin,
+      country: "NG",
+      state: "Lagos",
+    } as any;
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce({
+      id: "device-uuid",
+      deviceId: "EYE-WATCH-001",
+      user: { profile: { country: "NG", state: "Abuja", lga: "AMAC" } },
+      currentOrganization: null,
+    });
+
+    await expect(service.remoteWipe("device-uuid", actor)).rejects.toMatchObject({ status: 403 });
+    expect(prisma.smartwatchDevice.update).not.toHaveBeenCalled();
+
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce({
+      id: "device-uuid",
+      deviceId: "EYE-WATCH-001",
+      user: { profile: { country: "NG", state: "Lagos", lga: "Ikeja" } },
+      currentOrganization: null,
+    });
+    await service.deactivateDevice("device-uuid", actor);
+    expect(prisma.smartwatchDevice.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ isActive: false, isOnline: false }),
+    }));
   });
 
   it("activates unassigned inventory watches without inventing a user audit FK", async () => {

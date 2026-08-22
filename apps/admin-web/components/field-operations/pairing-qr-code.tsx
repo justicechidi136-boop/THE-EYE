@@ -6,13 +6,14 @@ import QRCode from "qrcode";
 type PairingQrCodeProps = {
   value: string;
   size?: number;
+  alt?: string;
 };
 
 /**
  * Renders a QR code entirely client-side (no network calls) so the one-time pairing token
  * embedded in `value` is never sent to a third-party QR image service.
  */
-export function PairingQrCode({ value, size = 220 }: PairingQrCodeProps) {
+export function PairingQrCode({ value, size = 220, alt = "Device pairing QR code" }: PairingQrCodeProps) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +62,7 @@ export function PairingQrCode({ value, size = 220 }: PairingQrCodeProps) {
     // eslint-disable-next-line @next/next/no-img-element -- data: URL is not supported by next/image
     <img
       src={dataUrl}
-      alt="Field device pairing QR code"
+      alt={alt}
       width={size}
       height={size}
       className="rounded-md border border-line bg-white p-2"

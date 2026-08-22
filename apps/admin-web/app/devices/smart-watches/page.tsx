@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "../../../components/app-shell";
 import { ActivateStandaloneWorkflow } from "../../../components/smartwatch/activate-standalone-workflow";
 import { SmartwatchSubnav } from "../../../components/smartwatch/smartwatch-subnav";
-import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
+import { MetricCard, PageHeader, Panel, StatusBadge } from "../../../components/ui";
 import { fetchSmartwatchManagementDevices } from "../../../lib/api/data";
 import { getAdminSession } from "../../../lib/session";
 import { smartwatchDeviceState } from "../../../lib/smartwatch-management";
@@ -38,6 +38,11 @@ export default async function SmartWatchesPage({ searchParams }: { searchParams:
     : { kind: "unauthorized" as const, devices: [] as const };
   const devices = result.devices;
   const online = devices.filter((device) => smartwatchDeviceState(device) === "Online").length;
+  const locked = devices.filter((device) => smartwatchDeviceState(device) === "Locked").length;
+  const deactivated = devices.filter((device) => smartwatchDeviceState(device) === "Deactivated").length;
+  const attention = devices.filter((device) =>
+    smartwatchDeviceState(device) !== "Online" || (device.batteryLevel != null && device.batteryLevel < 20),
+  ).length;
 
   return (
     <AppShell>
@@ -48,6 +53,15 @@ export default async function SmartWatchesPage({ searchParams }: { searchParams:
       />
       <SmartwatchSubnav canManage={canManage} />
       <div className="grid gap-5">
+        {result.kind === "success" ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <MetricCard label="Loaded devices" value={`${devices.length}`} detail={result.hasMore ? "More devices on the next page" : "Current admin scope"} />
+            <MetricCard label="Online" value={`${online}`} detail="Fresh heartbeat" accent="eye" />
+            <MetricCard label="Needs attention" value={`${attention}`} detail="Offline, locked or low battery" accent="eyeOrange" />
+            <MetricCard label="Locked" value={`${locked}`} detail="Activation recovery required" />
+            <MetricCard label="Deactivated" value={`${deactivated}`} detail="Administrative or security state" />
+          </div>
+        ) : null}
         {!canManage || result.kind === "unauthorized" ? (
           <Panel title="Smartwatch access">
             <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
