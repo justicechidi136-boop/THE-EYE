@@ -519,6 +519,14 @@ export type FieldPairingIssueView = {
   qrPayload: string;
 };
 
+export type FieldAssignableUserView = {
+  id: string;
+  displayName: string;
+  role: string;
+  agencyId: string | null;
+  scope: string;
+};
+
 export type FieldPermissionEffectivePreviewView = {
   profile: { id: string; code: string; name: string } | null;
   profilePermissions: string[];

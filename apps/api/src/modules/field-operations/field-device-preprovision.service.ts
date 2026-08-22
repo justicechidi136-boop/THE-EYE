@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import {
   AGENCY_ERROR_CODES,
   FIELD_ERROR_CODES,
@@ -7,6 +7,7 @@ import {
   FieldOperationalRole,
   FieldPreProvisionStatus,
   FieldProvisioningMode,
+  isFieldEligibleAdminRole,
   type Permission,
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
@@ -90,6 +91,18 @@ export class FieldDevicePreprovisionService {
       compatibleAgencyTypes,
     });
 
+    const assignedUserId = dto.assignedUserId
+      ? (await this.requireAssignableUser(dto.assignedUserId, agency)).id
+      : null;
+    const inventoryAssetRef = dto.inventoryAssetRef?.trim() || null;
+    if (inventoryAssetRef) {
+      const duplicate = await this.prisma.fieldDevice.findFirst({
+        where: { inventoryAssetRef: { equals: inventoryAssetRef, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (duplicate) throw new ConflictException("Inventory asset reference is already assigned to another device");
+    }
+
     const overrides = dto.permissionOverrides?.length ? this.policy.validateGrant(actor, dto.permissionOverrides) : [];
     const denies = dto.permissionDenies?.length ? this.policy.assertKnownPermissions(dto.permissionDenies) : [];
 
@@ -103,8 +116,10 @@ export class FieldDevicePreprovisionService {
     });
 
     const publicDeviceId = `fd_${randomToken(12)}`;
-    const device = await this.prisma.fieldDevice.create({
-      data: {
+    let device;
+    try {
+      device = await this.prisma.fieldDevice.create({
+        data: {
         publicDeviceId,
         deviceName: dto.deviceName.trim(),
         provisioningMode: FieldProvisioningMode.PreProvisioned,
@@ -114,7 +129,7 @@ export class FieldDevicePreprovisionService {
         provisionedById: actor.sub,
         permissionProfileId,
         assignedTeamId: dto.assignedTeamId?.trim() || null,
-        assignedUserId: dto.assignedUserId ?? null,
+        assignedUserId,
         assignedUnitId: dto.assignedUnitId ?? null,
         operationalRole: dto.operationalRole ?? null,
         deviceMode,
@@ -122,7 +137,7 @@ export class FieldDevicePreprovisionService {
         activationExpiresAt,
         reviewAt,
         notes: dto.notes?.trim() || null,
-        inventoryAssetRef: dto.inventoryAssetRef?.trim() || null,
+        inventoryAssetRef,
         permissionOverrides: overrides,
         permissionDenies: denies,
         authoritySnapshot: authoritySnapshot as never,
@@ -131,8 +146,16 @@ export class FieldDevicePreprovisionService {
         stateCode: scope.stateCode ?? agency.stateCode ?? undefined,
         lgaCode: scope.lgaCode ?? agency.lgaCode ?? undefined,
         metadata: {},
-      },
-    });
+        },
+      });
+    } catch (error: unknown) {
+      const code = (error as { code?: string }).code;
+      if (code === "P2002") throw new ConflictException("A device with this identifier already exists");
+      if (code === "P2003" || code === "P2023") {
+        throw new BadRequestException("One or more device assignments are invalid");
+      }
+      throw error;
+    }
 
     await this.audit.record({
       actor,
@@ -148,6 +171,43 @@ export class FieldDevicePreprovisionService {
     });
 
     return { data: this.devices.mapDevice(device) };
+  }
+
+  async listAssignableUsers(actor: JwtPayload, agencyId?: string) {
+    this.devicesAdmin.assertSupervisor(actor);
+    if (!agencyId) throw new BadRequestException("agencyId is required");
+    const agency = await this.agencies.assertFieldOperationsAssignment({ actor, agencyId });
+    const rows = await this.prisma.adminUser.findMany({
+      where: {
+        isActive: true,
+        country: agency.countryCode,
+        ...(agency.stateCode ? { state: agency.stateCode } : {}),
+        ...(agency.lgaCode ? { lga: agency.lgaCode } : {}),
+        OR: [{ agencyId: agency.id }, { agencyId: null }],
+      },
+      select: {
+        id: true,
+        displayName: true,
+        agencyId: true,
+        country: true,
+        state: true,
+        lga: true,
+        role: { select: { name: true } },
+      },
+      orderBy: { displayName: "asc" },
+      take: 200,
+    });
+    return {
+      data: rows
+        .filter((row) => isFieldEligibleAdminRole(row.role.name))
+        .map((row) => ({
+          id: row.id,
+          displayName: row.displayName,
+          role: row.role.name,
+          agencyId: row.agencyId,
+          scope: [row.country, row.state, row.lga].filter(Boolean).join(" / "),
+        })),
+    };
   }
 
   async getProvisioning(id: string, actor: JwtPayload) {
@@ -254,6 +314,25 @@ export class FieldDevicePreprovisionService {
       };
     }
     this.throwOutOfScope();
+  }
+
+  private async requireAssignableUser(
+    id: string,
+    agency: { id: string; countryCode: string; stateCode: string | null; lgaCode: string | null },
+  ) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      throw new BadRequestException("Selected officer is invalid");
+    }
+    const user = await this.prisma.adminUser.findUnique({ where: { id }, include: { role: true } });
+    if (!user || !user.isActive) throw new BadRequestException("Selected officer was not found or is inactive");
+    if (!isFieldEligibleAdminRole(user.role.name)) throw new BadRequestException("Selected user is not eligible for field operations");
+    const inScope =
+      user.country === agency.countryCode &&
+      (!agency.stateCode || user.state === agency.stateCode) &&
+      (!agency.lgaCode || user.lga === agency.lgaCode) &&
+      (!user.agencyId || user.agencyId === agency.id);
+    if (!inScope) this.throwOutOfScope();
+    return user;
   }
 
   private throwOutOfScope(): never {

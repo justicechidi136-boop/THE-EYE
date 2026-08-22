@@ -1113,6 +1113,15 @@ export async function preprovisionFieldDevice(input: PreProvisionFieldDeviceInpu
   return toFieldDeviceView(response.data);
 }
 
+export async function listFieldAssignableUsers(agencyId: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<{ data: import("../types/admin-views").FieldAssignableUserView[] }>(
+    `/admin/field-devices/assignable-users?agencyId=${encodeURIComponent(agencyId)}`,
+    { token },
+  ).then((response) => response.data);
+}
+
 export async function fetchFieldDeviceProvisioning(id: string): Promise<FieldDeviceView | null> {
   return withToken(async (token) => {
     try {

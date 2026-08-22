@@ -60,8 +60,12 @@ export default async function FieldDeviceDetailPage({ params }: { params: Promis
           <Panel title="Supervisor actions">
             <FieldDeviceActions device={device} canManage={canManage} />
           </Panel>
-          <Panel title="Device pairing">
-            <FieldDevicePairingPanel device={device} canManage={canManage} />
+          <Panel title="Supervisor token">
+            <FieldDevicePairingPanel
+              device={device}
+              canManage={canManage}
+              supervisorLabel={session?.email ?? session?.role ?? "Current administrator"}
+            />
           </Panel>
           <Panel title="Launcher policy">
             <FieldLauncherPolicyPanel deviceId={device.id} canManage={canManage} />

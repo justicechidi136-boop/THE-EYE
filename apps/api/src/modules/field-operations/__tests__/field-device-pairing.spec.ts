@@ -89,7 +89,7 @@ describe("FieldDevicePairingService", () => {
     });
 
     it("issues a token+short code and returns the plaintext exactly once", async () => {
-      const { service, devicesAdmin, prisma } = createService();
+      const { service, devicesAdmin, prisma, audit } = createService();
       devicesAdmin.requireScopedDevice.mockResolvedValue({
         id: "device-1",
         provisioningMode: FieldProvisioningMode.PreProvisioned,
@@ -108,6 +108,13 @@ describe("FieldDevicePairingService", () => {
       expect(result.data.shortCode).toMatch(/^EYE-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
       expect(typeof result.data.pairingToken).toBe("string");
       expect(result.data.pairingToken.length).toBeGreaterThan(0);
+      const expiresInMs = new Date(result.data.expiresAt).getTime() - Date.now();
+      expect(expiresInMs).toBeGreaterThan(14 * 60 * 1000);
+      expect(expiresInMs <= 15 * 60 * 1000).toBe(true);
+      expect(JSON.stringify(prisma.fieldDevicePairingToken.create.mock.calls[0][0])).not.toContain(result.data.pairingToken);
+      expect(JSON.stringify(prisma.fieldDevicePairingToken.create.mock.calls[0][0])).not.toContain(result.data.shortCode);
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain(result.data.pairingToken);
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain(result.data.shortCode);
     });
 
     it("atomically revokes the old active pairing code before creating a replacement", async () => {
