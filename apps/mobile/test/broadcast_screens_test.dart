@@ -275,14 +275,24 @@ void main() {
     bool authenticated = true,
     BroadcastFeedItem? detail,
     _FakeBroadcastSession? session,
+    bool productionButtonSizing = false,
   }) {
+    final theme = ThemeData(
+      brightness: Brightness.dark,
+      extensions: const [EyeSemanticColors.dark],
+    );
     return MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        extensions: const [EyeSemanticColors.dark],
-      ),
+      theme: productionButtonSizing
+          ? theme.copyWith(
+              filledButtonTheme: FilledButtonThemeData(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                ),
+              ),
+            )
+          : theme,
       home: AppScope(
         controller: session ??
             _FakeBroadcastSession(
@@ -508,6 +518,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("Seen near the market."), findsOneWidget);
     expect(find.text("Local resident"), findsOneWidget);
+  });
+
+  testWidgets("comments composer renders with production button sizing",
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastCommentsScreen(broadcastId: "b1"),
+        session: _FakeBroadcastSession(),
+        productionButtonSizing: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("No comments yet"), findsOneWidget);
+    expect(find.text("Add a comment"), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets("share screen invokes native share and clears loading state",

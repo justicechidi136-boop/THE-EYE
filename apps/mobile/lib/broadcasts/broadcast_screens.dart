@@ -1425,6 +1425,10 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(56, 56),
+                      padding: EdgeInsets.zero,
+                    ),
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
                         ? const SizedBox(
