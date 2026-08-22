@@ -4,20 +4,28 @@ import { SmartwatchSubnav } from "../../../../components/smartwatch/smartwatch-s
 import { PageHeader, Panel, StatusBadge } from "../../../../components/ui";
 import { fetchSosEvents } from "../../../../lib/api/data";
 import { getAdminSession } from "../../../../lib/session";
-import { canManageSmartwatches } from "../../../../lib/smartwatch-permissions";
+import { canManageSmartwatches, canViewSmartwatchSos } from "../../../../lib/smartwatch-permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function SmartWatchLiveTrackingPage() {
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
-  const sosEvents = await fetchSosEvents();
+  const canViewSos = canViewSmartwatchSos(session);
+  const sosEvents = canViewSos ? await fetchSosEvents() : [];
   const active = sosEvents.filter((event) => event.status === "Active");
 
   return (
     <AppShell>
       <PageHeader eyebrow="Devices" title="Live tracking" action={<StatusBadge tone="danger">{active.length} active</StatusBadge>} />
       <SmartwatchSubnav canManage={canManage} />
+      {!canViewSos ? (
+        <Panel title="Live tracking access">
+          <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            Your admin account does not have permission to view smartwatch emergency locations.
+          </div>
+        </Panel>
+      ) : (
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         <Panel title="Active emergency positions">
           <div className="grid min-h-[420px] gap-3">
@@ -29,7 +37,7 @@ export default async function SmartWatchLiveTrackingPage() {
                   Open live position
                 </a>
               </div>
-            )) : <p className="text-muted">No active SOS events. GPS trails refresh every 5 seconds during emergencies via `/smartwatch/sos/:id/tracking`.</p>}
+            )) : <p className="text-muted">No active smartwatch SOS events are currently available.</p>}
           </div>
         </Panel>
         <Panel title="All recent tracks">
@@ -50,6 +58,7 @@ export default async function SmartWatchLiveTrackingPage() {
           </div>
         </Panel>
       </div>
+      )}
     </AppShell>
   );
 }

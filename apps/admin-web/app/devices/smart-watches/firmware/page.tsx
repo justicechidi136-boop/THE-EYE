@@ -11,13 +11,20 @@ export const dynamic = "force-dynamic";
 export default async function SmartWatchFirmwarePage() {
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
-  const firmwareReleases = await fetchFirmwareReleases();
+  const firmwareReleases = canManage ? await fetchFirmwareReleases() : [];
 
   return (
     <AppShell>
       <PageHeader eyebrow="Devices" title="Firmware management" action={<StatusBadge tone="info">{firmwareReleases.length} releases</StatusBadge>} />
       <SmartwatchSubnav canManage={canManage} />
       <div className="grid gap-5">
+        {!canManage ? (
+          <Panel title="Firmware access">
+            <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+              Your admin account does not have permission to view or publish smartwatch firmware.
+            </div>
+          </Panel>
+        ) : null}
         <Panel title="Publish signed firmware">
           <FirmwarePublishForm canManage={canManage} />
         </Panel>

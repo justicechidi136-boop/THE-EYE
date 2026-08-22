@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, InlineAlert } from "../form-primitives";
@@ -7,10 +8,12 @@ import { Button, InlineAlert } from "../form-primitives";
 type SmartwatchDeviceActionsProps = {
   deviceId: string;
   isActive: boolean;
+  activationStatus: string;
+  restrictionReason?: string | null;
   canManage: boolean;
 };
 
-export function SmartwatchDeviceActions({ deviceId, isActive, canManage }: SmartwatchDeviceActionsProps) {
+export function SmartwatchDeviceActions({ deviceId, isActive, activationStatus, restrictionReason, canManage }: SmartwatchDeviceActionsProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -20,8 +23,12 @@ export function SmartwatchDeviceActions({ deviceId, isActive, canManage }: Smart
     return <InlineAlert tone="warning">You do not have permission to manage smartwatches.</InlineAlert>;
   }
 
-  async function runAction(action: "activate" | "deactivate" | "remote-wipe") {
-    if (action === "remote-wipe" && !window.confirm("Queue remote wipe for this watch? This cannot be undone.")) return;
+  async function runAction(action: "activate" | "deactivate") {
+    const confirmation = {
+      activate: "Reactivate this watch? The action will be recorded in the audit log.",
+      deactivate: "Deactivate this watch and stop its authenticated device traffic?",
+    }[action];
+    if (!window.confirm(confirmation)) return;
     setBusy(action);
     setError(null);
     setMessage(null);
@@ -40,8 +47,17 @@ export function SmartwatchDeviceActions({ deviceId, isActive, canManage }: Smart
 
   return (
     <div className="grid gap-3">
+      {activationStatus.toUpperCase() === "LOCKED" ? (
+        <InlineAlert tone="warning">
+          Activation is locked{restrictionReason ? `: ${restrictionReason}` : ""}. Use the authorized recovery workflow to issue one new code.
+        </InlineAlert>
+      ) : null}
       <div className="flex flex-wrap gap-2">
-        {isActive ? (
+        {activationStatus.toUpperCase() === "LOCKED" ? (
+          <Link className="rounded-md bg-eye px-3 py-2 text-sm font-semibold text-white" href="/devices/smart-watches/pending-activations">
+            Open recovery
+          </Link>
+        ) : isActive ? (
           <Button disabled={busy !== null} variant="danger" onClick={() => runAction("deactivate")}>
             Disable watch
           </Button>
@@ -50,9 +66,6 @@ export function SmartwatchDeviceActions({ deviceId, isActive, canManage }: Smart
             Activate watch
           </Button>
         )}
-        <Button disabled={busy !== null} variant="danger" onClick={() => runAction("remote-wipe")}>
-          Remote wipe
-        </Button>
       </div>
       {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}

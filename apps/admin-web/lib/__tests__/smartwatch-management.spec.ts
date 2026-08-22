@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ApiError } from "../api/client";
 import {
   loadSmartwatchManagementDevices,
@@ -7,6 +9,15 @@ import {
 import { canManageSmartwatches } from "../smartwatch-permissions";
 
 describe("smartwatch management dashboard", () => {
+  it("renders activation QR codes locally without sending secrets to a third party", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components", "smartwatch", "activate-standalone-workflow.tsx"),
+      "utf8",
+    );
+    expect(source.includes("PairingQrCode")).toBe(true);
+    expect(source.includes("quickchart.io")).toBe(false);
+  });
+
   it("loads a permitted admin's smartwatch devices from the fleet endpoint", async () => {
     let requestedPath = "";
     const result = await loadSmartwatchManagementDevices(
@@ -59,6 +70,21 @@ describe("smartwatch management dashboard", () => {
     const deactivated = toWatchInventoryRowView({ id: "off", activationStatus: "USABLE", isActive: false });
     expect(smartwatchDeviceState(locked)).toBe("Locked");
     expect(smartwatchDeviceState(deactivated)).toBe("Deactivated");
+  });
+
+  it("treats stale online flags as offline and accepts a fresh heartbeat", () => {
+    const stale = toWatchInventoryRowView({
+      id: "stale",
+      onlineStatus: "Online",
+      lastSeen: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+    });
+    const fresh = toWatchInventoryRowView({
+      id: "fresh",
+      onlineStatus: "Online",
+      lastSeen: new Date(Date.now() - 60 * 1000).toISOString(),
+    });
+    expect(smartwatchDeviceState(stale)).toBe("Offline");
+    expect(smartwatchDeviceState(fresh)).toBe("Online");
   });
 
   it("normalizes malformed or missing optional metadata without throwing", () => {

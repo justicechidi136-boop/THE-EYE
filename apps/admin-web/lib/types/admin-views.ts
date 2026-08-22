@@ -435,8 +435,15 @@ export type SmartwatchDeviceView = {
   security: string;
   alerts: string;
   isActive: boolean;
+  activationStatus: string;
+  activationLockedAt: string | null;
+  activationLockReason: string | null;
+  deactivatedAt: string | null;
+  deactivationReason: string | null;
+  isOnline: boolean;
   lastSeen: string;
-  lastGps: { lat: number; lng: number; accuracy: string };
+  lastSeenAt: string | null;
+  lastGps: { lat: number | null; lng: number | null; accuracy: string };
   lastGpsAt?: string;
 };
 

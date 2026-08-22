@@ -14,7 +14,9 @@ export default async function WatchFleetInventoryPage({ searchParams }: { search
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
   const params = await searchParams;
-  const { data, nextCursor, hasMore } = await fetchWatchInventory(params);
+  const { data, nextCursor, hasMore } = canManage
+    ? await fetchWatchInventory(params)
+    : { data: [], nextCursor: null, hasMore: false };
   const ownerDetail =
     params.ownerType && params.ownerId
       ? await fetchWatchOwnerDetail(params.ownerType, params.ownerId).catch(() => null)
@@ -24,6 +26,13 @@ export default async function WatchFleetInventoryPage({ searchParams }: { search
     <AppShell>
       <PageHeader eyebrow="Devices" title="Watch inventory" />
       <SmartwatchSubnav canManage={canManage} />
+      {!canManage ? (
+        <Panel title="Inventory access">
+          <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            Your admin account does not have permission to view smartwatch inventory.
+          </div>
+        </Panel>
+      ) : null}
       {ownerDetail ? (
         <Panel title={`${ownerDetail.ownerName} — ${ownerDetail.totalWatches} watches`}>
           <p className="text-sm text-muted">

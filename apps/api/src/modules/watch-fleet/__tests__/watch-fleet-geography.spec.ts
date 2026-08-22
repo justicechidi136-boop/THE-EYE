@@ -5,6 +5,7 @@ describe("watch fleet geography helpers", () => {
     const where = buildGeographyDeviceWhere({ country: "Nigeria", state: "Lagos", lga: "Ikeja" });
     expect(where != null).toBe(true);
     expect(where != null && "OR" in where).toBe(true);
+    expect(JSON.stringify(where).includes("currentInventoryLocation")).toBe(true);
   });
 
   it("returns undefined for super-admin scope", () => {

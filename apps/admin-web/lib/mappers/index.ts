@@ -409,7 +409,9 @@ export function toSmartwatchDeviceView(record: Record<string, unknown>): Smartwa
   const owner = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Unknown owner";
   const battery = toNumber(record.batteryLevel ?? record.batteryPercent, 0);
   const signal = toNumber(record.signalStrength, 0);
-  const online = Boolean(record.isOnline);
+  const lastSeenAt = record.lastSeenAt ? String(record.lastSeenAt) : null;
+  const lastSeenMs = lastSeenAt ? new Date(lastSeenAt).getTime() : Number.NaN;
+  const online = Boolean(record.isOnline) && Number.isFinite(lastSeenMs) && Date.now() - lastSeenMs <= 10 * 60 * 1000;
   const needsAttention = battery < 20 || signal < 25;
   const signatureStatus = String(record.firmwareSignatureStatus ?? "Unknown");
 
@@ -430,11 +432,20 @@ export function toSmartwatchDeviceView(record: Record<string, unknown>): Smartwa
     security: signatureStatus === "Invalid" ? "Certificate invalid" : "Certificate valid",
     alerts: record.criticalAlertsEnabled === false ? "Disabled" : "Enabled",
     isActive: record.isActive !== false,
+    activationStatus: String(record.activationStatus ?? "USABLE"),
+    activationLockedAt: record.activationLockedAt ? String(record.activationLockedAt) : null,
+    activationLockReason: record.activationLockReason ? String(record.activationLockReason) : null,
+    deactivatedAt: record.securityDeactivatedAt || record.remoteDisabledAt
+      ? String(record.securityDeactivatedAt ?? record.remoteDisabledAt)
+      : null,
+    deactivationReason: record.deactivationReason ? String(record.deactivationReason) : null,
+    isOnline: online,
     lastSeen: formatTime(record.lastSeenAt as string),
+    lastSeenAt,
     lastGpsAt: record.lastGpsAt ? String(record.lastGpsAt) : undefined,
     lastGps: {
-      lat: toNumber(record.lastLatitude),
-      lng: toNumber(record.lastLongitude),
+      lat: record.lastLatitude == null ? null : toNumber(record.lastLatitude),
+      lng: record.lastLongitude == null ? null : toNumber(record.lastLongitude),
       accuracy: record.lastGpsAccuracy ? `${toNumber(record.lastGpsAccuracy)}m` : "-",
     },
   };

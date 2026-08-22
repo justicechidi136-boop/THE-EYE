@@ -13,7 +13,21 @@ export default async function SmartWatchDetailPage({ params }: { params: Promise
   const { id } = await params;
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
-  const device = await fetchSmartwatchDeviceDetail(id);
+  const device = canManage ? await fetchSmartwatchDeviceDetail(id) : null;
+
+  if (!canManage) {
+    return (
+      <AppShell>
+        <PageHeader eyebrow="Devices" title="Smartwatch access" action={<StatusBadge tone="warning">Restricted</StatusBadge>} />
+        <SmartwatchSubnav canManage={false} />
+        <Panel title="Device detail">
+          <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            Your admin account does not have permission to view or manage smartwatch devices.
+          </div>
+        </Panel>
+      </AppShell>
+    );
+  }
 
   if (!device) {
     return (
@@ -41,17 +55,29 @@ export default async function SmartWatchDetailPage({ params }: { params: Promise
             <p><span className="font-semibold">Signal:</span> {device.signal}%</p>
             <p><span className="font-semibold">Last seen:</span> {device.lastSeen}</p>
             <p><span className="font-semibold">Active:</span> {device.isActive ? "Yes" : "No"}</p>
+            <p><span className="font-semibold">Activation:</span> {device.activationStatus}</p>
+            <p><span className="font-semibold">Security state:</span> {device.deactivationReason ?? device.activationLockReason ?? "No active restriction"}</p>
           </div>
         </Panel>
         <Panel title="Administration">
-          <SmartwatchDeviceActions deviceId={device.id} isActive={device.isActive} canManage={canManage} />
+          <SmartwatchDeviceActions
+            deviceId={device.id}
+            isActive={device.isActive}
+            activationStatus={device.activationStatus}
+            restrictionReason={device.activationLockReason ?? device.deactivationReason}
+            canManage={canManage}
+          />
         </Panel>
         <Panel title="Latest GPS">
           <div className="grid gap-3 text-sm">
-            <a className="font-semibold text-eye" href={`https://www.google.com/maps/search/?api=1&query=${device.lastGps.lat},${device.lastGps.lng}`}>
-              {device.lastGps.lat}, {device.lastGps.lng}
-            </a>
-            <p className="text-muted">Accuracy {device.lastGps.accuracy}{device.lastGpsAt ? ` · ${new Date(device.lastGpsAt).toLocaleString()}` : ""}</p>
+            {device.lastGps.lat != null && device.lastGps.lng != null ? (
+              <>
+                <a className="font-semibold text-eye" href={`https://www.google.com/maps/search/?api=1&query=${device.lastGps.lat},${device.lastGps.lng}`}>
+                  {device.lastGps.lat}, {device.lastGps.lng}
+                </a>
+                <p className="text-muted">Accuracy {device.lastGps.accuracy}{device.lastGpsAt ? ` · ${new Date(device.lastGpsAt).toLocaleString()}` : ""}</p>
+              </>
+            ) : <p className="text-muted">No authorized GPS fix has been reported by this watch.</p>}
           </div>
         </Panel>
         <Panel title="Recent GPS updates">

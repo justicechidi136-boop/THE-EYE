@@ -15,7 +15,9 @@ export default async function WatchFleetPage({ searchParams }: { searchParams: S
   const session = await getAdminSession();
   const canManage = canManageSmartwatches(session);
   const params = await searchParams;
-  const { data, nextCursor, hasMore } = await fetchWatchOwnerSummaries(params);
+  const { data, nextCursor, hasMore } = canManage
+    ? await fetchWatchOwnerSummaries(params)
+    : { data: [], nextCursor: null, hasMore: false };
 
   return (
     <AppShell>
@@ -30,6 +32,13 @@ export default async function WatchFleetPage({ searchParams }: { searchParams: S
       />
       <SmartwatchSubnav canManage={canManage} />
       <div className="grid gap-5">
+        {!canManage ? (
+          <Panel title="Fleet access">
+            <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+              Your admin account does not have permission to view smartwatch fleet ownership.
+            </div>
+          </Panel>
+        ) : null}
         <Panel title="Owner summary">
           <WatchOwnerSummaryTable
             owners={data}

@@ -374,6 +374,7 @@ describe("SmartwatchService", () => {
 
     expect(prisma.smartwatchDevice.findFirst).toHaveBeenCalledWith({
       where: { deviceId: "EYE-WATCH-001" },
+      include: { user: { include: { profile: true } }, currentOrganization: true, currentInventoryLocation: true },
     });
   });
 
@@ -553,6 +554,55 @@ describe("SmartwatchService", () => {
         }),
       }),
     );
+  });
+
+  it("prevents scoped admins from issuing codes for unregistered watches", async () => {
+    const { service, prisma } = buildService();
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce(null);
+
+    await expect(service.adminIssueActivation(
+      { deviceId: "EYE-WATCH-UNREGISTERED", ttlMinutes: 10 },
+      {
+        typ: "admin",
+        sub: "admin-state",
+        role: AdminRoleName.StateAdmin,
+        country: "NG",
+        state: "Lagos",
+      } as any,
+    )).rejects.toMatchObject({ status: 403 });
+
+    expect(prisma.smartwatchPairingSession.upsert).not.toHaveBeenCalled();
+  });
+
+  it("blocks cross-state remote watch actions while allowing in-scope devices", async () => {
+    const { service, prisma } = buildService();
+    const actor = {
+      typ: "admin",
+      sub: "admin-state",
+      role: AdminRoleName.StateAdmin,
+      country: "NG",
+      state: "Lagos",
+    } as any;
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce({
+      id: "device-uuid",
+      deviceId: "EYE-WATCH-001",
+      user: { profile: { country: "NG", state: "Abuja", lga: "AMAC" } },
+      currentOrganization: null,
+    });
+
+    await expect(service.remoteWipe("device-uuid", actor)).rejects.toMatchObject({ status: 403 });
+    expect(prisma.smartwatchDevice.update).not.toHaveBeenCalled();
+
+    prisma.smartwatchDevice.findUnique.mockResolvedValueOnce({
+      id: "device-uuid",
+      deviceId: "EYE-WATCH-001",
+      user: { profile: { country: "NG", state: "Lagos", lga: "Ikeja" } },
+      currentOrganization: null,
+    });
+    await service.deactivateDevice("device-uuid", actor);
+    expect(prisma.smartwatchDevice.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ isActive: false, isOnline: false }),
+    }));
   });
 
   it("activates unassigned inventory watches without inventing a user audit FK", async () => {
