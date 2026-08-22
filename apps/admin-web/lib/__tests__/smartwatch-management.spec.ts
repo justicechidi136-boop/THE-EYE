@@ -6,16 +6,26 @@ import {
   smartwatchDeviceState,
   toWatchInventoryRowView,
 } from "../smartwatch-management";
+import {
+  smartwatchLocationFreshness,
+  toSmartwatchTrackingLocation,
+} from "../smartwatch-live-tracking";
 import { canManageSmartwatches } from "../smartwatch-permissions";
 
 describe("smartwatch management dashboard", () => {
   it("renders activation QR codes locally without sending secrets to a third party", () => {
-    const source = readFileSync(
+    const workflowSource = readFileSync(
       join(process.cwd(), "components", "smartwatch", "activate-standalone-workflow.tsx"),
       "utf8",
     );
-    expect(source.includes("PairingQrCode")).toBe(true);
-    expect(source.includes("quickchart.io")).toBe(false);
+    const rendererSource = readFileSync(
+      join(process.cwd(), "components", "field-operations", "pairing-qr-code.tsx"),
+      "utf8",
+    );
+    expect(workflowSource.includes("PairingQrCode")).toBe(true);
+    expect(rendererSource.includes("QRCode.toDataURL(value")).toBe(true);
+    expect(rendererSource.includes("fetch(")).toBe(false);
+    expect(`${workflowSource}${rendererSource}`.includes("quickchart.io")).toBe(false);
   });
 
   it("loads a permitted admin's smartwatch devices from the fleet endpoint", async () => {
@@ -113,5 +123,39 @@ describe("smartwatch management dashboard", () => {
     );
     expect(result.kind).toBe("error");
     expect(result.kind === "error" ? result.status : null).toBe(502);
+  });
+
+  it("normalizes bounded live tracking data without inventing missing GPS", () => {
+    expect(toSmartwatchTrackingLocation({ data: { event: { latitude: null, longitude: null } } })).toBe(null);
+    expect(toSmartwatchTrackingLocation({
+      data: {
+        latest: { latitude: 6.5244, longitude: 3.3792, accuracy: 8, capturedAt: "2026-08-22T10:00:00.000Z" },
+        pollIntervalMs: 100,
+      },
+    })).toEqual({
+      latitude: 6.5244,
+      longitude: 3.3792,
+      accuracyMeters: 8,
+      capturedAt: "2026-08-22T10:00:00.000Z",
+      pollIntervalMs: 5000,
+    });
+  });
+
+  it("identifies fresh, stale and unavailable smartwatch locations", () => {
+    const now = new Date("2026-08-22T10:00:30.000Z").getTime();
+    expect(smartwatchLocationFreshness("2026-08-22T10:00:01.000Z", now)).toBe("Live");
+    expect(smartwatchLocationFreshness("2026-08-22T09:59:00.000Z", now)).toBe("Stale");
+    expect(smartwatchLocationFreshness(null, now)).toBe("Unavailable");
+  });
+
+  it("polls only the selected active emergency through the authorized admin BFF", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components", "smartwatch", "smartwatch-live-tracking.tsx"),
+      "utf8",
+    );
+    expect(source.includes("/api/admin/smartwatch/sos-events/")).toBe(true);
+    expect(source.includes("window.setInterval(refresh, POLL_INTERVAL_MS)")).toBe(true);
+    expect(source.includes("window.clearInterval(timer)")).toBe(true);
+    expect(source.includes("controller.abort()")).toBe(true);
   });
 });

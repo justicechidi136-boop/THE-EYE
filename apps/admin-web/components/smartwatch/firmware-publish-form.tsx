@@ -35,7 +35,7 @@ export function FirmwarePublishForm({ canManage }: { canManage: boolean }) {
       });
       const payload = (await response.json()) as { message?: string };
       if (!response.ok) throw new Error(payload.message ?? "Publish failed");
-      setMessage(`Published firmware ${form.version}.`);
+      setMessage(`Published firmware metadata ${form.version}. No device update was initiated.`);
       setForm({ version: "", title: "", releaseNotes: "", downloadUrl: "", fileHash: "", signature: "" });
       router.refresh();
     } catch (publishError) {
@@ -55,7 +55,7 @@ export function FirmwarePublishForm({ canManage }: { canManage: boolean }) {
         <input className="h-11 rounded-md border border-line px-3" placeholder="Signature" value={form.signature} onChange={(e) => setForm({ ...form, signature: e.target.value })} required />
         <textarea className="min-h-[88px] rounded-md border border-line px-3 py-2 lg:col-span-2" placeholder="Release notes" value={form.releaseNotes} onChange={(e) => setForm({ ...form, releaseNotes: e.target.value })} />
       </div>
-      <Button type="submit" disabled={busy}>Publish firmware</Button>
+      <Button type="submit" disabled={busy}>Publish firmware metadata</Button>
       {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
     </form>

@@ -110,20 +110,31 @@ androidComponents {
                 variant.signingConfig?.setConfig(android.signingConfigs.getByName("debug"))
                 return@onVariants
             }
-            if (!hasStagingReleaseSigning) {
-                throw GradleException(
-                    "Watch staging release signing is not configured. " +
-                        "Set THE_EYE_STAGING_KEYSTORE_PATH, THE_EYE_STAGING_KEYSTORE_PASSWORD, " +
-                        "THE_EYE_STAGING_KEY_ALIAS, and THE_EYE_STAGING_KEY_PASSWORD " +
-                        "(or android/key.properties staging* entries). " +
-                        "Emergency override only: THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true",
-                )
+            if (hasStagingReleaseSigning) {
+                variant.signingConfig?.setConfig(android.signingConfigs.getByName("stagingRelease"))
             }
-            variant.signingConfig?.setConfig(android.signingConfigs.getByName("stagingRelease"))
             return@onVariants
         }
 
         variant.signingConfig?.setConfig(android.signingConfigs.getByName("debug"))
+    }
+}
+
+if (!hasStagingReleaseSigning && !allowDebugStagingRelease) {
+    gradle.taskGraph.whenReady {
+        val stagingReleaseRequested = allTasks.any { task ->
+            task.name.contains("StagingRelease", ignoreCase = true) ||
+                task.name.contains("ManagedStagingRelease", ignoreCase = true)
+        }
+        if (stagingReleaseRequested) {
+            throw GradleException(
+                "Watch staging release signing is not configured. " +
+                    "Set THE_EYE_STAGING_KEYSTORE_PATH, THE_EYE_STAGING_KEYSTORE_PASSWORD, " +
+                    "THE_EYE_STAGING_KEY_ALIAS, and THE_EYE_STAGING_KEY_PASSWORD " +
+                    "(or android/key.properties staging* entries). " +
+                    "Emergency override only: THE_EYE_ALLOW_DEBUG_STAGING_RELEASE=true",
+            )
+        }
     }
 }
 

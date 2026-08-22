@@ -26,13 +26,16 @@ export default async function SmartWatchFirmwarePage() {
           </Panel>
         ) : null}
         <Panel title="Publish signed firmware">
+          <div className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            This publishes signed release metadata for eligible watches. The current watch app does not yet download or apply firmware, so publication must not be treated as device deployment.
+          </div>
           <FirmwarePublishForm canManage={canManage} />
         </Panel>
         <Panel title="Release history">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="bg-surfaceMuted text-xs uppercase text-muted">
-                <tr><th className="px-4 py-3">Version</th><th className="px-4 py-3">Title</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Signature</th><th className="px-4 py-3">Devices</th></tr>
+                <tr><th className="px-4 py-3">Version</th><th className="px-4 py-3">Title</th><th className="px-4 py-3">Metadata status</th><th className="px-4 py-3">Signature metadata</th><th className="px-4 py-3">Retrievals started</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {firmwareReleases.length ? firmwareReleases.map((release) => (
