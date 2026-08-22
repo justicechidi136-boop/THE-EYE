@@ -82,6 +82,7 @@ class AuthService {
   Future<AuthRequestResult> login({
     required String identifier,
     required String password,
+    bool remainSignedIn = false,
   }) async {
     final validation =
         validateLoginForm(identifier: identifier, password: password);
@@ -99,6 +100,7 @@ class AuthService {
         email: parsed.kind == LoginIdentifierKind.email ? parsed.email : null,
         phone: parsed.kind == LoginIdentifierKind.phone ? parsed.phone : null,
         password: password,
+        remainSignedIn: remainSignedIn,
       );
       await _sessionStore.save(session);
       final profileComplete = await _resolveProfileComplete(session);
@@ -131,6 +133,7 @@ class AuthService {
     required String confirmPassword,
     required String firstName,
     required String lastName,
+    bool remainSignedIn = false,
   }) async {
     final validation = validateRegisterForm(
       email: email,
@@ -153,6 +156,7 @@ class AuthService {
         password: password,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        remainSignedIn: remainSignedIn,
       );
       await _sessionStore.save(exchange.session);
       logAuthEvent("Auth registration succeeded for email");
@@ -324,6 +328,7 @@ class AuthService {
     required String phone,
     required String code,
     String purpose = "login",
+    bool remainSignedIn = false,
   }) async {
     final otpError = validateOtpCode(code);
     if (otpError != null) {
@@ -345,7 +350,11 @@ class AuthService {
 
     try {
       final session = await _apiClient.verifyPhoneOtp(
-          phone: normalized, code: code.trim(), purpose: purpose);
+        phone: normalized,
+        code: code.trim(),
+        purpose: purpose,
+        remainSignedIn: remainSignedIn,
+      );
       await _sessionStore.save(session);
       final profileComplete = await _resolveProfileComplete(session);
       logAuthEvent("Phone verification succeeded");

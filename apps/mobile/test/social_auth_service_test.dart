@@ -49,6 +49,7 @@ class _FakeApiClient extends TheEyeApiClient {
     required String provider,
     String? deviceId,
     String? platform,
+    bool remainSignedIn = false,
     Duration timeout = const Duration(seconds: 30),
   }) {
     return onExchange();
@@ -140,7 +141,8 @@ void main() {
       isTrue,
     );
     expect(
-      SocialAuthService.shouldFallbackToGoogleSignInPlugin("app-not-authorized"),
+      SocialAuthService.shouldFallbackToGoogleSignInPlugin(
+          "app-not-authorized"),
       isFalse,
     );
   });

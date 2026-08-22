@@ -113,6 +113,11 @@ export class AuthController {
 
   @Post("phone/verify-otp")
   verifyPhoneOtp(@Body() dto: PhoneOtpVerifyDto) {
-    return this.authService.verifyPhoneOtp(dto.phone, dto.code, dto.purpose ?? "login");
+    return this.authService.verifyPhoneOtp(
+      dto.phone,
+      dto.code,
+      dto.purpose ?? "login",
+      dto.remainSignedIn === true,
+    );
   }
 }

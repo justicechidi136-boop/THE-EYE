@@ -756,7 +756,7 @@ export class NeighborhoodWatchService {
         ...(authorLabel ? { authorLabel } : {}),
         targetType: "COMMUNITY",
         communityId,
-      }),
+      }, actor.sub),
     };
   }
 
@@ -827,7 +827,7 @@ export class NeighborhoodWatchService {
         targetType: "DYNAMIC_AREA",
         dynamicAreaKey: presence.areaKey,
         areaLabel: presence.areaLabel,
-      }),
+      }, actor.sub),
     };
   }
 
@@ -863,7 +863,7 @@ export class NeighborhoodWatchService {
           ...row,
           authorLabel: "Current Area Visitor",
           commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
-        }),
+        }, actor.sub),
       )),
       meta: {
         targetType: "DYNAMIC_AREA",
@@ -1057,7 +1057,7 @@ export class NeighborhoodWatchService {
             ...row,
             ...(labels.has(row.authorId) ? { authorLabel: labels.get(row.authorId) } : {}),
             commentCount: Array.isArray(row.comments) ? row.comments.length : 0,
-          }),
+          }, actor.sub),
         ),
       ),
     };
@@ -1928,7 +1928,7 @@ export class NeighborhoodWatchService {
         ...post,
         ...(authorLabel ? { authorLabel } : {}),
         commentCount,
-      }),
+      }, actor.sub),
     };
   }
 
@@ -2137,7 +2137,10 @@ export class NeighborhoodWatchService {
 
   /** Strip exact GPS from public community feed payloads. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async toPublicPostPayload(post: Record<string, unknown>): Promise<any> {
+  private async toPublicPostPayload(
+    post: Record<string, unknown>,
+    viewerId?: string,
+  ): Promise<any> {
     const {
       latitude: _lat,
       longitude: _lng,
@@ -2145,6 +2148,8 @@ export class NeighborhoodWatchService {
       ...rest
     } = post as Record<string, unknown>;
     const mediaRows = Array.isArray(rest.media) ? rest.media : [];
+    const reactionRows = Array.isArray(rest.reactions) ? rest.reactions : [];
+    const { reactions: _reactions, ...publicRest } = rest;
     const areaLabel =
       typeof rest.areaLabel === "string" && rest.areaLabel.trim()
         ? rest.areaLabel
@@ -2169,8 +2174,12 @@ export class NeighborhoodWatchService {
       }),
     );
     return {
-      ...rest,
+      ...publicRest,
       media,
+      reactionCount: reactionRows.length,
+      viewerReacted: viewerId != null && reactionRows.some((row) =>
+        typeof row === "object" && row != null && (row as { userId?: unknown }).userId === viewerId
+      ),
       ...(areaLabel ? { approximateLocationLabel: areaLabel } : {}),
       hasApproximateLocation: _lat != null && _lng != null,
     };

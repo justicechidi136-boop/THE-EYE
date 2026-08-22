@@ -193,6 +193,10 @@ abstract final class TheEyeApiPaths {
       "/neighborhood-watch/posts/$postId/comments";
   static String neighborhoodWatchPostComment(String postId, String commentId) =>
       "/neighborhood-watch/posts/$postId/comments/$commentId";
+  static String neighborhoodWatchPostReactions(String postId) =>
+      "/neighborhood-watch/posts/$postId/reactions";
+  static String neighborhoodWatchPostReaction(String postId, String type) =>
+      "/neighborhood-watch/posts/$postId/reactions/$type";
   static String neighborhoodWatchCommunityStatistics(String communityId) =>
       "/neighborhood-watch/communities/$communityId/statistics";
   static String neighborhoodWatchCommunityReports(String communityId) =>

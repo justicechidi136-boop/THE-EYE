@@ -20,6 +20,11 @@ export class RegisterDto {
   @IsString()
   @MinLength(1)
   lastName!: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  remainSignedIn?: boolean;
 }
 
 export class LoginDto {
@@ -42,6 +47,11 @@ export class LoginDto {
   @IsOptional()
   @IsBoolean()
   admin?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  remainSignedIn?: boolean;
 }
 
 export class GoogleLoginDto {
@@ -68,6 +78,11 @@ export class GoogleLoginDto {
   @IsOptional()
   @IsString()
   lastName?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  remainSignedIn?: boolean;
 }
 
 export class RefreshDto {
@@ -120,6 +135,11 @@ export class PhoneOtpVerifyDto {
   @IsOptional()
   @IsString()
   purpose?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  remainSignedIn?: boolean;
 }
 
 const FIREBASE_PROVIDERS = ["google.com", "apple.com"] as const;
@@ -144,6 +164,11 @@ export class FirebaseExchangeDto {
   @IsOptional()
   @IsString()
   platform?: "android" | "ios";
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  remainSignedIn?: boolean;
 }
 
 export class FirebaseLinkDto {

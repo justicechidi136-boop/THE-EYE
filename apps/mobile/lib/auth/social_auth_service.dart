@@ -82,7 +82,10 @@ class SocialAuthService {
     return Platform.isIOS || Platform.isMacOS;
   }
 
-  Future<SocialAuthResult> signInWithGoogle({String? deviceId}) async {
+  Future<SocialAuthResult> signInWithGoogle({
+    String? deviceId,
+    bool remainSignedIn = false,
+  }) async {
     if (_signInInFlight) {
       return const SocialAuthResult(
         status: SocialAuthStatus.providerError,
@@ -113,6 +116,7 @@ class SocialAuthService {
         idToken: idToken,
         provider: "google.com",
         deviceId: deviceId,
+        remainSignedIn: remainSignedIn,
       );
     } on FirebaseAuthException catch (error) {
       final diagnostic = AuthDiagnostics.forFirebaseAuthException(error.code);
@@ -213,7 +217,10 @@ class SocialAuthService {
     }
   }
 
-  Future<SocialAuthResult> signInWithApple({String? deviceId}) async {
+  Future<SocialAuthResult> signInWithApple({
+    String? deviceId,
+    bool remainSignedIn = false,
+  }) async {
     if (!isAppleSignInSupported) {
       return const SocialAuthResult(
         status: SocialAuthStatus.providerError,
@@ -250,6 +257,7 @@ class SocialAuthService {
         idToken: idToken,
         provider: "apple.com",
         deviceId: deviceId,
+        remainSignedIn: remainSignedIn,
       );
     } on SignInWithAppleAuthorizationException catch (error) {
       if (error.code == AuthorizationErrorCode.canceled) {
@@ -449,6 +457,7 @@ class SocialAuthService {
     required String idToken,
     required String provider,
     String? deviceId,
+    bool remainSignedIn = false,
   }) async {
     try {
       final exchange = await _apiClient.exchangeFirebaseToken(
@@ -456,6 +465,7 @@ class SocialAuthService {
         provider: provider,
         deviceId: deviceId,
         platform: _platformName(),
+        remainSignedIn: remainSignedIn,
       );
       await _sessionStore.save(exchange.session);
       logAuthEvent("Firebase exchange succeeded for $provider");

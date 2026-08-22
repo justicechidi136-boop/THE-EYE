@@ -48,6 +48,7 @@ export type CreateStolenVehicleBroadcastDto = {
   policeReportReference?: string;
   contactMethod: string;
   vinLastFour?: string;
+  vin?: string;
   directionOfTravel?: string;
   rewardNotice?: string;
   metadata?: Record<string, unknown>;
@@ -211,6 +212,9 @@ export function validateStolenVehicleBroadcastDto(dto: CreateStolenVehicleBroadc
   if (!dto.model?.trim()) throw new BadRequestException("model is required");
   if (!dto.colour?.trim()) throw new BadRequestException("colour is required");
   if (!dto.registrationNumber?.trim()) throw new BadRequestException("registrationNumber is required");
+  if (dto.vin != null && dto.vin.trim().length > 64) {
+    throw new BadRequestException("vin or chassis number must be 64 characters or fewer");
+  }
   if (!dto.stolenAt) throw new BadRequestException("stolenAt is required");
   if (!dto.lastSeenAt) throw new BadRequestException("lastSeenAt is required");
   const lastSeen = new Date(dto.lastSeenAt);

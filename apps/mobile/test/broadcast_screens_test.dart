@@ -36,11 +36,15 @@ class _FakeBroadcastFeedService extends BroadcastFeedService {
     this.detail,
     this.listMineItems = const [],
     this.listMineError,
+    this.comments = const [],
+    this.sharePayload,
   });
 
   final BroadcastFeedItem? detail;
   final List<BroadcastFeedItem> listMineItems;
   final Object? listMineError;
+  final List<BroadcastCommentItem> comments;
+  final BroadcastPublicSharePayload? sharePayload;
   int markReadCalls = 0;
   int listMineCalls = 0;
 
@@ -78,6 +82,22 @@ class _FakeBroadcastFeedService extends BroadcastFeedService {
     }
     return listMineItems;
   }
+
+  @override
+  Future<List<BroadcastCommentItem>> listComments({
+    required String accessToken,
+    required String broadcastId,
+  }) async =>
+      comments;
+
+  @override
+  Future<BroadcastPublicSharePayload> getPublicSharePayload({
+    required String accessToken,
+    required String broadcastId,
+    BroadcastFeedItem? fallbackSource,
+  }) async =>
+      sharePayload ??
+      BroadcastPublicShareMapper.fromFeedItemFallback(fallbackSource!);
 }
 
 class _FakeBroadcastSightingService extends BroadcastSightingService {
@@ -101,11 +121,15 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
     BroadcastFeedItem? detail,
     List<BroadcastFeedItem> mineItems = const [],
     Object? listMineError,
+    List<BroadcastCommentItem> comments = const [],
+    BroadcastPublicSharePayload? sharePayload,
     BroadcastSubmissionService? submissionService,
   })  : broadcastFeedService = _FakeBroadcastFeedService(
           detail: detail,
           listMineItems: mineItems,
           listMineError: listMineError,
+          comments: comments,
+          sharePayload: sharePayload,
         ),
         broadcastSubmissionService =
             submissionService ?? BroadcastSubmissionService();
@@ -422,6 +446,121 @@ void main() {
     expect(comment.body, "Seen near the market.");
   });
 
+  testWidgets(
+      "comments screen leaves loading state when session is unavailable",
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastCommentsScreen(broadcastId: "b1"),
+        authenticated: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text("Sign in again to view broadcast comments."), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byTooltip("Back"), findsOneWidget);
+  });
+
+  testWidgets("comments screen renders empty and populated states",
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastCommentsScreen(broadcastId: "b1"),
+        session: _FakeBroadcastSession(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text("No comments yet"), findsOneWidget);
+
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastCommentsScreen(broadcastId: "b1", key: ValueKey("b2")),
+        session: _FakeBroadcastSession(
+          comments: [
+            BroadcastCommentItem(
+              id: "c1",
+              body: "Seen near the market.",
+              createdAt: DateTime.utc(2026, 8, 22),
+              authorName: "Local resident",
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text("Seen near the market."), findsOneWidget);
+    expect(find.text("Local resident"), findsOneWidget);
+  });
+
+  testWidgets("share screen invokes native share and clears loading state",
+      (tester) async {
+    var invoked = 0;
+    final payload = BroadcastPublicSharePayload.fromApiJson({
+      "data": {
+        "id": "b1",
+        "type": "MissingPerson",
+        "status": "Active",
+        "title": "Missing person: Ada",
+        "summary": "Please review this public safety alert.",
+        "deepLink": "/broadcasts/b1",
+      },
+    });
+    await tester.pumpWidget(
+      wrap(
+        BroadcastShareScreen(
+          broadcastId: "b1",
+          shareInvoker: (_) async => invoked += 1,
+        ),
+        session: _FakeBroadcastSession(sharePayload: payload),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(invoked, 1);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text("Share"), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, "Share"));
+    await tester.pumpAndSettle();
+    expect(invoked, 2);
+  });
+
+  testWidgets("share failure clears its guard and allows retry",
+      (tester) async {
+    var invoked = 0;
+    final payload = BroadcastPublicSharePayload.fromApiJson({
+      "data": {
+        "id": "b1",
+        "type": "Safety",
+        "status": "Active",
+        "title": "Safety alert",
+        "summary": "Review this alert.",
+      },
+    });
+    await tester.pumpWidget(
+      wrap(
+        BroadcastShareScreen(
+          broadcastId: "b1",
+          shareInvoker: (_) async {
+            invoked += 1;
+            throw StateError("share unavailable");
+          },
+        ),
+        session: _FakeBroadcastSession(sharePayload: payload),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(invoked, 1);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+        find.textContaining("Unable to open the share sheet"), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, "Share"));
+    await tester.pumpAndSettle();
+    expect(invoked, 2);
+  });
+
   testWidgets("FUNC-011 detail leaves spinner and shows content",
       (tester) async {
     final detail = BroadcastFeedItem(
@@ -532,6 +671,8 @@ void main() {
         "year": "2022",
         "colour": "Red",
         "registrationMasked": "*****3XY",
+        "registrationNumber": "LAG-123-XY",
+        "vin": "1HGCM82633A004352",
         "vinLastFour": "3456",
         "stolenAt": "2026-08-01T13:10:00.000Z",
         "lastKnownLocation": "Ikeja under bridge",
@@ -563,14 +704,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text("STOLEN VEHICLE"), findsOneWidget);
     expect(
-        find.text("Stolen Vehicle: Toyota Corolla *****3XY"), findsOneWidget);
+        find.text("Stolen Vehicle: Toyota Corolla LAG-123-XY"), findsOneWidget);
     expect(find.text("Vehicle Information"), findsOneWidget);
     expect(find.text("Year"), findsOneWidget);
     expect(find.text("2022"), findsOneWidget);
-    expect(find.text("Plate"), findsOneWidget);
-    expect(find.text("*****3XY"), findsWidgets);
+    expect(find.text("Plate Number"), findsOneWidget);
+    expect(find.text("LAG-123-XY"), findsWidgets);
     expect(find.text("VIN"), findsOneWidget);
-    expect(find.text("3456"), findsOneWidget);
+    expect(find.text("1HGCM82633A004352"), findsOneWidget);
+    expect(find.byTooltip("Copy plate number"), findsOneWidget);
+    expect(find.byTooltip("Copy VIN"), findsOneWidget);
     expect(find.text("Vehicle Photos"), findsOneWidget);
     expect(find.text("Vehicle photo 1"), findsOneWidget);
     expect(find.text("Last Seen"), findsOneWidget);

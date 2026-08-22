@@ -143,6 +143,8 @@ class CommunityPostItem {
     this.authorName,
     this.authorLabel,
     this.commentCount = 0,
+    this.reactionCount = 0,
+    this.viewerReacted = false,
     this.media = const [],
     this.hasApproximateLocation = false,
     this.approximateLocationLabel,
@@ -161,11 +163,40 @@ class CommunityPostItem {
   final String? authorName;
   final String? authorLabel;
   final int commentCount;
+  final int reactionCount;
+  final bool viewerReacted;
   final List<CommunityPostMediaReference> media;
   final bool hasApproximateLocation;
   final String? approximateLocationLabel;
   final double? latitude;
   final double? longitude;
+
+  CommunityPostItem copyWith({
+    int? commentCount,
+    int? reactionCount,
+    bool? viewerReacted,
+  }) {
+    return CommunityPostItem(
+      id: id,
+      title: title,
+      body: body,
+      type: type,
+      verificationStatus: verificationStatus,
+      confidenceScore: confidenceScore,
+      createdAt: createdAt,
+      communityId: communityId,
+      authorName: authorName,
+      authorLabel: authorLabel,
+      commentCount: commentCount ?? this.commentCount,
+      reactionCount: reactionCount ?? this.reactionCount,
+      viewerReacted: viewerReacted ?? this.viewerReacted,
+      media: media,
+      hasApproximateLocation: hasApproximateLocation,
+      approximateLocationLabel: approximateLocationLabel,
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
 
   String get displayAuthor {
     final label = authorLabel?.trim();
@@ -212,6 +243,8 @@ class CommunityPostItem {
       authorName: authorName,
       authorLabel: json["authorLabel"] as String?,
       commentCount: commentCount,
+      reactionCount: (json["reactionCount"] as num?)?.toInt() ?? 0,
+      viewerReacted: json["viewerReacted"] == true,
       media: mediaRaw is List
           ? mediaRaw
               .whereType<Map>()
@@ -1499,6 +1532,31 @@ class NeighborhoodWatchService {
           (map["durationSeconds"] as num?)?.toInt() ?? durationSeconds,
       mediaType: hasVoice ? (mediaType ?? IncidentMediaType.audio) : mediaType,
     );
+  }
+
+  Future<void> addReaction({
+    required String accessToken,
+    required String postId,
+    String type = "Helpful",
+  }) async {
+    final response = await _apiClient.postJson(
+      TheEyeApiPaths.neighborhoodWatchPostReactions(postId),
+      {"type": type},
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+  }
+
+  Future<void> removeReaction({
+    required String accessToken,
+    required String postId,
+    String type = "Helpful",
+  }) async {
+    final response = await _apiClient.deleteJson(
+      TheEyeApiPaths.neighborhoodWatchPostReaction(postId, type),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
   }
 
   Future<CommunityCommentItem> updateComment({

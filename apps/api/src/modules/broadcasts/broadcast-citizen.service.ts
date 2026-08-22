@@ -197,6 +197,9 @@ export class BroadcastCitizenService {
     const vinLastFour = dto.vinLastFour?.trim() || (typeof safeMetadata.vinLastFour === "string"
       ? safeMetadata.vinLastFour.trim()
       : undefined);
+    const vin = dto.vin?.trim().toUpperCase() || (typeof safeMetadata.vin === "string"
+      ? safeMetadata.vin.trim().toUpperCase()
+      : undefined);
     return this.createCitizenBroadcast(BroadcastType.StolenVehicle, dto, actor, {
       title: `Stolen vehicle: ${dto.make.trim()} ${dto.model.trim()} (${maskRegistrationNumber(dto.registrationNumber)})`,
       body: this.buildStolenVehicleBody(dto),
@@ -216,6 +219,7 @@ export class BroadcastCitizenService {
         theftDescription: dto.theftDescription,
         policeReportReference: dto.policeReportReference,
         ...(vinLastFour ? { vinLastFour } : {}),
+        ...(vin ? { vin } : {}),
         ...(sourceVehicleId ? { sourceVehicleId } : {}),
         ...(vehiclePhotoObjectKeys.length > 0 ? { vehiclePhotoObjectKeys } : {}),
         ...(vehiclePhotos.length > 0 ? { vehiclePhotos } : {}),

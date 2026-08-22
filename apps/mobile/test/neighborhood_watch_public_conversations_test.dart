@@ -302,6 +302,25 @@ void main() {
       expect(post.displayLocation, "4.8156, 7.0498");
       expect(post.media.single.isVideo, isTrue);
     });
+
+    test("post model exposes privacy-safe viewer reaction state", () {
+      final post = CommunityPostItem.fromJson({
+        "id": "p-liked",
+        "title": "Gate update",
+        "body": "The gate is open again.",
+        "type": "Discussion",
+        "verificationStatus": "PendingVerification",
+        "confidenceScore": 0,
+        "reactionCount": 3,
+        "viewerReacted": true,
+      });
+
+      expect(post.reactionCount, 3);
+      expect(post.viewerReacted, isTrue);
+      expect(
+          post.copyWith(viewerReacted: false, reactionCount: 2).reactionCount,
+          2);
+    });
   });
 
   testWidgets(
