@@ -205,6 +205,7 @@ describe("BroadcastCitizenService", () => {
         distinguishingFeatures: "Rear bumper dent",
         contactMethod: "in_app",
         vinLastFour: "1A2B",
+        vin: "1HGCM82633A004352",
         metadata: {
           sourceVehicleId: "vehicle-42",
           vehiclePhotoObjectKeys: ["garage/vehicle-42/photo-1.jpg"],
@@ -222,6 +223,7 @@ describe("BroadcastCitizenService", () => {
     expect(metadata?.colour).toBe("Blue");
     expect(metadata?.registrationNumber).toBe("ABC-1234");
     expect(metadata?.vinLastFour).toBe("1A2B");
+    expect(metadata?.vin).toBe("1HGCM82633A004352");
     expect(metadata?.lastSeenAt).toBe("2026-08-06T09:30:00.000Z");
     expect(metadata?.lastKnownLocation).toBe("Allen Avenue, Ikeja");
     expect(metadata?.theftDescription).toBe(

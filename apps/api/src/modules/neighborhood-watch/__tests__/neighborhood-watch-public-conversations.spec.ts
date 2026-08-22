@@ -610,7 +610,10 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
               createdAt: new Date("2026-08-18T09:00:00.000Z"),
             },
           ],
-          reactions: [],
+          reactions: [
+            { userId: "traveler-1", type: "Helpful" },
+            { userId: "resident-1", type: "Helpful" },
+          ],
           comments: [],
           author: {
             id: "traveler-1",
@@ -628,6 +631,11 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
     expect(result.data.latitude).toBeUndefined();
     expect(result.data.longitude).toBeUndefined();
     expect(result.data.hasApproximateLocation).toBe(true);
+    expect(result.data.reactionCount).toBe(2);
+    expect(result.data.viewerReacted).toBe(true);
+    expect(
+      Object.prototype.hasOwnProperty.call(result.data, "reactions"),
+    ).toBe(false);
     expect(result.data.media[0].signedGetUrl).toBe(
       "https://storage.test/signed-object",
     );

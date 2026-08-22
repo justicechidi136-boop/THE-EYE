@@ -35,6 +35,7 @@ type LoginInput = {
   phone?: string;
   password: string;
   admin?: boolean;
+  remainSignedIn?: boolean;
 };
 
 type GoogleInput = {
@@ -43,6 +44,7 @@ type GoogleInput = {
   email: string;
   firstName?: string;
   lastName?: string;
+  remainSignedIn?: boolean;
 };
 
 @Injectable()
@@ -62,7 +64,7 @@ export class AuthService {
     return dto.admin ? this.loginAdmin(dto) : this.loginUser(dto);
   }
 
-  async register(dto: { email: string; password: string; firstName?: string; lastName?: string }) {
+  async register(dto: { email: string; password: string; firstName?: string; lastName?: string; remainSignedIn?: boolean }) {
     const email = this.normalizeEmail(dto.email);
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -102,7 +104,7 @@ export class AuthService {
     });
 
     const profileComplete = isCitizenProfileComplete(user.profile ?? null);
-    const session = await this.issueUserSession(user);
+    const session = await this.issueUserSession(user, undefined, dto.remainSignedIn === true);
     return { ...session, profileComplete };
   }
 
@@ -131,7 +133,7 @@ export class AuthService {
     });
 
     const profileComplete = isCitizenProfileComplete(user.profile ?? null);
-    const session = await this.issueUserSession(user);
+    const session = await this.issueUserSession(user, undefined, dto.remainSignedIn === true);
     return { ...session, profileComplete };
   }
 
@@ -158,7 +160,7 @@ export class AuthService {
     });
 
     const profileComplete = isCitizenProfileComplete(user.profile ?? null);
-    const session = await this.issueUserSession(user);
+    const session = await this.issueUserSession(user, undefined, dto.remainSignedIn === true);
     return { ...session, profileComplete };
   }
 
@@ -254,7 +256,11 @@ export class AuthService {
       });
       if (!user) throw new UnauthorizedException("User not found");
       this.assertUserCanSignIn(user);
-      return this.issueUserSession(user, stored.familyId);
+      return this.issueUserSession(
+        user,
+        stored.familyId,
+        payload.authMode === "persistent",
+      );
     }
 
     throw new UnauthorizedException("Invalid refresh token owner");
@@ -342,7 +348,12 @@ export class AuthService {
       : { ok: true };
   }
 
-  async verifyPhoneOtp(phone: string, code: string, purpose: string) {
+  async verifyPhoneOtp(
+    phone: string,
+    code: string,
+    purpose: string,
+    remainSignedIn = false,
+  ) {
     const normalizedPhone = normalizePhoneNumber(phone);
     if (!isValidPhoneNumber(normalizedPhone)) throw new BadRequestException("Enter a valid phone number");
 
@@ -369,7 +380,7 @@ export class AuthService {
     });
 
     await this.prisma.phoneOtp.update({ where: { id: otp.id }, data: { verifiedAt: new Date(), userId: user.id } });
-    return this.issueUserSession(user);
+    return this.issueUserSession(user, undefined, remainSignedIn);
   }
 
   private async loginUser(dto: LoginInput) {
@@ -393,7 +404,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
     this.assertUserCanSignIn(user);
-    return this.issueUserSession(user);
+    return this.issueUserSession(user, undefined, dto.remainSignedIn === true);
   }
 
   private async loginAdmin(dto: LoginInput) {
@@ -428,6 +439,7 @@ export class AuthService {
       trustedReporter?: unknown;
     },
     familyId?: string,
+    persistent = false,
   ) {
     const role = user.trustedReporter ? UserRole.TrustedReporter : UserRole.Citizen;
     const payload: JwtPayload = {
@@ -441,7 +453,7 @@ export class AuthService {
       preferredLocale: user.profile?.preferredLocale ?? undefined,
       effectivePreferredLocale: effectivePreferredLocale(user.profile?.preferredLocale),
     };
-    return this.issueSession(payload, { userId: user.id }, familyId);
+    return this.issueSession(payload, { userId: user.id }, familyId, persistent);
   }
 
   private async issueAdminSession(
@@ -499,10 +511,22 @@ export class AuthService {
     return payload as typeof payload & { sub: string; email: string };
   }
 
-  private async issueSession(payload: JwtPayload, owner: { userId?: string; adminUserId?: string }, familyId?: string) {
+  private async issueSession(
+    payload: JwtPayload,
+    owner: { userId?: string; adminUserId?: string },
+    familyId?: string,
+    persistent = false,
+  ) {
     const accessToken = signJwt(payload, requireJwtAccessSecret(this.config), this.config.get<string>("JWT_ACCESS_TTL", "15m"));
-    const refreshPayload: JwtPayload = { sub: payload.sub, typ: payload.typ, jti: randomUUID() };
-    const refreshTtl = this.config.get<string>("JWT_REFRESH_TTL", "30d");
+    const refreshPayload: JwtPayload = {
+      sub: payload.sub,
+      typ: payload.typ,
+      jti: randomUUID(),
+      ...(persistent ? { authMode: "persistent" } : {}),
+    };
+    const refreshTtl = persistent
+      ? this.config.get<string>("JWT_PERSISTENT_REFRESH_TTL", "365d")
+      : this.config.get<string>("JWT_REFRESH_TTL", "30d");
     const refreshToken = signJwt(refreshPayload, requireJwtRefreshSecret(this.config), refreshTtl);
     const expiresAt = new Date(Date.now() + parseTtl(refreshTtl, 30 * 24 * 60 * 60) * 1000);
 

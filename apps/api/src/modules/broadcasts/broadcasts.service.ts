@@ -953,6 +953,8 @@ export class BroadcastsService {
       "year",
       "colour",
       "registrationMasked",
+      "registrationNumber",
+      "vin",
       "vinLastFour",
       "stolenAt",
       "lastSeenAt",

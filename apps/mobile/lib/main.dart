@@ -10,6 +10,7 @@ import "package:google_fonts/google_fonts.dart";
 import "package:image_picker/image_picker.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
+import "package:share_plus/share_plus.dart";
 import "package:the_eye_flutter_l10n/the_eye_locales.dart";
 import "package:url_launcher/url_launcher.dart";
 
@@ -2217,6 +2218,46 @@ class AppController extends SessionAccessor
     }
   }
 
+  Future<String?> toggleCommunityPostLike(CommunityPostItem post) async {
+    if (!isAuthenticated || accessToken == null) {
+      return "Sign in to react to community posts.";
+    }
+    final index = communityFeed.indexWhere((item) => item.id == post.id);
+    if (index < 0) return "Community post is unavailable.";
+    final wasLiked = communityFeed[index].viewerReacted;
+    communityFeed[index] = communityFeed[index].copyWith(
+      viewerReacted: !wasLiked,
+      reactionCount: wasLiked
+          ? (communityFeed[index].reactionCount > 0
+              ? communityFeed[index].reactionCount - 1
+              : 0)
+          : communityFeed[index].reactionCount + 1,
+    );
+    notifyListeners();
+    try {
+      if (wasLiked) {
+        await _neighborhoodWatchService.removeReaction(
+          accessToken: accessToken!,
+          postId: post.id,
+        );
+      } else {
+        await _neighborhoodWatchService.addReaction(
+          accessToken: accessToken!,
+          postId: post.id,
+        );
+      }
+      return null;
+    } on IncidentApiException catch (error) {
+      communityFeed[index] = post;
+      notifyListeners();
+      return error.userMessage;
+    } catch (_) {
+      communityFeed[index] = post;
+      notifyListeners();
+      return "Unable to update your reaction. Try again.";
+    }
+  }
+
   Future<void> loadCommunityPatrols() async {
     final community = selectedCommunity;
     if (!isAuthenticated || accessToken == null || community == null) return;
@@ -3340,6 +3381,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     final result = await controller.authService.login(
       identifier: _identifierController.text,
       password: _passwordController.text,
+      remainSignedIn: controller.remainSignedIn,
     );
     if (!mounted) return;
 
@@ -3383,8 +3425,12 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     SocialAuthResult result;
     try {
       result = provider == SocialAuthProvider.google
-          ? await controller.socialAuthService.signInWithGoogle()
-          : await controller.socialAuthService.signInWithApple();
+          ? await controller.socialAuthService.signInWithGoogle(
+              remainSignedIn: controller.remainSignedIn,
+            )
+          : await controller.socialAuthService.signInWithApple(
+              remainSignedIn: controller.remainSignedIn,
+            );
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -3816,6 +3862,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
       confirmPassword: _confirmPasswordController.text,
       firstName: _firstNameController.text,
       lastName: _lastNameController.text,
+      remainSignedIn: controller.remainSignedIn,
     );
     if (!mounted) return;
 
@@ -4214,6 +4261,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final result = await controller.authService.verifyPhoneOtp(
       phone: phone,
       code: _otpController.text,
+      remainSignedIn: controller.remainSignedIn,
     );
     if (!mounted) return;
 
@@ -6865,6 +6913,7 @@ class _StolenVehicleBroadcastScreenState
           "theftDescription": theftDescriptionController.text.trim(),
           "contactMethod": "in_app",
           "lastKnownLocation": lastKnownLocationController.text.trim(),
+          if (vin.isNotEmpty) "vin": vin.toUpperCase(),
           if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
           "metadata": {
             if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty)
@@ -6874,6 +6923,7 @@ class _StolenVehicleBroadcastScreenState
             if (year.isNotEmpty) "year": parsedYear ?? year,
             "colour": normalizedColor,
             "registrationNumber": plateController.text.trim(),
+            if (vin.isNotEmpty) "vin": vin.toUpperCase(),
             if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
             if (savedVehiclePhotoObjectKeys.isNotEmpty)
               "vehiclePhotoObjectKeys": savedVehiclePhotoObjectKeys,
@@ -9202,6 +9252,39 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     );
   }
 
+  Future<void> _toggleLike(
+    AppController controller,
+    CommunityPostItem post,
+  ) async {
+    final error = await controller.toggleCommunityPostLike(post);
+    if (!mounted || error == null) return;
+    showAppSnackBar(context, error, isError: true);
+  }
+
+  Future<void> _sharePost(CommunityPostItem post) async {
+    final parts = <String>[
+      post.title,
+      if (post.body.trim().isNotEmpty) post.body.trim(),
+      if (post.displayLocation != null) post.displayLocation!,
+      "Open THE EYE to view this Neighborhood Watch conversation: ${NeighborhoodWatchDestinations.post(post.id)}",
+    ];
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          subject: post.title,
+          text: parts.join("\n\n"),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        "Unable to open the share sheet. Try again.",
+        isError: true,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
@@ -9224,6 +9307,19 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
             if (canStart)
               Column(
                 children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.of(context).pushNamed(
+                        NeighborhoodWatchDestinations.create,
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text(
+                        "What's happening in your neighborhood?",
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       NwPrototypeActionTile(
@@ -9349,27 +9445,72 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                 };
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: NwPrototypeListCard(
-                    leading: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: verificationTone.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      NwPrototypeListCard(
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: verificationTone.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.forum_outlined,
+                            color: verificationTone,
+                          ),
+                        ),
+                        title:
+                            "${_conversationTypeLabel(post.type)}\n${post.title}",
+                        subtitle: detailLines.join("\n"),
+                        badge: NwPrototypePill(
+                          label: post.verificationStatus,
+                          selected:
+                              post.verificationStatus != "PendingVerification",
+                          color: verificationTone,
+                        ),
+                        onTap: () => _openDiscussion(controller, post),
                       ),
-                      child:
-                          Icon(Icons.forum_outlined, color: verificationTone),
-                    ),
-                    title:
-                        "${_conversationTypeLabel(post.type)}\n${post.title}",
-                    subtitle: detailLines.join("\n"),
-                    badge: NwPrototypePill(
-                      label: post.verificationStatus,
-                      selected:
-                          post.verificationStatus != "PendingVerification",
-                      color: verificationTone,
-                    ),
-                    onTap: () => _openDiscussion(controller, post),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton.icon(
+                              onPressed: () => unawaited(
+                                _toggleLike(controller, post),
+                              ),
+                              icon: Icon(
+                                post.viewerReacted
+                                    ? Icons.thumb_up
+                                    : Icons.thumb_up_outlined,
+                              ),
+                              label: Text(
+                                post.reactionCount > 0
+                                    ? "Like ${post.reactionCount}"
+                                    : "Like",
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: TextButton.icon(
+                              onPressed: () =>
+                                  _openDiscussion(controller, post),
+                              icon: const Icon(Icons.chat_bubble_outline),
+                              label: Text(
+                                comments > 0 ? "Comment $comments" : "Comment",
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: TextButton.icon(
+                              onPressed: () => unawaited(_sharePost(post)),
+                              icon: const Icon(Icons.share_outlined),
+                              label: const Text("Share"),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 );
               }),

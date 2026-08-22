@@ -285,6 +285,35 @@ describe("AuthService login", () => {
     );
   });
 
+  it("issues a bounded persistent renewable session when requested", async () => {
+    const password = "Password123!";
+    const { service } = createAuthService({
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "user-1",
+          email: "citizen@theeye.local",
+          phone: null,
+          passwordHash: hashPassword(password),
+          status: "Active",
+          trustedReporter: null,
+        }),
+      },
+    });
+
+    const result = await service.login({
+      email: "citizen@theeye.local",
+      password,
+      remainSignedIn: true,
+    });
+    const refresh = verifyJwt(
+      result.refreshToken,
+      "test-refresh-secret-32-characters-min",
+    );
+
+    expect(refresh.authMode).toBe("persistent");
+    expect(refresh.exp - refresh.iat).toBe(365 * 24 * 60 * 60);
+  });
+
   it("rejects invalid credentials without revealing account existence", async () => {
     const { service } = createAuthService({
       user: {
@@ -369,6 +398,45 @@ describe("AuthService refresh rotation", () => {
     const createArgs = refreshTokenStore.create.mock.calls[0][0];
     expect(createArgs.data.familyId).toBe("family-1");
     expect(createArgs.data.userId).toBe("user-1");
+  });
+
+  it("preserves the persistent renewable-session policy during rotation", async () => {
+    const token = signJwt(
+      {
+        sub: "user-1",
+        typ: "user",
+        jti: "persistent-refresh-1",
+        authMode: "persistent",
+      },
+      refreshSecret,
+      "1h",
+    );
+    const refreshTokenStore = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "stored-persistent-1",
+        userId: "user-1",
+        adminUserId: null,
+        familyId: "family-persistent-1",
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      create: jest.fn().mockResolvedValue({}),
+    };
+    const { service } = createAuthService({
+      refreshToken: refreshTokenStore,
+      user: { findUnique: jest.fn().mockResolvedValue(activeUser()) },
+    });
+
+    const session = await service.refresh(token);
+    const refreshed = verifyJwt(session.refreshToken, refreshSecret);
+
+    expect(refreshed.authMode).toBe("persistent");
+    expect(refreshed.exp - refreshed.iat).toBe(365 * 24 * 60 * 60);
+    expect(refreshTokenStore.create.mock.calls[0][0].data.familyId).toBe(
+      "family-persistent-1",
+    );
   });
 
   it("rejects revoked refresh-token reuse and revokes its family", async () => {

@@ -184,22 +184,30 @@ void main() {
 
     test("successful login stores session tokens", () async {
       final store = InMemoryAuthSessionStore();
+      Map<String, dynamic>? requestBody;
       final client = TheEyeApiClient(
-        httpClient: MockClient((_) async => http.Response(
-              jsonEncode({
-                "accessToken": "access-token",
-                "refreshToken": "refresh-token",
-                "user": {"sub": "user-1"}
-              }),
-              200,
-            )),
+        httpClient: MockClient((request) async {
+          requestBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              "accessToken": "access-token",
+              "refreshToken": "refresh-token",
+              "user": {"sub": "user-1"}
+            }),
+            200,
+          );
+        }),
       );
       final service = AuthService(apiClient: client, sessionStore: store);
       final result = await service.login(
-          identifier: "citizen@theeye.local", password: "Password123!");
+        identifier: "citizen@theeye.local",
+        password: "Password123!",
+        remainSignedIn: true,
+      );
 
       expect(result.isSuccess, isTrue);
       expect((await store.load())?.accessToken, "access-token");
+      expect(requestBody?["remainSignedIn"], isTrue);
     });
 
     test("successful registration stores session and profile flag", () async {

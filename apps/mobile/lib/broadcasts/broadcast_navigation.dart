@@ -202,10 +202,14 @@ Route<dynamic>? resolveBroadcastRoute(
         ),
       );
     case BroadcastRouteKind.share:
+      final source = settings.arguments is BroadcastFeedItem
+          ? settings.arguments as BroadcastFeedItem
+          : null;
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => BroadcastShareScreen(
           broadcastId: parsed.broadcastId!,
+          fallbackSource: source,
         ),
       );
     case BroadcastRouteKind.sighting:

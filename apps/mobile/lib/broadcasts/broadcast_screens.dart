@@ -25,6 +25,7 @@ import "../widgets/section_card.dart";
 import "../voice/ai_voice_note_card.dart";
 import "../voice/ai_voice_service.dart";
 import "broadcast_feed_service.dart";
+import "broadcast_public_share.dart";
 import "broadcast_action_policy.dart";
 import "broadcast_media_upload_service.dart";
 import "broadcast_navigation.dart";
@@ -586,6 +587,7 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                                     ? null
                                     : () => Navigator.of(context).pushNamed(
                                           "${BroadcastRoutes.center}/${widget.broadcastId}/share",
+                                          arguments: item,
                                         ),
                                 icon: const Icon(Icons.share_outlined),
                                 label: Text(l10n.broadcastShare),
@@ -826,12 +828,12 @@ class _BroadcastDetailBody extends StatelessWidget {
     final vehicleYear = _metaAny(const ["year", "vehicleYear"]);
     final vehicleColor = _metaAny(const ["colour", "color", "vehicleColor"]);
     final vehiclePlate = _metaAny(const [
-      "registrationMasked",
       "registrationNumber",
       "plateNumber",
       "licensePlate",
+      "registrationMasked",
     ]);
-    final vehicleVin = _metaAny(const ["vinLastFour", "vin"]);
+    final vehicleVin = _metaAny(const ["vin", "chassisNumber", "vinLastFour"]);
     final vehicleLastSeenAt =
         _metaDateAny(const ["lastSeenAt", "stolenAt", "theftAt"]);
     final vehicleLastSeenAddress = _metaAny(
@@ -1046,13 +1048,35 @@ class _BroadcastDetailBody extends StatelessWidget {
           ],
           if (vehiclePlate != null) ...[
             const SizedBox(height: 8),
-            Text("Plate", style: Theme.of(context).textTheme.titleSmall),
-            Text(vehiclePlate),
+            Text("Plate Number", style: Theme.of(context).textTheme.titleSmall),
+            Row(
+              children: [
+                Expanded(child: SelectableText(vehiclePlate)),
+                IconButton(
+                  tooltip: "Copy plate number",
+                  onPressed: () => Clipboard.setData(
+                    ClipboardData(text: vehiclePlate),
+                  ),
+                  icon: const Icon(Icons.copy_outlined),
+                ),
+              ],
+            ),
           ],
           if (vehicleVin != null) ...[
             const SizedBox(height: 8),
             Text("VIN", style: Theme.of(context).textTheme.titleSmall),
-            Text(vehicleVin),
+            Row(
+              children: [
+                Expanded(child: SelectableText(vehicleVin)),
+                IconButton(
+                  tooltip: "Copy VIN",
+                  onPressed: () => Clipboard.setData(
+                    ClipboardData(text: vehicleVin),
+                  ),
+                  icon: const Icon(Icons.copy_outlined),
+                ),
+              ],
+            ),
           ],
           const SizedBox(height: 16),
           Text("Vehicle Photos",
@@ -1114,14 +1138,17 @@ class BroadcastCommentsScreen extends StatefulWidget {
 class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
   final _commentController = TextEditingController();
   List<BroadcastCommentItem> _comments = const [];
+  bool _didLoad = false;
   bool _loading = true;
   bool _submitting = false;
   BroadcastCommentItem? _replyTo;
   String? _error;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didLoad) return;
+    _didLoad = true;
     unawaited(_load());
   }
 
@@ -1133,7 +1160,13 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
 
   Future<void> _load() async {
     final session = BroadcastSession.require(context);
-    if (session.accessToken == null) return;
+    if (session.accessToken == null) {
+      setState(() {
+        _loading = false;
+        _error = "Sign in again to view broadcast comments.";
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -1622,29 +1655,49 @@ class BroadcastShareScreen extends StatefulWidget {
 
 class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
   BroadcastSharePayload? _payload;
+  bool _didLoad = false;
   bool _loading = true;
   String? _error;
   bool _shareOpened = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didLoad) return;
+    _didLoad = true;
     unawaited(_load());
   }
 
   Future<void> _load() async {
     final session = BroadcastSession.require(context);
-    if (session.accessToken == null) return;
+    if (session.accessToken == null) {
+      setState(() {
+        _loading = false;
+        _error = "Sign in again to share this broadcast.";
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final payload = await session.broadcastFeedService.getSharePayload(
-        accessToken: session.accessToken!,
-        broadcastId: widget.broadcastId,
-        fallbackSource: widget.fallbackSource,
-      );
+      late final BroadcastSharePayload payload;
+      try {
+        payload = await session.broadcastFeedService
+            .getSharePayload(
+              accessToken: session.accessToken!,
+              broadcastId: widget.broadcastId,
+              fallbackSource: widget.fallbackSource,
+            )
+            .timeout(const Duration(seconds: 12));
+      } on TimeoutException {
+        final fallback = widget.fallbackSource;
+        if (fallback == null) rethrow;
+        payload = BroadcastSharePayload.fromPublic(
+          BroadcastPublicShareMapper.fromFeedItemFallback(fallback),
+        );
+      }
       if (!mounted) return;
       setState(() {
         _payload = payload;
@@ -1679,7 +1732,6 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
         );
       }
     } catch (_) {
-      _shareOpened = false;
       if (mounted) {
         showBroadcastSnackBar(
           context,
@@ -1687,6 +1739,8 @@ class _BroadcastShareScreenState extends State<BroadcastShareScreen> {
           isError: true,
         );
       }
+    } finally {
+      _shareOpened = false;
     }
   }
 

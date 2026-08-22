@@ -614,12 +614,14 @@ class TheEyeApiClient {
     String? email,
     String? phone,
     required String password,
+    bool remainSignedIn = false,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final payload = <String, Object?>{
       "password": password,
       if (email != null) "email": email,
       if (phone != null) "phone": phone,
+      "remainSignedIn": remainSignedIn,
     };
     final response =
         await postJson(TheEyeApiPaths.authLogin, payload, timeout: timeout);
@@ -631,6 +633,7 @@ class TheEyeApiClient {
     required String password,
     required String firstName,
     required String lastName,
+    bool remainSignedIn = false,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final payload = <String, Object?>{
@@ -638,6 +641,7 @@ class TheEyeApiClient {
       "password": password,
       "firstName": firstName,
       "lastName": lastName,
+      "remainSignedIn": remainSignedIn,
     };
     final response =
         await postJson(TheEyeApiPaths.authRegister, payload, timeout: timeout);
@@ -755,11 +759,17 @@ class TheEyeApiClient {
     required String phone,
     required String code,
     String purpose = "login",
+    bool remainSignedIn = false,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final response = await postJson(
       TheEyeApiPaths.authVerifyPhoneOtp,
-      {"phone": phone, "code": code, "purpose": purpose},
+      {
+        "phone": phone,
+        "code": code,
+        "purpose": purpose,
+        "remainSignedIn": remainSignedIn,
+      },
       timeout: timeout,
     );
     return _sessionFromResponse(response);
@@ -770,6 +780,7 @@ class TheEyeApiClient {
     required String provider,
     String? deviceId,
     String? platform,
+    bool remainSignedIn = false,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final payload = <String, Object?>{
@@ -777,6 +788,7 @@ class TheEyeApiClient {
       "provider": provider,
       if (deviceId != null && deviceId.isNotEmpty) "deviceId": deviceId,
       if (platform != null && platform.isNotEmpty) "platform": platform,
+      "remainSignedIn": remainSignedIn,
     };
     final response = await postJson(
       TheEyeApiPaths.authFirebaseExchange,

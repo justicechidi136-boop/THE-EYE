@@ -291,8 +291,7 @@ void main() {
       }),
     );
     final service = NeighborhoodWatchService(apiClient: apiClient);
-    final context =
-        await service.resolveContext(accessToken: "token");
+    final context = await service.resolveContext(accessToken: "token");
     expect(context.locationStatus, NwLocationStatus.locationRequired);
     expect(context.publicCommunity, isNull);
   });
@@ -304,7 +303,10 @@ void main() {
         expect(request.method, "PATCH");
         expect(request.url.path,
             endsWith(TheEyeApiPaths.neighborhoodWatchHomeCommunity));
-        return http.Response(jsonEncode({"data": {"homeCommunityId": "c1"}}),
+        return http.Response(
+            jsonEncode({
+              "data": {"homeCommunityId": "c1"}
+            }),
             200);
       }),
     );
@@ -412,5 +414,30 @@ void main() {
     expect(page.items.first.media.first.signedGetUrl,
         "https://storage.test/photo-1.jpg");
     expect(page.items.first.displayLocation, "4.8156, 7.0498");
+  });
+
+  test("community post reactions use authorized Helpful add/remove routes",
+      () async {
+    final requests = <http.Request>[];
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response("{}", 200);
+      }),
+    );
+    final service = NeighborhoodWatchService(apiClient: apiClient);
+
+    await service.addReaction(accessToken: "token", postId: "post-1");
+    await service.removeReaction(accessToken: "token", postId: "post-1");
+
+    expect(requests, hasLength(2));
+    expect(requests[0].method, "POST");
+    expect(requests[0].url.path,
+        endsWith("/neighborhood-watch/posts/post-1/reactions"));
+    expect(jsonDecode(requests[0].body)["type"], "Helpful");
+    expect(requests[1].method, "DELETE");
+    expect(requests[1].url.path,
+        endsWith("/neighborhood-watch/posts/post-1/reactions/Helpful"));
   });
 }
