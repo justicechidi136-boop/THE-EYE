@@ -23,6 +23,9 @@ describe("database migrations", () => {
     expect(sql).toContain("prevent_audit_log_mutation");
     expect(sql).toContain("notification_delivery_logs");
     expect(sql).toContain("smartwatch_gps_tracks");
+    expect(sql).toContain('ALTER TABLE "smartwatch_devices"');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "failed_activation_attempts"');
+    expect(sql).toContain('"smartwatch_devices_activation_status_idx"');
     expect(sql).toContain("danger_zones");
     expect(sql).toContain("live_video_location_updates");
     expect(sql).toContain("idx_incidents_reporter_created_at");
