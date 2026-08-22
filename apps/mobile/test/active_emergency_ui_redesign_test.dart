@@ -266,8 +266,10 @@ void main() {
       ],
     );
     await tester.pumpWidget(_wrap(EmergencyEvidenceCard(active: active)));
-    expect(find.text("Video 1 · 00:24"), findsOneWidget);
-    expect(find.text("Audio 1 · 00:12"), findsOneWidget);
+    expect(find.text("Video 1"), findsOneWidget);
+    expect(find.text("00:24"), findsOneWidget);
+    expect(find.text("Audio 1"), findsOneWidget);
+    expect(find.textContaining("00:12"), findsOneWidget);
   });
 
   testWidgets(

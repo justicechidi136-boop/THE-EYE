@@ -248,6 +248,11 @@ export class ActiveEmergencyService {
         manualLocationAdjusted: incident.manualLocationAdjusted,
         source: locationSource,
         quality: locationQuality,
+        accuracyMeters:
+          typeof metadata.locationAccuracyMeters === "number"
+            ? metadata.locationAccuracyMeters
+            : null,
+        capturedAt: incident.submittedAt.toISOString(),
         locationLabel: citizenLocationQualityLabel({
           quality: locationQuality,
           source: locationSource,

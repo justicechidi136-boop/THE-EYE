@@ -3,18 +3,21 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:share_plus/share_plus.dart";
-import "package:url_launcher/url_launcher.dart";
 
 import "../brand.dart";
 import "../design_system/components/eye_page_header.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../design_system/tokens.dart";
 import "../evidence/evidence_attachment_picker.dart";
+import "../evidence/all_evidence_screen.dart";
+import "../evidence/evidence_collection.dart";
+import "../evidence/evidence_item.dart";
 import "../evidence/evidence_policy.dart";
 import "../incidents/incident_submission_service.dart";
 import "../l10n/generated/app_localizations.dart";
 import "../location/device_location_service.dart";
 import "../location/device_location_state.dart";
+import "../location/citizen_location_details.dart";
 import "../location/nigeria_location_catalog.dart";
 import "../presentation/citizen_location_presentation.dart";
 import "../presentation/citizen_broadcast_presenter.dart";
@@ -22,8 +25,6 @@ import "../presentation/citizen_presentation.dart";
 import "../presentation/citizen_time_picker.dart";
 import "../theme/the_eye_theme.dart";
 import "../widgets/section_card.dart";
-import "../voice/ai_voice_note_card.dart";
-import "../voice/ai_voice_service.dart";
 import "broadcast_feed_service.dart";
 import "broadcast_public_share.dart";
 import "broadcast_action_policy.dart";
@@ -705,104 +706,40 @@ class _BroadcastDetailBody extends StatelessWidget {
         "Broadcast evidence will appear here when media is attached.",
   }) {
     final attachments = source ?? _attachments;
-    if (attachments.isEmpty) {
-      return [
-        Text(
-          emptyMessage,
-          style: TextStyle(color: muted),
-        ),
-      ];
-    }
-    final widgets = <Widget>[];
-    for (final attachment in attachments) {
-      final label = (attachment["label"] as String?)?.trim().isNotEmpty == true
-          ? attachment["label"] as String
-          : "Attachment";
-      final mediaType = (attachment["mediaType"] as String?) ?? "";
-      final url = (attachment["url"] as String?) ?? "";
-      widgets.add(const SizedBox(height: 8));
-      if (mediaType == "image" && url.isNotEmpty) {
-        widgets.add(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  url,
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Text(
-                    "$label could not be loaded.",
-                    style: TextStyle(color: muted),
-                  ),
+    final items = _evidenceItems(attachments);
+    return [
+      const SizedBox(height: 8),
+      CompactEvidenceCollection(
+        items: items,
+        emptyMessage: emptyMessage,
+        showHeader: false,
+        onViewAll: items.isEmpty
+            ? null
+            : () => AllEvidenceScreen.open(
+                  context,
+                  items: items,
+                  title: item?.title ?? "Broadcast evidence",
                 ),
-              ),
-            ],
-          ),
-        );
-      } else if (mediaType == "audio" &&
-          (attachment["id"] as String?)?.isNotEmpty == true &&
-          item?.id.isNotEmpty == true) {
-        final session = BroadcastSession.require(context);
-        final service = AiVoiceService();
-        final mediaId = attachment["id"] as String;
-        final broadcastId = item!.id;
-        final targetLocale =
-            session.cachedCitizenProfile?.effectivePreferredLocale ??
-                session.cachedCitizenProfile?.preferredLocale ??
-                "en";
-        widgets.add(
-          AiVoiceNoteCard(
-            initialOriginalUrl: url,
-            load: () => service.getBroadcastVoice(
-              accessToken: session.accessToken!,
-              broadcastId: broadcastId,
-              mediaId: mediaId,
-              targetLocale: targetLocale,
-            ),
-            requestTranslation: () => service.requestBroadcastTranslation(
-              accessToken: session.accessToken!,
-              broadcastId: broadcastId,
-              mediaId: mediaId,
-              targetLocale: targetLocale,
-            ),
-            requestSynthesis: () => service.requestBroadcastSynthesis(
-              accessToken: session.accessToken!,
-              broadcastId: broadcastId,
-              mediaId: mediaId,
-              targetLocale: targetLocale,
-            ),
-          ),
-        );
-      } else {
-        widgets.add(
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              mediaType == "audio"
-                  ? Icons.audiotrack
-                  : mediaType == "video"
-                      ? Icons.videocam
-                      : Icons.attach_file,
-            ),
-            title: Text(label),
-            subtitle: Text(
-              url.isEmpty
-                  ? "Media is attached and available after refresh."
-                  : mediaType == "audio"
-                      ? "Audio attachment"
-                      : "Video attachment",
-              style: TextStyle(color: muted),
-            ),
-          ),
-        );
-      }
-    }
-    return widgets;
+      ),
+    ];
+  }
+
+  List<EvidenceItem> _evidenceItems(List<Map<String, dynamic>> attachments) {
+    return attachments.indexed.map((entry) {
+      final index = entry.$1;
+      final attachment = entry.$2;
+      final rawUrl = attachment["url"]?.toString().trim() ?? "";
+      final duration = attachment["durationSeconds"];
+      return EvidenceItem(
+        id: attachment["id"]?.toString() ?? "broadcast-${item?.id}-$index",
+        mediaType: attachment["mediaType"]?.toString() ?? "attachment",
+        label: attachment["label"]?.toString().trim().isNotEmpty == true
+            ? attachment["label"].toString()
+            : "Evidence ${index + 1}",
+        durationSeconds: duration is num ? duration.round() : null,
+        authorizedUri: rawUrl.isEmpty ? null : Uri.tryParse(rawUrl),
+      );
+    }).toList(growable: false);
   }
 
   @override
@@ -2183,32 +2120,18 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                     ),
                   ],
                   if (_capturedLocation?.hasCoordinates == true)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          CitizenLocationPresentation(
-                            streetAddress: _capturedLocation?.street,
-                            subLocality: _capturedLocation?.subLocality,
-                            cityTown: _capturedLocation?.locality,
-                            lga: _capturedLocation?.lga,
-                            state: _capturedLocation?.state,
-                          ).label,
-                        ),
-                      ),
-                    ),
-                  if (_capturedLocation?.capturedAt != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          "${l10n.capturedLabel}: ${CitizenDateTimeFormatter.formatDateTime(_capturedLocation!.capturedAt!)}",
-                          style: TextStyle(
-                            color: EyeSemanticColors.of(context).mutedText,
-                          ),
-                        ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: CitizenLocationDetails(
+                        address: CitizenLocationPresentation(
+                          streetAddress: _capturedLocation?.street,
+                          subLocality: _capturedLocation?.subLocality,
+                          cityTown: _capturedLocation?.locality,
+                          lga: _capturedLocation?.lga,
+                          state: _capturedLocation?.state,
+                        ).label,
+                        accuracyMeters: _capturedLocation?.accuracyMeters,
+                        capturedAt: _capturedLocation?.capturedAt,
                       ),
                     ),
                   if (_locationStatus != null)
@@ -2322,19 +2245,20 @@ class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
     }
   }
 
-  Future<void> _openEvidence(Map<String, dynamic> attachment) async {
-    final url = Uri.tryParse(attachment["url"]?.toString() ?? "");
-    if (url == null) return;
-    if (attachment["mediaType"] == "image" && mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => Dialog(
-          child: InteractiveViewer(child: Image.network(url.toString())),
-        ),
+  List<EvidenceItem> _evidenceItems(BroadcastSightingDetail detail) {
+    return detail.attachments.indexed.map((entry) {
+      final index = entry.$1;
+      final attachment = entry.$2;
+      final rawUrl = attachment["url"]?.toString().trim() ?? "";
+      final duration = attachment["durationSeconds"];
+      return EvidenceItem(
+        id: attachment["id"]?.toString() ?? "sighting-${detail.id}-$index",
+        mediaType: attachment["mediaType"]?.toString() ?? "attachment",
+        label: attachment["label"]?.toString() ?? "Evidence ${index + 1}",
+        durationSeconds: duration is num ? duration.round() : null,
+        authorizedUri: rawUrl.isEmpty ? null : Uri.tryParse(rawUrl),
       );
-      return;
-    }
-    await launchUrl(url, mode: LaunchMode.externalApplication);
+    }).toList(growable: false);
   }
 
   @override
@@ -2350,6 +2274,8 @@ class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
       state: location["state"]?.toString(),
       country: location["country"]?.toString(),
     ).label;
+    final evidenceItems =
+        detail == null ? const <EvidenceItem>[] : _evidenceItems(detail);
     return _BroadcastShell(
       title: l10n.sightingDetails,
       child: detail == null
@@ -2394,16 +2320,20 @@ class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
                             "${l10n.observedLabel}: ${CitizenDateTimeFormatter.formatDateTime(detail.observedAt!)}"),
                       ],
                       const SizedBox(height: 12),
-                      Text(l10n.locationLabel,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      Text(location["displayAddress"]
-                                  ?.toString()
-                                  .trim()
-                                  .isNotEmpty ==
-                              true
-                          ? location["displayAddress"].toString()
-                          : locationLabel),
+                      CitizenLocationDetails(
+                        address: location["displayAddress"]
+                                    ?.toString()
+                                    .trim()
+                                    .isNotEmpty ==
+                                true
+                            ? location["displayAddress"].toString()
+                            : locationLabel,
+                        accuracyMeters:
+                            (location["accuracyMeters"] as num?)?.toDouble(),
+                        capturedAt: DateTime.tryParse(
+                          location["capturedAt"]?.toString() ?? "",
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Text(l10n.whatWasObserved,
                           style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -2415,33 +2345,19 @@ class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
                 const SizedBox(height: 16),
                 SectionCard(
                   title: l10n.evidenceLabel,
-                  child: detail.attachments.isEmpty
-                      ? Text(l10n.noEvidenceAttached)
-                      : Column(
-                          children: detail.attachments.map((attachment) {
-                            final mediaType =
-                                attachment["mediaType"]?.toString();
-                            final url = attachment["url"]?.toString() ?? "";
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: mediaType == "image" && url.isNotEmpty
-                                  ? Image.network(url,
-                                      width: 64, height: 64, fit: BoxFit.cover)
-                                  : Icon(mediaType == "audio"
-                                      ? Icons.audiotrack
-                                      : Icons.play_circle_outline),
-                              title: Text(attachment["label"]?.toString() ??
-                                  "Attachment"),
-                              subtitle: attachment["durationSeconds"] == null
-                                  ? null
-                                  : Text(
-                                      "${attachment["durationSeconds"]} seconds"),
-                              onTap: url.isEmpty
-                                  ? null
-                                  : () => unawaited(_openEvidence(attachment)),
-                            );
-                          }).toList(growable: false),
-                        ),
+                  child: CompactEvidenceCollection(
+                    items: evidenceItems,
+                    showHeader: false,
+                    emptyMessage: l10n.noEvidenceAttached,
+                    onViewAll: evidenceItems.isEmpty
+                        ? null
+                        : () => AllEvidenceScreen.open(
+                              context,
+                              items: evidenceItems,
+                              title: l10n.evidenceLabel,
+                              onRetry: _load,
+                            ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(

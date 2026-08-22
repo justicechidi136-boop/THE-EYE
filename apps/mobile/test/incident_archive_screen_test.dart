@@ -243,10 +243,12 @@ void main() {
     expect(find.text("Cancel Emergency"), findsNothing);
     expect(find.text("Confirm still ongoing"), findsNothing);
 
-    await _show(tester, find.text("Play audio · 00:08"));
-    expect(find.text("Photo"), findsOneWidget);
-    expect(find.text("Play video · 00:12"), findsOneWidget);
-    expect(find.text("Play audio · 00:08"), findsOneWidget);
+    await _show(tester, find.text("Audio 1"));
+    expect(find.text("Photo 1"), findsOneWidget);
+    expect(find.text("Video 1"), findsOneWidget);
+    expect(find.text("00:12"), findsOneWidget);
+    expect(find.text("Audio 1"), findsOneWidget);
+    expect(find.textContaining("00:08"), findsOneWidget);
 
     await _show(tester, find.text("View communication history"));
     expect(find.textContaining("Read only"), findsOneWidget);

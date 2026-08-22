@@ -418,7 +418,7 @@ describe("ActiveEmergencyService contract", () => {
     manualLocationAdjusted: false,
     liveLocationStale: false,
     liveLocationUpdatedAt: null,
-    metadata: {},
+    metadata: { locationAccuracyMeters: 12.5 },
     media: [],
     statusHistory: [],
     timeline: [],
@@ -439,6 +439,10 @@ describe("ActiveEmergencyService contract", () => {
     expect(result.routeType).toBe("OWN_ACTIVE_INCIDENT");
     expect(result.incidentId).toBe("inc-1");
     expect(result.allowedActions.cancel).toBe(true);
+    expect(result.reportedLocation.accuracyMeters).toBe(12.5);
+    expect(result.reportedLocation.capturedAt).toEqual(
+      new Date("2026-08-05T10:00:00.000Z").toISOString(),
+    );
   });
 
   it("denies another citizen with 404", async () => {

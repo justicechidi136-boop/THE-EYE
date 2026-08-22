@@ -3,15 +3,17 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:permission_handler/permission_handler.dart";
-import "package:url_launcher/url_launcher.dart";
 
 import "../contracts/the_eye_enums.dart";
 import "evidence_audio_preview.dart";
 import "evidence_capture_controller.dart";
 import "evidence_capture_service.dart";
+import "evidence_item.dart";
 import "evidence_media_source.dart";
 import "evidence_policy.dart";
 import "evidence_permission_service.dart";
+import "evidence_video_thumbnail.dart";
+import "evidence_viewer_screen.dart";
 import "local_evidence_attachment.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../presentation/evidence_presentation.dart";
@@ -440,92 +442,14 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
     LocalEvidenceAttachment attachment,
     String label,
   ) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        final duration = attachment.durationSeconds;
-        return AlertDialog(
-          title: Text(label),
-          content: attachment.isImage &&
-                  File(attachment.uploadPath).existsSync()
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.file(
-                    File(attachment.uploadPath),
-                    fit: BoxFit.cover,
-                  ),
-                )
-              : attachment.isVideo && File(attachment.uploadPath).existsSync()
-                  ? SizedBox(
-                      width: 240,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.play_circle_fill, size: 54),
-                          const SizedBox(height: 8),
-                          const Text(
-                            "Video ready to play",
-                            textAlign: TextAlign.center,
-                          ),
-                          if (duration != null) ...[
-                            const SizedBox(height: 6),
-                            Text("Duration ${_clock(duration)}"),
-                          ],
-                          const SizedBox(height: 12),
-                          FilledButton.icon(
-                            onPressed: () =>
-                                _launchVideo(attachment.uploadPath),
-                            icon: const Icon(Icons.play_arrow),
-                            label: const Text("Play video"),
-                          ),
-                        ],
-                      ),
-                    )
-                  : SizedBox(
-                      width: 220,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            attachment.isVideo
-                                ? Icons.play_circle_fill
-                                : Icons.graphic_eq,
-                            size: 54,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            attachment.isVideo
-                                ? "Video preview unavailable"
-                                : "Audio attachment",
-                            textAlign: TextAlign.center,
-                          ),
-                          if (duration != null) ...[
-                            const SizedBox(height: 6),
-                            Text("Duration ${_clock(duration)}"),
-                          ],
-                        ],
-                      ),
-                    ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text("Close"),
-            ),
-          ],
-        );
-      },
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: RouteSettings(name: "/evidence/${attachment.localId}"),
+        builder: (_) => EvidenceViewerScreen(
+          item: EvidenceItem.fromLocal(attachment, label: label),
+        ),
+      ),
     );
-  }
-
-  String _clock(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, "0");
-    final s = (seconds % 60).toString().padLeft(2, "0");
-    return "$m:$s";
-  }
-
-  Future<void> _launchVideo(String path) async {
-    final uri = Uri.file(path);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 
@@ -845,6 +769,13 @@ class _VisualAttachmentTile extends StatelessWidget {
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => const Center(
                       child: Icon(Icons.broken_image_outlined, size: 34),
+                    ),
+                  )
+                else if (attachment.isVideo)
+                  EvidenceVideoThumbnail(
+                    item: EvidenceItem.fromLocal(
+                      attachment,
+                      label: presentation.displayName,
                     ),
                   )
                 else

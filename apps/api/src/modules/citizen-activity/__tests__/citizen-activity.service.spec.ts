@@ -186,7 +186,7 @@ describe("CitizenActivityService", () => {
       resolvedAt: new Date("2026-08-01T11:00:00.000Z"),
       closedAt: null,
       cancelledAt: null,
-      metadata: {},
+      metadata: { locationAccuracyMeters: 17.4 },
       address: "Lagos",
       manualAddress: null,
       latitude: 6.5,
@@ -225,6 +225,10 @@ describe("CitizenActivityService", () => {
     expect(archive.data.incidentId).toBe("inc-1");
     expect(archive.data.publicReference).toBe("EYE-260801-INC1");
     expect(archive.data.verificationStatus).toBe("Not verified");
+    expect(archive.data.location.accuracyMeters).toBe(17.4);
+    expect(archive.data.location.capturedAt).toBe(
+      "2026-08-01T09:00:00.000Z",
+    );
     expect(archive.data.evidenceGallery[0].fileHash).toBeUndefined();
     expect(archive.data.auditSummary).toBeUndefined();
     expect(archive.data.notificationsSent).toBeUndefined();

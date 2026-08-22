@@ -19,6 +19,8 @@ class IncidentSummary {
     this.address,
     this.publicReference,
     this.displayStatus,
+    this.locationAccuracyMeters,
+    this.locationCapturedAt,
   });
 
   final String id;
@@ -32,6 +34,22 @@ class IncidentSummary {
   final String? address;
   final String? publicReference;
   final String? displayStatus;
+  final double? locationAccuracyMeters;
+  final DateTime? locationCapturedAt;
+}
+
+class IncidentDetailEvidence {
+  const IncidentDetailEvidence({
+    required this.id,
+    required this.mediaType,
+    this.capturedAt,
+    this.durationSeconds,
+  });
+
+  final String id;
+  final String mediaType;
+  final DateTime? capturedAt;
+  final int? durationSeconds;
 }
 
 class IncidentDetail extends IncidentSummary {
@@ -47,14 +65,18 @@ class IncidentDetail extends IncidentSummary {
     super.address,
     super.publicReference,
     super.displayStatus,
+    super.locationAccuracyMeters,
+    super.locationCapturedAt,
     required this.timeline,
     required this.statusHistory,
     required this.evidenceCount,
+    required this.evidence,
   });
 
   final List<Map<String, String>> timeline;
   final List<Map<String, String>> statusHistory;
   final int evidenceCount;
+  final List<IncidentDetailEvidence> evidence;
 }
 
 class IncidentHistoryService {
@@ -137,6 +159,9 @@ class IncidentHistoryService {
     final submittedAt = _parseDate(json["submittedAt"]);
     final id = json["id"]?.toString() ?? "";
     final status = json["status"]?.toString() ?? "Submitted";
+    final metadata = json["metadata"] is Map
+        ? Map<String, dynamic>.from(json["metadata"] as Map)
+        : const <String, dynamic>{};
     return IncidentSummary(
       id: id,
       type: json["type"]?.toString() ?? "Incident",
@@ -158,6 +183,11 @@ class IncidentHistoryService {
                 )),
       displayStatus: json["displayLabel"]?.toString() ??
           citizenIncidentStatusLabel(status),
+      locationAccuracyMeters:
+          (metadata["locationAccuracyMeters"] as num?)?.toDouble(),
+      locationCapturedAt: _parseDate(
+        metadata["locationCapturedAt"] ?? json["submittedAt"],
+      ),
     );
   }
 
@@ -195,6 +225,25 @@ class IncidentHistoryService {
       }
     }
     final media = json["media"];
+    final evidence = media is List
+        ? media
+            .whereType<Map>()
+            .map((row) {
+              final item = Map<String, dynamic>.from(row);
+              return IncidentDetailEvidence(
+                id: item["id"]?.toString() ?? "",
+                mediaType: item["mediaType"]?.toString() ?? "evidence",
+                capturedAt: _parseDate(
+                  item["capturedAt"] ?? item["uploadedAt"],
+                ),
+                durationSeconds: item["durationSeconds"] is num
+                    ? (item["durationSeconds"] as num).round()
+                    : null,
+              );
+            })
+            .where((item) => item.id.isNotEmpty)
+            .toList(growable: false)
+        : const <IncidentDetailEvidence>[];
     return IncidentDetail(
       id: summary.id,
       type: summary.type,
@@ -207,9 +256,12 @@ class IncidentHistoryService {
       address: summary.address,
       publicReference: summary.publicReference,
       displayStatus: summary.displayStatus,
+      locationAccuracyMeters: summary.locationAccuracyMeters,
+      locationCapturedAt: summary.locationCapturedAt,
       timeline: timeline,
       statusHistory: statusHistory,
-      evidenceCount: media is List ? media.length : 0,
+      evidenceCount: evidence.length,
+      evidence: evidence,
     );
   }
 
