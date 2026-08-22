@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
 import {
   AGENCY_ERROR_CODES,
   AdminRoleName,
@@ -15,7 +15,12 @@ describe("FieldDevicePreprovisionService", () => {
     const prisma = {
       fieldDevice: {
         create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn(),
+      },
+      adminUser: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn(),
       },
     };
     const audit = { record: jest.fn() };
@@ -168,6 +173,97 @@ describe("FieldDevicePreprovisionService", () => {
     expect(createArgs.authoritySnapshot.profileCode).toBe("patrol_officer_baseline");
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "field.device.preprovisioned" }));
     expect(result.data.id).toBe("device-1");
+  });
+
+  it("rejects a malformed assigned officer before Prisma create", async () => {
+    const { service, prisma } = createService();
+
+    const request = service.preprovision(actor(), {
+        deviceName: "Patrol Tablet 08",
+        agencyId: "agency-1",
+        assignedUserId: "0001",
+      } as never);
+    await expect(request).rejects.toThrow(BadRequestException);
+    await expect(request).rejects.toMatchObject({ status: 400 });
+
+    expect(prisma.fieldDevice.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts an active field officer in the selected agency scope", async () => {
+    const { service, prisma } = createService();
+    prisma.adminUser.findUnique.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      displayName: "Officer One",
+      isActive: true,
+      agencyId: "agency-1",
+      country: "NG",
+      state: "LA",
+      lga: "IKEJA",
+      role: { name: AdminRoleName.PoliceSecurityOfficer },
+    });
+    prisma.fieldDevice.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
+      id: "device-1",
+      ...data,
+    }));
+
+    await service.preprovision(actor(), {
+      deviceName: "Patrol Tablet 09",
+      agencyId: "agency-1",
+      assignedUserId: "11111111-1111-4111-8111-111111111111",
+    } as never);
+
+    expect(prisma.fieldDevice.create.mock.calls[0][0].data.assignedUserId).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
+  });
+
+  it("rejects an assigned officer outside the selected agency scope", async () => {
+    const { service, prisma } = createService();
+    prisma.adminUser.findUnique.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      isActive: true,
+      agencyId: "agency-2",
+      country: "NG",
+      state: "KN",
+      lga: "KANO",
+      role: { name: AdminRoleName.PoliceSecurityOfficer },
+    });
+
+    const request = service.preprovision(actor(), {
+        deviceName: "Patrol Tablet 10",
+        agencyId: "agency-1",
+        assignedUserId: "11111111-1111-4111-8111-111111111111",
+      } as never);
+    await expect(request).rejects.toThrow(ForbiddenException);
+    await expect(request).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("returns a conflict for a duplicate inventory asset reference", async () => {
+    const { service, prisma } = createService();
+    prisma.fieldDevice.findFirst.mockResolvedValue({ id: "existing-device" });
+
+    const request = service.preprovision(actor(), {
+        deviceName: "Patrol Tablet 11",
+        agencyId: "agency-1",
+        inventoryAssetRef: "INV-FT-001",
+      } as never);
+    await expect(request).rejects.toThrow(ConflictException);
+    await expect(request).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("creates a device when optional assignment fields are omitted", async () => {
+    const { service, prisma } = createService();
+    prisma.fieldDevice.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
+      id: "device-optional",
+      ...data,
+    }));
+
+    await service.preprovision(actor(), { deviceName: "Unassigned Tablet", agencyId: "agency-1" } as never);
+
+    const createData = prisma.fieldDevice.create.mock.calls[0][0].data;
+    expect(createData.assignedUserId).toBe(null);
+    expect(createData.registrationStatus).toBe("PendingApproval");
+    expect(createData.activationPolicy).toBe("RequireSupervisorFinalApproval");
   });
 
   it("blocks editing provisioning once the device has moved past pairing", async () => {

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, InlineAlert, SelectInput } from "../form-primitives";
+import { Button, InlineAlert } from "../form-primitives";
 import type { FieldDeviceView, FieldPairingIssueView } from "../../lib/types/admin-views";
 import { PairingQrCode } from "./pairing-qr-code";
 
 type FieldDevicePairingPanelProps = {
   device: FieldDeviceView;
   canManage: boolean;
+  supervisorLabel: string;
 };
 
 function formatCountdown(expiresAt: string): string {
@@ -20,9 +21,8 @@ function formatCountdown(expiresAt: string): string {
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
-export function FieldDevicePairingPanel({ device, canManage }: FieldDevicePairingPanelProps) {
+export function FieldDevicePairingPanel({ device, canManage, supervisorLabel }: FieldDevicePairingPanelProps) {
   const [pairing, setPairing] = useState<FieldPairingIssueView | null>(null);
-  const [ttlMinutes, setTtlMinutes] = useState("15");
   const [busy, setBusy] = useState<"issue" | "regenerate" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function FieldDevicePairingPanel({ device, canManage }: FieldDevicePairin
       const response = await fetch(`/api/admin/field-devices/${encodeURIComponent(device.id)}/${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(action === "cancel" ? { reason: "Cancelled by supervisor" } : { ttlMinutes: Number(ttlMinutes) }),
+        body: JSON.stringify(action === "cancel" ? { reason: "Cancelled by supervisor" } : {}),
       });
       const payload = (await response.json()) as { data?: FieldPairingIssueView | { cancelled: number }; message?: string };
       if (!response.ok) throw new Error(payload.message ?? `Failed to ${action} pairing`);
@@ -55,7 +55,11 @@ export function FieldDevicePairingPanel({ device, canManage }: FieldDevicePairin
         setMessage("Pairing cancelled. Any issued codes are now invalid.");
       } else {
         setPairing(payload.data as FieldPairingIssueView);
-        setMessage(action === "issue" ? "Pairing code generated." : "Pairing code regenerated. The previous code no longer works.");
+        setMessage(
+          action === "issue"
+            ? "Supervisor token generated successfully."
+            : "New supervisor token generated. The previous token no longer works.",
+        );
       }
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : `Failed to ${action} pairing`);
@@ -91,8 +95,8 @@ export function FieldDevicePairingPanel({ device, canManage }: FieldDevicePairin
     <div className="grid gap-4">
       <div className="grid gap-1 text-sm">
         <p><span className="font-semibold">Device:</span> {device.deviceName}</p>
-        <p><span className="font-semibold">Agency:</span> {device.agencyId ?? "-"}</p>
-        <p><span className="font-semibold">Officer:</span> {device.assignedUserId ?? "Unassigned"}</p>
+        <p><span className="font-semibold">Supervisor:</span> {supervisorLabel}</p>
+        <p><span className="font-semibold">Assignment:</span> {[device.countryCode, device.stateCode, device.lgaCode].filter(Boolean).join(" / ") || "Global scope"}</p>
         <p><span className="font-semibold">Role:</span> {device.operationalRole ?? "Not set"}</p>
       </div>
 
@@ -101,20 +105,10 @@ export function FieldDevicePairingPanel({ device, canManage }: FieldDevicePairin
       ) : null}
 
       {!pairing ? (
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="grid gap-1 text-xs font-medium text-ink">
-            <span>Code validity</span>
-            <SelectInput value={ttlMinutes} onChange={(event) => setTtlMinutes(event.target.value)}>
-              <option value="5">5 minutes</option>
-              <option value="15">15 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="60">1 hour</option>
-              <option value="240">4 hours</option>
-              <option value="1440">24 hours</option>
-            </SelectInput>
-          </label>
+        <div className="grid gap-3">
+          <p className="text-sm text-muted">The token uses the secure server-configured expiry and can activate this device once.</p>
           <Button disabled={!canIssue || busy !== null} onClick={() => void callPairingApi("pairing-code", "issue")}>
-            {busy === "issue" ? "Generating…" : "Generate pairing QR"}
+            {busy === "issue" ? "Generating…" : "Generate supervisor token"}
           </Button>
         </div>
       ) : (
@@ -122,7 +116,7 @@ export function FieldDevicePairingPanel({ device, canManage }: FieldDevicePairin
           <PairingQrCode value={pairing.qrPayload} size={220} />
           <div className="grid gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase text-muted">Manual pairing code</p>
+              <p className="text-xs font-semibold uppercase text-muted">Supervisor token</p>
               <div className="mt-1 flex items-center gap-2">
                 <code className="rounded-md border border-line bg-surfaceMuted px-3 py-2 text-lg font-bold tracking-wider">{pairing.shortCode}</code>
                 <Button variant="secondary" onClick={() => void copyCode()}>
@@ -130,13 +124,22 @@ export function FieldDevicePairingPanel({ device, canManage }: FieldDevicePairin
                 </Button>
               </div>
             </div>
+            <InlineAlert tone="warning">Copy this token now. It will not be shown again after you leave this page.</InlineAlert>
             <p className="text-sm">
               <span className="font-semibold">Expires:</span> {new Date(pairing.expiresAt).toLocaleString()} ({formatCountdown(pairing.expiresAt)}
               {" "}remaining)
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" disabled={busy !== null} onClick={() => void callPairingApi("regenerate-pairing", "regenerate")}>
-                {busy === "regenerate" ? "Regenerating…" : "Regenerate"}
+              <Button
+                variant="secondary"
+                disabled={busy !== null}
+                onClick={() => {
+                  if (window.confirm("Generate a new token? The current token will stop working.")) {
+                    void callPairingApi("regenerate-pairing", "regenerate");
+                  }
+                }}
+              >
+                {busy === "regenerate" ? "Generating…" : "Generate new token"}
               </Button>
               <Button variant="danger" disabled={busy !== null} onClick={() => void callPairingApi("cancel-pairing", "cancel")}>
                 {busy === "cancel" ? "Cancelling…" : "Cancel pairing"}

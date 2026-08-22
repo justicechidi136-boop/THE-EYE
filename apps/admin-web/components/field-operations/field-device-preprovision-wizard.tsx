@@ -8,6 +8,7 @@ import { Panel } from "../ui";
 import type {
   AgencyUnitView,
   AgencyView,
+  FieldAssignableUserView,
   FieldPermissionEffectivePreviewView,
   FieldPermissionProfileView,
 } from "../../lib/types/admin-views";
@@ -83,6 +84,9 @@ export function FieldDevicePreprovisionWizard() {
   const [registryLoaded, setRegistryLoaded] = useState(false);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<FieldAssignableUserView[]>([]);
+  const [assignableUsersLoading, setAssignableUsersLoading] = useState(false);
+  const [assignableUsersError, setAssignableUsersError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<FieldPermissionProfileView[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState<string | null>(null);
@@ -101,6 +105,10 @@ export function FieldDevicePreprovisionWizard() {
   const selectedUnit = useMemo(
     () => units.find((unit) => unit.id === values.assignedUnitId) ?? null,
     [units, values.assignedUnitId],
+  );
+  const selectedAssignedUser = useMemo(
+    () => assignableUsers.find((user) => user.id === values.assignedUserId) ?? null,
+    [assignableUsers, values.assignedUserId],
   );
 
   useEffect(() => {
@@ -211,6 +219,37 @@ export function FieldDevicePreprovisionWizard() {
     };
   }, [values.agencyId]);
 
+  useEffect(() => {
+    if (!values.agencyId) {
+      setAssignableUsers([]);
+      setAssignableUsersError(null);
+      return;
+    }
+    let cancelled = false;
+    setAssignableUsersLoading(true);
+    setAssignableUsersError(null);
+    (async () => {
+      try {
+        const response = await fetch(
+          `/api/admin/field-devices/assignable-users?agencyId=${encodeURIComponent(values.agencyId)}`,
+        );
+        const payload = (await response.json()) as { data?: FieldAssignableUserView[]; message?: string };
+        if (!response.ok) throw new Error(payload.message ?? "Unable to load assignable officers");
+        if (!cancelled) setAssignableUsers(payload.data ?? []);
+      } catch (error) {
+        if (!cancelled) {
+          setAssignableUsers([]);
+          setAssignableUsersError(error instanceof Error ? error.message : "Unable to load assignable officers");
+        }
+      } finally {
+        if (!cancelled) setAssignableUsersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [values.agencyId]);
+
   function updateField<K extends keyof WizardValues>(field: K, value: WizardValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
   }
@@ -221,6 +260,7 @@ export function FieldDevicePreprovisionWizard() {
       ...current,
       agencyId,
       assignedUnitId: "",
+      assignedUserId: "",
       countryCode: agency?.countryCode || current.countryCode,
       stateCode: agency?.stateCode ?? "",
       lgaCode: agency?.lgaCode ?? "",
@@ -383,7 +423,7 @@ export function FieldDevicePreprovisionWizard() {
 
       {step === 0 ? (
         <div className="grid gap-3">
-          <FormField label="Device name" htmlFor="wizard-device-name" hint="Shown to the assigned officer and in admin lists.">
+          <FormField label="Device name (required)" htmlFor="wizard-device-name" hint="Shown to the assigned officer and in admin lists.">
             <TextInput
               id="wizard-device-name"
               value={values.deviceName}
@@ -428,6 +468,7 @@ export function FieldDevicePreprovisionWizard() {
                     countryCode: event.target.value,
                     agencyId: "",
                     assignedUnitId: "",
+                    assignedUserId: "",
                     stateCode: "",
                     lgaCode: "",
                     permissionProfileId: "",
@@ -441,7 +482,7 @@ export function FieldDevicePreprovisionWizard() {
                 ))}
               </SelectInput>
             </FormField>
-            <FormField label="Agency" htmlFor="wizard-agency" hint="Only active, field-operations-enabled agencies for the selected country.">
+            <FormField label="Agency (required)" htmlFor="wizard-agency" hint="Only active, field-operations-enabled agencies for the selected country.">
               <SelectInput
                 id="wizard-agency"
                 value={values.agencyId}
@@ -487,11 +528,20 @@ export function FieldDevicePreprovisionWizard() {
 
       {step === 2 ? (
         <div className="grid gap-3 md:grid-cols-2">
-          <FormField label="Assigned officer user ID" htmlFor="wizard-assigned-user" hint="Optional — can be assigned later during approval.">
-            <TextInput id="wizard-assigned-user" value={values.assignedUserId} onChange={(event) => updateField("assignedUserId", event.target.value)} />
-          </FormField>
-          <FormField label="Assigned team ID" htmlFor="wizard-assigned-team">
-            <TextInput id="wizard-assigned-team" value={values.assignedTeamId} onChange={(event) => updateField("assignedTeamId", event.target.value)} />
+          <FormField label="Assigned officer" htmlFor="wizard-assigned-user" hint="Optional — only eligible officers within the selected agency scope are shown.">
+            <SelectInput
+              id="wizard-assigned-user"
+              value={values.assignedUserId}
+              disabled={!values.agencyId || assignableUsersLoading}
+              onChange={(event) => updateField("assignedUserId", event.target.value)}
+            >
+              <option value="">{assignableUsersLoading ? "Loading officers…" : "Assign later"}</option>
+              {assignableUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.displayName} — {user.role} ({user.scope})
+                </option>
+              ))}
+            </SelectInput>
           </FormField>
           <FormField label="Operational role" htmlFor="wizard-operational-role">
             <SelectInput
@@ -514,6 +564,7 @@ export function FieldDevicePreprovisionWizard() {
           ) : (
             <p className="md:col-span-2 text-sm text-muted">No unit selected in the Agency step.</p>
           )}
+          {assignableUsersError ? <InlineAlert tone="warning">{assignableUsersError}</InlineAlert> : null}
         </div>
       ) : null}
 
@@ -646,12 +697,11 @@ export function FieldDevicePreprovisionWizard() {
               <span className="font-semibold">Jurisdiction:</span>{" "}
               {[values.countryCode, values.stateCode, values.lgaCode].filter(Boolean).join(" / ") || "-"}
             </p>
-            <p><span className="font-semibold">Assigned officer:</span> {values.assignedUserId || "Unassigned"}</p>
+            <p><span className="font-semibold">Assigned officer:</span> {selectedAssignedUser ? `${selectedAssignedUser.displayName} (${selectedAssignedUser.role})` : "Assign later"}</p>
             <p>
               <span className="font-semibold">Assigned unit:</span>{" "}
               {selectedUnit ? `${selectedUnit.name} (${selectedUnit.unitIdentifier})` : "None"}
             </p>
-            <p><span className="font-semibold">Assigned team:</span> {values.assignedTeamId || "-"}</p>
             <p><span className="font-semibold">Operational role:</span> {values.operationalRole || "Not set"}</p>
             <p><span className="font-semibold">Permission profile:</span> {selectedProfile ? `${selectedProfile.name} (${selectedProfile.code})` : "None"}</p>
             <p><span className="font-semibold">Device mode:</span> {values.deviceMode}</p>

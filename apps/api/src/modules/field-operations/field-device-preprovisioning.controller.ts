@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
@@ -7,7 +7,7 @@ import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import { RateLimitGuard } from "../../common/rate-limit/rate-limit.guard";
 import { FieldDevicePreprovisionService } from "./field-device-preprovision.service";
 import { FieldDevicePairingService } from "./field-device-pairing.service";
-import type { PreProvisionFieldDeviceDto, UpdateFieldDeviceProvisioningDto } from "./dto/field-device-preprovision.dto";
+import { PreProvisionFieldDeviceDto, UpdateFieldDeviceProvisioningDto } from "./dto/field-device-preprovision.dto";
 import type { CancelPairingDto, IssuePairingCodeDto } from "./dto/field-device-pairing.dto";
 
 /**
@@ -30,6 +30,12 @@ export class FieldDeviceProvisioningAdminController {
   @RequirePermissions("field:device:approve")
   create(@Req() request: { user: unknown }, @Body() dto: PreProvisionFieldDeviceDto) {
     return this.preprovision.preprovision(request.user as never, dto);
+  }
+
+  @Get("assignable-users")
+  @RequirePermissions("field:device:approve")
+  listAssignableUsers(@Req() request: { user: unknown }, @Query("agencyId") agencyId?: string) {
+    return this.preprovision.listAssignableUsers(request.user as never, agencyId);
   }
 
   @Get(":id/provisioning")
