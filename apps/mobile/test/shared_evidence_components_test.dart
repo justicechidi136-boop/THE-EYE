@@ -13,7 +13,7 @@ import "package:the_eye_mobile/evidence/evidence_viewer_screen.dart";
 void main() {
   test("local and authorized remote evidence resolve without public fallback",
       () async {
-    final local = _video(localPath: "C:/tmp/evidence.mp4");
+    final local = _video(localPath: "/tmp/evidence.mp4");
     final remote = _video(
       authorizedUri: Uri.parse("https://storage.googleapis.com/private/video"),
     );
