@@ -7407,7 +7407,10 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const EyePageHeader.root(title: "Safety broadcasts"),
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: EyePageHeader.root(title: "Safety broadcasts"),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(

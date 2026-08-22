@@ -1,7 +1,6 @@
 import "dart:async";
 
 import "package:app_links/app_links.dart";
-import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 
 import "citizen_auth_return_link.dart";
@@ -31,10 +30,12 @@ class CitizenAuthReturnListener {
   CitizenAuthReturnListener({
     AppLinks? appLinks,
     required this.onReturnToSignIn,
+    this.expectedScheme,
   }) : _appLinks = appLinks ?? AppLinks();
 
   final AppLinks _appLinks;
   final CitizenAuthReturnHandler onReturnToSignIn;
+  final String? expectedScheme;
   StreamSubscription<Uri>? _sub;
   bool _started = false;
 
@@ -57,7 +58,10 @@ class CitizenAuthReturnListener {
     if (CitizenAuthReturnLink.isForbiddenAdminDestination(uri)) {
       return;
     }
-    final message = CitizenAuthReturnLink.resolveSignInMessage(uri);
+    final message = CitizenAuthReturnLink.resolveSignInMessage(
+      uri,
+      expectedScheme: expectedScheme,
+    );
     if (message == null) return;
     onReturnToSignIn(message);
   }

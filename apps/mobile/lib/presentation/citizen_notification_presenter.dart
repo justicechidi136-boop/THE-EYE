@@ -68,12 +68,15 @@ abstract final class CitizenNotificationPresenter {
     }
 
     if (_isReportSubmitted(normalizedType, title, body)) {
+      final incidentLabel = _incidentLabel(meta);
+      final reportCategory = "$incidentLabel Report";
+      final noun = incidentLabel.toLowerCase();
       final reference = meta["publicReference"]?.toString() ??
           _extractReference(body) ??
           "your report";
       return CitizenNotificationPresentation(
-        category: "Report Submitted",
-        title: "Your emergency report has been received",
+        category: reportCategory,
+        title: "Your $noun report has been received",
         preview: "Your report $reference has been successfully submitted.",
         timestampLabel: timestamp,
         isUnread: isUnread,
@@ -94,7 +97,7 @@ abstract final class CitizenNotificationPresenter {
           ? "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active."
           : "A ${incidentLabel.toLowerCase()} has been reported near your location. Tap to review the incident and confirm whether it is still active.";
       return CitizenNotificationPresentation(
-        category: "Verify Active Incident",
+        category: "Verify $incidentLabel",
         title: _sanitizeTitle(title).toLowerCase().contains("confirm")
             ? _sanitizeTitle(title)
             : defaultTitle,
@@ -104,6 +107,19 @@ abstract final class CitizenNotificationPresenter {
         timestampLabel: timestamp,
         isUnread: isUnread,
         routeHint: "COMMUNITY_VERIFICATION",
+      );
+    }
+
+    if (_isSighting(normalizedType, meta)) {
+      final subject = _sightingSubject(meta);
+      return CitizenNotificationPresentation(
+        category: "New Sighting",
+        title: subject == null ? "New sighting reported" : "New sighting for $subject",
+        preview: _sanitizePreview(body),
+        timestampLabel: timestamp,
+        isUnread: isUnread,
+        routeHint: "BROADCAST_DETAILS",
+        publicReference: meta["publicReference"]?.toString(),
       );
     }
 
@@ -138,6 +154,33 @@ abstract final class CitizenNotificationPresenter {
     return type == "NearbyIncidentVerification" ||
         type == "VerifyActiveIncident" ||
         (lowered.contains("nearby") && lowered.contains("reported"));
+  }
+
+  static bool _isSighting(String type, Map<String, dynamic> metadata) {
+    final eventType = metadata["eventType"]?.toString().toLowerCase() ?? "";
+    return type.toLowerCase().contains("sighting") ||
+        eventType.contains("sighting");
+  }
+
+  static String _incidentLabel(Map<String, dynamic> metadata) {
+    final value = metadata["incidentCategory"]?.toString() ??
+        metadata["reportType"]?.toString() ??
+        metadata["category"]?.toString() ??
+        "Emergency";
+    return citizenIncidentCategoryLabel(value);
+  }
+
+  static String? _sightingSubject(Map<String, dynamic> metadata) {
+    final fullName = metadata["fullName"]?.toString().trim() ?? "";
+    if (fullName.isNotEmpty) return "missing person: $fullName";
+    final make = metadata["make"]?.toString().trim() ?? "";
+    final model = metadata["model"]?.toString().trim() ?? "";
+    final plate = metadata["registrationNumber"]?.toString().trim() ??
+        metadata["registrationMasked"]?.toString().trim() ??
+        "";
+    final vehicle = [make, model].where((value) => value.isNotEmpty).join(" ");
+    if (vehicle.isEmpty && plate.isEmpty) return null;
+    return plate.isEmpty ? "stolen vehicle: $vehicle" : "stolen vehicle: $vehicle ($plate)";
   }
 
   static String _friendlyCategory(String type) {

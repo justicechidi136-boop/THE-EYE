@@ -312,6 +312,22 @@ void main() {
     expect(finder, findsOneWidget);
   }
 
+  Future<void> scrollToSightingSubmit(
+    WidgetTester tester,
+    Finder scrollable,
+  ) async {
+    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
+    await tester.scrollUntilVisible(
+      submitButton,
+      250,
+      scrollable: scrollable,
+    );
+    await tester.drag(scrollable, const Offset(0, -160));
+    await tester.pump();
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+  }
+
   test("ParsedBroadcastRoute resolves detail and sub-routes", () {
     expect(
       ParsedBroadcastRoute.parse("/broadcasts/b1")?.kind,
@@ -1159,14 +1175,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen heading east");
-    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
-    await tester.scrollUntilVisible(
-      submitButton,
-      250,
-      scrollable: scrollable,
-    );
-    await tester.tap(submitButton);
-    await tester.pumpAndSettle();
+    await scrollToSightingSubmit(tester, scrollable);
 
     expect(find.text("Sighting submitted"), findsOneWidget);
     expect(submitService.submitCalls, 1);
@@ -1234,14 +1243,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen near the roundabout");
-    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
-    await tester.scrollUntilVisible(
-      submitButton,
-      250,
-      scrollable: scrollable,
-    );
-    await tester.tap(submitButton);
-    await tester.pumpAndSettle();
+    await scrollToSightingSubmit(tester, scrollable);
 
     expect(payload?["locationMode"], "MANUAL");
     expect(payload?["latitude"], isNull);
@@ -1303,10 +1305,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 350,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Vehicle heading east");
-    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
-    await tester.scrollUntilVisible(submitButton, 250, scrollable: scrollable);
-    await tester.tap(submitButton);
-    await tester.pumpAndSettle();
+    await scrollToSightingSubmit(tester, scrollable);
 
     expect(payload?["locationMode"], "CURRENT_GPS");
     expect(payload?["latitude"], 4.86);

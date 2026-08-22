@@ -28,7 +28,8 @@ void main() {
     return navKey;
   }
 
-  testWidgets("cold-start return opens citizen sign-in with message", (tester) async {
+  testWidgets("cold-start return opens citizen sign-in with message",
+      (tester) async {
     final navKey = await pumpApp(tester);
     navigateCitizenAuthReturn(
       nav: navKey.currentState!,
@@ -42,7 +43,8 @@ void main() {
     );
   });
 
-  testWidgets("background return replaces stack at citizen sign-in", (tester) async {
+  testWidgets("background return replaces stack at citizen sign-in",
+      (tester) async {
     final navKey = await pumpApp(tester);
     navKey.currentState!.pushNamed("/login");
     await tester.pumpAndSettle();
@@ -85,11 +87,11 @@ void main() {
     final calls = <String>[];
     final listener = CitizenAuthReturnListener(
       onReturnToSignIn: calls.add,
+      expectedScheme: "theeye-staging",
     );
-    // Flavor under flutter test package.json is production; force expected scheme via URI match helper.
     final uri = CitizenAuthReturnLink.buildReturnUri(
       "PASSWORD_RESET_SUCCESS",
-      forScheme: CitizenAuthReturnLink.scheme,
+      forScheme: "theeye-staging",
     );
     listener.handleUri(uri);
     expect(calls, isNotEmpty);

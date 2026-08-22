@@ -127,6 +127,38 @@ void main() {
       expect(result.errorCode, LocationTestErrorCode.reverseGeocodeFailed);
     });
   });
+
+  group("CachedLocationReverseGeocoder", () {
+    test("deduplicates nearby lookups within the cache lifetime", () async {
+      final delegate = _CountingGeocoder();
+      final cache = CachedLocationReverseGeocoder(delegate: delegate);
+
+      final first = cache.lookup(latitude: 4.81561, longitude: 7.04981);
+      final second = cache.lookup(latitude: 4.81562, longitude: 7.04982);
+      final results = await Future.wait([first, second]);
+
+      expect(results.every((result) => result.locality == "Port Harcourt"),
+          isTrue);
+      expect(delegate.calls, 1);
+    });
+  });
+}
+
+class _CountingGeocoder implements LocationReverseGeocoder {
+  int calls = 0;
+
+  @override
+  Future<ReverseGeocodeResult> lookup({
+    required double latitude,
+    required double longitude,
+  }) async {
+    calls += 1;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    return const ReverseGeocodeResult(
+      locality: "Port Harcourt",
+      state: "Rivers State",
+    );
+  }
 }
 
 class _PortHarcourtGeocoder implements LocationReverseGeocoder {

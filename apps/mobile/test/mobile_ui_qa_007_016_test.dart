@@ -82,7 +82,8 @@ void main() {
   });
 
   group("UI-014 secondary header", () {
-    testWidgets("secondary header shows Back", (tester) async {
+    testWidgets("secondary header keeps Back and title on one row",
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -92,6 +93,9 @@ void main() {
       );
       expect(find.text("Broadcast Detail"), findsOneWidget);
       expect(find.byTooltip("Back"), findsOneWidget);
+      final backCenter = tester.getCenter(find.byTooltip("Back"));
+      final titleCenter = tester.getCenter(find.text("Broadcast Detail"));
+      expect((backCenter.dy - titleCenter.dy).abs(), lessThan(8));
     });
   });
 

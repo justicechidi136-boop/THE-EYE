@@ -696,6 +696,7 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                         controller.remove(existing.localId);
                       }
                       controller.addVoiceAttachment(result.attachment);
+                      Navigator.of(context).pop();
                     },
                     onRecordingRemoved: () {
                       for (final existing in [

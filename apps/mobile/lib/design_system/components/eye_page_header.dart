@@ -48,46 +48,56 @@ class EyePageHeader extends StatelessWidget {
     final semantics = EyeSemanticColors.of(context);
     final header = Padding(
       padding: EdgeInsets.fromLTRB(showBack ? 8 : 16, 8, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (showBack || (actions != null && actions!.isNotEmpty))
-            Row(
+      child: showBack
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                if (showBack)
-                  IconButton(
-                    tooltip: "Back",
-                    onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-                    icon: Icon(
-                      Icons.arrow_back,
-                      color: semantics.interactiveText,
-                      size: 24,
+                IconButton(
+                  tooltip: "Back",
+                  onPressed: onBack ?? () => Navigator.of(context).maybePop(),
+                  icon: Icon(
+                    Icons.arrow_back,
+                    color: semantics.interactiveText,
+                    size: 24,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 40, minHeight: 48),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: EyeTypography.authHeading.copyWith(
+                        color: semantics.bodyText,
+                      ),
                     ),
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 40, minHeight: 40),
-                  )
-                else
-                  const SizedBox(width: 0, height: 40),
-                const Spacer(),
+                  ),
+                ),
+                if (actions != null) ...actions!,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      style: EyeTypography.authHeading.copyWith(
+                        color: semantics.bodyText,
+                      ),
+                    ),
+                  ),
+                ),
                 if (actions != null) ...actions!,
               ],
             ),
-          if (showBack) const SizedBox(height: 2),
-          Padding(
-            padding: EdgeInsets.only(left: showBack ? 8 : 0),
-            child: Semantics(
-              header: true,
-              child: Text(
-                title,
-                style: EyeTypography.authHeading.copyWith(
-                  color: semantics.bodyText,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
 
     if (!includeSafeArea) return header;

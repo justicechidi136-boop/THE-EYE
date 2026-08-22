@@ -61,6 +61,36 @@ void main() {
       expect(await store.loadPending(), isEmpty);
     });
 
+    test("keeps GPS accuracy and captured time out of address text", () async {
+      late Map<String, dynamic> payload;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          payload = Map<String, dynamic>.from(
+            jsonDecode(request.body) as Map,
+          );
+          return http.Response(
+            jsonEncode({
+              "id": "incident-location-1",
+              "status": "Submitted",
+              "submittedAt": "2026-07-10T01:31:00.000Z",
+            }),
+            200,
+          );
+        }),
+      );
+      final service = IncidentSubmissionService(
+        apiClient: client,
+        pendingStore: InMemoryPendingSubmissionStore(),
+      );
+
+      final result = await service.submit(sampleDraft());
+
+      expect(result.isSuccess, isTrue);
+      expect(payload["address"], isNull);
+      expect(payload["capturedAt"], "2026-07-10T01:30:00.000Z");
+      expect(jsonEncode(payload), isNot(contains("GPS accuracy")));
+    });
+
     test("missing required fields returns validation error", () async {
       final service = IncidentSubmissionService(
         apiClient: TheEyeApiClient(

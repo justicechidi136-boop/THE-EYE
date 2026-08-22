@@ -8,6 +8,48 @@ abstract class LocationReverseGeocoder {
   });
 }
 
+class CachedLocationReverseGeocoder implements LocationReverseGeocoder {
+  CachedLocationReverseGeocoder({
+    LocationReverseGeocoder? delegate,
+    this.ttl = const Duration(minutes: 15),
+    DateTime Function()? clock,
+  })  : _delegate = delegate ?? const PlatformLocationReverseGeocoder(),
+        _clock = clock ?? DateTime.now;
+
+  final LocationReverseGeocoder _delegate;
+  final Duration ttl;
+  final DateTime Function() _clock;
+  final Map<String, ({ReverseGeocodeResult result, DateTime expiresAt})>
+      _cache = {};
+  final Map<String, Future<ReverseGeocodeResult>> _inFlight = {};
+
+  @override
+  Future<ReverseGeocodeResult> lookup({
+    required double latitude,
+    required double longitude,
+  }) {
+    final key =
+        "${latitude.toStringAsFixed(4)},${longitude.toStringAsFixed(4)}";
+    final now = _clock();
+    final cached = _cache[key];
+    if (cached != null && cached.expiresAt.isAfter(now)) {
+      return Future.value(cached.result);
+    }
+    final active = _inFlight[key];
+    if (active != null) return active;
+    final lookup = _delegate
+        .lookup(latitude: latitude, longitude: longitude)
+        .then((result) {
+      _cache[key] = (result: result, expiresAt: _clock().add(ttl));
+      return result;
+    }).whenComplete(() {
+      _inFlight.remove(key);
+    });
+    _inFlight[key] = lookup;
+    return lookup;
+  }
+}
+
 class ReverseGeocodeResult {
   const ReverseGeocodeResult({
     this.street,

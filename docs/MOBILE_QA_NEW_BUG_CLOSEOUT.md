@@ -1,0 +1,56 @@
+# Mobile QA New Bug Closeout
+
+- Baseline: `b41a7a83ce596ceefa7afcfa53c70df520349093` (`origin/staging`, 2026-08-22)
+- Branch: `fix/mobile-qa-defect-closeout`
+- Scope: citizen mobile QA defects listed in the 2026-08-22 owner brief
+- Runtime rule: automated or static evidence never promotes a device-dependent item to runtime PASS.
+
+## Matrix
+
+| ID | Requirement | Previous/current behavior and root cause | Components / API dependency | Fix or verified implementation | Automated coverage | Engineering | Runtime QA |
+|---|---|---|---|---|---|---|---|
+| UI-001 | Safety Broadcast root title must respect the status bar and align with other root pages. | Broadcast used the shared safe-area header but omitted the extra root-content top inset used by Services and Settings. | `main.dart`, `EyePageHeader`; no API. | Added the standard root-content inset while retaining shared `SafeArea` behavior. | Shared header widget coverage; full mobile analyzer/tests required. | PASS | NOT TESTED |
+| UI-002 | Back and title share one horizontal secondary header row. | `EyePageHeader.secondary` rendered a Back row and a separate title row. | `eye_page_header.dart`; no API. | Secondary variant now lays out Back, wrapping title, and actions in one row. Existing `maybePop` preserves toolbar/system navigation semantics. | `mobile_ui_qa_007_016_test.dart` verifies geometry and Back. | PASS | NOT TESTED |
+| UX-001 | Friendly, structured notifications with category, title, preview, relative time, and read state. | The presenter handled basic cases but collapsed report submissions and verification to generic emergency labels and had no subject-aware sighting path. | `citizen_notification_presenter.dart`; metadata supplied by Notifications API. | Added category-aware report/verification copy and missing-person/vehicle sighting subject presentation. Existing notification card supplies relative time/read state and sanitizes technical text. | `mobile_ux_006_022_test.dart`; existing inbox/routing tests. | PASS | NOT TESTED |
+| UX-002A | Stop recording should add the authoritative voice file and return to evidence. | Recorder callback added the attachment but left the intermediate recorder sheet open. | `evidence_attachment_picker.dart`, `VoiceRecorder`; certified storage upload remains unchanged. | Successful recording now replaces any prior voice take, adds the original recording, and closes the sheet to reveal evidence controls. | Existing evidence picker and voice validation tests; microphone handoff requires device proof. | PASS | NOT TESTED |
+| UX-002B | Real video frame thumbnail and tap-to-autoplay. | Local and remote evidence still use a dark icon placeholder; local playback launches externally after a second action. The referenced prototype is blocked by Cloudflare human verification in terminal automation. | Evidence widgets; signed media endpoint; platform video player/thumbnail support. | No speculative implementation made without an interactable prototype and an approved shared playback dependency. | Existing media selection/playback contract tests only. | BLOCKED | NOT TESTED |
+| UX-003A | One compact mixed-media evidence presentation across evidence-bearing screens. | Capture uses compact shared presentation, archive uses a compact grid, but Broadcast Detail, sighting detail, and Active Emergency still have separate renderers. | Evidence presentation/widgets and signed media endpoints. | Existing compact capture behavior from PR #155 retained; duplication documented for a dedicated shared remote-gallery refactor. | `evidence_attachment_picker_test.dart`, `mobile_ui_qa_007_016_test.dart`, archive/broadcast tests. | PARTIAL | NOT TESTED |
+| UX-003B | Dedicated All Evidence screen with complete authorized media, retry, and Back. | Active Emergency's `All` action opens the add-evidence sheet, not a dedicated gallery; archive has a full grid but no reusable route. | Active Emergency, archive, incident media signed-view API. | Authorization endpoints already exist, but shared route/component work remains. | Archive media tests prove signed access only. | FAIL | NOT TESTED |
+| UX-008 | Human-readable location first; structured accuracy and friendly capture time second. | Incident submission concatenated `GPS accuracy` and raw ISO capture time into `address`, causing technical text to propagate to detail screens. Reverse geocoding had an interface but no result cache. | Incident submission, location geocoder, incident/active APIs. | Removed technical metadata from `address`; retained structured `capturedAt`/accuracy; added 15-minute, coordinate-rounded, single-flight reverse-geocode cache. Emergency submission remains independent of geocoding success. | `incident_submission_service_test.dart`, `device_location_service_test.dart`, `citizen_location_presentation_test.dart`. | PARTIAL | NOT TESTED |
+| UX-009 | Terminal incidents must not show active workflow copy. | Older archive rendering reused active progress language. | Citizen activity API and archive contract/screen. | PR #158 derives terminal progress as complete/skipped and uses terminal-specific notes; no contradictory active state observed statically. | `incident_archive_screen_test.dart`; API citizen activity tests. | PASS | NOT TESTED |
+| UX-010A | Selected saved vehicle carries its authorized saved photo into a stolen-vehicle Broadcast. | Older draft mapping copied fields but omitted saved photo references. | Vehicle garage, broadcast draft/submission and storage references. | PR #159 carries `vehiclePhotoObjectKeys` without duplicating binary media and shows the saved thumbnail. | `vehicle_garage_stolen_vehicle_test.dart`; API broadcast citizen tests. | PASS | NOT TESTED |
+| UX-010B | After vehicle selection, show Change vehicle and hide manual-entry path. | Both selected-vehicle and manual-entry actions could be displayed. | Stolen-vehicle form; no API. | PR #159 makes actions mutually exclusive and preserves return to selection. | `vehicle_garage_stolen_vehicle_test.dart`. | PASS | NOT TESTED |
+| UX-011 | Owner/viewer actions differ and backend blocks unauthorized resolve/withdraw. | Relationship policy was previously incomplete in detail UI. | Broadcast action policy, citizen broadcast service/controllers. | PR #159 supplies owner/viewer policy; backend `getOwnedBroadcast` scopes resolve/withdraw by `creatorUserId`; admin moderation remains separate. | `citizen_broadcast_presenter_test.dart`, `broadcast_screens_test.dart`, API broadcast citizen tests. | PASS | NOT TESTED |
+| UX-012 | Broadcast cards use citizen labels, summaries, status, and friendly time. | Raw type/status/body values could surface. | `CitizenBroadcastPresenter`; Broadcast feed metadata. | PR #159 maps missing-person/stolen-vehicle cards and rejects technical fallbacks. | `citizen_broadcast_presenter_test.dart`. | PASS | NOT TESTED |
+| AUTH-001A | Forgot Password must leave loading on success, error, and timeout without enumeration. | Earlier request paths could leave the UI busy. | Login UI, `AuthService`, auth API/provider. | PR #161 added bounded request handling and `finally` cleanup while retaining neutral recovery copy. | `auth_recovery_confirmation_test.dart`. | PASS | NOT TESTED |
+| AUTH-001B | Recover Account must leave loading on success, error, timeout, and support retry. | Independently affected by incomplete completion/error handling. | Account recovery flow and auth API. | PR #161 added bounded completion and retry-safe state reset. | `auth_recovery_confirmation_test.dart`. | PASS | NOT TESTED |
+| AUTH-002 | Citizen reset/recovery return must target THE EYE, never Admin sign-in. | Recovery web completion previously used an admin-oriented return. | Mobile/API/admin-web citizen return contracts. | Citizen schemes (`theeye-dev`, `theeye-staging`, `theeye`) and HTTPS soft landing are validated; admin `/login` is explicitly rejected. | Mobile/API/admin-web citizen-return and recovery-routing tests. | PASS | NOT TESTED |
+| AUTH-003 | Remain signed in must renew an expired access token after extended idle. | Expired access credentials could reach APIs; concurrent callers could race refresh rotation; transient network failure could clear usable persisted state. | Mobile auth/session/API client and API refresh sessions. | PRs #163 and #172 persist renewable sessions, use single-flight refresh, retry authenticated requests, preserve state for transient failures, and distinguish revoked sessions/manual logout. Access tokens remain short lived. | `auth_session_restore_test.dart`, `session_refresh_coverage_test.dart`, API auth tests. | PASS | NOT TESTED |
+| NAV-001 | Toolbar Back, Android Back, deep-link/notification entry must not trap users. | Shared secondary header layout was inconsistent; Active Emergency back was independently repaired. | Navigator routes, shared header, Active Emergency. | Shared `maybePop` retained; PR #165 restored Active Emergency Back; targeted route tests exist. Full entry-path device sweep remains. | Header, active-emergency, notification-routing and broadcast screen tests. | PARTIAL | NOT TESTED |
+
+## Security And Architecture Invariants
+
+- Original photo/video/audio files remain authoritative. This branch does not transcode, replace, publish, or weaken access to evidence.
+- Firebase Storage signed media access and existing incident/broadcast authorization paths are unchanged.
+- Broadcast remains country-wide and independent of location-based Neighborhood Watch.
+- Broadcast resolve/withdraw remains owner-scoped in the citizen API; administrative moderation is separate and permission controlled.
+- Access-token lifetime was not lengthened as a workaround. Persisted refresh sessions and rotation rules remain authoritative.
+- No database schema or migration change is included.
+
+## Runtime / Reference Blockers
+
+1. The evidence prototype URL returned a Cloudflare human-verification challenge to terminal Chromium, so dynamic video/gallery behavior could not be inspected honestly.
+2. UX-002B requires an approved in-app video frame/playback implementation; the current application has no `video_player`/thumbnail dependency.
+3. UX-003B requires extracting the existing authorized incident media access into a reusable All Evidence route rather than wiring Active Emergency's `All` action to its add sheet.
+4. The staging APK installed and launched on V2322, but authenticated workflow checks, real microphone/video playback, dark/light responsive layout, and recovery-email return flows remain NOT TESTED until a manual staging session is exercised.
+
+## Validation Record
+
+- Flutter analyze: PASS under the repository's non-fatal warning policy (no analyzer errors; 131 existing warnings/infos remain).
+- Focused Flutter tests: PASS, including evidence, location, notification, sighting submission, and citizen auth-return coverage.
+- Full mobile suite: PASS (578 tests).
+- API typecheck: PASS.
+- API suite: PASS (931 tests); this branch changes no API or backend code.
+- Staging debug APK: PASS (`assembleStagingDebug`).
+- V2322 installation/launch smoke: PASS using `adb install -r`; existing app data was preserved and the staging process remained alive after launch.
+- Authenticated physical-device defect matrix: NOT TESTED; requires manual staging-account interaction.
