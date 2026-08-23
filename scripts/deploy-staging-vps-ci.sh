@@ -28,9 +28,11 @@ PROOF_ONLY="${PROOF_ONLY:-false}"
 RUN_LOCATION_PROOF="${RUN_LOCATION_PROOF:-false}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
 RUN_STORAGE_PROOF="${RUN_STORAGE_PROOF:-false}"
+LIVEKIT_ICE_CAPTURE_SECONDS="${LIVEKIT_ICE_CAPTURE_SECONDS:-0}"
 echo "STEP deploy-start proof_only=${PROOF_ONLY}"
 echo "STEP migration-mode run_migrations=${RUN_MIGRATIONS}"
 echo "STEP storage-proof-mode run_storage_proof=${RUN_STORAGE_PROOF}"
+echo "STEP livekit-ice-capture-seconds=${LIVEKIT_ICE_CAPTURE_SECONDS}"
 
 if [[ "$PROOF_ONLY" == "true" ]]; then
   echo "=== Proof-only mode (skip full redeploy) ==="
@@ -95,6 +97,15 @@ fi
 
 # Release gate: compose ps, runtime yaml, network guard, smoke, health — before proofs.
 staging_release_validation
+
+if [[ "$LIVEKIT_ICE_CAPTURE_SECONDS" != "0" ]]; then
+  if [[ "$PROOF_ONLY" != "true" ]]; then
+    echo "FAIL LIVEKIT-ICE-EXT-001: packet capture is permitted only in proof-only mode"
+    exit 1
+  fi
+  LIVEKIT_ICE_CAPTURE_SECONDS="$LIVEKIT_ICE_CAPTURE_SECONDS" \
+    bash scripts/staging-livekit-ice-capture.sh
+fi
 
 if [[ "$RUN_STORAGE_PROOF" == "true" ]]; then
   echo "=== Staging Firebase Storage runtime proof ==="

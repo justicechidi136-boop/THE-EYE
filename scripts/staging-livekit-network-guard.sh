@@ -141,7 +141,7 @@ if ! docker exec "$CONTAINER" test -r "$YAML_PATH" 2>/dev/null; then
   fail "mounted config ${YAML_PATH} not readable inside container"
 fi
 
-RTC_LINES="$(docker exec "$CONTAINER" sh -c "grep -E '^(port:|  tcp_port:|  udp_port:|  node_ip:|  use_external_ip:)' ${YAML_PATH} 2>/dev/null" || true)"
+RTC_LINES="$(docker exec "$CONTAINER" sh -c "grep -E '^(port:|  tcp_port:|  udp_port:|  port_range_start:|  port_range_end:|  node_ip:|  use_external_ip:)' ${YAML_PATH} 2>/dev/null" || true)"
 if [[ -z "$RTC_LINES" ]]; then
   fail "could not read rtc settings from ${YAML_PATH}"
 fi
@@ -150,6 +150,23 @@ echo "$RTC_LINES" | sed 's/^/  /'
 
 NODE_IP="$(echo "$RTC_LINES" | awk '/node_ip:/ {print $2}' | tail -n1)"
 NODE_IP_COUNT="$(echo "$RTC_LINES" | grep -c 'node_ip:' || true)"
+UDP_PORT="$(echo "$RTC_LINES" | awk '/udp_port:/ {print $2}' | tail -n1)"
+RANGE_START="$(echo "$RTC_LINES" | awk '/port_range_start:/ {print $2}' | tail -n1)"
+RANGE_END="$(echo "$RTC_LINES" | awk '/port_range_end:/ {print $2}' | tail -n1)"
+
+if [[ -n "$UDP_PORT" && ( -n "$RANGE_START" || -n "$RANGE_END" ) ]]; then
+  fail "LIVEKIT-RTC-MODE-001: configure UDP mux or an RTC port range, not both"
+fi
+if [[ -n "$UDP_PORT" ]]; then
+  if [[ "$UDP_PORT" != "7882" ]]; then
+    fail "LIVEKIT-RTC-MODE-001: UDP mux must use published port 7882 (got ${UDP_PORT})"
+  fi
+  pass "LIVEKIT-RTC-MODE-001 mode=udp-mux udp_port=7882"
+elif [[ -z "$RANGE_START" || -z "$RANGE_END" ]]; then
+  fail "LIVEKIT-RTC-MODE-001: rtc must define udp_port or both port_range_start/port_range_end"
+else
+  fail "LIVEKIT-RTC-MODE-001: staging compose publishes UDP mux 7882, not RTC range ${RANGE_START}-${RANGE_END}"
+fi
 
 if [[ -z "$NODE_IP" ]]; then
   fail "LIVEKIT-ICE-001: rtc.node_ip missing from effective livekit.yaml — run: bash scripts/repair-livekit-node-ip.sh"

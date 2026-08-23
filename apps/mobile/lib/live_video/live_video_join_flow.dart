@@ -25,6 +25,9 @@ abstract final class LiveVideoJoinCheckpoint {
   static const staleAttemptIgnored = "STALE_ATTEMPT_IGNORED";
   static const operationSerialized = "OPERATION_SERIALIZED";
   static const timeoutFired = "TIMEOUT_FIRED";
+  static const iceCandidateObserved = "ICE_CANDIDATE_OBSERVED";
+  static const iceCandidatePairObserved = "ICE_CANDIDATE_PAIR_OBSERVED";
+  static const iceStatsUnavailable = "ICE_STATS_UNAVAILABLE";
 }
 
 /// Tracks join-flow checkpoints for post-mortem diagnostics.

@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/foundation.dart";
 
 /// Blocks logging raw secrets while allowing structured credential metadata.
@@ -16,6 +18,23 @@ void logLiveVideoEvent(String message) {
     return true;
   }());
   debugPrint(message);
+  assert(() {
+    if (message.startsWith("live_video checkpoint=ICE_")) {
+      final file = File(
+        "${Directory.systemTemp.path}/the-eye-live-video-ice-diagnostics.log",
+      );
+      try {
+        file.writeAsStringSync(
+          "$message\n",
+          mode: FileMode.append,
+          flush: true,
+        );
+      } on FileSystemException {
+        // Device diagnostics must never affect emergency video behavior.
+      }
+    }
+    return true;
+  }());
 }
 
 void logLiveVideoDiagnostic({
@@ -46,6 +65,15 @@ void logLiveVideoDiagnostic({
   String? timeoutDurationMs,
   String? cameraState,
   String? microphoneState,
+  String? iceTransport,
+  String? iceCandidateDirection,
+  String? iceCandidateType,
+  String? iceProtocol,
+  String? iceAddress,
+  String? icePort,
+  String? icePriority,
+  String? icePairState,
+  String? icePairSelected,
 }) {
   final parts = <String>[
     "live_video checkpoint=$checkpoint",
@@ -96,6 +124,22 @@ void logLiveVideoDiagnostic({
       "cameraState=$cameraState",
     if (microphoneState != null && microphoneState.isNotEmpty)
       "microphoneState=$microphoneState",
+    if (iceTransport != null && iceTransport.isNotEmpty)
+      "iceTransport=$iceTransport",
+    if (iceCandidateDirection != null && iceCandidateDirection.isNotEmpty)
+      "iceCandidateDirection=$iceCandidateDirection",
+    if (iceCandidateType != null && iceCandidateType.isNotEmpty)
+      "iceCandidateType=$iceCandidateType",
+    if (iceProtocol != null && iceProtocol.isNotEmpty)
+      "iceProtocol=$iceProtocol",
+    if (iceAddress != null && iceAddress.isNotEmpty) "iceAddress=$iceAddress",
+    if (icePort != null && icePort.isNotEmpty) "icePort=$icePort",
+    if (icePriority != null && icePriority.isNotEmpty)
+      "icePriority=$icePriority",
+    if (icePairState != null && icePairState.isNotEmpty)
+      "icePairState=$icePairState",
+    if (icePairSelected != null && icePairSelected.isNotEmpty)
+      "icePairSelected=$icePairSelected",
   ];
   logLiveVideoEvent(parts.join(" "));
 }
