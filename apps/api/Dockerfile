@@ -38,6 +38,7 @@ FROM base AS production
 ENV NODE_ENV=production
 RUN addgroup -S nodejs && adduser -S nestjs -G nodejs
 COPY --from=deploy-prod --chown=nestjs:nodejs /app/deploy /app
+COPY --from=builder --chown=nestjs:nodejs /app/scripts/staging-storage-smoke.cjs /app/scripts/staging-storage-smoke.cjs
 WORKDIR /app
 USER nestjs
 EXPOSE 4000
