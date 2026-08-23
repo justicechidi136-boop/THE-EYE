@@ -395,7 +395,6 @@ export class IncidentsService {
     if (existing) {
       if (
         existing.incidentId !== id ||
-        existing.objectKey !== dto.objectKey ||
         existing.bucket !== dto.bucket
       ) {
         throw new ConflictException("Evidence is already associated with another upload");

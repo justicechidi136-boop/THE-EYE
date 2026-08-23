@@ -658,7 +658,7 @@ describe("ActiveEmergencyService contract", () => {
       {
         mediaType: "Image",
         bucket,
-        objectKey: canonical.objectKey,
+        objectKey: "evidence/inc-1/55555555-5555-4555-8555-555555555555.jpg",
         contentType: "image/jpeg",
         fileHash: canonical.fileHash,
       },

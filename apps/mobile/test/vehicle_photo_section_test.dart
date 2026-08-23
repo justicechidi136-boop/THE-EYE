@@ -12,6 +12,7 @@ import "package:the_eye_mobile/evidence/evidence_permission_service.dart";
 import "package:the_eye_mobile/evidence/evidence_policy.dart";
 import "package:the_eye_mobile/evidence/local_evidence_attachment.dart";
 import "package:the_eye_mobile/vehicles/vehicle_photo_section.dart";
+import "package:the_eye_mobile/main.dart" show buildDarkTheme, buildTheme;
 
 const _pixel =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -134,6 +135,9 @@ Future<void> _pump(
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
+      theme: buildTheme(false),
+      darkTheme: buildDarkTheme(false),
+      themeMode: ThemeMode.dark,
       home: Scaffold(
         body: SingleChildScrollView(
           child: VehiclePhotoSection(
@@ -145,4 +149,5 @@ Future<void> _pump(
     ),
   );
   await tester.pump();
+  expect(tester.takeException(), isNull);
 }

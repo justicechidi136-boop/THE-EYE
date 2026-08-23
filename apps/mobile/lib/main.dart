@@ -117,6 +117,7 @@ import "incidents/live_video_incident_retry.dart";
 import "neighborhood_watch/community_media_upload_service.dart";
 import "neighborhood_watch/community_members_screen.dart";
 import "neighborhood_watch/community_post_detail_screen.dart";
+import "neighborhood_watch/community_post_action_button.dart";
 import "neighborhood_watch/community_report_screen.dart";
 import "neighborhood_watch/private_community_membership_screen.dart";
 import "notifications/notification_destination.dart";
@@ -9460,37 +9461,33 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: TextButton.icon(
+                            child: CommunityPostActionButton(
                               onPressed: () => unawaited(
                                 _toggleLike(controller, post),
                               ),
-                              icon: Icon(
-                                post.viewerReacted
-                                    ? Icons.thumb_up
-                                    : Icons.thumb_up_outlined,
-                              ),
-                              label: Text(
-                                post.reactionCount > 0
-                                    ? "Like ${post.reactionCount}"
-                                    : "Like",
-                              ),
+                              icon: post.viewerReacted
+                                  ? Icons.thumb_up
+                                  : Icons.thumb_up_outlined,
+                              label: post.reactionCount > 0
+                                  ? "Like ${post.reactionCount}"
+                                  : "Like",
                             ),
                           ),
                           Expanded(
-                            child: TextButton.icon(
+                            child: CommunityPostActionButton(
                               onPressed: () =>
                                   _openDiscussion(controller, post),
-                              icon: const Icon(Icons.chat_bubble_outline),
-                              label: Text(
-                                comments > 0 ? "Comment $comments" : "Comment",
-                              ),
+                              icon: Icons.chat_bubble_outline,
+                              label: comments > 0
+                                  ? "Comment $comments"
+                                  : "Comment",
                             ),
                           ),
                           Expanded(
-                            child: TextButton.icon(
+                            child: CommunityPostActionButton(
                               onPressed: () => unawaited(_sharePost(post)),
-                              icon: const Icon(Icons.share_outlined),
-                              label: const Text("Share"),
+                              icon: Icons.share_outlined,
+                              label: "Share",
                             ),
                           ),
                         ],
