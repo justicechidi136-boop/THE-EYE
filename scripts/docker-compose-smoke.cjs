@@ -136,9 +136,9 @@ const nginxChecks = [
   ["limit_except GET PUT", storageLocations, "Storage object API method allowlist"],
   ['"${LIVEKIT_HTTP_PORT:-7880}:7880"', compose, "LiveKit signaling port publish"],
   ['"${LIVEKIT_RTC_UDP_PORT:-7882}:7882/udp"', compose, "LiveKit RTC UDP port publish"],
-  ["the-eye-internal", compose, "LiveKit internal bridge network"],
+  ["the-eye-internal", compose, "internal bridge network"],
   ["the-eye-public", compose, "LiveKit public network for host port publish"],
-  ["# the-eye-public MUST be listed first", compose, "LiveKit public network listed before internal"],
+  ["# Keep LiveKit on one routable bridge.", compose, "LiveKit single-network NAT policy"],
   ["resolver 127.0.0.11", fs.readFileSync(path.join(root, "infra", "docker", "nginx", "nginx.conf"), "utf8"), "Docker embedded DNS resolver"],
 ];
 for (const [needle, content, label] of nginxChecks) {
@@ -146,6 +146,12 @@ for (const [needle, content, label] of nginxChecks) {
     console.error(`Docker Compose smoke failed. Nginx config missing ${label}.`);
     process.exit(1);
   }
+}
+
+const livekitService = compose.slice(compose.indexOf("  livekit:"), compose.indexOf("\n  api:"));
+if (!livekitService.includes("      - the-eye-public") || livekitService.includes("      - the-eye-internal")) {
+  console.error("Docker Compose smoke failed. LiveKit must use only the public bridge for stable RTC NAT.");
+  process.exit(1);
 }
 
 const entrypoint = fs.readFileSync(

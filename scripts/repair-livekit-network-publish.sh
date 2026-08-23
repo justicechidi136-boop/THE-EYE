@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Repair LiveKit dual-network host port publish on a running VPS without full redeploy.
+# Repair LiveKit single-network host port publish on a running VPS without full redeploy.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
