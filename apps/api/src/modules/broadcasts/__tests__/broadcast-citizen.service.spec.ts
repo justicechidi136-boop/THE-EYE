@@ -38,7 +38,12 @@ describe("BroadcastCitizenService", () => {
       findMany: jest.fn(),
       update: jest.fn(),
     },
-    broadcastCommentReaction: { upsert: jest.fn() },
+    broadcastCommentReaction: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      delete: jest.fn(),
+    },
+    citizenVehiclePhoto: { findMany: jest.fn() },
     broadcastSighting: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     broadcastMedia: { upsert: jest.fn() },
     $executeRawUnsafe: jest.fn(),
@@ -68,6 +73,12 @@ describe("BroadcastCitizenService", () => {
     prisma.broadcastReport.findFirst.mockResolvedValue(null);
     prisma.broadcastReport.create.mock.calls = [];
     prisma.broadcastReport.create.mockResolvedValue({ id: "report-1", status: "Open" });
+    prisma.broadcastCommentReaction.findUnique.mock.calls = [];
+    prisma.broadcastCommentReaction.findUnique.mockResolvedValue(null);
+    prisma.broadcastCommentReaction.upsert.mock.calls = [];
+    prisma.broadcastCommentReaction.delete.mock.calls = [];
+    prisma.citizenVehiclePhoto.findMany.mock.calls = [];
+    prisma.citizenVehiclePhoto.findMany.mockResolvedValue([]);
     audit.record.mock.calls = [];
     notificationsService.create.mock.calls = [];
     broadcastQueue.enqueueCountryDelivery.mock.calls = [];
@@ -188,6 +199,16 @@ describe("BroadcastCitizenService", () => {
       metadata: {},
       adminVerified: false,
     });
+    prisma.citizenVehiclePhoto.findMany.mockResolvedValue([
+      {
+        id: "vehicle-photo-1",
+        objectKey: "vehicles/user-1/vehicle-42/photo-1.jpg",
+        contentType: "image/jpeg",
+        angle: "FRONT",
+        sortOrder: 0,
+        createdAt: new Date("2026-08-06T00:00:00.000Z"),
+      },
+    ]);
 
     await service.createStolenVehicle(
       {
@@ -229,9 +250,19 @@ describe("BroadcastCitizenService", () => {
     expect(metadata?.theftDescription).toBe(
       "Vehicle was taken from a secured parking area.",
     );
+    expect(metadata?.distinguishingFeatures).toBe("Rear bumper dent");
     expect(metadata?.vehiclePhotoObjectKeys).toEqual([
-      "garage/vehicle-42/photo-1.jpg",
+      "vehicles/user-1/vehicle-42/photo-1.jpg",
     ]);
+    expect(metadata?.savedVehiclePhotos?.[0]?.angle).toBe("FRONT");
+    expect(prisma.citizenVehiclePhoto.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          vehicleId: "vehicle-42",
+          vehicle: { userId: "user-1" },
+        },
+      }),
+    );
   });
 
   it("allows author resolve and withdraw", async () => {
@@ -297,6 +328,42 @@ describe("BroadcastCitizenService", () => {
     await expect(
       service.deleteComment("broadcast-1", "comment-1", reporter),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("toggles duplicate comment reactions without creating duplicates", async () => {
+    resetCitizenMocks();
+    prisma.broadcastComment.findFirst.mockResolvedValue({
+      id: "comment-1",
+      broadcastId: "broadcast-1",
+      hiddenAt: null,
+    });
+    prisma.broadcastCommentReaction.upsert.mockResolvedValue({
+      id: "reaction-1",
+      commentId: "comment-1",
+      userId: "user-1",
+      reaction: "Helpful",
+    });
+
+    const added = await service.reactToComment(
+      "broadcast-1",
+      "comment-1",
+      { reaction: "Helpful" },
+      reporter,
+    );
+    expect(added.data.active).toBe(true);
+    expect(prisma.broadcastCommentReaction.upsert).toHaveBeenCalled();
+
+    prisma.broadcastCommentReaction.findUnique.mockResolvedValue({
+      id: "reaction-1",
+    });
+    const removed = await service.reactToComment(
+      "broadcast-1",
+      "comment-1",
+      { reaction: "Helpful" },
+      reporter,
+    );
+    expect(removed.data.active).toBe(false);
+    expect(prisma.broadcastCommentReaction.delete).toHaveBeenCalled();
   });
 
   it("submits stolen vehicle report with stable reason", async () => {

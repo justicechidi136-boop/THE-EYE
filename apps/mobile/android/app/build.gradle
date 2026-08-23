@@ -82,18 +82,18 @@ android {
             dimension = "environment"
             applicationIdSuffix = ".dev"
             resValue "string", "app_name", "THE EYE Dev"
-            manifestPlaceholders += [deepLinkScheme: "theeye-dev"]
+            manifestPlaceholders += [deepLinkScheme: "theeye-dev", shareHost: "localhost"]
         }
         staging {
             dimension = "environment"
             applicationIdSuffix = ".staging"
             resValue "string", "app_name", "THE EYE Staging"
-            manifestPlaceholders += [deepLinkScheme: "theeye-staging"]
+            manifestPlaceholders += [deepLinkScheme: "theeye-staging", shareHost: "staging-dashboard8jps.theeye.com.ng"]
         }
         production {
             dimension = "environment"
             resValue "string", "app_name", "THE EYE"
-            manifestPlaceholders += [deepLinkScheme: "theeye"]
+            manifestPlaceholders += [deepLinkScheme: "theeye", shareHost: "dashboard.theeye.com.ng"]
         }
     }
 

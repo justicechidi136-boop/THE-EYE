@@ -87,6 +87,7 @@ import "presentation/citizen_notification_presenter.dart";
 import "presentation/citizen_time_picker.dart";
 import "presentation/missing_person_age.dart";
 import "vehicles/vehicle_image_persist.dart";
+import "vehicles/vehicle_photo_section.dart";
 import "push/push_background_handler.dart";
 import "auth/citizen_auth_return_listener.dart";
 import "push/push_deep_link_router.dart";
@@ -2885,6 +2886,7 @@ class AppController extends SessionAccessor
               id: photo.id,
               objectKey: photo.objectKey,
               contentType: photo.contentType,
+              angle: photo.angle,
               sizeBytes: photo.sizeBytes,
               sortOrder: photo.sortOrder,
               createdAt: photo.createdAt,
@@ -2924,6 +2926,7 @@ class AppController extends SessionAccessor
             id: photo.id,
             objectKey: photo.objectKey,
             contentType: photo.contentType,
+            angle: photo.angle,
             sizeBytes: photo.sizeBytes,
             sortOrder: photo.sortOrder,
             createdAt: photo.createdAt,
@@ -6572,7 +6575,7 @@ class _StolenVehicleBroadcastScreenState
   final descriptionController = TextEditingController();
   final theftDescriptionController = TextEditingController();
   final lastKnownLocationController = TextEditingController();
-  final _vehiclePhotosSectionKey = GlobalKey<ManagedEvidenceSectionState>();
+  final _vehiclePhotosSectionKey = GlobalKey<VehiclePhotoSectionState>();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _draftStore = StolenVehicleBroadcastDraftStore();
   bool submitting = false;
@@ -6723,12 +6726,12 @@ class _StolenVehicleBroadcastScreenState
   }
 
   List<String> _extractVehiclePhotoObjectKeys(CarProfile? profile) {
-    final imagePath = profile?.imagePath?.trim() ?? "";
-    if (imagePath.isEmpty) return const [];
-    final looksLikeLocalPath =
-        imagePath.contains("\\") || imagePath.contains(":");
-    if (looksLikeLocalPath) return const [];
-    return [imagePath];
+    if (profile == null) return const [];
+    return profile.photos
+        .map((photo) => photo.objectKey?.trim() ?? "")
+        .where((key) => key.isNotEmpty && !key.contains(".."))
+        .take(EvidencePolicy.vehiclePhotos.maxPhotos)
+        .toList(growable: false);
   }
 
   Future<void> _openAddVehicleFlow() async {
@@ -7142,22 +7145,9 @@ class _StolenVehicleBroadcastScreenState
                       decoration: const InputDecoration(
                           labelText: "VIN / Chassis (optional)")),
                   const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text("Vehicle Photos",
-                        style: Theme.of(context).textTheme.titleMedium),
-                  ),
-                  const SizedBox(height: 4),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                        "Add clear front, rear, or side reference photos."),
-                  ),
-                  const SizedBox(height: 8),
-                  ManagedEvidenceSection(
+                  VehiclePhotoSection(
                     key: _vehiclePhotosSectionKey,
                     lowDataMode: appOf(context).lowDataMode,
-                    policy: EvidencePolicy.vehiclePhotos,
                   ),
                   const SizedBox(height: 20),
                   Align(
@@ -9173,6 +9163,7 @@ class CommunityFeedScreen extends StatefulWidget {
 
 class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
   String _selectedFilter = "All";
+  CommunityNotice? _communityNotice;
 
   @override
   void initState() {
@@ -9187,7 +9178,28 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
         await controller.loadCommunitiesFromApi(refresh: true);
       }
       await controller.loadCommunityFeed(refresh: true);
+      await _loadCommunityNotice(controller);
     });
+  }
+
+  Future<void> _loadCommunityNotice(AppController controller) async {
+    final token = controller.accessToken;
+    final community = controller.selectedCommunity;
+    if (token == null || community == null) return;
+    try {
+      final notices = await NeighborhoodWatchService(
+        apiClient: controller.apiClient,
+      ).communityNotices(
+        accessToken: token,
+        communityId: community.id,
+      );
+      if (!mounted) return;
+      setState(
+        () => _communityNotice = notices.isEmpty ? null : notices.first,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _communityNotice = null);
+    }
   }
 
   String _conversationTypeLabel(String type) {
@@ -9298,8 +9310,19 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       title: "Neighborhood Watch",
       actions: _neighborhoodWatchHeaderActions(context),
       tabs: _neighborhoodWatchPrimaryTabs(context, selectedIndex: 1),
+      floatingActionButton: canStart
+          ? FloatingActionButton(
+              tooltip: "Create neighborhood post",
+              onPressed: () => Navigator.of(context)
+                  .pushNamed(NeighborhoodWatchDestinations.create),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: RefreshIndicator(
-        onRefresh: () => controller.loadCommunityFeed(refresh: true),
+        onRefresh: () async {
+          await controller.loadCommunityFeed(refresh: true);
+          await _loadCommunityNotice(controller);
+        },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           physics: const AlwaysScrollableScrollPhysics(),
@@ -9307,89 +9330,48 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
             OutsideCurrentAreaNotice(
               status: controller.selectedCommunityAccessStatus,
             ),
-            if (canStart)
-              Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.of(context).pushNamed(
-                        NeighborhoodWatchDestinations.create,
-                      ),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text(
-                        "What's happening in your neighborhood?",
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      NwPrototypeActionTile(
-                        icon: Icons.tips_and_updates_outlined,
-                        label: "Share Security Tip",
-                        primary: true,
-                        onTap: () => Navigator.of(context).pushNamed(
-                          NeighborhoodWatchDestinations.create,
-                          arguments: const {"type": "SafetyTip"},
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      NwPrototypeActionTile(
-                        icon: Icons.report_outlined,
-                        label: "Report Activity",
-                        color: const Color(0xFF4A9DFF),
-                        onTap: () => Navigator.of(context).pushNamed(
-                          NeighborhoodWatchDestinations.create,
-                          arguments: const {"type": "SuspiciousActivity"},
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      NwPrototypeActionTile(
-                        icon: Icons.warning_amber_outlined,
-                        label: "Report Road Hazard",
-                        color: BrandColors.green,
-                        onTap: () => Navigator.of(context).pushNamed(
-                          NeighborhoodWatchDestinations.create,
-                          arguments: const {"type": "RoadHazard"},
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              )
-            else
+            if (!canStart)
               const NwPrototypeListCard(
                 leading: Icon(Icons.lock_outline),
                 title: "Community posting unavailable",
                 subtitle:
                     "Sign in and confirm your current location to participate in this area.",
               ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () =>
-                    Navigator.of(context).pushNamed("/report/emergency"),
-                icon: const Icon(Icons.emergency),
-                label: const Text("Report Emergency"),
-              ),
-            ),
-            const SizedBox(height: 16),
+            if (!canStart) const SizedBox(height: 16),
             NwPrototypeFilterChips(
               labels: const [
                 "All",
                 "Discussions",
                 "Tips",
                 "Traffic",
-                "Activity",
-                "Hazards",
               ],
               selectedLabel: _selectedFilter,
               onSelected: (value) => setState(() => _selectedFilter = value),
             ),
             const SizedBox(height: 14),
+            if (_communityNotice != null) ...[
+              NwPrototypeCard(
+                highlight: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const NwPrototypeSectionHeading(
+                      title: "Community Notice",
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _communityNotice!.title,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    if (_communityNotice!.body.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(_communityNotice!.body),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             if (controller.loadingCommunityFeed &&
                 controller.communityFeed.isEmpty)
               const Center(child: CircularProgressIndicator())
@@ -10835,6 +10817,7 @@ class _VehiclePhotoDraft {
     this.localPath,
     this.previewUrl,
     required this.contentType,
+    this.angle = VehiclePhotoAngle.other,
     this.sizeBytes,
     this.sortOrder = 0,
     this.createdAt,
@@ -10847,6 +10830,7 @@ class _VehiclePhotoDraft {
   final String? localPath;
   final String? previewUrl;
   final String contentType;
+  final VehiclePhotoAngle angle;
   final int? sizeBytes;
   final int sortOrder;
   final DateTime? createdAt;
@@ -10859,6 +10843,7 @@ class _VehiclePhotoDraft {
     String? localPath,
     String? previewUrl,
     String? contentType,
+    VehiclePhotoAngle? angle,
     int? sizeBytes,
     int? sortOrder,
     DateTime? createdAt,
@@ -10871,6 +10856,7 @@ class _VehiclePhotoDraft {
       localPath: localPath ?? this.localPath,
       previewUrl: previewUrl ?? this.previewUrl,
       contentType: contentType ?? this.contentType,
+      angle: angle ?? this.angle,
       sizeBytes: sizeBytes ?? this.sizeBytes,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
@@ -10928,6 +10914,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             objectKey: photo.objectKey,
             previewUrl: photo.previewUrl,
             contentType: photo.contentType ?? "image/jpeg",
+            angle: VehiclePhotoAngle.fromApi(photo.angle),
             sizeBytes: photo.sizeBytes,
             sortOrder: photo.sortOrder,
             createdAt: photo.createdAt,
@@ -10954,7 +10941,23 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     return persistPickedVehicleImage(picked);
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _addVehiclePhoto() async {
+    final angle = await chooseVehiclePhotoAngle(context);
+    if (angle == null || !mounted) return;
+    final source = await chooseVehiclePhotoSource(context);
+    if (source == null || !mounted) return;
+    await _pickImage(
+      source == ImageSourceChoice.camera
+          ? ImageSource.camera
+          : ImageSource.gallery,
+      angle,
+    );
+  }
+
+  Future<void> _pickImage(
+    ImageSource source,
+    VehiclePhotoAngle angle,
+  ) async {
     final picker = ImagePicker();
     if (source == ImageSource.gallery) {
       final picked = await picker.pickMultiImage(
@@ -10962,7 +10965,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         imageQuality: 85,
       );
       if (!mounted || picked.isEmpty) return;
-      await _addPickedImages(picked);
+      await _addPickedImages(picked, angle);
       return;
     }
     final picked = await picker.pickImage(
@@ -10971,10 +10974,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       imageQuality: 85,
     );
     if (!mounted || picked == null) return;
-    await _addPickedImages([picked]);
+    await _addPickedImages([picked], angle);
   }
 
-  Future<void> _addPickedImages(List<XFile> pickedImages) async {
+  Future<void> _addPickedImages(
+    List<XFile> pickedImages,
+    VehiclePhotoAngle angle,
+  ) async {
     if (_photos.length + pickedImages.length >
         EvidencePolicy.vehiclePhotos.maxPhotos) {
       showAppSnackBar(context, _vehiclePhotoLimitMessage, isError: true);
@@ -11016,6 +11022,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             localPath: savedPath,
             previewUrl: savedPath,
             contentType: contentType,
+            angle: angle,
             sizeBytes: sizeBytes,
             uploadState: _VehiclePhotoUploadState.local,
           ),
@@ -11091,6 +11098,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           vehicleId: resolvedVehicleId,
           objectKey: presigned.objectKey,
           contentType: photo.contentType,
+          angle: photo.angle.apiValue,
           sizeBytes: sizeBytes,
           sortOrder: index,
         );
@@ -11102,6 +11110,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             localPath: localPath,
             previewUrl: confirmed.signedGetUrl ?? localPath,
             contentType: confirmed.contentType,
+            angle: VehiclePhotoAngle.fromApi(confirmed.angle),
             sizeBytes: confirmed.sizeBytes,
             sortOrder: confirmed.sortOrder,
             createdAt: confirmed.createdAt,
@@ -11166,6 +11175,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         vehicleId: resolvedVehicleId,
         objectKey: presigned.objectKey,
         contentType: photo.contentType,
+        angle: photo.angle.apiValue,
         sizeBytes: sizeBytes,
         sortOrder: index,
       );
@@ -11177,6 +11187,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           localPath: localPath,
           previewUrl: confirmed.signedGetUrl ?? localPath,
           contentType: confirmed.contentType,
+          angle: VehiclePhotoAngle.fromApi(confirmed.angle),
           sizeBytes: confirmed.sizeBytes,
           sortOrder: confirmed.sortOrder,
           createdAt: confirmed.createdAt,
@@ -11256,6 +11267,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             id: photo.id,
             objectKey: photo.objectKey,
             contentType: photo.contentType,
+            angle: photo.angle.apiValue,
             sizeBytes: photo.sizeBytes,
             sortOrder: photo.sortOrder,
             createdAt: photo.createdAt,
@@ -11456,6 +11468,29 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                             ),
                           ),
                           Positioned(
+                            left: 4,
+                            top: 4,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black87,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
+                                ),
+                                child: Text(
+                                  photo.angle.label,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
                             right: 4,
                             top: 4,
                             child: GestureDetector(
@@ -11512,32 +11547,21 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                 const SizedBox(height: 12),
                 Text(
-                  "${_photos.length} of ${EvidencePolicy.vehiclePhotos.maxPhotos}",
+                  "${_photos.length}/${EvidencePolicy.vehiclePhotos.maxPhotos}",
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: saving
-                            ? null
-                            : () => _pickImage(ImageSource.camera),
-                        icon: const Icon(Icons.photo_camera_outlined),
-                        label: const Text("Take photo"),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: saving
-                            ? null
-                            : () => _pickImage(ImageSource.gallery),
-                        icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text("Add more"),
-                      ),
-                    ),
-                  ],
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: saving ||
+                            _photos.length >=
+                                EvidencePolicy.vehiclePhotos.maxPhotos
+                        ? null
+                        : _addVehiclePhoto,
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: const Text("Add photo"),
+                  ),
                 ),
                 if (hasFailed) ...[
                   const SizedBox(height: 8),

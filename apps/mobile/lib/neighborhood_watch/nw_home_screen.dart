@@ -316,6 +316,14 @@ class _NeighborhoodWatchHomeScreenState
           }
         },
       ),
+      floatingActionButton: _context?.permissions.canPost == true
+          ? FloatingActionButton(
+              tooltip: "Create neighborhood post",
+              onPressed: () => Navigator.of(context)
+                  .pushNamed(NeighborhoodWatchDestinations.create),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _refreshContext,
         child: ListView(
@@ -414,7 +422,6 @@ class _NeighborhoodWatchHomeScreenState
     final isHomeCommunity = !isDynamic &&
         community != null &&
         ctx.homeCommunity?.id == community.id;
-    final canPost = !_contextIsStale && ctx.permissions.canPost;
     final areaBadgeColor = presentation.isAmbient
         ? semantics.secondaryText
         : presentation.isMember
@@ -644,14 +651,6 @@ class _NeighborhoodWatchHomeScreenState
                 ),
               ],
             ),
-            if (summary.publicBroadcasts > 0) ...[
-              const SizedBox(height: 10),
-              NwPrototypeStatTile(
-                value: "${summary.publicBroadcasts}",
-                label: "Public broadcasts",
-                accent: const Color(0xFF4A9DFF),
-              ),
-            ],
             if (summary.activeAlerts == 0 &&
                 summary.roadHazards == 0 &&
                 summary.communityWarnings == 0)
@@ -666,134 +665,42 @@ class _NeighborhoodWatchHomeScreenState
         ),
       ),
       const SizedBox(height: 16),
-      if (canPost) ...[
-        const NwPrototypeSectionHeading(title: "Share with your area"),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            NwPrototypeActionTile(
-              icon: Icons.tips_and_updates_outlined,
-              label: "Share Security Tip",
-              primary: true,
-              onTap: () => Navigator.of(context).pushNamed(
-                NeighborhoodWatchDestinations.create,
-                arguments: const {"type": "SafetyTip"},
-              ),
-            ),
-            const SizedBox(width: 10),
-            NwPrototypeActionTile(
-              icon: Icons.report_outlined,
-              label: "Report Activity",
-              color: const Color(0xFF4A9DFF),
-              onTap: () => Navigator.of(context).pushNamed(
-                NeighborhoodWatchDestinations.create,
-                arguments: const {"type": "SuspiciousActivity"},
-              ),
-            ),
-            const SizedBox(width: 10),
-            NwPrototypeActionTile(
-              icon: Icons.warning_amber_outlined,
-              label: "Report Road Hazard",
-              color: semantics.success,
-              onTap: () => Navigator.of(context).pushNamed(
-                NeighborhoodWatchDestinations.create,
-                arguments: const {"type": "RoadHazard"},
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () => Navigator.of(context)
-                .pushNamed(NeighborhoodWatchDestinations.create),
-            icon: const Icon(Icons.edit_outlined),
-            label: const Text("Start Conversation"),
-          ),
-        ),
-        const SizedBox(height: 12),
-      ],
+      const NwPrototypeSectionHeading(title: "What's happening nearby"),
+      const SizedBox(height: 10),
       NwPrototypeCard(
-        highlight: true,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              "Switch to Active Emergency",
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: semantics.error,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              "If the situation is immediate or dangerous, move into the canonical emergency reporting flow.",
-              style: TextStyle(color: semantics.mutedText),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: semantics.error,
-                  foregroundColor: semantics.textOnPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onPressed: () =>
-                    Navigator.of(context).pushNamed("/report/emergency"),
-                icon: const Icon(Icons.emergency),
-                label: const Text("Report Emergency"),
+            if (summary.activeAlerts == 0 &&
+                summary.recentVerifiedIncidents == 0 &&
+                summary.roadHazards == 0 &&
+                summary.communityWarnings == 0) ...[
+              const Text("Nothing happening nearby right now"),
+              const SizedBox(height: 4),
+              Text(
+                "Be the first to share something that can help keep the community safe.",
+                style: TextStyle(color: semantics.mutedText),
               ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 16),
-      NwPrototypeCard(
-        child: GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.35,
-          children: [
-            _NavTile(
-              label: "Feed",
-              icon: Icons.dynamic_feed,
-              color: semantics.interactiveText,
-              onTap: () => Navigator.of(context)
-                  .pushNamed(NeighborhoodWatchDestinations.feed),
-            ),
-            _NavTile(
-              label: "Alerts",
-              icon: Icons.campaign,
-              color: semantics.interactiveText,
-              onTap: () => Navigator.of(context)
-                  .pushNamed(NeighborhoodWatchDestinations.alerts),
-            ),
-            _NavTile(
-              label: "Community",
-              icon: Icons.groups,
-              color: semantics.interactiveText,
-              onTap: () => Navigator.of(context)
-                  .pushNamed(NeighborhoodWatchDestinations.communities),
-            ),
-            _NavTile(
-              label: "Patrol",
-              icon: Icons.security,
-              color: semantics.interactiveText,
-              onTap: () => Navigator.of(context)
-                  .pushNamed(NeighborhoodWatchDestinations.patrols),
-            ),
-            _NavTile(
-              label: "Broadcasts",
-              icon: Icons.campaign_outlined,
-              color: semantics.interactiveText,
-              onTap: () => Navigator.of(context)
-                  .pushNamed(NeighborhoodWatchDestinations.broadcasts),
-            ),
+            ] else ...[
+              if (summary.activeAlerts > 0)
+                Text("${summary.activeAlerts} active local alert(s)"),
+              if (summary.recentVerifiedIncidents > 0)
+                Text(
+                  "${summary.recentVerifiedIncidents} verified incident(s) in the last 7 days",
+                ),
+              if (summary.roadHazards > 0)
+                Text("${summary.roadHazards} road hazard(s)"),
+              if (summary.communityWarnings > 0)
+                Text("${summary.communityWarnings} community warning(s)"),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context)
+                      .pushNamed(NeighborhoodWatchDestinations.feed),
+                  child: const Text("View all"),
+                ),
+              ),
+            ],
           ],
         ),
       ),

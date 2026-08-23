@@ -260,6 +260,29 @@ class CommunityPostItem {
   }
 }
 
+class CommunityNotice {
+  const CommunityNotice({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.category,
+  });
+
+  final String id;
+  final String title;
+  final String body;
+  final String category;
+
+  factory CommunityNotice.fromJson(Map<String, dynamic> json) {
+    return CommunityNotice(
+      id: json["id"] as String? ?? "",
+      title: json["title"] as String? ?? "Community Notice",
+      body: json["body"] as String? ?? "",
+      category: json["category"] as String? ?? "Safety",
+    );
+  }
+}
+
 class CommunityPostMediaReference {
   const CommunityPostMediaReference({
     required this.id,
@@ -1393,6 +1416,27 @@ class NeighborhoodWatchService {
       },
     );
     return _decodePage(response, CommunityPostItem.fromJson);
+  }
+
+  Future<List<CommunityNotice>> communityNotices({
+    required String accessToken,
+    required String communityId,
+  }) async {
+    if (isDynamicAreaCommunityId(communityId)) return const [];
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.neighborhoodWatchCommunityPinnedSafety(communityId),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final raw = decoded is Map ? decoded["data"] : null;
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((item) => CommunityNotice.fromJson(
+              Map<String, dynamic>.from(item),
+            ))
+        .toList(growable: false);
   }
 
   Future<CommunityPostItem> getPost({

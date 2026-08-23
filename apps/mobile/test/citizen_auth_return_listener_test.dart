@@ -107,4 +107,32 @@ void main() {
       isNull,
     );
   });
+
+  test("public staging Broadcast link resolves to in-app detail route", () {
+    expect(
+      broadcastRouteForPublicUri(
+        Uri.parse(
+          "https://staging-dashboard8jps.theeye.com.ng/share/broadcasts/broadcast-42",
+        ),
+      ),
+      "/broadcasts/broadcast-42",
+    );
+  });
+
+  test("public Broadcast link rejects unapproved hosts and malformed paths", () {
+    expect(
+      broadcastRouteForPublicUri(
+        Uri.parse("https://example.com/share/broadcasts/broadcast-42"),
+      ),
+      isNull,
+    );
+    expect(
+      broadcastRouteForPublicUri(
+        Uri.parse(
+          "https://dashboard.theeye.com.ng/admin/broadcasts/broadcast-42",
+        ),
+      ),
+      isNull,
+    );
+  });
 }

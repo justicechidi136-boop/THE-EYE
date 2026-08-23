@@ -407,6 +407,7 @@ describe("UsersService vehicle garage", () => {
             vehicleId: "v1",
             objectKey: "vehicles/user-1/v1/photo.jpg",
             contentType: "image/jpeg",
+            angle: "FRONT",
             sizeBytes: 1400,
             sortOrder: 0,
             createdAt: new Date("2026-01-04T00:00:00.000Z"),
@@ -642,6 +643,7 @@ describe("UsersService vehicle garage", () => {
       vehicleId,
       objectKey: `vehicles/user-1/${vehicleId}/photo.jpg`,
       contentType: "image/jpeg",
+      angle: "REAR",
       sizeBytes: 1234,
       sortOrder: 2,
       createdAt: new Date("2026-01-04T00:00:00.000Z"),
@@ -653,11 +655,18 @@ describe("UsersService vehicle garage", () => {
       {
         objectKey: `vehicles/user-1/${vehicleId}/4f8ca2f6-3db5-4fd8-bf3b-bf2d66b92f8f.jpg`,
         contentType: "image/jpeg",
+        angle: "REAR",
         sizeBytes: 1234,
       },
     );
 
     expect(result.sortOrder).toBe(2);
+    expect(result.angle).toBe("REAR");
+    expect(prisma.citizenVehiclePhoto.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ angle: "REAR" }),
+      }),
+    );
     expect(prisma.citizenVehiclePhoto.create).toHaveBeenCalled();
   });
 

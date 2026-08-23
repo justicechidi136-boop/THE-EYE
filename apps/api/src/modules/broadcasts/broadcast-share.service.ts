@@ -13,6 +13,27 @@ const PUBLIC_STATUSES = new Set<string>([
   BroadcastStatus.Expired,
 ]);
 
+export function resolvePublicBroadcastShareBaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const configured = env.PUBLIC_BROADCAST_SHARE_BASE_URL?.trim();
+  if (configured) {
+    const parsed = new URL(configured);
+    if (parsed.protocol !== "https:" && env.NODE_ENV !== "development") {
+      throw new Error("PUBLIC_BROADCAST_SHARE_BASE_URL must use HTTPS");
+    }
+    return configured.replace(/\/$/, "");
+  }
+  const appEnv = String(env.THE_EYE_APP_ENV ?? env.NODE_ENV ?? "development")
+    .trim()
+    .toLowerCase();
+  if (appEnv === "staging") {
+    return "https://staging-dashboard8jps.theeye.com.ng";
+  }
+  if (appEnv === "production") return "https://dashboard.theeye.com.ng";
+  return "http://localhost:3000";
+}
+
 @Injectable()
 export class BroadcastShareService {
   constructor(private readonly prisma: PrismaService) {}
@@ -38,6 +59,18 @@ export class BroadcastShareService {
         : broadcast.adminVerified
           ? "Verified by Admin"
           : "Admin Broadcast";
+    const approximateArea = this.approximateArea(
+      metadata,
+      broadcast.state,
+      broadcast.country,
+    );
+    const shareUrl = `${resolvePublicBroadcastShareBaseUrl()}/share/broadcasts/${broadcast.id}`;
+    const summary = this.buildSafeSummary(
+      broadcast.type as BroadcastType,
+      broadcast.title,
+      broadcast.body,
+      metadata,
+    );
 
     return {
       data: {
@@ -45,18 +78,26 @@ export class BroadcastShareService {
         type: broadcast.type,
         status: broadcast.status,
         title: broadcast.title,
-        summary: this.buildSafeSummary(broadcast.type as BroadcastType, broadcast.title, broadcast.body, metadata),
+        summary,
         authorLabel,
         adminVerified: broadcast.adminVerified,
         country: broadcast.country,
         state: broadcast.state,
-        approximateArea: this.approximateArea(metadata, broadcast.state, broadcast.country),
+        approximateArea,
         publishedAt: broadcast.publishedAt,
         updatedAt: broadcast.createdAt,
         expiresAt: broadcast.expiresAt,
         statusBanner: this.statusBanner(String(broadcast.status)),
-        shareUrl: `/share/broadcasts/${broadcast.id}`,
-        deepLink: `/broadcasts/${broadcast.id}`,
+        shareUrl,
+        deepLink: shareUrl,
+        shareText: this.buildShareText({
+          type: broadcast.type as BroadcastType,
+          title: broadcast.title,
+          summary,
+          approximateArea,
+          lastSeenAt: metadata.lastSeenAt,
+          shareUrl,
+        }),
         openGraph: {
           title: broadcast.title,
           description: this.buildSafeSummary(broadcast.type as BroadcastType, broadcast.title, broadcast.body, metadata),
@@ -64,6 +105,41 @@ export class BroadcastShareService {
         },
       },
     };
+  }
+
+  private buildShareText(input: {
+    type: BroadcastType;
+    title: string;
+    summary: string;
+    approximateArea: string | null;
+    lastSeenAt: unknown;
+    shareUrl: string;
+  }) {
+    const heading = input.type === BroadcastType.StolenVehicle
+      ? "Stolen Vehicle Alert"
+      : input.type === BroadcastType.MissingPerson
+        ? "Missing Person Alert"
+        : "Safety Broadcast";
+    const parsedLastSeen = typeof input.lastSeenAt === "string"
+      ? new Date(input.lastSeenAt)
+      : null;
+    return [
+      heading,
+      input.title,
+      input.summary === input.title ? null : input.summary,
+      parsedLastSeen && !Number.isNaN(parsedLastSeen.getTime())
+        ? `Last seen: ${parsedLastSeen.toLocaleString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          })}`
+        : null,
+      input.approximateArea ? `Location: ${input.approximateArea}` : null,
+      `View full broadcast: ${input.shareUrl}`,
+    ].filter(Boolean).join("\n");
   }
 
   private buildSafeSummary(

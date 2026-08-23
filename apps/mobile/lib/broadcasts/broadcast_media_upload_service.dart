@@ -90,6 +90,8 @@ class BroadcastMediaUploadService {
           "capturedAt": attachment.capturedAt.toUtc().toIso8601String(),
           if (attachment.metadata["selectedLanguage"] is String)
             "selectedLanguage": attachment.metadata["selectedLanguage"],
+          if (attachment.metadata["vehiclePhotoAngle"] is String)
+            "angle": attachment.metadata["vehiclePhotoAngle"],
           if (attachment.durationSeconds != null)
             "durationSeconds": attachment.durationSeconds,
         });

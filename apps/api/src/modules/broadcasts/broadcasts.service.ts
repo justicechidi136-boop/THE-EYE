@@ -967,6 +967,19 @@ export class BroadcastsService {
       if (source[key] != null && source[key] !== "") projected[key] = source[key];
     }
     const mediaClient = (this.prisma as any).broadcastMedia;
+    const rawVehiclePhotos = Array.isArray(source.vehiclePhotos)
+      ? source.vehiclePhotos
+      : [];
+    const vehicleAngleByObjectKey = new Map(
+      rawVehiclePhotos
+        .filter((item): item is Record<string, unknown> =>
+          Boolean(item && typeof item === "object"),
+        )
+        .map((item) => [
+          String(item.objectKey ?? ""),
+          String(item.angle ?? "OTHER"),
+        ]),
+    );
     if (broadcastId && typeof mediaClient?.findMany === "function") {
       const rows = await mediaClient.findMany({
         where: { broadcastId, sightingId: null, deletedAt: null },
@@ -990,6 +1003,9 @@ export class BroadcastsService {
           selectedLanguage: row.selectedLanguage ?? null,
           detectedLanguage: row.detectedLanguage ?? null,
           role: String(row.role),
+          ...(String(row.role) === "VehiclePhoto"
+            ? { angle: vehicleAngleByObjectKey.get(String(row.objectKey)) ?? "OTHER" }
+            : {}),
           url,
         };
       }));
@@ -997,6 +1013,38 @@ export class BroadcastsService {
       const vehiclePhotos = projectedMedia.filter((row) => row.role === "VehiclePhoto");
       if (incidentEvidence.length > 0) projected.attachments = incidentEvidence;
       if (vehiclePhotos.length > 0) projected.vehiclePhotos = vehiclePhotos;
+    }
+    if (!projected.vehiclePhotos && Array.isArray(source.savedVehiclePhotos)) {
+      const savedPhotos = source.savedVehiclePhotos
+        .filter((item): item is Record<string, unknown> =>
+          Boolean(item && typeof item === "object"),
+        )
+        .slice(0, 8);
+      const signedSavedPhotos = await Promise.all(
+        savedPhotos.map(async (row) => {
+          const objectKey = String(row.objectKey ?? "");
+          let url = "";
+          try {
+            url = objectKey
+              ? (await createStorageDownloadUrl(objectKey, 600)).url
+              : "";
+          } catch {
+            url = "";
+          }
+          return {
+            id: String(row.id ?? objectKey),
+            mediaType: "image",
+            objectKey,
+            contentType: String(row.contentType ?? "image/jpeg"),
+            angle: String(row.angle ?? "OTHER"),
+            role: "VehiclePhoto",
+            url,
+          };
+        }),
+      );
+      if (signedSavedPhotos.length > 0) {
+        projected.vehiclePhotos = signedSavedPhotos;
+      }
     }
     const attachmentsRaw = source.attachments;
     if (!projected.attachments && Array.isArray(attachmentsRaw)) {

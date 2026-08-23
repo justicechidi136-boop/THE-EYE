@@ -499,7 +499,13 @@ export class UsersService {
   async confirmMyVehiclePhoto(
     actor: JwtPayload,
     vehicleId: string,
-    dto: { objectKey: string; contentType: string; sizeBytes?: number; sortOrder?: number },
+    dto: {
+      objectKey: string;
+      contentType: string;
+      angle: "FRONT" | "REAR" | "SIDE" | "OTHER";
+      sizeBytes?: number;
+      sortOrder?: number;
+    },
   ) {
     this.assertCitizen(actor);
     validateVehiclePhotoUpload(dto.contentType, dto.sizeBytes);
@@ -523,6 +529,7 @@ export class UsersService {
           vehicleId: vehicle.id,
           objectKey: dto.objectKey,
           contentType: dto.contentType,
+          angle: dto.angle,
           sizeBytes: dto.sizeBytes,
           sortOrder: dto.sortOrder ?? count,
         },
@@ -1058,6 +1065,7 @@ export class UsersService {
       id: photo.id,
       objectKey: photo.objectKey,
       contentType: photo.contentType,
+      angle: photo.angle,
       sizeBytes: photo.sizeBytes,
       sortOrder: photo.sortOrder,
       createdAt: photo.createdAt.toISOString(),

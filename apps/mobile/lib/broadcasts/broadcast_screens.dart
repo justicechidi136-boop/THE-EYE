@@ -730,12 +730,21 @@ class _BroadcastDetailBody extends StatelessWidget {
       final attachment = entry.$2;
       final rawUrl = attachment["url"]?.toString().trim() ?? "";
       final duration = attachment["durationSeconds"];
+      final angle = attachment["angle"]?.toString().trim().toUpperCase();
+      final angleLabel = switch (angle) {
+        "FRONT" => "Front photo",
+        "REAR" => "Rear photo",
+        "SIDE" => "Side photo",
+        "OTHER" => "Other photo",
+        _ => null,
+      };
       return EvidenceItem(
         id: attachment["id"]?.toString() ?? "broadcast-${item?.id}-$index",
         mediaType: attachment["mediaType"]?.toString() ?? "attachment",
-        label: attachment["label"]?.toString().trim().isNotEmpty == true
+        label: angleLabel ??
+            (attachment["label"]?.toString().trim().isNotEmpty == true
             ? attachment["label"].toString()
-            : "Evidence ${index + 1}",
+            : "Evidence ${index + 1}"),
         durationSeconds: duration is num ? duration.round() : null,
         authorizedUri: rawUrl.isEmpty ? null : Uri.tryParse(rawUrl),
       );
@@ -781,13 +790,9 @@ class _BroadcastDetailBody extends StatelessWidget {
         "lastSeenLocation",
       ],
     );
-    final theftDescription = _metaAny(
-      const [
-        "theftDescription",
-        "distinguishingFeatures",
-        "additionalDescription",
-      ],
-    );
+    final distinguishingFeatures = _meta("distinguishingFeatures");
+    final theftDescription =
+        _metaAny(const ["theftDescription", "additionalDescription"]);
     Map<String, dynamic>? primaryPhoto;
     for (final attachment in _attachments) {
       if (attachment["mediaType"] == "image") {
@@ -1014,6 +1019,15 @@ class _BroadcastDetailBody extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+          if (distinguishingFeatures != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              "Distinguishing Features",
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            SelectableText(distinguishingFeatures),
           ],
           const SizedBox(height: 16),
           Text("Vehicle Photos",

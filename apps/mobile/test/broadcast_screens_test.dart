@@ -718,6 +718,8 @@ void main() {
         "vinLastFour": "3456",
         "stolenAt": "2026-08-01T13:10:00.000Z",
         "lastKnownLocation": "Ikeja under bridge",
+        "distinguishingFeatures":
+            "Rear bumper dent\nWhite sticker on the left window",
         "theftDescription": "Taken from parking lot",
         "attachments": [
           {
@@ -730,6 +732,7 @@ void main() {
           {
             "mediaType": "image",
             "label": "Vehicle photo 1",
+            "angle": "FRONT",
             "url": "https://example.com/vehicle.jpg",
           }
         ],
@@ -756,8 +759,13 @@ void main() {
     expect(find.text("1HGCM82633A004352"), findsOneWidget);
     expect(find.byTooltip("Copy plate number"), findsOneWidget);
     expect(find.byTooltip("Copy VIN"), findsOneWidget);
+    expect(find.text("Distinguishing Features"), findsOneWidget);
+    expect(
+      find.text("Rear bumper dent\nWhite sticker on the left window"),
+      findsOneWidget,
+    );
     expect(find.text("Vehicle Photos"), findsOneWidget);
-    expect(find.text("Vehicle photo 1"), findsOneWidget);
+    expect(find.text("Front photo"), findsOneWidget);
     expect(find.text("Last Seen"), findsOneWidget);
     expect(find.textContaining("PM"), findsWidgets);
     expect(find.text("Description of Theft"), findsOneWidget);
