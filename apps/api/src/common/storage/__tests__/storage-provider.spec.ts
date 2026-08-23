@@ -88,6 +88,24 @@ describe("storage provider selection", () => {
     restoreEnv();
   });
 
+  it("accepts server-generated dynamic-area voice evidence keys", () => {
+    restoreEnv();
+    configureFirebaseStaging();
+
+    const ownerId = "nw-da-da_NIGERIA_RIVERS_OBIO_AKPOR";
+    const objectKey = evidenceObjectKey(ownerId, "voice-report.m4a");
+
+    expect(() =>
+      assertEvidenceObjectKey(
+        ownerId,
+        objectKey,
+        "the-eye-2stg.firebasestorage.app",
+        "audio/mp4",
+      ),
+    ).not.toThrow();
+    restoreEnv();
+  });
+
   it("leaves MinIO/S3 available as explicit legacy mode", async () => {
     restoreEnv();
     process.env.STORAGE_PROVIDER = "s3";

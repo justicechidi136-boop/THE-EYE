@@ -15,7 +15,7 @@ const allowedContentTypes = new Set([
 const avatarContentTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const vehiclePhotoContentTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-const evidenceKeyPattern = /^evidence\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
+const evidenceKeyPattern = /^evidence\/[a-zA-Z0-9_-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const avatarKeyPattern = /^avatars\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const kycKeyPattern = /^kyc\/[a-zA-Z0-9-]+\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
 const droneOperatorDocKeyPattern = /^drone-operators\/[0-9a-f-]{36}\/[0-9a-f-]{36}(\.[a-z0-9]{1,8})?$/i;
