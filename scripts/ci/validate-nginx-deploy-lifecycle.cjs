@@ -16,6 +16,17 @@ const deployVpsCi = read("scripts/deploy-staging-vps-ci.sh");
 const reloadScript = read("scripts/reload-nginx-upstreams.sh");
 const smokeScript = read("scripts/staging-smoke-check.sh");
 const releaseValidation = read("scripts/lib/staging-release-validation.sh");
+const fullDeployStart = deployVpsCi.indexOf(
+  '"${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web',
+);
+const livekitRecreate = deployVpsCi.indexOf(
+  "force_recreate_livekit_container",
+  fullDeployStart,
+);
+const nginxRecreate = deployVpsCi.indexOf(
+  '"${COMPOSE[@]}" up -d --force-recreate nginx',
+  fullDeployStart,
+);
 
 const checks = [
   [nginxConf.includes("resolver 127.0.0.11"), "nginx.conf must configure Docker embedded DNS resolver"],
@@ -33,6 +44,12 @@ const checks = [
         (deployVpsCi.includes("staging_release_validation") &&
           releaseValidation.includes("staging-smoke-check.sh"))),
     "deploy workflow must run Host-aware smoke checks",
+  ],
+  [
+    fullDeployStart >= 0 &&
+      livekitRecreate > fullDeployStart &&
+      nginxRecreate > livekitRecreate,
+    "full staging deploy must recreate LiveKit after patching runtime RTC config",
   ],
   [deployStaging.includes("reload-nginx-upstreams.sh"), "deploy-staging.sh must reload nginx"],
   [reloadScript.includes("nginx -t"), "reload script must run nginx -t"],

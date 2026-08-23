@@ -68,6 +68,9 @@ if [[ "$PROOF_ONLY" == "true" ]]; then
 else
   "${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web
   "${COMPOSE[@]}" up -d --wait api admin-web
+  # LiveKit reads rtc.node_ip only at process start. A healthy old container can
+  # otherwise keep stale ICE/NAT configuration after the mounted YAML is patched.
+  force_recreate_livekit_container
   ensure_livekit_dual_network_publish
   verify_livekit_runtime_config
   "${COMPOSE[@]}" up -d --force-recreate nginx
