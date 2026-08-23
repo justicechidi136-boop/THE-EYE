@@ -59,7 +59,7 @@ fi
 prepare_livekit_node_ip_only
 
 if [[ "$PROOF_ONLY" == "true" ]]; then
-  ensure_livekit_dual_network_publish
+  ensure_livekit_single_network_publish
   verify_livekit_runtime_config
   echo "=== Admin container logs (proof-only SSR forensics) ==="
   docker ps --filter "name=the-eye-admin-web" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
@@ -73,7 +73,7 @@ else
   # LiveKit reads rtc.node_ip only at process start. A healthy old container can
   # otherwise keep stale ICE/NAT configuration after the mounted YAML is patched.
   force_recreate_livekit_container
-  ensure_livekit_dual_network_publish
+  ensure_livekit_single_network_publish
   verify_livekit_runtime_config
   "${COMPOSE[@]}" up -d --force-recreate nginx
   "${COMPOSE[@]}" up -d --wait nginx livekit
