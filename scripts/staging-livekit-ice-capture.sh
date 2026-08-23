@@ -62,14 +62,18 @@ echo "=== LIVEKIT-ICE-EXT-001 packet headers (LiveKit RTC ports only) ==="
 sed -n '1,200p' "$CAPTURE_FILE"
 UDP_IN="$(grep -Ec "> ${PUBLIC_IP}\.7882:" "$CAPTURE_FILE" || true)"
 UDP_OUT="$(grep -Ec "${PUBLIC_IP}\.7882 >" "$CAPTURE_FILE" || true)"
+UDP_SERVER_OUT="$(grep -Ec 'eth0 +Out IP [^ ]+\.7882 >' "$CAPTURE_FILE" || true)"
 TCP_IN="$(grep -Ec "> ${PUBLIC_IP}\.7881:" "$CAPTURE_FILE" || true)"
 TCP_OUT="$(grep -Ec "${PUBLIC_IP}\.7881 >" "$CAPTURE_FILE" || true)"
-echo "ICE_PACKET_COUNTS udpIn=${UDP_IN} udpOut=${UDP_OUT} tcpIn=${TCP_IN} tcpOut=${TCP_OUT}"
+echo "ICE_PACKET_COUNTS udpIn=${UDP_IN} udpPublicOut=${UDP_OUT} udpServerOut=${UDP_SERVER_OUT} tcpIn=${TCP_IN} tcpOut=${TCP_OUT}"
 
 if (( UDP_IN == 0 && TCP_IN == 0 )); then
   fail "no external ICE packet reached the staging host during the capture window"
 fi
 if (( UDP_IN > 0 && UDP_OUT == 0 )); then
+  if (( UDP_SERVER_OUT > 0 )); then
+    fail "LIVEKIT-DOCKER-NAT-001: UDP replies left the host with a non-public source address"
+  fi
   fail "UDP 7882 reached the host but no return packet left the host"
 fi
 echo "PASS LIVEKIT-ICE-EXT-001 external ICE packets reached the staging host"

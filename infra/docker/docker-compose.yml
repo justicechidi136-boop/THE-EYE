@@ -110,9 +110,11 @@ services:
     image: livekit/livekit-server:v1.8
     container_name: the-eye-livekit
     restart: unless-stopped
-    # Dual-network: the-eye-internal for nginx/API Docker DNS (livekit:7880);
-    # the-eye-public is required so Compose can publish 7880/7881/7882 to the host —
-    # Docker ignores port mappings when a service is attached only to internal: true networks.
+    # Keep LiveKit on one routable bridge. A dual internal/public attachment can
+    # make RTC replies leave through a different bridge than Docker's published
+    # port DNAT target, bypassing SNAT and exposing an unroutable private source.
+    # API and nginx already share the-eye-public, so livekit:7880 remains private
+    # Docker DNS traffic while 7880/7881/7882 are explicitly published below.
     command: ["--config", "/etc/livekit/livekit.yaml"]
     environment:
       # LiveKit requires "keyName: secret" (space after colon). Single source — do not duplicate in livekit.yaml.
@@ -130,11 +132,7 @@ services:
       start_period: 45s
       retries: 5
     networks:
-      # the-eye-public MUST be listed first — Docker only publishes ports when the
-      # container's primary network is non-internal. Signaling still resolves as livekit:7880
-      # on the-eye-internal for nginx/API.
       - the-eye-public
-      - the-eye-internal
 
   api:
     build:

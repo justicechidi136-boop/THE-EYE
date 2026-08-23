@@ -51,7 +51,7 @@ echo "INFO compose_working_dir=${WORKING_DIR:-unknown}"
 echo "INFO compose_service=${SERVICE_NAME:-unknown}"
 
 if [[ "$NETWORK_MODE" == "host" ]]; then
-  fail "LiveKit must use bridge networking on the-eye-internal (got host). Recreate with updated compose (LIVEKIT-DOCKER-001)"
+  fail "LiveKit must use the single the-eye-public bridge (got host). Recreate with updated compose (LIVEKIT-DOCKER-001)"
 fi
 pass "network_mode=${NETWORK_MODE} (bridge, not host)"
 
@@ -60,16 +60,19 @@ PORTS_JSON="$(docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Port
 
 NETWORKS="$(docker inspect "$CONTAINER" --format '{{range $name, $cfg := .NetworkSettings.Networks}}{{$name}} {{end}}')"
 echo "INFO attached_networks=${NETWORKS:-none}"
-if [[ "$NETWORKS" != *the-eye-internal* ]]; then
-  fail "LiveKit must join the-eye-internal for Docker DNS (got: ${NETWORKS:-none})"
-fi
-pass "attached to the-eye-internal"
 if [[ "$NETWORKS" != *the-eye-public* ]]; then
   echo "INFO HostConfig.PortBindings=${PORT_BINDINGS:-{}}"
   echo "INFO NetworkSettings.Ports=${PORTS_JSON:-{}}"
-  fail "LiveKit must also join the-eye-public so Docker can publish RTC ports to the host (got: ${NETWORKS:-none}). Run: bash scripts/repair-livekit-network-publish.sh"
+  fail "LiveKit must join the-eye-public so Docker can publish RTC ports to the host (got: ${NETWORKS:-none}). Run: bash scripts/repair-livekit-network-publish.sh"
 fi
-pass "attached to the-eye-public (required for host port publish)"
+if [[ "$NETWORKS" == *the-eye-internal* ]]; then
+  fail "LIVEKIT-DOCKER-NAT-001: dual internal/public attachment can bypass published-port SNAT; recreate LiveKit on the-eye-public only"
+fi
+NETWORK_COUNT="$(wc -w <<<"$NETWORKS" | tr -d ' ')"
+if [[ "$NETWORK_COUNT" != "1" ]]; then
+  fail "LIVEKIT-DOCKER-NAT-001: LiveKit must have exactly one Docker network (got ${NETWORK_COUNT}: ${NETWORKS:-none})"
+fi
+pass "LIVEKIT-DOCKER-NAT-001 attached only to the-eye-public"
 
 port_publish_fail() {
   local port="$1"
@@ -208,7 +211,7 @@ fi
 
 NGINX_LIVEKIT_BACKEND="$(grep -E 'the_eye_livekit_backend' infra/docker/nginx/snippets/livekit-locations.conf | head -n1 || true)"
 if [[ "$NGINX_LIVEKIT_BACKEND" != *livekit:7880* ]]; then
-  fail "nginx livekit upstream must target livekit:7880 on the-eye-internal"
+  fail "nginx livekit upstream must target livekit:7880 on the shared Docker bridge"
 fi
 pass "nginx livekit upstream uses livekit:7880"
 

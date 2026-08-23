@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared LiveKit deploy prep — patch rtc.node_ip, recreate with dual-network publish, verify.
+# Shared LiveKit deploy prep — patch rtc.node_ip, recreate with stable published-port NAT, verify.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -39,13 +39,18 @@ livekit_port_published() {
   docker port "$CONTAINER" "${port}/${proto}" 2>/dev/null || true
 }
 
-livekit_dual_network_publish_ok() {
+livekit_single_network_publish_ok() {
   local networks
+  local network_count
   networks="$(livekit_attached_networks)"
   if [[ "$networks" != *the-eye-public* ]]; then
     return 1
   fi
-  if [[ "$networks" != *the-eye-internal* ]]; then
+  if [[ "$networks" == *the-eye-internal* ]]; then
+    return 1
+  fi
+  network_count="$(wc -w <<<"$networks" | tr -d ' ')"
+  if [[ "$network_count" != "1" ]]; then
     return 1
   fi
   if [[ -z "$(livekit_port_published 7880 tcp)" ]]; then
@@ -75,7 +80,7 @@ force_recreate_livekit_container() {
   ensure_livekit_node_ip_on_host
   docker rm -f "$CONTAINER" 2>/dev/null || true
   "${COMPOSE[@]}" rm -sf livekit 2>/dev/null || true
-  # Ensure compose project networks exist before LiveKit create (both internal + public).
+  # Ensure the compose public bridge exists before LiveKit create.
   "${COMPOSE[@]}" up -d --no-start nginx >/dev/null 2>&1 || true
   "${COMPOSE[@]}" up -d --force-recreate --no-deps livekit
   "${COMPOSE[@]}" up -d --wait livekit
@@ -157,31 +162,31 @@ extract_rendered_livekit_networks() {
   ' | tr '\n' ' '
 }
 
-ensure_livekit_dual_network_publish() {
+ensure_livekit_single_network_publish() {
   local attempt
   local rendered_networks
-  echo "STEP livekit-dual-network-publish-start"
+  echo "STEP livekit-single-network-publish-start"
 
-  if docker inspect "$CONTAINER" >/dev/null 2>&1 && livekit_dual_network_publish_ok; then
+  if docker inspect "$CONTAINER" >/dev/null 2>&1 && livekit_single_network_publish_ok; then
     log_livekit_runtime_state
-    echo "PASS DEP-LIVEKIT-002: dual-network host port publish (runtime already healthy)"
+    echo "PASS DEP-LIVEKIT-002: single-network host port publish (runtime already healthy)"
     return 0
   fi
 
   rendered_networks="$(extract_rendered_livekit_networks)"
   echo "INFO rendered_livekit_networks=${rendered_networks:-unknown}"
-  if [[ "$rendered_networks" != *the-eye-public* || "$rendered_networks" != *the-eye-internal* ]]; then
-    echo "WARN rendered compose livekit networks missing public/internal — continuing because runtime recreate uses compose file on disk"
+  if [[ "$rendered_networks" != *the-eye-public* || "$rendered_networks" == *the-eye-internal* ]]; then
+    dep_fail "rendered compose must attach LiveKit only to the-eye-public (LIVEKIT-DOCKER-NAT-001)"
   fi
 
   for attempt in 1 2 3; do
-    if docker inspect "$CONTAINER" >/dev/null 2>&1 && livekit_dual_network_publish_ok; then
+    if docker inspect "$CONTAINER" >/dev/null 2>&1 && livekit_single_network_publish_ok; then
       log_livekit_runtime_state
-      echo "PASS DEP-LIVEKIT-002: dual-network host port publish attempt=${attempt}"
+      echo "PASS DEP-LIVEKIT-002: single-network host port publish attempt=${attempt}"
       return 0
     fi
 
-    echo "WARN livekit dual-network publish incomplete attempt=${attempt}/3"
+    echo "WARN livekit single-network publish incomplete attempt=${attempt}/3"
     if docker inspect "$CONTAINER" >/dev/null 2>&1; then
       log_livekit_runtime_state
     else
@@ -192,7 +197,7 @@ ensure_livekit_dual_network_publish() {
   done
 
   log_livekit_runtime_state
-  dep_fail "LiveKit missing the-eye-public attachment or host ports after 3 recreates (LIVEKIT-DOCKER-001)"
+  dep_fail "LiveKit single-network attachment or host ports invalid after 3 recreates (LIVEKIT-DOCKER-NAT-001)"
 }
 
 prepare_livekit_node_ip_only() {
@@ -211,7 +216,7 @@ prepare_livekit_deploy() {
   echo "STEP livekit-prepare-start"
   prepare_livekit_node_ip_only
   echo "STEP livekit-recreate-start"
-  ensure_livekit_dual_network_publish
+  ensure_livekit_single_network_publish
   verify_livekit_runtime_config
   echo "STEP livekit-prepare-ok"
 }
