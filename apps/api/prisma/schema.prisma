@@ -891,7 +891,7 @@ model IncidentMedia {
   uploadedAt                  DateTime                             @default(now()) @map("uploaded_at") @db.Timestamptz(6)
   latitude                    Decimal                              @db.Decimal(9, 6)
   longitude                   Decimal                              @db.Decimal(9, 6)
-  gpsLocation                 Unsupported("geography(Point,4326)") @map("gps_location")
+  gpsLocation                 Unsupported("geography(Point,4326)") @default(dbgenerated()) @map("gps_location")
   metadata                    Json                                 @default("{}")
   durationSeconds             Int?                                 @map("duration_seconds")
   clientAttachmentId          String?                              @map("client_attachment_id")
