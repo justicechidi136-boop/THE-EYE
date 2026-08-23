@@ -92,10 +92,12 @@ This file is the pre-implementation classification. Statuses must be updated wit
 - Prisma client generation: PASS.
 - Secret scan: PASS, 2,105 tracked files.
 - `git diff --check`: PASS (line-ending notices only).
+- Staging Android debug APK: PASS (`assembleStagingDebug`).
+- V2322 install/launch smoke: PASS using `adb install -r`; existing app data was not cleared, the staging activity remained resumed, a visible authenticated Home frame rendered, and targeted immediate-crash logcat was clear.
 
 ### Runtime status and blockers
 
-- Physical-device certification of the new screens, saved-photo upload/reuse, comment interaction, and installed-app share routing remains pending until this branch is built and installed.
+- Physical-device certification of the new screens, saved-photo upload/reuse, comment interaction, and installed-app share routing remains pending. The branch APK is installed and launch-smoke verified, but no claim is made for flows the owner has not manually exercised.
 - The existing staging backend does not contain PR #173 or this delta. End-to-end upload, persistence, public fallback, reaction toggle, and the additive vehicle-photo migration cannot be certified against staging without a later authorized merge/deploy/migration.
 - Android intent routing is implemented. Verified automatic Android App Link ownership still requires the deployed public host to serve an approved `assetlinks.json` for the actual staging/release signing certificate. No certificate fingerprint was guessed or committed.
 - No deployment, migration execution, production change, secret change, stash operation, or destructive database command was performed.
