@@ -105,6 +105,14 @@ assert(
   deployScript.includes("scripts/staging-livekit-ice-capture.sh"),
   "proof-only deploy must support the external ICE packet-path diagnostic",
 );
+assert(
+  deployScript.includes("ensure_livekit_single_network_publish"),
+  "staging deploy must call the single-network LiveKit helper",
+);
+assert(
+  !deployScript.includes("ensure_livekit_dual_network_publish"),
+  "staging deploy must not call the removed dual-network LiveKit helper",
+);
 
 const iceCapture = readFileSync("scripts/staging-livekit-ice-capture.sh", "utf8");
 assert(iceCapture.includes("udp port 7882 or tcp port 7881"), "ICE capture must be limited to LiveKit RTC ports");
