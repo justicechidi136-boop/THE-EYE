@@ -88,11 +88,28 @@ assert(
   deployWorkflow.includes("export RUN_MIGRATIONS=${{ github.event.inputs.run_migrations }}"),
   "SSH deploy must export RUN_MIGRATIONS",
 );
+assert(
+  deployWorkflow.includes("livekit_ice_capture_seconds:"),
+  "deploy workflow must expose opt-in staging ICE capture duration",
+);
+assert(
+  deployWorkflow.includes("export LIVEKIT_ICE_CAPTURE_SECONDS="),
+  "SSH deploy must export the staging ICE capture duration",
+);
 
 const deployScript = readFileSync("scripts/deploy-staging-vps-ci.sh", "utf8");
 assert(deployScript.includes('RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"'), "deploy script must default RUN_MIGRATIONS to true");
 assert(deployScript.includes('if [[ "$RUN_MIGRATIONS" == "true" ]]; then'), "run_migrations=true must run api-migrate path");
 assert(deployScript.includes("Skipping staging migrations"), "run_migrations=false must skip api-migrate path");
+assert(
+  deployScript.includes("scripts/staging-livekit-ice-capture.sh"),
+  "proof-only deploy must support the external ICE packet-path diagnostic",
+);
+
+const iceCapture = readFileSync("scripts/staging-livekit-ice-capture.sh", "utf8");
+assert(iceCapture.includes("udp port 7882 or tcp port 7881"), "ICE capture must be limited to LiveKit RTC ports");
+assert(iceCapture.includes("-s 64"), "ICE capture must truncate packets before application payload");
+assert(!iceCapture.includes("-A") && !iceCapture.includes("-X"), "ICE capture must not print packet payloads");
 
 const storageSmoke = readFileSync("scripts/staging-storage-smoke.cjs", "utf8");
 assert(storageSmoke.includes('provider: String(env.STORAGE_PROVIDER || "s3")'), "storage smoke must read STORAGE_PROVIDER");

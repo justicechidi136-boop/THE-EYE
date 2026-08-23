@@ -47,6 +47,11 @@ on:
         required: false
         default: true
         type: boolean
+      livekit_ice_capture_seconds:
+        description: Staging proof only - capture headers for external ICE traffic on 7881/7882 (0 disables)
+        required: false
+        default: "0"
+        type: string
 
 concurrency:
   group: deploy-${{ github.event.inputs.environment }}
@@ -242,6 +247,7 @@ jobs:
             export RUN_LOCATION_PROOF=${{ github.event.inputs.run_location_proof }}
             export RUN_STORAGE_PROOF=${{ github.event.inputs.run_storage_proof }}
             export SKIP_LIVE_VIDEO_PROOF=${{ github.event.inputs.skip_live_video_proof }}
+            export LIVEKIT_ICE_CAPTURE_SECONDS='${{ github.event.inputs.livekit_ice_capture_seconds }}'
             git fetch --tags origin
             git checkout -- infra/docker/livekit/livekit.yaml 2>/dev/null || true
             git checkout ${{ github.sha }}
