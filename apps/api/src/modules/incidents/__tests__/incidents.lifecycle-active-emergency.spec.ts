@@ -579,6 +579,7 @@ describe("ActiveEmergencyService contract", () => {
         contentType: "image/jpeg",
         objectKey: "evidence/inc-1/11111111-1111-4111-8111-111111111111.jpg",
         fileHash: "sha256:image",
+        sizeBytes: 2048,
       },
       {
         mediaType: "Video",
@@ -596,8 +597,9 @@ describe("ActiveEmergencyService contract", () => {
       },
     ];
 
+    const confirmedRows = [];
     for (const draft of drafts) {
-      await incidents.confirmMedia(
+      confirmedRows.push(await incidents.confirmMedia(
         "inc-1",
         {
           ...draft,
@@ -606,8 +608,12 @@ describe("ActiveEmergencyService contract", () => {
           clientAttachmentId: `client-${draft.mediaType.toLowerCase()}`,
         } as any,
         reporter,
-      );
+      ));
     }
+
+    expect(incidentMedia.create.mock.calls[0]?.[0].data.sizeBytes).toBe(BigInt(2048));
+    expect(confirmedRows[0].sizeBytes).toBe(2048);
+    expect(JSON.stringify(confirmedRows[0])).toContain('"sizeBytes":2048');
 
     const result = await active.getActiveEmergency("inc-1", reporter);
     expect(result.evidenceItems.length).toBe(3);
@@ -629,6 +635,9 @@ describe("ActiveEmergencyService contract", () => {
       objectKey: "evidence/inc-1/44444444-4444-4444-8444-444444444444.jpg",
       contentType: "image/jpeg",
       fileHash: "sha256:duplicate",
+      sizeBytes: BigInt(4096),
+      latitude: "6.524379",
+      longitude: "3.379206",
       uploadedAt: new Date("2026-08-05T10:00:10.000Z"),
     };
     const incidentMedia = {
@@ -657,6 +666,10 @@ describe("ActiveEmergencyService contract", () => {
     );
 
     expect(result.id).toBe("media-1");
+    expect(result.sizeBytes).toBe(4096);
+    expect(result.latitude).toBe(6.524379);
+    expect(result.longitude).toBe(3.379206);
+    expect(JSON.stringify(result)).toContain('"sizeBytes":4096');
     expect(incidentMedia.create).not.toHaveBeenCalled();
   });
 });
