@@ -120,9 +120,8 @@ class VehiclePhotoSectionState extends State<VehiclePhotoSection> {
     final source = await chooseVehiclePhotoSource(context);
     if (source == null || !mounted) return;
 
-    final existingIds = controller.attachments
-        .map((attachment) => attachment.localId)
-        .toSet();
+    final existingIds =
+        controller.attachments.map((attachment) => attachment.localId).toSet();
     if (source == ImageSourceChoice.camera) {
       await controller.takePhoto();
     } else {
@@ -182,8 +181,7 @@ class VehiclePhotoSectionState extends State<VehiclePhotoSection> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: photos.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
                     mainAxisSpacing: 8,
                     crossAxisSpacing: 8,
@@ -232,7 +230,8 @@ class VehiclePhotoSectionState extends State<VehiclePhotoSection> {
                           right: 0,
                           top: 0,
                           child: IconButton.filledTonal(
-                            tooltip: "Remove ${angle.label.toLowerCase()} photo",
+                            tooltip:
+                                "Remove ${angle.label.toLowerCase()} photo",
                             onPressed: controller.busy
                                 ? null
                                 : () => controller.remove(photo.localId),
@@ -255,6 +254,9 @@ class VehiclePhotoSectionState extends State<VehiclePhotoSection> {
                     onPressed: controller.busy || !controller.canAddMore
                         ? null
                         : _addPhoto,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 56),
+                    ),
                     icon: const Icon(Icons.add_a_photo_outlined),
                     label: const Text("Add photo"),
                   ),

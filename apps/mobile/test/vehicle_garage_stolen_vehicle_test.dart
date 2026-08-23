@@ -362,6 +362,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: buildTheme(false),
+        darkTheme: buildDarkTheme(false),
+        themeMode: ThemeMode.dark,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: AppScope(
@@ -375,9 +378,25 @@ void main() {
     await tester.tap(find.text("Enter Vehicle Manually"));
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
     expect(find.text("Use Saved Vehicle"), findsNothing);
-    expect(find.text("Plate number"), findsOneWidget);
-    expect(find.byType(TextField), findsWidgets);
+    for (final label in [
+      "Make",
+      "Model",
+      "Year",
+      "Color",
+      "Plate number",
+      "VIN / Chassis (optional)",
+      "Last Known Location",
+      "What happened?",
+      "Distinguishing features",
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text("Vehicle Photos"), findsOneWidget);
+    expect(find.text("Last Seen"), findsOneWidget);
+    expect(find.text("Incident Evidence"), findsOneWidget);
+    expect(find.text("Submit broadcast"), findsOneWidget);
   });
 }
 

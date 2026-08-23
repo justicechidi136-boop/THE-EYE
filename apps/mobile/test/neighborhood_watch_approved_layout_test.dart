@@ -3,9 +3,10 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
-  test("Neighborhood Watch Home keeps approved order and one creation entry", () {
-    final source = File("lib/neighborhood_watch/nw_home_screen.dart")
-        .readAsStringSync();
+  test("Neighborhood Watch Home keeps approved order and one creation entry",
+      () {
+    final source =
+        File("lib/neighborhood_watch/nw_home_screen.dart").readAsStringSync();
     final currentArea = source.indexOf("Current area");
     final safetySummary = source.indexOf("Safety summary");
     final nearby = source.indexOf("What's happening nearby");
@@ -35,7 +36,8 @@ void main() {
     }
   });
 
-  test("Neighborhood Watch Feed uses approved filters and notice placement", () {
+  test("Neighborhood Watch Feed uses approved filters and notice placement",
+      () {
     final appSource = File("lib/main.dart").readAsStringSync();
     final start = appSource.indexOf("class _CommunityFeedScreenState");
     final end = appSource.indexOf("class _SelectedCommunityLocation", start);
@@ -58,8 +60,9 @@ void main() {
       source.indexOf("Community Notice"),
       lessThan(source.indexOf("loadingCommunityFeed")),
     );
+    expect(source, contains("CommunityPostActionButton("));
     expect(source, contains('"Like"'));
     expect(source, contains("Comment"));
-    expect(source, contains('label: const Text("Share")'));
+    expect(source, contains('label: "Share"'));
   });
 }
