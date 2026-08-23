@@ -12,7 +12,7 @@ class DeviceLocationService {
     LocationReverseGeocoder? reverseGeocoder,
     GeolocatorPlatform? geolocator,
   })  : _reverseGeocoder =
-            reverseGeocoder ?? const PlatformLocationReverseGeocoder(),
+            reverseGeocoder ?? CachedLocationReverseGeocoder(),
         _geolocator = geolocator ?? GeolocatorPlatform.instance;
 
   final LocationReverseGeocoder _reverseGeocoder;

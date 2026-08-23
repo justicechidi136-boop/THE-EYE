@@ -61,7 +61,7 @@ void main() {
         isUnread: false,
         metadata: {"publicReference": "EYE-260810-AE7C"},
       );
-      expect(submitted.category, "Report Submitted");
+      expect(submitted.category, "Emergency Report");
       expect(submitted.preview, contains("EYE-260810-AE7C"));
       expect(submitted.routeHint, "OWN_ACTIVE_INCIDENT");
     });
@@ -76,10 +76,57 @@ void main() {
         isUnread: true,
         metadata: {"incidentCategory": "SuspiciousActivity"},
       );
-      expect(verify.category, "Verify Active Incident");
+      expect(verify.category, "Verify Suspicious Activity");
       expect(verify.title, "Can you confirm this suspicious activity?");
       expect(verify.preview, contains("suspicious activity"));
       expect(verify.preview, isNot(contains("NearbyIncidentVerification")));
+    });
+
+    test("uses report category templates instead of generic incident update",
+        () {
+      for (final category in const [
+        "Emergency",
+        "Accident",
+        "Crime",
+        "Fire",
+        "Kidnapping",
+        "Abuse",
+        "SuspiciousActivity",
+      ]) {
+        final presented = CitizenNotificationPresenter.present(
+          type: "ReportSubmitted",
+          title: "Incident update",
+          body: "Submitted",
+          createdAt: DateTime(2026, 8, 13, 14, 45),
+          isUnread: true,
+          metadata: {
+            "incidentCategory": category,
+            "publicReference": "EYE-260813-QA",
+          },
+          now: DateTime(2026, 8, 14, 14, 45),
+        );
+        expect(presented.category, isNot("Update"));
+        expect(presented.category, isNot("Incident update"));
+        expect(presented.timestampLabel, isNot(contains("2026-08-13T")));
+      }
+    });
+
+    test("identifies the subject of a stolen vehicle sighting", () {
+      final presented = CitizenNotificationPresenter.present(
+        type: "BroadcastSightingReported",
+        title: "Update",
+        body: "A new sighting was submitted.",
+        createdAt: DateTime(2026, 8, 13, 14, 45),
+        isUnread: true,
+        metadata: const {
+          "make": "Toyota",
+          "model": "Corolla",
+          "registrationMasked": "ABJ 234 GG",
+        },
+      );
+      expect(presented.category, "New Sighting");
+      expect(presented.title, contains("Toyota Corolla"));
+      expect(presented.title, contains("ABJ 234 GG"));
     });
   });
 

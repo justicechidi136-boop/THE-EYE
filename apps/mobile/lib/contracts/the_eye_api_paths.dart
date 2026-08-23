@@ -214,6 +214,8 @@ abstract final class TheEyeApiPaths {
       "/neighborhood-watch/patrols/$scheduleId/observations";
   static String neighborhoodWatchCommunityOfficialAlerts(String communityId) =>
       "/neighborhood-watch/communities/$communityId/official-alerts";
+  static String neighborhoodWatchCommunityPinnedSafety(String communityId) =>
+      "/neighborhood-watch/communities/$communityId/pinned-safety";
 
   static String communityVerification(String requestId) =>
       "/community-verifications/$requestId";

@@ -86,6 +86,10 @@ function sanitizeBroadcastAttachments(raw: unknown): Array<Record<string, string
     if (Number.isInteger(durationSeconds) && durationSeconds > 0) sanitized.durationSeconds = durationSeconds;
     const selectedLanguage = String(row.selectedLanguage ?? "").trim();
     if (selectedLanguage) sanitized.selectedLanguage = selectedLanguage;
+    const angle = String(row.angle ?? "").trim().toUpperCase();
+    if (new Set(["FRONT", "REAR", "SIDE", "OTHER"]).has(angle)) {
+      sanitized.angle = angle;
+    }
     const capturedAt = String(row.capturedAt ?? "").trim();
     if (capturedAt && !Number.isNaN(new Date(capturedAt).getTime())) sanitized.capturedAt = capturedAt;
     attachments.push(sanitized);
@@ -99,18 +103,6 @@ function normalizeVehicleYear(value: unknown): number | undefined {
   const parsed = Number.parseInt(`${value}`, 10);
   if (!Number.isFinite(parsed) || parsed < 1886 || parsed > 3000) return undefined;
   return parsed;
-}
-
-function sanitizeVehiclePhotoObjectKeys(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  const keys: string[] = [];
-  for (const candidate of raw) {
-    const key = String(candidate ?? "").trim();
-    if (!key || key.includes("..") || key.length > 512) continue;
-    keys.push(key);
-    if (keys.length >= 8) break;
-  }
-  return keys;
 }
 
 @Injectable()
@@ -183,16 +175,42 @@ export class BroadcastCitizenService {
   async createStolenVehicle(dto: CreateStolenVehicleBroadcastDto, actor: JwtPayload) {
     validateStolenVehicleBroadcastDto(dto);
     const attachments = sanitizeBroadcastAttachments(dto.metadata?.attachments);
-    const { attachments: _ignoredAttachments, ...safeMetadata } = (dto.metadata ?? {}) as Record<string, unknown>;
+    const rawMetadata = (dto.metadata ?? {}) as Record<string, unknown>;
+    const {
+      attachments: _ignoredAttachments,
+      vehiclePhotos: _ignoredVehiclePhotos,
+      vehiclePhotoObjectKeys: _ignoredVehiclePhotoObjectKeys,
+      savedVehiclePhotos: _ignoredSavedVehiclePhotos,
+      ...safeMetadata
+    } = rawMetadata;
     const sourceVehicleId =
       typeof safeMetadata.sourceVehicleId === "string" && safeMetadata.sourceVehicleId.trim().length > 0
         ? safeMetadata.sourceVehicleId.trim()
         : undefined;
-    const vehiclePhotos = sanitizeBroadcastAttachments(safeMetadata.vehiclePhotos)
+    const savedVehiclePhotos = sourceVehicleId
+      ? await this.prisma.citizenVehiclePhoto.findMany({
+          where: {
+            vehicleId: sourceVehicleId,
+            vehicle: { userId: actor.sub },
+          },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          take: 8,
+        })
+      : [];
+    const vehiclePhotos = sanitizeBroadcastAttachments(rawMetadata.vehiclePhotos)
       .filter((attachment) => attachment.mediaType === "image");
-    const vehiclePhotoObjectKeys = vehiclePhotos.length > 0
-      ? vehiclePhotos.map((attachment) => String(attachment.objectKey))
-      : sanitizeVehiclePhotoObjectKeys(safeMetadata.vehiclePhotoObjectKeys);
+    const savedVehiclePhotoRefs = savedVehiclePhotos.map((photo) => ({
+      id: photo.id,
+      mediaType: "image",
+      objectKey: photo.objectKey,
+      contentType: photo.contentType,
+      angle: photo.angle,
+      sortOrder: photo.sortOrder,
+    }));
+    const vehiclePhotoObjectKeys = [
+      ...savedVehiclePhotoRefs.map((photo) => photo.objectKey),
+      ...vehiclePhotos.map((attachment) => String(attachment.objectKey)),
+    ].slice(0, 8);
     const normalizedYear = normalizeVehicleYear(dto.year ?? safeMetadata.year);
     const vinLastFour = dto.vinLastFour?.trim() || (typeof safeMetadata.vinLastFour === "string"
       ? safeMetadata.vinLastFour.trim()
@@ -222,6 +240,9 @@ export class BroadcastCitizenService {
         ...(vin ? { vin } : {}),
         ...(sourceVehicleId ? { sourceVehicleId } : {}),
         ...(vehiclePhotoObjectKeys.length > 0 ? { vehiclePhotoObjectKeys } : {}),
+        ...(savedVehiclePhotoRefs.length > 0
+          ? { savedVehiclePhotos: savedVehiclePhotoRefs }
+          : {}),
         ...(vehiclePhotos.length > 0 ? { vehiclePhotos } : {}),
         directionOfTravel: dto.directionOfTravel,
         rewardNotice: dto.rewardNotice,
@@ -408,12 +429,31 @@ export class BroadcastCitizenService {
     }
     const comment = await this.prisma.broadcastComment.findFirst({ where: { id: commentId, broadcastId: id, hiddenAt: null } });
     if (!comment) throw new NotFoundException("Comment not found");
-    const reaction = await (this.prisma as any).broadcastCommentReaction.upsert({
-      where: { commentId_userId_reaction: { commentId, userId: actor.sub, reaction: dto.reaction } },
+    const reactions = (this.prisma as any).broadcastCommentReaction;
+    const key = {
+      commentId_userId_reaction: {
+        commentId,
+        userId: actor.sub,
+        reaction: dto.reaction,
+      },
+    };
+    const existing = await reactions.findUnique({ where: key });
+    if (existing) {
+      await reactions.delete({ where: key });
+      return {
+        data: {
+          commentId,
+          reaction: dto.reaction,
+          active: false,
+        },
+      };
+    }
+    const reaction = await reactions.upsert({
+      where: key,
       update: {},
       create: { commentId, userId: actor.sub, reaction: dto.reaction },
     });
-    return { data: reaction };
+    return { data: { ...reaction, active: true } };
   }
 
   async submitSighting(id: string, dto: SubmitBroadcastSightingDto, actor: JwtPayload) {

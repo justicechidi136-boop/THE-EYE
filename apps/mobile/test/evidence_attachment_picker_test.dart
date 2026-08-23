@@ -12,6 +12,7 @@ import "package:the_eye_mobile/evidence/evidence_capture_service.dart";
 import "package:the_eye_mobile/evidence/evidence_media_source.dart";
 import "package:the_eye_mobile/evidence/evidence_permission_service.dart";
 import "package:the_eye_mobile/evidence/evidence_policy.dart";
+import "package:the_eye_mobile/evidence/evidence_viewer_screen.dart";
 import "package:the_eye_mobile/evidence/local_evidence_attachment.dart";
 
 void main() {
@@ -155,9 +156,9 @@ void main() {
     await tester.tap(find.bySemanticsLabel(RegExp("Open Photo 1")));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(EvidenceViewerScreen), findsOneWidget);
     expect(find.text("Photo 1"), findsOneWidget);
-    expect(find.text("Close"), findsOneWidget);
+    expect(find.byTooltip("Back"), findsOneWidget);
   });
 
   testWidgets("shows policy limit without discarding selected evidence",

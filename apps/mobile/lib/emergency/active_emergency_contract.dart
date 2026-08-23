@@ -124,6 +124,8 @@ class ActiveEmergencyLocation {
     required this.liveLocationStale,
     this.liveLocationUpdatedAt,
     this.locationLabel,
+    this.accuracyMeters,
+    this.capturedAt,
   });
 
   final String? latitude;
@@ -135,6 +137,8 @@ class ActiveEmergencyLocation {
   final bool liveLocationStale;
   final DateTime? liveLocationUpdatedAt;
   final String? locationLabel;
+  final double? accuracyMeters;
+  final DateTime? capturedAt;
 
   factory ActiveEmergencyLocation.fromJson(Map<String, dynamic> json) {
     return ActiveEmergencyLocation(
@@ -148,6 +152,8 @@ class ActiveEmergencyLocation {
       liveLocationStale: json["liveLocationStale"] == true,
       liveLocationUpdatedAt: _optionalDateTime(json["liveLocationUpdatedAt"]),
       locationLabel: json["locationLabel"]?.toString(),
+      accuracyMeters: (json["accuracyMeters"] as num?)?.toDouble(),
+      capturedAt: _optionalDateTime(json["capturedAt"]),
     );
   }
 }

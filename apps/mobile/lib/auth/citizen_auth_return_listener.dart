@@ -1,12 +1,30 @@
 import "dart:async";
 
 import "package:app_links/app_links.dart";
-import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 
 import "citizen_auth_return_link.dart";
 
 typedef CitizenAuthReturnHandler = void Function(String message);
+typedef BroadcastLinkHandler = void Function(String route);
+
+@visibleForTesting
+String? broadcastRouteForPublicUri(Uri uri) {
+  const allowedHosts = {
+    "staging-dashboard8jps.theeye.com.ng",
+    "dashboard.theeye.com.ng",
+    "localhost",
+  };
+  if (uri.scheme != "https" && uri.scheme != "http") return null;
+  if (!allowedHosts.contains(uri.host.toLowerCase())) return null;
+  if (uri.pathSegments.length != 3 ||
+      uri.pathSegments[0] != "share" ||
+      uri.pathSegments[1] != "broadcasts") {
+    return null;
+  }
+  final id = uri.pathSegments[2].trim();
+  return id.isEmpty ? null : "/broadcasts/$id";
+}
 
 /// Shared navigation for cold / background / foreground AUTH-007 returns.
 @visibleForTesting
@@ -31,10 +49,14 @@ class CitizenAuthReturnListener {
   CitizenAuthReturnListener({
     AppLinks? appLinks,
     required this.onReturnToSignIn,
+    this.onBroadcastLink,
+    this.expectedScheme,
   }) : _appLinks = appLinks ?? AppLinks();
 
   final AppLinks _appLinks;
   final CitizenAuthReturnHandler onReturnToSignIn;
+  final BroadcastLinkHandler? onBroadcastLink;
+  final String? expectedScheme;
   StreamSubscription<Uri>? _sub;
   bool _started = false;
 
@@ -54,10 +76,18 @@ class CitizenAuthReturnListener {
 
   @visibleForTesting
   void handleUri(Uri uri) {
+    final broadcastRoute = broadcastRouteForPublicUri(uri);
+    if (broadcastRoute != null) {
+      onBroadcastLink?.call(broadcastRoute);
+      return;
+    }
     if (CitizenAuthReturnLink.isForbiddenAdminDestination(uri)) {
       return;
     }
-    final message = CitizenAuthReturnLink.resolveSignInMessage(uri);
+    final message = CitizenAuthReturnLink.resolveSignInMessage(
+      uri,
+      expectedScheme: expectedScheme,
+    );
     if (message == null) return;
     onReturnToSignIn(message);
   }
@@ -96,7 +126,10 @@ class _CitizenAuthReturnHostState extends State<CitizenAuthReturnHost> {
   void initState() {
     super.initState();
     if (widget.enableListener) {
-      _listener = CitizenAuthReturnListener(onReturnToSignIn: _onReturn);
+      _listener = CitizenAuthReturnListener(
+        onReturnToSignIn: _onReturn,
+        onBroadcastLink: _onBroadcastLink,
+      );
       unawaited(_listener!.start());
     }
   }
@@ -112,6 +145,12 @@ class _CitizenAuthReturnHostState extends State<CitizenAuthReturnHost> {
       message: message,
       isAuthenticated: widget.isAuthenticated?.call() == true,
     );
+  }
+
+  void _onBroadcastLink(String route) {
+    final nav = widget.navigatorKey.currentState;
+    if (nav == null) return;
+    nav.pushNamed(route);
   }
 
   @override

@@ -400,7 +400,7 @@ export class IncidentsService {
       ) {
         throw new ConflictException("Evidence is already associated with another upload");
       }
-      return existing;
+      return this.toIncidentMediaResponse(existing);
     }
 
     const media = await (this.prisma as any).incidentMedia.create({
@@ -423,7 +423,7 @@ export class IncidentsService {
       },
     });
 
-    return media;
+    return this.toIncidentMediaResponse(media);
   }
 
   async submitWrittenUpdate(
@@ -1069,7 +1069,7 @@ export class IncidentsService {
           bucket: media.bucket,
           objectKey: media.objectKey,
           contentType: media.contentType,
-          sizeBytes: media.sizeBytes,
+          sizeBytes: media.sizeBytes == null ? undefined : BigInt(media.sizeBytes),
           fileHash: media.fileHash,
           capturedAt: media.capturedAt ? new Date(media.capturedAt) : new Date(),
           latitude: media.latitude ?? fallbackLatitude,
@@ -1178,7 +1178,7 @@ export class IncidentsService {
       bucket: dto.bucket,
       objectKey: dto.objectKey,
       contentType: dto.contentType,
-      sizeBytes: dto.sizeBytes,
+      sizeBytes: dto.sizeBytes == null ? undefined : BigInt(dto.sizeBytes),
       fileHash: dto.fileHash,
       capturedAt: dto.capturedAt ? new Date(dto.capturedAt) : new Date(),
       latitude: dto.latitude ?? 0,
@@ -1190,6 +1190,15 @@ export class IncidentsService {
       transcriptionStatus: dto.mediaType === "Audio" ? "Uploaded" : undefined,
       moderationStatus: dto.mediaType === "Audio" ? "Pending" : undefined,
     } as never;
+  }
+
+  private toIncidentMediaResponse(media: any) {
+    return {
+      ...media,
+      sizeBytes: media.sizeBytes == null ? null : Number(media.sizeBytes),
+      latitude: media.latitude == null ? null : Number(media.latitude),
+      longitude: media.longitude == null ? null : Number(media.longitude),
+    };
   }
 
   private async systemUserId() {

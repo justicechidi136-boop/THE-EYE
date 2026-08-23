@@ -275,14 +275,24 @@ void main() {
     bool authenticated = true,
     BroadcastFeedItem? detail,
     _FakeBroadcastSession? session,
+    bool productionButtonSizing = false,
   }) {
+    final theme = ThemeData(
+      brightness: Brightness.dark,
+      extensions: const [EyeSemanticColors.dark],
+    );
     return MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        extensions: const [EyeSemanticColors.dark],
-      ),
+      theme: productionButtonSizing
+          ? theme.copyWith(
+              filledButtonTheme: FilledButtonThemeData(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                ),
+              ),
+            )
+          : theme,
       home: AppScope(
         controller: session ??
             _FakeBroadcastSession(
@@ -310,6 +320,22 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(finder, findsOneWidget);
+  }
+
+  Future<void> scrollToSightingSubmit(
+    WidgetTester tester,
+    Finder scrollable,
+  ) async {
+    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
+    await tester.scrollUntilVisible(
+      submitButton,
+      250,
+      scrollable: scrollable,
+    );
+    await tester.drag(scrollable, const Offset(0, -160));
+    await tester.pump();
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
   }
 
   test("ParsedBroadcastRoute resolves detail and sub-routes", () {
@@ -494,6 +520,22 @@ void main() {
     expect(find.text("Local resident"), findsOneWidget);
   });
 
+  testWidgets("comments composer renders with production button sizing",
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastCommentsScreen(broadcastId: "b1"),
+        session: _FakeBroadcastSession(),
+        productionButtonSizing: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("No comments yet"), findsOneWidget);
+    expect(find.text("Add a comment"), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets("share screen invokes native share and clears loading state",
       (tester) async {
     var invoked = 0;
@@ -676,6 +718,8 @@ void main() {
         "vinLastFour": "3456",
         "stolenAt": "2026-08-01T13:10:00.000Z",
         "lastKnownLocation": "Ikeja under bridge",
+        "distinguishingFeatures":
+            "Rear bumper dent\nWhite sticker on the left window",
         "theftDescription": "Taken from parking lot",
         "attachments": [
           {
@@ -688,6 +732,7 @@ void main() {
           {
             "mediaType": "image",
             "label": "Vehicle photo 1",
+            "angle": "FRONT",
             "url": "https://example.com/vehicle.jpg",
           }
         ],
@@ -714,8 +759,13 @@ void main() {
     expect(find.text("1HGCM82633A004352"), findsOneWidget);
     expect(find.byTooltip("Copy plate number"), findsOneWidget);
     expect(find.byTooltip("Copy VIN"), findsOneWidget);
+    expect(find.text("Distinguishing Features"), findsOneWidget);
+    expect(
+      find.text("Rear bumper dent\nWhite sticker on the left window"),
+      findsOneWidget,
+    );
     expect(find.text("Vehicle Photos"), findsOneWidget);
-    expect(find.text("Vehicle photo 1"), findsOneWidget);
+    expect(find.text("Front photo"), findsOneWidget);
     expect(find.text("Last Seen"), findsOneWidget);
     expect(find.textContaining("PM"), findsWidgets);
     expect(find.text("Description of Theft"), findsOneWidget);
@@ -1159,14 +1209,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen heading east");
-    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
-    await tester.scrollUntilVisible(
-      submitButton,
-      250,
-      scrollable: scrollable,
-    );
-    await tester.tap(submitButton);
-    await tester.pumpAndSettle();
+    await scrollToSightingSubmit(tester, scrollable);
 
     expect(find.text("Sighting submitted"), findsOneWidget);
     expect(submitService.submitCalls, 1);
@@ -1234,14 +1277,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 400,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Seen near the roundabout");
-    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
-    await tester.scrollUntilVisible(
-      submitButton,
-      250,
-      scrollable: scrollable,
-    );
-    await tester.tap(submitButton);
-    await tester.pumpAndSettle();
+    await scrollToSightingSubmit(tester, scrollable);
 
     expect(payload?["locationMode"], "MANUAL");
     expect(payload?["latitude"], isNull);
@@ -1303,10 +1339,7 @@ void main() {
     await tester.scrollUntilVisible(descriptionField, 350,
         scrollable: scrollable);
     await tester.enterText(descriptionField, "Vehicle heading east");
-    final submitButton = find.widgetWithText(FilledButton, "Submit sighting");
-    await tester.scrollUntilVisible(submitButton, 250, scrollable: scrollable);
-    await tester.tap(submitButton);
-    await tester.pumpAndSettle();
+    await scrollToSightingSubmit(tester, scrollable);
 
     expect(payload?["locationMode"], "CURRENT_GPS");
     expect(payload?["latitude"], 4.86);

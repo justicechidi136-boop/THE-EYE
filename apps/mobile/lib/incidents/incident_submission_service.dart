@@ -8,7 +8,6 @@ import "../evidence/evidence_capture_service.dart";
 import "../evidence/evidence_upload_coordinator.dart";
 import "../evidence/evidence_upload_service.dart";
 import "../contracts/the_eye_api_client.dart";
-import "../contracts/the_eye_api_paths.dart";
 import "../contracts/the_eye_enums.dart";
 import "../contracts/the_eye_payloads.dart";
 import "incident_draft.dart";
@@ -260,15 +259,6 @@ class IncidentSubmissionService {
   }
 
   Map<String, Object?> _payloadForDraft(IncidentDraft draft) {
-    final accuracyAddress = draft.locationAccuracyMeters == null
-        ? draft.address
-        : [
-            if (draft.address != null && draft.address!.isNotEmpty)
-              draft.address,
-            "GPS accuracy ${draft.locationAccuracyMeters!.toStringAsFixed(0)}m",
-            "Captured ${draft.capturedAt.toUtc().toIso8601String()}",
-          ].whereType<String>().join(" • ");
-
     return TheEyePayloads.reportIncident(
       type: draft.type,
       description: draft.description.trim(),
@@ -278,7 +268,9 @@ class IncidentSubmissionService {
       manualLongitude: draft.manualLongitude,
       manualAddress: draft.manualAddress,
       title: draft.title,
-      address: accuracyAddress,
+      // Accuracy and capture time have dedicated structured fields. Keeping
+      // them out of address prevents technical GPS/ISO text leaking into UI.
+      address: draft.address,
       anonymous: draft.anonymous,
       notifyEmergencyContacts: draft.notifyEmergencyContacts,
       emergencyContactIds: draft.emergencyContactIds,

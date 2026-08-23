@@ -155,6 +155,8 @@ class IncidentArchiveContract {
       location: IncidentArchiveLocation(
         address: _clean(location?["address"]),
         jurisdiction: _clean(location?["jurisdiction"]),
+        accuracyMeters: (location?["accuracyMeters"] as num?)?.toDouble(),
+        capturedAt: _date(location?["capturedAt"]),
       ),
       evidence: _list(json["evidenceGallery"])
           .map(IncidentArchiveEvidenceItem.fromJson)
@@ -174,10 +176,17 @@ class IncidentArchiveContract {
 }
 
 class IncidentArchiveLocation {
-  const IncidentArchiveLocation({this.address, this.jurisdiction});
+  const IncidentArchiveLocation({
+    this.address,
+    this.jurisdiction,
+    this.accuracyMeters,
+    this.capturedAt,
+  });
 
   final String? address;
   final String? jurisdiction;
+  final double? accuracyMeters;
+  final DateTime? capturedAt;
 
   String get label {
     final parts = <String>[];

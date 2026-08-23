@@ -247,6 +247,7 @@ void main() {
       vehicleId: "v2",
       objectKey: "vehicles/u1/v2/upload.jpg",
       contentType: "image/jpeg",
+      angle: "FRONT",
       sizeBytes: 1111,
       sortOrder: 1,
     );
@@ -263,6 +264,7 @@ void main() {
     expect(primary.isPrimary, isTrue);
     expect(presigned.objectKey, contains("vehicles/u1/v2"));
     expect(confirmed.id, "p2");
+    expect(confirmed.angle, "OTHER");
     expect(
       calls,
       containsAll([

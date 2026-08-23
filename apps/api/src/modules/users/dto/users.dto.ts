@@ -336,6 +336,11 @@ export class VehiclePhotoConfirmDto {
   @IsIn(["image/jpeg", "image/png", "image/webp"])
   contentType!: string;
 
+  @ApiProperty({ enum: ["FRONT", "REAR", "SIDE", "OTHER"], example: "FRONT" })
+  @IsString()
+  @IsIn(["FRONT", "REAR", "SIDE", "OTHER"])
+  angle!: "FRONT" | "REAR" | "SIDE" | "OTHER";
+
   @ApiPropertyOptional({ example: 420000 })
   @IsOptional()
   @IsInt()

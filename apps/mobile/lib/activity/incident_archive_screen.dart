@@ -1,7 +1,6 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
-import "package:url_launcher/url_launcher.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_semantic_colors.dart";
@@ -12,7 +11,11 @@ import "../emergency/widgets/active_emergency_skeleton.dart";
 import "../emergency/widgets/active_emergency_tokens.dart";
 import "../emergency/widgets/emergency_timeline_card.dart";
 import "../emergency/widgets/response_progress_card.dart";
+import "../evidence/all_evidence_screen.dart";
+import "../evidence/evidence_collection.dart";
+import "../evidence/evidence_item.dart";
 import "../l10n/generated/app_localizations.dart";
+import "../location/citizen_location_details.dart";
 import "../presentation/citizen_presentation.dart";
 import "activity_history_service.dart";
 import "incident_archive_contract.dart";
@@ -93,42 +96,25 @@ class _IncidentArchiveScreenState extends State<IncidentArchiveScreen> {
     );
   }
 
-  Future<void> _openEvidence(IncidentArchiveEvidenceItem item) async {
-    try {
-      final uri = await _evidenceUrl(item);
-      if (!mounted) return;
-      if (_mediaKind(item.mediaType) == _ArchiveMediaKind.photo) {
-        await showDialog<void>(
-          context: context,
-          builder: (context) => Dialog(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 720),
-              child: InteractiveViewer(
-                child: Image.network(
-                  uri.toString(),
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text("Unable to display this evidence."),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      } else {
-        final opened = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
-        if (!opened) throw const FormatException();
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Evidence is unavailable right now.")),
+  List<EvidenceItem> _evidenceItems(IncidentArchiveContract archive) {
+    final counters = <String, int>{};
+    return archive.evidence.map((item) {
+      final key = item.mediaType.toLowerCase();
+      final index = counters[key] = (counters[key] ?? 0) + 1;
+      final prefix = key.contains("video")
+          ? "Video"
+          : key.contains("audio") || key.contains("voice")
+              ? "Audio"
+              : "Photo";
+      return EvidenceItem(
+        id: item.id,
+        mediaType: item.mediaType,
+        label: "$prefix $index",
+        createdAt: item.uploadedAt,
+        durationSeconds: item.durationSeconds,
+        loadAuthorizedUri: () => _evidenceUrl(item),
       );
-    }
+    }).toList(growable: false);
   }
 
   Future<void> _openCommunication(IncidentArchiveContract archive) {
@@ -208,9 +194,14 @@ class _IncidentArchiveScreenState extends State<IncidentArchiveScreen> {
                         _FinalStatusCard(archive: archive),
                         const SizedBox(height: 14),
                         _ArchiveEvidenceCard(
-                          items: archive.evidence,
-                          loadUrl: _evidenceUrl,
-                          onOpen: _openEvidence,
+                          items: _evidenceItems(archive),
+                          onViewAll: () => unawaited(
+                            AllEvidenceScreen.open(
+                              context,
+                              items: _evidenceItems(archive),
+                              onRetry: () => unawaited(_load()),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 14),
                         _CommunicationHistoryCard(
@@ -320,10 +311,12 @@ class _ArchiveOverviewCard extends StatelessWidget {
           label: l10n.reportedLabel,
           value: CitizenDateTimeFormatter.formatDateTime(archive.reportedAt),
         ),
-        _ArchiveField(
+        CitizenLocationDetails(
           key: const ValueKey("archive-readable-location"),
-          label: l10n.locationLabel,
-          value: archive.location.label,
+          address: archive.location.address,
+          secondaryLocation: archive.location.jurisdiction,
+          accuracyMeters: archive.location.accuracyMeters,
+          capturedAt: archive.location.capturedAt,
         ),
         _ArchiveField(
           label: "Verification",
@@ -381,148 +374,25 @@ class _FinalStatusCard extends StatelessWidget {
 class _ArchiveEvidenceCard extends StatelessWidget {
   const _ArchiveEvidenceCard({
     required this.items,
-    required this.loadUrl,
-    required this.onOpen,
+    required this.onViewAll,
   });
 
-  final List<IncidentArchiveEvidenceItem> items;
-  final Future<Uri> Function(IncidentArchiveEvidenceItem item) loadUrl;
-  final ValueChanged<IncidentArchiveEvidenceItem> onOpen;
+  final List<EvidenceItem> items;
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context) {
-    final colors = EyeSemanticColors.of(context);
     final l10n = AppLocalizations.of(context);
     return _ArchiveSectionCard(
       title: l10n.evidenceLabel,
-      children: items.isEmpty
-          ? [
-              Text(l10n.noEvidenceSubmitted,
-                  style: TextStyle(color: colors.mutedText))
-            ]
-          : [
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: items.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1,
-                ),
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  return _ArchiveEvidenceTile(
-                    item: item,
-                    url: _mediaKind(item.mediaType) == _ArchiveMediaKind.photo
-                        ? loadUrl(item)
-                        : null,
-                    onTap: () => onOpen(item),
-                  );
-                },
-              ),
-            ],
-    );
-  }
-}
-
-class _ArchiveEvidenceTile extends StatelessWidget {
-  const _ArchiveEvidenceTile({
-    required this.item,
-    required this.url,
-    required this.onTap,
-  });
-
-  final IncidentArchiveEvidenceItem item;
-  final Future<Uri>? url;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = EyeSemanticColors.of(context);
-    final kind = _mediaKind(item.mediaType);
-    final label = switch (kind) {
-      _ArchiveMediaKind.photo => "Photo",
-      _ArchiveMediaKind.video => "Play video",
-      _ArchiveMediaKind.audio => "Play audio",
-      _ArchiveMediaKind.other => "View evidence",
-    };
-    final icon = switch (kind) {
-      _ArchiveMediaKind.photo => Icons.image_outlined,
-      _ArchiveMediaKind.video => Icons.play_circle_outline,
-      _ArchiveMediaKind.audio => Icons.graphic_eq,
-      _ArchiveMediaKind.other => Icons.attach_file,
-    };
-
-    return Semantics(
-      button: true,
-      label: label,
-      child: Material(
-        color: colors.elevatedSurface,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (url != null)
-                  FutureBuilder<Uri>(
-                    future: url,
-                    builder: (context, snapshot) => snapshot.hasData
-                        ? Image.network(
-                            snapshot.data.toString(),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Icon(
-                              icon,
-                              color: colors.mutedText,
-                            ),
-                          )
-                        : Center(
-                            child: snapshot.hasError
-                                ? Icon(icon, color: colors.mutedText)
-                                : const SizedBox.square(
-                                    dimension: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                          ),
-                  )
-                else
-                  Center(child: Icon(icon, color: colors.mutedText, size: 30)),
-                if (kind == _ArchiveMediaKind.video)
-                  Center(child: Icon(Icons.play_arrow, color: colors.bodyText)),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: ColoredBox(
-                    color: colors.cardSurface.withValues(alpha: 0.88),
-                    child: Padding(
-                      padding: const EdgeInsets.all(5),
-                      child: Text(
-                        item.durationSeconds == null
-                            ? label
-                            : "$label · ${_duration(item.durationSeconds!)}",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: colors.bodyText,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+      children: [
+        CompactEvidenceCollection(
+          items: items,
+          emptyMessage: l10n.noEvidenceSubmitted,
+          onViewAll: items.isEmpty ? null : onViewAll,
+          showHeader: false,
         ),
-      ),
+      ],
     );
   }
 }
@@ -667,7 +537,6 @@ class _ArchiveSectionCard extends StatelessWidget {
 
 class _ArchiveField extends StatelessWidget {
   const _ArchiveField({
-    super.key,
     required this.label,
     required this.value,
   });
@@ -743,26 +612,6 @@ class _ArchiveError extends StatelessWidget {
       ],
     );
   }
-}
-
-enum _ArchiveMediaKind { photo, video, audio, other }
-
-_ArchiveMediaKind _mediaKind(String value) {
-  final lower = value.toLowerCase();
-  if (lower.contains("image") || lower.contains("photo")) {
-    return _ArchiveMediaKind.photo;
-  }
-  if (lower.contains("video")) return _ArchiveMediaKind.video;
-  if (lower.contains("audio") || lower.contains("voice")) {
-    return _ArchiveMediaKind.audio;
-  }
-  return _ArchiveMediaKind.other;
-}
-
-String _duration(int seconds) {
-  final minutes = (seconds ~/ 60).toString().padLeft(2, "0");
-  final remainder = (seconds % 60).toString().padLeft(2, "0");
-  return "$minutes:$remainder";
 }
 
 String? _citizenResolutionSource(String? value) {

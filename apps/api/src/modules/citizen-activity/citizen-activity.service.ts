@@ -202,6 +202,11 @@ export class CitizenActivityService {
           latitude: incident.latitude ? Number(incident.latitude) : incident.manualLatitude ? Number(incident.manualLatitude) : null,
           longitude: incident.longitude ? Number(incident.longitude) : incident.manualLongitude ? Number(incident.manualLongitude) : null,
           jurisdiction: [incident.lga, incident.state, incident.country].filter(Boolean).join(", "),
+          accuracyMeters:
+            typeof metadata.locationAccuracyMeters === "number"
+              ? metadata.locationAccuracyMeters
+              : null,
+          capturedAt: incident.submittedAt.toISOString(),
         },
         map: {
           latitude: incident.latitude ? Number(incident.latitude) : incident.manualLatitude ? Number(incident.manualLatitude) : null,

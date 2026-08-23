@@ -3,10 +3,15 @@ import "dart:async";
 import "package:flutter/material.dart";
 
 import "../contracts/the_eye_api_client.dart";
+import "../activity/activity_history_service.dart";
 import "../design_system/components/eye_page_header.dart";
 import "../design_system/components/eye_status_chip.dart";
 import "../emergency/incident_communication_contract.dart";
 import "../emergency/incident_communication_service.dart";
+import "../evidence/all_evidence_screen.dart";
+import "../evidence/evidence_collection.dart";
+import "../evidence/evidence_item.dart";
+import "../location/citizen_location_details.dart";
 import "../presentation/citizen_presentation.dart";
 import "incident_history_service.dart";
 
@@ -29,6 +34,7 @@ class IncidentDetailScreen extends StatefulWidget {
 class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
   late final IncidentHistoryService _historyService;
   late final IncidentCommunicationService _communicationService;
+  late final ActivityHistoryService _evidenceService;
   IncidentDetail? _detail;
   IncidentCommunicationSummary? _communication;
   String? _error;
@@ -39,8 +45,30 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
     super.initState();
     final apiClient = widget.apiClient ?? TheEyeApiClient();
     _historyService = IncidentHistoryService(apiClient: apiClient);
+    _evidenceService = ActivityHistoryService(apiClient: apiClient);
     _communicationService = IncidentCommunicationService(apiClient);
     unawaited(_load());
+  }
+
+  List<EvidenceItem> _evidenceItems(IncidentDetail detail) {
+    return detail.evidence.map((item) {
+      return EvidenceItem(
+        id: item.id,
+        mediaType: item.mediaType,
+        label: item.mediaType.toLowerCase().contains("audio")
+            ? "Audio evidence"
+            : item.mediaType.toLowerCase().contains("video")
+                ? "Video evidence"
+                : "Photo evidence",
+        createdAt: item.capturedAt,
+        durationSeconds: item.durationSeconds,
+        loadAuthorizedUri: () => _evidenceService.getIncidentEvidenceViewUrl(
+          accessToken: widget.accessToken,
+          incidentId: detail.id,
+          mediaId: item.id,
+        ),
+      );
+    }).toList(growable: false);
   }
 
   Future<void> _loadCommunication() async {
@@ -128,105 +156,135 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
                       subtitle: Text(_error!),
                     ),
                   if (detail != null) ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            detail.description ?? "No description",
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                    Builder(builder: (context) {
+                      final evidenceItems = _evidenceItems(detail);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  detail.description ?? "No description",
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              if (statusLabel != null) ...[
+                                const SizedBox(width: 8),
+                                EyeStatusChip(
+                                    label: statusLabel, compact: true),
+                              ],
+                            ],
                           ),
-                        ),
-                        if (statusLabel != null) ...[
-                          const SizedBox(width: 8),
-                          EyeStatusChip(label: statusLabel, compact: true),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text("Agency: ${detail.agency}"),
-                    Text("Verification: ${detail.verificationStatus}"),
-                    Text("Evidence files: ${detail.evidenceCount}"),
-                    if (_communication?.conversationAvailable == true) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        "Communication history",
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.chat_bubble_outline),
-                        title: Text(
-                          _communication!.lastMessagePreview ??
-                              "View communication record",
-                        ),
-                        subtitle: Text(
-                          _communication!.unreadMessageCount > 0
-                              ? "${_communication!.unreadMessageCount} unread message(s)"
-                              : _communication!.lastMessageAt == null
-                                  ? "Read-only communication record"
-                                  : "Last update ${CitizenDateTimeFormatter.formatDateTime(_communication!.lastMessageAt!)}",
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).pushNamed(
-                            "/incident-detail/${widget.incidentId}/messages",
-                          );
-                        },
-                      ),
-                    ],
-                    if (detail.statusHistory.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        "Status history",
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      ...detail.statusHistory.map((entry) {
-                        final toStatus = entry["to"] ?? "Update";
-                        final parsed =
-                            CitizenDateTimeFormatter.tryParse(entry["time"]);
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            resolveCitizenIncidentStatusLabel(status: toStatus),
+                          const SizedBox(height: 8),
+                          Text("Agency: ${detail.agency}"),
+                          Text("Verification: ${detail.verificationStatus}"),
+                          const SizedBox(height: 8),
+                          CitizenLocationDetails(
+                            address: detail.address,
+                            accuracyMeters: detail.locationAccuracyMeters,
+                            capturedAt: detail.locationCapturedAt,
                           ),
-                          subtitle: Text(
-                            [
-                              if ((entry["note"] ?? "").trim().isNotEmpty)
-                                entry["note"],
-                              parsed == null
-                                  ? null
-                                  : CitizenDateTimeFormatter.formatDateTime(
-                                      parsed),
-                            ].whereType<String>().join("\n"),
+                          const SizedBox(height: 12),
+                          CompactEvidenceCollection(
+                            items: evidenceItems,
+                            emptyMessage: "No evidence attached.",
+                            onViewAll: evidenceItems.isEmpty
+                                ? null
+                                : () => AllEvidenceScreen.open(
+                                      context,
+                                      items: evidenceItems,
+                                      title: "Incident evidence",
+                                      onRetry: _load,
+                                    ),
                           ),
-                        );
-                      }),
-                    ],
-                    if (detail.timeline.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        "Timeline",
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      ...detail.timeline.map((entry) {
-                        final parsed =
-                            CitizenDateTimeFormatter.tryParse(entry["time"]);
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            citizenTimelineMessage(
-                              message: entry["event"],
+                          if (_communication?.conversationAvailable ==
+                              true) ...[
+                            const SizedBox(height: 12),
+                            const Text(
+                              "Communication history",
+                              style: TextStyle(fontWeight: FontWeight.w800),
                             ),
-                          ),
-                          subtitle: Text(
-                            parsed == null
-                                ? (entry["actor"] ?? "Update")
-                                : "${entry["actor"] ?? "Update"} · ${CitizenDateTimeFormatter.formatDateTime(parsed)}",
-                          ),
-                        );
-                      }),
-                    ],
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.chat_bubble_outline),
+                              title: Text(
+                                _communication!.lastMessagePreview ??
+                                    "View communication record",
+                              ),
+                              subtitle: Text(
+                                _communication!.unreadMessageCount > 0
+                                    ? "${_communication!.unreadMessageCount} unread message(s)"
+                                    : _communication!.lastMessageAt == null
+                                        ? "Read-only communication record"
+                                        : "Last update ${CitizenDateTimeFormatter.formatDateTime(_communication!.lastMessageAt!)}",
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () {
+                                Navigator.of(context).pushNamed(
+                                  "/incident-detail/${widget.incidentId}/messages",
+                                );
+                              },
+                            ),
+                          ],
+                          if (detail.statusHistory.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            const Text(
+                              "Status history",
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            ...detail.statusHistory.map((entry) {
+                              final toStatus = entry["to"] ?? "Update";
+                              final parsed = CitizenDateTimeFormatter.tryParse(
+                                  entry["time"]);
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  resolveCitizenIncidentStatusLabel(
+                                      status: toStatus),
+                                ),
+                                subtitle: Text(
+                                  [
+                                    if ((entry["note"] ?? "").trim().isNotEmpty)
+                                      entry["note"],
+                                    parsed == null
+                                        ? null
+                                        : CitizenDateTimeFormatter
+                                            .formatDateTime(parsed),
+                                  ].whereType<String>().join("\n"),
+                                ),
+                              );
+                            }),
+                          ],
+                          if (detail.timeline.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            const Text(
+                              "Timeline",
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            ...detail.timeline.map((entry) {
+                              final parsed = CitizenDateTimeFormatter.tryParse(
+                                  entry["time"]);
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  citizenTimelineMessage(
+                                    message: entry["event"],
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  parsed == null
+                                      ? (entry["actor"] ?? "Update")
+                                      : "${entry["actor"] ?? "Update"} · ${CitizenDateTimeFormatter.formatDateTime(parsed)}",
+                                ),
+                              );
+                            }),
+                          ],
+                        ],
+                      );
+                    }),
                   ],
                 ],
               ),

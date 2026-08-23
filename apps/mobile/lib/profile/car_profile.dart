@@ -5,6 +5,7 @@ class CarPhotoRef {
     this.id,
     this.objectKey,
     this.contentType,
+    this.angle = "OTHER",
     this.sizeBytes,
     this.sortOrder = 0,
     this.createdAt,
@@ -14,6 +15,7 @@ class CarPhotoRef {
   final String? id;
   final String? objectKey;
   final String? contentType;
+  final String angle;
   final int? sizeBytes;
   final int sortOrder;
   final DateTime? createdAt;
@@ -23,6 +25,7 @@ class CarPhotoRef {
         if (id != null && id!.isNotEmpty) "id": id,
         if (objectKey != null && objectKey!.isNotEmpty) "objectKey": objectKey,
         if (contentType != null && contentType!.isNotEmpty) "contentType": contentType,
+        "angle": angle,
         if (sizeBytes != null) "sizeBytes": sizeBytes,
         "sortOrder": sortOrder,
         if (createdAt != null) "createdAt": createdAt!.toUtc().toIso8601String(),
@@ -34,6 +37,7 @@ class CarPhotoRef {
       id: json["id"] as String?,
       objectKey: json["objectKey"] as String?,
       contentType: json["contentType"] as String?,
+      angle: json["angle"] as String? ?? "OTHER",
       sizeBytes: (json["sizeBytes"] as num?)?.toInt(),
       sortOrder: (json["sortOrder"] as num?)?.toInt() ?? 0,
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),

@@ -165,6 +165,7 @@ class CitizenVehiclePhotoRecord {
     required this.id,
     required this.objectKey,
     required this.contentType,
+    required this.angle,
     required this.sortOrder,
     this.sizeBytes,
     this.createdAt,
@@ -174,6 +175,7 @@ class CitizenVehiclePhotoRecord {
   final String id;
   final String objectKey;
   final String contentType;
+  final String angle;
   final int sortOrder;
   final int? sizeBytes;
   final DateTime? createdAt;
@@ -184,6 +186,7 @@ class CitizenVehiclePhotoRecord {
       id: (json["id"] as String?) ?? "",
       objectKey: (json["objectKey"] as String?) ?? "",
       contentType: (json["contentType"] as String?) ?? "",
+      angle: (json["angle"] as String?) ?? "OTHER",
       sortOrder: (json["sortOrder"] as num?)?.toInt() ?? 0,
       sizeBytes: (json["sizeBytes"] as num?)?.toInt(),
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
@@ -1146,6 +1149,7 @@ class TheEyeApiClient {
     required String vehicleId,
     required String objectKey,
     required String contentType,
+    required String angle,
     int? sizeBytes,
     int? sortOrder,
     Duration timeout = const Duration(seconds: 30),
@@ -1155,6 +1159,7 @@ class TheEyeApiClient {
       {
         "objectKey": objectKey,
         "contentType": contentType,
+        "angle": angle,
         if (sizeBytes != null) "sizeBytes": sizeBytes,
         if (sortOrder != null) "sortOrder": sortOrder,
       },

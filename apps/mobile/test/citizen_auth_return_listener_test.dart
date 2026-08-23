@@ -28,7 +28,8 @@ void main() {
     return navKey;
   }
 
-  testWidgets("cold-start return opens citizen sign-in with message", (tester) async {
+  testWidgets("cold-start return opens citizen sign-in with message",
+      (tester) async {
     final navKey = await pumpApp(tester);
     navigateCitizenAuthReturn(
       nav: navKey.currentState!,
@@ -42,7 +43,8 @@ void main() {
     );
   });
 
-  testWidgets("background return replaces stack at citizen sign-in", (tester) async {
+  testWidgets("background return replaces stack at citizen sign-in",
+      (tester) async {
     final navKey = await pumpApp(tester);
     navKey.currentState!.pushNamed("/login");
     await tester.pumpAndSettle();
@@ -85,11 +87,11 @@ void main() {
     final calls = <String>[];
     final listener = CitizenAuthReturnListener(
       onReturnToSignIn: calls.add,
+      expectedScheme: "theeye-staging",
     );
-    // Flavor under flutter test package.json is production; force expected scheme via URI match helper.
     final uri = CitizenAuthReturnLink.buildReturnUri(
       "PASSWORD_RESET_SUCCESS",
-      forScheme: CitizenAuthReturnLink.scheme,
+      forScheme: "theeye-staging",
     );
     listener.handleUri(uri);
     expect(calls, isNotEmpty);
@@ -101,6 +103,34 @@ void main() {
       CitizenAuthReturnLink.resolveSignInMessage(
         Uri.parse("theeye://not-auth/login"),
         expectedScheme: "theeye",
+      ),
+      isNull,
+    );
+  });
+
+  test("public staging Broadcast link resolves to in-app detail route", () {
+    expect(
+      broadcastRouteForPublicUri(
+        Uri.parse(
+          "https://staging-dashboard8jps.theeye.com.ng/share/broadcasts/broadcast-42",
+        ),
+      ),
+      "/broadcasts/broadcast-42",
+    );
+  });
+
+  test("public Broadcast link rejects unapproved hosts and malformed paths", () {
+    expect(
+      broadcastRouteForPublicUri(
+        Uri.parse("https://example.com/share/broadcasts/broadcast-42"),
+      ),
+      isNull,
+    );
+    expect(
+      broadcastRouteForPublicUri(
+        Uri.parse(
+          "https://dashboard.theeye.com.ng/admin/broadcasts/broadcast-42",
+        ),
       ),
       isNull,
     );

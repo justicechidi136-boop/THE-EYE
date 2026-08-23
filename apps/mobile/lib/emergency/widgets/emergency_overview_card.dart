@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../design_system/eye_semantic_colors.dart";
+import "../../location/citizen_location_details.dart";
 import "../../presentation/citizen_presentation.dart";
 import "../active_emergency_contract.dart";
 import "active_emergency_tokens.dart";
@@ -14,14 +15,6 @@ class EmergencyOverviewCard extends StatelessWidget {
 
   final ActiveEmergencyActiveContract active;
   final VoidCallback? onViewMap;
-
-  String get _location {
-    return active.reportedLocation.address?.trim().isNotEmpty == true
-        ? active.reportedLocation.address!.trim()
-        : (active.reportedLocation.locationLabel?.trim().isNotEmpty == true
-            ? active.reportedLocation.locationLabel!.trim()
-            : "Location recorded");
-  }
 
   String get _agency {
     return active.assignedAgencyName?.trim().isNotEmpty == true
@@ -68,25 +61,12 @@ class EmergencyOverviewCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_on_outlined,
-                          size: 14,
-                          color: colors.information,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _location,
-                            style: TextStyle(
-                              color: colors.mutedText,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
+                    CitizenLocationDetails(
+                      address: active.reportedLocation.address,
+                      secondaryLocation: active.reportedLocation.locationLabel,
+                      accuracyMeters: active.reportedLocation.accuracyMeters,
+                      capturedAt: active.reportedLocation.capturedAt,
+                      compact: true,
                     ),
                     const SizedBox(height: 8),
                     Align(

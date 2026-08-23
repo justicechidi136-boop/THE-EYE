@@ -2,11 +2,13 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 
+import "../activity/activity_history_service.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/components/eye_cancellation_reason_sheet.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../navigation/navigate_back_or_home.dart";
 import "../presentation/citizen_presentation.dart";
+import "../evidence/all_evidence_screen.dart";
 import "active_emergency_contract.dart";
 import "active_emergency_errors.dart";
 import "active_emergency_evidence_actions.dart";
@@ -59,16 +61,34 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
   bool _isStale = false;
   bool _actionInFlight = false;
   Timer? _pollTimer;
+  late final ActivityHistoryService _evidenceService;
 
   @override
   void initState() {
     super.initState();
+    _evidenceService = ActivityHistoryService(apiClient: widget.apiClient);
     WidgetsBinding.instance.addObserver(this);
     _liveVideoError = widget.liveVideoErrorMessage;
     unawaited(_refresh(initial: true));
     _pollTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => unawaited(_refresh()),
+    );
+  }
+
+  Future<Uri> _evidenceUrl(ActiveEmergencyEvidenceItem item) {
+    return _evidenceService.getIncidentEvidenceViewUrl(
+      accessToken: widget.accessToken,
+      incidentId: widget.incidentId,
+      mediaId: item.id,
+    );
+  }
+
+  Future<void> _openAllEvidence(ActiveEmergencyActiveContract active) {
+    return AllEvidenceScreen.open(
+      context,
+      items: activeEmergencyEvidenceItems(active, loadUrl: _evidenceUrl),
+      onRetry: () => unawaited(_refresh()),
     );
   }
 
@@ -569,8 +589,9 @@ class _ActiveEmergencyScreenState extends State<ActiveEmergencyScreen>
                                 const SizedBox(height: 14),
                                 EmergencyEvidenceCard(
                                   active: active,
+                                  loadUrl: _evidenceUrl,
                                   onViewAll: () =>
-                                      unawaited(_showEvidenceSheet()),
+                                      unawaited(_openAllEvidence(active)),
                                   onAddMore: () =>
                                       unawaited(_showEvidenceSheet()),
                                 ),

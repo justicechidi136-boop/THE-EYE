@@ -133,8 +133,10 @@ class _ActiveEmergencyEvidenceActionsState
           setState(() => _statusMessage =
               "${batch.uploaded.length} uploaded, ${batch.failures.length} failed. Retry queued items.");
         } else {
-          setState(
-              () => _statusMessage = "Upload failed. Will retry when online.");
+          setState(() {
+            _statusMessage = batch.failures.first.userMessage ??
+                "Evidence upload failed. Try again.";
+          });
         }
         if (shouldRefreshAfterEvidenceUpload(batch)) {
           refreshed = await widget.onUploaded(

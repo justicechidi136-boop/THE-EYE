@@ -14,6 +14,7 @@ const publicPaths = [
   "/account-recovery",
   "/app/sign-in",
   "/sign-in",
+  "/share/broadcasts",
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/refresh",
