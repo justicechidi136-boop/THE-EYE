@@ -170,6 +170,10 @@ assert(!apiToolsBlock.includes("- the-eye-public"), "api-tools must not gain pub
 const apiDockerfile = readFileSync("apps/api/Dockerfile", "utf8");
 assert(apiDockerfile.includes("COPY . ."), "API image build must include repository scripts before deploy packaging");
 assert(apiDockerfile.includes("pnpm --filter @the-eye/api deploy --prod /app/deploy"), "API production image must use deploy-prod packaging");
+assert(
+  apiDockerfile.includes("/app/scripts/staging-storage-smoke.cjs /app/scripts/staging-storage-smoke.cjs"),
+  "API production image must include the staging storage proof runner",
+);
 
 if (failures.length) {
   console.error("Staging storage certification tests failed:");
