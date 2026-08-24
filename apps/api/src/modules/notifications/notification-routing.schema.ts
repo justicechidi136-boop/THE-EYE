@@ -44,6 +44,7 @@ export interface NotificationRoutingV1 {
   safetyAlertId?: string;
   fieldDeviceId?: string;
   communityId?: string;
+  dynamicAreaKey?: string;
   postId?: string;
   patrolId?: string;
 }
@@ -404,7 +405,8 @@ export function buildNeighborhoodWatchNotificationMetadata(input: {
     | "NW_AREA_CHANGED"
     | "NW_ESCALATION_UPDATE"
   >;
-  communityId: string;
+  communityId?: string;
+  dynamicAreaKey?: string;
   postId?: string;
   patrolId?: string;
   notificationType: string;
@@ -419,7 +421,9 @@ export function buildNeighborhoodWatchNotificationMetadata(input: {
           : input.patrolId
             ? `/neighborhood-watch/patrol/${input.patrolId}`
             : input.routeType.startsWith("NW_MEMBERSHIP")
-              ? `/neighborhood-watch/private/${input.communityId}/membership`
+              ? input.communityId
+                ? `/neighborhood-watch/private/${input.communityId}/membership`
+                : "/neighborhood-watch"
               : "/neighborhood-watch";
   const routing: NotificationRoutingV1 = {
     schemaVersion: NOTIFICATION_SCHEMA_VERSION,
@@ -427,6 +431,7 @@ export function buildNeighborhoodWatchNotificationMetadata(input: {
     notificationType: input.notificationType,
     destination,
     communityId: input.communityId,
+    dynamicAreaKey: input.dynamicAreaKey,
     postId: input.postId,
     patrolId: input.patrolId,
   };

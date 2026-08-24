@@ -40,6 +40,7 @@ import {
   SendCommunityMessageDto,
   UpdateCommunityAlertDto,
   UpdateCommunityCommentDto,
+  UpdateCommunityPostDto,
   UpdatePinnedSafetyInfoDto,
   VerifyCommunityPostDto,
   UpdateCommunityDto,
@@ -702,6 +703,12 @@ export class NeighborhoodWatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can create community posts");
     validatePost(dto);
     await this.assertCanParticipate(communityId, actor);
+    const duplicate = await this.findIdempotentPost(dto.clientMessageId, actor.sub, {
+      communityId,
+      dynamicAreaKey: null,
+    });
+    if (duplicate) return { data: await this.toPublicPostPayload(duplicate, actor.sub) };
+    await this.assertReplyTarget(dto.replyToPostId, { communityId, dynamicAreaKey: null }, actor);
     if (dto.media?.length) {
       for (const media of dto.media) {
         assertEvidenceObjectKey(`community-${communityId}`, media.objectKey, media.bucket, media.contentType);
@@ -714,6 +721,8 @@ export class NeighborhoodWatchService {
     const post = await this.prisma.communityPost.create({
       data: {
         communityId,
+        clientMessageId: dto.clientMessageId,
+        replyToPostId: dto.replyToPostId,
         authorId: actor.sub,
         type: dto.type as never,
         title: dto.title.trim(),
@@ -768,6 +777,16 @@ export class NeighborhoodWatchService {
     if (actor.typ !== "user") throw new ForbiddenException("Only citizens can create community posts");
     validatePost(dto);
     const presence = await this.requireFreshDynamicAreaPresence(actor.sub, { forNewThread: true });
+    const duplicate = await this.findIdempotentPost(dto.clientMessageId, actor.sub, {
+      communityId: null,
+      dynamicAreaKey: presence.areaKey,
+    });
+    if (duplicate) return { data: await this.toPublicPostPayload(duplicate, actor.sub) };
+    await this.assertReplyTarget(
+      dto.replyToPostId,
+      { communityId: null, dynamicAreaKey: presence.areaKey },
+      actor,
+    );
     const mediaPrefix = `nw-da-${presence.areaKey.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80)}`;
     if (dto.media?.length) {
       for (const media of dto.media) {
@@ -781,6 +800,8 @@ export class NeighborhoodWatchService {
     const post = await this.prisma.communityPost.create({
       data: {
         communityId: null,
+        clientMessageId: dto.clientMessageId,
+        replyToPostId: dto.replyToPostId,
         targetType: "DYNAMIC_AREA",
         dynamicAreaKey: presence.areaKey,
         areaCountry: presence.areaCountry,
@@ -820,6 +841,7 @@ export class NeighborhoodWatchService {
       type: dto.type,
     });
     void this.dangerDetection?.enqueueSource("COMMUNITY_POST", post.id).catch(() => undefined);
+    await this.notifyDynamicArea(presence.areaKey, actor.sub, post.id, scored.title);
     return {
       data: await this.toPublicPostPayload({
         ...scored,
@@ -851,6 +873,7 @@ export class NeighborhoodWatchService {
         incident: true,
         broadcast: true,
         author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        replyTo: { select: { id: true, title: true, body: true } },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
@@ -953,6 +976,7 @@ export class NeighborhoodWatchService {
       where: { ...where, ...dateIdCursorWhere(cursor) } as never,
       include: {
         author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        replyTo: { select: { id: true, title: true, body: true } },
         media: true,
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -1040,6 +1064,7 @@ export class NeighborhoodWatchService {
         incident: true,
         broadcast: true,
         author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        replyTo: { select: { id: true, title: true, body: true } },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
@@ -1078,6 +1103,49 @@ export class NeighborhoodWatchService {
     });
     await this.audit(actor, "community.post_verified", "community_posts", postId, { status: dto.status, confidence });
     return { data: updated };
+  }
+
+  async updateOwnPost(postId: string, dto: UpdateCommunityPostDto, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can edit messages");
+    const post = await this.prisma.communityPost.findUnique({
+      where: { id: postId },
+      include: {
+        media: true,
+        reactions: true,
+        replyTo: { select: { id: true, title: true, body: true } },
+      },
+    });
+    if (!post || post.hiddenAt) throw new NotFoundException("Community message not found");
+    if (post.authorId !== actor.sub) throw new ForbiddenException("Only the author can edit this message");
+    await this.assertCanParticipateOnPost(post, actor, { forNewThread: false });
+    const body = dto.body?.trim() ?? "";
+    if (!body && post.media.length === 0) throw new BadRequestException("Message cannot be empty");
+    if (body.length > 4000) throw new BadRequestException("Message must not exceed 4000 characters");
+    const updated = await this.prisma.communityPost.update({
+      where: { id: postId },
+      data: { body, editedAt: new Date() } as never,
+      include: {
+        media: true,
+        reactions: true,
+        replyTo: { select: { id: true, title: true, body: true } },
+      },
+    });
+    await this.audit(actor, "community.message_updated", "community_posts", postId, {});
+    return { data: await this.toPublicPostPayload(updated, actor.sub) };
+  }
+
+  async deleteOwnPost(postId: string, actor: JwtPayload) {
+    if (actor.typ !== "user") throw new ForbiddenException("Only citizens can delete messages");
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
+    if (!post || post.hiddenAt) throw new NotFoundException("Community message not found");
+    if (post.authorId !== actor.sub) throw new ForbiddenException("Only the author can delete this message");
+    await this.assertCanParticipateOnPost(post, actor, { forNewThread: false });
+    await this.prisma.communityPost.update({
+      where: { id: postId },
+      data: { hiddenAt: new Date(), hiddenById: actor.sub } as never,
+    });
+    await this.audit(actor, "community.message_deleted", "community_posts", postId, {});
+    return { data: { id: postId, deleted: true } };
   }
 
   async convertPostToIncident(postId: string, actor: JwtPayload) {
@@ -1901,6 +1969,7 @@ export class NeighborhoodWatchService {
         comments: { orderBy: { createdAt: "asc" }, take: 20 },
         reactions: true,
         author: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        replyTo: { select: { id: true, title: true, body: true } },
       },
     });
     if (!post) throw new NotFoundException("Community post not found");
@@ -2072,6 +2141,45 @@ export class NeighborhoodWatchService {
       }
     }
     return presence;
+  }
+
+  private async findIdempotentPost(
+    clientMessageId: string | undefined,
+    userId: string,
+    target: { communityId: string | null; dynamicAreaKey: string | null },
+  ) {
+    if (!clientMessageId) return null;
+    const existing = await this.prisma.communityPost.findFirst({
+      where: { clientMessageId } as never,
+      include: {
+        media: true,
+        reactions: true,
+        replyTo: { select: { id: true, title: true, body: true } },
+      },
+    });
+    if (!existing) return null;
+    if (
+      existing.authorId !== userId ||
+      existing.communityId !== target.communityId ||
+      existing.dynamicAreaKey !== target.dynamicAreaKey
+    ) {
+      throw new ForbiddenException("Message identifier belongs to another conversation");
+    }
+    return existing;
+  }
+
+  private async assertReplyTarget(
+    replyToPostId: string | undefined,
+    target: { communityId: string | null; dynamicAreaKey: string | null },
+    actor: JwtPayload,
+  ) {
+    if (!replyToPostId) return;
+    const reply = await this.prisma.communityPost.findUnique({ where: { id: replyToPostId } });
+    if (!reply || reply.hiddenAt) throw new NotFoundException("Reply message not found");
+    if (reply.communityId !== target.communityId || reply.dynamicAreaKey !== target.dynamicAreaKey) {
+      throw new BadRequestException("Replies must stay in the same neighborhood conversation");
+    }
+    await this.assertCanParticipateOnPost(reply, actor, { forNewThread: false });
   }
 
   private async assertModeratorForPost(
@@ -2493,6 +2601,34 @@ export class NeighborhoodWatchService {
         body,
         ...metadata,
       });
+    }
+  }
+
+  private async notifyDynamicArea(
+    areaKey: string,
+    senderId: string,
+    postId: string,
+    title: string,
+  ) {
+    const presences = await this.prisma.nwDynamicAreaPresence.findMany({
+      where: { areaKey, expiresAt: { gt: new Date() }, userId: { not: senderId } },
+      select: { userId: true },
+      distinct: ["userId"],
+      take: 500,
+    });
+    const metadata = buildNeighborhoodWatchNotificationMetadata({
+      routeType: "NW_NEW_DISCUSSION",
+      dynamicAreaKey: areaKey,
+      postId,
+      notificationType: "NW_NEW_DISCUSSION",
+    });
+    for (const presence of presences) {
+      await this.notifyUser(
+        presence.userId,
+        title,
+        "New message in your neighborhood",
+        metadata,
+      );
     }
   }
 

@@ -140,6 +140,7 @@ class CommunityPostItem {
     required this.confidenceScore,
     required this.createdAt,
     this.communityId,
+    this.authorId,
     this.authorName,
     this.authorLabel,
     this.commentCount = 0,
@@ -150,6 +151,9 @@ class CommunityPostItem {
     this.approximateLocationLabel,
     this.latitude,
     this.longitude,
+    this.clientMessageId,
+    this.replyTo,
+    this.editedAt,
   });
 
   final String id;
@@ -160,6 +164,7 @@ class CommunityPostItem {
   final double confidenceScore;
   final DateTime? createdAt;
   final String? communityId;
+  final String? authorId;
   final String? authorName;
   final String? authorLabel;
   final int commentCount;
@@ -170,6 +175,9 @@ class CommunityPostItem {
   final String? approximateLocationLabel;
   final double? latitude;
   final double? longitude;
+  final String? clientMessageId;
+  final CommunityPostReplyReference? replyTo;
+  final DateTime? editedAt;
 
   CommunityPostItem copyWith({
     int? commentCount,
@@ -185,6 +193,7 @@ class CommunityPostItem {
       confidenceScore: confidenceScore,
       createdAt: createdAt,
       communityId: communityId,
+      authorId: authorId,
       authorName: authorName,
       authorLabel: authorLabel,
       commentCount: commentCount ?? this.commentCount,
@@ -195,6 +204,9 @@ class CommunityPostItem {
       approximateLocationLabel: approximateLocationLabel,
       latitude: latitude,
       longitude: longitude,
+      clientMessageId: clientMessageId,
+      replyTo: replyTo,
+      editedAt: editedAt,
     );
   }
 
@@ -240,6 +252,7 @@ class CommunityPostItem {
       confidenceScore: double.tryParse("${json["confidenceScore"]}") ?? 0,
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
       communityId: json["communityId"] as String?,
+      authorId: (json["authorId"] as String?) ?? (author?["id"] as String?),
       authorName: authorName,
       authorLabel: json["authorLabel"] as String?,
       commentCount: commentCount,
@@ -256,6 +269,30 @@ class CommunityPostItem {
       approximateLocationLabel: json["approximateLocationLabel"] as String?,
       latitude: (json["latitude"] as num?)?.toDouble(),
       longitude: (json["longitude"] as num?)?.toDouble(),
+      clientMessageId: json["clientMessageId"] as String?,
+      replyTo: json["replyTo"] is Map
+          ? CommunityPostReplyReference.fromJson(
+              Map<String, dynamic>.from(json["replyTo"] as Map),
+            )
+          : null,
+      editedAt: DateTime.tryParse((json["editedAt"] as String?) ?? ""),
+    );
+  }
+}
+
+class CommunityPostReplyReference {
+  const CommunityPostReplyReference(
+      {required this.id, required this.title, required this.body});
+
+  final String id;
+  final String title;
+  final String body;
+
+  factory CommunityPostReplyReference.fromJson(Map<String, dynamic> json) {
+    return CommunityPostReplyReference(
+      id: (json["id"] as String?) ?? "",
+      title: (json["title"] as String?) ?? "",
+      body: (json["body"] as String?) ?? "",
     );
   }
 }
@@ -1032,12 +1069,49 @@ class NwPrivateCommunityNearby {
       };
 }
 
+class NwRoom {
+  const NwRoom({
+    required this.id,
+    required this.targetType,
+    required this.name,
+    required this.areaLabel,
+    this.communityId,
+    this.dynamicAreaKey,
+  });
+
+  final String id;
+  final String targetType;
+  final String name;
+  final String areaLabel;
+  final String? communityId;
+  final String? dynamicAreaKey;
+
+  factory NwRoom.fromJson(Map<String, dynamic> json) => NwRoom(
+        id: (json["id"] as String?) ?? "",
+        targetType: (json["targetType"] as String?) ?? "",
+        name: (json["name"] as String?) ?? "Neighborhood Watch",
+        areaLabel: (json["areaLabel"] as String?) ?? "",
+        communityId: json["communityId"] as String?,
+        dynamicAreaKey: json["dynamicAreaKey"] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        "id": id,
+        "targetType": targetType,
+        "name": name,
+        "areaLabel": areaLabel,
+        if (communityId != null) "communityId": communityId,
+        if (dynamicAreaKey != null) "dynamicAreaKey": dynamicAreaKey,
+      };
+}
+
 class NwContextResponse {
   const NwContextResponse({
     required this.locationStatus,
     this.contextType = NwContextType.unknown,
     this.publicCommunity,
     this.dynamicArea,
+    this.room,
     this.presence,
     this.homeCommunity,
     this.privateCommunitiesNearby = const [],
@@ -1055,6 +1129,7 @@ class NwContextResponse {
   final NwContextType contextType;
   final NwPublicCommunityCard? publicCommunity;
   final NwDynamicArea? dynamicArea;
+  final NwRoom? room;
   final NwPresenceInfo? presence;
   final NwPublicCommunityCard? homeCommunity;
   final List<NwPrivateCommunityNearby> privateCommunitiesNearby;
@@ -1097,6 +1172,9 @@ class NwContextResponse {
           ? NwDynamicArea.fromJson(
               Map<String, dynamic>.from(json["dynamicArea"] as Map))
           : null,
+      room: json["room"] is Map
+          ? NwRoom.fromJson(Map<String, dynamic>.from(json["room"] as Map))
+          : null,
       presence: json["presence"] is Map
           ? NwPresenceInfo.fromJson(
               Map<String, dynamic>.from(json["presence"] as Map))
@@ -1131,6 +1209,7 @@ class NwContextResponse {
         if (publicCommunity != null)
           "publicCommunity": publicCommunity!.toJson(),
         if (dynamicArea != null) "dynamicArea": dynamicArea!.toJson(),
+        if (room != null) "room": room!.toJson(),
         if (presence != null) "presence": presence!.toJson(),
         if (homeCommunity != null) "homeCommunity": homeCommunity!.toJson(),
         "privateCommunitiesNearby":
@@ -1462,6 +1541,8 @@ class NeighborhoodWatchService {
     double? latitude,
     double? longitude,
     List<CommunityPostMediaItem> media = const [],
+    String? clientMessageId,
+    String? replyToPostId,
   }) async {
     final path = isDynamicAreaCommunityId(communityId)
         ? TheEyeApiPaths.neighborhoodWatchDynamicAreaPosts
@@ -1472,6 +1553,8 @@ class NeighborhoodWatchService {
         "type": type,
         "title": title,
         "body": body,
+        if (clientMessageId != null) "clientMessageId": clientMessageId,
+        if (replyToPostId != null) "replyToPostId": replyToPostId,
         if (latitude != null) "latitude": latitude,
         if (longitude != null) "longitude": longitude,
         if (media.isNotEmpty)
@@ -1483,6 +1566,33 @@ class NeighborhoodWatchService {
     final decoded = jsonDecode(response.body);
     final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
     return CommunityPostItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<CommunityPostItem> updateOwnPost({
+    required String accessToken,
+    required String postId,
+    required String body,
+  }) async {
+    final response = await _apiClient.patchJson(
+      TheEyeApiPaths.neighborhoodWatchPost(postId),
+      {"body": body},
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
+    final decoded = jsonDecode(response.body);
+    final data = decoded is Map ? decoded["data"] ?? decoded : decoded;
+    return CommunityPostItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteOwnPost({
+    required String accessToken,
+    required String postId,
+  }) async {
+    final response = await _apiClient.deleteJson(
+      TheEyeApiPaths.neighborhoodWatchOwnPostDelete(postId),
+      accessToken: accessToken,
+    );
+    _ensureSuccess(response);
   }
 
   Future<CommunityPage<CommunityMemberItem>> listMembers({

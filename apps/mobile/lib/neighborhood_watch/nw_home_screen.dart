@@ -79,6 +79,15 @@ class _NeighborhoodWatchHomeScreenState
       _syncSelectedCommunity(staleContext);
     }
     await _refreshContext();
+    if (!mounted) return;
+    final arguments = ModalRoute.of(context)?.settings.arguments;
+    final openFeed = arguments is Map && arguments["openFeed"] == true;
+    final hasAuthorizedRoom = _context?.isMappedPublicCommunity == true ||
+        _context?.isDynamicPublicArea == true;
+    if (openFeed && hasAuthorizedRoom) {
+      Navigator.of(context)
+          .pushReplacementNamed(NeighborhoodWatchDestinations.feed);
+    }
   }
 
   Future<void> _refreshContext() async {
@@ -284,11 +293,16 @@ class _NeighborhoodWatchHomeScreenState
     nwSession?.clearNeighborhoodWatchParticipationContext();
   }
 
+  void _returnToAppHome() {
+    Navigator.of(context).pushReplacementNamed("/home");
+  }
+
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
     return NwPrototypeScaffold(
       title: "Neighborhood Watch",
+      onBack: _returnToAppHome,
       actions: [
         NwPrototypeIconButton(
           icon: Icons.groups_2_outlined,

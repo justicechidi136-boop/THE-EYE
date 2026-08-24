@@ -7,6 +7,7 @@ describe("NeighborhoodWatchService dynamic area participation", () => {
     nwDynamicAreaPresence: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     communityPost: {
       create: jest.fn(),
@@ -142,6 +143,83 @@ describe("NeighborhoodWatchService dynamic area participation", () => {
     expect(result.data.latitude).toBeUndefined();
     expect(result.data.longitude).toBeUndefined();
     expect(result.data.dynamicAreaKey).toBe("da:NIGERIA:ENUGU:ENUGU_NORTH");
+  });
+
+  it("lets the first authorized user start an empty canonical area conversation", async () => {
+    prisma.nwDynamicAreaPresence.findFirst.mockResolvedValue({
+      areaKey: "da:NIGERIA:ENUGU:ENUGU_NORTH",
+      areaCountry: "Nigeria",
+      areaState: "Enugu",
+      areaLga: "Enugu North",
+      areaCity: "Enugu",
+      areaLabel: "Enugu North, Enugu, Nigeria",
+      capturedAt: new Date(),
+      expiresAt: new Date(Date.now() + 20 * 60 * 1000),
+    });
+    prisma.communityPost.findFirst.mockResolvedValue(null);
+    prisma.communityPost.create.mockResolvedValue({ id: "first-message" });
+    prisma.communityPost.findUnique.mockResolvedValue({
+      id: "first-message",
+      authorId: citizen.sub,
+      communityId: null,
+      targetType: "DYNAMIC_AREA",
+      dynamicAreaKey: "da:NIGERIA:ENUGU:ENUGU_NORTH",
+      areaLabel: "Enugu North, Enugu, Nigeria",
+      type: "Discussion",
+      title: "Neighborhood conversation",
+      body: "Hello neighbors",
+      latitude: null,
+      longitude: null,
+      media: [],
+      reactions: [],
+      confidenceScore: 10,
+    });
+    prisma.communityPost.update.mockResolvedValue({
+      id: "first-message",
+      authorId: citizen.sub,
+      communityId: null,
+      targetType: "DYNAMIC_AREA",
+      dynamicAreaKey: "da:NIGERIA:ENUGU:ENUGU_NORTH",
+      areaLabel: "Enugu North, Enugu, Nigeria",
+      type: "Discussion",
+      title: "Neighborhood conversation",
+      body: "Hello neighbors",
+      latitude: null,
+      longitude: null,
+      media: [],
+      reactions: [],
+      confidenceScore: 10,
+    });
+    prisma.nwDynamicAreaPresence.findMany.mockResolvedValue([
+      { userId: "22222222-2222-4222-8222-222222222222" },
+    ]);
+
+    const result = await service.createDynamicAreaPost(
+      {
+        type: "Discussion",
+        title: "Neighborhood conversation",
+        body: "Hello neighbors",
+        clientMessageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      },
+      citizen as never,
+    );
+
+    expect(result.data.id).toBe("first-message");
+    expect(prisma.communityPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          dynamicAreaKey: "da:NIGERIA:ENUGU:ENUGU_NORTH",
+          clientMessageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        }),
+      }),
+    );
+    expect(notifications.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "22222222-2222-4222-8222-222222222222",
+        postId: "first-message",
+        dynamicAreaKey: "da:NIGERIA:ENUGU:ENUGU_NORTH",
+      }),
+    );
   });
 
   it("allows comments on existing Dynamic Area threads within presence TTL", async () => {

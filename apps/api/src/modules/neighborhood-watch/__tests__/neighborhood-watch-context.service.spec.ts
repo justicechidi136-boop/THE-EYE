@@ -116,6 +116,10 @@ describe("NeighborhoodWatchContextService", () => {
     expect(result.presence?.mode).toBe("LOCATION_PARTICIPANT");
     expect(result.publicCommunity?.membershipStatus).toBe(null);
     expect(result.permissions.canPost).toBe(true);
+    expect(result.room?.id).toBe(
+      "community:22222222-2222-4222-8222-222222222222",
+    );
+    expect(result.room?.targetType).toBe("COMMUNITY");
     expect(prisma.communityPresence.upsert).toHaveBeenCalled();
   });
 
@@ -213,8 +217,88 @@ describe("NeighborhoodWatchContextService", () => {
     expect(result.permissions.canPost).toBe(true);
     expect(result.permissions.canShareSecurityTip).toBe(true);
     expect(result.presence?.mode).toBe("DYNAMIC_AREA_PARTICIPANT");
+    expect(result.room?.id).toBe(
+      "dynamic-area:da:NIGERIA:RIVERS:OBIO_AKPOR",
+    );
+    expect(result.room?.targetType).toBe("DYNAMIC_AREA");
     expect(dynamicUpserts).toBe(1);
     expect(communityUpserts).toBe(0);
+  });
+
+  it("keeps the prior canonical area during boundary jitter", async () => {
+    prisma.$queryRawUnsafe = jest.fn().mockImplementation(async (sql: string) =>
+      sql.includes("AS meters") ? [{ meters: 48 }] : [],
+    );
+    jurisdictionResolution.diagnose.mockResolvedValue({
+      polygonMatch: { id: "j2", country: "Nigeria", state: "Rivers", lga: "Port Harcourt" },
+      nearestMatch: null,
+    });
+    prisma.nwDynamicAreaPresence.findFirst = jest.fn().mockResolvedValue({
+      areaKey: "da:NIGERIA:RIVERS:OBIO_AKPOR",
+      areaCountry: "Nigeria",
+      areaState: "Rivers",
+      areaLga: "Obio-Akpor",
+      areaCity: "Rumuola",
+      areaLabel: "Obio-Akpor, Rivers, Nigeria",
+      latitude: 4.85,
+      longitude: 7.0,
+      capturedAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    const result = await buildService().resolveContext(citizen as any, {
+      lat: "4.8503",
+      lng: "7.0002",
+      accuracy: "18",
+      capturedAt: new Date().toISOString(),
+    });
+
+    expect(result.room?.id).toBe(
+      "dynamic-area:da:NIGERIA:RIVERS:OBIO_AKPOR",
+    );
+    expect(prisma.nwDynamicAreaPresence.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId_areaKey: expect.objectContaining({
+            areaKey: "da:NIGERIA:RIVERS:OBIO_AKPOR",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("switches canonical area after genuine movement", async () => {
+    prisma.$queryRawUnsafe = jest.fn().mockImplementation(async (sql: string) =>
+      sql.includes("AS meters") ? [{ meters: 900 }] : [],
+    );
+    jurisdictionResolution.diagnose.mockResolvedValue({
+      polygonMatch: { id: "j3", country: "Nigeria", state: "Rivers", lga: "Port Harcourt" },
+      nearestMatch: null,
+    });
+    prisma.nwDynamicAreaPresence.findFirst = jest.fn().mockResolvedValue({
+      areaKey: "da:NIGERIA:RIVERS:OBIO_AKPOR",
+      areaCountry: "Nigeria",
+      areaState: "Rivers",
+      areaLga: "Obio-Akpor",
+      areaCity: "Rumuola",
+      areaLabel: "Obio-Akpor, Rivers, Nigeria",
+      latitude: 4.85,
+      longitude: 7.0,
+      capturedAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    const result = await buildService().resolveContext(citizen as any, {
+      lat: "4.90",
+      lng: "7.05",
+      accuracy: "18",
+      capturedAt: new Date().toISOString(),
+    });
+
+    expect(result.presence?.switchRecommended).toBe(true);
+    expect(result.room?.id).toBe(
+      "dynamic-area:da:NIGERIA:RIVERS:PORT_HARCOURT",
+    );
   });
 
   it("keeps private communities nearby alongside Dynamic Public Area", async () => {

@@ -6,29 +6,19 @@ import "../eye_semantic_colors.dart";
 import "../tokens.dart";
 import "../typography.dart";
 
-/// Figma bottom navigation: Home, Services, Eye (SOS), Broadcast, Settings.
+/// Primary navigation: Home, local Feed, Eye (SOS), Broadcast, Settings.
 abstract final class EyeNavRoutes {
   static const home = "/home";
-  static const services = "/services";
+  static const neighborhoodWatch = "/neighborhood-watch";
   static const broadcast = "/broadcasts";
   static const settings = "/settings";
 
-  static const tabs = [home, services, broadcast, settings];
+  static const tabs = [home, neighborhoodWatch, broadcast, settings];
 
   static int selectedIndexForRoute(String? route) {
     if (route == null) return 0;
     if (route == home) return 0;
-    if (route == services ||
-        route == "/police-stations" ||
-        route.startsWith("/neighborhood-watch") ||
-        route == "/tracking" ||
-        route == "/family" ||
-        route == "/profile" ||
-        route == "/smartwatch" ||
-        route.startsWith("/report/") ||
-        route == "/live-video" ||
-        route == "/missing-person" ||
-        route == "/stolen-vehicle") {
+    if (route.startsWith("/neighborhood-watch")) {
       return 1;
     }
     if (route == broadcast || route == "/notifications") return 3;
@@ -46,7 +36,7 @@ class EyeBottomNav extends StatelessWidget {
     required this.onTabSelected,
     required this.onEyePressed,
     this.homeLabel = "Home",
-    this.servicesLabel = "Services",
+    this.neighborhoodLabel = "Feed",
     this.broadcastLabel = "Broadcast",
     this.settingsLabel = "Settings",
     super.key,
@@ -56,7 +46,7 @@ class EyeBottomNav extends StatelessWidget {
   final ValueChanged<int> onTabSelected;
   final VoidCallback onEyePressed;
   final String homeLabel;
-  final String servicesLabel;
+  final String neighborhoodLabel;
   final String broadcastLabel;
   final String settingsLabel;
 
@@ -94,8 +84,8 @@ class EyeBottomNav extends StatelessWidget {
                         onTap: () => onTabSelected(0),
                       ),
                       _NavItem(
-                        icon: Icons.layers_rounded,
-                        label: servicesLabel,
+                        icon: Icons.forum_rounded,
+                        label: neighborhoodLabel,
                         selected: selectedIndex == 1,
                         onTap: () => onTabSelected(1),
                       ),

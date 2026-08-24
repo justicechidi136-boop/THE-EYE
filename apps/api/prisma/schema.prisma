@@ -1736,6 +1736,8 @@ model CommunityPost {
   authorId           String                                @map("author_id") @db.Uuid
   incidentId         String?                               @map("incident_id") @db.Uuid
   broadcastId        String?                               @map("broadcast_id") @db.Uuid
+  replyToPostId      String?                               @map("reply_to_post_id") @db.Uuid
+  clientMessageId    String?                               @unique @map("client_message_id")
   targetType         CommunityPostTargetType               @default(COMMUNITY) @map("target_type")
   /// Deterministic geographic bucket (never raw lat/lng). Required for DYNAMIC_AREA.
   dynamicAreaKey     String?                               @map("dynamic_area_key")
@@ -1757,12 +1759,15 @@ model CommunityPost {
   escalatedAt        DateTime?                             @map("escalated_at") @db.Timestamptz(6)
   escalatedById      String?                               @map("escalated_by_id") @db.Uuid
   hiddenAt           DateTime?                             @map("hidden_at") @db.Timestamptz(6)
+  editedAt           DateTime?                             @map("edited_at") @db.Timestamptz(6)
   createdAt          DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   community          Community?                            @relation(fields: [communityId], references: [id], onDelete: Cascade)
   author             User                                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
   incident           Incident?                             @relation(fields: [incidentId], references: [id])
   broadcast          Broadcast?                            @relation(fields: [broadcastId], references: [id])
+  replyTo             CommunityPost?                       @relation("CommunityPostReplies", fields: [replyToPostId], references: [id])
+  replies             CommunityPost[]                      @relation("CommunityPostReplies")
   media              CommunityPostMedia[]
   comments           CommunityPostComment[]
   reactions          CommunityPostReaction[]
@@ -1778,6 +1783,7 @@ model CommunityPost {
   @@index([hazardStatus])
   @@index([incidentId])
   @@index([broadcastId])
+  @@index([replyToPostId])
   @@map("community_posts")
 }
 

@@ -36,33 +36,17 @@ void main() {
     }
   });
 
-  test("Neighborhood Watch Feed uses approved filters and notice placement",
+  test("Neighborhood Watch geographic chat keeps an active empty-room composer",
       () {
-    final appSource = File("lib/main.dart").readAsStringSync();
-    final start = appSource.indexOf("class _CommunityFeedScreenState");
-    final end = appSource.indexOf("class _SelectedCommunityLocation", start);
-    final source = appSource.substring(start, end);
+    final source = File(
+      "lib/neighborhood_watch/geo_community_chat_view.dart",
+    ).readAsStringSync();
 
-    expect(source, contains('"All",'));
-    expect(source, contains('"Discussions",'));
-    expect(source, contains('"Tips",'));
-    expect(source, contains('"Traffic",'));
-    expect(source, isNot(contains('"Activity",')));
-    expect(source, isNot(contains('"Hazards",')));
-    expect(source, isNot(contains("Share Security Tip")));
-    expect(source, isNot(contains("Report Activity")));
-    expect(source, isNot(contains("Report Road Hazard")));
-    expect(source, isNot(contains("Report Emergency")));
-    expect(source, contains("floatingActionButton:"));
-    expect(source, contains("No community discussions yet"));
-    expect(source, contains("Share First Security Tip"));
-    expect(
-      source.indexOf("Community Notice"),
-      lessThan(source.indexOf("loadingCommunityFeed")),
-    );
-    expect(source, contains("CommunityPostActionButton("));
-    expect(source, contains('"Like"'));
-    expect(source, contains("Comment"));
-    expect(source, contains('label: "Share"'));
+    expect(source, contains("No conversations here yet"));
+    expect(source, contains("Be the first to start a conversation"));
+    expect(source, contains("Message your neighborhood..."));
+    expect(source, contains("Add photo, video, or voice note"));
+    expect(source, isNot(contains("Share First Security Tip")));
+    expect(source, isNot(contains("floatingActionButton:")));
   });
 }

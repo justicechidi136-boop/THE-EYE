@@ -6,26 +6,41 @@ class NwPrototypeScaffold extends StatelessWidget {
   const NwPrototypeScaffold({
     required this.title,
     required this.body,
+    this.subtitle,
     this.leading,
     this.actions = const [],
     this.tabs,
     this.floatingActionButton,
+    this.bottomNavigationBar,
+    this.onBack,
     super.key,
   });
 
   final String title;
   final Widget body;
+  final String? subtitle;
   final Widget? leading;
   final List<Widget> actions;
   final Widget? tabs;
   final Widget? floatingActionButton;
+  final Widget? bottomNavigationBar;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
-    return Scaffold(
+    final effectiveLeading = leading ??
+        (onBack == null
+            ? null
+            : IconButton(
+                tooltip: "Back to app home",
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back),
+              ));
+    final scaffold = Scaffold(
       backgroundColor: semantics.background,
       floatingActionButton: floatingActionButton,
+      bottomNavigationBar: bottomNavigationBar,
       body: SafeArea(
         child: Column(
           children: [
@@ -33,20 +48,37 @@ class NwPrototypeScaffold extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
               child: Row(
                 children: [
-                  if (leading != null) ...[
-                    leading!,
+                  if (effectiveLeading != null) ...[
+                    effectiveLeading,
                     const SizedBox(width: 10),
                   ],
                   Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0,
+                                  ),
+                        ),
+                        if (subtitle != null && subtitle!.trim().isNotEmpty)
+                          Text(
+                            subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: semantics.secondaryText,
+                                      letterSpacing: 0,
+                                    ),
                           ),
+                      ],
                     ),
                   ),
                   ...actions,
@@ -62,6 +94,14 @@ class NwPrototypeScaffold extends StatelessWidget {
           ],
         ),
       ),
+    );
+    if (onBack == null) return scaffold;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) onBack!();
+      },
+      child: scaffold,
     );
   }
 }
