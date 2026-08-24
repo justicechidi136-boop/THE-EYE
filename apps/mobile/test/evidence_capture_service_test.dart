@@ -68,6 +68,16 @@ Future<File> writeTempMp4(String name, {int size = 256}) async {
   return file;
 }
 
+Future<File> writeTempGif(String name, {int size = 128}) async {
+  final file = File("${Directory.systemTemp.path}/$name");
+  final bytes = <int>[0x47, 0x49, 0x46, 0x38, 0x39, 0x61];
+  while (bytes.length < size) {
+    bytes.add(0x00);
+  }
+  await file.writeAsBytes(bytes);
+  return file;
+}
+
 Future<Directory> testDocumentsDir() async {
   final dir = Directory("${Directory.systemTemp.path}/the_eye_evidence_test");
   if (!await dir.exists()) {
@@ -111,6 +121,16 @@ void main() {
   });
 
   group("EvidenceValidation", () {
+    test("accepts animated GIF image evidence", () async {
+      final file = await writeTempGif("neighborhood-chat.gif");
+      await EvidenceValidation.validateFile(
+        path: file.path,
+        fileName: "neighborhood-chat.gif",
+        mediaType: IncidentMediaType.image,
+        mimeType: "image/gif",
+      );
+    });
+
     test("rejects unsupported mime type and extension", () async {
       final file = File("${Directory.systemTemp.path}/bad-evidence.exe");
       await file.writeAsBytes(const [1, 2, 3, 4]);
@@ -168,6 +188,60 @@ void main() {
   });
 
   group("EvidenceCaptureService", () {
+    test("GIF picker preserves private image upload metadata", () async {
+      final gif = await writeTempGif("chat-picker.gif");
+      final mediaSource = FakeEvidenceMediaSource()
+        ..nextGif = PickedEvidenceFile(
+          path: gif.path,
+          fileName: "chat-picker.gif",
+          mimeType: "image/gif",
+        );
+      final controller = EvidenceCaptureController(
+        captureService: EvidenceCaptureService(
+          compressor: InMemoryEvidenceCompressor(),
+          documentsDirectoryProvider: testDocumentsDir,
+        ),
+        mediaSource: mediaSource,
+        permissionService: grantedPermissionService(),
+      );
+
+      await controller.pickGif();
+
+      expect(controller.attachments, hasLength(1));
+      expect(controller.attachments.single.mediaType, IncidentMediaType.image);
+      expect(controller.attachments.single.contentType, "image/gif");
+      controller.dispose();
+    });
+
+    test("bundled GIF enters the same private image upload pipeline", () async {
+      final controller = EvidenceCaptureController(
+        captureService: EvidenceCaptureService(
+          compressor: InMemoryEvidenceCompressor(),
+          documentsDirectoryProvider: testDocumentsDir,
+        ),
+        mediaSource: FakeEvidenceMediaSource(),
+        permissionService: grantedPermissionService(),
+      );
+
+      await controller.addBundledGif(
+        fileName: "heart.gif",
+        bytes: Uint8List.fromList([
+          0x47,
+          0x49,
+          0x46,
+          0x38,
+          0x39,
+          0x61,
+          ...List<int>.filled(64, 0x00),
+        ]),
+      );
+
+      expect(controller.attachments, hasLength(1));
+      expect(controller.attachments.single.fileName, "heart.gif");
+      expect(controller.attachments.single.contentType, "image/gif");
+      controller.dispose();
+    });
+
     test("empty selection returns validation failure", () async {
       final service = EvidenceCaptureService(
         compressor: InMemoryEvidenceCompressor(),

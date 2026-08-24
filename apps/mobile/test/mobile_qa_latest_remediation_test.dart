@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:the_eye_mobile/design_system/components/eye_cancellation_reason_sheet.dart";
+import "package:the_eye_mobile/design_system/components/eye_service_card.dart";
 import "package:the_eye_mobile/main.dart";
 import "package:the_eye_mobile/presentation/citizen_presentation.dart";
 import "package:the_eye_mobile/presentation/citizen_time_picker.dart";
@@ -116,7 +117,8 @@ void main() {
   });
 
   group("UX-030 service cards", () {
-    testWidgets("narrow width does not overflow long labels", (tester) async {
+    testWidgets("primary Home cards stay compact with descriptions",
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -126,6 +128,46 @@ void main() {
                 crossAxisCount: 2,
                 shrinkWrap: true,
                 childAspectRatio: 1.15,
+                children: const [
+                  EyeServiceCard(
+                    title: "Emergency Case",
+                    description:
+                        "Ensure fast and accurate information during urgent situations",
+                    icon: Icons.emergency_share,
+                    onTap: _noop,
+                  ),
+                  EyeServiceCard(
+                    title: "Nearest Police Station",
+                    description:
+                        "Locate the nearest police station quickly in case of emergencies",
+                    icon: Icons.local_police_outlined,
+                    onTap: _noop,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(EyeServiceCard).first).height,
+        lessThan(125),
+      );
+    });
+
+    testWidgets("narrow width keeps service cards compact without overflow",
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 280,
+              child: GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                childAspectRatio: 1.35,
                 children: const [
                   ActionTile(
                     "Live emergency video",
@@ -147,6 +189,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(
+          tester.getSize(find.byType(ActionTile).first).height, lessThan(115));
       expect(find.textContaining("Live emergency"), findsOneWidget);
       expect(find.textContaining("Neighborhood"), findsOneWidget);
     });

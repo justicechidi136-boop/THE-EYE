@@ -14,6 +14,7 @@ abstract final class EvidenceMimeTypes {
     "image/jpeg",
     "image/png",
     "image/webp",
+    "image/gif",
     "video/mp4",
     "video/webm",
     "audio/mpeg",
@@ -23,7 +24,12 @@ abstract final class EvidenceMimeTypes {
     "audio/x-m4a",
   };
 
-  static const image = <String>{"image/jpeg", "image/png", "image/webp"};
+  static const image = <String>{
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  };
   static const video = <String>{"video/mp4", "video/webm"};
   static const audio = <String>{"audio/mpeg", "audio/mp4", "audio/webm"};
 }
@@ -34,6 +40,7 @@ abstract final class EvidenceExtensions {
     ".jpeg",
     ".png",
     ".webp",
+    ".gif",
     ".mp4",
     ".webm",
     ".mpeg",

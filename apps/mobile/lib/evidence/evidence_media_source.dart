@@ -27,6 +27,7 @@ abstract class EvidenceMediaSource {
   Future<PickedEvidenceFile?> takePhoto();
   Future<PickedEvidenceFile?> pickImage();
   Future<List<PickedEvidenceFile>> pickImages();
+  Future<PickedEvidenceFile?> pickGif();
   Future<PickedEvidenceFile?> recordVideo(
       {Duration maxDuration = const Duration(seconds: 120)});
   Future<PickedEvidenceFile?> pickVideo();
@@ -59,6 +60,28 @@ class ImagePickerEvidenceSource implements EvidenceMediaSource {
   Future<List<PickedEvidenceFile>> pickImages() async {
     final files = await _picker.pickMultiImage(imageQuality: 100);
     return _mapXFiles(files);
+  }
+
+  @override
+  Future<PickedEvidenceFile?> pickGif() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ["gif"],
+      allowMultiple: false,
+      withReadStream: false,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return null;
+    final picked = result.files.first;
+    final path = picked.path ?? "";
+    final bytes = picked.bytes;
+    if (path.isEmpty && (bytes == null || bytes.isEmpty)) return null;
+    return PickedEvidenceFile(
+      path: path,
+      fileName: picked.name,
+      mimeType: "image/gif",
+      bytes: bytes == null ? null : Uint8List.fromList(bytes),
+    );
   }
 
   @override
@@ -192,6 +215,7 @@ class FakeEvidenceMediaSource implements EvidenceMediaSource {
   PickedEvidenceFile? nextPhoto;
   PickedEvidenceFile? nextImage;
   List<PickedEvidenceFile>? nextImages;
+  PickedEvidenceFile? nextGif;
   PickedEvidenceFile? nextVideo;
   List<PickedEvidenceFile>? nextVideos;
   PickedEvidenceFile? nextRecordedVideo;
@@ -207,6 +231,9 @@ class FakeEvidenceMediaSource implements EvidenceMediaSource {
   @override
   Future<List<PickedEvidenceFile>> pickImages() async =>
       nextImages ?? (nextImage == null ? const [] : [nextImage!]);
+
+  @override
+  Future<PickedEvidenceFile?> pickGif() async => nextGif;
 
   @override
   Future<PickedEvidenceFile?> recordVideo(

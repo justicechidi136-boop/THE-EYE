@@ -1,14 +1,26 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:permission_handler/permission_handler.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
+import "package:the_eye_mobile/evidence/evidence_capture_controller.dart";
+import "package:the_eye_mobile/evidence/evidence_capture_service.dart";
+import "package:the_eye_mobile/evidence/evidence_compressor.dart";
+import "package:the_eye_mobile/evidence/evidence_media_source.dart";
+import "package:the_eye_mobile/evidence/evidence_permission_service.dart";
 import "package:the_eye_mobile/neighborhood_watch/geo_community_chat_view.dart";
 
 void main() {
   Widget buildChat({
     required Future<void> Function() onSend,
+    TextEditingController? messageController,
     String? pendingMessage,
     String? sendError,
     VoidCallback? onBack,
+    EvidenceCaptureController? evidenceController,
+    VoidCallback? onToggleAttachments,
   }) {
     final theme = ThemeData.light().copyWith(
       extensions: const [EyeSemanticColors.light],
@@ -23,15 +35,15 @@ void main() {
         showAttachments: false,
         sending: false,
         attachmentCount: 0,
-        messageController: TextEditingController(),
-        evidenceController: null,
+        messageController: messageController ?? TextEditingController(),
+        evidenceController: evidenceController,
         pendingMessage: pendingMessage,
         sendError: sendError,
         onRefresh: () async {},
         onLoadOlder: () async {},
         hasOlderMessages: false,
         loadingOlderMessages: false,
-        onToggleAttachments: () {},
+        onToggleAttachments: onToggleAttachments ?? () {},
         onSend: onSend,
         onOpenMessage: (_) {},
         onReply: (_) {},
@@ -57,9 +69,125 @@ void main() {
     expect(find.byTooltip("Add photo, video, or voice note"), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), "Hello neighbors");
+    await tester.pump();
     await tester.tap(find.byTooltip("Send message"));
     await tester.pump();
     expect(sends, 1);
+  });
+
+  testWidgets("composer offers emoji, GIF, and sticker controls",
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      messageController: controller,
+    ));
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.autocorrect, isTrue);
+    expect(textField.enableSuggestions, isTrue);
+    expect(textField.spellCheckConfiguration, isNotNull);
+    expect(textField.contentInsertionConfiguration, isNotNull);
+    expect(
+      textField.contentInsertionConfiguration!.allowedMimeTypes,
+      ["image/gif"],
+    );
+    expect(
+      tester.getCenter(find.byKey(const Key("chat-expression-button"))).dy,
+      lessThan(
+        tester.getCenter(find.byKey(const Key("chat-attachment-button"))).dy,
+      ),
+    );
+
+    await tester.tap(find.byTooltip("Emoji, GIF, and stickers"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Emoji"), findsOneWidget);
+    expect(find.text("GIF"), findsOneWidget);
+    expect(find.text("Stickers"), findsOneWidget);
+
+    await tester.tap(find.byTooltip("Insert 😀"));
+    await tester.pump();
+    expect(controller.text, "😀");
+
+    await tester.tap(find.text("GIF"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text("Blush"), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+    expect(find.text("Choose GIF from device"), findsOneWidget);
+
+    await tester.tap(find.text("Stickers"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text("Stay safe"));
+    await tester.pumpAndSettle();
+    expect(controller.text, "😀🛡️✅");
+  });
+
+  testWidgets("empty composer opens the live voice-message recorder",
+      (tester) async {
+    final evidence = _evidenceController();
+    addTearDown(evidence.dispose);
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      evidenceController: evidence,
+    ));
+
+    await tester.tap(find.byTooltip("Record voice message"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Voice message"), findsOneWidget);
+    expect(find.text("Audio / Voice report"), findsOneWidget);
+  });
+
+  testWidgets("Android keyboard GIF enters the private attachment pipeline",
+      (tester) async {
+    final tempDir = Directory.systemTemp.createTempSync("eye-keyboard-gif-");
+    addTearDown(() {
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+    final evidence = _evidenceController(tempDir: tempDir);
+    addTearDown(evidence.dispose);
+    var attachmentPanelToggles = 0;
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      evidenceController: evidence,
+      onToggleAttachments: () => attachmentPanelToggles += 1,
+    ));
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    await tester.runAsync(() async {
+      textField.contentInsertionConfiguration!.onContentInserted(
+        KeyboardInsertedContent(
+          mimeType: "image/gif",
+          uri: "content://keyboard/reaction.gif",
+          data: Uint8List.fromList([
+            0x47,
+            0x49,
+            0x46,
+            0x38,
+            0x39,
+            0x61,
+            ...List<int>.filled(64, 0x00),
+          ]),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      for (var attempt = 0; attempt < 100 && evidence.busy; attempt += 1) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pump();
+
+    expect(
+      evidence.attachments,
+      hasLength(1),
+      reason: "lastError=${evidence.lastError}; busy=${evidence.busy}",
+    );
+    expect(evidence.attachments.single.contentType, "image/gif");
+    expect(attachmentPanelToggles, 1);
   });
 
   testWidgets("failed first message stays visible and can be retried",
@@ -114,4 +242,18 @@ void main() {
     expect(backCalls, 1);
     expect(find.text("No conversations here yet"), findsOneWidget);
   });
+}
+
+EvidenceCaptureController _evidenceController({Directory? tempDir}) {
+  return EvidenceCaptureController(
+    captureService: EvidenceCaptureService(
+      compressor: InMemoryEvidenceCompressor(),
+      documentsDirectoryProvider: tempDir == null ? null : () async => tempDir,
+    ),
+    mediaSource: FakeEvidenceMediaSource(),
+    permissionService: EvidencePermissionService(
+      checkPermission: (_) async => PermissionStatus.granted,
+      requestPermission: (_) async => PermissionStatus.granted,
+    ),
+  );
 }

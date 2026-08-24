@@ -1,10 +1,75 @@
-import "package:flutter/material.dart";
+import "dart:async";
 
+import "package:flutter/material.dart";
+import "package:flutter/services.dart";
+
+import "../contracts/the_eye_enums.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_capture_controller.dart";
+import "../voice/voice_recorder.dart";
 import "neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch_service.dart";
+
+const _chatEmojis = <String>[
+  "😀",
+  "😂",
+  "😍",
+  "👍",
+  "🙏",
+  "👏",
+  "❤️",
+  "🎉",
+  "👀",
+  "🤝",
+  "✅",
+  "🚨",
+  "📍",
+  "🏠",
+  "🛡️",
+  "💡",
+  "⚠️",
+  "🔥",
+  "💬",
+  "🙌",
+];
+
+const _chatStickers = <({String label, String value})>[
+  (label: "Stay safe", value: "🛡️✅"),
+  (label: "Alert", value: "🚨⚠️"),
+  (label: "Watching", value: "👀🏠"),
+  (label: "Thank you", value: "🙏❤️"),
+  (label: "All clear", value: "✅🙌"),
+  (label: "Neighbors", value: "🤝🏠"),
+];
+
+const _chatGifs = <({String label, String asset, String fileName})>[
+  (
+    label: "Blush",
+    asset: "assets/gifs/blush.gif",
+    fileName: "blush.gif",
+  ),
+  (
+    label: "Laugh",
+    asset: "assets/gifs/laugh.gif",
+    fileName: "laugh.gif",
+  ),
+  (
+    label: "Smile",
+    asset: "assets/gifs/smile.gif",
+    fileName: "smile.gif",
+  ),
+  (
+    label: "Joy",
+    asset: "assets/gifs/joy.gif",
+    fileName: "joy.gif",
+  ),
+  (
+    label: "Heart",
+    asset: "assets/gifs/heart.gif",
+    fileName: "heart.gif",
+  ),
+];
 
 class GeoCommunityChatView extends StatelessWidget {
   const GeoCommunityChatView({
@@ -67,6 +132,146 @@ class GeoCommunityChatView extends StatelessWidget {
   final String? pendingMessage;
   final String? sendError;
   final CommunityPostItem? replyTo;
+
+  void _insertExpression(String value) {
+    final text = messageController.text;
+    final selection = messageController.selection;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final next = text.replaceRange(start, end, value);
+    messageController.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + value.length),
+    );
+  }
+
+  Future<void> _showExpressionPicker(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _ChatExpressionSheet(
+        gifEnabled: canSend && evidenceController != null,
+        onEmoji: _insertExpression,
+        onSticker: (value) {
+          _insertExpression(value);
+          Navigator.of(sheetContext).pop();
+        },
+        onGif: () async {
+          Navigator.of(sheetContext).pop();
+          final before = evidenceController?.attachments.length ?? 0;
+          await evidenceController?.pickGif();
+          final after = evidenceController?.attachments.length ?? 0;
+          if (after > before && !showAttachments) onToggleAttachments();
+        },
+        onGifAsset: (gif) async {
+          Navigator.of(sheetContext).pop();
+          final before = evidenceController?.attachments.length ?? 0;
+          final data = await rootBundle.load(gif.asset);
+          await evidenceController?.addBundledGif(
+            fileName: gif.fileName,
+            bytes: data.buffer.asUint8List(
+              data.offsetInBytes,
+              data.lengthInBytes,
+            ),
+          );
+          final after = evidenceController?.attachments.length ?? 0;
+          if (after > before && !showAttachments) onToggleAttachments();
+        },
+      ),
+    );
+  }
+
+  Future<void> _showVoiceRecorder(BuildContext context) async {
+    final controller = evidenceController;
+    if (controller == null) return;
+    final existingVoice = controller.attachments
+        .where((item) => item.isAudio && item.metadata["voiceReport"] == true)
+        .toList(growable: false);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            16 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "Voice message",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: "Close voice recorder",
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              VoiceRecorder(
+                enabled: canSend &&
+                    !sending &&
+                    (controller.canAddMoreFor(IncidentMediaType.audio) ||
+                        existingVoice.isNotEmpty),
+                onRecordingReady: (result) {
+                  for (final existing in existingVoice) {
+                    controller.remove(existing.localId);
+                  }
+                  controller.addVoiceAttachment(result.attachment);
+                  Navigator.of(sheetContext).pop();
+                  if (!showAttachments) onToggleAttachments();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _insertKeyboardGif(
+    BuildContext context,
+    KeyboardInsertedContent content,
+  ) async {
+    final controller = evidenceController;
+    if (controller == null || content.mimeType != "image/gif") return;
+    final bytes = content.data;
+    if (bytes == null || bytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Unable to read that keyboard GIF. Choose it from the GIF picker instead.",
+          ),
+        ),
+      );
+      return;
+    }
+    final before = controller.attachments.length;
+    await controller.addGifBytes(
+      fileName: "keyboard-${DateTime.now().millisecondsSinceEpoch}.gif",
+      bytes: bytes,
+    );
+    if (!context.mounted) return;
+    final after = controller.attachments.length;
+    if (after > before && !showAttachments) {
+      onToggleAttachments();
+    } else if (after == before && controller.lastError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(controller.lastError!)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -282,13 +487,36 @@ class GeoCommunityChatView extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            IconButton(
-              tooltip: "Add photo, video, or voice note",
-              onPressed: canSend ? onToggleAttachments : null,
-              icon: Badge(
-                isLabelVisible: attachmentCount > 0,
-                label: Text("$attachmentCount"),
-                child: const Icon(Icons.add_circle_outline),
+            SizedBox(
+              width: 42,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    key: const Key("chat-expression-button"),
+                    tooltip: "Emoji, GIF, and stickers",
+                    constraints:
+                        const BoxConstraints.tightFor(width: 40, height: 36),
+                    padding: EdgeInsets.zero,
+                    onPressed: canSend && !sending
+                        ? () => _showExpressionPicker(context)
+                        : null,
+                    icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
+                  ),
+                  IconButton(
+                    key: const Key("chat-attachment-button"),
+                    tooltip: "Add photo, video, or voice note",
+                    constraints:
+                        const BoxConstraints.tightFor(width: 40, height: 36),
+                    padding: EdgeInsets.zero,
+                    onPressed: canSend ? onToggleAttachments : null,
+                    icon: Badge(
+                      isLabelVisible: attachmentCount > 0,
+                      label: Text("$attachmentCount"),
+                      child: const Icon(Icons.add_circle_outline, size: 22),
+                    ),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -297,6 +525,19 @@ class GeoCommunityChatView extends StatelessWidget {
                 enabled: canSend && !sending,
                 minLines: 1,
                 maxLines: 5,
+                autocorrect: true,
+                enableSuggestions: true,
+                spellCheckConfiguration: WidgetsBinding.instance
+                        .platformDispatcher.nativeSpellCheckServiceDefined
+                    ? const SpellCheckConfiguration()
+                    : const SpellCheckConfiguration.disabled(),
+                contentInsertionConfiguration: ContentInsertionConfiguration(
+                  allowedMimeTypes: const ["image/gif"],
+                  onContentInserted: (content) {
+                    unawaited(_insertKeyboardGif(context, content));
+                  },
+                ),
+                keyboardType: TextInputType.multiline,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   hintText: "Message your neighborhood...",
@@ -307,15 +548,31 @@ class GeoCommunityChatView extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            IconButton.filled(
-              tooltip: "Send message",
-              onPressed: canSend && !sending ? onSend : null,
-              icon: sending
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: messageController,
+              builder: (context, value, _) {
+                final hasMessage = value.text.trim().isNotEmpty;
+                final hasContent = hasMessage || attachmentCount > 0;
+                if (!hasContent && !sending) {
+                  return IconButton.filled(
+                    tooltip: "Record voice message",
+                    onPressed: canSend && evidenceController != null
+                        ? () => _showVoiceRecorder(context)
+                        : null,
+                    icon: const Icon(Icons.mic_rounded),
+                  );
+                }
+                return IconButton.filled(
+                  tooltip: "Send message",
+                  onPressed: canSend && !sending ? onSend : null,
+                  icon: sending
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send),
+                );
+              },
             ),
           ],
         ),
@@ -401,7 +658,14 @@ class RoomMessageBubble extends StatelessWidget {
                     ],
                     if (body.trim().isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(body),
+                      Text(
+                        body,
+                        style: _chatStickers.any(
+                          (sticker) => sticker.value == body.trim(),
+                        )
+                            ? const TextStyle(fontSize: 32, height: 1.15)
+                            : null,
+                      ),
                     ],
                     if (media.isNotEmpty) ...[
                       const SizedBox(height: 7),
@@ -448,6 +712,176 @@ class RoomMessageBubble extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatExpressionSheet extends StatelessWidget {
+  const _ChatExpressionSheet({
+    required this.gifEnabled,
+    required this.onEmoji,
+    required this.onSticker,
+    required this.onGif,
+    required this.onGifAsset,
+  });
+
+  final bool gifEnabled;
+  final ValueChanged<String> onEmoji;
+  final ValueChanged<String> onSticker;
+  final Future<void> Function() onGif;
+  final Future<void> Function(
+      ({String label, String asset, String fileName}) gif) onGifAsset;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
+    return SafeArea(
+      child: DefaultTabController(
+        length: 3,
+        child: SizedBox(
+          height: 360,
+          child: Column(
+            children: [
+              const TabBar(
+                tabs: [
+                  Tab(icon: Icon(Icons.emoji_emotions_outlined), text: "Emoji"),
+                  Tab(icon: Icon(Icons.gif_box_outlined), text: "GIF"),
+                  Tab(
+                      icon: Icon(Icons.auto_awesome_outlined),
+                      text: "Stickers"),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 6,
+                        mainAxisSpacing: 4,
+                        crossAxisSpacing: 4,
+                      ),
+                      itemCount: _chatEmojis.length,
+                      itemBuilder: (context, index) => IconButton(
+                        tooltip: "Insert ${_chatEmojis[index]}",
+                        onPressed: () => onEmoji(_chatEmojis[index]),
+                        icon: Text(
+                          _chatEmojis[index],
+                          style: const TextStyle(fontSize: 26),
+                        ),
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        Expanded(
+                          child: GridView.builder(
+                            padding: const EdgeInsets.all(12),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 1.35,
+                              mainAxisSpacing: 8,
+                              crossAxisSpacing: 8,
+                            ),
+                            itemCount: _chatGifs.length,
+                            itemBuilder: (context, index) {
+                              final gif = _chatGifs[index];
+                              return Material(
+                                color: semantics.elevatedSurface,
+                                borderRadius: BorderRadius.circular(8),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  onTap:
+                                      gifEnabled ? () => onGifAsset(gif) : null,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Image.asset(gif.asset,
+                                          fit: BoxFit.contain),
+                                      Align(
+                                        alignment: Alignment.bottomCenter,
+                                        child: ColoredBox(
+                                          color: Colors.black54,
+                                          child: SizedBox(
+                                            width: double.infinity,
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(4),
+                                              child: Text(
+                                                gif.label,
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: semantics
+                                                      .textOnDarkSurface,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: gifEnabled ? onGif : null,
+                              icon: const Icon(Icons.folder_open),
+                              label: const Text("Choose GIF from device"),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 1.55,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                      ),
+                      itemCount: _chatStickers.length,
+                      itemBuilder: (context, index) {
+                        final sticker = _chatStickers[index];
+                        return Material(
+                          color: semantics.elevatedSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => onSticker(sticker.value),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(sticker.value,
+                                    style: const TextStyle(fontSize: 30)),
+                                const SizedBox(height: 5),
+                                Text(sticker.label,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

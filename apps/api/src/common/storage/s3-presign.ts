@@ -6,7 +6,7 @@ import { resolveAppEnvironment } from "../auth/firebase-environment";
 import { PRODUCTION_FIREBASE_PROJECT_ID, STAGING_FIREBASE_PROJECT_ID } from "../auth/firebase-project";
 
 const allowedContentTypes = new Set([
-  "image/jpeg", "image/png", "image/webp",
+  "image/jpeg", "image/png", "image/webp", "image/gif",
   "video/mp4", "video/webm",
   "audio/mpeg", "audio/mp4", "audio/webm", "audio/aac", "audio/x-m4a",
   "application/pdf",
