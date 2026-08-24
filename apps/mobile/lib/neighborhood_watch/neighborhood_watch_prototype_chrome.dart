@@ -12,6 +12,7 @@ class NwPrototypeScaffold extends StatelessWidget {
     this.tabs,
     this.floatingActionButton,
     this.bottomNavigationBar,
+    this.onBack,
     super.key,
   });
 
@@ -23,11 +24,20 @@ class NwPrototypeScaffold extends StatelessWidget {
   final Widget? tabs;
   final Widget? floatingActionButton;
   final Widget? bottomNavigationBar;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
-    return Scaffold(
+    final effectiveLeading = leading ??
+        (onBack == null
+            ? null
+            : IconButton(
+                tooltip: "Back to app home",
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back),
+              ));
+    final scaffold = Scaffold(
       backgroundColor: semantics.background,
       floatingActionButton: floatingActionButton,
       bottomNavigationBar: bottomNavigationBar,
@@ -38,8 +48,8 @@ class NwPrototypeScaffold extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
               child: Row(
                 children: [
-                  if (leading != null) ...[
-                    leading!,
+                  if (effectiveLeading != null) ...[
+                    effectiveLeading,
                     const SizedBox(width: 10),
                   ],
                   Expanded(
@@ -84,6 +94,14 @@ class NwPrototypeScaffold extends StatelessWidget {
           ],
         ),
       ),
+    );
+    if (onBack == null) return scaffold;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) onBack!();
+      },
+      child: scaffold,
     );
   }
 }

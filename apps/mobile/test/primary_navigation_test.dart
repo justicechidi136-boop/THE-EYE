@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:the_eye_mobile/design_system/components/eye_bottom_nav.dart";
+import "package:the_eye_mobile/neighborhood_watch/neighborhood_watch_prototype_chrome.dart";
 
 void main() {
   testWidgets("primary navigation replaces Services with local Feed",
@@ -50,5 +51,32 @@ void main() {
       homeSource,
       contains("pushReplacementNamed(NeighborhoodWatchDestinations.feed)"),
     );
+  });
+
+  testWidgets("Neighborhood Watch Home intercepts Android back",
+      (tester) async {
+    var backCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NwPrototypeScaffold(
+          title: "Neighborhood Watch",
+          body: const SizedBox.expand(),
+          onBack: () => backCalls += 1,
+        ),
+      ),
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(backCalls, 1);
+    expect(find.byTooltip("Back to app home"), findsOneWidget);
+  });
+
+  test("Neighborhood Watch Home routes back to app Home", () {
+    final homeSource =
+        File("lib/neighborhood_watch/nw_home_screen.dart").readAsStringSync();
+    expect(homeSource, contains('pushReplacementNamed("/home")'));
+    expect(homeSource, contains("onBack: _returnToAppHome"));
   });
 }
