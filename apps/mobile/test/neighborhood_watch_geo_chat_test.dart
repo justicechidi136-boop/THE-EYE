@@ -8,6 +8,7 @@ void main() {
     required Future<void> Function() onSend,
     String? pendingMessage,
     String? sendError,
+    VoidCallback? onBack,
   }) {
     final theme = ThemeData.light().copyWith(
       extensions: const [EyeSemanticColors.light],
@@ -36,6 +37,7 @@ void main() {
         onReply: (_) {},
         onLike: (_) {},
         onCancelReply: () {},
+        onBack: onBack,
       ),
     );
   }
@@ -96,5 +98,20 @@ void main() {
         lessThanOrEqualTo(keyboardTop));
     expect(tester.getBottomRight(find.text("Message remains visible")).dy,
         lessThanOrEqualTo(keyboardTop));
+  });
+
+  testWidgets("Android back returns through the Neighborhood Watch callback",
+      (tester) async {
+    var backCalls = 0;
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      onBack: () => backCalls += 1,
+    ));
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(backCalls, 1);
+    expect(find.text("No conversations here yet"), findsOneWidget);
   });
 }

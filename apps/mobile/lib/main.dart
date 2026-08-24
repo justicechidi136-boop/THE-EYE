@@ -9335,6 +9335,11 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     });
   }
 
+  void _returnToNeighborhoodWatchHome() {
+    Navigator.of(context)
+        .pushReplacementNamed(NeighborhoodWatchDestinations.home);
+  }
+
   Future<void> _showRoomMessageActions(CommunityPostItem post) async {
     final controller = appOf(context);
     final ownMessage = post.authorId == controller.cachedCitizenProfile?.id;
@@ -9503,6 +9508,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       onReply: _showRoomMessageActions,
       onLike: (post) => unawaited(_toggleLike(controller, post)),
       onCancelReply: () => setState(() => _replyTo = null),
+      onBack: _returnToNeighborhoodWatchHome,
     );
   }
 }

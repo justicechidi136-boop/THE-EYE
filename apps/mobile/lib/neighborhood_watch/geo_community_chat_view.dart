@@ -28,6 +28,7 @@ class GeoCommunityChatView extends StatelessWidget {
     required this.onReply,
     required this.onLike,
     required this.onCancelReply,
+    this.onBack,
     this.headerActions = const [],
     this.locationNotice,
     this.currentUserId,
@@ -58,6 +59,7 @@ class GeoCommunityChatView extends StatelessWidget {
   final ValueChanged<CommunityPostItem> onReply;
   final ValueChanged<CommunityPostItem> onLike;
   final VoidCallback onCancelReply;
+  final VoidCallback? onBack;
   final List<Widget> headerActions;
   final Widget? locationNotice;
   final String? currentUserId;
@@ -69,9 +71,16 @@ class GeoCommunityChatView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
-    return NwPrototypeScaffold(
+    final scaffold = NwPrototypeScaffold(
       title: title,
       subtitle: subtitle,
+      leading: onBack == null
+          ? null
+          : IconButton(
+              tooltip: "Back to Neighborhood Watch",
+              onPressed: onBack,
+              icon: const Icon(Icons.arrow_back),
+            ),
       actions: headerActions,
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -111,6 +120,14 @@ class GeoCommunityChatView extends StatelessWidget {
           );
         },
       ),
+    );
+    if (onBack == null) return scaffold;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) onBack!();
+      },
+      child: scaffold,
     );
   }
 
