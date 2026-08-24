@@ -73,6 +73,12 @@ class EvidenceCaptureController extends ChangeNotifier {
     required String fileName,
     required Uint8List bytes,
   }) =>
+      addGifBytes(fileName: fileName, bytes: bytes);
+
+  Future<void> addGifBytes({
+    required String fileName,
+    required Uint8List bytes,
+  }) =>
       _capture(
         mediaType: IncidentMediaType.image,
         action: () async => PickedEvidenceFile(

@@ -1,9 +1,13 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 
+import "../contracts/the_eye_enums.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_capture_controller.dart";
+import "../voice/voice_recorder.dart";
 import "neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch_service.dart";
 
@@ -175,6 +179,98 @@ class GeoCommunityChatView extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Future<void> _showVoiceRecorder(BuildContext context) async {
+    final controller = evidenceController;
+    if (controller == null) return;
+    final existingVoice = controller.attachments
+        .where((item) => item.isAudio && item.metadata["voiceReport"] == true)
+        .toList(growable: false);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            16 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "Voice message",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: "Close voice recorder",
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              VoiceRecorder(
+                enabled: canSend &&
+                    !sending &&
+                    (controller.canAddMoreFor(IncidentMediaType.audio) ||
+                        existingVoice.isNotEmpty),
+                onRecordingReady: (result) {
+                  for (final existing in existingVoice) {
+                    controller.remove(existing.localId);
+                  }
+                  controller.addVoiceAttachment(result.attachment);
+                  Navigator.of(sheetContext).pop();
+                  if (!showAttachments) onToggleAttachments();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _insertKeyboardGif(
+    BuildContext context,
+    KeyboardInsertedContent content,
+  ) async {
+    final controller = evidenceController;
+    if (controller == null || content.mimeType != "image/gif") return;
+    final bytes = content.data;
+    if (bytes == null || bytes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Unable to read that keyboard GIF. Choose it from the GIF picker instead.",
+          ),
+        ),
+      );
+      return;
+    }
+    final before = controller.attachments.length;
+    await controller.addGifBytes(
+      fileName: "keyboard-${DateTime.now().millisecondsSinceEpoch}.gif",
+      bytes: bytes,
+    );
+    if (!context.mounted) return;
+    final after = controller.attachments.length;
+    if (after > before && !showAttachments) {
+      onToggleAttachments();
+    } else if (after == before && controller.lastError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(controller.lastError!)),
+      );
+    }
   }
 
   @override
@@ -435,6 +531,12 @@ class GeoCommunityChatView extends StatelessWidget {
                         .platformDispatcher.nativeSpellCheckServiceDefined
                     ? const SpellCheckConfiguration()
                     : const SpellCheckConfiguration.disabled(),
+                contentInsertionConfiguration: ContentInsertionConfiguration(
+                  allowedMimeTypes: const ["image/gif"],
+                  onContentInserted: (content) {
+                    unawaited(_insertKeyboardGif(context, content));
+                  },
+                ),
                 keyboardType: TextInputType.multiline,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
@@ -446,15 +548,31 @@ class GeoCommunityChatView extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            IconButton.filled(
-              tooltip: "Send message",
-              onPressed: canSend && !sending ? onSend : null,
-              icon: sending
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: messageController,
+              builder: (context, value, _) {
+                final hasMessage = value.text.trim().isNotEmpty;
+                final hasContent = hasMessage || attachmentCount > 0;
+                if (!hasContent && !sending) {
+                  return IconButton.filled(
+                    tooltip: "Record voice message",
+                    onPressed: canSend && evidenceController != null
+                        ? () => _showVoiceRecorder(context)
+                        : null,
+                    icon: const Icon(Icons.mic_rounded),
+                  );
+                }
+                return IconButton.filled(
+                  tooltip: "Send message",
+                  onPressed: canSend && !sending ? onSend : null,
+                  icon: sending
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send),
+                );
+              },
             ),
           ],
         ),
