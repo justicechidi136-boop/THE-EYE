@@ -75,4 +75,26 @@ void main() {
     await tester.pump();
     expect(retries, 1);
   });
+
+  testWidgets("keyboard keeps composer and latest message above its inset",
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      pendingMessage: "Message remains visible",
+    ));
+    await tester.pumpAndSettle();
+
+    const keyboardTop = 844.0 - 320.0;
+    expect(tester.getBottomRight(find.byType(TextField)).dy,
+        lessThanOrEqualTo(keyboardTop));
+    expect(tester.getBottomRight(find.text("Message remains visible")).dy,
+        lessThanOrEqualTo(keyboardTop));
+  });
 }

@@ -73,39 +73,43 @@ class GeoCommunityChatView extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       actions: headerActions,
-      body: Column(
-        children: [
-          if (locationNotice != null) locationNotice!,
-          Expanded(child: _conversation(context)),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: semantics.elevatedSurface,
-            border: Border(top: BorderSide(color: semantics.divider)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final attachmentHeight =
+              (constraints.maxHeight * 0.45).clamp(120.0, 330.0);
+          return Column(
             children: [
-              if (replyTo != null) _replyPreview(context),
-              if (showAttachments && evidenceController != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 330),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                    child: EvidenceAttachmentPicker(
-                      controller: evidenceController!,
-                      lowDataMode: false,
-                    ),
-                  ),
+              if (locationNotice != null) locationNotice!,
+              Expanded(child: _conversation(context)),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: semantics.elevatedSurface,
+                  border: Border(top: BorderSide(color: semantics.divider)),
                 ),
-              if (sendError != null) _failedSend(context),
-              _composer(context),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (replyTo != null) _replyPreview(context),
+                    if (showAttachments && evidenceController != null)
+                      ConstrainedBox(
+                        constraints:
+                            BoxConstraints(maxHeight: attachmentHeight),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                          child: EvidenceAttachmentPicker(
+                            controller: evidenceController!,
+                            lowDataMode: false,
+                          ),
+                        ),
+                      ),
+                    if (sendError != null) _failedSend(context),
+                    _composer(context),
+                  ],
+                ),
+              ),
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }
