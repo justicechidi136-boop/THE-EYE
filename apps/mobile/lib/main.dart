@@ -4654,7 +4654,7 @@ class HomeScreen extends StatelessWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: EyeTokens.cardGap,
                 crossAxisSpacing: EyeTokens.cardGap,
-                childAspectRatio: 0.92,
+                childAspectRatio: 1.15,
                 children: [
                   EyeServiceCard(
                     title: "Emergency Case",
@@ -4710,7 +4710,7 @@ class HomeScreen extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: 1.05,
+                  childAspectRatio: 1.35,
                   children: [
                     ActionTile(
                         "Live emergency video",
@@ -12524,9 +12524,9 @@ class ActionTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           onTap: onTap,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 88),
+            constraints: const BoxConstraints(minHeight: 76),
             child: Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 border: Border.all(color: context.eyeBorder),
                 borderRadius: BorderRadius.circular(18),
@@ -12534,15 +12534,15 @@ class ActionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(icon, color: color, size: 30),
+                  Icon(icon, color: color, size: 26),
                   const Spacer(),
                   Text(
                     label,
-                    maxLines: 3,
+                    maxLines: 2,
                     softWrap: true,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       height: 1.15,
                       fontWeight: FontWeight.w800,
                       color: semantics.bodyText,

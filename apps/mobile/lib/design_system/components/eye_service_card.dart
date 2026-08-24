@@ -27,33 +27,33 @@ class EyeServiceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
+          padding: const EdgeInsets.all(8),
           child: Column(
             children: [
               Container(
-                width: 44,
-                height: 42,
+                width: 38,
+                height: 36,
                 decoration: BoxDecoration(
                   color: semantics.elevatedSurface,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 28, color: semantics.bodyText),
+                child: Icon(icon, size: 24, color: semantics.bodyText),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 title,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   height: 1.15,
                   color: semantics.bodyText,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               Expanded(
                 child: Text(
                   description,
@@ -61,7 +61,7 @@ class EyeServiceCard extends StatelessWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w400,
                     height: 1.2,
                     color: semantics.secondaryText,
