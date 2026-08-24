@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 
 import "../design_system/eye_semantic_colors.dart";
 import "../evidence/evidence_attachment_picker.dart";
@@ -36,6 +37,34 @@ const _chatStickers = <({String label, String value})>[
   (label: "Thank you", value: "🙏❤️"),
   (label: "All clear", value: "✅🙌"),
   (label: "Neighbors", value: "🤝🏠"),
+];
+
+const _chatGifs = <({String label, String asset, String fileName})>[
+  (
+    label: "Blush",
+    asset: "assets/gifs/blush.gif",
+    fileName: "blush.gif",
+  ),
+  (
+    label: "Laugh",
+    asset: "assets/gifs/laugh.gif",
+    fileName: "laugh.gif",
+  ),
+  (
+    label: "Smile",
+    asset: "assets/gifs/smile.gif",
+    fileName: "smile.gif",
+  ),
+  (
+    label: "Joy",
+    asset: "assets/gifs/joy.gif",
+    fileName: "joy.gif",
+  ),
+  (
+    label: "Heart",
+    asset: "assets/gifs/heart.gif",
+    fileName: "heart.gif",
+  ),
 ];
 
 class GeoCommunityChatView extends StatelessWidget {
@@ -127,6 +156,20 @@ class GeoCommunityChatView extends StatelessWidget {
           Navigator.of(sheetContext).pop();
           final before = evidenceController?.attachments.length ?? 0;
           await evidenceController?.pickGif();
+          final after = evidenceController?.attachments.length ?? 0;
+          if (after > before && !showAttachments) onToggleAttachments();
+        },
+        onGifAsset: (gif) async {
+          Navigator.of(sheetContext).pop();
+          final before = evidenceController?.attachments.length ?? 0;
+          final data = await rootBundle.load(gif.asset);
+          await evidenceController?.addBundledGif(
+            fileName: gif.fileName,
+            bytes: data.buffer.asUint8List(
+              data.offsetInBytes,
+              data.lengthInBytes,
+            ),
+          );
           final after = evidenceController?.attachments.length ?? 0;
           if (after > before && !showAttachments) onToggleAttachments();
         },
@@ -348,21 +391,37 @@ class GeoCommunityChatView extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            IconButton(
-              tooltip: "Add photo, video, or voice note",
-              onPressed: canSend ? onToggleAttachments : null,
-              icon: Badge(
-                isLabelVisible: attachmentCount > 0,
-                label: Text("$attachmentCount"),
-                child: const Icon(Icons.add_circle_outline),
+            SizedBox(
+              width: 42,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    key: const Key("chat-expression-button"),
+                    tooltip: "Emoji, GIF, and stickers",
+                    constraints:
+                        const BoxConstraints.tightFor(width: 40, height: 36),
+                    padding: EdgeInsets.zero,
+                    onPressed: canSend && !sending
+                        ? () => _showExpressionPicker(context)
+                        : null,
+                    icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
+                  ),
+                  IconButton(
+                    key: const Key("chat-attachment-button"),
+                    tooltip: "Add photo, video, or voice note",
+                    constraints:
+                        const BoxConstraints.tightFor(width: 40, height: 36),
+                    padding: EdgeInsets.zero,
+                    onPressed: canSend ? onToggleAttachments : null,
+                    icon: Badge(
+                      isLabelVisible: attachmentCount > 0,
+                      label: Text("$attachmentCount"),
+                      child: const Icon(Icons.add_circle_outline, size: 22),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            IconButton(
-              tooltip: "Emoji, GIF, and stickers",
-              onPressed: canSend && !sending
-                  ? () => _showExpressionPicker(context)
-                  : null,
-              icon: const Icon(Icons.emoji_emotions_outlined),
             ),
             Expanded(
               child: TextField(
@@ -370,6 +429,13 @@ class GeoCommunityChatView extends StatelessWidget {
                 enabled: canSend && !sending,
                 minLines: 1,
                 maxLines: 5,
+                autocorrect: true,
+                enableSuggestions: true,
+                spellCheckConfiguration: WidgetsBinding.instance
+                        .platformDispatcher.nativeSpellCheckServiceDefined
+                    ? const SpellCheckConfiguration()
+                    : const SpellCheckConfiguration.disabled(),
+                keyboardType: TextInputType.multiline,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   hintText: "Message your neighborhood...",
@@ -541,12 +607,15 @@ class _ChatExpressionSheet extends StatelessWidget {
     required this.onEmoji,
     required this.onSticker,
     required this.onGif,
+    required this.onGifAsset,
   });
 
   final bool gifEnabled;
   final ValueChanged<String> onEmoji;
   final ValueChanged<String> onSticker;
   final Future<void> Function() onGif;
+  final Future<void> Function(
+      ({String label, String asset, String fileName}) gif) onGifAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -588,28 +657,74 @@ class _ChatExpressionSheet extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.gif_box_outlined,
-                                size: 48, color: semantics.interactiveText),
-                            const SizedBox(height: 10),
-                            const Text(
-                              "Choose a GIF saved on your device.",
-                              textAlign: TextAlign.center,
+                    Column(
+                      children: [
+                        Expanded(
+                          child: GridView.builder(
+                            padding: const EdgeInsets.all(12),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 1.35,
+                              mainAxisSpacing: 8,
+                              crossAxisSpacing: 8,
                             ),
-                            const SizedBox(height: 16),
-                            FilledButton.icon(
+                            itemCount: _chatGifs.length,
+                            itemBuilder: (context, index) {
+                              final gif = _chatGifs[index];
+                              return Material(
+                                color: semantics.elevatedSurface,
+                                borderRadius: BorderRadius.circular(8),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  onTap:
+                                      gifEnabled ? () => onGifAsset(gif) : null,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Image.asset(gif.asset,
+                                          fit: BoxFit.contain),
+                                      Align(
+                                        alignment: Alignment.bottomCenter,
+                                        child: ColoredBox(
+                                          color: Colors.black54,
+                                          child: SizedBox(
+                                            width: double.infinity,
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(4),
+                                              child: Text(
+                                                gif.label,
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: semantics
+                                                      .textOnDarkSurface,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
                               onPressed: gifEnabled ? onGif : null,
                               icon: const Icon(Icons.folder_open),
-                              label: const Text("Choose GIF"),
+                              label: const Text("Choose GIF from device"),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                     GridView.builder(
                       padding: const EdgeInsets.all(12),

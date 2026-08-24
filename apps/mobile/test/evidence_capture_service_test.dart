@@ -213,6 +213,35 @@ void main() {
       controller.dispose();
     });
 
+    test("bundled GIF enters the same private image upload pipeline", () async {
+      final controller = EvidenceCaptureController(
+        captureService: EvidenceCaptureService(
+          compressor: InMemoryEvidenceCompressor(),
+          documentsDirectoryProvider: testDocumentsDir,
+        ),
+        mediaSource: FakeEvidenceMediaSource(),
+        permissionService: grantedPermissionService(),
+      );
+
+      await controller.addBundledGif(
+        fileName: "heart.gif",
+        bytes: Uint8List.fromList([
+          0x47,
+          0x49,
+          0x46,
+          0x38,
+          0x39,
+          0x61,
+          ...List<int>.filled(64, 0x00),
+        ]),
+      );
+
+      expect(controller.attachments, hasLength(1));
+      expect(controller.attachments.single.fileName, "heart.gif");
+      expect(controller.attachments.single.contentType, "image/gif");
+      controller.dispose();
+    });
+
     test("empty selection returns validation failure", () async {
       final service = EvidenceCaptureService(
         compressor: InMemoryEvidenceCompressor(),

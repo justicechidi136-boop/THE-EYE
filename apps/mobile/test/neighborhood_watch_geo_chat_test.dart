@@ -72,6 +72,17 @@ void main() {
       messageController: controller,
     ));
 
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.autocorrect, isTrue);
+    expect(textField.enableSuggestions, isTrue);
+    expect(textField.spellCheckConfiguration, isNotNull);
+    expect(
+      tester.getCenter(find.byKey(const Key("chat-expression-button"))).dy,
+      lessThan(
+        tester.getCenter(find.byKey(const Key("chat-attachment-button"))).dy,
+      ),
+    );
+
     await tester.tap(find.byTooltip("Emoji, GIF, and stickers"));
     await tester.pumpAndSettle();
 
@@ -84,11 +95,15 @@ void main() {
     expect(controller.text, "😀");
 
     await tester.tap(find.text("GIF"));
-    await tester.pumpAndSettle();
-    expect(find.text("Choose GIF"), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text("Blush"), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+    expect(find.text("Choose GIF from device"), findsOneWidget);
 
     await tester.tap(find.text("Stickers"));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text("Stay safe"));
     await tester.pumpAndSettle();
     expect(controller.text, "😀🛡️✅");
