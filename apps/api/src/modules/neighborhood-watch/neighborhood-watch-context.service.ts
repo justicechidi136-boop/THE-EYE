@@ -6,6 +6,7 @@ import { JurisdictionResolutionService } from "../incidents/jurisdiction-resolut
 import {
   buildDynamicAreaFromJurisdiction,
   buildDynamicAreaGeohashFallback,
+  normalizeGeoToken,
   type DynamicAreaGeo,
   type NwContextType,
 } from "./dynamic-public-area";
@@ -139,6 +140,18 @@ export class NeighborhoodWatchContextService {
         lat,
         lng,
       );
+      if (
+        displacement < MIN_SWITCH_DISPLACEMENT_M &&
+        previous.expiresAt.getTime() > Date.now() &&
+        previous.community?.status === "Active" &&
+        previous.community?.visibility === "Public"
+      ) {
+        return this.mappedPublicContext(
+          actor,
+          previous.community as PublicCommunityRow,
+          coords,
+        );
+      }
       switchRecommended = displacement >= MIN_SWITCH_DISPLACEMENT_M;
       if (switchRecommended) {
         switchMessage = `You're now in ${publicCommunity.name}. Neighborhood Watch has updated to show safety information for your current area.`;
@@ -207,6 +220,14 @@ export class NeighborhoodWatchContextService {
         membership?.status ? String(membership.status) : null,
       ),
       dynamicArea: null,
+      room: {
+        id: `community:${communityId}`,
+        targetType: "COMMUNITY",
+        communityId,
+        dynamicAreaKey: null,
+        name: `${publicCommunity.name} Neighborhood Watch`,
+        areaLabel: [publicCommunity.lga, publicCommunity.state].filter(Boolean).join(", "),
+      },
       presence: {
         mode: "LOCATION_PARTICIPANT",
         communityId,
@@ -246,9 +267,10 @@ export class NeighborhoodWatchContextService {
   private async dynamicPublicAreaContext(
     actor: JwtPayload,
     coords: { latitude: number; longitude: number; accuracyM: number; capturedAt: Date },
+    stableArea?: DynamicAreaGeo,
   ) {
     const { latitude: lat, longitude: lng, accuracyM: accuracy, capturedAt } = coords;
-    const dynamicArea = await this.resolveDynamicArea(lat, lng);
+    const dynamicArea = stableArea ?? (await this.resolveDynamicArea(lat, lng));
     const expiresAt = new Date(Date.now() + PRESENCE_TTL_MS);
 
     const previous = await this.prisma.nwDynamicAreaPresence.findFirst({
@@ -265,6 +287,20 @@ export class NeighborhoodWatchContextService {
         lat,
         lng,
       );
+      if (displacement < MIN_SWITCH_DISPLACEMENT_M && previous.expiresAt.getTime() > Date.now()) {
+        return this.dynamicPublicAreaContext(actor, coords, {
+          countryCode: normalizeGeoToken(previous.areaCountry) ?? "XX",
+          stateCode: normalizeGeoToken(previous.areaState),
+          lgaCode: normalizeGeoToken(previous.areaLga),
+          country: previous.areaCountry,
+          state: previous.areaState,
+          lga: previous.areaLga,
+          city: previous.areaCity,
+          areaLabel: previous.areaLabel,
+          areaKey: previous.areaKey,
+          resolutionSource: "presence_hysteresis",
+        });
+      }
       switchRecommended = displacement >= MIN_SWITCH_DISPLACEMENT_M;
       if (switchRecommended) {
         switchMessage = `You're now in ${dynamicArea.areaLabel}. Neighborhood Watch has updated to your current area.`;
@@ -337,6 +373,14 @@ export class NeighborhoodWatchContextService {
         areaKey: dynamicArea.areaKey,
         resolutionSource: dynamicArea.resolutionSource,
       },
+      room: {
+        id: `dynamic-area:${dynamicArea.areaKey}`,
+        targetType: "DYNAMIC_AREA",
+        communityId: null,
+        dynamicAreaKey: dynamicArea.areaKey,
+        name: `${dynamicArea.areaLabel} Neighborhood Watch`,
+        areaLabel: [dynamicArea.city ?? dynamicArea.lga, dynamicArea.state].filter(Boolean).join(", "),
+      },
       presence: {
         mode: "DYNAMIC_AREA_PARTICIPANT",
         communityId: null,
@@ -391,6 +435,7 @@ export class NeighborhoodWatchContextService {
       contextType,
       publicCommunity: null,
       dynamicArea: null,
+      room: null,
       presence: null,
       homeCommunity: null,
       privateCommunitiesNearby: [],

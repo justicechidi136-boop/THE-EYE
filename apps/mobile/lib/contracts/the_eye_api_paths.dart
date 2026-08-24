@@ -206,6 +206,8 @@ abstract final class TheEyeApiPaths {
       "/neighborhood-watch/communities/$communityId/posts/media/presign";
   static String neighborhoodWatchPost(String postId) =>
       "/neighborhood-watch/posts/$postId";
+  static String neighborhoodWatchOwnPostDelete(String postId) =>
+      "/neighborhood-watch/posts/$postId/mine";
   static String neighborhoodWatchPostRestore(String postId) =>
       "/neighborhood-watch/posts/$postId/restore";
   static String neighborhoodWatchPatrolJoin(String scheduleId) =>

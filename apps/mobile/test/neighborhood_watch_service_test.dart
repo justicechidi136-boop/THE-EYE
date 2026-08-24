@@ -440,4 +440,72 @@ void main() {
     expect(requests[1].url.path,
         endsWith("/neighborhood-watch/posts/post-1/reactions/Helpful"));
   });
+
+  test("first room message carries text, photo, video, voice and idempotency",
+      () async {
+    Map<String, dynamic>? payload;
+    final apiClient = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        payload = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({
+            "data": {
+              "id": "first-message",
+              "title": "Neighborhood conversation",
+              "body": "Hello neighbors",
+              "type": "Discussion",
+              "verificationStatus": "PendingVerification",
+              "confidenceScore": 0,
+              "createdAt": "2026-08-24T10:00:00.000Z",
+              "media": payload!["media"],
+            },
+          }),
+          201,
+          headers: {"content-type": "application/json"},
+        );
+      }),
+    );
+
+    final result =
+        await NeighborhoodWatchService(apiClient: apiClient).createPost(
+      accessToken: "token",
+      communityId: "dynamic:da:NIGERIA:LAGOS:IKEJA",
+      type: "Discussion",
+      title: "Neighborhood conversation",
+      body: "Hello neighbors",
+      clientMessageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      media: const [
+        CommunityPostMediaItem(
+          mediaType: "Image",
+          bucket: "test",
+          objectKey: "image-key",
+          contentType: "image/jpeg",
+          fileHash: "image-hash",
+        ),
+        CommunityPostMediaItem(
+          mediaType: "Video",
+          bucket: "test",
+          objectKey: "video-key",
+          contentType: "video/mp4",
+          fileHash: "video-hash",
+        ),
+        CommunityPostMediaItem(
+          mediaType: "Audio",
+          bucket: "test",
+          objectKey: "audio-key",
+          contentType: "audio/m4a",
+          fileHash: "audio-hash",
+        ),
+      ],
+    );
+
+    expect(result.id, "first-message");
+    expect(payload?["clientMessageId"], "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect((payload?["media"] as List), hasLength(3));
+    expect(
+      (payload?["media"] as List).map((item) => item["mediaType"]).toList(),
+      ["Image", "Video", "Audio"],
+    );
+  });
 }

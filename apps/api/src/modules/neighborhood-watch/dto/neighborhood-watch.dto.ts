@@ -42,6 +42,12 @@ export type CreateCommunityPostDto = {
   longitude?: number;
   hazardStatus?: "Open" | "Verified" | "Ongoing" | "Resolved" | "Dismissed";
   media?: Array<{ mediaType: "Image" | "Video" | "Audio" | "Document"; bucket: string; objectKey: string; contentType: string; fileHash: string }>;
+  clientMessageId?: string;
+  replyToPostId?: string;
+};
+
+export type UpdateCommunityPostDto = {
+  body: string;
 };
 
 export type VerifyCommunityPostDto = {
@@ -296,8 +302,15 @@ export function validatePost(dto: CreateCommunityPostDto) {
   const hasMediaBody =
     Array.isArray(dto.media) &&
     dto.media.some((item) => item.mediaType === "Audio" || item.mediaType === "Image" || item.mediaType === "Video");
-  if ((!dto.body || dto.body.trim().length < 5) && !hasMediaBody) {
+  const minimumBodyLength = dto.type === "Discussion" ? 1 : 5;
+  if ((!dto.body || dto.body.trim().length < minimumBodyLength) && !hasMediaBody) {
     throw new BadRequestException("Post body or voice/photo/video attachment is required");
+  }
+  if (dto.clientMessageId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(dto.clientMessageId)) {
+    throw new BadRequestException("clientMessageId must be a UUID");
+  }
+  if (dto.replyToPostId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(dto.replyToPostId)) {
+    throw new BadRequestException("replyToPostId must be a UUID");
   }
   if (dto.latitude !== undefined) assertCoordinate(dto.latitude, "latitude", -90, 90);
   if (dto.longitude !== undefined) assertCoordinate(dto.longitude, "longitude", -180, 180);

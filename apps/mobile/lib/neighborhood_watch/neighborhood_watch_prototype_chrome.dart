@@ -6,19 +6,23 @@ class NwPrototypeScaffold extends StatelessWidget {
   const NwPrototypeScaffold({
     required this.title,
     required this.body,
+    this.subtitle,
     this.leading,
     this.actions = const [],
     this.tabs,
     this.floatingActionButton,
+    this.bottomNavigationBar,
     super.key,
   });
 
   final String title;
   final Widget body;
+  final String? subtitle;
   final Widget? leading;
   final List<Widget> actions;
   final Widget? tabs;
   final Widget? floatingActionButton;
+  final Widget? bottomNavigationBar;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +30,7 @@ class NwPrototypeScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: semantics.background,
       floatingActionButton: floatingActionButton,
+      bottomNavigationBar: bottomNavigationBar,
       body: SafeArea(
         child: Column(
           children: [
@@ -38,15 +43,32 @@ class NwPrototypeScaffold extends StatelessWidget {
                     const SizedBox(width: 10),
                   ],
                   Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0,
+                                  ),
+                        ),
+                        if (subtitle != null && subtitle!.trim().isNotEmpty)
+                          Text(
+                            subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: semantics.secondaryText,
+                                      letterSpacing: 0,
+                                    ),
                           ),
+                      ],
                     ),
                   ),
                   ...actions,

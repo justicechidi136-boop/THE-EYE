@@ -13,6 +13,7 @@ import "package:path_provider/path_provider.dart";
 import "package:share_plus/share_plus.dart";
 import "package:the_eye_flutter_l10n/the_eye_locales.dart";
 import "package:url_launcher/url_launcher.dart";
+import "package:uuid/uuid.dart";
 
 import "auth/auth_service.dart";
 import "auth/account_recovery_flow.dart";
@@ -30,6 +31,7 @@ import "voice/voice_recorder.dart";
 import "neighborhood_watch/community_conversation_eligibility.dart";
 import "neighborhood_watch/community_post_route_args.dart";
 import "evidence/evidence_attachment_picker.dart";
+import "evidence/evidence_capture_controller.dart";
 import "evidence/local_evidence_attachment.dart";
 import "evidence/evidence_capture_service.dart";
 import "evidence/evidence_policy.dart";
@@ -117,7 +119,7 @@ import "incidents/live_video_incident_retry.dart";
 import "neighborhood_watch/community_media_upload_service.dart";
 import "neighborhood_watch/community_members_screen.dart";
 import "neighborhood_watch/community_post_detail_screen.dart";
-import "neighborhood_watch/community_post_action_button.dart";
+import "neighborhood_watch/geo_community_chat_view.dart";
 import "neighborhood_watch/community_report_screen.dart";
 import "neighborhood_watch/private_community_membership_screen.dart";
 import "notifications/notification_destination.dart";
@@ -1576,7 +1578,9 @@ class AppController extends SessionAccessor
   String? communityStatisticsError;
   final List<CommunityPostItem> communityFeed = [];
   bool loadingCommunityFeed = false;
+  bool loadingOlderCommunityMessages = false;
   String? communityFeedError;
+  String? communityFeedNextCursor;
   final List<CommunityPostItem> communityAlerts = [];
   bool loadingCommunityAlerts = false;
   String? communityAlertsError;
@@ -1718,6 +1722,7 @@ class AppController extends SessionAccessor
     communityLoadError = null;
     communityFeed.clear();
     communityFeedError = null;
+    communityFeedNextCursor = null;
     communityAlerts.clear();
     communityAlertsError = null;
     communityPatrols.clear();
@@ -2163,16 +2168,38 @@ class AppController extends SessionAccessor
       final page = await _neighborhoodWatchService.communityFeed(
         accessToken: accessToken!,
         communityId: community.id,
+        cursor: refresh ? null : communityFeedNextCursor,
       );
-      communityFeed
-        ..clear()
-        ..addAll(page.items);
+      if (refresh) {
+        communityFeed
+          ..clear()
+          ..addAll(page.items);
+      } else {
+        final known = communityFeed.map((item) => item.id).toSet();
+        communityFeed
+            .addAll(page.items.where((item) => !known.contains(item.id)));
+      }
+      communityFeedNextCursor = page.nextCursor;
     } on IncidentApiException catch (error) {
       communityFeedError = error.userMessage;
     } catch (_) {
       communityFeedError = "Unable to load community feed.";
     } finally {
       loadingCommunityFeed = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadOlderCommunityMessages() async {
+    if (loadingOlderCommunityMessages || communityFeedNextCursor == null) {
+      return;
+    }
+    loadingOlderCommunityMessages = true;
+    notifyListeners();
+    try {
+      await loadCommunityFeed();
+    } finally {
+      loadingOlderCommunityMessages = false;
       notifyListeners();
     }
   }
@@ -2456,6 +2483,8 @@ class AppController extends SessionAccessor
     CommunityMediaUploadProgress? onMediaProgress,
     double? latitude,
     double? longitude,
+    String? clientMessageId,
+    String? replyToPostId,
   }) async {
     final community = selectedCommunity;
     if (community == null) {
@@ -2491,6 +2520,8 @@ class AppController extends SessionAccessor
         latitude: latitude,
         longitude: longitude,
         media: media,
+        clientMessageId: clientMessageId,
+        replyToPostId: replyToPostId,
       );
       await loadCommunityFeed(refresh: true);
       communityActionMessage = "Post submitted for verification";
@@ -2500,6 +2531,45 @@ class AppController extends SessionAccessor
       return error.userMessage;
     } catch (_) {
       return "Unable to create community post.";
+    }
+  }
+
+  Future<String?> updateOwnCommunityMessage(
+    CommunityPostItem post,
+    String body,
+  ) async {
+    if (!isAuthenticated || accessToken == null) return "Sign in required";
+    try {
+      final updated = await _neighborhoodWatchService.updateOwnPost(
+        accessToken: accessToken!,
+        postId: post.id,
+        body: body,
+      );
+      final index = communityFeed.indexWhere((item) => item.id == post.id);
+      if (index >= 0) communityFeed[index] = updated;
+      notifyListeners();
+      return null;
+    } on IncidentApiException catch (error) {
+      return error.userMessage;
+    } catch (_) {
+      return "Unable to edit this message.";
+    }
+  }
+
+  Future<String?> deleteOwnCommunityMessage(CommunityPostItem post) async {
+    if (!isAuthenticated || accessToken == null) return "Sign in required";
+    try {
+      await _neighborhoodWatchService.deleteOwnPost(
+        accessToken: accessToken!,
+        postId: post.id,
+      );
+      communityFeed.removeWhere((item) => item.id == post.id);
+      notifyListeners();
+      return null;
+    } on IncidentApiException catch (error) {
+      return error.userMessage;
+    } catch (_) {
+      return "Unable to delete this message.";
     }
   }
 
@@ -9163,8 +9233,15 @@ class CommunityFeedScreen extends StatefulWidget {
 }
 
 class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
-  String _selectedFilter = "All";
-  CommunityNotice? _communityNotice;
+  final TextEditingController _messageController = TextEditingController();
+  EvidenceCaptureController? _chatEvidenceController;
+  Timer? _roomPollTimer;
+  bool _showAttachments = false;
+  bool _sendingMessage = false;
+  String? _pendingMessage;
+  String? _sendError;
+  String? _pendingClientMessageId;
+  CommunityPostItem? _replyTo;
 
   @override
   void initState() {
@@ -9179,79 +9256,185 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
         await controller.loadCommunitiesFromApi(refresh: true);
       }
       await controller.loadCommunityFeed(refresh: true);
-      await _loadCommunityNotice(controller);
+      _roomPollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+        if (mounted && !_sendingMessage) {
+          unawaited(appOf(context).loadCommunityFeed(refresh: true));
+        }
+      });
     });
   }
 
-  Future<void> _loadCommunityNotice(AppController controller) async {
-    final token = controller.accessToken;
-    final community = controller.selectedCommunity;
-    if (token == null || community == null) return;
-    try {
-      final notices = await NeighborhoodWatchService(
-        apiClient: controller.apiClient,
-      ).communityNotices(
-        accessToken: token,
-        communityId: community.id,
-      );
-      if (!mounted) return;
-      setState(
-        () => _communityNotice = notices.isEmpty ? null : notices.first,
-      );
-    } catch (_) {
-      if (mounted) setState(() => _communityNotice = null);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_chatEvidenceController == null) {
+      _chatEvidenceController = createEvidenceCaptureController(context);
+      _chatEvidenceController!.addListener(_onChatEvidenceChanged);
     }
   }
 
-  String _conversationTypeLabel(String type) {
-    return switch (type) {
-      "Discussion" => "Safety Discussion",
-      "SafetyTip" => "Security Tip",
-      "CommunityQuestion" => "Community Question",
-      "LocalWarning" => "Local Warning",
-      "RoadHazard" => "Road / Environmental Hazard",
-      "SuspiciousActivity" => "Suspicious Activity",
-      _ => type,
-    };
+  void _onChatEvidenceChanged() {
+    if (mounted) setState(() {});
   }
 
-  String _formatPostTime(DateTime? createdAt) {
-    if (createdAt == null) return "";
-    final local = createdAt.toLocal();
-    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-    final minute = local.minute.toString().padLeft(2, "0");
-    final suffix = local.hour >= 12 ? "PM" : "AM";
-    return "$hour:$minute $suffix";
+  @override
+  void dispose() {
+    _roomPollTimer?.cancel();
+    _messageController.dispose();
+    _chatEvidenceController?.removeListener(_onChatEvidenceChanged);
+    _chatEvidenceController?.dispose();
+    super.dispose();
   }
 
-  String _mediaSummary(CommunityPostItem post) {
-    if (post.media.isEmpty) return "";
-    var photoCount = 0;
-    var videoCount = 0;
-    var audioCount = 0;
-    for (final item in post.media) {
-      if (item.isImage) photoCount += 1;
-      if (item.isVideo) videoCount += 1;
-      if (item.isAudio) audioCount += 1;
+  Future<void> _sendRoomMessage() async {
+    final controller = appOf(context);
+    final evidence = _chatEvidenceController;
+    final body = _messageController.text.trim();
+    final attachments = List<LocalEvidenceAttachment>.from(
+      evidence?.attachments ?? const [],
+    );
+    if (_sendingMessage || (body.isEmpty && attachments.isEmpty)) return;
+    final clientMessageId = _pendingClientMessageId ?? const Uuid().v4();
+    setState(() {
+      _sendingMessage = true;
+      _pendingMessage = body;
+      _pendingClientMessageId = clientMessageId;
+      _sendError = null;
+    });
+    final error = await controller.createCommunityPost(
+      type: "Discussion",
+      title: body.isEmpty ? "Neighborhood media" : "Neighborhood conversation",
+      body: body,
+      attachments: attachments,
+      clientMessageId: clientMessageId,
+      replyToPostId: _replyTo?.id,
+      onMediaProgress: (localId, progress) =>
+          evidence?.markUploading(localId, progress),
+    );
+    if (!mounted) return;
+    if (error != null) {
+      setState(() {
+        _sendingMessage = false;
+        _sendError = error;
+      });
+      return;
     }
-    final labels = <String>[
-      if (photoCount > 0) "$photoCount photo${photoCount == 1 ? "" : "s"}",
-      if (videoCount > 0) "$videoCount video${videoCount == 1 ? "" : "s"}",
-      if (audioCount > 0) "$audioCount audio",
-    ];
-    return labels.join(" • ");
+    for (final attachment in List<LocalEvidenceAttachment>.from(
+      evidence?.attachments ?? const [],
+    )) {
+      evidence?.remove(attachment.localId);
+    }
+    _messageController.clear();
+    setState(() {
+      _sendingMessage = false;
+      _pendingMessage = null;
+      _pendingClientMessageId = null;
+      _sendError = null;
+      _showAttachments = false;
+      _replyTo = null;
+    });
   }
 
-  bool _matchesFeedFilter(CommunityPostItem post) {
-    return switch (_selectedFilter) {
-      "Discussions" =>
-        post.type == "Discussion" || post.type == "CommunityQuestion",
-      "Tips" => post.type == "SafetyTip",
-      "Traffic" => post.type == "Traffic" || post.type == "LocalWarning",
-      "Activity" => post.type == "SuspiciousActivity",
-      "Hazards" => post.type == "RoadHazard",
-      _ => true,
-    };
+  Future<void> _showRoomMessageActions(CommunityPostItem post) async {
+    final controller = appOf(context);
+    final ownMessage = post.authorId == controller.cachedCitizenProfile?.id;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.reply),
+              title: const Text("Reply"),
+              onTap: () => Navigator.of(context).pop("reply"),
+            ),
+            if (ownMessage)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text("Edit message"),
+                onTap: () => Navigator.of(context).pop("edit"),
+              ),
+            if (ownMessage)
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text("Delete message"),
+                onTap: () => Navigator.of(context).pop("delete"),
+              ),
+            ListTile(
+              leading: const Icon(Icons.open_in_new),
+              title: const Text("Open details"),
+              onTap: () => Navigator.of(context).pop("open"),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == "reply") {
+      setState(() => _replyTo = post);
+      return;
+    }
+    if (action == "open") {
+      _openDiscussion(controller, post);
+      return;
+    }
+    if (action == "edit") {
+      final editor = TextEditingController(text: post.body);
+      final body = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Edit message"),
+          content: TextField(
+            controller: editor,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 6,
+            decoration: const InputDecoration(hintText: "Message"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cancel"),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(editor.text.trim()),
+              child: const Text("Save"),
+            ),
+          ],
+        ),
+      );
+      editor.dispose();
+      if (!mounted || body == null || body == post.body) return;
+      final error = await controller.updateOwnCommunityMessage(post, body);
+      if (mounted && error != null) {
+        showAppSnackBar(context, error, isError: true);
+      }
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete message?"),
+        content: const Text(
+            "This removes the message from the neighborhood conversation."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    final error = await controller.deleteOwnCommunityMessage(post);
+    if (mounted && error != null) {
+      showAppSnackBar(context, error, isError: true);
+    }
   }
 
   void _openDiscussion(AppController controller, CommunityPostItem post) {
@@ -9277,228 +9460,49 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     showAppSnackBar(context, error, isError: true);
   }
 
-  Future<void> _sharePost(CommunityPostItem post) async {
-    final parts = <String>[
-      post.title,
-      if (post.body.trim().isNotEmpty) post.body.trim(),
-      if (post.displayLocation != null) post.displayLocation!,
-      "Open THE EYE to view this Neighborhood Watch conversation: ${NeighborhoodWatchDestinations.post(post.id)}",
-    ];
-    try {
-      await SharePlus.instance.share(
-        ShareParams(
-          subject: post.title,
-          text: parts.join("\n\n"),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        "Unable to open the share sheet. Try again.",
-        isError: true,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = appOf(context);
-    final canStart = controller.canStartCommunityConversation;
-    final visiblePosts =
-        controller.communityFeed.where(_matchesFeedFilter).toList();
-    return NwPrototypeScaffold(
-      title: "Neighborhood Watch",
-      actions: _neighborhoodWatchHeaderActions(context),
-      tabs: _neighborhoodWatchPrimaryTabs(context, selectedIndex: 1),
-      floatingActionButton: canStart
-          ? FloatingActionButton(
-              tooltip: "Create neighborhood post",
-              onPressed: () => Navigator.of(context)
-                  .pushNamed(NeighborhoodWatchDestinations.create),
-              child: const Icon(Icons.add),
-            )
-          : null,
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await controller.loadCommunityFeed(refresh: true);
-          await _loadCommunityNotice(controller);
-        },
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            OutsideCurrentAreaNotice(
-              status: controller.selectedCommunityAccessStatus,
-            ),
-            if (!canStart)
-              const NwPrototypeListCard(
-                leading: Icon(Icons.lock_outline),
-                title: "Community posting unavailable",
-                subtitle:
-                    "Sign in and confirm your current location to participate in this area.",
-              ),
-            if (!canStart) const SizedBox(height: 16),
-            NwPrototypeFilterChips(
-              labels: const [
-                "All",
-                "Discussions",
-                "Tips",
-                "Traffic",
-              ],
-              selectedLabel: _selectedFilter,
-              onSelected: (value) => setState(() => _selectedFilter = value),
-            ),
-            const SizedBox(height: 14),
-            if (_communityNotice != null) ...[
-              NwPrototypeCard(
-                highlight: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const NwPrototypeSectionHeading(
-                      title: "Community Notice",
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _communityNotice!.title,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    if (_communityNotice!.body.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(_communityNotice!.body),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (controller.loadingCommunityFeed &&
-                controller.communityFeed.isEmpty)
-              const Center(child: CircularProgressIndicator())
-            else if (controller.communityFeedError != null &&
-                controller.communityFeed.isEmpty)
-              NwPrototypeListCard(
-                leading: const Icon(Icons.cloud_off),
-                title: "Feed unavailable",
-                subtitle: controller.communityFeedError ?? "Unknown error",
-              )
-            else if (controller.communityFeed.isEmpty)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const NwPrototypeListCard(
-                    leading: Icon(Icons.forum_outlined),
-                    title: "No community discussions yet",
-                    subtitle:
-                        "Be the first to start a safety conversation in this area.",
-                  ),
-                  if (canStart) ...[
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: () => Navigator.of(context).pushNamed(
-                        NeighborhoodWatchDestinations.create,
-                        arguments: const {"type": "SafetyTip"},
-                      ),
-                      child: const Text("Share First Security Tip"),
-                    ),
-                  ],
-                ],
-              )
-            else if (visiblePosts.isEmpty)
-              NwPrototypeListCard(
-                leading: const Icon(Icons.filter_alt_off_outlined),
-                title: "No $_selectedFilter posts",
-                subtitle: "Try another feed filter.",
-              )
-            else
-              ...visiblePosts.map((post) {
-                final time = _formatPostTime(post.createdAt);
-                final comments = post.commentCount;
-                final mediaSummary = _mediaSummary(post);
-                final detailLines = <String>[
-                  post.body.isEmpty ? "Media attachment" : post.body,
-                  if (post.displayLocation != null)
-                    "Location: ${post.displayLocation}",
-                  if (mediaSummary.isNotEmpty) mediaSummary,
-                  "${post.displayAuthor}${time.isEmpty ? "" : " · $time"}",
-                  "$comments comment${comments == 1 ? "" : "s"} · View Discussion",
-                ];
-                final verificationTone = switch (post.verificationStatus) {
-                  "Verified" => BrandColors.green,
-                  "Confirmed" => const Color(0xFF4A9DFF),
-                  _ => EyeSemanticColors.of(context).secondaryText,
-                };
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      NwPrototypeListCard(
-                        leading: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: verificationTone.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.forum_outlined,
-                            color: verificationTone,
-                          ),
-                        ),
-                        title:
-                            "${_conversationTypeLabel(post.type)}\n${post.title}",
-                        subtitle: detailLines.join("\n"),
-                        badge: NwPrototypePill(
-                          label: post.verificationStatus,
-                          selected:
-                              post.verificationStatus != "PendingVerification",
-                          color: verificationTone,
-                        ),
-                        onTap: () => _openDiscussion(controller, post),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: CommunityPostActionButton(
-                              onPressed: () => unawaited(
-                                _toggleLike(controller, post),
-                              ),
-                              icon: post.viewerReacted
-                                  ? Icons.thumb_up
-                                  : Icons.thumb_up_outlined,
-                              label: post.reactionCount > 0
-                                  ? "Like ${post.reactionCount}"
-                                  : "Like",
-                            ),
-                          ),
-                          Expanded(
-                            child: CommunityPostActionButton(
-                              onPressed: () =>
-                                  _openDiscussion(controller, post),
-                              icon: Icons.chat_bubble_outline,
-                              label: comments > 0
-                                  ? "Comment $comments"
-                                  : "Comment",
-                            ),
-                          ),
-                          Expanded(
-                            child: CommunityPostActionButton(
-                              onPressed: () => unawaited(_sharePost(post)),
-                              icon: Icons.share_outlined,
-                              label: "Share",
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              }),
-          ],
-        ),
+    final community = controller.selectedCommunity;
+    final evidence = _chatEvidenceController;
+    return GeoCommunityChatView(
+      title: community == null
+          ? "Neighborhood Watch"
+          : "${community.name} Neighborhood Watch",
+      subtitle: community == null
+          ? null
+          : [community.lga, community.state]
+              .whereType<String>()
+              .where((part) => part.trim().isNotEmpty)
+              .join(" · "),
+      messages: controller.communityFeed,
+      canSend: controller.canStartCommunityConversation,
+      loading: controller.loadingCommunityFeed,
+      error: controller.communityFeedError,
+      showAttachments: _showAttachments,
+      sending: _sendingMessage,
+      attachmentCount: evidence?.attachments.length ?? 0,
+      messageController: _messageController,
+      evidenceController: evidence,
+      pendingMessage: _pendingMessage,
+      sendError: _sendError,
+      replyTo: _replyTo,
+      currentUserId: controller.cachedCitizenProfile?.id,
+      headerActions: _neighborhoodWatchHeaderActions(context),
+      locationNotice: OutsideCurrentAreaNotice(
+        status: controller.selectedCommunityAccessStatus,
       ),
+      onRefresh: () => controller.loadCommunityFeed(refresh: true),
+      onLoadOlder: controller.loadOlderCommunityMessages,
+      hasOlderMessages: controller.communityFeedNextCursor != null,
+      loadingOlderMessages: controller.loadingOlderCommunityMessages,
+      onToggleAttachments: () =>
+          setState(() => _showAttachments = !_showAttachments),
+      onSend: _sendRoomMessage,
+      onOpenMessage: (post) => _openDiscussion(controller, post),
+      onReply: _showRoomMessageActions,
+      onLike: (post) => unawaited(_toggleLike(controller, post)),
+      onCancelReply: () => setState(() => _replyTo = null),
     );
   }
 }

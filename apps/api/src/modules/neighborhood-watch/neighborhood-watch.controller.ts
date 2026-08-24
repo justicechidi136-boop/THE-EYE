@@ -11,6 +11,7 @@ import {
   CreateCommunityContentReportDto,
   CreateCommunityDto,
   CreateCommunityPostDto,
+  UpdateCommunityPostDto,
   CreateCommunityReactionDto,
   CreateCommunityRequestDto,
   CreatePatrolObservationDto,
@@ -272,6 +273,18 @@ export class NeighborhoodWatchController {
   @RequirePermissions("community:post")
   createPost(@Param("communityId") communityId: string, @Body() dto: CreateCommunityPostDto, @Req() request: any) {
     return this.neighborhoodWatch.createPost(communityId, dto, request.user);
+  }
+
+  @Patch("posts/:postId")
+  @RequirePermissions("community:post")
+  updateOwnPost(@Param("postId") postId: string, @Body() dto: UpdateCommunityPostDto, @Req() request: any) {
+    return this.neighborhoodWatch.updateOwnPost(postId, dto, request.user);
+  }
+
+  @Delete("posts/:postId/mine")
+  @RequirePermissions("community:post")
+  deleteOwnPost(@Param("postId") postId: string, @Req() request: any) {
+    return this.neighborhoodWatch.deleteOwnPost(postId, request.user);
   }
 
   @Get("dynamic-areas/feed")

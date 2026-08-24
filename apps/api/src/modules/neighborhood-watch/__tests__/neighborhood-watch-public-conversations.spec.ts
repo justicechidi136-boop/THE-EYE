@@ -23,6 +23,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
         country: "NG",
       }),
       findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
     communityMembership: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -64,6 +65,7 @@ function buildService(overrides: Record<string, unknown> = {}) {
         author: { id: "traveler-1", profile: { firstName: "Ada", lastName: "Traveler" } },
       }),
       findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockImplementation(async ({ data, where }: any) => ({
         id: where?.id ?? "post-1",
         communityId: "community-a",
@@ -154,6 +156,111 @@ describe("Neighborhood Watch public user-initiated conversations", () => {
     expect(result.data.authorLabel).toBe("Current Area Visitor");
     expect(notifications.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ routeType: "NW_NEW_DISCUSSION", postId: "post-1" }),
+    );
+  });
+
+  it("deduplicates a retried first message by clientMessageId", async () => {
+    const { service, prisma } = buildService();
+    prisma.communityPost.findFirst.mockResolvedValue({
+      id: "post-existing",
+      clientMessageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      communityId: "community-a",
+      dynamicAreaKey: null,
+      authorId: traveler.sub,
+      title: "Neighborhood conversation",
+      body: "First message",
+      media: [],
+      reactions: [],
+    });
+
+    const result = await service.createPost(
+      "community-a",
+      {
+        type: "Discussion",
+        title: "Neighborhood conversation",
+        body: "First message",
+        clientMessageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      },
+      traveler,
+    );
+
+    expect(result.data.id).toBe("post-existing");
+    expect(prisma.communityPost.create).not.toHaveBeenCalled();
+  });
+
+  it("blocks a reply reference from another geographic room", async () => {
+    const { service, prisma } = buildService();
+    prisma.communityPost.findUnique.mockResolvedValue({
+      id: "other-room-post",
+      communityId: "community-b",
+      dynamicAreaKey: null,
+      authorId: "other-user",
+      hiddenAt: null,
+    });
+
+    await expect(
+      service.createPost(
+        "community-a",
+        {
+          type: "Discussion",
+          title: "Neighborhood conversation",
+          body: "Cross-room reply",
+          replyToPostId: "other-room-post",
+        },
+        traveler,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("allows an author to edit and soft-delete their own message", async () => {
+    const { service, prisma } = buildService();
+    prisma.communityPost.findUnique.mockResolvedValue({
+      id: "post-1",
+      communityId: "community-a",
+      dynamicAreaKey: null,
+      targetType: "COMMUNITY",
+      authorId: traveler.sub,
+      hiddenAt: null,
+      media: [],
+      reactions: [],
+      replyTo: null,
+    });
+
+    await service.updateOwnPost("post-1", { body: "Edited message" }, traveler);
+    await service.deleteOwnPost("post-1", traveler);
+
+    expect(prisma.communityPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "post-1" },
+        data: expect.objectContaining({ body: "Edited message" }),
+      }),
+    );
+    expect(prisma.communityPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "post-1" },
+        data: expect.objectContaining({ hiddenById: traveler.sub }),
+      }),
+    );
+  });
+
+  it("does not let another user edit or delete a message", async () => {
+    const { service, prisma } = buildService();
+    prisma.communityPost.findUnique.mockResolvedValue({
+      id: "post-1",
+      communityId: "community-a",
+      dynamicAreaKey: null,
+      targetType: "COMMUNITY",
+      authorId: traveler.sub,
+      hiddenAt: null,
+      media: [],
+      reactions: [],
+    });
+
+    await expect(
+      service.updateOwnPost("post-1", { body: "Not mine" }, outsider),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.deleteOwnPost("post-1", outsider)).rejects.toBeInstanceOf(
+      ForbiddenException,
     );
   });
 
