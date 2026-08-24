@@ -17,6 +17,8 @@ import "package:uuid/uuid.dart";
 
 import "auth/auth_service.dart";
 import "auth/account_recovery_flow.dart";
+import "auth/biometric_auth_service.dart";
+import "auth/biometric_preference_store.dart";
 import "auth/auth_persistence_preference_store.dart";
 import "auth/auth_session_store.dart";
 import "auth/auth_validation.dart";
@@ -669,6 +671,8 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       ),
       authSessionStore: authSessionStore,
       authPersistencePreferenceStore: authPersistencePreferenceStore,
+      biometricAuthService: BiometricAuthService(),
+      biometricPreferenceStore: SecureBiometricPreferenceStore(),
       themeProvider: themeProvider,
       vehicleGarageStore: vehicleGarageStore,
       initialLocale: initialLocale,
@@ -1463,6 +1467,11 @@ ThemeData buildDarkTheme(bool highContrast) {
   );
 }
 
+typedef BackgroundPushContextPersister = Future<void> Function({
+  required String accessToken,
+  required String apiBaseUrl,
+});
+
 class AppController extends SessionAccessor
     implements
         ActiveEmergencyNavigationController,
@@ -1476,6 +1485,9 @@ class AppController extends SessionAccessor
     required SocialAuthService socialAuthService,
     required AuthSessionStore authSessionStore,
     AuthPersistencePreferenceStore? authPersistencePreferenceStore,
+    BiometricAuthService? biometricAuthService,
+    BiometricPreferenceStore? biometricPreferenceStore,
+    BackgroundPushContextPersister? backgroundPushContextPersister,
     required ThemeProvider themeProvider,
     required VehicleGarageStore vehicleGarageStore,
     Locale initialLocale = TheEyeLocaleCatalog.defaultLocale,
@@ -1499,6 +1511,11 @@ class AppController extends SessionAccessor
         _socialAuthService = socialAuthService,
         _authSessionStore = authSessionStore,
         _authPersistencePreferenceStore = authPersistencePreferenceStore,
+        _biometricAuthService = biometricAuthService ?? BiometricAuthService(),
+        _biometricPreferenceStore =
+            biometricPreferenceStore ?? InMemoryBiometricPreferenceStore(),
+        _backgroundPushContextPersister =
+            backgroundPushContextPersister ?? persistBackgroundPushContext,
         _remainSignedIn =
             authPersistencePreferenceStore?.remainSignedIn ?? true,
         _themeProvider = themeProvider,
@@ -1529,6 +1546,12 @@ class AppController extends SessionAccessor
   final SocialAuthService _socialAuthService;
   final AuthSessionStore _authSessionStore;
   final AuthPersistencePreferenceStore? _authPersistencePreferenceStore;
+  final BiometricAuthService _biometricAuthService;
+  final BiometricPreferenceStore _biometricPreferenceStore;
+  final BackgroundPushContextPersister _backgroundPushContextPersister;
+  BiometricPreference _biometricPreference =
+      const BiometricPreference.disabled();
+  bool _biometricUnlockRequired = false;
   bool _remainSignedIn;
   final ThemeProvider _themeProvider;
   final VehicleGarageStore _vehicleGarageStore;
@@ -1632,23 +1655,35 @@ class AppController extends SessionAccessor
 
   AuthSession? get session => _cachedSession;
   bool get remainSignedIn => _remainSignedIn;
+  bool get biometricUnlockEnabled => _biometricPreference.hasAccountBinding;
+  bool get biometricUnlockRequired => _biometricUnlockRequired;
+
+  Future<BiometricCapability> biometricCapability() =>
+      _biometricAuthService.capability();
 
   Future<void> setRemainSignedIn(bool value) async {
     if (_remainSignedIn == value) return;
     await _authPersistencePreferenceStore?.setRemainSignedIn(value);
     _remainSignedIn = value;
+    if (!value) {
+      await disableBiometricUnlock();
+    }
     notifyListeners();
   }
 
   Future<void> loadPersistedSession() async {
     final session = await _authSessionStore.load();
-    _cachedSession = session;
-    _sessionAccessToken = session?.accessToken;
+    _biometricPreference = await _biometricPreferenceStore.load();
+    _biometricUnlockRequired =
+        session != null && _biometricPreference.hasAccountBinding;
+    _cachedSession = _biometricUnlockRequired ? null : session;
+    _sessionAccessToken =
+        _biometricUnlockRequired ? null : session?.accessToken;
     final store = await _languageRegionStore();
     _setLocaleCode(store.preferredLocale, notify: false);
     notifyListeners();
     if (_sessionAccessToken != null && _sessionAccessToken!.isNotEmpty) {
-      await persistBackgroundPushContext(
+      await _backgroundPushContextPersister(
         accessToken: _sessionAccessToken!,
         apiBaseUrl: theEyeApiUrl,
       );
@@ -1659,12 +1694,13 @@ class AppController extends SessionAccessor
   }
 
   Future<void> setSession(AuthSession session) async {
+    await disableBiometricUnlock(notify: false);
     await _authSessionStore.save(session);
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
     clearCitizenProfileCache();
     notifyListeners();
-    await persistBackgroundPushContext(
+    await _backgroundPushContextPersister(
       accessToken: session.accessToken,
       apiBaseUrl: theEyeApiUrl,
     );
@@ -1672,6 +1708,78 @@ class AppController extends SessionAccessor
     unawaited(loadVehicleGarage(refresh: true));
     unawaited(loadIncidentsFromApi());
     unawaited(loadNotificationsFromApi());
+  }
+
+  Future<BiometricAuthenticationStatus> enableBiometricUnlock() async {
+    if (!isAuthenticated) return BiometricAuthenticationStatus.error;
+    final status = await _biometricAuthService.authenticate(
+      reason: "Confirm your identity to enable biometric unlock",
+    );
+    if (status != BiometricAuthenticationStatus.success) return status;
+    try {
+      final profile = await loadCitizenProfile(forceRefresh: true);
+      if (profile == null || profile.id.trim().isEmpty) {
+        return BiometricAuthenticationStatus.error;
+      }
+      if (!_remainSignedIn) {
+        await _authPersistencePreferenceStore?.setRemainSignedIn(true);
+        _remainSignedIn = true;
+      }
+      await _biometricPreferenceStore.enableForAccount(profile.id);
+      _biometricPreference =
+          BiometricPreference(enabled: true, accountId: profile.id);
+      notifyListeners();
+      return BiometricAuthenticationStatus.success;
+    } catch (_) {
+      return BiometricAuthenticationStatus.error;
+    }
+  }
+
+  Future<void> disableBiometricUnlock({bool notify = true}) async {
+    await _biometricPreferenceStore.clear();
+    _biometricPreference = const BiometricPreference.disabled();
+    _biometricUnlockRequired = false;
+    if (notify) notifyListeners();
+  }
+
+  Future<BiometricUnlockResult> unlockWithBiometrics() async {
+    if (!_biometricUnlockRequired || !_biometricPreference.hasAccountBinding) {
+      return const BiometricUnlockResult(
+        status: BiometricAuthenticationStatus.unavailable,
+      );
+    }
+    final status = await _biometricAuthService.authenticate();
+    if (status != BiometricAuthenticationStatus.success) {
+      return BiometricUnlockResult(status: status);
+    }
+
+    final restore = await _authService.restorePersistedSession();
+    final profile = restore.citizenProfile;
+    if (!restore.isAuthenticated || restore.session == null) {
+      await disableBiometricUnlock(notify: false);
+      clearCachedSession();
+      return const BiometricUnlockResult(
+        status: BiometricAuthenticationStatus.error,
+      );
+    }
+    if (profile == null ||
+        profile.id.trim().isEmpty ||
+        profile.id != _biometricPreference.accountId) {
+      await _authSessionStore.clear();
+      await disableBiometricUnlock(notify: false);
+      clearCachedSession();
+      return const BiometricUnlockResult(
+        status: BiometricAuthenticationStatus.error,
+      );
+    }
+
+    _biometricUnlockRequired = false;
+    _cachedCitizenProfile = profile;
+    await _applyRestoredSession(restore.session!);
+    return BiometricUnlockResult(
+      status: BiometricAuthenticationStatus.success,
+      profileComplete: restore.status != SessionRestoreStatus.profileIncomplete,
+    );
   }
 
   Future<void> ensureFreshSession() async {
@@ -1694,7 +1802,7 @@ class AppController extends SessionAccessor
     _sessionAccessToken = session.accessToken;
     clearCitizenProfileCache();
     notifyListeners();
-    await persistBackgroundPushContext(
+    await _backgroundPushContextPersister(
       accessToken: session.accessToken,
       apiBaseUrl: theEyeApiUrl,
     );
@@ -2080,6 +2188,7 @@ class AppController extends SessionAccessor
     final cacheScope = _notificationCacheScope;
     await _authService.logout();
     await _socialAuthService.signOutProviders();
+    await disableBiometricUnlock(notify: false);
     clearCachedSession();
     if (cacheScope != null) {
       await _notificationInboxCache.clear(cacheScope);
@@ -2688,6 +2797,11 @@ class AppController extends SessionAccessor
   }
 
   Future<SessionRestoreResult> restoreSession() async {
+    if (_biometricUnlockRequired) {
+      return const SessionRestoreResult(
+        status: SessionRestoreStatus.biometricRequired,
+      );
+    }
     if (_restoreInFlight != null) {
       return _restoreInFlight!;
     }
@@ -2706,18 +2820,8 @@ class AppController extends SessionAccessor
   Future<SessionRestoreResult> _restoreSessionImpl() async {
     final result = await _authService.restorePersistedSession();
     if (result.session != null) {
-      _cachedSession = result.session;
-      _sessionAccessToken = result.session!.accessToken;
-      notifyListeners();
-      await persistBackgroundPushContext(
-        accessToken: result.session!.accessToken,
-        apiBaseUrl: theEyeApiUrl,
-      );
-      await _pushNotifications?.syncTokenWithBackend();
-      unawaited(loadVehicleGarage(refresh: true));
-      unawaited(loadIncidentsFromApi());
-      unawaited(loadNotificationsFromApi(refresh: true));
-      unawaited(refreshComposeDrafts());
+      _cachedCitizenProfile = result.citizenProfile;
+      await _applyRestoredSession(result.session!);
     } else if (result.status == SessionRestoreStatus.failed ||
         result.status == SessionRestoreStatus.unauthenticated) {
       _cachedSession = null;
@@ -2726,6 +2830,21 @@ class AppController extends SessionAccessor
       notifyListeners();
     }
     return result;
+  }
+
+  Future<void> _applyRestoredSession(AuthSession session) async {
+    _cachedSession = session;
+    _sessionAccessToken = session.accessToken;
+    notifyListeners();
+    await _backgroundPushContextPersister(
+      accessToken: session.accessToken,
+      apiBaseUrl: theEyeApiUrl,
+    );
+    await _pushNotifications?.syncTokenWithBackend();
+    unawaited(loadVehicleGarage(refresh: true));
+    unawaited(loadIncidentsFromApi());
+    unawaited(loadNotificationsFromApi(refresh: true));
+    unawaited(refreshComposeDrafts());
   }
 
   @override
@@ -3393,6 +3512,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
   bool submitting = false;
   bool forgotPasswordBusy = false;
   bool obscurePassword = true;
+  bool biometricBusy = false;
+  bool _loadedBiometricCapability = false;
+  BiometricCapability biometricCapability =
+      const BiometricCapability.unavailable();
   SocialAuthProvider? activeSocialProvider;
   DateTime? _socialSignInStartedAt;
 
@@ -3407,6 +3530,14 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_loadedBiometricCapability) {
+      _loadedBiometricCapability = true;
+      final scopedSession =
+          context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
+      if (scopedSession is AppController) {
+        unawaited(_loadBiometricCapability(scopedSession));
+      }
+    }
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map && args["authReturnMessage"] is String) {
       final message = (args["authReturnMessage"] as String).trim();
@@ -3414,6 +3545,46 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
         formSuccess = message;
       }
     }
+  }
+
+  Future<void> _loadBiometricCapability(AppController controller) async {
+    final capability = await controller.biometricCapability();
+    if (!mounted) return;
+    setState(() => biometricCapability = capability);
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    if (biometricBusy) return;
+    setState(() {
+      biometricBusy = true;
+      formError = null;
+    });
+    final result = await appOf(context).unlockWithBiometrics();
+    if (!mounted) return;
+    if (result.isSuccess) {
+      Navigator.of(context).pushReplacementNamed(
+        result.profileComplete ? "/home" : "/profile",
+      );
+      return;
+    }
+    setState(() {
+      biometricBusy = false;
+      formError = _biometricMessage(result.status);
+    });
+  }
+
+  String _biometricMessage(BiometricAuthenticationStatus status) {
+    return switch (status) {
+      BiometricAuthenticationStatus.cancelled =>
+        "Biometric unlock was cancelled. You can still sign in normally.",
+      BiometricAuthenticationStatus.lockedOut =>
+        "Biometrics are temporarily locked. Unlock your device, then try again or sign in normally.",
+      BiometricAuthenticationStatus.notEnrolled =>
+        "No fingerprint or face is enrolled on this device. Sign in normally to continue.",
+      BiometricAuthenticationStatus.unavailable =>
+        "Biometric unlock is unavailable on this device. Sign in normally to continue.",
+      _ => "Biometric unlock did not succeed. Sign in normally or try again.",
+    };
   }
 
   @override
@@ -3613,6 +3784,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
 
   @override
   Widget build(BuildContext context) {
+    final scopedSession =
+        context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
+    final appController = scopedSession is AppController ? scopedSession : null;
     final canSubmit = !submitting &&
         !socialBusy &&
         _identifierController.text.trim().isNotEmpty &&
@@ -3804,6 +3978,30 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                       )
                     : const Text("Log In"),
               ),
+              if (appController?.biometricUnlockRequired == true) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: submitting || socialBusy || biometricBusy
+                      ? null
+                      : _unlockWithBiometrics,
+                  icon: biometricBusy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          biometricCapability.kind == BiometricKind.face
+                              ? Icons.face_outlined
+                              : Icons.fingerprint,
+                        ),
+                  label: Text(
+                    biometricCapability.enrolled
+                        ? "Unlock with ${biometricCapability.name}"
+                        : "Unlock with biometrics",
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Center(
                 child: Text(
@@ -11641,6 +11839,98 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
   }
 }
 
+class _BiometricUnlockSettingsTile extends StatefulWidget {
+  const _BiometricUnlockSettingsTile();
+
+  @override
+  State<_BiometricUnlockSettingsTile> createState() =>
+      _BiometricUnlockSettingsTileState();
+}
+
+class _BiometricUnlockSettingsTileState
+    extends State<_BiometricUnlockSettingsTile> {
+  BiometricCapability? _capability;
+  bool _busy = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_capability == null) unawaited(_loadCapability());
+  }
+
+  Future<void> _loadCapability() async {
+    final capability = await appOf(context).biometricCapability();
+    if (!mounted) return;
+    setState(() => _capability = capability);
+  }
+
+  Future<void> _setEnabled(bool enabled) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final controller = appOf(context);
+    if (!enabled) {
+      await controller.disableBiometricUnlock();
+      if (!mounted) return;
+      setState(() => _busy = false);
+      showAppSnackBar(context, "Biometric unlock disabled.");
+      return;
+    }
+
+    final status = await controller.enableBiometricUnlock();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    final message = switch (status) {
+      BiometricAuthenticationStatus.success =>
+        "Biometric unlock enabled for this account.",
+      BiometricAuthenticationStatus.cancelled =>
+        "Biometric setup was cancelled.",
+      BiometricAuthenticationStatus.lockedOut =>
+        "Biometrics are temporarily locked. Unlock your device and try again.",
+      BiometricAuthenticationStatus.notEnrolled =>
+        "Add a fingerprint or face in your device settings first.",
+      BiometricAuthenticationStatus.unavailable =>
+        "Biometric unlock is unavailable on this device.",
+      _ => "Unable to enable biometric unlock. Try again.",
+    };
+    showAppSnackBar(
+      context,
+      message,
+      isError: status != BiometricAuthenticationStatus.success,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = appOf(context);
+    final capability = _capability;
+    final name = capability?.name ?? "Biometric";
+    final enabled = controller.biometricUnlockEnabled;
+    final canEnable = capability?.canAuthenticate ?? false;
+    final subtitle = enabled
+        ? "Use your device $name to unlock your signed-in account."
+        : capability == null
+            ? "Checking this device..."
+            : !capability.available
+                ? "Biometric authentication is unavailable on this device."
+                : !capability.enrolled
+                    ? "Enroll a fingerprint or face in device settings first."
+                    : "Unlock your saved session without entering a password.";
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      secondary: Icon(
+        capability?.kind == BiometricKind.face
+            ? Icons.face_outlined
+            : Icons.fingerprint,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: Text("Use $name to unlock"),
+      subtitle: Text(subtitle),
+      value: enabled,
+      onChanged: _busy || (!enabled && !canEnable) ? null : _setEnabled,
+    );
+  }
+}
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -11690,19 +11980,6 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).pushNamed("/profile"),
                 ),
                 if (authenticated) ...[
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: Icon(
-                      Icons.lock_clock_outlined,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    title: const Text("Remain signed in"),
-                    subtitle: const Text(
-                      "Keep me signed in when I close THE EYE.",
-                    ),
-                    value: controller.remainSignedIn,
-                    onChanged: controller.setRemainSignedIn,
-                  ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(
@@ -11758,6 +12035,30 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          if (authenticated) ...[
+            SectionCard(
+              title: "Security",
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Icon(
+                      Icons.lock_clock_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text("Remain signed in"),
+                    subtitle: const Text(
+                      "Keep me signed in when I close THE EYE.",
+                    ),
+                    value: controller.remainSignedIn,
+                    onChanged: controller.setRemainSignedIn,
+                  ),
+                  const _BiometricUnlockSettingsTile(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           const LocationPermissionSettingsSection(),
           const SizedBox(height: 16),
           SectionCard(

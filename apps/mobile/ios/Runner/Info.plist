@@ -4,6 +4,8 @@
 	<dict>
 		<key>NSCameraUsageDescription</key>
 		<string>THE EYE needs camera access so you can attach timestamped photo and video evidence to incident reports.</string>
+		<key>NSFaceIDUsageDescription</key>
+		<string>Use Face ID to unlock your signed-in THE EYE account.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>THE EYE needs microphone access to record voice reports and short video evidence for incident reports.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
