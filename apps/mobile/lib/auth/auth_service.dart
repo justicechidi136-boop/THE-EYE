@@ -27,6 +27,7 @@ enum AuthRequestStatus {
 
 enum SessionRestoreStatus {
   unauthenticated,
+  biometricRequired,
   restored,
   profileIncomplete,
   failed,
@@ -36,10 +37,12 @@ class SessionRestoreResult {
   const SessionRestoreResult({
     required this.status,
     this.session,
+    this.citizenProfile,
   });
 
   final SessionRestoreStatus status;
   final AuthSession? session;
+  final CitizenProfile? citizenProfile;
 
   bool get isAuthenticated =>
       status == SessionRestoreStatus.restored ||
@@ -388,11 +391,13 @@ class AuthService {
         return SessionRestoreResult(
           status: SessionRestoreStatus.profileIncomplete,
           session: profile.session,
+          citizenProfile: profile.citizenProfile,
         );
       }
       return SessionRestoreResult(
         status: SessionRestoreStatus.restored,
         session: profile.session,
+        citizenProfile: profile.citizenProfile,
       );
     } on SocketException {
       if (session.accessToken.isNotEmpty) {
