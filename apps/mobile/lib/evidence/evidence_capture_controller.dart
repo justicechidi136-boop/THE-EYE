@@ -63,6 +63,12 @@ class EvidenceCaptureController extends ChangeNotifier {
         action: _mediaSource.pickImages,
       );
 
+  Future<void> pickGif() => _capture(
+        mediaType: IncidentMediaType.image,
+        needsPhotos: true,
+        action: _mediaSource.pickGif,
+      );
+
   Future<void> recordVideo() => _capture(
         mediaType: IncidentMediaType.video,
         needsCamera: true,

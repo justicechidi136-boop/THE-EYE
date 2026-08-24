@@ -6,6 +6,7 @@ import "package:the_eye_mobile/neighborhood_watch/geo_community_chat_view.dart";
 void main() {
   Widget buildChat({
     required Future<void> Function() onSend,
+    TextEditingController? messageController,
     String? pendingMessage,
     String? sendError,
     VoidCallback? onBack,
@@ -23,7 +24,7 @@ void main() {
         showAttachments: false,
         sending: false,
         attachmentCount: 0,
-        messageController: TextEditingController(),
+        messageController: messageController ?? TextEditingController(),
         evidenceController: null,
         pendingMessage: pendingMessage,
         sendError: sendError,
@@ -60,6 +61,37 @@ void main() {
     await tester.tap(find.byTooltip("Send message"));
     await tester.pump();
     expect(sends, 1);
+  });
+
+  testWidgets("composer offers emoji, GIF, and sticker controls",
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      messageController: controller,
+    ));
+
+    await tester.tap(find.byTooltip("Emoji, GIF, and stickers"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Emoji"), findsOneWidget);
+    expect(find.text("GIF"), findsOneWidget);
+    expect(find.text("Stickers"), findsOneWidget);
+
+    await tester.tap(find.byTooltip("Insert 😀"));
+    await tester.pump();
+    expect(controller.text, "😀");
+
+    await tester.tap(find.text("GIF"));
+    await tester.pumpAndSettle();
+    expect(find.text("Choose GIF"), findsOneWidget);
+
+    await tester.tap(find.text("Stickers"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Stay safe"));
+    await tester.pumpAndSettle();
+    expect(controller.text, "😀🛡️✅");
   });
 
   testWidgets("failed first message stays visible and can be retried",

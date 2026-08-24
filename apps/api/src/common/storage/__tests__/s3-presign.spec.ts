@@ -1,5 +1,11 @@
 import { BadRequestException } from "@nestjs/common";
-import { createS3PresignedGetUrl, createS3PresignedPutUrl, evidenceObjectKey, validateEvidenceUpload } from "../s3-presign";
+import {
+  createS3PresignedGetUrl,
+  createS3PresignedPutUrl,
+  evidenceObjectKey,
+  validateAvatarUpload,
+  validateEvidenceUpload,
+} from "../s3-presign";
 
 describe("evidence upload signing", () => {
   it("creates a scoped private object key without retaining unsafe file names", () => {
@@ -10,6 +16,11 @@ describe("evidence upload signing", () => {
   it("rejects executable content types and oversized evidence", () => {
     expect(() => validateEvidenceUpload("text/html", 100)).toThrow(BadRequestException);
     expect(() => validateEvidenceUpload("video/mp4", 101 * 1024 * 1024)).toThrow(BadRequestException);
+  });
+
+  it("allows GIF evidence without widening avatar uploads", () => {
+    expect(() => validateEvidenceUpload("image/gif", 1024)).not.toThrow();
+    expect(() => validateAvatarUpload("image/gif", 1024)).toThrow(BadRequestException);
   });
 
   it("creates a time-limited AWS Signature V4 upload URL", () => {

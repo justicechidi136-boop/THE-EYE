@@ -31,6 +31,7 @@ class EvidenceValidation {
       ".jpg" || ".jpeg" => "image/jpeg",
       ".png" => "image/png",
       ".webp" => "image/webp",
+      ".gif" => "image/gif",
       ".mp4" => "video/mp4",
       ".webm" => "video/webm",
       ".mp3" || ".mpeg" => "audio/mpeg",
@@ -118,6 +119,11 @@ class EvidenceValidation {
         return bytes.length >= 12 &&
             String.fromCharCodes(bytes.sublist(0, 4)) == "RIFF" &&
             String.fromCharCodes(bytes.sublist(8, 12)) == "WEBP";
+      }
+      if (mimeType == "image/gif") {
+        return bytes.length >= 6 &&
+            (String.fromCharCodes(bytes.sublist(0, 6)) == "GIF87a" ||
+                String.fromCharCodes(bytes.sublist(0, 6)) == "GIF89a");
       }
     }
     if (mimeType == "video/mp4" || mimeType == "audio/mp4") {

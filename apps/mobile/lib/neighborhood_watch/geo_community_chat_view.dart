@@ -6,6 +6,38 @@ import "../evidence/evidence_capture_controller.dart";
 import "neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch_service.dart";
 
+const _chatEmojis = <String>[
+  "😀",
+  "😂",
+  "😍",
+  "👍",
+  "🙏",
+  "👏",
+  "❤️",
+  "🎉",
+  "👀",
+  "🤝",
+  "✅",
+  "🚨",
+  "📍",
+  "🏠",
+  "🛡️",
+  "💡",
+  "⚠️",
+  "🔥",
+  "💬",
+  "🙌",
+];
+
+const _chatStickers = <({String label, String value})>[
+  (label: "Stay safe", value: "🛡️✅"),
+  (label: "Alert", value: "🚨⚠️"),
+  (label: "Watching", value: "👀🏠"),
+  (label: "Thank you", value: "🙏❤️"),
+  (label: "All clear", value: "✅🙌"),
+  (label: "Neighbors", value: "🤝🏠"),
+];
+
 class GeoCommunityChatView extends StatelessWidget {
   const GeoCommunityChatView({
     required this.title,
@@ -67,6 +99,40 @@ class GeoCommunityChatView extends StatelessWidget {
   final String? pendingMessage;
   final String? sendError;
   final CommunityPostItem? replyTo;
+
+  void _insertExpression(String value) {
+    final text = messageController.text;
+    final selection = messageController.selection;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final next = text.replaceRange(start, end, value);
+    messageController.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + value.length),
+    );
+  }
+
+  Future<void> _showExpressionPicker(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _ChatExpressionSheet(
+        gifEnabled: canSend && evidenceController != null,
+        onEmoji: _insertExpression,
+        onSticker: (value) {
+          _insertExpression(value);
+          Navigator.of(sheetContext).pop();
+        },
+        onGif: () async {
+          Navigator.of(sheetContext).pop();
+          final before = evidenceController?.attachments.length ?? 0;
+          await evidenceController?.pickGif();
+          final after = evidenceController?.attachments.length ?? 0;
+          if (after > before && !showAttachments) onToggleAttachments();
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -291,6 +357,13 @@ class GeoCommunityChatView extends StatelessWidget {
                 child: const Icon(Icons.add_circle_outline),
               ),
             ),
+            IconButton(
+              tooltip: "Emoji, GIF, and stickers",
+              onPressed: canSend && !sending
+                  ? () => _showExpressionPicker(context)
+                  : null,
+              icon: const Icon(Icons.emoji_emotions_outlined),
+            ),
             Expanded(
               child: TextField(
                 controller: messageController,
@@ -401,7 +474,14 @@ class RoomMessageBubble extends StatelessWidget {
                     ],
                     if (body.trim().isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(body),
+                      Text(
+                        body,
+                        style: _chatStickers.any(
+                          (sticker) => sticker.value == body.trim(),
+                        )
+                            ? const TextStyle(fontSize: 32, height: 1.15)
+                            : null,
+                      ),
                     ],
                     if (media.isNotEmpty) ...[
                       const SizedBox(height: 7),
@@ -448,6 +528,127 @@ class RoomMessageBubble extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatExpressionSheet extends StatelessWidget {
+  const _ChatExpressionSheet({
+    required this.gifEnabled,
+    required this.onEmoji,
+    required this.onSticker,
+    required this.onGif,
+  });
+
+  final bool gifEnabled;
+  final ValueChanged<String> onEmoji;
+  final ValueChanged<String> onSticker;
+  final Future<void> Function() onGif;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
+    return SafeArea(
+      child: DefaultTabController(
+        length: 3,
+        child: SizedBox(
+          height: 360,
+          child: Column(
+            children: [
+              const TabBar(
+                tabs: [
+                  Tab(icon: Icon(Icons.emoji_emotions_outlined), text: "Emoji"),
+                  Tab(icon: Icon(Icons.gif_box_outlined), text: "GIF"),
+                  Tab(
+                      icon: Icon(Icons.auto_awesome_outlined),
+                      text: "Stickers"),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 6,
+                        mainAxisSpacing: 4,
+                        crossAxisSpacing: 4,
+                      ),
+                      itemCount: _chatEmojis.length,
+                      itemBuilder: (context, index) => IconButton(
+                        tooltip: "Insert ${_chatEmojis[index]}",
+                        onPressed: () => onEmoji(_chatEmojis[index]),
+                        icon: Text(
+                          _chatEmojis[index],
+                          style: const TextStyle(fontSize: 26),
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.gif_box_outlined,
+                                size: 48, color: semantics.interactiveText),
+                            const SizedBox(height: 10),
+                            const Text(
+                              "Choose a GIF saved on your device.",
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              onPressed: gifEnabled ? onGif : null,
+                              icon: const Icon(Icons.folder_open),
+                              label: const Text("Choose GIF"),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 1.55,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                      ),
+                      itemCount: _chatStickers.length,
+                      itemBuilder: (context, index) {
+                        final sticker = _chatStickers[index];
+                        return Material(
+                          color: semantics.elevatedSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => onSticker(sticker.value),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(sticker.value,
+                                    style: const TextStyle(fontSize: 30)),
+                                const SizedBox(height: 5),
+                                Text(sticker.label,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
