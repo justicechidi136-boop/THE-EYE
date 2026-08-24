@@ -11980,20 +11980,6 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).pushNamed("/profile"),
                 ),
                 if (authenticated) ...[
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: Icon(
-                      Icons.lock_clock_outlined,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    title: const Text("Remain signed in"),
-                    subtitle: const Text(
-                      "Keep me signed in when I close THE EYE.",
-                    ),
-                    value: controller.remainSignedIn,
-                    onChanged: controller.setRemainSignedIn,
-                  ),
-                  const _BiometricUnlockSettingsTile(),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(
@@ -12049,6 +12035,30 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          if (authenticated) ...[
+            SectionCard(
+              title: "Security",
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Icon(
+                      Icons.lock_clock_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text("Remain signed in"),
+                    subtitle: const Text(
+                      "Keep me signed in when I close THE EYE.",
+                    ),
+                    value: controller.remainSignedIn,
+                    onChanged: controller.setRemainSignedIn,
+                  ),
+                  const _BiometricUnlockSettingsTile(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           const LocationPermissionSettingsSection(),
           const SizedBox(height: 16),
           SectionCard(

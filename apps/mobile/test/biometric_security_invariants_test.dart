@@ -37,4 +37,11 @@ void main() {
     expect(logout.contains("disableBiometricUnlock"), isTrue);
     expect(logout.contains("_authService.logout"), isTrue);
   });
+
+  test("biometric opt-in is presented in Settings Security", () {
+    final source = File("lib/main.dart").readAsStringSync();
+
+    expect(source.contains('title: "Security"'), isTrue);
+    expect(source.contains("const _BiometricUnlockSettingsTile()"), isTrue);
+  });
 }
