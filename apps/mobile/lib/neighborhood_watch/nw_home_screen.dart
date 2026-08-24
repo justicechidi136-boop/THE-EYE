@@ -79,6 +79,15 @@ class _NeighborhoodWatchHomeScreenState
       _syncSelectedCommunity(staleContext);
     }
     await _refreshContext();
+    if (!mounted) return;
+    final arguments = ModalRoute.of(context)?.settings.arguments;
+    final openFeed = arguments is Map && arguments["openFeed"] == true;
+    final hasAuthorizedRoom = _context?.isMappedPublicCommunity == true ||
+        _context?.isDynamicPublicArea == true;
+    if (openFeed && hasAuthorizedRoom) {
+      Navigator.of(context)
+          .pushReplacementNamed(NeighborhoodWatchDestinations.feed);
+    }
   }
 
   Future<void> _refreshContext() async {

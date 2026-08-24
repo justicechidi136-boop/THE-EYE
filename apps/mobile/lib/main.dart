@@ -1102,7 +1102,6 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 return OtpVerificationScreen(args: args);
               },
               "/home": (_) => const HomeScreen(),
-              "/services": (_) => const ServicesHubScreen(),
               "/report/emergency": (context) =>
                   _reportRoute(context, ReportType.emergency),
               "/live-video": (context) {
@@ -4540,58 +4539,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 }
 
-class ServicesHubScreen extends StatelessWidget {
-  const ServicesHubScreen({super.key});
-
-  static const _destinations = [
-    (
-      label: "Create broadcast",
-      icon: Icons.campaign,
-      route: BroadcastRoutes.create
-    ),
-    (label: "Tracking", icon: Icons.route, route: "/tracking"),
-    (label: "Family", icon: Icons.family_restroom, route: "/family"),
-    (label: "Police", icon: Icons.local_police, route: "/police-stations"),
-    (label: "Profile", icon: Icons.person, route: "/profile"),
-    (label: "Home", icon: Icons.home, route: "/home"),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SafetyScaffold(
-      title: "Services",
-      selectedIndex: 1,
-      useFigmaShell: true,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-        children: [
-          const EyePageHeader.root(title: "Services"),
-          const SizedBox(height: 8),
-          Text(
-            "Quick access to safety tools and account features.",
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 16),
-          ..._destinations.map(
-            (destination) => ListTileCard(
-              leading: Icon(destination.icon),
-              title: destination.label,
-              subtitle: "Open ${destination.label.toLowerCase()}",
-              onTap: () {
-                if (destination.route == "/home") {
-                  Navigator.of(context).pushReplacementNamed(destination.route);
-                  return;
-                }
-                Navigator.of(context).pushNamed(destination.route);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -4741,6 +4688,13 @@ class HomeScreen extends StatelessWidget {
                     onTap: () =>
                         Navigator.of(context).pushNamed(BroadcastRoutes.create),
                   ),
+                  EyeServiceCard(
+                    title: "Incident Tracking",
+                    description:
+                        "Track active reports and review incident status updates",
+                    icon: Icons.route,
+                    onTap: () => Navigator.of(context).pushNamed("/tracking"),
+                  ),
                 ],
               ),
             ),
@@ -4815,11 +4769,6 @@ class HomeScreen extends StatelessWidget {
                         Icons.campaign,
                         Colors.purple.shade700,
                         () => Navigator.of(context).pushNamed("/broadcasts")),
-                    ActionTile(
-                        "Incident status",
-                        Icons.radar,
-                        Colors.cyan.shade800,
-                        () => Navigator.of(context).pushNamed("/tracking")),
                     ActionTile(
                         "Help & Support",
                         Icons.support_agent,
@@ -11970,14 +11919,17 @@ class SafetyScaffold extends StatelessWidget {
   void _navigateTab(BuildContext context, int tabIndex) {
     final route = switch (tabIndex) {
       0 => EyeNavRoutes.home,
-      1 => EyeNavRoutes.services,
+      1 => EyeNavRoutes.neighborhoodWatch,
       3 => EyeNavRoutes.broadcast,
       4 => EyeNavRoutes.settings,
       _ => null,
     };
     if (route == null) return;
     if (ModalRoute.of(context)?.settings.name != route) {
-      Navigator.of(context).pushReplacementNamed(route);
+      Navigator.of(context).pushReplacementNamed(
+        route,
+        arguments: tabIndex == 1 ? const {"openFeed": true} : null,
+      );
     }
   }
 
