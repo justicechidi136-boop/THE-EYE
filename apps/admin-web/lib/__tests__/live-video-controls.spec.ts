@@ -11,7 +11,10 @@ describe("admin live video controls", () => {
     expect(player.includes("bottom-4 right-4 z-20")).toBe(true);
     expect(player.includes('variant="inverse"')).toBe(true);
     expect(player.includes('variant="secondary" className="bg-white text-command')).toBe(false);
-    expect(viewer.includes("top-4 z-10")).toBe(true);
+    expect(viewer.includes('data-testid="live-video-player"')).toBe(true);
+    expect(viewer.includes('data-testid="live-evidence-panel"')).toBe(true);
+    expect(viewer.includes("absolute left-4 right-4 top-4")).toBe(false);
+    expect(viewer.indexOf('data-testid="live-evidence-panel"') > viewer.indexOf('data-testid="live-video-player"')).toBe(true);
     expect(primitives.includes('inverse: "border border-white/20 bg-white text-command')).toBe(true);
   });
 });
