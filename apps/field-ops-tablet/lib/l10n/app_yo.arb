@@ -47,6 +47,7 @@
   "active": "N ṣiṣẹ",
   "currentLocation": "Ipo bayii",
   "locationUnavailable": "Ipo ko si",
+  "locationDetected": "A ti ri ipo",
   "battery": "Batiri",
   "offlineQueue": "Ise offline",
   "pendingCount": "{count} nduro",
@@ -131,5 +132,10 @@
   "maintenance": "Itọju",
   "approvedApps": "Awon app ti a fọwọsi",
   "incidentLocation": "Maapu isele",
-  "broadcasts": "Ikede"
+  "broadcasts": "Ikede",
+  "nationwideBroadcasts": "Awọn ikede aabo jakejado orilẹ-ede",
+  "noBroadcasts": "Ko si ikede ni bayi",
+  "broadcastFeedEmptyHint": "Fa silẹ lati tun ikede aabo ṣe.",
+  "broadcastDetails": "Awọn alaye ikede",
+  "published": "Ti a tẹjade"
 }

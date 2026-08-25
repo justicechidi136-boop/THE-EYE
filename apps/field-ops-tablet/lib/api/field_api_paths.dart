@@ -43,6 +43,17 @@ abstract final class FieldApiPaths {
   static const dashboard = '/field/dashboard';
   static const dashboardTelemetry = '/field/dashboard/telemetry';
 
+  // Authenticated, nationwide public-safety feed.
+  static const broadcastsCountry = '/broadcasts/country';
+  static const broadcastsFieldCreate = '/broadcasts/field';
+  static const broadcastsMediaPresign = '/broadcasts/media/presign';
+
+  static String broadcastLiveVideoStart(String broadcastId) =>
+      '/live-video/broadcasts/$broadcastId/start';
+
+  static String liveVideoStop(String sessionId) =>
+      '/live-video/sessions/$sessionId/stop';
+
   // Shifts
   static const shiftsActive = '/field/shifts/active';
   static const shiftsStart = '/field/shifts/start';

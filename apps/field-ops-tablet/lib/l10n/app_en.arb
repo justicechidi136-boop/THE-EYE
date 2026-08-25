@@ -49,6 +49,7 @@
   "active": "Active",
   "currentLocation": "Current location",
   "locationUnavailable": "Location unavailable",
+  "locationDetected": "Location detected",
   "battery": "Battery",
   "offlineQueue": "Offline queue",
   "pendingCount": "{count} pending",
@@ -133,5 +134,10 @@
   "maintenance": "Maintenance",
   "approvedApps": "Approved Apps",
   "incidentLocation": "Incident Map",
-  "broadcasts": "Broadcasts"
+  "broadcasts": "Broadcasts",
+  "nationwideBroadcasts": "Nationwide safety broadcasts",
+  "noBroadcasts": "No broadcasts available",
+  "broadcastFeedEmptyHint": "Pull down to refresh the nationwide safety feed.",
+  "broadcastDetails": "Broadcast details",
+  "published": "Published"
 }

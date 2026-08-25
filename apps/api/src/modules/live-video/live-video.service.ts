@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { IncidentStatus, IncidentType } from "@the-eye/shared";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -21,6 +22,74 @@ export class LiveVideoService {
     private readonly metrics: MetricsService,
   ) {}
 
+  async startFieldBroadcastLiveVideo(
+    broadcastId: string,
+    dto: StartLiveVideoDto,
+    actor: JwtPayload,
+    trace: { requestId?: string; clientTraceId?: string } = {},
+  ) {
+    if (actor.typ !== "field") {
+      throw new ForbiddenException(
+        liveVideoErrorBody(LiveVideoErrorCode.NOT_AUTHORIZED, "Field session required", trace.requestId),
+      );
+    }
+    validateLocationUpdate(dto);
+    const broadcast = await this.prisma.broadcast.findUnique({ where: { id: broadcastId } });
+    if (!broadcast) throw new NotFoundException("Broadcast not found");
+    if (broadcast.creatorAdminId !== actor.sub) {
+      throw new ForbiddenException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.NOT_AUTHORIZED,
+          "Only the submitting field officer can start this live video",
+          trace.requestId,
+        ),
+      );
+    }
+    if (!broadcast.jurisdictionId || !broadcast.country || !broadcast.state || !broadcast.lga) {
+      throw new ForbiddenException("Broadcast jurisdiction is incomplete");
+    }
+
+    let incidentId = broadcast.incidentId;
+    if (!incidentId) {
+      const incidentType = this.incidentTypeForBroadcast(String(broadcast.type));
+      const incident = await this.prisma.incident.create({
+        data: {
+          reporterId: null,
+          jurisdictionId: broadcast.jurisdictionId,
+          assignedAdminId: actor.sub,
+          type: incidentType as never,
+          status: IncidentStatus.Submitted as never,
+          priority: broadcast.priority,
+          title: broadcast.title,
+          description: broadcast.body,
+          country: broadcast.country,
+          state: broadcast.state,
+          lga: broadcast.lga,
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          metadata: {
+            source: "field_broadcast_live_video",
+            broadcastId,
+            fieldDeviceId: actor.fieldDeviceId ?? null,
+          },
+        } as never,
+      });
+      const linked = await this.prisma.broadcast.updateMany({
+        where: { id: broadcastId, incidentId: null },
+        data: { incidentId: incident.id },
+      });
+      if (linked.count === 0) {
+        await this.prisma.incident.delete({ where: { id: incident.id } });
+        const current = await this.prisma.broadcast.findUnique({ where: { id: broadcastId } });
+        incidentId = current?.incidentId ?? null;
+      } else {
+        incidentId = incident.id;
+      }
+    }
+    if (!incidentId) throw new InternalServerErrorException("Unable to link live video incident");
+    return this.startIncidentLiveVideo(incidentId, dto, actor, trace);
+  }
+
   async startIncidentLiveVideo(
     incidentId: string,
     dto: StartLiveVideoDto,
@@ -34,11 +103,11 @@ export class LiveVideoService {
       requestId: trace.requestId,
       clientTraceId: trace.clientTraceId,
     };
-    if (actor.typ !== "user") {
+    if (actor.typ !== "user" && actor.typ !== "field") {
       throw new ForbiddenException(
         liveVideoErrorBody(
           LiveVideoErrorCode.NOT_AUTHORIZED,
-          "Only citizens can start emergency live video",
+          "Only citizens or authorized field sessions can start live video",
           trace.requestId,
         ),
       );
@@ -54,11 +123,20 @@ export class LiveVideoService {
         ),
       );
     }
-    if (incident.reporterId && incident.reporterId !== actor.sub) {
+    if (actor.typ === "user" && incident.reporterId && incident.reporterId !== actor.sub) {
       throw new ForbiddenException(
         liveVideoErrorBody(
           LiveVideoErrorCode.NOT_AUTHORIZED,
           "Only the reporting user can start live video for this incident",
+          trace.requestId,
+        ),
+      );
+    }
+    if (actor.typ === "field" && incident.assignedAdminId !== actor.sub) {
+      throw new ForbiddenException(
+        liveVideoErrorBody(
+          LiveVideoErrorCode.NOT_AUTHORIZED,
+          "Only the assigned field officer can start live video for this incident",
           trace.requestId,
         ),
       );
@@ -78,7 +156,7 @@ export class LiveVideoService {
     }
 
     const roomName = `eye-incident-${incidentId}`;
-    const identity = `user-${actor.sub}`;
+    const identity = `${actor.typ}-${actor.sub}`;
     let session;
     try {
       session = await this.prisma.liveVideoSession.upsert({
@@ -174,7 +252,7 @@ export class LiveVideoService {
       );
       token = this.livekitTokens.createToken({
         identity,
-        name: "Citizen emergency video",
+        name: actor.typ === "field" ? "Field operations live video" : "Citizen emergency video",
         roomName,
         canPublish: true,
         canSubscribe: false,
@@ -277,12 +355,20 @@ export class LiveVideoService {
     const session = await this.prisma.liveVideoSession.findUnique({ where: { id: sessionId }, include: { incident: true } });
     if (!session) throw new NotFoundException("Live video session not found");
     if (actor.typ === "user" && session.createdById !== actor.sub) throw new ForbiddenException("Only the stream owner can stop this live video");
+    if (actor.typ === "field" && session.createdById !== actor.sub) throw new ForbiddenException("Only the stream owner can stop this live video");
     if (actor.typ === "admin") await this.assertAdminCanAccessIncident(session.incidentId, actor);
 
     const updated = await this.prisma.liveVideoSession.update({ where: { id: sessionId }, data: { status: "Ended", endedAt: new Date() } as never });
     await this.timeline(session.incidentId, actor, "live_video.stopped", "Emergency live video stopped.", { sessionId });
     await this.audit(actor, "live_video.stopped", sessionId, { incidentId: session.incidentId });
     return { data: updated };
+  }
+
+  private incidentTypeForBroadcast(type: string): IncidentType {
+    if (type === "Emergency") return IncidentType.Emergency;
+    if (type === "Crime") return IncidentType.Crime;
+    if (type === "Accident") return IncidentType.Accident;
+    return IncidentType.CommunitySafety;
   }
 
   /**

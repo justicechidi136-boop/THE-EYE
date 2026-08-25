@@ -47,6 +47,7 @@
   "active": "Yana aiki",
   "currentLocation": "Wurin yanzu",
   "locationUnavailable": "Ba a samu wuri ba",
+  "locationDetected": "An gano wuri",
   "battery": "Baturi",
   "offlineQueue": "Jerin aiki ba tare da intanet ba",
   "pendingCount": "{count} na jiran aiki",
@@ -131,5 +132,10 @@
   "maintenance": "Gyara",
   "approvedApps": "Manhajoji da aka amince da su",
   "incidentLocation": "Taswirar lamari",
-  "broadcasts": "Sanarwa"
+  "broadcasts": "Sanarwa",
+  "nationwideBroadcasts": "Sanarwar tsaro na ƙasa",
+  "noBroadcasts": "Babu sanarwa a yanzu",
+  "broadcastFeedEmptyHint": "Ja ƙasa don sabunta sanarwar tsaro.",
+  "broadcastDetails": "Bayanan sanarwa",
+  "published": "An wallafa"
 }

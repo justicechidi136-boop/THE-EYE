@@ -123,12 +123,15 @@ export class BroadcastCitizenService {
     actor: JwtPayload,
     dto: { fileName?: string; contentType?: string; mediaType?: string; sizeBytes?: number },
   ) {
-    if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
+    if (actor.typ !== "user" && actor.typ !== "field") {
+      throw new ForbiddenException("Citizen or field session required");
+    }
     if (!dto.fileName || !dto.contentType || !dto.mediaType) {
       throw new BadRequestException("fileName, contentType, and mediaType are required");
     }
     validateEvidenceUpload(dto.contentType, dto.sizeBytes);
-    const objectKey = evidenceObjectKey(`broadcast-${actor.sub}`, dto.fileName);
+    const ownerPrefix = actor.typ === "field" ? `broadcast-field-${actor.sub}` : `broadcast-${actor.sub}`;
+    const objectKey = evidenceObjectKey(ownerPrefix, dto.fileName);
     const signed = await createStorageUploadUrl(objectKey, 300, dto.contentType);
     return {
       data: {

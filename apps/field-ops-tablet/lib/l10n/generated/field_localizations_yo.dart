@@ -153,6 +153,9 @@ class FieldLocalizationsYo extends FieldLocalizations {
   String get locationUnavailable => 'Ipo ko si';
 
   @override
+  String get locationDetected => 'A ti ri ipo';
+
+  @override
   String get battery => 'Batiri';
 
   @override
@@ -403,4 +406,19 @@ class FieldLocalizationsYo extends FieldLocalizations {
 
   @override
   String get broadcasts => 'Ikede';
+
+  @override
+  String get nationwideBroadcasts => 'Awọn ikede aabo jakejado orilẹ-ede';
+
+  @override
+  String get noBroadcasts => 'Ko si ikede ni bayi';
+
+  @override
+  String get broadcastFeedEmptyHint => 'Fa silẹ lati tun ikede aabo ṣe.';
+
+  @override
+  String get broadcastDetails => 'Awọn alaye ikede';
+
+  @override
+  String get published => 'Ti a tẹjade';
 }

@@ -57,6 +57,28 @@ class FieldLoginResult {
     );
   }
 
+  factory FieldLoginResult.fromRefreshJson(
+    Map<String, dynamic> json, {
+    required String refreshToken,
+    required String publicDeviceId,
+    String? officerId,
+    String? officerName,
+    String? preferredLocale,
+  }) {
+    final data = Map<String, dynamic>.from(json['data'] as Map? ?? json);
+    return FieldLoginResult(
+      accessToken: data['accessToken'] as String,
+      refreshToken: data['refreshToken'] as String? ?? refreshToken,
+      expiresIn: (data['expiresIn'] as num?)?.toInt() ?? 0,
+      sessionId: data['sessionId'] as String,
+      publicDeviceId: publicDeviceId,
+      officerId: officerId,
+      officerName: officerName,
+      preferredLocale: preferredLocale,
+      effectivePreferredLocale: preferredLocale,
+    );
+  }
+
   final String accessToken;
   final String refreshToken;
   final int expiresIn;
@@ -153,7 +175,14 @@ class FieldAuthService {
       FieldApiPaths.authRefresh,
       body: {'refreshToken': refreshToken, 'publicDeviceId': publicDeviceId},
     );
-    final result = FieldLoginResult.fromJson(response);
+    final result = FieldLoginResult.fromRefreshJson(
+      response,
+      refreshToken: refreshToken,
+      publicDeviceId: publicDeviceId,
+      officerId: await _session.readOfficerId(),
+      officerName: await _session.readOfficerName(),
+      preferredLocale: await _session.readPreferredLocale(),
+    );
     await _session.saveSession(
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,

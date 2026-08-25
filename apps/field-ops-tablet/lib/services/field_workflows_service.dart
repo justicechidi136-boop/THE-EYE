@@ -34,8 +34,49 @@ class FieldWorkflowsService {
     return fieldData(response);
   }
 
-  Future<Map<String, dynamic>> updateTelemetry(Map<String, dynamic> body) async {
-    final response = await _api.post(FieldApiPaths.dashboardTelemetry, body: body);
+  Future<Map<String, dynamic>> updateTelemetry(
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      FieldApiPaths.dashboardTelemetry,
+      body: body,
+    );
+    return fieldData(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listCountryBroadcasts({
+    int limit = 50,
+  }) async {
+    final response = await _api.get(
+      FieldApiPaths.broadcastsCountry,
+      query: {'limit': '$limit'},
+    );
+    return fieldList(response);
+  }
+
+  Future<Map<String, dynamic>> createFieldBroadcast(
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      FieldApiPaths.broadcastsFieldCreate,
+      body: body,
+    );
+    return fieldData(response);
+  }
+
+  Future<Map<String, dynamic>> startBroadcastLiveVideo(
+    String broadcastId,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      FieldApiPaths.broadcastLiveVideoStart(broadcastId),
+      body: body,
+    );
+    return response;
+  }
+
+  Future<Map<String, dynamic>> stopLiveVideo(String sessionId) async {
+    final response = await _api.patch(FieldApiPaths.liveVideoStop(sessionId));
     return fieldData(response);
   }
 
@@ -91,7 +132,9 @@ class FieldWorkflowsService {
     return fieldData(response);
   }
 
-  Future<Map<String, dynamic>> recordPatrolLocation(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> recordPatrolLocation(
+    Map<String, dynamic> body,
+  ) async {
     final response = await _api.post(FieldApiPaths.patrolsLocation, body: body);
     return fieldData(response);
   }
@@ -102,8 +145,13 @@ class FieldWorkflowsService {
     return fieldData(response);
   }
 
-  Future<Map<String, dynamic>> startCheckpoint(Map<String, dynamic> body) async {
-    final response = await _api.post(FieldApiPaths.checkpointsStart, body: body);
+  Future<Map<String, dynamic>> startCheckpoint(
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      FieldApiPaths.checkpointsStart,
+      body: body,
+    );
     return fieldData(response);
   }
 
@@ -122,8 +170,13 @@ class FieldWorkflowsService {
     return fieldData(response);
   }
 
-  Future<Map<String, dynamic>> updateCheckpointQueue(Map<String, dynamic> body) async {
-    final response = await _api.patch(FieldApiPaths.checkpointsQueue, body: body);
+  Future<Map<String, dynamic>> updateCheckpointQueue(
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.patch(
+      FieldApiPaths.checkpointsQueue,
+      body: body,
+    );
     return fieldData(response);
   }
 
@@ -175,8 +228,10 @@ class FieldWorkflowsService {
     String id,
     Map<String, dynamic> body,
   ) async {
-    final response =
-        await _api.post(FieldApiPaths.assignmentLocation(id), body: body);
+    final response = await _api.post(
+      FieldApiPaths.assignmentLocation(id),
+      body: body,
+    );
     return fieldData(response);
   }
 
@@ -207,8 +262,9 @@ class FieldWorkflowsService {
   Future<List<Map<String, dynamic>>> listResponsesForAssignment(
     String assignmentId,
   ) async {
-    final response =
-        await _api.get(FieldApiPaths.responsesForAssignment(assignmentId));
+    final response = await _api.get(
+      FieldApiPaths.responsesForAssignment(assignmentId),
+    );
     return fieldList(response);
   }
 
@@ -236,7 +292,9 @@ class FieldWorkflowsService {
     return fieldList(response);
   }
 
-  Future<Map<String, dynamic>> createBoloSighting(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> createBoloSighting(
+    Map<String, dynamic> body,
+  ) async {
     final response = await _api.post(FieldApiPaths.boloSightings, body: body);
     return fieldData(response);
   }
@@ -325,18 +383,27 @@ class FieldWorkflowsService {
     return fieldData(response);
   }
 
-  Future<Map<String, dynamic>> triggerOfficerDown(Map<String, dynamic> body) async {
-    final response = await _api.post(FieldApiPaths.safetyOfficerDown, body: body);
+  Future<Map<String, dynamic>> triggerOfficerDown(
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      FieldApiPaths.safetyOfficerDown,
+      body: body,
+    );
     return fieldData(response);
   }
 
-  Future<Map<String, dynamic>> triggerDistress(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> triggerDistress(
+    Map<String, dynamic> body,
+  ) async {
     final response = await _api.post(FieldApiPaths.safetyDistress, body: body);
     return fieldData(response);
   }
 
   // Backup
-  Future<Map<String, dynamic>> createBackupRequest(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> createBackupRequest(
+    Map<String, dynamic> body,
+  ) async {
     final response = await _api.post(FieldApiPaths.backupCreate, body: body);
     return fieldData(response);
   }
@@ -347,8 +414,12 @@ class FieldWorkflowsService {
   }
 
   // Incident comms (Phase 6 bridge)
-  Future<Map<String, dynamic>> getIncidentConversation(String incidentId) async {
-    final response = await _api.get(FieldApiPaths.incidentConversation(incidentId));
+  Future<Map<String, dynamic>> getIncidentConversation(
+    String incidentId,
+  ) async {
+    final response = await _api.get(
+      FieldApiPaths.incidentConversation(incidentId),
+    );
     return fieldData(response);
   }
 
@@ -371,12 +442,17 @@ class FieldWorkflowsService {
     String incidentId,
     Map<String, dynamic> body,
   ) async {
-    final response =
-        await _api.post(FieldApiPaths.incidentMessages(incidentId), body: body);
+    final response = await _api.post(
+      FieldApiPaths.incidentMessages(incidentId),
+      body: body,
+    );
     return fieldData(response);
   }
 
-  Future<void> markIncidentMessageRead(String incidentId, String messageId) async {
+  Future<void> markIncidentMessageRead(
+    String incidentId,
+    String messageId,
+  ) async {
     await _api.patch(FieldApiPaths.incidentMessageRead(incidentId, messageId));
   }
 }

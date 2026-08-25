@@ -22,6 +22,7 @@ class PatrolModeScreen extends StatefulWidget {
 class _PatrolModeScreenState extends State<PatrolModeScreen> {
   Map<String, dynamic>? _patrol;
   Position? _position;
+  String? _locationLabel;
   String? _error;
   bool _busy = true;
   bool _recordingRoute = false;
@@ -58,10 +59,18 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
       } on Object {
         // GPS optional.
       }
+      final locationLabel =
+          position == null
+              ? null
+              : await widget.services.deviceContext.reverseGeocode(
+                latitude: position.latitude,
+                longitude: position.longitude,
+              );
       if (!mounted) return;
       setState(() {
         _patrol = patrol;
         _position = position;
+        _locationLabel = locationLabel;
         _busy = false;
       });
       await _refreshMap();
@@ -168,7 +177,15 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
         clientActionId: clientActionId,
       );
     }
-    setState(() => _position = position);
+    final locationLabel = await widget.services.deviceContext.reverseGeocode(
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+    if (!mounted) return;
+    setState(() {
+      _position = position;
+      _locationLabel = locationLabel;
+    });
   }
 
   Future<void> _endPatrol() async {
@@ -216,7 +233,7 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
                   ),
                   SizedBox(
                     width: 320,
-                    child: Padding(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -238,8 +255,7 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
                           Text(
                             _position == null
                                 ? l10n.locationAcquiring
-                                : '${_position!.latitude.toStringAsFixed(5)}, '
-                                    '${_position!.longitude.toStringAsFixed(5)}',
+                                : _locationLabel ?? l10n.locationDetected,
                           ),
                           const SizedBox(height: 24),
                           if (_patrol == null)
@@ -275,7 +291,7 @@ class _PatrolModeScreenState extends State<PatrolModeScreen> {
                               child: Text(l10n.requestBackup),
                             ),
                           ],
-                          const Spacer(),
+                          const SizedBox(height: 24),
                           OfficerSafetyPanel(services: widget.services),
                           const SizedBox(height: 12),
                           const _EvidencePlaceholder(),

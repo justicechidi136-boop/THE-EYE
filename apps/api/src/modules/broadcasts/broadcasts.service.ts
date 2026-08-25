@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { BroadcastStatus, BroadcastType, IncidentPriority, IncidentStatus } from "@the-eye/shared";
+import { BroadcastAuthorType, BroadcastStatus, BroadcastType, IncidentPriority, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import {
@@ -10,7 +10,10 @@ import {
   resolvePageLimit,
   type CursorPageQuery,
 } from "../../common/pagination/cursor-pagination";
-import { createStorageDownloadUrl } from "../../common/storage/s3-presign";
+import {
+  createStorageDownloadUrl,
+  validateEvidenceUpload,
+} from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -118,6 +121,124 @@ export class BroadcastsService {
     }
 
     return { data: await this.getById(broadcast.id) };
+  }
+
+  async createFromField(dto: CreateBroadcastDto, actor: JwtPayload) {
+    if (actor.typ !== "field") throw new ForbiddenException("Field session required");
+    if (!actor.country) throw new ForbiddenException("Field session country is required");
+
+    const allowedTypes = new Set<BroadcastType>([
+      BroadcastType.Emergency,
+      BroadcastType.Crime,
+      BroadcastType.Accident,
+      BroadcastType.CommunityWarning,
+    ]);
+    if (!allowedTypes.has(dto.type)) {
+      throw new BadRequestException("Unsupported field broadcast category");
+    }
+    validateCreateBroadcastDto(dto);
+
+    const attachments = this.sanitizeFieldAttachments(dto.attachments, actor.sub);
+
+    const jurisdictionId = actor.jurisdictionId ?? dto.jurisdictionId ?? (await this.inferJurisdictionId(dto));
+    const broadcast = await this.prisma.broadcast.create({
+      data: {
+        jurisdictionId,
+        incidentId: dto.incidentId,
+        creatorAdminId: actor.sub,
+        authorType: BroadcastAuthorType.Admin as never,
+        type: dto.type as never,
+        title: dto.title.trim(),
+        body: dto.body.trim(),
+        priority: dto.priority as never,
+        status: BroadcastStatus.PendingApproval as never,
+        requiresApproval: true,
+        autoPublished: false,
+        country: actor.country,
+        state: actor.state,
+        lga: actor.lga,
+        targetRadiusMeters: dto.radiusMeters,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+        metadata: {
+          source: "field_tablet",
+          fieldRole: actor.fieldRole ?? null,
+          fieldDeviceId: actor.fieldDeviceId ?? null,
+          attachmentCount: attachments.length,
+        },
+      } as never,
+    });
+
+    await this.writeGeofence(broadcast.id, { ...dto, jurisdictionId });
+    await this.persistFieldBroadcastMedia(broadcast.id, actor.sub, attachments);
+    await this.audit(actor, "broadcast.field_submitted", broadcast.id, {
+      status: BroadcastStatus.PendingApproval,
+      type: dto.type,
+      country: actor.country,
+    });
+
+    return { data: broadcast };
+  }
+
+  private sanitizeFieldAttachments(raw: unknown, uploaderAdminId: string) {
+    if (!Array.isArray(raw)) return [];
+    if (raw.length > 8) throw new BadRequestException("A field broadcast supports up to 8 attachments");
+    const expectedPrefix = `evidence/broadcast-field-${uploaderAdminId}/`;
+    return raw.map((item, index) => {
+      if (!item || typeof item !== "object") throw new BadRequestException("Invalid field broadcast attachment");
+      const row = item as Record<string, unknown>;
+      const mediaType = String(row.mediaType ?? "").trim().toLowerCase();
+      const contentType = String(row.contentType ?? "").trim().toLowerCase();
+      const objectKey = String(row.objectKey ?? "").trim();
+      const bucket = String(row.bucket ?? "").trim();
+      if (!["image", "video", "audio"].includes(mediaType)) {
+        throw new BadRequestException("Unsupported field broadcast media type");
+      }
+      validateEvidenceUpload(contentType, Number(row.sizeBytes));
+      if (!objectKey.startsWith(expectedPrefix) || objectKey.includes("..") || !bucket) {
+        throw new BadRequestException("Invalid field broadcast evidence object key");
+      }
+      return {
+        mediaType,
+        contentType,
+        objectKey,
+        bucket,
+        fileHash: String(row.fileHash ?? "").trim() || null,
+        sizeBytes: Number(row.sizeBytes),
+        capturedAt: row.capturedAt ? new Date(String(row.capturedAt)) : null,
+        durationSeconds: Number.isInteger(Number(row.durationSeconds)) ? Number(row.durationSeconds) : null,
+        clientAttachmentId: String(row.clientAttachmentId ?? "").trim() || `field-${index + 1}`,
+        selectedLanguage: String(row.selectedLanguage ?? "").trim() || null,
+      };
+    });
+  }
+
+  private async persistFieldBroadcastMedia(
+    broadcastId: string,
+    uploaderAdminId: string,
+    attachments: ReturnType<BroadcastsService["sanitizeFieldAttachments"]>,
+  ) {
+    for (const attachment of attachments) {
+      const mediaType = attachment.mediaType === "image" ? "Image" : attachment.mediaType === "video" ? "Video" : "Audio";
+      await this.prisma.broadcastMedia.create({
+        data: {
+          broadcastId,
+          uploaderId: null,
+          uploaderAdminId,
+          role: "IncidentEvidence",
+          mediaType: mediaType as never,
+          bucket: attachment.bucket,
+          objectKey: attachment.objectKey,
+          contentType: attachment.contentType,
+          fileHash: attachment.fileHash,
+          sizeBytes: BigInt(attachment.sizeBytes),
+          capturedAt: attachment.capturedAt,
+          durationSeconds: attachment.durationSeconds,
+          clientAttachmentId: attachment.clientAttachmentId,
+          selectedLanguage: attachment.selectedLanguage,
+          transcriptionStatus: attachment.mediaType === "audio" ? "Uploaded" as never : null,
+        },
+      });
+    }
   }
 
   async getSchedulerHealth(actor: JwtPayload) {
@@ -695,6 +816,89 @@ export class BroadcastsService {
       encodeDateIdCursor(new Date(String(item.published_at ?? new Date().toISOString())), String(item.id)),
     );
 
+    return {
+      data: await Promise.all(page.data.map((row) => this.toCitizenFeedItem(row))),
+      nextCursor: page.nextCursor,
+    };
+  }
+
+  async countryFeed(
+    actor: JwtPayload,
+    query: {
+      cursor?: string;
+      limit?: number;
+      category?: string;
+      severity?: string;
+      unreadOnly?: boolean;
+    } = {},
+  ) {
+    if (actor.typ === "user") return this.countryFeedForUser(actor.sub, query);
+    if (actor.typ !== "field") throw new ForbiddenException("Country broadcast feed is unavailable");
+    if (!actor.country) throw new ForbiddenException("Field session country is required");
+    return this.countryFeedForField(actor.country, query);
+  }
+
+  private async countryFeedForField(
+    country: string,
+    query: {
+      cursor?: string;
+      limit?: number;
+      category?: string;
+      severity?: string;
+      unreadOnly?: boolean;
+    },
+  ) {
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const params: unknown[] = [country];
+    let paramIndex = 2;
+    let filterSql = "";
+
+    if (query.category) {
+      filterSql += ` AND b.type = $${paramIndex++}`;
+      params.push(query.category);
+    }
+    if (query.severity) {
+      filterSql += ` AND b.priority = $${paramIndex++}`;
+      params.push(query.severity);
+    }
+    if (cursor) {
+      filterSql += ` AND (b.published_at, b.id) < ($${paramIndex++}::timestamptz, $${paramIndex++}::uuid)`;
+      params.push(cursor.createdAt, cursor.id);
+    }
+    params.push(limit + 1);
+
+    const rows = await this.prisma.$queryRawUnsafe(
+      `SELECT b.id,
+              b.type,
+              b.title,
+              b.body,
+              b.priority,
+              b.status,
+              b.author_type,
+              b.admin_verified,
+              b.country,
+              b.state,
+              b.published_at,
+              b.expires_at,
+              (SELECT COUNT(*)::int FROM broadcast_comments bc WHERE bc.broadcast_id = b.id AND bc.hidden_at IS NULL) AS comments_count,
+              NULL::double precision AS distance_meters,
+              FALSE AS read
+         FROM broadcasts b
+         LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
+        WHERE b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+          AND b.deleted_at IS NULL
+          AND (b.expires_at IS NULL OR b.expires_at > NOW())
+          AND COALESCE(b.country, j.country) = $1
+          ${filterSql}
+        ORDER BY ${PRIORITY_ORDER_SQL}
+        LIMIT $${paramIndex}`,
+      ...params,
+    ) as Array<Record<string, unknown>>;
+
+    const page = buildCursorPage(rows, limit, (item) =>
+      encodeDateIdCursor(new Date(String(item.published_at ?? new Date().toISOString())), String(item.id)),
+    );
     return {
       data: await Promise.all(page.data.map((row) => this.toCitizenFeedItem(row))),
       nextCursor: page.nextCursor,

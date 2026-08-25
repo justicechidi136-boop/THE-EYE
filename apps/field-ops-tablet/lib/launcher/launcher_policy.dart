@@ -50,7 +50,8 @@ class LauncherPolicy {
       FieldDeviceModeConfig.isLauncherShell(deviceMode) || launcherEnabled;
 
   bool get settingsAllowed =>
-      settingsAccessLevel == 'restricted' || settingsAccessLevel == 'supervisor';
+      settingsAccessLevel == 'restricted' ||
+      settingsAccessLevel == 'supervisor';
 
   factory LauncherPolicy.defaults({
     FieldDeviceMode mode = FieldDeviceMode.standard,
@@ -66,8 +67,10 @@ class LauncherPolicy {
         'com.google.android.dialer',
         'com.android.chrome',
       ],
-      settingsAccessLevel: mode == FieldDeviceMode.standard ? 'none' : 'restricted',
-      maintenanceModeAllowed: true, // staging escape; production policy may disable
+      settingsAccessLevel:
+          mode == FieldDeviceMode.standard ? 'none' : 'restricted',
+      maintenanceModeAllowed:
+          true, // staging escape; production policy may disable
       emergencyDialerAllowed: true,
       browserAllowed: true,
       screenshotsAllowed: mode != FieldDeviceMode.managedKiosk,
@@ -97,6 +100,7 @@ class LauncherPolicy {
           'drone',
           'incident_map',
           'assignments',
+          'broadcasts',
           'comms',
           'backup',
           'device_status',
@@ -127,6 +131,7 @@ class LauncherPolicy {
           'assignments',
           'incident_map',
           'bolo',
+          'broadcasts',
           'comms',
           'backup',
           'officer_safety',
@@ -137,17 +142,15 @@ class LauncherPolicy {
 
   factory LauncherPolicy.fromJson(Map<String, dynamic> json) {
     final role = json['role']?.toString() ?? 'officer';
-    final modules = (json['visibleModules'] as List?)
-            ?.map((e) => e.toString())
-            .toList() ??
+    final modules =
+        (json['visibleModules'] as List?)?.map((e) => e.toString()).toList() ??
         modulesForRole(role);
     return LauncherPolicy(
       deviceMode: FieldDeviceModeConfig.parse(json['deviceMode']?.toString()),
       launcherEnabled: json['launcherEnabled'] != false,
       kioskEnabled: json['kioskEnabled'] == true,
-      approvedApps: (json['approvedApps'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
+      approvedApps:
+          (json['approvedApps'] as List?)?.map((e) => e.toString()).toList() ??
           const [],
       settingsAccessLevel: json['settingsAccessLevel']?.toString() ?? 'none',
       maintenanceModeAllowed: json['maintenanceModeAllowed'] == true,
@@ -158,7 +161,8 @@ class LauncherPolicy {
       autoLockMinutes: (json['autoLockMinutes'] as num?)?.toInt() ?? 15,
       visibleModules: modules,
       role: role,
-      fetchedAt: DateTime.tryParse(json['fetchedAt']?.toString() ?? '') ??
+      fetchedAt:
+          DateTime.tryParse(json['fetchedAt']?.toString() ?? '') ??
           DateTime.now().toUtc(),
       policyVersion: (json['policyVersion'] as num?)?.toInt() ?? 1,
       agencyId: json['agencyId']?.toString(),
@@ -169,26 +173,26 @@ class LauncherPolicy {
   }
 
   Map<String, dynamic> toJson() => {
-        'deviceMode': FieldDeviceModeConfig.apiValue(deviceMode),
-        'launcherEnabled': launcherEnabled,
-        'kioskEnabled': kioskEnabled,
-        'approvedApps': approvedApps,
-        'settingsAccessLevel': settingsAccessLevel,
-        'maintenanceModeAllowed': maintenanceModeAllowed,
-        'emergencyDialerAllowed': emergencyDialerAllowed,
-        'browserAllowed': browserAllowed,
-        'screenshotsAllowed': screenshotsAllowed,
-        'usbPolicy': usbPolicy,
-        'autoLockMinutes': autoLockMinutes,
-        'visibleModules': visibleModules,
-        'role': role,
-        'fetchedAt': fetchedAt.toIso8601String(),
-        'policyVersion': policyVersion,
-        'agencyId': agencyId,
-        'deviceReference': deviceReference,
-        'locked': locked,
-        'lockReason': lockReason,
-      };
+    'deviceMode': FieldDeviceModeConfig.apiValue(deviceMode),
+    'launcherEnabled': launcherEnabled,
+    'kioskEnabled': kioskEnabled,
+    'approvedApps': approvedApps,
+    'settingsAccessLevel': settingsAccessLevel,
+    'maintenanceModeAllowed': maintenanceModeAllowed,
+    'emergencyDialerAllowed': emergencyDialerAllowed,
+    'browserAllowed': browserAllowed,
+    'screenshotsAllowed': screenshotsAllowed,
+    'usbPolicy': usbPolicy,
+    'autoLockMinutes': autoLockMinutes,
+    'visibleModules': visibleModules,
+    'role': role,
+    'fetchedAt': fetchedAt.toIso8601String(),
+    'policyVersion': policyVersion,
+    'agencyId': agencyId,
+    'deviceReference': deviceReference,
+    'locked': locked,
+    'lockReason': lockReason,
+  };
 
   String encodeCache() => jsonEncode(toJson());
 

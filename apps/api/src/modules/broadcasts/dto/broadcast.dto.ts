@@ -19,6 +19,7 @@ export type CreateBroadcastDto = {
   expiresAt?: string;
   scheduledAt?: string;
   saveAsDraft?: boolean;
+  attachments?: unknown;
 };
 
 export type ScheduleBroadcastDto = {
