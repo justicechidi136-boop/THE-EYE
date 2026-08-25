@@ -860,7 +860,6 @@ export class UsersService {
     const adminWhere = {
       ...this.adminScopeWhere(actor),
       ...dateIdCursorWhere(cursor),
-      ...(query.kind === "citizen" ? { id: "__deny_all__" } : {}),
       ...(query.status === "active" ? { isActive: true } : query.status === "inactive" ? { isActive: false } : {}),
       ...(query.role ? { role: { name: query.role } } : {}),
       ...textFilter.admin,
@@ -868,7 +867,6 @@ export class UsersService {
     const citizenWhere = {
       ...this.citizenScopeWhere(actor),
       ...dateIdCursorWhere(cursor),
-      ...(query.kind === "admin" ? { id: "__deny_all__" } : {}),
       ...(query.status === "active"
         ? { status: "Active" as const }
         : query.status === "suspended"
@@ -879,24 +877,27 @@ export class UsersService {
       ...textFilter.citizen,
     } as never;
 
-    const [admins, citizens] = await Promise.all([
-      this.prisma.adminUser.findMany({
-        where: adminWhere,
-        include: { role: true, agency: true },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take,
-      }),
-      this.prisma.user.findMany({
-        where: citizenWhere,
-        include: {
-          profile: true,
-          trustedReporter: true,
-          kycRecords: { orderBy: { createdAt: "desc" }, take: 1 },
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take,
-      }),
-    ]);
+    const adminsPromise = query.kind === "citizen"
+      ? Promise.resolve([])
+      : this.prisma.adminUser.findMany({
+          where: adminWhere,
+          include: { role: true, agency: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take,
+        });
+    const citizensPromise = query.kind === "admin"
+      ? Promise.resolve([])
+      : this.prisma.user.findMany({
+          where: citizenWhere,
+          include: {
+            profile: true,
+            trustedReporter: true,
+            kycRecords: { orderBy: { createdAt: "desc" }, take: 1 },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take,
+        });
+    const [admins, citizens] = await Promise.all([adminsPromise, citizensPromise]);
 
     const merged: DirectoryRow[] = [
       ...admins.map((admin) => ({

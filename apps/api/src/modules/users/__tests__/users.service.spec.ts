@@ -7,6 +7,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
     user: {
       findUnique: jest.fn(),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
     },
     adminUserPreference: {
@@ -15,6 +16,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
     adminUser: {
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
     },
     adminRole: {
@@ -214,6 +216,39 @@ describe("UsersService operational account provisioning", () => {
     expect(result.role).toBe("Police/Security Officer");
     expect(Object.prototype.hasOwnProperty.call(result, "passwordHash")).toBe(false);
     expect(JSON.stringify(result).includes("must-not-leak")).toBe(false);
+  });
+});
+
+describe("UsersService directory account-kind filtering", () => {
+  it("does not query citizen UUIDs for the admin-only directory", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.adminUser.findMany.mockResolvedValue([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        createdAt: new Date("2026-08-25T12:00:00.000Z"),
+        displayName: "Field Officer",
+        email: "field@example.test",
+        role: { name: "Police/Security Officer" },
+        isActive: true,
+        country: "NG",
+        state: "LA",
+        lga: "Ikeja",
+        agency: { name: "Lagos Field Command" },
+      },
+    ]);
+
+    const result = await service.listDirectory({
+      sub: "state-admin",
+      typ: "admin",
+      role: "State Admin",
+      country: "NG",
+      state: "LA",
+      permissions: ["user:manage"],
+    } as never, { kind: "admin" });
+
+    expect(prisma.adminUser.findMany).toHaveBeenCalled();
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+    expect(result.data[0].role).toBe("Police/Security Officer");
   });
 });
 
