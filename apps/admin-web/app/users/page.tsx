@@ -50,6 +50,9 @@ export default async function UsersPage({
             <Link href="/users/kyc" className="text-sm text-accent underline">
               KYC queue
             </Link>
+            <Link href="/users/new" className="rounded-md bg-eye px-4 py-2 text-sm font-semibold text-white hover:bg-eyeDeep">
+              Create account
+            </Link>
             <StatusBadge tone="success">{page.data.length} loaded</StatusBadge>
           </div>
         }

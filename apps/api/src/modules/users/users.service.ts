@@ -18,6 +18,8 @@ import {
 } from "@the-eye/shared";
 import type { CitizenVehicle, CitizenVehiclePhoto, Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
+import { adminCanAccessGeography } from "../../common/auth/admin-geography-scope";
+import { hashPassword } from "../../common/auth/crypto";
 import {
   buildCursorPage,
   dateIdCursorWhere,
@@ -50,6 +52,7 @@ import type {
   UpdateCitizenVehicleDto,
   UpsertEmergencyContactDto,
   CreateCitizenVehicleDto,
+  CreateOperationalAdminDto,
 } from "./dto/users.dto";
 import { incompleteProfileLocation, isCitizenProfileComplete } from "./profile-complete";
 
@@ -931,6 +934,129 @@ export class UsersService {
     };
   }
 
+  async getAdminAccountOptions(actor: JwtPayload) {
+    this.assertAdminWithUserManage(actor);
+    const accountTypes = this.creatableOperationalAccountTypes(actor);
+    const geographyWhere = this.adminJurisdictionWhere(actor);
+    const agencyWhere = this.adminAgencyWhere(actor);
+    const [jurisdictions, agencies] = await Promise.all([
+      this.prisma.jurisdiction.findMany({
+        where: geographyWhere,
+        select: { id: true, country: true, state: true, lga: true, name: true },
+        orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }],
+        take: 500,
+      }),
+      this.prisma.agency.findMany({
+        where: { ...agencyWhere, isActive: true, isFieldOperationsEnabled: true },
+        select: {
+          id: true,
+          name: true,
+          countryCode: true,
+          stateCode: true,
+          lgaCode: true,
+          jurisdictionId: true,
+        },
+        orderBy: { name: "asc" },
+        take: 500,
+      }),
+    ]);
+    return { data: { accountTypes, jurisdictions, agencies } };
+  }
+
+  async createOperationalAdmin(actor: JwtPayload, dto: CreateOperationalAdminDto) {
+    this.assertAdminWithUserManage(actor);
+    const allowedTypes = this.creatableOperationalAccountTypes(actor);
+    if (!allowedTypes.includes(dto.accountType)) {
+      throw new ForbiddenException("You cannot create this account type");
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const displayName = dto.displayName.trim();
+    const existing = await this.prisma.adminUser.findUnique({ where: { email }, select: { id: true } });
+    if (existing) throw new ConflictException("An account with this email already exists");
+
+    let roleName: AdminRoleName;
+    let agencyId: string | null = null;
+    let jurisdiction: { id: string; country: string; state: string; lga: string };
+
+    if (dto.accountType === "field_officer") {
+      if (!dto.agencyId) throw new BadRequestException("agencyId is required for a field officer");
+      const agency = await this.prisma.agency.findUnique({
+        where: { id: dto.agencyId },
+        include: { jurisdiction: true },
+      });
+      if (!agency?.isActive || !agency.isFieldOperationsEnabled || !agency.jurisdiction) {
+        throw new BadRequestException("Select an active field-operations agency with a jurisdiction");
+      }
+      jurisdiction = agency.jurisdiction;
+      agencyId = agency.id;
+      roleName = AdminRoleName.PoliceSecurityOfficer;
+      if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId !== agency.id) {
+        throw new ForbiddenException("Agency Admin cannot create an officer for another agency");
+      }
+    } else {
+      if (!dto.jurisdictionId) throw new BadRequestException("jurisdictionId is required for an LGA Admin");
+      const selected = await this.prisma.jurisdiction.findUnique({ where: { id: dto.jurisdictionId } });
+      if (!selected || !selected.lga || selected.lga === "All") {
+        throw new BadRequestException("Select a specific LGA jurisdiction");
+      }
+      jurisdiction = selected;
+      roleName = AdminRoleName.LgaAdmin;
+    }
+
+    if (!adminCanAccessGeography(jurisdiction, actor)) {
+      throw new ForbiddenException("Selected jurisdiction is outside your admin scope");
+    }
+    const role = await this.prisma.adminRole.findUnique({ where: { name: roleName } });
+    if (!role) throw new ServiceUnavailableException(`Required role is not configured: ${roleName}`);
+
+    let created;
+    try {
+      created = await this.prisma.adminUser.create({
+        data: {
+          email,
+          passwordHash: hashPassword(dto.password),
+          displayName,
+          roleId: role.id,
+          agencyId,
+          jurisdictionId: jurisdiction.id,
+          country: jurisdiction.country,
+          state: jurisdiction.state,
+          lga: jurisdiction.lga,
+          isActive: true,
+        },
+        include: { role: true, agency: true },
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: string }).code === "P2002") {
+        throw new ConflictException("An account with this email already exists");
+      }
+      throw error;
+    }
+
+    await this.audit.record({
+      actor,
+      action: "admin.account.created",
+      entityType: "admin_user",
+      entityId: created.id,
+      metadata: { accountType: dto.accountType, role: roleName, jurisdictionId: jurisdiction.id, agencyId },
+    });
+
+    return {
+      data: {
+        id: created.id,
+        email: created.email,
+        displayName: created.displayName,
+        role: created.role.name,
+        agencyId: created.agencyId,
+        agencyName: created.agency?.name ?? null,
+        jurisdictionId: created.jurisdictionId,
+        scope: [created.country, created.state, created.lga].filter(Boolean).join(" / "),
+        isActive: created.isActive,
+      },
+    };
+  }
+
   private async buildCitizenProfileResponse(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -1141,6 +1267,35 @@ export class UsersService {
     if (!actor.permissions?.includes("user:manage")) {
       throw new ForbiddenException("Missing permission: user:manage");
     }
+  }
+
+  private creatableOperationalAccountTypes(actor: JwtPayload): Array<"field_officer" | "lga_admin"> {
+    if ([AdminRoleName.SuperAdmin, AdminRoleName.CountryAdmin, AdminRoleName.StateAdmin].includes(actor.role as AdminRoleName)) {
+      return ["field_officer", "lga_admin"];
+    }
+    if ([AdminRoleName.LgaAdmin, AdminRoleName.AgencyAdmin].includes(actor.role as AdminRoleName)) {
+      return ["field_officer"];
+    }
+    return [];
+  }
+
+  private adminJurisdictionWhere(actor: JwtPayload) {
+    if (actor.role === AdminRoleName.SuperAdmin) return {};
+    if (actor.role === AdminRoleName.CountryAdmin) return { country: actor.country };
+    if (actor.role === AdminRoleName.StateAdmin) return { country: actor.country, state: actor.state };
+    return { country: actor.country, state: actor.state, lga: actor.lga };
+  }
+
+  private adminAgencyWhere(actor: JwtPayload) {
+    if (actor.role === AdminRoleName.SuperAdmin) return {};
+    if (actor.role === AdminRoleName.AgencyAdmin) return { id: actor.agencyId ?? "__no_agency__" };
+    if (actor.role === AdminRoleName.CountryAdmin) {
+      return { jurisdiction: { is: { country: actor.country } } };
+    }
+    if (actor.role === AdminRoleName.StateAdmin) {
+      return { jurisdiction: { is: { country: actor.country, state: actor.state } } };
+    }
+    return { jurisdiction: { is: { country: actor.country, state: actor.state, lga: actor.lga } } };
   }
 
   private assertCitizenInAdminScope(

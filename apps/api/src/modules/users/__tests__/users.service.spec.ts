@@ -12,6 +12,21 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
     adminUserPreference: {
       findUnique: jest.fn().mockResolvedValue(null),
     },
+    adminUser: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn(),
+    },
+    adminRole: {
+      findUnique: jest.fn(),
+    },
+    jurisdiction: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    agency: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     profile: {
       upsert: jest.fn(),
       findUnique: jest.fn(),
@@ -66,6 +81,110 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
     audit,
   };
 }
+
+describe("UsersService operational account provisioning", () => {
+  const stateAdmin = {
+    sub: "state-admin",
+    typ: "admin",
+    role: "State Admin",
+    permissions: ["user:manage"],
+    country: "NG",
+    state: "LA",
+    lga: "Ikeja",
+  } as never;
+
+  it("creates a scoped field officer with a hashed password and audit record", async () => {
+    const { service, prisma, audit } = createUsersService();
+    const jurisdiction = { id: "jur-1", country: "NG", state: "LA", lga: "Ikeja" };
+    prisma.agency.findUnique.mockResolvedValue({
+      id: "agency-1",
+      name: "Lagos Field Command",
+      isActive: true,
+      isFieldOperationsEnabled: true,
+      jurisdiction,
+    });
+    prisma.adminRole.findUnique.mockResolvedValue({ id: "role-officer", name: "Police/Security Officer" });
+    prisma.adminUser.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "officer-1",
+      ...data,
+      role: { name: "Police/Security Officer" },
+      agency: { name: "Lagos Field Command" },
+    }));
+
+    const result = await service.createOperationalAdmin(stateAdmin, {
+      accountType: "field_officer",
+      displayName: "Officer Ada Okeke",
+      email: "Ada.Okeke@Agency.gov.ng",
+      password: "StrongPassword-123",
+      agencyId: "agency-1",
+    });
+
+    const createCall = prisma.adminUser.create.mock.calls[0][0];
+    expect(createCall.data.email).toBe("ada.okeke@agency.gov.ng");
+    expect(createCall.data.passwordHash === "StrongPassword-123").toBe(false);
+    expect(result.data.role).toBe("Police/Security Officer");
+    expect(Object.prototype.hasOwnProperty.call(result.data, "password")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(result.data, "passwordHash")).toBe(false);
+    expect(JSON.stringify(audit.record.mock.calls[0][0]).includes("StrongPassword-123")).toBe(false);
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.account.created" }));
+  });
+
+  it("creates a Sub-State account using the existing LGA Admin role", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.jurisdiction.findUnique.mockResolvedValue({ id: "jur-2", country: "NG", state: "LA", lga: "Eti-Osa" });
+    prisma.adminRole.findUnique.mockResolvedValue({ id: "role-lga", name: "LGA Admin" });
+    prisma.adminUser.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "lga-admin-1",
+      ...data,
+      role: { name: "LGA Admin" },
+      agency: null,
+    }));
+
+    const result = await service.createOperationalAdmin(stateAdmin, {
+      accountType: "lga_admin",
+      displayName: "Eti-Osa Administrator",
+      email: "admin@eti-osa.gov.ng",
+      password: "StrongPassword-456",
+      jurisdictionId: "jur-2",
+    });
+
+    expect(result.data.role).toBe("LGA Admin");
+    expect(result.data.scope).toBe("NG / LA / Eti-Osa");
+  });
+
+  it("rejects account creation outside the actor's state", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.jurisdiction.findUnique.mockResolvedValue({ id: "jur-3", country: "NG", state: "FC", lga: "Abuja" });
+
+    await expect(service.createOperationalAdmin(stateAdmin, {
+      accountType: "lga_admin",
+      displayName: "Out of scope",
+      email: "admin@outside.gov.ng",
+      password: "StrongPassword-789",
+      jurisdictionId: "jur-3",
+    })).rejects.toThrow("outside your admin scope");
+    expect(prisma.adminUser.create).not.toHaveBeenCalled();
+  });
+
+  it("prevents an LGA Admin from creating another LGA Admin", async () => {
+    const { service } = createUsersService();
+    await expect(service.createOperationalAdmin({
+      sub: "lga-admin",
+      typ: "admin",
+      role: "LGA Admin",
+      permissions: ["user:manage"],
+      country: "NG",
+      state: "LA",
+      lga: "Ikeja",
+    } as never, {
+      accountType: "lga_admin",
+      displayName: "Peer Admin",
+      email: "peer@ikeja.gov.ng",
+      password: "StrongPassword-000",
+      jurisdictionId: "jur-1",
+    })).rejects.toThrow("cannot create this account type");
+  });
+});
 
 describe("isCitizenProfileComplete", () => {
   it("rejects empty jurisdiction and placeholder names", () => {
