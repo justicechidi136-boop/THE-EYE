@@ -1,11 +1,13 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger";
+type ButtonVariant = "primary" | "secondary" | "danger" | "inverse" | "media";
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary: "bg-eye text-white hover:bg-eyeDeep",
   secondary: "border border-line bg-surface text-ink hover:bg-surfaceMuted",
   danger: "border border-danger/30 bg-surface text-danger hover:bg-danger/10",
+  inverse: "border border-white/20 bg-white text-command hover:bg-white/90",
+  media: "border border-white/30 bg-black/70 text-white hover:bg-black",
 };
 
 export function Button({
