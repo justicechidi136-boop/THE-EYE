@@ -160,5 +160,96 @@ describe("BroadcastsService field operations", () => {
     expect(String(prisma.$queryRawUnsafe.mock.calls[0]?.[0])).not.toContain(
       "LEFT JOIN profiles",
     );
+    expect(String(prisma.$queryRawUnsafe.mock.calls[0]?.[0])).toContain(
+      "b.metadata",
+    );
+  });
+
+  it("projects complete vehicle identifiers and private evidence into the field feed", async () => {
+    const broadcastId = "22222222-2222-4222-8222-222222222222";
+    const prisma = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([
+        {
+          id: broadcastId,
+          type: "StolenVehicle",
+          title: "Stolen vehicle",
+          body: "Watch for this vehicle.",
+          priority: "P2ActiveCrimeAccident",
+          status: "Published",
+          author_type: "Citizen",
+          admin_verified: true,
+          country: "Nigeria",
+          state: "Lagos",
+          published_at: new Date("2026-08-25T20:00:00.000Z"),
+          expires_at: null,
+          metadata: {
+            registrationNumber: "LAG-123-XY",
+            vin: "1HGCM82633A004352",
+          },
+          comments_count: 0,
+          distance_meters: null,
+          read: false,
+        },
+      ]),
+      broadcastMedia: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "media-image",
+            mediaType: "Image",
+            objectKey: "evidence/vehicle/photo.jpg",
+            bucket: "the-eye-2stg.firebasestorage.app",
+            contentType: "image/jpeg",
+            durationSeconds: null,
+            transcriptionStatus: null,
+            selectedLanguage: null,
+            detectedLanguage: null,
+            role: "IncidentEvidence",
+          },
+          {
+            id: "media-video",
+            mediaType: "Video",
+            objectKey: "evidence/vehicle/video.mp4",
+            bucket: "the-eye-2stg.firebasestorage.app",
+            contentType: "video/mp4",
+            durationSeconds: 12,
+            transcriptionStatus: null,
+            selectedLanguage: null,
+            detectedLanguage: null,
+            role: "IncidentEvidence",
+          },
+          {
+            id: "media-audio",
+            mediaType: "Audio",
+            objectKey: "evidence/vehicle/audio.m4a",
+            bucket: "the-eye-2stg.firebasestorage.app",
+            contentType: "audio/mp4",
+            durationSeconds: 8,
+            transcriptionStatus: "Uploaded",
+            selectedLanguage: "en",
+            detectedLanguage: null,
+            role: "IncidentEvidence",
+          },
+        ]),
+      },
+    };
+    const { service } = buildService(prisma);
+
+    const result = await service.countryFeed(fieldActor as any, { limit: 20 });
+
+    expect(result.data[0]?.metadata).toEqual(
+      expect.objectContaining({
+        registrationNumber: "LAG-123-XY",
+        vin: "1HGCM82633A004352",
+      }),
+    );
+    expect((result.data[0]?.metadata as any).attachments.map((item: any) => item.mediaType)).toEqual([
+      "image",
+      "video",
+      "audio",
+    ]);
+    expect(prisma.broadcastMedia.findMany).toHaveBeenCalledWith({
+      where: { broadcastId, sightingId: null, deletedAt: null },
+      orderBy: { createdAt: "asc" },
+    });
   });
 });

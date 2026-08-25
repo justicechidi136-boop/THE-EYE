@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/field_api_client.dart';
 import '../../l10n/generated/field_localizations.dart';
@@ -20,6 +21,7 @@ class FieldBroadcastItem {
     this.publishedAt,
     this.state,
     this.country,
+    this.metadata = const {},
   });
 
   final String id;
@@ -31,6 +33,27 @@ class FieldBroadcastItem {
   final DateTime? publishedAt;
   final String? state;
   final String? country;
+  final Map<String, dynamic> metadata;
+
+  String? metadataText(String key) => _optionalText(metadata[key]);
+
+  List<FieldBroadcastEvidence> get evidence {
+    final rows = <FieldBroadcastEvidence>[];
+    final seen = <String>{};
+    for (final key in const ['vehiclePhotos', 'attachments']) {
+      final source = metadata[key];
+      if (source is! List) continue;
+      for (final value in source) {
+        if (value is! Map) continue;
+        final item = FieldBroadcastEvidence.fromJson(
+          Map<String, dynamic>.from(value),
+        );
+        final identity = item.id.isNotEmpty ? item.id : item.objectKey;
+        if (identity.isNotEmpty && seen.add(identity)) rows.add(item);
+      }
+    }
+    return rows;
+  }
 
   factory FieldBroadcastItem.fromJson(Map<String, dynamic> json) {
     return FieldBroadcastItem(
@@ -43,12 +66,51 @@ class FieldBroadcastItem {
       publishedAt: DateTime.tryParse(json['publishedAt']?.toString() ?? ''),
       state: _optionalText(json['state']),
       country: _optionalText(json['country']),
+      metadata:
+          json['metadata'] is Map
+              ? Map<String, dynamic>.from(json['metadata'] as Map)
+              : const {},
     );
   }
 
   static String? _optionalText(Object? value) {
     final text = value?.toString().trim();
     return text == null || text.isEmpty ? null : text;
+  }
+}
+
+class FieldBroadcastEvidence {
+  const FieldBroadcastEvidence({
+    required this.id,
+    required this.mediaType,
+    required this.objectKey,
+    required this.url,
+    required this.label,
+  });
+
+  final String id;
+  final String mediaType;
+  final String objectKey;
+  final String url;
+  final String label;
+
+  factory FieldBroadcastEvidence.fromJson(Map<String, dynamic> json) {
+    final mediaType = json['mediaType']?.toString().trim().toLowerCase() ?? '';
+    return FieldBroadcastEvidence(
+      id: json['id']?.toString().trim() ?? '',
+      mediaType: mediaType,
+      objectKey: json['objectKey']?.toString().trim() ?? '',
+      url: json['url']?.toString().trim() ?? '',
+      label:
+          json['label']?.toString().trim().isNotEmpty == true
+              ? json['label'].toString().trim()
+              : switch (mediaType) {
+                'image' => 'Photo evidence',
+                'video' => 'Video evidence',
+                'audio' => 'Audio evidence',
+                _ => 'Evidence',
+              },
+    );
   }
 }
 
@@ -733,22 +795,7 @@ class _BroadcastDetailDialog extends StatelessWidget {
       title: Text(item.title.isEmpty ? l10n.broadcastDetails : item.title),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.body.isEmpty ? l10n.noDescription : item.body),
-              const SizedBox(height: 20),
-              Text('${l10n.priority}: ${item.priority}'),
-              const SizedBox(height: 6),
-              Text('${l10n.status}: ${item.status}'),
-              if (item.state != null || item.country != null) ...[
-                const SizedBox(height: 6),
-                Text([item.state, item.country].whereType<String>().join(', ')),
-              ],
-            ],
-          ),
-        ),
+        child: SingleChildScrollView(child: FieldBroadcastDetails(item: item)),
       ),
       actions: [
         TextButton(
@@ -756,6 +803,210 @@ class _BroadcastDetailDialog extends StatelessWidget {
           child: const Text('Close'),
         ),
       ],
+    );
+  }
+}
+
+class FieldBroadcastDetails extends StatelessWidget {
+  const FieldBroadcastDetails({super.key, required this.item});
+
+  final FieldBroadcastItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = FieldLocalizations.of(context);
+    final details = <(String, String?)>[
+      if (item.type == 'MissingPerson') ...[
+        ('Full name', item.metadataText('fullName')),
+        ('Age', item.metadataText('ageOrApproximateAge')),
+        ('Gender', item.metadataText('gender')),
+        ('Last seen', item.metadataText('lastSeenAt')),
+        ('Last-seen location', item.metadataText('lastSeenAddress')),
+        ('Clothing', item.metadataText('clothingDescription')),
+        ('Physical description', item.metadataText('physicalDescription')),
+        ('Additional details', item.metadataText('additionalDescription')),
+      ],
+      if (item.type == 'StolenVehicle') ...[
+        ('Vehicle type', item.metadataText('vehicleType')),
+        ('Make', item.metadataText('make')),
+        ('Model', item.metadataText('model')),
+        ('Year', item.metadataText('year')),
+        ('Colour', item.metadataText('colour')),
+        (
+          'Plate number',
+          item.metadataText('registrationNumber') ??
+              item.metadataText('registrationMasked'),
+        ),
+        ('VIN', item.metadataText('vin') ?? item.metadataText('vinLastFour')),
+        ('Reported stolen', item.metadataText('stolenAt')),
+        ('Last seen', item.metadataText('lastSeenAt')),
+        ('Last-known location', item.metadataText('lastKnownLocation')),
+        (
+          'Distinguishing features',
+          item.metadataText('distinguishingFeatures'),
+        ),
+        ('Theft details', item.metadataText('theftDescription')),
+      ],
+    ].where((entry) => entry.$2 != null).toList(growable: false);
+    final evidence = item.evidence;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(item.body.isEmpty ? l10n.noDescription : item.body),
+        const SizedBox(height: 20),
+        _DetailRow(label: l10n.priority, value: item.priority),
+        _DetailRow(label: l10n.status, value: item.status),
+        if (item.state != null || item.country != null)
+          _DetailRow(
+            label: 'Area',
+            value: [item.state, item.country].whereType<String>().join(', '),
+          ),
+        if (details.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text(
+            'Broadcast information',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          ...details.map(
+            (entry) => _DetailRow(label: entry.$1, value: entry.$2!),
+          ),
+        ],
+        if (evidence.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text('Evidence', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children:
+                evidence
+                    .map((entry) => _FieldEvidenceCard(item: entry))
+                    .toList(),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidget = Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: FieldColors.muted,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+        final valueWidget = SelectableText(value);
+        if (constraints.maxWidth < 420) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [labelWidget, const SizedBox(height: 2), valueWidget],
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 150, child: labelWidget),
+              const SizedBox(width: 12),
+              Expanded(child: valueWidget),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FieldEvidenceCard extends StatelessWidget {
+  const _FieldEvidenceCard({required this.item});
+
+  final FieldBroadcastEvidence item;
+
+  Future<void> _open(BuildContext context) async {
+    final uri = Uri.tryParse(item.url);
+    if (uri == null || !uri.isScheme('https') || !await launchUrl(uri)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Evidence is temporarily unavailable. Refresh and try again.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = Uri.tryParse(item.url)?.isScheme('https') == true;
+    final icon = switch (item.mediaType) {
+      'video' => Icons.play_circle_outline,
+      'audio' => Icons.volume_up_outlined,
+      _ => Icons.image_outlined,
+    };
+    return SizedBox(
+      width: 180,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          onTap: hasUrl ? () => _open(context) : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 110,
+                child:
+                    item.mediaType == 'image' && hasUrl
+                        ? Image.network(
+                          item.url,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Icon(icon, size: 42),
+                        )
+                        : Center(child: Icon(icon, size: 42)),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: Text(
+                  item.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (hasUrl)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                  child: Text(
+                    item.mediaType == 'audio'
+                        ? 'Play audio'
+                        : 'Open ${item.mediaType}',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_eye_field_ops/launcher/launcher_modules.dart';
 import 'package:the_eye_field_ops/launcher/launcher_policy.dart';
+import 'package:the_eye_field_ops/l10n/generated/field_localizations.dart';
 import 'package:the_eye_field_ops/screens/broadcasts/broadcasts_screen.dart';
 import 'package:the_eye_field_ops/screens/routes.dart';
 
@@ -45,5 +47,90 @@ void main() {
         reason: 'missing Broadcasts for $role',
       );
     }
+  });
+
+  testWidgets('shows full vehicle identifiers and every evidence type', (
+    tester,
+  ) async {
+    final item = FieldBroadcastItem.fromJson({
+      'id': 'broadcast-vehicle',
+      'type': 'StolenVehicle',
+      'title': 'Stolen vehicle',
+      'body': 'Watch for this vehicle.',
+      'priority': 'P2ActiveCrimeAccident',
+      'status': 'Published',
+      'metadata': {
+        'make': 'Toyota',
+        'model': 'Camry',
+        'registrationNumber': 'LAG-123-XY',
+        'registrationMasked': '*****3-XY',
+        'vin': '1HGCM82633A004352',
+        'vinLastFour': '4352',
+        'vehiclePhotos': [
+          {
+            'id': 'photo-1',
+            'mediaType': 'image',
+            'objectKey': 'evidence/vehicle/photo.jpg',
+          },
+        ],
+        'attachments': [
+          {
+            'id': 'video-1',
+            'mediaType': 'video',
+            'objectKey': 'evidence/vehicle/video.mp4',
+          },
+          {
+            'id': 'audio-1',
+            'mediaType': 'audio',
+            'objectKey': 'evidence/vehicle/audio.m4a',
+          },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: FieldLocalizations.localizationsDelegates,
+        supportedLocales: FieldLocalizations.supportedLocales,
+        home: Scaffold(body: FieldBroadcastDetails(item: item)),
+      ),
+    );
+
+    expect(find.text('LAG-123-XY'), findsOneWidget);
+    expect(find.text('1HGCM82633A004352'), findsOneWidget);
+    expect(find.text('*****3-XY'), findsNothing);
+    expect(find.text('Photo evidence'), findsOneWidget);
+    expect(find.text('Video evidence'), findsOneWidget);
+    expect(find.text('Audio evidence'), findsOneWidget);
+  });
+
+  testWidgets('shows complete missing-person information', (tester) async {
+    final item = FieldBroadcastItem.fromJson({
+      'id': 'broadcast-missing',
+      'type': 'MissingPerson',
+      'title': 'Missing person',
+      'body': 'Please remain observant.',
+      'priority': 'P2ActiveCrimeAccident',
+      'status': 'Published',
+      'metadata': {
+        'fullName': 'Ada Okeke',
+        'ageOrApproximateAge': '12',
+        'lastSeenAddress': 'Allen Avenue, Ikeja',
+        'clothingDescription': 'Blue shirt and black trousers',
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: FieldLocalizations.localizationsDelegates,
+        supportedLocales: FieldLocalizations.supportedLocales,
+        home: Scaffold(body: FieldBroadcastDetails(item: item)),
+      ),
+    );
+
+    expect(find.text('Ada Okeke'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('Allen Avenue, Ikeja'), findsOneWidget);
+    expect(find.text('Blue shirt and black trousers'), findsOneWidget);
   });
 }
