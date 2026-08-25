@@ -42,7 +42,7 @@ function expectForbiddenCode(fn: () => void, code: string) {
 
 describe("FieldDevicesService", () => {
   it("creates registration challenge", async () => {
-    const { service, prisma } = createDevicesService();
+    const { service, prisma, audit } = createDevicesService();
     prisma.fieldDeviceRegistrationChallenge.create.mockResolvedValue({
       id: "ch-1",
       expiresAt: new Date(Date.now() + 60000),
@@ -51,6 +51,12 @@ describe("FieldDevicesService", () => {
     expect(result.data.challengeId).toBe("ch-1");
     expect(typeof result.data.challenge).toBe("string");
     expect(result.data.challenge.length).toBeGreaterThan(10);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorType: "system",
+        action: "field.device.registration_challenge",
+      }),
+    );
   });
 
   it("rejects citizen-only style registration without admin actor", async () => {
