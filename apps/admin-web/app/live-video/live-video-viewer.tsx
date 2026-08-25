@@ -115,28 +115,30 @@ export function LiveVideoViewer({ sessions }: Props) {
       <PageHeader eyebrow="LiveKit incident streams" title="Live video viewer" action={<StatusBadge tone={active.length ? "success" : "neutral"}>{active.length} active</StatusBadge>} />
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <Panel title="Authorized stream viewer">
-          <div className="relative min-h-[520px] overflow-hidden rounded-lg border border-line bg-command text-white">
-            <LivekitAdminPlayer sessionId={selected.id} sessionStatus={selected.status} onStateChange={setPlayerState} />
+          <div className="grid gap-4">
+            <div data-testid="live-video-player" className="relative min-h-[520px] overflow-hidden rounded-lg border border-line bg-command text-white">
+              <LivekitAdminPlayer sessionId={selected.id} sessionStatus={selected.status} onStateChange={setPlayerState} />
+            </div>
 
-            <div className="absolute left-4 right-4 top-4 z-10 w-auto rounded-lg border border-white/15 bg-black/80 p-4 shadow-soft sm:right-auto sm:w-[330px]">
-              <p className="text-sm font-black tracking-normal text-white">THE EYE LIVE EVIDENCE</p>
-              <div className="mt-3 grid gap-1 text-sm text-white/85">
+            <section data-testid="live-evidence-panel" className="rounded-lg border border-line bg-surfaceMuted p-4 shadow-soft" aria-labelledby="live-evidence-title">
+              <p id="live-evidence-title" className="text-sm font-black tracking-normal text-ink">THE EYE LIVE EVIDENCE</p>
+              <div className="mt-3 grid gap-1 text-sm text-muted sm:grid-cols-2">
                 <p>Incident: {displayOverlay.incidentId}</p>
                 <p>Date: {displayOverlay.date}</p>
                 <p>Time: {displayOverlay.time}</p>
-                <a className="font-semibold text-white underline" href={displayOverlay.signedLocationPath}>GPS: {gps}</a>
+                <a className="font-semibold text-ink underline decoration-eye decoration-2 underline-offset-4" href={displayOverlay.signedLocationPath}>GPS: {gps}</a>
                 <p>Accuracy: {displayOverlay.accuracy}</p>
                 <p>Reporter: {displayOverlay.reporter}</p>
                 <p>Status: {displayOverlay.connectionStatus}</p>
               </div>
               {selected.recordingConfigured ? (
-                <p className="mt-3 text-xs text-emerald-200">Server-side recording is configured for this session.</p>
+                <p className="mt-3 text-xs font-semibold text-success">Server-side recording is configured for this session.</p>
               ) : null}
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <a className="rounded-md bg-white px-3 py-2 text-center text-xs font-bold text-command hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" href={displayOverlay.signedLocationPath}>Open Location</a>
-                <button className="rounded-md border border-white/30 px-3 py-2 text-xs font-bold text-white" onClick={() => navigator.clipboard.writeText(gps)}>Copy Coordinates</button>
+              <div className="mt-4 grid gap-2 sm:max-w-md sm:grid-cols-2">
+                <a className="rounded-md bg-eye px-3 py-2 text-center text-xs font-bold text-white hover:bg-eyeDeep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye" href={displayOverlay.signedLocationPath}>Open Location</a>
+                <button className="rounded-md border border-line bg-surface px-3 py-2 text-xs font-bold text-ink hover:bg-field" onClick={() => navigator.clipboard.writeText(gps)}>Copy Coordinates</button>
               </div>
-            </div>
+            </section>
           </div>
         </Panel>
 
