@@ -153,6 +153,9 @@ class FieldLocalizationsPcm extends FieldLocalizations {
   String get locationUnavailable => 'Location no dey available';
 
   @override
+  String get locationDetected => 'Location don show';
+
+  @override
   String get battery => 'Battery';
 
   @override

@@ -47,6 +47,7 @@
   "active": "Active",
   "currentLocation": "Current location",
   "locationUnavailable": "Location no dey available",
+  "locationDetected": "Location don show",
   "battery": "Battery",
   "offlineQueue": "Offline queue",
   "pendingCount": "{count} pending",

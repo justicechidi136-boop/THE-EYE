@@ -130,63 +130,69 @@ class _CheckpointModeScreenState extends State<CheckpointModeScreen> {
                   children: [
                     Expanded(
                       flex: 2,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            _checkpoint == null
-                                ? l10n.noActiveCheckpoint
-                                : _checkpoint!['checkpointName']?.toString() ??
-                                    l10n.checkpointActive,
-                            style: Theme.of(context).textTheme.headlineLarge,
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 8),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                             Text(
-                              _error!,
-                              style: const TextStyle(color: FieldColors.danger),
+                              _checkpoint == null
+                                  ? l10n.noActiveCheckpoint
+                                  : _checkpoint!['checkpointName']
+                                          ?.toString() ??
+                                      l10n.checkpointActive,
+                              style: Theme.of(context).textTheme.headlineLarge,
                             ),
-                          ],
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _CounterCard(
-                                  label: l10n.queueCount,
-                                  value: _queueCount,
-                                  onChanged:
-                                      (v) => setState(() => _queueCount = v),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _CounterCard(
-                                  label: l10n.vehicleChecks,
-                                  value: _vehicleChecks,
-                                  onChanged:
-                                      (v) => setState(() => _vehicleChecks = v),
+                            if (_error != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                _error!,
+                                style: const TextStyle(
+                                  color: FieldColors.danger,
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 16),
-                          if (_checkpoint != null)
-                            ElevatedButton(
-                              onPressed: _updateQueue,
-                              child: Text(l10n.saveQueueStats),
+                            const SizedBox(height: 24),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _CounterCard(
+                                    label: l10n.queueCount,
+                                    value: _queueCount,
+                                    onChanged:
+                                        (v) => setState(() => _queueCount = v),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _CounterCard(
+                                    label: l10n.vehicleChecks,
+                                    value: _vehicleChecks,
+                                    onChanged:
+                                        (v) =>
+                                            setState(() => _vehicleChecks = v),
+                                  ),
+                                ),
+                              ],
                             ),
-                          const SizedBox(height: 16),
-                          if (_checkpoint == null)
-                            ElevatedButton(
-                              onPressed: _startCheckpoint,
-                              child: Text(l10n.startCheckpointSession),
-                            )
-                          else
-                            OutlinedButton(
-                              onPressed: _endCheckpoint,
-                              child: Text(l10n.endCheckpointSession),
-                            ),
-                        ],
+                            const SizedBox(height: 16),
+                            if (_checkpoint != null)
+                              ElevatedButton(
+                                onPressed: _updateQueue,
+                                child: Text(l10n.saveQueueStats),
+                              ),
+                            const SizedBox(height: 16),
+                            if (_checkpoint == null)
+                              ElevatedButton(
+                                onPressed: _startCheckpoint,
+                                child: Text(l10n.startCheckpointSession),
+                              )
+                            else
+                              OutlinedButton(
+                                onPressed: _endCheckpoint,
+                                child: Text(l10n.endCheckpointSession),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 24),
@@ -323,14 +329,27 @@ class _CounterCard extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: value > 0 ? () => onChanged(value - 1) : null,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 40,
+                  ),
+                  padding: EdgeInsets.zero,
                   icon: const Icon(Icons.remove_circle_outline),
                 ),
-                Text(
-                  '$value',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                Expanded(
+                  child: Text(
+                    '$value',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                 ),
                 IconButton(
                   onPressed: () => onChanged(value + 1),
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 40,
+                  ),
+                  padding: EdgeInsets.zero,
                   icon: const Icon(Icons.add_circle_outline),
                 ),
               ],

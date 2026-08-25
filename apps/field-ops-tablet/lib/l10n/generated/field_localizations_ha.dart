@@ -153,6 +153,9 @@ class FieldLocalizationsHa extends FieldLocalizations {
   String get locationUnavailable => 'Ba a samu wuri ba';
 
   @override
+  String get locationDetected => 'An gano wuri';
+
+  @override
   String get battery => 'Baturi';
 
   @override

@@ -386,6 +386,12 @@ abstract class FieldLocalizations {
   /// **'Location unavailable'**
   String get locationUnavailable;
 
+  /// No description provided for @locationDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Location detected'**
+  String get locationDetected;
+
   /// No description provided for @battery.
   ///
   /// In en, this message translates to:

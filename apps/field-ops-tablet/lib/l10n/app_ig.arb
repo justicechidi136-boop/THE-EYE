@@ -47,6 +47,7 @@
   "active": "Na-arụ ọrụ",
   "currentLocation": "Ebe ugbu a",
   "locationUnavailable": "Ebe adịghị",
+  "locationDetected": "Achọpụtara ebe",
   "battery": "Batrị",
   "offlineQueue": "Queue offline",
   "pendingCount": "{count} na-echere",

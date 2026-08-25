@@ -47,6 +47,7 @@
   "active": "Yana aiki",
   "currentLocation": "Wurin yanzu",
   "locationUnavailable": "Ba a samu wuri ba",
+  "locationDetected": "An gano wuri",
   "battery": "Baturi",
   "offlineQueue": "Jerin aiki ba tare da intanet ba",
   "pendingCount": "{count} na jiran aiki",

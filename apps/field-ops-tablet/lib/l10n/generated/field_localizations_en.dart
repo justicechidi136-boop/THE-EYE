@@ -153,6 +153,9 @@ class FieldLocalizationsEn extends FieldLocalizations {
   String get locationUnavailable => 'Location unavailable';
 
   @override
+  String get locationDetected => 'Location detected';
+
+  @override
   String get battery => 'Battery';
 
   @override

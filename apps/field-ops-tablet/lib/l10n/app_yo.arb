@@ -47,6 +47,7 @@
   "active": "N ṣiṣẹ",
   "currentLocation": "Ipo bayii",
   "locationUnavailable": "Ipo ko si",
+  "locationDetected": "A ti ri ipo",
   "battery": "Batiri",
   "offlineQueue": "Ise offline",
   "pendingCount": "{count} nduro",

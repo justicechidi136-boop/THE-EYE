@@ -21,6 +21,8 @@ class _OperationalDashboardScreenState
     extends State<OperationalDashboardScreen> {
   Map<String, dynamic>? _dashboard;
   Position? _position;
+  String? _locationLabel;
+  int? _batteryLevel;
   String? _error;
   bool _busy = true;
   int _pendingSync = 0;
@@ -40,7 +42,10 @@ class _OperationalDashboardScreenState
       await widget.services.restoreSession();
       final pending = await widget.services.offlineQueue.pendingCount();
       final dashboard = await widget.services.workflows.getDashboard();
+      final batteryLevel =
+          await widget.services.deviceContext.readBatteryLevel();
       Position? position;
+      String? locationLabel;
       try {
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
@@ -48,11 +53,16 @@ class _OperationalDashboardScreenState
             timeLimit: Duration(seconds: 8),
           ),
         );
+        locationLabel = await widget.services.deviceContext.reverseGeocode(
+          latitude: position.latitude,
+          longitude: position.longitude,
+        );
         await widget.services.workflows.updateTelemetry({
           'latitude': position.latitude,
           'longitude': position.longitude,
           'accuracyMeters': position.accuracy,
           'gpsStatus': 'active',
+          if (batteryLevel != null) 'batteryLevel': batteryLevel,
         });
         await widget.services.offlineQueue.flushIfOnline();
       } on Object {
@@ -62,6 +72,8 @@ class _OperationalDashboardScreenState
       setState(() {
         _dashboard = dashboard;
         _position = position;
+        _locationLabel = locationLabel;
+        _batteryLevel = batteryLevel;
         _pendingSync = pending;
         _busy = false;
       });
@@ -110,9 +122,8 @@ class _OperationalDashboardScreenState
     final counts = Map<String, dynamic>.from(
       _dashboard?['counts'] as Map? ?? const {},
     );
-    final battery = status['batteryLevel'] ?? device['batteryLevel'];
-    final lat = _position?.latitude ?? status['latitude'];
-    final lng = _position?.longitude ?? status['longitude'];
+    final battery =
+        _batteryLevel ?? status['batteryLevel'] ?? device['batteryLevel'];
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -146,10 +157,10 @@ class _OperationalDashboardScreenState
                 child: _StatusCard(
                   title: l10n.currentLocation,
                   value:
-                      lat != null && lng != null
-                          ? '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'
-                          : status['gpsStatus']?.toString() ??
-                              l10n.locationUnavailable,
+                      _locationLabel ??
+                      (_position != null
+                          ? l10n.locationDetected
+                          : l10n.locationUnavailable),
                   icon: Icons.gps_fixed,
                 ),
               ),
@@ -266,7 +277,12 @@ class _StatusCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(title, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 4),
-            Text(value, style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              value,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
           ],
         ),
       ),

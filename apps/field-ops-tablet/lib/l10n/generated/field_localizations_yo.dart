@@ -153,6 +153,9 @@ class FieldLocalizationsYo extends FieldLocalizations {
   String get locationUnavailable => 'Ipo ko si';
 
   @override
+  String get locationDetected => 'A ti ri ipo';
+
+  @override
   String get battery => 'Batiri';
 
   @override

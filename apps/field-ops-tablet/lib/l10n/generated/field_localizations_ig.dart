@@ -152,6 +152,9 @@ class FieldLocalizationsIg extends FieldLocalizations {
   String get locationUnavailable => 'Ebe adịghị';
 
   @override
+  String get locationDetected => 'Achọpụtara ebe';
+
+  @override
   String get battery => 'Batrị';
 
   @override
