@@ -18,6 +18,7 @@ import { RateLimit } from "../../common/rate-limit/rate-limit.decorator";
 import {
   AvatarConfirmDto,
   AvatarPresignDto,
+  CreateOperationalAdminDto,
   RequestAccountDeletionDto,
   ReviewKycDto,
   SubmitKycDto,
@@ -125,6 +126,23 @@ export class UsersController {
     @Query("kind") kind?: string,
   ) {
     return this.users.listDirectory(request.user, { cursor, limit, q, searchType, searchBy, status, role, kind });
+  }
+
+  @Get("admin-account-options")
+  @RequirePermissions("user:manage")
+  adminAccountOptions(
+    @Req() request: { user: Parameters<UsersService["getAdminAccountOptions"]>[0] },
+  ) {
+    return this.users.getAdminAccountOptions(request.user);
+  }
+
+  @Post("admin-accounts")
+  @RequirePermissions("user:manage")
+  createAdminAccount(
+    @Req() request: { user: Parameters<UsersService["createOperationalAdmin"]>[0] },
+    @Body() dto: CreateOperationalAdminDto,
+  ) {
+    return this.users.createOperationalAdmin(request.user, dto);
   }
 
   @Get("kyc/pending")

@@ -2,16 +2,52 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsBoolean,
   IsDateString,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Max,
   Min,
   MinLength,
   ValidateIf,
 } from "class-validator";
+
+export class CreateOperationalAdminDto {
+  @ApiProperty({ enum: ["field_officer", "lga_admin"] })
+  @IsString()
+  @IsIn(["field_officer", "lga_admin"])
+  accountType!: "field_officer" | "lga_admin";
+
+  @ApiProperty({ example: "Officer Ada Okeke" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  displayName!: string;
+
+  @ApiProperty({ example: "ada.okeke@agency.gov.ng" })
+  @IsEmail()
+  @MaxLength(240)
+  email!: string;
+
+  @ApiProperty({ minLength: 12, maxLength: 128, writeOnly: true })
+  @IsString()
+  @MinLength(12)
+  @MaxLength(128)
+  password!: string;
+
+  @ApiPropertyOptional({ description: "Required for field officer accounts" })
+  @IsOptional()
+  @IsUUID()
+  agencyId?: string;
+
+  @ApiPropertyOptional({ description: "Required for LGA Admin accounts" })
+  @IsOptional()
+  @IsUUID()
+  jurisdictionId?: string;
+}
 
 export class UpdateCitizenProfileDto {
   @ApiPropertyOptional({ example: "Ada" })
