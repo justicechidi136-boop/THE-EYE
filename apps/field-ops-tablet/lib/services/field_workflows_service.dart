@@ -54,6 +54,16 @@ class FieldWorkflowsService {
     return fieldList(response);
   }
 
+  Future<Map<String, dynamic>> createFieldBroadcast(
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      FieldApiPaths.broadcastsFieldCreate,
+      body: body,
+    );
+    return fieldData(response);
+  }
+
   // Shifts
   Future<Map<String, dynamic>?> getActiveShift() async {
     final response = await _api.get(FieldApiPaths.shiftsActive);

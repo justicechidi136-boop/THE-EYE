@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 import '../../api/field_api_client.dart';
@@ -62,6 +63,7 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
   List<FieldBroadcastItem> _items = const [];
   String? _error;
   bool _loading = true;
+  bool _submitting = false;
 
   @override
   void initState() {
@@ -98,6 +100,71 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
     );
   }
 
+  Future<void> _openCreateBroadcast() async {
+    final draft = await showDialog<_FieldBroadcastDraft>(
+      context: context,
+      builder: (context) => const _CreateBroadcastDialog(),
+    );
+    if (draft == null || !mounted) return;
+
+    setState(() => _submitting = true);
+    try {
+      final permission = await Geolocator.checkPermission();
+      final granted =
+          permission == LocationPermission.denied
+              ? await Geolocator.requestPermission()
+              : permission;
+      if (granted == LocationPermission.denied ||
+          granted == LocationPermission.deniedForever) {
+        throw const _BroadcastSubmissionException(
+          'Location permission is required to target this broadcast safely.',
+        );
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      await widget.services.restoreSession();
+      await widget.services.workflows.createFieldBroadcast({
+        'type': draft.type,
+        'title': draft.title,
+        'body': draft.body,
+        'priority': draft.priority,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'radiusMeters': 5000,
+        'requiresApproval': true,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Broadcast submitted for authorized review.'),
+        ),
+      );
+    } on FieldApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } on _BroadcastSubmissionException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to submit broadcast. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = FieldLocalizations.of(context);
@@ -106,6 +173,17 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
         title: Text(l10n.broadcasts),
         backgroundColor: FieldColors.surface,
         foregroundColor: FieldColors.white,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _submitting ? null : _openCreateBroadcast,
+        icon:
+            _submitting
+                ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                : const Icon(Icons.add_alert_outlined),
+        label: const Text('Create broadcast'),
       ),
       body:
           _loading
@@ -160,6 +238,176 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
                   ],
                 ),
               ),
+    );
+  }
+}
+
+class _FieldBroadcastDraft {
+  const _FieldBroadcastDraft({
+    required this.type,
+    required this.title,
+    required this.body,
+    required this.priority,
+  });
+
+  final String type;
+  final String title;
+  final String body;
+  final String priority;
+}
+
+class _BroadcastSubmissionException implements Exception {
+  const _BroadcastSubmissionException(this.message);
+
+  final String message;
+}
+
+class _CreateBroadcastDialog extends StatefulWidget {
+  const _CreateBroadcastDialog();
+
+  @override
+  State<_CreateBroadcastDialog> createState() => _CreateBroadcastDialogState();
+}
+
+class _CreateBroadcastDialogState extends State<_CreateBroadcastDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _bodyController = TextEditingController();
+  String _type = 'CommunityWarning';
+  String _priority = 'P4GeneralSafety';
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(
+      _FieldBroadcastDraft(
+        type: _type,
+        title: _titleController.text.trim(),
+        body: _bodyController.text.trim(),
+        priority: _priority,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create safety broadcast'),
+      content: SizedBox(
+        width: 620,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: _type,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'Emergency',
+                      child: Text('Emergency'),
+                    ),
+                    DropdownMenuItem(value: 'Crime', child: Text('Crime')),
+                    DropdownMenuItem(
+                      value: 'Accident',
+                      child: Text('Accident'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'CommunityWarning',
+                      child: Text('Community warning'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _type = value);
+                  },
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  initialValue: _priority,
+                  decoration: const InputDecoration(labelText: 'Priority'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'P1LifeThreatening',
+                      child: Text('P1 - Life threatening'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'P2ActiveCrimeAccident',
+                      child: Text('P2 - Active crime or accident'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'P3SuspiciousActivity',
+                      child: Text('P3 - Suspicious activity'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'P4GeneralSafety',
+                      child: Text('P4 - General safety'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _priority = value);
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Broadcast title',
+                  ),
+                  maxLength: 120,
+                  validator: (value) {
+                    if ((value ?? '').trim().length < 5) {
+                      return 'Enter a title of at least 5 characters.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _bodyController,
+                  decoration: const InputDecoration(
+                    labelText: 'Safety message',
+                    alignLabelWithHint: true,
+                  ),
+                  minLines: 4,
+                  maxLines: 7,
+                  maxLength: 1000,
+                  validator: (value) {
+                    if ((value ?? '').trim().length < 10) {
+                      return 'Enter a message of at least 10 characters.';
+                    }
+                    return null;
+                  },
+                ),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Your current GPS location and a 5 km safety area will be attached. An authorized administrator must approve the broadcast before publication.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send_outlined),
+          label: const Text('Submit for review'),
+        ),
+      ],
     );
   }
 }

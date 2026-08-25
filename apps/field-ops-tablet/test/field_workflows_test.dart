@@ -82,6 +82,7 @@ void main() {
     expect(FieldApiPaths.safetyPanic, '/field/safety/panic');
     expect(FieldApiPaths.backupCreate, '/field/backup');
     expect(FieldApiPaths.broadcastsCountry, '/broadcasts/country');
+    expect(FieldApiPaths.broadcastsFieldCreate, '/broadcasts/field');
     expect(
       FieldApiPaths.incidentMessages('inc-1'),
       '/field/incidents/inc-1/messages',
@@ -138,6 +139,32 @@ void main() {
       expect(broadcasts.single['id'], 'broadcast-1');
     },
   );
+
+  test('workflows service submits a field broadcast for review', () async {
+    final client = _RecordingClient(
+      handler:
+          (method, path, body) async => {
+            'data': {'id': 'broadcast-2', 'status': 'PendingApproval'},
+          },
+    );
+    final service = FieldWorkflowsService(api: client);
+    final payload = {
+      'type': 'CommunityWarning',
+      'title': 'Road closure ahead',
+      'body': 'Avoid the affected road until responders clear the scene.',
+      'priority': 'P3SuspiciousActivity',
+      'latitude': 6.6018,
+      'longitude': 3.3515,
+      'radiusMeters': 5000,
+    };
+
+    final created = await service.createFieldBroadcast(payload);
+
+    expect(client.lastMethod, 'POST');
+    expect(client.lastPath, FieldApiPaths.broadcastsFieldCreate);
+    expect(client.lastBody, payload);
+    expect(created['status'], 'PendingApproval');
+  });
 
   test('offline queue persists and sync batch clears applied items', () async {
     final tempDir = await Directory.systemTemp.createTemp('field_queue_test');

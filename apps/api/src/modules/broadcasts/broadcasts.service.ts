@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { BroadcastStatus, BroadcastType, IncidentPriority, IncidentStatus } from "@the-eye/shared";
+import { BroadcastAuthorType, BroadcastStatus, BroadcastType, IncidentPriority, IncidentStatus } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import {
@@ -118,6 +118,58 @@ export class BroadcastsService {
     }
 
     return { data: await this.getById(broadcast.id) };
+  }
+
+  async createFromField(dto: CreateBroadcastDto, actor: JwtPayload) {
+    if (actor.typ !== "field") throw new ForbiddenException("Field session required");
+    if (!actor.country) throw new ForbiddenException("Field session country is required");
+
+    const allowedTypes = new Set<BroadcastType>([
+      BroadcastType.Emergency,
+      BroadcastType.Crime,
+      BroadcastType.Accident,
+      BroadcastType.CommunityWarning,
+    ]);
+    if (!allowedTypes.has(dto.type)) {
+      throw new BadRequestException("Unsupported field broadcast category");
+    }
+    validateCreateBroadcastDto(dto);
+
+    const jurisdictionId = actor.jurisdictionId ?? dto.jurisdictionId ?? (await this.inferJurisdictionId(dto));
+    const broadcast = await this.prisma.broadcast.create({
+      data: {
+        jurisdictionId,
+        incidentId: dto.incidentId,
+        creatorAdminId: actor.sub,
+        authorType: BroadcastAuthorType.Admin as never,
+        type: dto.type as never,
+        title: dto.title.trim(),
+        body: dto.body.trim(),
+        priority: dto.priority as never,
+        status: BroadcastStatus.PendingApproval as never,
+        requiresApproval: true,
+        autoPublished: false,
+        country: actor.country,
+        state: actor.state,
+        lga: actor.lga,
+        targetRadiusMeters: dto.radiusMeters,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+        metadata: {
+          source: "field_tablet",
+          fieldRole: actor.fieldRole ?? null,
+          fieldDeviceId: actor.fieldDeviceId ?? null,
+        },
+      } as never,
+    });
+
+    await this.writeGeofence(broadcast.id, { ...dto, jurisdictionId });
+    await this.audit(actor, "broadcast.field_submitted", broadcast.id, {
+      status: BroadcastStatus.PendingApproval,
+      type: dto.type,
+      country: actor.country,
+    });
+
+    return { data: broadcast };
   }
 
   async getSchedulerHealth(actor: JwtPayload) {
@@ -695,6 +747,89 @@ export class BroadcastsService {
       encodeDateIdCursor(new Date(String(item.published_at ?? new Date().toISOString())), String(item.id)),
     );
 
+    return {
+      data: await Promise.all(page.data.map((row) => this.toCitizenFeedItem(row))),
+      nextCursor: page.nextCursor,
+    };
+  }
+
+  async countryFeed(
+    actor: JwtPayload,
+    query: {
+      cursor?: string;
+      limit?: number;
+      category?: string;
+      severity?: string;
+      unreadOnly?: boolean;
+    } = {},
+  ) {
+    if (actor.typ === "user") return this.countryFeedForUser(actor.sub, query);
+    if (actor.typ !== "field") throw new ForbiddenException("Country broadcast feed is unavailable");
+    if (!actor.country) throw new ForbiddenException("Field session country is required");
+    return this.countryFeedForField(actor.country, query);
+  }
+
+  private async countryFeedForField(
+    country: string,
+    query: {
+      cursor?: string;
+      limit?: number;
+      category?: string;
+      severity?: string;
+      unreadOnly?: boolean;
+    },
+  ) {
+    const limit = resolvePageLimit(query.limit);
+    const cursor = decodeDateIdCursor(query.cursor);
+    const params: unknown[] = [country];
+    let paramIndex = 2;
+    let filterSql = "";
+
+    if (query.category) {
+      filterSql += ` AND b.type = $${paramIndex++}`;
+      params.push(query.category);
+    }
+    if (query.severity) {
+      filterSql += ` AND b.priority = $${paramIndex++}`;
+      params.push(query.severity);
+    }
+    if (cursor) {
+      filterSql += ` AND (b.published_at, b.id) < ($${paramIndex++}::timestamptz, $${paramIndex++}::uuid)`;
+      params.push(cursor.createdAt, cursor.id);
+    }
+    params.push(limit + 1);
+
+    const rows = await this.prisma.$queryRawUnsafe(
+      `SELECT b.id,
+              b.type,
+              b.title,
+              b.body,
+              b.priority,
+              b.status,
+              b.author_type,
+              b.admin_verified,
+              b.country,
+              b.state,
+              b.published_at,
+              b.expires_at,
+              (SELECT COUNT(*)::int FROM broadcast_comments bc WHERE bc.broadcast_id = b.id AND bc.hidden_at IS NULL) AS comments_count,
+              NULL::double precision AS distance_meters,
+              FALSE AS read
+         FROM broadcasts b
+         LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
+        WHERE b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+          AND b.deleted_at IS NULL
+          AND (b.expires_at IS NULL OR b.expires_at > NOW())
+          AND COALESCE(b.country, j.country) = $1
+          ${filterSql}
+        ORDER BY ${PRIORITY_ORDER_SQL}
+        LIMIT $${paramIndex}`,
+      ...params,
+    ) as Array<Record<string, unknown>>;
+
+    const page = buildCursorPage(rows, limit, (item) =>
+      encodeDateIdCursor(new Date(String(item.published_at ?? new Date().toISOString())), String(item.id)),
+    );
     return {
       data: await Promise.all(page.data.map((row) => this.toCitizenFeedItem(row))),
       nextCursor: page.nextCursor,

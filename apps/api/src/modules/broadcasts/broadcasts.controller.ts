@@ -84,13 +84,20 @@ export class BroadcastsController {
   @Get("country")
   @RequirePermissions("incident:read")
   countryFeed(@Query() query: NearbyBroadcastsQuery, @Req() request: any) {
-    return this.broadcastsService.countryFeedForUser(request.user.sub, {
+    return this.broadcastsService.countryFeed(request.user, {
       cursor: query.cursor,
       limit: query.limit ? Number(query.limit) : undefined,
       category: query.category,
       severity: query.severity,
       unreadOnly: query.unreadOnly === "true",
     });
+  }
+
+  @Post("field")
+  @RateLimit("broadcastCreate")
+  @RequirePermissions("field:session:operate")
+  createFromField(@Body() dto: CreateBroadcastDto, @Req() request: any) {
+    return this.broadcastsService.createFromField(dto, request.user);
   }
 
   @Get("unread-count")

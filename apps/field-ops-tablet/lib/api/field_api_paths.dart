@@ -45,6 +45,7 @@ abstract final class FieldApiPaths {
 
   // Authenticated, nationwide public-safety feed.
   static const broadcastsCountry = '/broadcasts/country';
+  static const broadcastsFieldCreate = '/broadcasts/field';
 
   // Shifts
   static const shiftsActive = '/field/shifts/active';
