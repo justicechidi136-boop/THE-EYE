@@ -30,6 +30,20 @@ export class LiveVideoController {
     });
   }
 
+  @Post("broadcasts/:broadcastId/start")
+  @RateLimit("liveStreamCreate")
+  @RequirePermissions("field:session:operate")
+  startFieldBroadcast(
+    @Param("broadcastId") broadcastId: string,
+    @Body() dto: StartLiveVideoDto,
+    @Req() request: any,
+  ) {
+    return this.liveVideo.startFieldBroadcastLiveVideo(broadcastId, dto, request.user, {
+      requestId: String(request.headers["x-request-id"] ?? ""),
+      clientTraceId: String(request.headers["x-client-trace-id"] ?? ""),
+    });
+  }
+
   @Patch("sessions/:sessionId/stop")
   @RequirePermissions("incident:read")
   stop(@Param("sessionId") sessionId: string, @Req() request: any) {

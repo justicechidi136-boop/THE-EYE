@@ -505,7 +505,7 @@ model User {
   broadcastCommentReactions BroadcastCommentReaction[]
   broadcastReports          BroadcastReport[]      @relation("BroadcastReportReporter")
   broadcastSightings        BroadcastSighting[]      @relation("BroadcastSightingReporter")
-  broadcastMedia            BroadcastMedia[]
+  broadcastMedia            BroadcastMedia[] @relation("BroadcastMediaUserUploader")
   groupMessages             GroupMessage[]
   smartwatchDevices         SmartwatchDevice[]
   sosEvents                 SosEvent[]
@@ -785,6 +785,7 @@ model AdminUser {
   fieldOfficerSafetyAlerts     FieldOfficerSafetyAlert[]  @relation("FieldOfficerSafetyAlertOfficer")
   fieldPatrolEvents            FieldPatrolEvent[]         @relation("FieldPatrolEventOfficer")
   fieldCheckpointObservations  FieldCheckpointObservation[] @relation("FieldCheckpointObservationOfficer")
+  broadcastMediaUploaded       BroadcastMedia[] @relation("BroadcastMediaAdminUploader")
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -1334,7 +1335,8 @@ model BroadcastMedia {
   id                          String                    @id @default(uuid()) @db.Uuid
   broadcastId                 String                    @map("broadcast_id") @db.Uuid
   sightingId                  String?                   @map("sighting_id") @db.Uuid
-  uploaderId                  String                    @map("uploader_id") @db.Uuid
+  uploaderId                  String?                   @map("uploader_id") @db.Uuid
+  uploaderAdminId             String?                   @map("uploader_admin_id") @db.Uuid
   role                        String
   mediaType                   MediaType                 @map("media_type")
   bucket                      String
@@ -1358,11 +1360,13 @@ model BroadcastMedia {
   createdAt                   DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   broadcast                   Broadcast                 @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   sighting                    BroadcastSighting?        @relation(fields: [sightingId], references: [id], onDelete: Cascade)
-  uploader                    User                      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  uploader                    User?                     @relation("BroadcastMediaUserUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+  uploaderAdmin               AdminUser?                @relation("BroadcastMediaAdminUploader", fields: [uploaderAdminId], references: [id], onDelete: Cascade)
 
   @@unique([broadcastId, clientAttachmentId])
   @@index([broadcastId, role, createdAt])
   @@index([sightingId, createdAt])
+  @@index([uploaderAdminId])
   @@index([transcriptionStatus])
   @@map("broadcast_media")
 }

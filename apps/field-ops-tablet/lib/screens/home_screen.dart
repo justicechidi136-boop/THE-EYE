@@ -4,6 +4,7 @@ import '../l10n/generated/field_localizations.dart';
 import '../screens/routes.dart';
 import '../services/field_app_services.dart';
 import '../theme/field_theme.dart';
+import '../theme/field_branding.dart';
 import 'home/operational_dashboard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -100,7 +101,12 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Column(
                 children: [
-                  Icon(Icons.shield, color: FieldColors.orange, size: 36),
+                  Image.asset(
+                    FieldBrandingAssets.logoUi,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.contain,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     l10n.fieldOps,

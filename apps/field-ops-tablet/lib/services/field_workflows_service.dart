@@ -64,6 +64,22 @@ class FieldWorkflowsService {
     return fieldData(response);
   }
 
+  Future<Map<String, dynamic>> startBroadcastLiveVideo(
+    String broadcastId,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      FieldApiPaths.broadcastLiveVideoStart(broadcastId),
+      body: body,
+    );
+    return response;
+  }
+
+  Future<Map<String, dynamic>> stopLiveVideo(String sessionId) async {
+    final response = await _api.patch(FieldApiPaths.liveVideoStop(sessionId));
+    return fieldData(response);
+  }
+
   // Shifts
   Future<Map<String, dynamic>?> getActiveShift() async {
     final response = await _api.get(FieldApiPaths.shiftsActive);

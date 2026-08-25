@@ -11,6 +11,7 @@ import 'field_device_context_service.dart';
 import 'field_events_service.dart';
 import 'field_offline_queue.dart';
 import 'field_workflows_service.dart';
+import 'field_broadcast_media_service.dart';
 
 class FieldAppServices {
   FieldAppServices({
@@ -40,6 +41,7 @@ class FieldAppServices {
       auth: auth,
     );
     workflows = FieldWorkflowsService(api: this.api);
+    broadcastMedia = FieldBroadcastMediaService(api: this.api);
     offlineQueue = FieldOfflineQueue(api: this.api, workflows: workflows);
     events = FieldEventsService(workflows: workflows);
     launcherPolicy = LauncherPolicyService(
@@ -57,6 +59,7 @@ class FieldAppServices {
   late final FieldAuthService auth;
   late final FieldDeviceService devices;
   late final FieldWorkflowsService workflows;
+  late final FieldBroadcastMediaService broadcastMedia;
   late final FieldOfflineQueue offlineQueue;
   late final FieldEventsService events;
   late final LauncherPolicyService launcherPolicy;
@@ -68,6 +71,7 @@ class FieldAppServices {
 
   Future<void> dispose() async {
     events.dispose();
+    broadcastMedia.dispose();
     accountLocale.dispose();
     api.dispose();
   }

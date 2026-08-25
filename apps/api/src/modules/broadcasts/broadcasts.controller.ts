@@ -39,7 +39,6 @@ export class BroadcastsController {
 
   @Post("media/presign")
   @RateLimit("broadcastCreate")
-  @RequirePermissions("incident:create")
   presignMedia(
     @Body()
     dto: { fileName?: string; contentType?: string; mediaType?: string; sizeBytes?: number },

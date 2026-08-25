@@ -10,7 +10,10 @@ import {
   resolvePageLimit,
   type CursorPageQuery,
 } from "../../common/pagination/cursor-pagination";
-import { createStorageDownloadUrl } from "../../common/storage/s3-presign";
+import {
+  createStorageDownloadUrl,
+  validateEvidenceUpload,
+} from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -135,6 +138,8 @@ export class BroadcastsService {
     }
     validateCreateBroadcastDto(dto);
 
+    const attachments = this.sanitizeFieldAttachments(dto.attachments, actor.sub);
+
     const jurisdictionId = actor.jurisdictionId ?? dto.jurisdictionId ?? (await this.inferJurisdictionId(dto));
     const broadcast = await this.prisma.broadcast.create({
       data: {
@@ -158,11 +163,13 @@ export class BroadcastsService {
           source: "field_tablet",
           fieldRole: actor.fieldRole ?? null,
           fieldDeviceId: actor.fieldDeviceId ?? null,
+          attachmentCount: attachments.length,
         },
       } as never,
     });
 
     await this.writeGeofence(broadcast.id, { ...dto, jurisdictionId });
+    await this.persistFieldBroadcastMedia(broadcast.id, actor.sub, attachments);
     await this.audit(actor, "broadcast.field_submitted", broadcast.id, {
       status: BroadcastStatus.PendingApproval,
       type: dto.type,
@@ -170,6 +177,68 @@ export class BroadcastsService {
     });
 
     return { data: broadcast };
+  }
+
+  private sanitizeFieldAttachments(raw: unknown, uploaderAdminId: string) {
+    if (!Array.isArray(raw)) return [];
+    if (raw.length > 8) throw new BadRequestException("A field broadcast supports up to 8 attachments");
+    const expectedPrefix = `evidence/broadcast-field-${uploaderAdminId}/`;
+    return raw.map((item, index) => {
+      if (!item || typeof item !== "object") throw new BadRequestException("Invalid field broadcast attachment");
+      const row = item as Record<string, unknown>;
+      const mediaType = String(row.mediaType ?? "").trim().toLowerCase();
+      const contentType = String(row.contentType ?? "").trim().toLowerCase();
+      const objectKey = String(row.objectKey ?? "").trim();
+      const bucket = String(row.bucket ?? "").trim();
+      if (!["image", "video", "audio"].includes(mediaType)) {
+        throw new BadRequestException("Unsupported field broadcast media type");
+      }
+      validateEvidenceUpload(contentType, Number(row.sizeBytes));
+      if (!objectKey.startsWith(expectedPrefix) || objectKey.includes("..") || !bucket) {
+        throw new BadRequestException("Invalid field broadcast evidence object key");
+      }
+      return {
+        mediaType,
+        contentType,
+        objectKey,
+        bucket,
+        fileHash: String(row.fileHash ?? "").trim() || null,
+        sizeBytes: Number(row.sizeBytes),
+        capturedAt: row.capturedAt ? new Date(String(row.capturedAt)) : null,
+        durationSeconds: Number.isInteger(Number(row.durationSeconds)) ? Number(row.durationSeconds) : null,
+        clientAttachmentId: String(row.clientAttachmentId ?? "").trim() || `field-${index + 1}`,
+        selectedLanguage: String(row.selectedLanguage ?? "").trim() || null,
+      };
+    });
+  }
+
+  private async persistFieldBroadcastMedia(
+    broadcastId: string,
+    uploaderAdminId: string,
+    attachments: ReturnType<BroadcastsService["sanitizeFieldAttachments"]>,
+  ) {
+    for (const attachment of attachments) {
+      const mediaType = attachment.mediaType === "image" ? "Image" : attachment.mediaType === "video" ? "Video" : "Audio";
+      await this.prisma.broadcastMedia.create({
+        data: {
+          broadcastId,
+          uploaderId: null,
+          uploaderAdminId,
+          role: "IncidentEvidence",
+          mediaType: mediaType as never,
+          bucket: attachment.bucket,
+          objectKey: attachment.objectKey,
+          contentType: attachment.contentType,
+          fileHash: attachment.fileHash,
+          sizeBytes: BigInt(attachment.sizeBytes),
+          capturedAt: attachment.capturedAt,
+          durationSeconds: attachment.durationSeconds,
+          clientAttachmentId: attachment.clientAttachmentId,
+          selectedLanguage: attachment.selectedLanguage,
+          transcriptionStatus: attachment.mediaType === "audio" ? "Uploaded" as never : null,
+        },
+      });
+    }
   }
 
   async getSchedulerHealth(actor: JwtPayload) {

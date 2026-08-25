@@ -35,6 +35,9 @@ describe("BroadcastsService field operations", () => {
           status: BroadcastStatus.PendingApproval,
         }),
       },
+      broadcastMedia: {
+        create: jest.fn().mockResolvedValue({ id: "media-1" }),
+      },
       $queryRawUnsafe: jest.fn().mockResolvedValue([{ id: "jurisdiction-1" }]),
       $executeRawUnsafe: jest.fn().mockResolvedValue(1),
     };
@@ -49,6 +52,16 @@ describe("BroadcastsService field operations", () => {
         latitude: 6.6018,
         longitude: 3.3515,
         radiusMeters: 5000,
+        attachments: [
+          {
+            mediaType: "image",
+            contentType: "image/jpeg",
+            sizeBytes: 1024,
+            bucket: "staging-private",
+            objectKey: `evidence/broadcast-field-${fieldActor.sub}/photo.jpg`,
+            clientAttachmentId: "photo-1",
+          },
+        ],
       } as any,
       fieldActor as any,
     );
@@ -72,6 +85,41 @@ describe("BroadcastsService field operations", () => {
         entityId: "broadcast-1",
       }),
     );
+    expect(prisma.broadcastMedia.create.mock.calls[0]?.[0]?.data).toEqual(
+      expect.objectContaining({
+        broadcastId: "broadcast-1",
+        uploaderId: null,
+        uploaderAdminId: fieldActor.sub,
+        mediaType: "Image",
+        objectKey: `evidence/broadcast-field-${fieldActor.sub}/photo.jpg`,
+      }),
+    );
+  });
+
+  it("rejects evidence outside the authenticated field uploader prefix", async () => {
+    const { service } = buildService({});
+    await expect(
+      service.createFromField(
+        {
+          type: "CommunityWarning",
+          title: "Road closure ahead",
+          body: "Avoid the affected road while responders clear the scene.",
+          priority: "P3SuspiciousActivity",
+          latitude: 6.6018,
+          longitude: 3.3515,
+          attachments: [
+            {
+              mediaType: "video",
+              contentType: "video/mp4",
+              sizeBytes: 2048,
+              bucket: "staging-private",
+              objectKey: "evidence/broadcast-field-another-officer/video.mp4",
+            },
+          ],
+        } as any,
+        fieldActor as any,
+      ),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("does not allow a field tablet to create admin-only categories", async () => {

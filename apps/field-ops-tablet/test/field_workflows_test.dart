@@ -83,6 +83,11 @@ void main() {
     expect(FieldApiPaths.backupCreate, '/field/backup');
     expect(FieldApiPaths.broadcastsCountry, '/broadcasts/country');
     expect(FieldApiPaths.broadcastsFieldCreate, '/broadcasts/field');
+    expect(FieldApiPaths.broadcastsMediaPresign, '/broadcasts/media/presign');
+    expect(
+      FieldApiPaths.broadcastLiveVideoStart('broadcast-1'),
+      '/live-video/broadcasts/broadcast-1/start',
+    );
     expect(
       FieldApiPaths.incidentMessages('inc-1'),
       '/field/incidents/inc-1/messages',
@@ -165,6 +170,50 @@ void main() {
     expect(client.lastBody, payload);
     expect(created['status'], 'PendingApproval');
   });
+
+  test(
+    'workflows service starts and stops field broadcast live video',
+    () async {
+      final client = _RecordingClient(
+        handler:
+            (method, path, body) async => {
+              'data': {'id': 'session-1'},
+              'connection': {'serverUrl': 'wss://live.example.test'},
+            },
+      );
+      final service = FieldWorkflowsService(api: client);
+
+      final response = await service.startBroadcastLiveVideo('broadcast-1', {
+        'latitude': 6.6018,
+        'longitude': 3.3515,
+      });
+      expect(
+        client.lastPath,
+        FieldApiPaths.broadcastLiveVideoStart('broadcast-1'),
+      );
+      expect(client.lastBody?['latitude'], 6.6018);
+      expect(response['connection'], isA<Map>());
+
+      await service.stopLiveVideo('session-1');
+      expect(client.lastPath, FieldApiPaths.liveVideoStop('session-1'));
+    },
+  );
+
+  test(
+    'broadcast composer exposes voice, photo, video, and live video controls',
+    () {
+      final source =
+          File(
+            'lib/screens/broadcasts/broadcasts_screen.dart',
+          ).readAsStringSync();
+
+      expect(source, contains("Text('Photos')"));
+      expect(source, contains("Text('Record video')"));
+      expect(source, contains("Text('Upload video')"));
+      expect(source, contains("'Voice note'"));
+      expect(source, contains('Start live video after submission'));
+    },
+  );
 
   test('offline queue persists and sync batch clears applied items', () async {
     final tempDir = await Directory.systemTemp.createTemp('field_queue_test');

@@ -10,6 +10,16 @@ const citizen = {
   permissions: ["incident:create"],
 } as any;
 
+const fieldOfficer = {
+  typ: "field",
+  sub: "field-officer-1",
+  permissions: ["field:session:operate"],
+  country: "Nigeria",
+  state: "Lagos",
+  lga: "Ikeja",
+  fieldDeviceId: "field-device-1",
+} as any;
+
 function buildStartService(options: {
   publicUrl?: string;
   token?: string;
@@ -104,6 +114,78 @@ describe("LiveVideoService startIncidentLiveVideo", () => {
       response: expect.objectContaining({
         code: LiveVideoErrorCode.TOKEN_CONNECTION_INCOMPLETE,
       }),
+    });
+  });
+});
+
+describe("LiveVideoService startFieldBroadcastLiveVideo", () => {
+  it("links a field-owned broadcast to one operational incident and starts LiveKit", async () => {
+    const { service, prisma, tokens } = buildStartService();
+    prisma.broadcast = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "broadcast-1",
+        creatorAdminId: fieldOfficer.sub,
+        incidentId: null,
+        jurisdictionId: "jurisdiction-1",
+        country: "Nigeria",
+        state: "Lagos",
+        lga: "Ikeja",
+        type: "Emergency",
+        priority: "P1LifeThreatening",
+        title: "Flood warning",
+        body: "Avoid the flooded road.",
+      }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    };
+    prisma.incident.create = jest.fn().mockResolvedValue({ id: "incident-field-1" });
+    prisma.incident.delete = jest.fn();
+    prisma.incident.findUnique.mockResolvedValue({
+      id: "incident-field-1",
+      reporterId: null,
+      assignedAdminId: fieldOfficer.sub,
+      isAnonymous: false,
+      submittedAt: new Date("2026-08-25T00:00:00.000Z"),
+    });
+
+    const result = await service.startFieldBroadcastLiveVideo(
+      "broadcast-1",
+      { latitude: 6.6018, longitude: 3.3515 },
+      fieldOfficer,
+      { requestId: "req-field-1" },
+    );
+
+    expect(prisma.broadcast.updateMany).toHaveBeenCalledWith({
+      where: { id: "broadcast-1", incidentId: null },
+      data: { incidentId: "incident-field-1" },
+    });
+    expect(tokens.createToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identity: "field-field-officer-1",
+        roomName: "eye-incident-incident-field-1",
+        canPublish: true,
+      }),
+    );
+    expect(result.connection.participantIdentity).toBe("field-field-officer-1");
+  });
+
+  it("rejects a field officer who did not submit the broadcast", async () => {
+    const { service, prisma } = buildStartService();
+    prisma.broadcast = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: "broadcast-1",
+        creatorAdminId: "another-officer",
+      }),
+    };
+
+    await expect(
+      service.startFieldBroadcastLiveVideo(
+        "broadcast-1",
+        {},
+        fieldOfficer,
+        { requestId: "req-field-2" },
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: LiveVideoErrorCode.NOT_AUTHORIZED }),
     });
   });
 });

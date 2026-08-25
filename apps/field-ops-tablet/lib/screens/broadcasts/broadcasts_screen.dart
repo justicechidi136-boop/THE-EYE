@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import '../../api/field_api_client.dart';
 import '../../l10n/generated/field_localizations.dart';
 import '../../services/field_app_services.dart';
+import '../../services/field_broadcast_media_service.dart';
 import '../../theme/field_theme.dart';
+import 'field_broadcast_live_video_screen.dart';
 
 class FieldBroadcastItem {
   const FieldBroadcastItem({
@@ -103,7 +105,7 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
   Future<void> _openCreateBroadcast() async {
     final draft = await showDialog<_FieldBroadcastDraft>(
       context: context,
-      builder: (context) => const _CreateBroadcastDialog(),
+      builder: (context) => _CreateBroadcastDialog(services: widget.services),
     );
     if (draft == null || !mounted) return;
 
@@ -127,7 +129,10 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
         ),
       );
       await widget.services.restoreSession();
-      await widget.services.workflows.createFieldBroadcast({
+      final attachments = await widget.services.broadcastMedia.uploadAll(
+        draft.attachments,
+      );
+      final created = await widget.services.workflows.createFieldBroadcast({
         'type': draft.type,
         'title': draft.title,
         'body': draft.body,
@@ -136,6 +141,7 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
         'longitude': position.longitude,
         'radiusMeters': 5000,
         'requiresApproval': true,
+        'attachments': attachments,
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -143,6 +149,19 @@ class _BroadcastsScreenState extends State<BroadcastsScreen> {
           content: Text('Broadcast submitted for authorized review.'),
         ),
       );
+      final broadcastId = created['id']?.toString() ?? '';
+      if (draft.startLiveVideo && broadcastId.isNotEmpty && mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder:
+                (context) => FieldBroadcastLiveVideoScreen(
+                  services: widget.services,
+                  broadcastId: broadcastId,
+                  broadcastTitle: draft.title,
+                ),
+          ),
+        );
+      }
     } on FieldApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -248,12 +267,16 @@ class _FieldBroadcastDraft {
     required this.title,
     required this.body,
     required this.priority,
+    required this.attachments,
+    required this.startLiveVideo,
   });
 
   final String type;
   final String title;
   final String body;
   final String priority;
+  final List<FieldBroadcastAttachment> attachments;
+  final bool startLiveVideo;
 }
 
 class _BroadcastSubmissionException implements Exception {
@@ -263,7 +286,9 @@ class _BroadcastSubmissionException implements Exception {
 }
 
 class _CreateBroadcastDialog extends StatefulWidget {
-  const _CreateBroadcastDialog();
+  const _CreateBroadcastDialog({required this.services});
+
+  final FieldAppServices services;
 
   @override
   State<_CreateBroadcastDialog> createState() => _CreateBroadcastDialogState();
@@ -275,9 +300,16 @@ class _CreateBroadcastDialogState extends State<_CreateBroadcastDialog> {
   final _bodyController = TextEditingController();
   String _type = 'CommunityWarning';
   String _priority = 'P4GeneralSafety';
+  final List<FieldBroadcastAttachment> _attachments = [];
+  bool _recordingVoice = false;
+  bool _mediaBusy = false;
+  bool _startLiveVideo = false;
 
   @override
   void dispose() {
+    if (_recordingVoice) {
+      widget.services.broadcastMedia.cancelVoiceRecording();
+    }
     _titleController.dispose();
     _bodyController.dispose();
     super.dispose();
@@ -291,8 +323,66 @@ class _CreateBroadcastDialogState extends State<_CreateBroadcastDialog> {
         title: _titleController.text.trim(),
         body: _bodyController.text.trim(),
         priority: _priority,
+        attachments: List.unmodifiable(_attachments),
+        startLiveVideo: _startLiveVideo,
       ),
     );
+  }
+
+  Future<void> _addMedia(
+    Future<List<FieldBroadcastAttachment>> Function() action,
+  ) async {
+    if (_mediaBusy) return;
+    setState(() => _mediaBusy = true);
+    try {
+      final picked = await action();
+      if (!mounted) return;
+      final remaining = 8 - _attachments.length;
+      setState(() => _attachments.addAll(picked.take(remaining)));
+      if (picked.length > remaining) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A broadcast supports up to 8 attachments.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _mediaBusy = false);
+    }
+  }
+
+  Future<void> _toggleVoiceRecording() async {
+    if (_mediaBusy) return;
+    if (_recordingVoice) {
+      final attachment =
+          await widget.services.broadcastMedia.stopVoiceRecording();
+      if (!mounted) return;
+      setState(() {
+        _recordingVoice = false;
+        if (attachment != null && _attachments.length < 8) {
+          _attachments.add(attachment);
+        }
+      });
+      return;
+    }
+    try {
+      await widget.services.broadcastMedia.startVoiceRecording();
+      if (mounted) setState(() => _recordingVoice = true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ),
+      );
+    }
   }
 
   @override
@@ -386,6 +476,130 @@ class _CreateBroadcastDialogState extends State<_CreateBroadcastDialog> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Evidence',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed:
+                          _mediaBusy || _attachments.length >= 8
+                              ? null
+                              : () => _addMedia(
+                                widget.services.broadcastMedia.pickPhotos,
+                              ),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Photos'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed:
+                          _mediaBusy || _attachments.length >= 8
+                              ? null
+                              : () async {
+                                await _addMedia(() async {
+                                  final item =
+                                      await widget.services.broadcastMedia
+                                          .recordVideo();
+                                  return item == null ? const [] : [item];
+                                });
+                              },
+                      icon: const Icon(Icons.videocam_outlined),
+                      label: const Text('Record video'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed:
+                          _mediaBusy || _attachments.length >= 8
+                              ? null
+                              : () async {
+                                await _addMedia(() async {
+                                  final item =
+                                      await widget.services.broadcastMedia
+                                          .pickVideo();
+                                  return item == null ? const [] : [item];
+                                });
+                              },
+                      icon: const Icon(Icons.video_library_outlined),
+                      label: const Text('Upload video'),
+                    ),
+                    OutlinedButton.icon(
+                      style:
+                          _recordingVoice
+                              ? OutlinedButton.styleFrom(
+                                foregroundColor: FieldColors.danger,
+                              )
+                              : null,
+                      onPressed:
+                          _attachments.length >= 8 && !_recordingVoice
+                              ? null
+                              : _toggleVoiceRecording,
+                      icon: Icon(
+                        _recordingVoice ? Icons.stop_circle : Icons.mic_none,
+                      ),
+                      label: Text(
+                        _recordingVoice ? 'Stop voice note' : 'Voice note',
+                      ),
+                    ),
+                  ],
+                ),
+                if (_mediaBusy) ...[
+                  const SizedBox(height: 10),
+                  const LinearProgressIndicator(),
+                ],
+                if (_attachments.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  ..._attachments.asMap().entries.map((entry) {
+                    final attachment = entry.value;
+                    final icon = switch (attachment.mediaType) {
+                      'image' => Icons.image_outlined,
+                      'video' => Icons.movie_outlined,
+                      _ => Icons.graphic_eq,
+                    };
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(icon),
+                      title: Text(
+                        attachment.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${attachment.mediaType.toUpperCase()} • ${(attachment.sizeBytes / 1048576).toStringAsFixed(1)} MB',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Remove attachment',
+                        onPressed:
+                            _recordingVoice
+                                ? null
+                                : () => setState(
+                                  () => _attachments.removeAt(entry.key),
+                                ),
+                        icon: const Icon(Icons.close),
+                      ),
+                    );
+                  }),
+                ],
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _startLiveVideo,
+                  onChanged:
+                      _recordingVoice
+                          ? null
+                          : (value) => setState(() => _startLiveVideo = value),
+                  secondary: const Icon(Icons.live_tv_outlined),
+                  title: const Text('Start live video after submission'),
+                  subtitle: const Text(
+                    'Stream camera and microphone securely to authorized operations staff.',
+                  ),
+                ),
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
@@ -403,7 +617,7 @@ class _CreateBroadcastDialogState extends State<_CreateBroadcastDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton.icon(
-          onPressed: _submit,
+          onPressed: _recordingVoice || _mediaBusy ? null : _submit,
           icon: const Icon(Icons.send_outlined),
           label: const Text('Submit for review'),
         ),

@@ -12,5 +12,7 @@ void main() {
     expect(source, isNot(contains('labelType: NavigationRailLabelType.all')));
     expect(source, contains('FieldRoutes.broadcasts'));
     expect(source, contains('Icons.campaign_outlined'));
+    expect(source, contains('FieldBrandingAssets.logoUi'));
+    expect(source, isNot(contains('Icons.shield')));
   });
 }
