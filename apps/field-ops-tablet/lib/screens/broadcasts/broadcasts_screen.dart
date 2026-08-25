@@ -899,37 +899,32 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final labelWidget = Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: FieldColors.muted,
-            fontWeight: FontWeight.w600,
-          ),
-        );
-        final valueWidget = SelectableText(value);
-        if (constraints.maxWidth < 420) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [labelWidget, const SizedBox(height: 2), valueWidget],
-            ),
-          );
-        }
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(width: 150, child: labelWidget),
-              const SizedBox(width: 12),
-              Expanded(child: valueWidget),
-            ],
-          ),
-        );
-      },
+    final labelWidget = Text(
+      label,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: FieldColors.muted,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final valueWidget = SelectableText(value);
+    final compact = MediaQuery.sizeOf(context).width < 600;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child:
+          compact
+              ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [labelWidget, const SizedBox(height: 2), valueWidget],
+              )
+              : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 150, child: labelWidget),
+                  const SizedBox(width: 12),
+                  Expanded(child: valueWidget),
+                ],
+              ),
     );
   }
 }

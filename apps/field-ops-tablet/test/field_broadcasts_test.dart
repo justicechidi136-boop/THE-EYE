@@ -133,4 +133,62 @@ void main() {
     expect(find.text('Allen Avenue, Ikeja'), findsOneWidget);
     expect(find.text('Blue shirt and black trousers'), findsOneWidget);
   });
+
+  testWidgets('lays out broadcast details inside a tablet dialog', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final item = FieldBroadcastItem.fromJson({
+      'id': 'broadcast-dialog',
+      'type': 'StolenVehicle',
+      'title': 'Stolen vehicle',
+      'body': 'Watch for this vehicle.',
+      'priority': 'P2ActiveCrimeAccident',
+      'status': 'Published',
+      'metadata': {
+        'registrationNumber': 'LAG-123-XY',
+        'vin': '1HGCM82633A004352',
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: FieldLocalizations.localizationsDelegates,
+        supportedLocales: FieldLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder:
+                (context) => Center(
+                  child: FilledButton(
+                    onPressed:
+                        () => showDialog<void>(
+                          context: context,
+                          builder:
+                              (context) => AlertDialog(
+                                content: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 620,
+                                  ),
+                                  child: SingleChildScrollView(
+                                    child: FieldBroadcastDetails(item: item),
+                                  ),
+                                ),
+                              ),
+                        ),
+                    child: const Text('Open details'),
+                  ),
+                ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open details'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('LAG-123-XY'), findsOneWidget);
+    expect(find.text('1HGCM82633A004352'), findsOneWidget);
+  });
 }
