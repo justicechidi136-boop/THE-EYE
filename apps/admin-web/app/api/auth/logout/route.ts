@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
 import { apiRequest } from "../../../../lib/api/client";
-import { clearAuthCookies, setAuthCookies } from "../../../../lib/auth-cookies";
+import { createLogoutResponse } from "../../../../lib/logout-response";
 import { REFRESH_TOKEN_COOKIE } from "../../../../lib/session";
 
-export async function POST(request: Request) {
+export async function POST() {
   const { cookies } = await import("next/headers");
   const store = await cookies();
   const refreshToken = store.get(REFRESH_TOKEN_COOKIE)?.value;
@@ -19,8 +18,5 @@ export async function POST(request: Request) {
     }
   }
 
-  const loginUrl = new URL("/login", request.url);
-  const response = NextResponse.redirect(loginUrl, 303);
-  clearAuthCookies(response);
-  return response;
+  return createLogoutResponse();
 }
