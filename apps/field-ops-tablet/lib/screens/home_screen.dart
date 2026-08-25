@@ -24,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
     FieldRoutes.checkpoint,
     FieldRoutes.assignments,
     FieldRoutes.bolo,
+    FieldRoutes.broadcasts,
     FieldRoutes.drone,
     FieldRoutes.comms,
   ];
@@ -42,15 +43,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onDestinationSelected(int index) {
     // Lock and sign-out are action items, not tabs.
-    if (index == 8) {
+    if (index == 9) {
       _lock();
       return;
     }
-    if (index == 9) {
+    if (index == 10) {
       _signOut();
       return;
     }
-    if (index == 7) {
+    if (index == 8) {
       Navigator.of(context).pushNamed(FieldRoutes.deviceStatus);
       return;
     }
@@ -135,6 +136,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icon(Icons.search_outlined),
                 selectedIcon: Icon(Icons.search),
                 label: Text('BOLO'),
+              ),
+              NavigationRailDestination(
+                icon: const Icon(Icons.campaign_outlined),
+                selectedIcon: const Icon(Icons.campaign),
+                label: Text(l10n.broadcasts),
               ),
               NavigationRailDestination(
                 icon: const Icon(Icons.flight_outlined),

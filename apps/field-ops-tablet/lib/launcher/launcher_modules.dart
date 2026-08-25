@@ -61,7 +61,7 @@ abstract final class LauncherModules {
       id: 'broadcasts',
       label: 'Broadcasts',
       icon: Icons.campaign_outlined,
-      route: FieldRoutes.comms,
+      route: FieldRoutes.broadcasts,
     ),
     LauncherModule(
       id: 'drone',

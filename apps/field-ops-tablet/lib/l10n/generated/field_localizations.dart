@@ -877,6 +877,36 @@ abstract class FieldLocalizations {
   /// In en, this message translates to:
   /// **'Broadcasts'**
   String get broadcasts;
+
+  /// No description provided for @nationwideBroadcasts.
+  ///
+  /// In en, this message translates to:
+  /// **'Nationwide safety broadcasts'**
+  String get nationwideBroadcasts;
+
+  /// No description provided for @noBroadcasts.
+  ///
+  /// In en, this message translates to:
+  /// **'No broadcasts available'**
+  String get noBroadcasts;
+
+  /// No description provided for @broadcastFeedEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull down to refresh the nationwide safety feed.'**
+  String get broadcastFeedEmptyHint;
+
+  /// No description provided for @broadcastDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcast details'**
+  String get broadcastDetails;
+
+  /// No description provided for @published.
+  ///
+  /// In en, this message translates to:
+  /// **'Published'**
+  String get published;
 }
 
 class _FieldLocalizationsDelegate

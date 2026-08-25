@@ -405,4 +405,19 @@ class FieldLocalizationsIg extends FieldLocalizations {
 
   @override
   String get broadcasts => 'Mgbasa ozi';
+
+  @override
+  String get nationwideBroadcasts => 'Mgbasa ozi nchekwa mba niile';
+
+  @override
+  String get noBroadcasts => 'Enweghị mgbasa ozi ugbu a';
+
+  @override
+  String get broadcastFeedEmptyHint => 'Dọpụta ala iji mee mgbasa ozi ọhụrụ.';
+
+  @override
+  String get broadcastDetails => 'Nkọwa mgbasa ozi';
+
+  @override
+  String get published => 'Ebipụtara';
 }

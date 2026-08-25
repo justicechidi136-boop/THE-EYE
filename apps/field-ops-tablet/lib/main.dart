@@ -10,6 +10,7 @@ import 'screens/approval_pending_screen.dart';
 import 'screens/assignments/assignments_screen.dart';
 import 'screens/assignments/incident_workspace_screen.dart';
 import 'screens/bolo/bolo_screen.dart';
+import 'screens/broadcasts/broadcasts_screen.dart';
 import 'screens/checkpoint/checkpoint_mode_screen.dart';
 import 'screens/comms/comms_screen.dart';
 import 'screens/device_registration_screen.dart';
@@ -187,6 +188,8 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
                   );
                 case FieldRoutes.bolo:
                   return _page(BoloScreen(services: _services), settings);
+                case FieldRoutes.broadcasts:
+                  return _page(BroadcastsScreen(services: _services), settings);
                 case FieldRoutes.drone:
                   return _page(
                     DroneMonitorScreen(services: _services),

@@ -406,4 +406,19 @@ class FieldLocalizationsHa extends FieldLocalizations {
 
   @override
   String get broadcasts => 'Sanarwa';
+
+  @override
+  String get nationwideBroadcasts => 'Sanarwar tsaro na ƙasa';
+
+  @override
+  String get noBroadcasts => 'Babu sanarwa a yanzu';
+
+  @override
+  String get broadcastFeedEmptyHint => 'Ja ƙasa don sabunta sanarwar tsaro.';
+
+  @override
+  String get broadcastDetails => 'Bayanan sanarwa';
+
+  @override
+  String get published => 'An wallafa';
 }

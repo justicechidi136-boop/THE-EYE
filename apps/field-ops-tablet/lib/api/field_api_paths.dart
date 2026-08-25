@@ -43,6 +43,9 @@ abstract final class FieldApiPaths {
   static const dashboard = '/field/dashboard';
   static const dashboardTelemetry = '/field/dashboard/telemetry';
 
+  // Authenticated, nationwide public-safety feed.
+  static const broadcastsCountry = '/broadcasts/country';
+
   // Shifts
   static const shiftsActive = '/field/shifts/active';
   static const shiftsStart = '/field/shifts/start';

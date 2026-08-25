@@ -97,6 +97,53 @@ describe("FieldLauncherPolicyService", () => {
     );
   });
 
+  it("includes broadcasts in default policies for every field role", async () => {
+    const roles = ["officer", "patrol", "checkpoint", "drone", "supervisor", "commander"];
+
+    for (const role of roles) {
+      const { prisma, service } = createService();
+      prisma.fieldDevice.findUnique.mockResolvedValueOnce({
+        id: `dev-${role}`,
+        publicDeviceId: `FD-${role}`,
+        agencyId: "agency-1",
+        isRevoked: false,
+        isLost: false,
+        registrationStatus: "Active",
+        launcherPolicy: null,
+        agency: null,
+      });
+      prisma.fieldDeviceLauncherPolicy.upsert.mockResolvedValueOnce({
+        fieldDeviceId: `dev-${role}`,
+        deviceMode: "standard",
+        launcherEnabled: false,
+        kioskEnabled: false,
+        approvedApps: [],
+        settingsAccessLevel: "none",
+        maintenanceModeAllowed: true,
+        emergencyDialerAllowed: true,
+        browserAllowed: true,
+        screenshotsAllowed: true,
+        usbPolicy: "allow",
+        autoLockMinutes: 15,
+        visibleModules: ["broadcasts"],
+        role,
+        policyVersion: 1,
+        updatedAt: new Date("2026-08-25T00:00:00.000Z"),
+      });
+
+      const dto = await service.getPolicyForFieldSession({
+        typ: "field",
+        sub: "officer-1",
+        fieldDeviceId: `dev-${role}`,
+        fieldRole: role,
+      } as never);
+
+      const create = prisma.fieldDeviceLauncherPolicy.upsert.mock.calls[0]?.[0]?.create;
+      expect(create.visibleModules.includes("broadcasts")).toBe(true);
+      expect(dto.visibleModules.includes("broadcasts")).toBe(true);
+    }
+  });
+
   it("rejects invalid deviceMode", async () => {
     const { prisma, service } = createService();
     prisma.fieldDevice.findUnique.mockResolvedValueOnce({ id: "dev-1", publicDeviceId: "FD-1" });

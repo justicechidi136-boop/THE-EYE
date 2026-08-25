@@ -218,6 +218,12 @@ class _OperationalDashboardScreenState
                 onTap: () => _openRoute(FieldRoutes.bolo),
               ),
               _QuickAction(
+                label: l10n.broadcasts,
+                icon: Icons.campaign_outlined,
+                count: counts['nearbyBroadcasts'] as int?,
+                onTap: () => _openRoute(FieldRoutes.broadcasts),
+              ),
+              _QuickAction(
                 label: l10n.drone,
                 icon: Icons.flight,
                 onTap: () => _openRoute(FieldRoutes.drone),

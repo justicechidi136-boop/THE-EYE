@@ -407,4 +407,20 @@ class FieldLocalizationsEn extends FieldLocalizations {
 
   @override
   String get broadcasts => 'Broadcasts';
+
+  @override
+  String get nationwideBroadcasts => 'Nationwide safety broadcasts';
+
+  @override
+  String get noBroadcasts => 'No broadcasts available';
+
+  @override
+  String get broadcastFeedEmptyHint =>
+      'Pull down to refresh the nationwide safety feed.';
+
+  @override
+  String get broadcastDetails => 'Broadcast details';
+
+  @override
+  String get published => 'Published';
 }

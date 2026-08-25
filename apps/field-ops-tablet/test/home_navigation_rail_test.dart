@@ -10,5 +10,7 @@ void main() {
     expect(source, contains('scrollable: true'));
     expect(source, contains('labelType: NavigationRailLabelType.none'));
     expect(source, isNot(contains('labelType: NavigationRailLabelType.all')));
+    expect(source, contains('FieldRoutes.broadcasts'));
+    expect(source, contains('Icons.campaign_outlined'));
   });
 }

@@ -132,5 +132,10 @@
   "maintenance": "Nlekọta",
   "approvedApps": "App akwadoro",
   "incidentLocation": "Maapụ ihe merenụ",
-  "broadcasts": "Mgbasa ozi"
+  "broadcasts": "Mgbasa ozi",
+  "nationwideBroadcasts": "Mgbasa ozi nchekwa mba niile",
+  "noBroadcasts": "Enweghị mgbasa ozi ugbu a",
+  "broadcastFeedEmptyHint": "Dọpụta ala iji mee mgbasa ozi ọhụrụ.",
+  "broadcastDetails": "Nkọwa mgbasa ozi",
+  "published": "Ebipụtara"
 }

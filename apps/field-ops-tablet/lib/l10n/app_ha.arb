@@ -132,5 +132,10 @@
   "maintenance": "Gyara",
   "approvedApps": "Manhajoji da aka amince da su",
   "incidentLocation": "Taswirar lamari",
-  "broadcasts": "Sanarwa"
+  "broadcasts": "Sanarwa",
+  "nationwideBroadcasts": "Sanarwar tsaro na ƙasa",
+  "noBroadcasts": "Babu sanarwa a yanzu",
+  "broadcastFeedEmptyHint": "Ja ƙasa don sabunta sanarwar tsaro.",
+  "broadcastDetails": "Bayanan sanarwa",
+  "published": "An wallafa"
 }

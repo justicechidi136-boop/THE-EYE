@@ -18,6 +18,7 @@ abstract final class FieldRoutes {
   static const assignments = '/assignments';
   static const incidentWorkspace = '/incident-workspace';
   static const bolo = '/bolo';
+  static const broadcasts = '/broadcasts';
   static const drone = '/drone';
   static const comms = '/comms';
 }

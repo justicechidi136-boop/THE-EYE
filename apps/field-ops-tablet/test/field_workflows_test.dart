@@ -11,23 +11,39 @@ import 'package:the_eye_field_ops/api/field_api_client.dart';
 
 class _RecordingClient extends FieldApiClient {
   _RecordingClient({required this.handler})
-      : super(baseUrl: 'http://127.0.0.1:4000/v1', skipEnvGuard: true);
+    : super(baseUrl: 'http://127.0.0.1:4000/v1', skipEnvGuard: true);
 
-  final Future<Map<String, dynamic>> Function(String method, String path, Map<String, dynamic>? body) handler;
+  final Future<Map<String, dynamic>> Function(
+    String method,
+    String path,
+    Map<String, dynamic>? body,
+  )
+  handler;
 
   String? lastMethod;
   String? lastPath;
   Map<String, dynamic>? lastBody;
+  Map<String, String>? lastQuery;
 
   @override
-  Future<Map<String, dynamic>> get(String path, {Map<String, String>? headers, Map<String, String>? query}) async {
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, String>? headers,
+    Map<String, String>? query,
+  }) async {
     lastMethod = 'GET';
     lastPath = path;
+    lastQuery = query;
     return handler('GET', path, null);
   }
 
   @override
-  Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? body, Map<String, String>? headers, Map<String, String>? query}) async {
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+    Map<String, String>? query,
+  }) async {
     lastMethod = 'POST';
     lastPath = path;
     lastBody = body;
@@ -35,7 +51,12 @@ class _RecordingClient extends FieldApiClient {
   }
 
   @override
-  Future<Map<String, dynamic>> patch(String path, {Map<String, dynamic>? body, Map<String, String>? headers, Map<String, String>? query}) async {
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+    Map<String, String>? query,
+  }) async {
     lastMethod = 'PATCH';
     lastPath = path;
     lastBody = body;
@@ -51,14 +72,20 @@ void main() {
     expect(FieldApiPaths.patrolsStart, '/field/patrols/start');
     expect(FieldApiPaths.checkpointsSearch, '/field/checkpoints/search');
     expect(FieldApiPaths.assignment('abc'), '/field/assignments/abc');
-    expect(FieldApiPaths.responsesForAssignment('abc'),
-        '/field/responses/assignments/abc');
+    expect(
+      FieldApiPaths.responsesForAssignment('abc'),
+      '/field/responses/assignments/abc',
+    );
     expect(FieldApiPaths.syncBatch, '/field/sync/batch');
     expect(FieldApiPaths.mapContext, '/field/map/context');
     expect(FieldApiPaths.eventsPoll, '/field/events');
     expect(FieldApiPaths.safetyPanic, '/field/safety/panic');
     expect(FieldApiPaths.backupCreate, '/field/backup');
-    expect(FieldApiPaths.incidentMessages('inc-1'), '/field/incidents/inc-1/messages');
+    expect(FieldApiPaths.broadcastsCountry, '/broadcasts/country');
+    expect(
+      FieldApiPaths.incidentMessages('inc-1'),
+      '/field/incidents/inc-1/messages',
+    );
   });
 
   test('operational routes are registered', () {
@@ -67,15 +94,19 @@ void main() {
     expect(FieldRoutes.assignments, '/assignments');
     expect(FieldRoutes.incidentWorkspace, '/incident-workspace');
     expect(FieldRoutes.bolo, '/bolo');
+    expect(FieldRoutes.broadcasts, '/broadcasts');
     expect(FieldRoutes.drone, '/drone');
     expect(FieldRoutes.comms, '/comms');
   });
 
   test('workflows service calls dashboard endpoint', () async {
     final client = _RecordingClient(
-      handler: (method, path, body) async => {
-        'data': {'officer': {'displayName': 'Officer A'}},
-      },
+      handler:
+          (method, path, body) async => {
+            'data': {
+              'officer': {'displayName': 'Officer A'},
+            },
+          },
     );
     final service = FieldWorkflowsService(api: client);
 
@@ -85,6 +116,28 @@ void main() {
     expect(client.lastPath, FieldApiPaths.dashboard);
     expect(dashboard['officer'], isA<Map>());
   });
+
+  test(
+    'workflows service reads the canonical nationwide broadcast feed',
+    () async {
+      final client = _RecordingClient(
+        handler:
+            (method, path, body) async => {
+              'data': [
+                {'id': 'broadcast-1', 'title': 'Safety update'},
+              ],
+            },
+      );
+      final service = FieldWorkflowsService(api: client);
+
+      final broadcasts = await service.listCountryBroadcasts(limit: 25);
+
+      expect(client.lastMethod, 'GET');
+      expect(client.lastPath, FieldApiPaths.broadcastsCountry);
+      expect(client.lastQuery, {'limit': '25'});
+      expect(broadcasts.single['id'], 'broadcast-1');
+    },
+  );
 
   test('offline queue persists and sync batch clears applied items', () async {
     final tempDir = await Directory.systemTemp.createTemp('field_queue_test');
@@ -96,12 +149,15 @@ void main() {
         final items = body?['items'] as List? ?? [];
         return {
           'data': {
-            'results': items
-                .map((item) => {
-                      'clientActionId': (item as Map)['clientActionId'],
-                      'success': true,
-                    })
-                .toList(),
+            'results':
+                items
+                    .map(
+                      (item) => {
+                        'clientActionId': (item as Map)['clientActionId'],
+                        'success': true,
+                      },
+                    )
+                    .toList(),
           },
         };
       },

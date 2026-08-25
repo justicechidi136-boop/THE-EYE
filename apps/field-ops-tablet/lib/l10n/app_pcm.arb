@@ -132,5 +132,10 @@
   "maintenance": "Maintenance",
   "approvedApps": "Approved Apps",
   "incidentLocation": "Incident Map",
-  "broadcasts": "Broadcasts"
+  "broadcasts": "Broadcasts",
+  "nationwideBroadcasts": "Nationwide safety broadcasts",
+  "noBroadcasts": "No broadcast dey now",
+  "broadcastFeedEmptyHint": "Pull down to refresh the safety feed.",
+  "broadcastDetails": "Broadcast details",
+  "published": "Published"
 }
