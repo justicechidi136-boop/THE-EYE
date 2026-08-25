@@ -70,7 +70,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (error.code == 'DEVICE_APPROVAL_PENDING') {
         Navigator.of(context).pushReplacementNamed(FieldRoutes.approvalPending);
       } else if (error.statusCode == 401 || error.statusCode == 403) {
-        Navigator.of(context).pushReplacementNamed(FieldRoutes.unauthorized);
+        Navigator.of(context).pushReplacementNamed(
+          FieldRoutes.unauthorized,
+          arguments: error.message,
+        );
       }
     } catch (error) {
       setState(() => _error = error.toString());
