@@ -165,6 +165,15 @@ export class UsersController {
     return this.users.reviewKyc(request.user, id, dto);
   }
 
+  @Get("admin/:id")
+  @RequirePermissions("user:manage")
+  adminDetail(
+    @Req() request: { user: Parameters<UsersService["getAdminDetail"]>[0] },
+    @Param("id") id: string,
+  ) {
+    return this.users.getAdminDetail(request.user, id);
+  }
+
   @Get(":id")
   @RequirePermissions("user:manage")
   citizenDetail(

@@ -430,6 +430,17 @@ export async function fetchCitizenDetail(userId: string): Promise<Record<string,
   }, null);
 }
 
+export async function fetchDirectoryDetail(id: string): Promise<Record<string, unknown> | null> {
+  const token = await getAccessToken();
+  if (!token) return null;
+  try {
+    return await apiRequest<Record<string, unknown>>(`/users/admin/${encodeURIComponent(id)}`, { token });
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 404) throw error;
+    return apiRequest<Record<string, unknown>>(`/users/${encodeURIComponent(id)}`, { token });
+  }
+}
+
 export async function fetchAuditLogs(filters?: {
   action?: string;
   entityType?: string;

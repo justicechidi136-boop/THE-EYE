@@ -1138,6 +1138,28 @@ export class UsersService {
     };
   }
 
+  async getAdminDetail(actor: JwtPayload, adminId: string) {
+    this.assertAdminWithUserManage(actor);
+    const admin = await this.prisma.adminUser.findFirst({
+      where: { id: adminId, ...this.adminScopeWhere(actor) },
+      include: { role: true, agency: true },
+    });
+    if (!admin) throw new NotFoundException("Admin account not found");
+
+    return {
+      id: admin.id,
+      typ: "admin" as const,
+      displayName: admin.displayName,
+      email: admin.email,
+      role: admin.role.name,
+      status: admin.isActive ? "Active" : "Inactive",
+      scope: [admin.country, admin.state, admin.lga].filter(Boolean).join(" / ") || "Global",
+      agency: admin.agency?.name ?? null,
+      createdAt: admin.createdAt.toISOString(),
+      updatedAt: admin.updatedAt.toISOString(),
+    };
+  }
+
   private async resolveProfileAvatarUrl(value?: string | null) {
     if (!value) return value ?? null;
     const match = value.match(/^storage:\/\/([^/]+)\/(.+)$/);
