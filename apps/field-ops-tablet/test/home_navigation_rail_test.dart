@@ -7,6 +7,7 @@ void main() {
     final source = File('lib/screens/home_screen.dart').readAsStringSync();
 
     expect(source, contains('extended: true'));
+    expect(source, contains('scrollable: true'));
     expect(source, contains('labelType: NavigationRailLabelType.none'));
     expect(source, isNot(contains('labelType: NavigationRailLabelType.all')));
   });

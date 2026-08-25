@@ -74,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationRail(
             selectedIndex: _selectedIndex,
             extended: true,
+            scrollable: true,
             minExtendedWidth: 200,
             labelType: NavigationRailLabelType.none,
             backgroundColor: FieldColors.surface,
