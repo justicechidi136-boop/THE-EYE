@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:the_eye_field_ops/api/field_api_client.dart';
+import 'package:the_eye_field_ops/screens/pair_device_screen.dart';
+import 'package:the_eye_field_ops/security/device_keystore_service.dart';
+import 'package:the_eye_field_ops/security/secure_session_store.dart';
+import 'package:the_eye_field_ops/services/field_app_services.dart';
 import 'package:the_eye_field_ops/theme/field_theme.dart';
 
 void main() {
@@ -90,6 +95,38 @@ void main() {
 
     expect(find.byType(TextField), findsNWidgets(2));
     expect(find.text('Submit registration'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pairing chooser renders in a landscape scroll view', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final services = FieldAppServices(
+      api: FieldApiClient(
+        baseUrl: 'http://127.0.0.1:4000/v1',
+        skipEnvGuard: true,
+      ),
+      session: SecureSessionStore(memory: {}),
+      keystore: DeviceKeystoreService(memory: {}),
+    );
+    addTearDown(services.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFieldTheme(),
+        home: PairDeviceScreen(services: services),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pair this device'), findsOneWidget);
+    expect(find.text('Scan QR Code'), findsOneWidget);
+    expect(find.text('Enter Pairing Code'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

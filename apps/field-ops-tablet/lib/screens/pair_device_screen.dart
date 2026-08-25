@@ -327,7 +327,7 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
         ),
         const SizedBox(height: 32),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Semantics(
