@@ -14,6 +14,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
     },
     adminUser: {
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn(),
     },
     adminRole: {
@@ -183,6 +184,36 @@ describe("UsersService operational account provisioning", () => {
       password: "StrongPassword-000",
       jurisdictionId: "jur-1",
     })).rejects.toThrow("cannot create this account type");
+  });
+
+  it("returns a scoped operational account without credential material", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.adminUser.findFirst.mockResolvedValue({
+      id: "officer-1",
+      displayName: "Officer Ada Okeke",
+      email: "ada.okeke@agency.gov.ng",
+      passwordHash: "must-not-leak",
+      country: "NG",
+      state: "LA",
+      lga: "Ikeja",
+      isActive: true,
+      createdAt: new Date("2026-08-25T10:00:00.000Z"),
+      updatedAt: new Date("2026-08-25T10:00:00.000Z"),
+      role: { name: "Police/Security Officer" },
+      agency: { name: "Lagos Field Command" },
+    });
+
+    const result = await service.getAdminDetail(stateAdmin, "officer-1");
+
+    expect(prisma.adminUser.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: "officer-1", country: "NG", state: "LA" }),
+      }),
+    );
+    expect(result.typ).toBe("admin");
+    expect(result.role).toBe("Police/Security Officer");
+    expect(Object.prototype.hasOwnProperty.call(result, "passwordHash")).toBe(false);
+    expect(JSON.stringify(result).includes("must-not-leak")).toBe(false);
   });
 });
 

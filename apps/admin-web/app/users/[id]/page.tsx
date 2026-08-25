@@ -2,16 +2,58 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "../../../components/app-shell";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
-import { fetchCitizenDetail } from "../../../lib/api/data";
+import { fetchDirectoryDetail } from "../../../lib/api/data";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = { params: Promise<{ id: string }> };
 
-export default async function CitizenDetailPage({ params }: PageProps) {
+export default async function UserDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const detail = await fetchCitizenDetail(id);
+  const detail = await fetchDirectoryDetail(id);
   if (!detail) notFound();
+
+  if (detail.typ === "admin") {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Operational account"
+          title={String(detail.displayName ?? "Administrator")}
+          action={
+            <Link href="/users?kind=admin" className="text-sm text-accent underline">
+              Directory
+            </Link>
+          }
+        />
+        <Panel title="Identity and access">
+          <dl className="space-y-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Email</dt>
+              <dd>{String(detail.email ?? "—")}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Role</dt>
+              <dd>{String(detail.role ?? "—")}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Status</dt>
+              <dd>
+                <StatusBadge>{String(detail.status ?? "—")}</StatusBadge>
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Jurisdiction</dt>
+              <dd>{String(detail.scope ?? "—")}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Agency</dt>
+              <dd>{String(detail.agency ?? "Not assigned")}</dd>
+            </div>
+          </dl>
+        </Panel>
+      </AppShell>
+    );
+  }
 
   const profile = (detail.profile as Record<string, unknown> | null) ?? null;
   const contacts = Array.isArray(detail.emergencyContacts)
