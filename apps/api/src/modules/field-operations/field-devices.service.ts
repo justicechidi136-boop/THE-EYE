@@ -47,7 +47,7 @@ export class FieldDevicesService {
       },
     });
     await this.audit.record({
-      actor: { sub: "system", typ: "admin", permissions: [] },
+      actorType: "system",
       action: "field.device.registration_challenge",
       entityType: "field_device_registration_challenge",
       entityId: record.id,
