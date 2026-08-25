@@ -118,7 +118,7 @@ export function LiveVideoViewer({ sessions }: Props) {
           <div className="relative min-h-[520px] overflow-hidden rounded-lg border border-line bg-command text-white">
             <LivekitAdminPlayer sessionId={selected.id} sessionStatus={selected.status} onStateChange={setPlayerState} />
 
-            <div className="absolute left-4 top-4 w-[330px] rounded-lg border border-white/15 bg-black/80 p-4 shadow-soft">
+            <div className="absolute left-4 right-4 top-4 z-10 w-auto rounded-lg border border-white/15 bg-black/80 p-4 shadow-soft sm:right-auto sm:w-[330px]">
               <p className="text-sm font-black tracking-normal text-white">THE EYE LIVE EVIDENCE</p>
               <div className="mt-3 grid gap-1 text-sm text-white/85">
                 <p>Incident: {displayOverlay.incidentId}</p>

@@ -87,15 +87,15 @@ export function LivekitAdminPlayer({ sessionId, sessionStatus, onStateChange }: 
     <div className="relative h-full min-h-[520px] w-full">
       <video ref={videoRef} className="h-full w-full object-cover" playsInline muted controls={playerState === "connected" || playerState === "paused"} />
       {playerState === "connected" ? (
-        <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" className="bg-black/70 text-white hover:bg-black" onClick={pause}>
+        <div className="absolute bottom-4 right-4 z-20 flex flex-wrap gap-2">
+          <Button type="button" variant="media" onClick={pause}>
             Pause
           </Button>
         </div>
       ) : null}
       {playerState !== "connected" && playerState !== "paused" ? (
-        <div className="absolute inset-0 grid place-items-center bg-command/80 px-6 text-center text-white">
-          <div className="max-w-sm">
+        <div className="absolute inset-0 flex items-end justify-center bg-command/80 px-6 pb-8 text-center text-white">
+          <div className="max-w-sm rounded-md bg-black/45 px-5 py-4">
             {playerState === "connecting" ? <p className="text-lg font-semibold">Connecting to authorized stream...</p> : null}
             {playerState === "reconnecting" ? <p className="text-lg font-semibold">Reconnecting...</p> : null}
             {playerState === "disconnected" ? <p className="text-lg font-semibold">Stream disconnected</p> : null}
@@ -109,7 +109,7 @@ export function LivekitAdminPlayer({ sessionId, sessionStatus, onStateChange }: 
             ) : null}
             <div className="mt-4 flex justify-center">
               {playerState === "idle" || playerState === "failed" || playerState === "disconnected" ? (
-                <Button type="button" variant="secondary" className="bg-white text-command hover:bg-white/90" onClick={() => void connect()}>
+                <Button type="button" variant="inverse" onClick={() => void connect()}>
                   {playerState === "failed" || playerState === "disconnected" ? "Retry live video" : "Play live video"}
                 </Button>
               ) : null}
@@ -118,10 +118,10 @@ export function LivekitAdminPlayer({ sessionId, sessionStatus, onStateChange }: 
         </div>
       ) : null}
       {playerState === "paused" ? (
-        <div className="absolute inset-0 grid place-items-center bg-command/70 px-6 text-center text-white">
-          <div>
+        <div className="absolute inset-0 flex items-end justify-center bg-command/70 px-6 pb-8 text-center text-white">
+          <div className="rounded-md bg-black/45 px-5 py-4">
             <p className="text-lg font-semibold">Live video paused.</p>
-            <Button type="button" variant="secondary" className="mt-4 bg-white text-command hover:bg-white/90" onClick={resume}>
+            <Button type="button" variant="inverse" className="mt-4" onClick={resume}>
               Play
             </Button>
           </div>
