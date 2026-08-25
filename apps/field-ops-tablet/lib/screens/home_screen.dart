@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIndex: _selectedIndex,
             extended: true,
             minExtendedWidth: 200,
-            labelType: NavigationRailLabelType.all,
+            labelType: NavigationRailLabelType.none,
             backgroundColor: FieldColors.surface,
             selectedIconTheme: const IconThemeData(
               color: FieldColors.orange,
