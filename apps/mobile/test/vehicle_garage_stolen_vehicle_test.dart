@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io";
 
 import "package:connectivity_plus/connectivity_plus.dart";
 import "package:flutter/material.dart";
@@ -284,6 +285,7 @@ void main() {
     expect(find.text("Select Vehicle"), findsNothing);
     expect(find.textContaining("Toyota Corolla"), findsNothing);
     expect(find.text("Change vehicle"), findsOneWidget);
+    expect(find.text("Enter Vehicle Manually"), findsNothing);
     expect(find.text("ABC-222"), findsAtLeastNWidgets(1));
     expect(find.text("Honda"), findsAtLeastNWidgets(1));
     expect(find.text("Civic"), findsAtLeastNWidgets(1));
@@ -292,6 +294,88 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("Select Vehicle"), findsOneWidget);
     expect(find.textContaining("Toyota Corolla"), findsOneWidget);
+  });
+
+  testWidgets("selected saved vehicle shows every photo and opens full preview",
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final tempDir = Directory.systemTemp.createTempSync("vehicle-gallery-");
+    addTearDown(() => tempDir.delete(recursive: true));
+    final image = File("${tempDir.path}${Platform.pathSeparator}vehicle.png");
+    image.writeAsBytesSync(base64Decode(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    ));
+    final themeProvider =
+        ThemeProvider(ThemePreferences(await SharedPreferences.getInstance()));
+    final garage = InMemoryVehicleGarageStore()
+      ..vehicles = [
+        CarProfile(
+          id: "v-gallery",
+          make: "Toyota",
+          model: "Corolla",
+          plateNumber: "ABC-111",
+          photos: [
+            CarPhotoRef(
+              id: "front",
+              objectKey: "garage/v-gallery/front.png",
+              previewUrl: image.path,
+              angle: "FRONT",
+              sortOrder: 0,
+            ),
+            CarPhotoRef(
+              id: "side",
+              objectKey: "garage/v-gallery/side.png",
+              previewUrl: image.path,
+              angle: "SIDE",
+              sortOrder: 1,
+            ),
+            CarPhotoRef(
+              id: "rear",
+              objectKey: "garage/v-gallery/rear.png",
+              previewUrl: image.path,
+              angle: "REAR",
+              sortOrder: 2,
+            ),
+          ],
+        ),
+      ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AppScope(
+          controller: _testController(themeProvider, garage),
+          child: const StolenVehicleBroadcastScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text("Use Saved Vehicle"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining("Toyota Corolla"));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("saved-vehicle-photo-grid")),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey("saved-vehicle-photo-0")),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey("saved-vehicle-photo-1")),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey("saved-vehicle-photo-2")),
+        findsOneWidget);
+    expect(find.text("Front"), findsOneWidget);
+    expect(find.text("Side"), findsOneWidget);
+    expect(find.text("Rear"), findsOneWidget);
+    expect(find.text("Enter Vehicle Manually"), findsNothing);
+    expect(find.text("Change vehicle"), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey("saved-vehicle-photo-0")));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text("Front vehicle photo"), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsOneWidget);
   });
 
   testWidgets("saved vehicle selection replaces stale manual vehicle fields",

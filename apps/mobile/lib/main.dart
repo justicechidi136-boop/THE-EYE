@@ -7337,6 +7337,8 @@ class _StolenVehicleBroadcastScreenState
                                   .trim(),
                             ),
                           ),
+                          _buildSavedVehicleGallery(selectedVehicle),
+                          const SizedBox(height: 4),
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
@@ -7355,11 +7357,13 @@ class _StolenVehicleBroadcastScreenState
                     )
                   else
                     _buildSavedVehicleSelector(garageVehicles, selectedVehicle),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: _switchToManualEntry,
-                    child: const Text("Enter Vehicle Manually"),
-                  ),
+                  if (selectedVehicle == null) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: _switchToManualEntry,
+                      child: const Text("Enter Vehicle Manually"),
+                    ),
+                  ],
                 ],
                 if (_entryMode == _StolenVehicleEntryMode.manualEntry &&
                     hasSavedCar) ...[
@@ -7377,30 +7381,6 @@ class _StolenVehicleBroadcastScreenState
                   const SizedBox(height: 12),
                 ],
                 if (showVehicleForm) ...[
-                  if (savedCarImagePath != null &&
-                      (savedCarImagePath!.startsWith("http://") ||
-                          savedCarImagePath!.startsWith("https://") ||
-                          File(savedCarImagePath!).existsSync()))
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: savedCarImagePath!.startsWith("http://") ||
-                                savedCarImagePath!.startsWith("https://")
-                            ? Image.network(
-                                savedCarImagePath!,
-                                height: 140,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              )
-                            : Image.file(
-                                File(savedCarImagePath!),
-                                height: 140,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
-                      ),
-                    ),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text("Vehicle Information",
@@ -7625,14 +7605,12 @@ class _StolenVehicleBroadcastScreenState
   }
 
   Widget _buildVehicleThumb(CarProfile vehicle) {
-    final imagePath = vehicle.imagePath;
-    if (imagePath != null &&
-        imagePath.isNotEmpty &&
-        File(imagePath).existsSync()) {
+    final imagePath = _primarySavedVehiclePhotoPath(vehicle);
+    if (imagePath != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Image.file(
-          File(imagePath),
+        child: _buildSavedVehicleImage(
+          imagePath,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
@@ -7648,6 +7626,160 @@ class _StolenVehicleBroadcastScreenState
       ),
       child: Icon(Icons.directions_car, color: context.eyeMutedText),
     );
+  }
+
+  List<CarPhotoRef> _displayableSavedVehiclePhotos(CarProfile vehicle) {
+    final photos = vehicle.photos
+        .where((photo) => (photo.previewUrl ?? "").trim().isNotEmpty)
+        .toList(growable: true)
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    if (photos.isEmpty && (vehicle.imagePath ?? "").trim().isNotEmpty) {
+      photos.add(CarPhotoRef(
+        previewUrl: vehicle.imagePath!.trim(),
+        angle: "OTHER",
+      ));
+    }
+    return photos;
+  }
+
+  String? _primarySavedVehiclePhotoPath(CarProfile vehicle) {
+    final photos = _displayableSavedVehiclePhotos(vehicle);
+    return photos.isEmpty ? null : photos.first.previewUrl?.trim();
+  }
+
+  Widget _buildSavedVehicleGallery(CarProfile vehicle) {
+    final photos = _displayableSavedVehiclePhotos(vehicle);
+    if (photos.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                "Saved vehicle photos",
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const Spacer(),
+              Text(
+                "${photos.length} photo${photos.length == 1 ? "" : "s"}",
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.eyeMutedText,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GridView.builder(
+            key: const ValueKey("saved-vehicle-photo-grid"),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: photos.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 1,
+            ),
+            itemBuilder: (context, index) {
+              final photo = photos[index];
+              final path = photo.previewUrl!.trim();
+              final angle = VehiclePhotoAngle.fromApi(photo.angle).label;
+              return Semantics(
+                button: true,
+                label: "View $angle vehicle photo",
+                child: Material(
+                  key: ValueKey("saved-vehicle-photo-$index"),
+                  clipBehavior: Clip.antiAlias,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    onTap: () => _openSavedVehiclePhoto(path, angle),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _buildSavedVehicleImage(path, fit: BoxFit.cover),
+                        Positioned(
+                          left: 4,
+                          bottom: 4,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              child: Text(
+                                angle,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openSavedVehiclePhoto(String path, String angle) {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: Text("$angle vehicle photo")),
+          body: SafeArea(
+            child: Center(
+              child: InteractiveViewer(
+                minScale: 1,
+                maxScale: 4,
+                child: _buildSavedVehicleImage(path, fit: BoxFit.contain),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSavedVehicleImage(
+    String path, {
+    double? width,
+    double? height,
+    required BoxFit fit,
+  }) {
+    final fallback = Container(
+      width: width,
+      height: height,
+      color: context.eyeSurfaceMuted,
+      alignment: Alignment.center,
+      child: Icon(Icons.broken_image_outlined, color: context.eyeMutedText),
+    );
+    if (path.startsWith("http://") || path.startsWith("https://")) {
+      return Image.network(
+        path,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (_, __, ___) => fallback,
+      );
+    }
+    final file = File(path);
+    if (!file.existsSync()) return fallback;
+    return Image.file(file, width: width, height: height, fit: fit);
   }
 }
 
