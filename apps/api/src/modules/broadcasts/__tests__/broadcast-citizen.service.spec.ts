@@ -469,13 +469,18 @@ describe("BroadcastCitizenService", () => {
     resetCitizenMocks();
     prisma.broadcast.findFirst.mockResolvedValue({
       id: "broadcast-1",
+      type: BroadcastType.StolenVehicle,
       status: BroadcastStatus.Active,
       creatorUserId: "owner-1",
       jurisdictionId: "jurisdiction-1",
       country: "NG",
       state: "Lagos",
       lga: "Ikeja",
-      metadata: { make: "Toyota", model: "Corolla" },
+      metadata: {
+        make: "Toyota",
+        model: "Corolla",
+        registrationMasked: "****-234",
+      },
       incident: { assignedAgencyId: "agency-1" },
     });
     prisma.broadcastSighting.findFirst.mockResolvedValue(null);
@@ -530,11 +535,16 @@ describe("BroadcastCitizenService", () => {
       expect.objectContaining({
         userId: "owner-1",
         type: "BroadcastSightingAlert",
-        title: "New sighting reported",
+        title: "New sighting for stolen vehicle: Toyota Corolla (****-234)",
         channels: ["push"],
         metadata: expect.objectContaining({
           broadcastId: "broadcast-1",
           sightingId: "sighting-1",
+          eventType: "BROADCAST_SIGHTING_REPORTED",
+          broadcastType: BroadcastType.StolenVehicle,
+          notificationTemplateKey: "sighting.stolenVehicle",
+          vehicleDescription: "Toyota Corolla",
+          plateNumber: "****-234",
           idempotencyKey: "broadcast-sighting:sighting-1:owner-1",
           deepLink: "/broadcasts/broadcast-1/sightings/sighting-1",
         }),
