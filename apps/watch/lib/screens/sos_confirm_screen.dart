@@ -30,9 +30,6 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
     super.initState();
     _mode = widget.mode;
     _stream = widget.services.sos.states;
-    if (widget.services.sos.state.lifecycle == SosLifecycle.idle) {
-      widget.services.sos.beginHold(emergencyMode: _mode);
-    }
   }
 
   void _cancel() {
@@ -81,8 +78,15 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
                       )
                     : LargeSosButton(
                         progress: progress.clamp(0.0, 1.0),
-                        onHoldStart: () => widget.services.sos
-                            .beginHold(emergencyMode: _mode),
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Press and hold SOS for 3 seconds'),
+                            ),
+                          );
+                        },
+                        onHoldStart: () =>
+                            widget.services.sos.beginHold(emergencyMode: _mode),
                         onHoldEnd: widget.services.sos.cancelHold,
                       ),
               ),
@@ -99,7 +103,9 @@ class _SosConfirmScreenState extends State<SosConfirmScreen> {
                   seconds: (3 - (progress * 3)).ceil().clamp(1, 3),
                   subtitle: state.lifecycle == SosLifecycle.holding
                       ? (discreet ? 'Keep holding' : 'Keep holding for SOS')
-                      : (discreet ? 'Hold 3 seconds' : 'Hold 3 seconds to activate'),
+                      : (discreet
+                          ? 'Hold 3 seconds'
+                          : 'Hold 3 seconds to activate'),
                 ),
               const Spacer(),
               WatchOutlineButton(label: 'Cancel', onPressed: _cancel),

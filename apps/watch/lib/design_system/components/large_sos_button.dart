@@ -9,6 +9,7 @@ class LargeSosButton extends StatelessWidget {
     super.key,
     required this.onHoldStart,
     required this.onHoldEnd,
+    this.onTap,
     this.progress = 0,
     this.size = EyeTokens.sosButtonLarge,
     this.compact = false,
@@ -17,6 +18,7 @@ class LargeSosButton extends StatelessWidget {
 
   final VoidCallback onHoldStart;
   final VoidCallback onHoldEnd;
+  final VoidCallback? onTap;
   final double progress;
   final double size;
   final bool compact;
@@ -28,6 +30,7 @@ class LargeSosButton extends StatelessWidget {
     final fontSize = compact ? 10.0 : 12.0;
 
     return GestureDetector(
+      onTap: onTap,
       onLongPressStart: (_) => onHoldStart(),
       onLongPressEnd: (_) => onHoldEnd(),
       onLongPressCancel: onHoldEnd,

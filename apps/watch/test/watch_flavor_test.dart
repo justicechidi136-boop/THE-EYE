@@ -21,6 +21,17 @@ void main() {
   });
 
   group('assertWatchFirebaseEnvMatchesFlavor', () {
+    test('staging Firebase client configuration is complete', () {
+      expect(
+        FirebaseOptionsStaging.currentPlatform.apiKey,
+        isNot(startsWith('REPLACE_WITH_')),
+      );
+      expect(
+        FirebaseOptionsStaging.currentPlatform.appId,
+        isNot(startsWith('REPLACE_WITH_')),
+      );
+    });
+
     test('allows matching staging project', () {
       expect(
         () => assertWatchFirebaseEnvMatchesFlavor(

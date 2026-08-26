@@ -29,6 +29,14 @@ function buildService() {
   const prisma = {
     incident: {
       create: jest.fn().mockResolvedValue({ id: "incident-1" }),
+      findUnique: jest.fn().mockResolvedValue({
+        country: "Nigeria",
+        state: "Lagos",
+        lga: "Ikeja",
+      }),
+    },
+    adminUser: {
+      findMany: jest.fn().mockResolvedValue([{ id: "admin-1" }]),
     },
     dangerEvent: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -151,6 +159,19 @@ describe("DangerTriggerService", () => {
         channels: ["watch_push"],
       }),
     );
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminUserId: "admin-1",
+        incidentId: "incident-1",
+        type: "EmergencyAlert",
+        channels: ["in_app", "push"],
+        metadata: expect.objectContaining({
+          category: "DANGER_ALERT",
+          preciseReporterLocationExposed: false,
+        }),
+      }),
+    );
+    expect(result.adminNotificationCount).toBe(1);
   });
 
   it("notifies every distinct eligible user within four kilometres", async () => {
@@ -171,7 +192,7 @@ describe("DangerTriggerService", () => {
 
     const mobileRecipients = notifications.create.mock.calls
       .map((call: any[]) => call[0])
-      .filter((input: any) => input.channels.includes("push"))
+      .filter((input: any) => input.userId && input.channels.includes("push"))
       .map((input: any) => input.userId);
     expect(mobileRecipients).toEqual(["user-a", "user-b", "user-c"]);
     const userBWatchAlerts = notifications.create.mock.calls
