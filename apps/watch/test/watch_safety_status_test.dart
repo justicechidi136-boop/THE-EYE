@@ -128,4 +128,26 @@ void main() {
       return const SizedBox.shrink();
     })));
   });
+
+  testWidgets('area risk labels are available in every watch locale',
+      (tester) async {
+    for (final locale in TheEyeLocaleCatalog.supportedLocales) {
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        supportedLocales: TheEyeLocaleCatalog.supportedLocales,
+        localizationsDelegates: const [
+          WatchLocalizations.delegate,
+          ...TheEyeLocaleCatalog.frameworkLocalizationsDelegates,
+        ],
+        home: Builder(builder: (context) {
+          final l10n = WatchLocalizations.of(context);
+          expect(l10n.highRiskArea.trim(), isNotEmpty);
+          expect(l10n.mediumRiskArea.trim(), isNotEmpty);
+          expect(l10n.greenSafeArea.trim(), isNotEmpty);
+          return const SizedBox.shrink();
+        }),
+      ));
+      await tester.pumpAndSettle();
+    }
+  });
 }

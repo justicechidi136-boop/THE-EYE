@@ -176,6 +176,54 @@ abstract class WatchLocalizations {
   /// **'Area safe'**
   String get areaSafe;
 
+  /// No description provided for @greenSafeArea.
+  ///
+  /// In en, this message translates to:
+  /// **'Green safe area'**
+  String get greenSafeArea;
+
+  /// No description provided for @checkingAreaRisk.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking area risk'**
+  String get checkingAreaRisk;
+
+  /// No description provided for @areaRiskUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for trusted location data'**
+  String get areaRiskUnavailable;
+
+  /// No description provided for @mediumRiskArea.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium risk area'**
+  String get mediumRiskArea;
+
+  /// No description provided for @highRiskArea.
+  ///
+  /// In en, this message translates to:
+  /// **'High risk area'**
+  String get highRiskArea;
+
+  /// No description provided for @noRepeatedDangerPattern.
+  ///
+  /// In en, this message translates to:
+  /// **'No repeated danger pattern nearby.'**
+  String get noRepeatedDangerPattern;
+
+  /// No description provided for @someRepeatedDangerReports.
+  ///
+  /// In en, this message translates to:
+  /// **'Some recent danger reports nearby.'**
+  String get someRepeatedDangerReports;
+
+  /// No description provided for @frequentDangerReports.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequent danger reports nearby.'**
+  String get frequentDangerReports;
+
   /// No description provided for @stayAlertSuspiciousActivity.
   ///
   /// In en, this message translates to:

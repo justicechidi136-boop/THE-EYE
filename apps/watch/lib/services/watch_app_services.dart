@@ -2,6 +2,7 @@ import '../api/watch_api_client.dart';
 import '../models/connectivity_mode.dart';
 import '../pairing/pairing_service.dart';
 import '../services/alert_service.dart';
+import '../services/area_risk_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/danger_alert_service.dart';
 import '../services/device_telemetry_service.dart';
@@ -54,6 +55,11 @@ class WatchAppServices {
       preferences: this.preferences,
       connectivity: this.connectivity,
     );
+    areaRisk = AreaRiskService(
+      api: api,
+      credentials: creds,
+      location: location,
+    );
     sos = SosService(
       api: api,
       credentials: creds,
@@ -95,6 +101,7 @@ class WatchAppServices {
   late final StandaloneAuthService standaloneAuth;
   late final PairingService pairing;
   late final LocationService location;
+  late final AreaRiskService areaRisk;
   late final SosService sos;
   late final HeartbeatService heartbeat;
   late final AlertService alerts;
@@ -126,6 +133,7 @@ class WatchAppServices {
     heartbeat.start();
     await location.restoreEmergencyTrackingIfNeeded();
     await location.startIdleTracking();
+    areaRisk.start();
     if (firebaseReady && _enablePush) {
       try {
         await push.start().timeout(pushTimeout);
@@ -146,6 +154,7 @@ class WatchAppServices {
     await heartbeat.refreshAfterResume();
     await _refreshPushRegistration();
     await accountLanguage.syncFromAccount();
+    await areaRisk.refresh();
   }
 
   Future<void> _refreshPushRegistration() async {
@@ -161,6 +170,7 @@ class WatchAppServices {
     _telemetry?.dispose();
     heartbeat.stop();
     location.stopTracking();
+    areaRisk.dispose();
     sos.dispose();
     pairing.dispose();
     dangerAlerts.dispose();

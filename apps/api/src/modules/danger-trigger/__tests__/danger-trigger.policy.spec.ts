@@ -1,9 +1,17 @@
-import { dangerRecipientEligibility, resolveDangerRadius } from "../danger-trigger.policy";
+import { classifyDangerAreaRisk, dangerRecipientEligibility, resolveDangerRadius } from "../danger-trigger.policy";
 import { validateStartDangerTriggerDto } from "../dto/danger-trigger.dto";
 
 const metersNorth = (meters: number) => meters / 111_320;
 
 describe("danger trigger geographic policy", () => {
+  it("uses bounded thresholds for historical area risk", () => {
+    expect(classifyDangerAreaRisk(0)).toBe("GREEN_SAFE");
+    expect(classifyDangerAreaRisk(1)).toBe("GREEN_SAFE");
+    expect(classifyDangerAreaRisk(2)).toBe("MEDIUM_RISK");
+    expect(classifyDangerAreaRisk(4)).toBe("MEDIUM_RISK");
+    expect(classifyDangerAreaRisk(5)).toBe("HIGH_RISK");
+  });
+
   it("includes recipients from 100 metres through the exact four kilometre boundary", () => {
     for (const distance of [100, 1_000, 3_900, 4_000]) {
       const result = dangerRecipientEligibility({

@@ -181,6 +181,32 @@ describe("DangerTriggerService", () => {
     expect(userBWatchAlerts[0].metadata.deviceId).toBeUndefined();
   });
 
+  it("classifies repeated non-QA danger triggers near the requested area", async () => {
+    const { service, prisma } = buildService();
+    prisma.dangerEvent.findMany.mockResolvedValue([
+      { latitude: 6.5244, longitude: 3.3792, areaName: "Ikeja", metadata: {} },
+      { latitude: 6.5250, longitude: 3.3800, areaName: "Ikeja", metadata: {} },
+      { latitude: 6.5260, longitude: 3.3810, areaName: "Ikeja", metadata: { qaTest: true } },
+    ]);
+
+    const result = await service.areaRisk(6.5244, 3.3792, actor);
+
+    expect(result.data.level).toBe("MEDIUM_RISK");
+    expect(result.data.eventCount).toBe(2);
+    expect(result.data.radiusMeters).toBe(4_000);
+    expect(result.data.approximateArea).toBe("Ikeja");
+  });
+
+  it("returns green safe when no qualifying danger pattern exists", async () => {
+    const { service, prisma } = buildService();
+    prisma.dangerEvent.findMany.mockResolvedValue([]);
+
+    const result = await service.areaRisk(6.5244, 3.3792, actor);
+
+    expect(result.data.level).toBe("GREEN_SAFE");
+    expect(result.data.eventCount).toBe(0);
+  });
+
   it("ending voice preserves the danger event state", async () => {
     const { service, prisma, live } = buildService();
     prisma.dangerEvent.findUnique.mockResolvedValue({

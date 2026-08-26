@@ -51,4 +51,7 @@ abstract final class WatchApiPaths {
   static const featureFlags = '/devices/watch/feature-flags';
 
   static const telemetry = '/devices/watch/telemetry';
+
+  static String dangerAreaRisk(double latitude, double longitude) =>
+      '/danger-triggers/area-risk?latitude=${Uri.encodeQueryComponent(latitude.toString())}&longitude=${Uri.encodeQueryComponent(longitude.toString())}';
 }

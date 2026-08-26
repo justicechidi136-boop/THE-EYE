@@ -45,6 +45,32 @@ class WatchLocalizationsYo extends WatchLocalizations {
   String get areaSafe => 'Agbegbe wa lailewu';
 
   @override
+  String get greenSafeArea => 'Agbegbe alawọ ewe ti o ni aabo';
+
+  @override
+  String get checkingAreaRisk => 'N se ayewo ewu agbegbe';
+
+  @override
+  String get areaRiskUnavailable => 'N duro de data ipo to gbekele';
+
+  @override
+  String get mediumRiskArea => 'Agbegbe ewu alabọde';
+
+  @override
+  String get highRiskArea => 'Agbegbe ewu giga';
+
+  @override
+  String get noRepeatedDangerPattern => 'Ko si ewu to n waye leralera nitosi.';
+
+  @override
+  String get someRepeatedDangerReports =>
+      'Awon iroyin ewu tuntun kan wa nitosi.';
+
+  @override
+  String get frequentDangerReports =>
+      'Awon iroyin ewu n waye nigbagbogbo nitosi.';
+
+  @override
   String get stayAlertSuspiciousActivity => 'Maa sora fun iwa ifura.';
 
   @override

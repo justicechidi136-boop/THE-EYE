@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
@@ -45,6 +45,12 @@ export class DangerTriggerController {
   @RequirePermissions("incident:create")
   cancel(@Param("eventId") eventId: string, @Body() dto: CancelDangerTriggerDto, @Req() request: any) {
     return this.dangerTrigger.cancel(eventId, dto, request.user);
+  }
+
+  @Get("area-risk")
+  @RequirePermissions("incident:read")
+  areaRisk(@Query("latitude") latitude: string, @Query("longitude") longitude: string, @Req() request: any) {
+    return this.dangerTrigger.areaRisk(Number(latitude), Number(longitude), request.user);
   }
 
   @Get(":eventId")

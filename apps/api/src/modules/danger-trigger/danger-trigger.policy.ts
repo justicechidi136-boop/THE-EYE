@@ -3,6 +3,16 @@ import { haversineMeters } from "../verification/verification-signals";
 export const OWNER_APPROVED_MAX_DANGER_RADIUS_METERS = 4_000;
 export const DANGER_LOCATION_FRESHNESS_MS = 30 * 60_000;
 export const DANGER_RECIPIENT_LOCATION_FRESHNESS_MS = 30 * 60_000;
+export const DANGER_AREA_RISK_WINDOW_DAYS = 30;
+export const DANGER_AREA_RISK_RADIUS_METERS = 4_000;
+
+export type DangerAreaRiskLevel = "GREEN_SAFE" | "MEDIUM_RISK" | "HIGH_RISK";
+
+export function classifyDangerAreaRisk(eventCount: number): DangerAreaRiskLevel {
+  if (eventCount >= 5) return "HIGH_RISK";
+  if (eventCount >= 2) return "MEDIUM_RISK";
+  return "GREEN_SAFE";
+}
 
 export function resolveDangerRadius(configured?: unknown) {
   const value = Number(configured);

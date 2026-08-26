@@ -45,6 +45,33 @@ class WatchLocalizationsIg extends WatchLocalizations {
   String get areaSafe => 'Mpaghara di mma';
 
   @override
+  String get greenSafeArea => 'Mpaghara ndu di mma';
+
+  @override
+  String get checkingAreaRisk => 'Na-enyocha ihe egwu mpaghara';
+
+  @override
+  String get areaRiskUnavailable => 'Na-eche data ebe a tukwasiri obi';
+
+  @override
+  String get mediumRiskArea => 'Mpaghara ihe egwu etiti';
+
+  @override
+  String get highRiskArea => 'Mpaghara ihe egwu di elu';
+
+  @override
+  String get noRepeatedDangerPattern =>
+      'Enweghi ihe egwu na-eme ugboro ugboro nso.';
+
+  @override
+  String get someRepeatedDangerReports =>
+      'Enwere ufodu akuko ihe egwu nso n\'oge na-adịbeghị anya.';
+
+  @override
+  String get frequentDangerReports =>
+      'Akuko ihe egwu na-aputa ugboro ugboro nso.';
+
+  @override
   String get stayAlertSuspiciousActivity =>
       'Nọ na nche maka omume a na-enyo enyo.';
 
