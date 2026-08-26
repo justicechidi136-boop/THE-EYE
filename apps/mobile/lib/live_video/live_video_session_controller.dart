@@ -25,14 +25,18 @@ class LiveVideoPermissionOutcome {
 }
 
 class LiveVideoSessionController extends ChangeNotifier {
-  LiveVideoSessionController({EvidencePermissionService? permissionService})
-      : _permissionService = permissionService ?? EvidencePermissionService();
+  LiveVideoSessionController({
+    EvidencePermissionService? permissionService,
+    this.audioOnly = false,
+  }) : _permissionService = permissionService ?? EvidencePermissionService();
 
   static const connectTimeout = Duration(seconds: 30);
 
   final EvidencePermissionService _permissionService;
+  final bool audioOnly;
   final LiveVideoJoinFlowTracker joinFlow = LiveVideoJoinFlowTracker();
-  final LiveVideoLifecycleStateMachine _lifecycle = LiveVideoLifecycleStateMachine();
+  final LiveVideoLifecycleStateMachine _lifecycle =
+      LiveVideoLifecycleStateMachine();
   final LiveVideoAttemptFactory _attemptFactory = LiveVideoAttemptFactory();
   final LiveVideoOperationLock _operationLock = LiveVideoOperationLock();
 
@@ -166,10 +170,13 @@ class LiveVideoSessionController extends ChangeNotifier {
   }
 
   Future<LiveVideoPermissionOutcome> ensurePermissions() async {
-    var camera = await _permissionService.cameraState();
-    if (camera == EvidencePermissionState.notRequested ||
-        camera == EvidencePermissionState.denied) {
-      camera = await _permissionService.requestCamera();
+    var camera = EvidencePermissionState.granted;
+    if (!audioOnly) {
+      camera = await _permissionService.cameraState();
+      if (camera == EvidencePermissionState.notRequested ||
+          camera == EvidencePermissionState.denied) {
+        camera = await _permissionService.requestCamera();
+      }
     }
     var microphone = await _permissionService.microphoneState();
     if (microphone == EvidencePermissionState.notRequested ||
@@ -185,8 +192,7 @@ class LiveVideoSessionController extends ChangeNotifier {
         microphone == EvidencePermissionState.granted) {
       return LiveVideoPermissionOutcome(
         granted: false,
-        message:
-            "Camera permission is required for live emergency video. "
+        message: "Camera permission is required for live emergency video. "
             "Reference: ${LiveVideoErrorCodes.cameraPermissionDenied}.",
       );
     }
@@ -194,8 +200,7 @@ class LiveVideoSessionController extends ChangeNotifier {
         microphone != EvidencePermissionState.granted) {
       return LiveVideoPermissionOutcome(
         granted: false,
-        message:
-            "Microphone permission is required for live emergency video. "
+        message: "Microphone permission is required for this live broadcast. "
             "Reference: ${LiveVideoErrorCodes.microphonePermissionDenied}.",
       );
     }
@@ -204,7 +209,7 @@ class LiveVideoSessionController extends ChangeNotifier {
       return LiveVideoPermissionOutcome(
         granted: false,
         message:
-            "Enable camera and microphone in device settings to start live emergency video. "
+            "Enable the required microphone permission in device settings to start this live broadcast. "
             "Reference: ${LiveVideoErrorCodes.cameraPermissionDenied}.",
       );
     }
@@ -212,13 +217,12 @@ class LiveVideoSessionController extends ChangeNotifier {
         microphone == EvidencePermissionState.restricted) {
       return const LiveVideoPermissionOutcome(
         granted: false,
-        message: "Camera or microphone access is restricted on this device.",
+        message: "Required microphone access is restricted on this device.",
       );
     }
     return const LiveVideoPermissionOutcome(
       granted: false,
-      message:
-          "Camera and microphone permission are required for live emergency video.",
+      message: "Microphone permission is required for this live broadcast.",
     );
   }
 
@@ -242,8 +246,7 @@ class LiveVideoSessionController extends ChangeNotifier {
       );
 
       final permissions = await ensurePermissions();
-      if (_disposing ||
-          _lifecycle.phase == LiveVideoLifecyclePhase.stopping) {
+      if (_disposing || _lifecycle.phase == LiveVideoLifecyclePhase.stopping) {
         return false;
       }
       if (!permissions.granted) {
@@ -369,9 +372,7 @@ class LiveVideoSessionController extends ChangeNotifier {
       lifecyclePhase: _lifecycle.phase.name,
     );
 
-    if (runtimeUrl.isEmpty ||
-        runtimeToken.isEmpty ||
-        runtimeRoomName.isEmpty) {
+    if (runtimeUrl.isEmpty || runtimeToken.isEmpty || runtimeRoomName.isEmpty) {
       joinFlow.recordInterrupt(
         reason: "empty_runtime_connect_inputs",
         location: "connectPublisher:preconnect_validation",
@@ -416,8 +417,7 @@ class LiveVideoSessionController extends ChangeNotifier {
       lastConnectStackTraceHead = liveVideoStackTraceHead(stackTrace);
       _transitionLifecycle(
         LiveVideoLifecyclePhase.publishFailed,
-        message:
-            "Unable to prepare camera/microphone for live video ($error). "
+        message: "Unable to prepare camera/microphone for live video ($error). "
             "Reference: ${LiveVideoErrorCodes.publishTracksFailed}.",
         caller: "connectPublisher:prepare_tracks",
       );
@@ -525,7 +525,8 @@ class LiveVideoSessionController extends ChangeNotifier {
         internalReason: lastConnectFailureReason,
       );
       if (kDebugMode) {
-        debugPrintStack(stackTrace: stackTrace, label: "live_video_room_connect");
+        debugPrintStack(
+            stackTrace: stackTrace, label: "live_video_room_connect");
       }
       final code = LiveVideoErrorCodes.connectLivekitFailed;
       _transitionLifecycle(
@@ -574,7 +575,9 @@ class LiveVideoSessionController extends ChangeNotifier {
       }
       await participant.publishAudioTrack(_localAudioTrack!);
       await participant.setMicrophoneEnabled(!_muted);
-      await participant.setCameraEnabled(_cameraEnabled);
+      if (!audioOnly) {
+        await participant.setCameraEnabled(_cameraEnabled);
+      }
 
       attempt.publishedAt = DateTime.now().toUtc();
       _previewActive = true;
@@ -614,7 +617,8 @@ class LiveVideoSessionController extends ChangeNotifier {
         internalReason: lastConnectFailureReason,
       );
       if (kDebugMode) {
-        debugPrintStack(stackTrace: stackTrace, label: "live_video_track_publish");
+        debugPrintStack(
+            stackTrace: stackTrace, label: "live_video_track_publish");
       }
       _transitionLifecycle(
         LiveVideoLifecyclePhase.publishFailed,
@@ -878,11 +882,11 @@ class LiveVideoSessionController extends ChangeNotifier {
   }) async {
     final ownedRoom = room ?? _room;
     if (ownedRoom == null) return;
-    final ownedInstanceId =
-        roomInstanceId ?? attempt?.roomInstanceId ?? identityHashCode(ownedRoom);
+    final ownedInstanceId = roomInstanceId ??
+        attempt?.roomInstanceId ??
+        identityHashCode(ownedRoom);
 
-    final isCurrent =
-        identical(ownedRoom, _room) &&
+    final isCurrent = identical(ownedRoom, _room) &&
         _activeRoomInstanceId == ownedInstanceId &&
         (attempt == null ||
             _activeAttempt?.connectionAttemptId == attempt.connectionAttemptId);
@@ -979,6 +983,10 @@ class LiveVideoSessionController extends ChangeNotifier {
     required String correlationId,
     required String sessionId,
   }) async {
+    if (audioOnly) {
+      await _disposeVideoTrack(caller: "_preparePublisherTracks:audio_only");
+      return;
+    }
     await _recreateLocalVideoTrack(
       correlationId: correlationId,
       sessionId: sessionId,

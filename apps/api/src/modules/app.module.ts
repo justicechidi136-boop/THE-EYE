@@ -38,6 +38,7 @@ import { CitizenActivityModule } from "./citizen-activity/citizen-activity.modul
 import { FieldOperationsModule } from "./field-operations/field-operations.module";
 import { AgenciesModule } from "./agencies/agencies.module";
 import { DangerDetectionModule } from "./danger-detection/danger-detection.module";
+import { DangerTriggerModule } from "./danger-trigger/danger-trigger.module";
 
 const redisDisabled = !shouldRegisterBullMq();
 
@@ -99,6 +100,7 @@ const redisDisabled = !shouldRegisterBullMq();
     FieldOperationsModule,
     AgenciesModule,
     DangerDetectionModule,
+    DangerTriggerModule,
   ],
   controllers: [HealthController],
   providers: [

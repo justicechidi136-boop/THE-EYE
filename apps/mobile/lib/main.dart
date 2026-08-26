@@ -81,6 +81,8 @@ import "live_video/live_video_error_codes.dart";
 import "live_video/live_video_stop_routing.dart";
 import "live_video/live_video_startup_trace.dart";
 import "live_video/live_video_start_validation.dart";
+import "danger_trigger/danger_trigger_screen.dart";
+import "danger_trigger/danger_trigger_alert_screen.dart";
 import "brand.dart";
 import "config/app_flavor.dart";
 import "config/firebase_bootstrap.dart";
@@ -974,6 +976,14 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
       return;
     }
 
+    if (request.route.startsWith("/danger-trigger/events/")) {
+      final eventId =
+          request.route.substring("/danger-trigger/events/".length).trim();
+      if (eventId.isEmpty) return;
+      navigator.pushNamed("/danger-trigger/alert", arguments: eventId);
+      return;
+    }
+
     if (request.route == "/incident-detail") {
       final incidentId = request.incidentId;
       if (incidentId == null || incidentId.isEmpty) return;
@@ -1167,6 +1177,19 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               },
               "/family": (_) => const FamilySafetyCircleScreen(),
               "/smartwatch": (_) => const SmartwatchDeviceScreen(),
+              "/danger-trigger": (context) => DangerTriggerScreen(
+                    apiClient: appOf(context).apiClient,
+                    accessTokenProvider: () => appOf(context).accessToken,
+                  ),
+              "/danger-trigger/alert": (context) {
+                final eventId =
+                    ModalRoute.of(context)?.settings.arguments as String? ?? "";
+                return DangerTriggerAlertScreen(
+                  eventId: eventId,
+                  apiClient: appOf(context).apiClient,
+                  accessTokenProvider: () => appOf(context).accessToken,
+                );
+              },
               "/neighborhood-watch": (_) => const NeighborhoodWatchHomeScreen(),
               "/neighborhood-watch/communities": (_) =>
                   const NeighborhoodWatchHomeScreen(openChatWhenReady: true),
@@ -4961,8 +4984,12 @@ class HomeScreen extends StatelessWidget {
                         Colors.blueGrey.shade700,
                         () =>
                             Navigator.of(context).pushNamed("/stolen-vehicle")),
-                    ActionTile("SOS device", Icons.watch, Colors.red.shade800,
-                        () => Navigator.of(context).pushNamed("/smartwatch")),
+                    ActionTile(
+                        "Danger Trigger",
+                        Icons.crisis_alert,
+                        Colors.red.shade800,
+                        () =>
+                            Navigator.of(context).pushNamed("/danger-trigger")),
                     ActionTile(
                         "Neighborhood Watch",
                         Icons.groups,

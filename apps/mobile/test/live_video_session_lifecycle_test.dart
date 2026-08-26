@@ -34,6 +34,33 @@ void main() {
   }
 
   group("LiveVideoSessionController lifecycle guards", () {
+    test("audio-only permission flow never checks or requests camera",
+        () async {
+      final checked = <Permission>[];
+      final requested = <Permission>[];
+      final controller = LiveVideoSessionController(
+        audioOnly: true,
+        permissionService: EvidencePermissionService(
+          checkPermission: (permission) async {
+            checked.add(permission);
+            return PermissionStatus.granted;
+          },
+          requestPermission: (permission) async {
+            requested.add(permission);
+            return PermissionStatus.granted;
+          },
+        ),
+      );
+
+      final outcome = await controller.ensurePermissions();
+
+      expect(outcome.granted, isTrue);
+      expect(checked, contains(Permission.microphone));
+      expect(checked, isNot(contains(Permission.camera)));
+      expect(requested, isNot(contains(Permission.camera)));
+      controller.dispose();
+    });
+
     test("double stop is idempotent", () async {
       final controller = LiveVideoSessionController();
 
@@ -52,7 +79,8 @@ void main() {
       controller.dispose();
     });
 
-    test("start blocked when lifecycle disallows overlapping sessions", () async {
+    test("start blocked when lifecycle disallows overlapping sessions",
+        () async {
       final controller = LiveVideoSessionController();
 
       controller.debugForceLifecycle(LiveVideoLifecyclePhase.connecting);
@@ -77,8 +105,7 @@ void main() {
       controller.dispose();
     });
 
-    test(
-        "preview does not abort solely because preparing disallows start",
+    test("preview does not abort solely because preparing disallows start",
         () async {
       expect(LiveVideoLifecyclePhase.preparing.allowsStart, isTrue);
 

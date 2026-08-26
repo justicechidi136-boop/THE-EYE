@@ -14,6 +14,7 @@ import { DANGER_CLASSIFIER, type DangerClassifier } from "./danger-classifier.in
 import { resolveDangerDetectionConfig } from "./danger-detection.config";
 import { DangerSourceLoader } from "./danger-source.loader";
 import { RiskDecisionEngine } from "./risk-decision.engine";
+import { dangerRecipientEligibility } from "../danger-trigger/danger-trigger.policy";
 
 export type DangerDetectionJobPayload = { sourceType: DangerSourceType; sourceId: string; idempotencyKey: string };
 
@@ -113,6 +114,7 @@ export class DangerDetectionService {
         afterState: { state: assessment.state, dangerLevel: assessment.dangerLevel, category: assessment.category, resultingAction: assessment.resultingAction },
         metadata: { sourceType: source.sourceType, sourceId: source.sourceId, classifierVersion: classification.version },
       });
+      await this.correlateDangerEventSignal({ assessment, source, classification });
       return { status: "completed" as const, assessmentId: assessment.id, state: assessment.state };
     } catch (error) {
       const errorCode = error instanceof Error
@@ -161,5 +163,85 @@ export class DangerDetectionService {
       correlatedSourceCount: decision.correlatedSourceCount, resultingAction: decision.resultingAction, errorCode: null,
       metadata: { semanticTags: classification.semanticTags ?? [], contextSuppression: classification.contextSuppression ?? null, safetyCopy: "Observe -> Report -> Stay Safe" },
     };
+  }
+
+  private async correlateDangerEventSignal(input: {
+    assessment: any;
+    source: any;
+    classification: any;
+  }) {
+    const { assessment, source, classification } = input;
+    if (!classification.immediateThreat || !classification.activeIncident) return;
+    const prisma = this.prisma as any;
+    if (!prisma.dangerEvent || !prisma.dangerEventSignal) return;
+
+    let event = source.incidentId
+      ? await prisma.dangerEvent.findFirst({
+          where: {
+            state: { in: ["POTENTIAL", "ACTIVE", "VERIFIED"] },
+            OR: [
+              { incidentId: source.incidentId },
+              { signals: { some: { incidentId: source.incidentId } } },
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
+    if (!event && source.latitude != null && source.longitude != null) {
+      const candidates = await prisma.dangerEvent.findMany({
+        where: {
+          state: { in: ["POTENTIAL", "ACTIVE", "VERIFIED"] },
+          createdAt: { gte: new Date(Date.now() - 20 * 60_000) },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
+      event = candidates.find((candidate: any) =>
+        dangerRecipientEligibility({
+          dangerLatitude: Number(candidate.latitude),
+          dangerLongitude: Number(candidate.longitude),
+          recipientLatitude: Number(source.latitude),
+          recipientLongitude: Number(source.longitude),
+          recipientLocationAt: source.occurredAt ?? new Date(),
+          radiusMeters: 750,
+        }).eligible,
+      );
+    }
+    if (!event) return;
+
+    await prisma.dangerEventSignal.upsert({
+      where: {
+        sourceType_sourceId: {
+          sourceType: "AI_SIGNAL",
+          sourceId: assessment.id,
+        },
+      },
+      update: {
+        dangerEventId: event.id,
+        category: classification.category,
+        severity: classification.dangerLevel,
+        metadata: {
+          assessmentState: assessment.state,
+          classifierVersion: classification.version,
+          transcriptPersistedSeparately: true,
+        },
+      },
+      create: {
+        dangerEventId: event.id,
+        sourceType: "AI_SIGNAL",
+        sourceId: assessment.id,
+        incidentId: source.incidentId,
+        category: classification.category,
+        severity: classification.dangerLevel,
+        latitude: source.latitude,
+        longitude: source.longitude,
+        occurredAt: source.occurredAt ?? new Date(),
+        metadata: {
+          assessmentState: assessment.state,
+          classifierVersion: classification.version,
+          transcriptPersistedSeparately: true,
+        },
+      },
+    });
   }
 }
