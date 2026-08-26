@@ -1731,11 +1731,11 @@ class AppController extends SessionAccessor
   }
 
   Future<void> setSession(AuthSession session) async {
-    await disableBiometricUnlock(notify: false);
     await _authSessionStore.save(session);
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
     clearCitizenProfileCache();
+    await _reconcileBiometricBinding(session.accessToken);
     notifyListeners();
     await _backgroundPushContextPersister(
       accessToken: session.accessToken,
@@ -1745,6 +1745,20 @@ class AppController extends SessionAccessor
     unawaited(loadVehicleGarage(refresh: true));
     unawaited(loadIncidentsFromApi());
     unawaited(loadNotificationsFromApi());
+  }
+
+  Future<void> _reconcileBiometricBinding(String accessToken) async {
+    if (!_biometricPreference.hasAccountBinding) return;
+    try {
+      final profile =
+          await _apiClient.fetchCitizenProfile(accessToken: accessToken);
+      _cachedCitizenProfile = profile;
+      if (profile.id != _biometricPreference.accountId) {
+        await disableBiometricUnlock(notify: false);
+      }
+    } catch (_) {
+      // A transient profile request must not erase an explicit opt-in.
+    }
   }
 
   Future<BiometricAuthenticationStatus> enableBiometricUnlock() async {
@@ -2220,9 +2234,24 @@ class AppController extends SessionAccessor
   }
 
   @override
-  Future<void> clearSession() async {
-    await _pushNotifications?.deactivateCurrentToken();
+  Future<void> clearSession({bool preserveBiometricUnlock = true}) async {
     final cacheScope = _notificationCacheScope;
+    final persistedSession = await _authSessionStore.load();
+    final canLockForBiometrics = preserveBiometricUnlock &&
+        _remainSignedIn &&
+        _biometricPreference.hasAccountBinding &&
+        persistedSession != null;
+    if (canLockForBiometrics) {
+      _biometricUnlockRequired = true;
+      clearCachedSession();
+      if (cacheScope != null) {
+        await _notificationInboxCache.clear(cacheScope);
+        await _broadcastFeedCache.clear(cacheScope);
+      }
+      return;
+    }
+
+    await _pushNotifications?.deactivateCurrentToken();
     await _authService.logout();
     await _socialAuthService.signOutProviders();
     await disableBiometricUnlock(notify: false);
@@ -3551,6 +3580,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
   bool obscurePassword = true;
   bool biometricBusy = false;
   bool _loadedBiometricCapability = false;
+  bool _didAutoPromptBiometrics = false;
   BiometricCapability biometricCapability =
       const BiometricCapability.unavailable();
   SocialAuthProvider? activeSocialProvider;
@@ -3588,6 +3618,14 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     final capability = await controller.biometricCapability();
     if (!mounted) return;
     setState(() => biometricCapability = capability);
+    if (controller.biometricUnlockRequired &&
+        capability.canAuthenticate &&
+        !_didAutoPromptBiometrics) {
+      _didAutoPromptBiometrics = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_unlockWithBiometrics());
+      });
+    }
   }
 
   Future<void> _unlockWithBiometrics() async {
@@ -11833,7 +11871,7 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
 
   try {
     await controller.apiClient.requestAccountDeletion(accessToken: token);
-    await controller.clearSession();
+    await controller.clearSession(preserveBiometricUnlock: false);
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil("/login", (_) => false);
     showAppSnackBar(context, "Account deactivated.");
