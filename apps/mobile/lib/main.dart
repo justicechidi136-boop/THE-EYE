@@ -1169,23 +1169,30 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/smartwatch": (_) => const SmartwatchDeviceScreen(),
               "/neighborhood-watch": (_) => const NeighborhoodWatchHomeScreen(),
               "/neighborhood-watch/communities": (_) =>
-                  const MyCommunitiesScreen(),
-              "/neighborhood-watch/join": (_) => const JoinCommunityScreen(),
+                  const NeighborhoodWatchHomeScreen(openChatWhenReady: true),
+              "/neighborhood-watch/join": (_) =>
+                  const NeighborhoodWatchHomeScreen(),
               "/neighborhood-watch/request-community": (_) =>
-                  const RequestCommunityScreen(),
-              "/neighborhood-watch/preview-community": (context) {
-                final args = ModalRoute.of(context)?.settings.arguments;
-                return CommunityPreviewScreen(
-                  initialCommunity: args is CommunitySummary ? args : null,
-                );
-              },
-              "/neighborhood-watch/feed": (_) => const CommunityFeedScreen(),
+                  const NeighborhoodWatchHomeScreen(),
+              "/neighborhood-watch/preview-community": (_) =>
+                  const NeighborhoodWatchHomeScreen(),
+              "/neighborhood-watch/feed": (_) =>
+                  const NeighborhoodWatchHomeScreen(),
               "/neighborhood-watch/map": (_) => const CommunityMapScreen(),
-              "/neighborhood-watch/chat": (_) => const CommunityChatScreen(),
+              "/neighborhood-watch/chat": (context) {
+                final args = ModalRoute.of(context)?.settings.arguments;
+                final contextResolved =
+                    args is Map && args["contextResolved"] == true;
+                return contextResolved
+                    ? const CommunityFeedScreen()
+                    : const NeighborhoodWatchHomeScreen(
+                        openChatWhenReady: true,
+                      );
+              },
               "/neighborhood-watch/volunteers": (_) => const VolunteersScreen(),
               "/neighborhood-watch/patrols": (_) => const PatrolsScreen(),
               "/neighborhood-watch/broadcasts": (_) =>
-                  const NeighborhoodWatchBroadcastsScreen(),
+                  const BroadcastCenterScreen(),
               "/neighborhood-watch/alerts": (_) =>
                   const CommunityAlertsScreen(),
               "/neighborhood-watch/members": (context) {
@@ -8571,33 +8578,8 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   }
 }
 
-Widget _neighborhoodWatchPrimaryTabs(
-  BuildContext context, {
-  required int selectedIndex,
-}) {
-  return NwPrototypeSegmentTabs(
-    labels: const ["Home", "Feed", "Broadcasts", "Community"],
-    selectedIndex: selectedIndex,
-    onSelected: (index) {
-      if (index == selectedIndex) return;
-      final route = switch (index) {
-        0 => NeighborhoodWatchDestinations.home,
-        1 => NeighborhoodWatchDestinations.feed,
-        2 => NeighborhoodWatchDestinations.broadcasts,
-        _ => NeighborhoodWatchDestinations.communities,
-      };
-      Navigator.of(context).pushReplacementNamed(route);
-    },
-  );
-}
-
 List<Widget> _neighborhoodWatchHeaderActions(BuildContext context) {
   return [
-    NwPrototypeIconButton(
-      icon: Icons.groups_2_outlined,
-      onPressed: () => Navigator.of(context)
-          .pushNamed(NeighborhoodWatchDestinations.communities),
-    ),
     NwPrototypeIconButton(
       icon: Icons.notifications_none,
       hasDot: true,
@@ -8638,7 +8620,6 @@ class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
     return NwPrototypeScaffold(
       title: "Neighborhood Watch",
       actions: _neighborhoodWatchHeaderActions(context),
-      tabs: _neighborhoodWatchPrimaryTabs(context, selectedIndex: 3),
       body: RefreshIndicator(
         onRefresh: () => controller.loadCommunitiesFromApi(refresh: true),
         child: ListView(
@@ -9482,9 +9463,13 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     });
   }
 
-  void _returnToNeighborhoodWatchHome() {
-    Navigator.of(context)
-        .pushReplacementNamed(NeighborhoodWatchDestinations.home);
+  void _returnToNeighborhoodWatchFeed() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    navigator.pushReplacementNamed(NeighborhoodWatchDestinations.feed);
   }
 
   Future<void> _showRoomMessageActions(CommunityPostItem post) async {
@@ -9618,9 +9603,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     final community = controller.selectedCommunity;
     final evidence = _chatEvidenceController;
     return GeoCommunityChatView(
-      title: community == null
-          ? "Neighborhood Watch"
-          : "${community.name} Neighborhood Watch",
+      title: community == null ? "Community Chat" : community.name,
       subtitle: community == null
           ? null
           : [community.lga, community.state]
@@ -9655,7 +9638,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       onReply: _showRoomMessageActions,
       onLike: (post) => unawaited(_toggleLike(controller, post)),
       onCancelReply: () => setState(() => _replyTo = null),
-      onBack: _returnToNeighborhoodWatchHome,
+      onBack: _returnToNeighborhoodWatchFeed,
     );
   }
 }
@@ -10750,7 +10733,6 @@ class _NeighborhoodWatchBroadcastsScreenState
     return NwPrototypeScaffold(
       title: "Neighborhood Watch",
       actions: _neighborhoodWatchHeaderActions(context),
-      tabs: _neighborhoodWatchPrimaryTabs(context, selectedIndex: 2),
       body: RefreshIndicator(
         onRefresh: _load,
         child: _buildBroadcastList(),

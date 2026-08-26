@@ -6,7 +6,7 @@ import "../eye_semantic_colors.dart";
 import "../tokens.dart";
 import "../typography.dart";
 
-/// Primary navigation: Home, local Feed, Eye (SOS), Broadcast, Settings.
+/// Primary navigation: Home, Watch, Eye (SOS), Broadcasts, Settings.
 abstract final class EyeNavRoutes {
   static const home = "/home";
   static const neighborhoodWatch = "/neighborhood-watch";
@@ -36,8 +36,8 @@ class EyeBottomNav extends StatelessWidget {
     required this.onTabSelected,
     required this.onEyePressed,
     this.homeLabel = "Home",
-    this.neighborhoodLabel = "Feed",
-    this.broadcastLabel = "Broadcast",
+    this.neighborhoodLabel = "Watch",
+    this.broadcastLabel = "Broadcasts",
     this.settingsLabel = "Settings",
     super.key,
   });
