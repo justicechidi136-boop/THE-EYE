@@ -1272,6 +1272,13 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                   const LanguageRegionSettingsScreen(),
               "/support": (context) => SupportHomeScreen(
                     accessToken: appOf(context).accessToken ?? "",
+                    onSendSos: () => _openSos(context),
+                    onOpenActiveEmergency: () => unawaited(
+                      ActiveEmergencyNavigation.open(
+                        context,
+                        appOf(context),
+                      ),
+                    ),
                   ),
               "/support/new": (context) {
                 final prefill = ModalRoute.of(context)?.settings.arguments
