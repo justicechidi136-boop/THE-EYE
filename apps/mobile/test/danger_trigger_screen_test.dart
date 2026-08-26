@@ -9,6 +9,7 @@ import "package:the_eye_mobile/live_video/live_video_session_controller.dart";
 import "package:the_eye_mobile/location/device_location_service.dart";
 import "package:the_eye_mobile/location/device_location_state.dart";
 import "package:the_eye_mobile/location/emergency_location_fix.dart";
+import "package:the_eye_mobile/push/watch_danger_alert_relay.dart";
 
 class _FakeLocationService extends DeviceLocationService {
   @override
@@ -85,13 +86,23 @@ class _FakeGateway implements DangerTriggerGateway {
       );
 
   @override
-  Future<void> activate({
+  Future<DangerTriggerActivation> activate({
     required String accessToken,
     required String eventId,
     required String liveSessionId,
     required DateTime connectedAt,
   }) async {
     activateCalls += 1;
+    return const DangerTriggerActivation(
+      recipientCount: 3,
+      radiusMeters: 4000,
+      initiatorWatchAlertQueued: true,
+      watchRelayPayload: {
+        "type": "NearbyDangerWarning",
+        "relayToWatch": "true",
+        "dangerAlertCode": "DANGER_ZONE_GENERAL_ENTRY",
+      },
+    );
   }
 
   @override
@@ -122,6 +133,11 @@ class _FakeGateway implements DangerTriggerGateway {
       throw UnimplementedError();
 }
 
+class _FakeWatchRelay extends WatchDangerAlertRelay {
+  @override
+  Future<bool> relayDangerAlert(Map<String, dynamic> fcmData) async => true;
+}
+
 Widget _app({required bool connects, required _FakeGateway gateway}) {
   return MaterialApp(
     home: DangerTriggerScreen(
@@ -130,6 +146,7 @@ Widget _app({required bool connects, required _FakeGateway gateway}) {
       gateway: gateway,
       locationService: _FakeLocationService(),
       liveVoiceController: _FakeLiveVoiceController(connects: connects),
+      watchRelay: _FakeWatchRelay(),
     ),
     routes: {
       "/report/emergency": (_) =>
@@ -175,6 +192,9 @@ void main() {
 
     expect(gateway.activateCalls, 1);
     expect(find.text("Live voice broadcasting"), findsOneWidget);
+    expect(find.text("Alert active. Alerts sent to 3 nearby users."),
+        findsOneWidget);
+    expect(find.text("Paired smartwatch alerted."), findsOneWidget);
     expect(find.text("End live voice"), findsOneWidget);
   });
 }
