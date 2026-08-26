@@ -109,7 +109,39 @@ void main() {
 
     expect(find.text("Send SOS now"), findsOneWidget);
     expect(find.text("Start SOS live video"), findsOneWidget);
+    expect(find.text("Send silent alert"), findsNothing);
+    expect(find.text("Cancel"), findsNothing);
     expect(find.text("Sending SOS..."), findsNothing);
+  });
+
+  testWidgets("Android back dismisses the simplified SOS action sheet",
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        routes: {
+          "/active-emergency": (_) =>
+              const Scaffold(body: Text("Active emergency")),
+          "/tracking": (_) => const Scaffold(body: Text("Tracking")),
+        },
+        home: AppScope(
+          controller: _testController(themeProvider),
+          child: const SafetyScaffold(
+            title: "Test",
+            useFigmaShell: true,
+            body: SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel("Send SOS emergency alert"));
+    await tester.pumpAndSettle();
+    expect(find.text("Send SOS alert?"), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text("Send SOS alert?"), findsNothing);
   });
 
   testWidgets("Send SOS now dismisses action sheet immediately",
