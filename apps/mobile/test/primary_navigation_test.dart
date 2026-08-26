@@ -6,7 +6,7 @@ import "package:the_eye_mobile/design_system/components/eye_bottom_nav.dart";
 import "package:the_eye_mobile/neighborhood_watch/neighborhood_watch_prototype_chrome.dart";
 
 void main() {
-  testWidgets("primary navigation replaces Services with local Feed",
+  testWidgets("primary navigation exposes the approved Watch destination",
       (tester) async {
     int? selected;
     await tester.pumpWidget(
@@ -22,12 +22,13 @@ void main() {
     );
 
     expect(find.text("Services"), findsNothing);
-    expect(find.text("Feed"), findsOneWidget);
-    await tester.tap(find.text("Feed"));
+    expect(find.text("Watch"), findsOneWidget);
+    expect(find.text("Broadcasts"), findsOneWidget);
+    await tester.tap(find.text("Watch"));
     expect(selected, 1);
   });
 
-  test("navigation selection treats Tracking as Home and NW as Feed", () {
+  test("navigation selection treats Tracking as Home and NW as Watch", () {
     expect(EyeNavRoutes.selectedIndexForRoute("/tracking"), 0);
     expect(
       EyeNavRoutes.selectedIndexForRoute("/neighborhood-watch/feed"),
@@ -42,14 +43,52 @@ void main() {
     expect(mainSource, isNot(contains('"/services":')));
   });
 
-  test("Feed shortcut resolves an authorized geographic room first", () {
+  test("Watch opens the location-resolved feed-first experience", () {
     final homeSource =
         File("lib/neighborhood_watch/nw_home_screen.dart").readAsStringSync();
-    expect(homeSource, contains('arguments["openFeed"] == true'));
-    expect(homeSource, contains("hasAuthorizedRoom"));
+    expect(homeSource, contains('title: "Neighborhood Feed"'));
+    expect(homeSource, contains("Eyes · See what is happening around you"));
+    expect(homeSource, contains('tooltip: "Open community chat"'));
+    expect(homeSource, isNot(contains('labels: const ["Home", "Feed"')));
+    expect(homeSource, isNot(contains('Text("Join community")')));
+    expect(homeSource, isNot(contains('Text("Request community")')));
+  });
+
+  test("legacy Neighborhood Watch routes resolve to simplified surfaces", () {
+    final mainSource = File("lib/main.dart").readAsStringSync();
     expect(
-      homeSource,
-      contains("pushReplacementNamed(NeighborhoodWatchDestinations.feed)"),
+      RegExp(r'"/neighborhood-watch/feed"[\s\S]{0,80}NeighborhoodWatchHomeScreen')
+          .hasMatch(mainSource),
+      isTrue,
+    );
+    expect(
+      RegExp(r'"/neighborhood-watch/chat"[\s\S]{0,500}CommunityFeedScreen')
+          .hasMatch(mainSource),
+      isTrue,
+    );
+    expect(
+      RegExp(
+        r'"/neighborhood-watch/communities"[\s\S]{0,120}NeighborhoodWatchHomeScreen\(openChatWhenReady: true\)',
+      ).hasMatch(mainSource),
+      isTrue,
+    );
+    expect(
+      RegExp(r'"/neighborhood-watch/broadcasts"[\s\S]{0,80}BroadcastCenterScreen')
+          .hasMatch(mainSource),
+      isTrue,
+    );
+    expect(mainSource, contains('args["contextResolved"] == true'));
+  });
+
+  test("Community Chat back pops to Feed without creating a route loop", () {
+    final mainSource = File("lib/main.dart").readAsStringSync();
+    expect(mainSource, contains("if (navigator.canPop())"));
+    expect(mainSource, contains("navigator.pop();"));
+    expect(
+      mainSource,
+      contains(
+        "navigator.pushReplacementNamed(NeighborhoodWatchDestinations.feed)",
+      ),
     );
   });
 

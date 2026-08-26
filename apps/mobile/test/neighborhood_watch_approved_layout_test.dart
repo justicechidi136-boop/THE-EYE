@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
-  test("Neighborhood Watch Home keeps approved order and one creation entry",
+  test("Neighborhood Watch Feed keeps approved order and one creation entry",
       () {
     final source =
         File("lib/neighborhood_watch/nw_home_screen.dart").readAsStringSync();
@@ -18,7 +18,7 @@ void main() {
     expect(
       source,
       contains(
-        "Be the first to share something that can help keep the community safe.",
+        "Share the first local update, or open Community Chat to talk with your neighborhood.",
       ),
     );
     expect(source, contains("floatingActionButton:"));

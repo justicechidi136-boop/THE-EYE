@@ -136,7 +136,7 @@ void main() {
     });
   });
 
-  test("state selector is absent while real navigation tabs remain", () {
+  test("legacy Neighborhood Watch tabs and manual membership UI are absent", () {
     final source =
         File("lib/neighborhood_watch/nw_home_screen.dart").readAsStringSync();
 
@@ -149,7 +149,12 @@ void main() {
       source.contains(
         'labels: const ["Home", "Feed", "Broadcasts", "Community"]',
       ),
-      isTrue,
+      isFalse,
     );
+    expect(source.contains('Text("Join community")'), isFalse);
+    expect(source.contains('Text("Request community")'), isFalse);
+    expect(source.contains("NeighborhoodWatchDestinations.chat"), isTrue);
+    expect(source.contains('arguments: const {"contextResolved": true}'),
+        isTrue);
   });
 }
