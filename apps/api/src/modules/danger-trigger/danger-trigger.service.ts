@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { DangerAlertCode, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
+import { AdminRoleName, DangerAlertCode, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";
 import {
@@ -271,6 +271,9 @@ export class DangerTriggerService {
         },
       });
     }
+    const adminNotificationCount = metadata.alertFanoutCompletedAt
+      ? 0
+      : await this.notifyScopedAdmins(activated);
     if (!metadata.alertFanoutCompletedAt) {
       await prisma.dangerEvent.update({
         where: { id: eventId },
@@ -283,13 +286,18 @@ export class DangerTriggerService {
       action: "danger_trigger.activated",
       entityType: "danger_events",
       entityId: eventId,
-      metadata: { liveVoiceSessionId: dto.liveVoiceSessionId, recipientCount: fanout.recipients },
+      metadata: {
+        liveVoiceSessionId: dto.liveVoiceSessionId,
+        recipientCount: fanout.recipients,
+        adminNotificationCount,
+      },
     });
     return {
       data: this.publicEvent(activated),
       fanout,
       initiatorWatchAlertQueued: !metadata.alertFanoutCompletedAt,
       watchRelay: initiatorWatchAlert.relayData,
+      adminNotificationCount,
     };
   }
 
@@ -643,6 +651,60 @@ export class DangerTriggerService {
         ...dangerAlertPayloadToFcmData(dangerAlert),
       },
     };
+  }
+
+  private async notifyScopedAdmins(event: any) {
+    const incident = await (this.prisma as any).incident.findUnique({
+      where: { id: event.incidentId },
+      select: { country: true, state: true, lga: true },
+    });
+    if (!incident) return 0;
+
+    const admins = await (this.prisma as any).adminUser.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { role: { name: AdminRoleName.SuperAdmin } },
+          {
+            role: { name: AdminRoleName.CountryAdmin },
+            country: incident.country,
+          },
+          {
+            role: { name: AdminRoleName.StateAdmin },
+            country: incident.country,
+            state: incident.state,
+          },
+          {
+            role: { name: { in: [AdminRoleName.LgaAdmin, AdminRoleName.CallCenterAgent, AdminRoleName.OversightAuditor] } },
+            country: incident.country,
+            state: incident.state,
+            lga: incident.lga,
+          },
+        ],
+      },
+      select: { id: true },
+      take: 100,
+    });
+
+    for (const admin of admins) {
+      await this.notifications.create({
+        adminUserId: admin.id,
+        type: "EmergencyAlert",
+        priority: "Critical",
+        channels: ["in_app", "push"],
+        title: "Live Danger Alert",
+        body: `A live danger alert was activated in ${event.areaName || "your operational area"}.`,
+        incidentId: event.incidentId,
+        metadata: {
+          category: "DANGER_ALERT",
+          dangerEventId: event.id,
+          approximateArea: event.areaName,
+          preciseReporterLocationExposed: false,
+          deepLink: `/incidents/${event.incidentId}`,
+        },
+      });
+    }
+    return admins.length;
   }
 
   private async assertCanAccess(event: any, actor: JwtPayload) {

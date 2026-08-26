@@ -69,6 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _openSosConfirmation() {
+    Navigator.pushNamed(context, WatchRoutes.sosConfirm);
+  }
+
   Color _safetyColor(WatchSafetyStatus status) {
     return switch (status.level) {
       WatchSafetyLevel.danger => EyeColors.danger,
@@ -265,11 +269,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     progress: sosState.lifecycle == SosLifecycle.holding
                         ? holdProgress.clamp(0.0, 1.0)
                         : 0,
-                    onHoldStart: () {
-                      widget.services.sos.beginHold();
-                      Navigator.pushNamed(context, WatchRoutes.sosConfirm);
-                    },
-                    onHoldEnd: widget.services.sos.cancelHold,
+                    onTap: _openSosConfirmation,
+                    onHoldStart: _openSosConfirmation,
+                    onHoldEnd: () {},
                   ),
                   WatchMetricColumn(
                     value: gpsLabel,

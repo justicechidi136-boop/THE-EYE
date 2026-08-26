@@ -37,17 +37,21 @@ import 'theme/eye_theme.dart';
 import 'widgets/watch_ui.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    debugPrint('[THE_EYE_WATCH] FlutterError: ${details.exceptionAsString()}');
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('[THE_EYE_WATCH] Uncaught: $error\n$stack');
-    return true;
-  };
   runZonedGuarded(
-    () => runApp(const TheEyeWatchApp()),
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        debugPrint(
+          '[THE_EYE_WATCH] FlutterError: ${details.exceptionAsString()}',
+        );
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[THE_EYE_WATCH] Uncaught: $error\n$stack');
+        return true;
+      };
+      runApp(const TheEyeWatchApp());
+    },
     (error, stack) {
       debugPrint('[THE_EYE_WATCH] Zone error: $error\n$stack');
     },
