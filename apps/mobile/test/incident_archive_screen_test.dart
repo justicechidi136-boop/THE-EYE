@@ -19,16 +19,14 @@ class _ArchiveService extends ActivityHistoryService {
   Future<IncidentArchiveContract> getIncidentArchiveContract({
     required String accessToken,
     required String incidentId,
-  }) async =>
-      archive;
+  }) async => archive;
 
   @override
   Future<Uri> getIncidentEvidenceViewUrl({
     required String accessToken,
     required String incidentId,
     required String mediaId,
-  }) async =>
-      Uri.parse("https://example.invalid/evidence/$mediaId");
+  }) async => Uri.parse("https://example.invalid/evidence/$mediaId");
 }
 
 class _PendingArchiveService extends ActivityHistoryService {
@@ -38,8 +36,7 @@ class _PendingArchiveService extends ActivityHistoryService {
   Future<IncidentArchiveContract> getIncidentArchiveContract({
     required String accessToken,
     required String incidentId,
-  }) =>
-      _pending.future;
+  }) => _pending.future;
 }
 
 class _FailingArchiveService extends ActivityHistoryService {
@@ -104,8 +101,11 @@ IncidentArchiveContract _archive({
   );
 }
 
-Widget _app(IncidentArchiveContract archive,
-    {ThemeMode mode = ThemeMode.light, ActivityHistoryService? service}) {
+Widget _app(
+  IncidentArchiveContract archive, {
+  ThemeMode mode = ThemeMode.light,
+  ActivityHistoryService? service,
+}) {
   return MaterialApp(
     themeMode: mode,
     theme: ThemeData(
@@ -177,6 +177,37 @@ void main() {
     expect(steps[4].state, ActiveEmergencyProgressStageState.complete);
   });
 
+  test("terminal archive replaces active community verification copy", () {
+    final archive = IncidentArchiveContract.fromJson({
+      "incidentId": "11111111-1111-1111-1111-111111111111",
+      "category": "Emergency",
+      "status": "CancelledByReporter",
+      "title": "Emergency",
+      "createdAt": "2026-08-20T08:00:00.000Z",
+      "cancelledAt": "2026-08-20T08:05:00.000Z",
+      "location": {
+        "address": "12 Market Road",
+        "jurisdiction": "Ikeja, Lagos",
+        "accuracyMeters": 20,
+        "capturedAt": "2026-08-20T07:59:30.000Z",
+      },
+      "communityVerificationSummary": {
+        "safeSummaryText": "Community verification is in progress.",
+      },
+      "timeline": const [],
+    });
+
+    expect(
+      archive.communitySummary,
+      "Community verification ended when this incident was cancelled.",
+    );
+    expect(archive.location.accuracyMeters, 20);
+    expect(
+      archive.location.capturedAt,
+      DateTime.parse("2026-08-20T07:59:30.000Z"),
+    );
+  });
+
   test("resolved response completes only stages supported by history", () {
     final archive = _archive(
       dispatch: [
@@ -198,65 +229,68 @@ void main() {
     );
   });
 
-  testWidgets("resolved archive is citizen-readable and has no active controls",
-      (tester) async {
-    final archive = _archive(
-      dispatch: [
-        IncidentArchiveDispatchEntry(
-          label: "Response completed",
-          agency: "State Fire Service",
-          at: DateTime.utc(2026, 8, 20, 9, 30),
-        ),
-      ],
-      evidence: [
-        IncidentArchiveEvidenceItem(
-          id: "photo-1",
-          mediaType: "Image",
-          uploadedAt: DateTime.utc(2026, 8, 20, 8, 2),
-        ),
-        IncidentArchiveEvidenceItem(
-          id: "video-1",
-          mediaType: "Video",
-          uploadedAt: DateTime.utc(2026, 8, 20, 8, 3),
-          durationSeconds: 12,
-        ),
-        IncidentArchiveEvidenceItem(
-          id: "audio-1",
-          mediaType: "Audio",
-          uploadedAt: DateTime.utc(2026, 8, 20, 8, 4),
-          durationSeconds: 8,
-        ),
-      ],
-    );
-    await tester.pumpWidget(_app(archive));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+  testWidgets(
+    "resolved archive is citizen-readable and has no active controls",
+    (tester) async {
+      final archive = _archive(
+        dispatch: [
+          IncidentArchiveDispatchEntry(
+            label: "Response completed",
+            agency: "State Fire Service",
+            at: DateTime.utc(2026, 8, 20, 9, 30),
+          ),
+        ],
+        evidence: [
+          IncidentArchiveEvidenceItem(
+            id: "photo-1",
+            mediaType: "Image",
+            uploadedAt: DateTime.utc(2026, 8, 20, 8, 2),
+          ),
+          IncidentArchiveEvidenceItem(
+            id: "video-1",
+            mediaType: "Video",
+            uploadedAt: DateTime.utc(2026, 8, 20, 8, 3),
+            durationSeconds: 12,
+          ),
+          IncidentArchiveEvidenceItem(
+            id: "audio-1",
+            mediaType: "Audio",
+            uploadedAt: DateTime.utc(2026, 8, 20, 8, 4),
+            durationSeconds: 8,
+          ),
+        ],
+      );
+      await tester.pumpWidget(_app(archive));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text("Fire archive"), findsOneWidget);
-    expect(find.text("Incident resolved"), findsOneWidget);
-    expect(find.text("EYE-260820-1111"), findsWidgets);
-    expect(find.text("12 Market Road\nIkeja, Lagos"), findsOneWidget);
-    expect(find.text("Map coordinates"), findsNothing);
-    expect(find.textContaining("4.8156"), findsNothing);
-    expect(find.text("Start Live Video"), findsNothing);
-    expect(find.text("Add evidence"), findsNothing);
-    expect(find.text("Cancel Emergency"), findsNothing);
-    expect(find.text("Confirm still ongoing"), findsNothing);
+      expect(find.text("Fire archive"), findsOneWidget);
+      expect(find.text("Incident resolved"), findsOneWidget);
+      expect(find.text("EYE-260820-1111"), findsWidgets);
+      expect(find.text("12 Market Road\nIkeja, Lagos"), findsOneWidget);
+      expect(find.text("Map coordinates"), findsNothing);
+      expect(find.textContaining("4.8156"), findsNothing);
+      expect(find.text("Start Live Video"), findsNothing);
+      expect(find.text("Add evidence"), findsNothing);
+      expect(find.text("Cancel Emergency"), findsNothing);
+      expect(find.text("Confirm still ongoing"), findsNothing);
 
-    await _show(tester, find.text("Audio 1"));
-    expect(find.text("Photo 1"), findsOneWidget);
-    expect(find.text("Video 1"), findsOneWidget);
-    expect(find.text("00:12"), findsOneWidget);
-    expect(find.text("Audio 1"), findsOneWidget);
-    expect(find.textContaining("00:08"), findsOneWidget);
+      await _show(tester, find.text("Audio 1"));
+      expect(find.text("Photo 1"), findsOneWidget);
+      expect(find.text("Video 1"), findsOneWidget);
+      expect(find.text("00:12"), findsOneWidget);
+      expect(find.text("Audio 1"), findsOneWidget);
+      expect(find.textContaining("00:08"), findsOneWidget);
 
-    await _show(tester, find.text("View communication history"));
-    expect(find.textContaining("Read only"), findsOneWidget);
-    expect(find.text("Response completed"), findsWidgets);
-  });
+      await _show(tester, find.text("View communication history"));
+      expect(find.textContaining("Read only"), findsOneWidget);
+      expect(find.text("Response completed"), findsWidgets);
+    },
+  );
 
-  testWidgets("cancelled and no-evidence states use terminal language",
-      (tester) async {
+  testWidgets("cancelled and no-evidence states use terminal language", (
+    tester,
+  ) async {
     final archive = _archive(
       state: ArchivedEmergencyTerminalState.cancelled,
       reason: "Reported by mistake",
@@ -283,8 +317,9 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets("archive failure shows safe retry without raw exception text",
-      (tester) async {
+  testWidgets("archive failure shows safe retry without raw exception text", (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _app(_archive(), service: _FailingArchiveService()),
     );

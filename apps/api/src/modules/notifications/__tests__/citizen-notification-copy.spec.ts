@@ -45,15 +45,20 @@ describe("UX-016 / missing-person notification copy", () => {
   });
 
   it("builds report submitted and verify copies without private payload", () => {
-    const submitted = reportSubmittedNotificationCopy("EYE-260810-AE7C");
-    expect(submitted.title).toContain("received");
-    expect(submitted.body).toContain("EYE-260810-AE7C");
+    const submitted = reportSubmittedNotificationCopy("EYE-260810-AE7C", "Accident");
+    expect(submitted.title).toBe("Your accident report has been received");
+    expect(submitted.body).toBe(
+      "Your accident report EYE-260810-AE7C has been successfully submitted.",
+    );
+    expect(submitted.metadata.notificationTemplateKey).toBe("report.submitted");
+    expect(submitted.metadata.incidentCategory).toBe("Accident");
     expect(JSON.stringify(submitted.metadata)).not.toContain("latitude");
 
     const verify = verifyActiveIncidentNotificationCopy();
     expect(verify.title).toBe("Can you confirm this emergency?");
     expect(verify.metadata.route).toBe("COMMUNITY_VERIFICATION");
     expect(verify.metadata.incidentCategory).toBe("Emergency");
+    expect(verify.body).toBe("An emergency has been reported near your location.");
   });
 
   it("builds category-aware verification copy", () => {

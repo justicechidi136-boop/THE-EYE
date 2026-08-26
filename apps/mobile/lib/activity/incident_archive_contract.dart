@@ -46,11 +46,11 @@ class IncidentArchiveContract {
   final List<IncidentArchiveDispatchEntry> dispatchTimeline;
 
   String get terminalLabel => switch (terminalState) {
-        ArchivedEmergencyTerminalState.resolved => "Resolved",
-        ArchivedEmergencyTerminalState.cancelled => "Cancelled",
-        ArchivedEmergencyTerminalState.closed => "Closed",
-        ArchivedEmergencyTerminalState.other => _citizenStatus(status),
-      };
+    ArchivedEmergencyTerminalState.resolved => "Resolved",
+    ArchivedEmergencyTerminalState.cancelled => "Cancelled",
+    ArchivedEmergencyTerminalState.closed => "Closed",
+    ArchivedEmergencyTerminalState.other => _citizenStatus(status),
+  };
 
   String get terminalBannerLabel => "Incident ${terminalLabel.toLowerCase()}";
 
@@ -70,9 +70,11 @@ class IncidentArchiveContract {
     }
 
     final verificationReached = timelineHas(["verif", "triage"]);
-    final agencyReached = dispatchTimeline.isNotEmpty ||
+    final agencyReached =
+        dispatchTimeline.isNotEmpty ||
         timelineHas(["agency assigned", "assignment.created"]);
-    final respondersReached = dispatchHas([
+    final respondersReached =
+        dispatchHas([
           "accepted",
           "en route",
           "on scene",
@@ -80,7 +82,8 @@ class IncidentArchiveContract {
           "completed",
         ]) ||
         timelineHas(["responder", "response en route", "response arrived"]);
-    final resolved = terminalState == ArchivedEmergencyTerminalState.resolved ||
+    final resolved =
+        terminalState == ArchivedEmergencyTerminalState.resolved ||
         terminalState == ArchivedEmergencyTerminalState.closed;
 
     ActiveEmergencyCitizenProgressStep step(
@@ -100,11 +103,17 @@ class IncidentArchiveContract {
 
     return [
       step(ActiveEmergencyCitizenProgressKey.submitted, "Submitted", true),
-      step(ActiveEmergencyCitizenProgressKey.verifying, "Verification",
-          verificationReached),
+      step(
+        ActiveEmergencyCitizenProgressKey.verifying,
+        "Verification",
+        verificationReached,
+      ),
       step(ActiveEmergencyCitizenProgressKey.agency, "Agency", agencyReached),
-      step(ActiveEmergencyCitizenProgressKey.responders, "Responders",
-          respondersReached),
+      step(
+        ActiveEmergencyCitizenProgressKey.responders,
+        "Responders",
+        respondersReached,
+      ),
       step(
         ActiveEmergencyCitizenProgressKey.resolved,
         terminalState == ArchivedEmergencyTerminalState.cancelled
@@ -120,18 +129,25 @@ class IncidentArchiveContract {
     final terminalState = _terminalState(status);
     final reportedAt = _requiredDate(json, "createdAt");
     final terminalAt =
-        _date(json[terminalState == ArchivedEmergencyTerminalState.cancelled
-                ? "cancelledAt"
-                : terminalState == ArchivedEmergencyTerminalState.closed
-                    ? "closedAt"
-                    : "resolvedAt"]) ??
-            _date(json["closedAt"]) ??
-            _date(json["resolvedAt"]) ??
-            _date(json["cancelledAt"]);
+        _date(
+          json[terminalState == ArchivedEmergencyTerminalState.cancelled
+              ? "cancelledAt"
+              : terminalState == ArchivedEmergencyTerminalState.closed
+              ? "closedAt"
+              : "resolvedAt"],
+        ) ??
+        _date(json["closedAt"]) ??
+        _date(json["resolvedAt"]) ??
+        _date(json["cancelledAt"]);
     final location = _map(json["location"]);
     final community = _map(json["communityVerificationSummary"]);
     final incidentId = _requiredString(json, "incidentId");
 
+    final communitySummary = _clean(community?["safeSummaryText"]);
+    final terminalCommunitySummary = _terminalCommunitySummary(
+      terminalState,
+      communitySummary,
+    );
     return IncidentArchiveContract(
       incidentId: incidentId,
       publicReference: resolveIncidentPublicReference(
@@ -149,30 +165,55 @@ class IncidentArchiveContract {
       finalReason: _clean(json["resolutionNotes"]),
       resolutionSource: _clean(json["resolutionSource"]),
       agency: _clean(json["agency"]),
-      verificationStatus:
-          _citizenVerification(_clean(json["verificationStatus"])),
-      communitySummary: _clean(community?["safeSummaryText"]),
+      verificationStatus: _citizenVerification(
+        _clean(json["verificationStatus"]),
+      ),
+      communitySummary: terminalCommunitySummary,
       location: IncidentArchiveLocation(
         address: _clean(location?["address"]),
         jurisdiction: _clean(location?["jurisdiction"]),
         accuracyMeters: (location?["accuracyMeters"] as num?)?.toDouble(),
         capturedAt: _date(location?["capturedAt"]),
       ),
-      evidence: _list(json["evidenceGallery"])
-          .map(IncidentArchiveEvidenceItem.fromJson)
-          .toList(growable: false),
-      timeline: _list(json["timeline"])
-          .map(IncidentArchiveTimelineEntry.fromJson)
-          .where((entry) => entry.at != null)
-          .toList(growable: false)
-        ..sort((a, b) => a.at!.compareTo(b.at!)),
-      dispatchTimeline: _list(json["dispatchTimeline"])
-          .map(IncidentArchiveDispatchEntry.fromJson)
-          .where((entry) => entry.at != null)
-          .toList(growable: false)
-        ..sort((a, b) => a.at!.compareTo(b.at!)),
+      evidence: _list(
+        json["evidenceGallery"],
+      ).map(IncidentArchiveEvidenceItem.fromJson).toList(growable: false),
+      timeline:
+          _list(json["timeline"])
+              .map(IncidentArchiveTimelineEntry.fromJson)
+              .where((entry) => entry.at != null)
+              .toList(growable: false)
+            ..sort((a, b) => a.at!.compareTo(b.at!)),
+      dispatchTimeline:
+          _list(json["dispatchTimeline"])
+              .map(IncidentArchiveDispatchEntry.fromJson)
+              .where((entry) => entry.at != null)
+              .toList(growable: false)
+            ..sort((a, b) => a.at!.compareTo(b.at!)),
     );
   }
+}
+
+String? _terminalCommunitySummary(
+  ArchivedEmergencyTerminalState state,
+  String? summary,
+) {
+  if (summary == null) return null;
+  final lowered = summary.toLowerCase();
+  final soundsActive =
+      lowered.contains("in progress") ||
+      lowered.contains("continuing") ||
+      lowered.contains("ongoing");
+  if (!soundsActive) return summary;
+  return switch (state) {
+    ArchivedEmergencyTerminalState.cancelled =>
+      "Community verification ended when this incident was cancelled.",
+    ArchivedEmergencyTerminalState.resolved =>
+      "Community verification is complete for this resolved incident.",
+    ArchivedEmergencyTerminalState.closed =>
+      "Community verification is complete for this closed incident.",
+    ArchivedEmergencyTerminalState.other => summary,
+  };
 }
 
 class IncidentArchiveLocation {
@@ -320,7 +361,7 @@ Map<String, dynamic>? _map(Object? value) =>
 
 List<Map<String, dynamic>> _list(Object? value) => value is List
     ? value
-        .whereType<Map>()
-        .map((entry) => Map<String, dynamic>.from(entry))
-        .toList(growable: false)
+          .whereType<Map>()
+          .map((entry) => Map<String, dynamic>.from(entry))
+          .toList(growable: false)
     : const [];

@@ -86,6 +86,7 @@ export type ReportIncidentDto = {
   isCached?: boolean;
   ageSeconds?: number;
   accuracyMeters?: number;
+  capturedAt?: string;
   quality?: string;
   locationErrorCode?: string;
   locationRequestId?: string;
@@ -158,6 +159,10 @@ export function validateReportIncidentDto(dto: ReportIncidentDto) {
 
   if (dto.quality && !ALLOWED_LOCATION_QUALITIES.has(dto.quality)) {
     throw new BadRequestException("Unsupported location quality");
+  }
+
+  if (dto.capturedAt && Number.isNaN(new Date(dto.capturedAt).getTime())) {
+    throw new BadRequestException("capturedAt must be a valid date-time");
   }
 
   if (incidentHasSubmissionCoordinates(dto)) {
