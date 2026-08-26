@@ -4909,14 +4909,6 @@ class HomeScreen extends StatelessWidget {
                         Navigator.of(context).pushNamed("/police-stations"),
                   ),
                   EyeServiceCard(
-                    title: "Safety broadcasts",
-                    description:
-                        "Create or manage missing person and stolen vehicle alerts",
-                    icon: Icons.campaign_outlined,
-                    onTap: () =>
-                        Navigator.of(context).pushNamed(BroadcastRoutes.create),
-                  ),
-                  EyeServiceCard(
                     title: "Incident Tracking",
                     description:
                         "Track active reports and review incident status updates",
@@ -4996,11 +4988,6 @@ class HomeScreen extends StatelessWidget {
                         Colors.teal.shade800,
                         () => Navigator.of(context)
                             .pushNamed("/neighborhood-watch")),
-                    ActionTile(
-                        "Safety broadcasts",
-                        Icons.campaign,
-                        Colors.purple.shade700,
-                        () => Navigator.of(context).pushNamed("/broadcasts")),
                     ActionTile(
                         "Help & Support",
                         Icons.support_agent,
@@ -5199,7 +5186,12 @@ class _ReportScreenState extends State<ReportScreen> {
           EyePageHeader.secondary(title: widget.type.figmaTitle),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                EyeTokens.contentBottomClearance,
+              ),
               children: [
                 if (controller.showConnectivityBanner)
                   OfflineStatusBanner(state: controller.connectivityState),
