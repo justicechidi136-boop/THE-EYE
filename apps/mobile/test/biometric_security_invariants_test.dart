@@ -25,17 +25,14 @@ void main() {
     expect(infoPlist.contains("NSFaceIDUsageDescription"), isTrue);
   });
 
-  test("explicit logout clears biometric binding", () {
+  test("account deactivation forces full logout and clears biometric binding", () {
     final source = File("lib/main.dart").readAsStringSync();
-    final logoutStart = source.indexOf("Future<void> clearSession() async");
-    final logoutEnd = source.indexOf(
-      "Future<void> loadCommunitiesFromApi",
-      logoutStart,
-    );
-    final logout = source.substring(logoutStart, logoutEnd);
 
-    expect(logout.contains("disableBiometricUnlock"), isTrue);
-    expect(logout.contains("_authService.logout"), isTrue);
+    expect(
+      source.contains("clearSession(preserveBiometricUnlock: false)"),
+      isTrue,
+    );
+    expect(source.contains("await _authService.logout()"), isTrue);
   });
 
   test("biometric opt-in is presented in Settings Security", () {

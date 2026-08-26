@@ -56,7 +56,7 @@ void main() {
     expect(fixture.gateway.authenticationCalls, 1);
   });
 
-  testWidgets("login screen offers native biometric unlock for a gated session",
+  testWidgets("login screen automatically offers native biometric unlock",
       (tester) async {
     final fixture = await _buildFixture(biometricAccountId: "citizen-1");
     await fixture.controller.loadPersistedSession();
@@ -74,11 +74,37 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text("Unlocked home"), findsOneWidget);
+    expect(fixture.gateway.authenticationCalls, 1);
+  });
+
+  testWidgets("failed biometric can retry while password fallback remains",
+      (tester) async {
+    final fixture = await _buildFixture(
+      biometricAccountId: "citizen-1",
+      authenticationResult: false,
+    );
+    await fixture.controller.loadPersistedSession();
+
+    await tester.pumpWidget(
+      AppScope(
+        controller: fixture.controller,
+        child: const MaterialApp(home: LoginRegisterScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fixture.gateway.authenticationCalls, 1);
     expect(find.text("Unlock with Biometric"), findsOneWidget);
+    expect(find.text("Email"), findsOneWidget);
+    expect(find.text("Password"), findsOneWidget);
+
     await tester.tap(find.text("Unlock with Biometric"));
     await tester.pumpAndSettle();
 
-    expect(find.text("Unlocked home"), findsOneWidget);
+    expect(fixture.gateway.authenticationCalls, 2);
+    expect(fixture.controller.biometricUnlockRequired, isTrue);
+    expect((await fixture.biometrics.load()).enabled, isTrue);
   });
 
   test("account mismatch fails closed and clears saved credentials", () async {
@@ -111,9 +137,10 @@ void main() {
     expect(await fixture.sessions.load(), isNotNull);
   });
 
-  test("normal sign-in invalidates a previous account biometric binding",
+  test("manual password fallback preserves the biometric preference",
       () async {
     final fixture = await _buildFixture(biometricAccountId: "citizen-1");
+    await fixture.controller.loadPersistedSession();
 
     await fixture.controller.setSession(
       const AuthSession(
@@ -123,15 +150,46 @@ void main() {
     );
 
     expect(fixture.controller.isAuthenticated, isTrue);
+    expect((await fixture.biometrics.load()).enabled, isTrue);
+    expect((await fixture.biometrics.load()).accountId, "citizen-1");
+  });
+
+  test("signing into another account clears the old biometric binding",
+      () async {
+    final fixture = await _buildFixture(
+      biometricAccountId: "citizen-1",
+      profileId: "citizen-2",
+    );
+    await fixture.controller.loadPersistedSession();
+
+    await fixture.controller.setSession(
+      const AuthSession(
+        accessToken: "new-access-token-long",
+        refreshToken: "new-refresh-token-long",
+      ),
+    );
+
     expect((await fixture.biometrics.load()).enabled, isFalse);
   });
 
-  test("explicit sign-out clears session and biometric binding", () async {
-    final fixture = await _buildFixture();
+  test("biometric-enabled sign-out locks the persisted session", () async {
+    final fixture = await _buildFixture(biometricAccountId: "citizen-1");
     await fixture.controller.loadPersistedSession();
-    await fixture.biometrics.enableForAccount("citizen-1");
 
     await fixture.controller.clearSession();
+
+    expect(await fixture.sessions.load(), isNotNull);
+    expect((await fixture.biometrics.load()).enabled, isTrue);
+    expect(fixture.controller.isAuthenticated, isFalse);
+    expect(fixture.controller.biometricUnlockRequired, isTrue);
+  });
+
+  test("full sign-out revokes the session and clears biometric binding",
+      () async {
+    final fixture = await _buildFixture(biometricAccountId: "citizen-1");
+    await fixture.controller.loadPersistedSession();
+
+    await fixture.controller.clearSession(preserveBiometricUnlock: false);
 
     expect(await fixture.sessions.load(), isNull);
     expect((await fixture.biometrics.load()).enabled, isFalse);
@@ -163,6 +221,7 @@ void main() {
 
 Future<_Fixture> _buildFixture({
   String? biometricAccountId,
+  String profileId = "citizen-1",
   bool remainSignedIn = true,
   Object authenticationResult = true,
 }) async {
@@ -185,7 +244,7 @@ Future<_Fixture> _buildFixture({
       if (request.url.path.endsWith(TheEyeApiPaths.usersMe)) {
         return http.Response(
           jsonEncode({
-            "id": "citizen-1",
+            "id": profileId,
             "displayName": "Test Citizen",
             "kycStatus": "Unverified",
             "profileComplete": true,
