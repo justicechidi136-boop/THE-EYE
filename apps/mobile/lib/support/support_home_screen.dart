@@ -8,9 +8,16 @@ import "support_models.dart";
 import "support_service.dart";
 
 class SupportHomeScreen extends StatelessWidget {
-  const SupportHomeScreen({required this.accessToken, super.key});
+  const SupportHomeScreen({
+    required this.accessToken,
+    required this.onSendSos,
+    required this.onOpenActiveEmergency,
+    super.key,
+  });
 
   final String accessToken;
+  final VoidCallback onSendSos;
+  final VoidCallback onOpenActiveEmergency;
 
   @override
   Widget build(BuildContext context) {
@@ -44,8 +51,7 @@ class SupportHomeScreen extends StatelessWidget {
                 _ActionTile(
                   icon: Icons.sos,
                   label: "Send SOS",
-                  onTap: () =>
-                      Navigator.of(context).pushNamed("/report/emergency"),
+                  onTap: onSendSos,
                 ),
                 _ActionTile(
                   icon: Icons.videocam,
@@ -60,8 +66,7 @@ class SupportHomeScreen extends StatelessWidget {
                 _ActionTile(
                   icon: Icons.emergency,
                   label: "Open Active Emergency",
-                  onTap: () =>
-                      Navigator.of(context).pushNamed("/active-emergency"),
+                  onTap: onOpenActiveEmergency,
                 ),
                 _ActionTile(
                   icon: Icons.support_agent,
