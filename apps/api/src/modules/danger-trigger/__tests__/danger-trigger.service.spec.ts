@@ -130,7 +130,7 @@ describe("DangerTriggerService", () => {
   });
 
   it("activates only after a matching connected session is confirmed", async () => {
-    const { service, prisma, audit } = buildService();
+    const { service, prisma, notifications, audit } = buildService();
     const result = await service.activate(
       "event-1",
       { liveVoiceSessionId: "session-1", connectedAt: new Date().toISOString() },
@@ -141,6 +141,15 @@ describe("DangerTriggerService", () => {
     expect(prisma.$queryRawUnsafe).toHaveBeenCalled();
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "danger_trigger.activated" }),
+    );
+    expect(result.initiatorWatchAlertQueued).toBe(true);
+    expect(result.watchRelay.type).toBe("NearbyDangerWarning");
+    expect(result.watchRelay.relayToWatch).toBe("true");
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: actor.sub,
+        channels: ["watch_push"],
+      }),
     );
   });
 
@@ -165,6 +174,11 @@ describe("DangerTriggerService", () => {
       .filter((input: any) => input.channels.includes("push"))
       .map((input: any) => input.userId);
     expect(mobileRecipients).toEqual(["user-a", "user-b", "user-c"]);
+    const userBWatchAlerts = notifications.create.mock.calls
+      .map((call: any[]) => call[0])
+      .filter((input: any) => input.userId === "user-b" && input.channels.includes("watch_push"));
+    expect(userBWatchAlerts.length).toBe(1);
+    expect(userBWatchAlerts[0].metadata.deviceId).toBeUndefined();
   });
 
   it("ending voice preserves the danger event state", async () => {

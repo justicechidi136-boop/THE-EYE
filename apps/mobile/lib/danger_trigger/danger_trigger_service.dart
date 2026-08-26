@@ -30,6 +30,20 @@ class PreparedDangerTrigger {
   final int radiusMeters;
 }
 
+class DangerTriggerActivation {
+  const DangerTriggerActivation({
+    required this.recipientCount,
+    required this.radiusMeters,
+    required this.initiatorWatchAlertQueued,
+    required this.watchRelayPayload,
+  });
+
+  final int recipientCount;
+  final int radiusMeters;
+  final bool initiatorWatchAlertQueued;
+  final Map<String, dynamic> watchRelayPayload;
+}
+
 class DangerTriggerEventDetail {
   const DangerTriggerEventDetail({
     required this.id,
@@ -72,7 +86,7 @@ abstract class DangerTriggerGateway {
     String? areaName,
   });
 
-  Future<void> activate({
+  Future<DangerTriggerActivation> activate({
     required String accessToken,
     required String eventId,
     required String liveSessionId,
@@ -166,7 +180,7 @@ class DangerTriggerApiService implements DangerTriggerGateway {
   }
 
   @override
-  Future<void> activate({
+  Future<DangerTriggerActivation> activate({
     required String accessToken,
     required String eventId,
     required String liveSessionId,
@@ -182,6 +196,18 @@ class DangerTriggerApiService implements DangerTriggerGateway {
     );
     _requireSuccess(response.statusCode, response.body,
         "The voice connection started, but nearby alerts could not be activated.");
+    final body = _decode(response.body);
+    final fanout = Map<String, dynamic>.from(
+      (body["fanout"] as Map?) ?? const {},
+    );
+    return DangerTriggerActivation(
+      recipientCount: (fanout["recipients"] as num?)?.toInt() ?? 0,
+      radiusMeters: (fanout["radiusMeters"] as num?)?.toInt() ?? 4000,
+      initiatorWatchAlertQueued: body["initiatorWatchAlertQueued"] == true,
+      watchRelayPayload: Map<String, dynamic>.from(
+        (body["watchRelay"] as Map?) ?? const {},
+      ),
+    );
   }
 
   @override

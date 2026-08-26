@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { DangerAlertCode, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";
-import { buildDangerZoneAlertPayload } from "../danger-zones/danger-alert-payload";
+import {
+  buildDangerZoneAlertPayload,
+  dangerAlertPayloadToFcmData,
+} from "../danger-zones/danger-alert-payload";
 import { JurisdictionResolutionService } from "../incidents/jurisdiction-resolution.service";
 import { LiveKitTokenService } from "../live-video/livekit-token.service";
 import { LiveVideoService } from "../live-video/live-video.service";
@@ -239,6 +242,32 @@ export class DangerTriggerService {
     const fanout = metadata.alertFanoutCompletedAt
       ? { recipients: 0, duplicate: true }
       : await this.fanout(activated);
+    const initiatorWatchAlert = this.buildWatchAlert(
+      activated,
+      actor.sub,
+      0,
+      "DANGER ALERT ACTIVE",
+      `Your live danger alert is active. Nearby users within ${Math.round(activated.effectiveRadiusMeters / 1000)} km are being alerted.`,
+    );
+    if (!metadata.alertFanoutCompletedAt) {
+      await this.notifications.create({
+        userId: actor.sub,
+        type: "NearbyDangerWarning",
+        priority: "Critical",
+        channels: ["watch_push"],
+        title: initiatorWatchAlert.title,
+        body: initiatorWatchAlert.body,
+        incidentId: activated.incidentId,
+        metadata: {
+          category: "DANGER_ALERT",
+          dangerEventId: activated.id,
+          preciseReporterLocationExposed: false,
+          liveAvailable: true,
+          watchLiveAudioSupported: false,
+          dangerAlert: initiatorWatchAlert.dangerAlert,
+        },
+      });
+    }
     if (!metadata.alertFanoutCompletedAt) {
       await prisma.dangerEvent.update({
         where: { id: eventId },
@@ -253,7 +282,12 @@ export class DangerTriggerService {
       entityId: eventId,
       metadata: { liveVoiceSessionId: dto.liveVoiceSessionId, recipientCount: fanout.recipients },
     });
-    return { data: this.publicEvent(activated), fanout };
+    return {
+      data: this.publicEvent(activated),
+      fanout,
+      initiatorWatchAlertQueued: !metadata.alertFanoutCompletedAt,
+      watchRelay: initiatorWatchAlert.relayData,
+    };
   }
 
   async stopLiveVoice(eventId: string, actor: JwtPayload) {
@@ -487,7 +521,7 @@ export class DangerTriggerService {
         approximateArea: event.areaName,
         preciseReporterLocationExposed: false,
         liveAvailable: true,
-        relayToWatch: entries.some((entry) => Boolean(entry.row.deviceId)),
+        relayToWatch: true,
         watchLiveAudioSupported: false,
         deepLink: `/danger-trigger/events/${event.id}`,
         dangerAlert,
@@ -502,20 +536,54 @@ export class DangerTriggerService {
         incidentId: event.incidentId,
         metadata: commonMetadata,
       });
-      for (const watch of entries.filter((entry) => entry.row.deviceId)) {
-        await this.notifications.create({
-          userId,
-          type: "NearbyDangerWarning",
-          priority: "Critical",
-          channels: ["watch_push"],
-          title: "DANGER ALERT",
-          body: `Danger reported nearby. Approximately ${distanceLabel} away. Open THE EYE for details.`,
-          incidentId: event.incidentId,
-          metadata: { ...commonMetadata, deviceId: watch.row.deviceId, watchLiveAudioSupported: false },
-        });
-      }
+      await this.notifications.create({
+        userId,
+        type: "NearbyDangerWarning",
+        priority: "Critical",
+        channels: ["watch_push"],
+        title: "DANGER ALERT",
+        body: `Danger reported nearby. Approximately ${distanceLabel} away. Open THE EYE for details.`,
+        incidentId: event.incidentId,
+        metadata: { ...commonMetadata, watchLiveAudioSupported: false },
+      });
     }
     return { recipients: byUser.size, eligibleDeviceLocations: eligible.length, radiusMeters: event.effectiveRadiusMeters };
+  }
+
+  private buildWatchAlert(
+    event: any,
+    userId: string,
+    distanceMeters: number,
+    title: string,
+    body: string,
+  ) {
+    const dangerAlert = buildDangerZoneAlertPayload({
+      zoneId: event.id,
+      incidentId: event.incidentId,
+      safetyAlertId: event.id,
+      userId,
+      alertId: `danger-event:${event.id}:${userId}`,
+      incidentType: IncidentType.Emergency,
+      alertState: "Critical",
+      distanceMeters,
+      areaName: event.areaName ?? undefined,
+      notificationPriority: "Critical",
+      deepLink: `theeye://danger-trigger/events/${event.id}`,
+      metadata: { dangerAlertCode: DangerAlertCode.GENERAL_ENTRY },
+      config: this.config as unknown as Record<string, unknown>,
+    });
+    return {
+      title,
+      body,
+      dangerAlert,
+      relayData: {
+        type: "NearbyDangerWarning",
+        relayToWatch: "true",
+        title,
+        body,
+        ...dangerAlertPayloadToFcmData(dangerAlert),
+      },
+    };
   }
 
   private async assertCanAccess(event: any, actor: JwtPayload) {

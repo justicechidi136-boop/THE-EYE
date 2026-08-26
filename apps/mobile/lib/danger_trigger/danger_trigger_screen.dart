@@ -10,6 +10,7 @@ import "../live_video/live_video_lifecycle_phase.dart";
 import "../live_video/live_video_session_controller.dart";
 import "../location/device_location_service.dart";
 import "../location/device_location_state.dart";
+import "../push/watch_danger_alert_relay.dart";
 import "danger_trigger_service.dart";
 
 enum DangerTriggerViewState {
@@ -30,16 +31,19 @@ class DangerTriggerScreen extends StatefulWidget {
     DangerTriggerGateway? gateway,
     DeviceLocationService? locationService,
     LiveVideoSessionController? liveVoiceController,
+    WatchDangerAlertRelay? watchRelay,
     super.key,
   })  : gateway = gateway ?? DangerTriggerApiService(apiClient),
         locationService = locationService ?? DeviceLocationService(),
         liveVoiceController =
-            liveVoiceController ?? LiveVideoSessionController(audioOnly: true);
+            liveVoiceController ?? LiveVideoSessionController(audioOnly: true),
+        watchRelay = watchRelay ?? WatchDangerAlertRelay();
 
   final String? Function() accessTokenProvider;
   final DangerTriggerGateway gateway;
   final DeviceLocationService locationService;
   final LiveVideoSessionController liveVoiceController;
+  final WatchDangerAlertRelay watchRelay;
 
   @override
   State<DangerTriggerScreen> createState() => _DangerTriggerScreenState();
@@ -53,6 +57,8 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
   Timer? _timer;
   Duration _elapsed = Duration.zero;
   bool _ending = false;
+  DangerTriggerActivation? _activation;
+  bool _pairedWatchAlerted = false;
 
   bool get _isActive =>
       _viewState == DangerTriggerViewState.preparing ||
@@ -165,7 +171,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
               "Unable to establish the live voice connection.",
         );
       }
-      await widget.gateway.activate(
+      final activation = await widget.gateway.activate(
         accessToken: token,
         eventId: prepared.eventId,
         liveSessionId: prepared.liveSessionId,
@@ -176,7 +182,11 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() => _elapsed += const Duration(seconds: 1));
       });
-      setState(() => _viewState = DangerTriggerViewState.broadcasting);
+      setState(() {
+        _activation = activation;
+        _viewState = DangerTriggerViewState.broadcasting;
+      });
+      unawaited(_relayToPairedWatch(activation));
     } catch (error) {
       await widget.liveVoiceController.stop();
       if (!mounted) return;
@@ -186,6 +196,15 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
             ? error.message
             : "Unable to start the live danger broadcast. Please try again.";
       });
+    }
+  }
+
+  Future<void> _relayToPairedWatch(DangerTriggerActivation activation) async {
+    if (activation.watchRelayPayload.isEmpty) return;
+    final relayed =
+        await widget.watchRelay.relayDangerAlert(activation.watchRelayPayload);
+    if (mounted && relayed) {
+      setState(() => _pairedWatchAlerted = true);
     }
   }
 
@@ -426,6 +445,26 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                         "Nearby alerts cover up to ${((_prepared?.radiusMeters ?? 4000) / 1000).toStringAsFixed(0)} km. Ending voice does not resolve the safety event.",
                         textAlign: TextAlign.center,
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _activation == null
+                            ? "Activating nearby alerts..."
+                            : _activation!.recipientCount == 0
+                                ? "Alert active. No other nearby users were eligible when the alert started."
+                                : "Alert active. Alerts sent to ${_activation!.recipientCount} nearby ${_activation!.recipientCount == 1 ? "user" : "users"}.",
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      if (_activation?.initiatorWatchAlertQueued == true) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _pairedWatchAlerted
+                              ? "Paired smartwatch alerted."
+                              : "Smartwatch alert queued. Delivery depends on watch connectivity.",
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ],
                   ),
                 ),
