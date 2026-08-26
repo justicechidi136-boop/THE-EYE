@@ -10,7 +10,17 @@ import "location_permission_service.dart";
 import "location_types.dart";
 
 class LocationPermissionSettingsSection extends StatefulWidget {
-  const LocationPermissionSettingsSection({super.key});
+  const LocationPermissionSettingsSection({
+    super.key,
+    this.permissionResolver,
+    this.appSettingsOpener,
+    this.locationSettingsOpener,
+  });
+
+  final Future<LocationPermissionState> Function({bool requestIfDenied})?
+      permissionResolver;
+  final Future<void> Function()? appSettingsOpener;
+  final Future<void> Function()? locationSettingsOpener;
 
   @override
   State<LocationPermissionSettingsSection> createState() =>
@@ -18,7 +28,8 @@ class LocationPermissionSettingsSection extends StatefulWidget {
 }
 
 class _LocationPermissionSettingsSectionState
-    extends State<LocationPermissionSettingsSection> {
+    extends State<LocationPermissionSettingsSection>
+    with WidgetsBindingObserver {
   final DeviceLocationService _deviceLocationService = DeviceLocationService();
 
   LocationPermissionState? _permission;
@@ -31,6 +42,7 @@ class _LocationPermissionSettingsSectionState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshPermissionOnly());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_loadProfileJurisdiction());
@@ -38,9 +50,23 @@ class _LocationPermissionSettingsSectionState
     });
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshPermissionOnly());
+    }
+  }
+
   Future<void> _refreshPermissionOnly({bool requestIfDenied = false}) async {
     setState(() => _initialLoading = true);
-    final permission = await resolveLocationPermissionState(
+    final permission = await (widget.permissionResolver ??
+        resolveLocationPermissionState)(
       requestIfDenied: requestIfDenied,
     );
     if (!mounted) return;
@@ -48,6 +74,51 @@ class _LocationPermissionSettingsSectionState
       _permission = permission;
       _initialLoading = false;
     });
+  }
+
+  Future<void> _retryPermission() async {
+    switch (locationPermissionRecoveryAction(_permission)) {
+      case LocationPermissionRecoveryAction.openAppSettings:
+        await (widget.appSettingsOpener ?? openAppSettings)();
+        if (!mounted) return;
+        _showPermissionMessage(
+          "Allow Location in Android Settings, then return to THE EYE.",
+        );
+        return;
+      case LocationPermissionRecoveryAction.openLocationSettings:
+        await (widget.locationSettingsOpener ?? openLocationSettings)();
+        if (!mounted) return;
+        _showPermissionMessage(
+          "Turn on device Location, then return to THE EYE.",
+        );
+        return;
+      case LocationPermissionRecoveryAction.requestPermission:
+        await _refreshPermissionOnly(requestIfDenied: true);
+        if (!mounted) return;
+        final granted = _permission == LocationPermissionState.grantedPrecise ||
+            _permission == LocationPermissionState.grantedApproximate;
+        _showPermissionMessage(
+          granted
+              ? "Location permission is available."
+              : "Location permission was not granted. You can try again or open Android Settings.",
+          isError: !granted,
+        );
+        return;
+    }
+  }
+
+  void _showPermissionMessage(String message, {bool isError = false}) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor:
+              isError ? Theme.of(context).colorScheme.error : null,
+        ),
+      );
   }
 
   Future<void> _loadProfileJurisdiction() async {
@@ -219,11 +290,25 @@ class _LocationPermissionSettingsSectionState
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: _testInFlight
+                onPressed: _testInFlight || _initialLoading
                     ? null
-                    : () => _refreshPermissionOnly(requestIfDenied: true),
-                icon: const Icon(Icons.refresh),
-                label: const Text("Retry permission"),
+                    : _retryPermission,
+                icon: Icon(
+                  locationPermissionRecoveryAction(_permission) ==
+                          LocationPermissionRecoveryAction.requestPermission
+                      ? Icons.refresh
+                      : Icons.settings,
+                ),
+                label: Text(
+                  switch (locationPermissionRecoveryAction(_permission)) {
+                    LocationPermissionRecoveryAction.openAppSettings =>
+                      "Open app settings",
+                    LocationPermissionRecoveryAction.openLocationSettings =>
+                      "Open location settings",
+                    LocationPermissionRecoveryAction.requestPermission =>
+                      "Retry permission",
+                  },
+                ),
               ),
             ],
           ),
@@ -342,4 +427,23 @@ class _LocationPermissionSettingsSectionState
       ],
     );
   }
+}
+
+enum LocationPermissionRecoveryAction {
+  requestPermission,
+  openAppSettings,
+  openLocationSettings,
+}
+
+LocationPermissionRecoveryAction locationPermissionRecoveryAction(
+  LocationPermissionState? state,
+) {
+  return switch (state) {
+    LocationPermissionState.deniedPermanently ||
+    LocationPermissionState.restricted =>
+      LocationPermissionRecoveryAction.openAppSettings,
+    LocationPermissionState.serviceDisabled =>
+      LocationPermissionRecoveryAction.openLocationSettings,
+    _ => LocationPermissionRecoveryAction.requestPermission,
+  };
 }
