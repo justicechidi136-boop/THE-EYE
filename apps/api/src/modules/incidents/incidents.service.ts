@@ -250,6 +250,7 @@ export class IncidentsService {
           ...(dto.isCached !== undefined ? { isCached: dto.isCached } : {}),
           ...(dto.ageSeconds !== undefined ? { ageSeconds: dto.ageSeconds } : {}),
           ...(dto.accuracyMeters !== undefined ? { locationAccuracyMeters: dto.accuracyMeters } : {}),
+          ...(dto.capturedAt ? { locationCapturedAt: new Date(dto.capturedAt).toISOString() } : {}),
           ...(dto.quality ? { locationQuality: dto.quality } : {}),
           ...(dto.locationErrorCode ? { locationErrorCode: dto.locationErrorCode } : {}),
           ...(dto.locationRequestId ? { locationRequestId: dto.locationRequestId } : {}),
@@ -343,7 +344,7 @@ export class IncidentsService {
             incidentId: incident.id,
             submittedAt: incident.submittedAt,
           });
-          const copy = reportSubmittedNotificationCopy(publicReference);
+          const copy = reportSubmittedNotificationCopy(publicReference, String(dto.type));
           await this.notifications.create({
             userId: actor.sub,
             incidentId: incident.id,

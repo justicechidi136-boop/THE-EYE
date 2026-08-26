@@ -106,11 +106,32 @@ describe("notification localization", () => {
       },
     });
 
-    expect(missingPerson.title).toBe("Missing person sighting");
-    expect(missingPerson.body).toContain("Ada Okafor");
-    expect(stolenVehicle.title).toBe("Stolen vehicle sighting");
+    expect(missingPerson.title).toBe("New Sighting");
+    expect(missingPerson.body).toBe(
+      "New sighting reported for missing person: Ada Okafor.",
+    );
+    expect(stolenVehicle.title).toBe("New Sighting");
     expect(stolenVehicle.body).toContain("Toyota Corolla");
     expect(stolenVehicle.body).toContain("ABC-123-LA");
+  });
+
+  it("uses a report-specific submitted template instead of incident update", () => {
+    const result = localizeNotification({
+      type: "IncidentStatusUpdate",
+      title: "Your fire report has been received",
+      body: "Your fire report EYE-260810-AE7C has been successfully submitted.",
+      recipientPreferredLocale: "en",
+      metadata: {
+        notificationTemplateKey: "report.submitted",
+        incidentCategory: "Fire",
+        publicReference: "EYE-260810-AE7C",
+      },
+    });
+
+    expect(result.title).toBe("Report Submitted");
+    expect(result.body).toBe(
+      "Your fire report EYE-260810-AE7C has been successfully submitted.",
+    );
   });
 
   it("maps trusted danger codes to structured locale templates", () => {

@@ -141,6 +141,10 @@ export class CitizenActivityService {
     ]);
 
     const latestVerification = incident.verifications.at(-1);
+    const terminalCommunityVerificationSummary = this.toTerminalCommunityVerificationSummary(
+      communityVerificationSummary,
+      String(incident.status),
+    );
     const arrivalAssignment = incident.assignments.find((row) => row.arrivedAt);
     const archiveTimeline: Array<Record<string, unknown>> = [
       ...(timeline.data ?? []),
@@ -206,7 +210,10 @@ export class CitizenActivityService {
             typeof metadata.locationAccuracyMeters === "number"
               ? metadata.locationAccuracyMeters
               : null,
-          capturedAt: incident.submittedAt.toISOString(),
+          capturedAt:
+            typeof metadata.locationCapturedAt === "string"
+              ? metadata.locationCapturedAt
+              : incident.submittedAt.toISOString(),
         },
         map: {
           latitude: incident.latitude ? Number(incident.latitude) : incident.manualLatitude ? Number(incident.manualLatitude) : null,
@@ -242,7 +249,7 @@ export class CitizenActivityService {
           if (assignment.completedAt) events.push({ at: assignment.completedAt.toISOString(), label: "Response completed" });
           return events;
         }),
-        communityVerificationSummary,
+        communityVerificationSummary: terminalCommunityVerificationSummary,
         verificationStatus: latestVerification?.result ?? "Not verified",
         agency: incident.assignedAgency?.name ?? null,
         responderArrivalAt: arrivalAssignment?.arrivedAt?.toISOString() ?? null,
@@ -253,9 +260,24 @@ export class CitizenActivityService {
             : incident.resolutionReason,
         finalOutcome: incident.status,
         broadcastReferences: incident.broadcasts,
-        nearbyVerificationSummary: communityVerificationSummary,
+        nearbyVerificationSummary: terminalCommunityVerificationSummary,
       },
     };
+  }
+
+  private toTerminalCommunityVerificationSummary(
+    summary: Record<string, unknown>,
+    status: string,
+  ) {
+    const normalized = status.toLowerCase();
+    const safeSummaryText = normalized.includes("cancel")
+      ? "Community verification ended when this incident was cancelled."
+      : normalized.includes("resolve")
+        ? "Community verification is complete for this resolved incident."
+        : normalized.includes("close")
+          ? "Community verification is complete for this closed incident."
+          : summary.safeSummaryText;
+    return { ...summary, safeSummaryText };
   }
 
   async getBroadcastArchive(id: string, actor: JwtPayload) {

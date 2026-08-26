@@ -244,7 +244,7 @@ export class ActiveEmergencyService {
       reportedLocation: {
         latitude: incident.latitude?.toString() ?? null,
         longitude: incident.longitude?.toString() ?? null,
-        address: incident.address,
+        address: incident.address ?? incident.manualAddress,
         manualLocationAdjusted: incident.manualLocationAdjusted,
         source: locationSource,
         quality: locationQuality,
@@ -252,13 +252,18 @@ export class ActiveEmergencyService {
           typeof metadata.locationAccuracyMeters === "number"
             ? metadata.locationAccuracyMeters
             : null,
-        capturedAt: incident.submittedAt.toISOString(),
-        locationLabel: citizenLocationQualityLabel({
-          quality: locationQuality,
-          source: locationSource,
-          latitude: incident.latitude?.toString() ?? null,
-          longitude: incident.longitude?.toString() ?? null,
-        }),
+        capturedAt:
+          typeof metadata.locationCapturedAt === "string"
+            ? metadata.locationCapturedAt
+            : incident.submittedAt.toISOString(),
+        locationLabel:
+          [incident.lga, incident.state, incident.country].filter(Boolean).join(", ") ||
+          citizenLocationQualityLabel({
+            quality: locationQuality,
+            source: locationSource,
+            latitude: incident.latitude?.toString() ?? null,
+            longitude: incident.longitude?.toString() ?? null,
+          }),
         liveLocationStale: incident.liveLocationStale,
         liveLocationUpdatedAt: incident.liveLocationUpdatedAt?.toISOString() ?? null,
       },

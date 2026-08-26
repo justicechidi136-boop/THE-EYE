@@ -50,12 +50,12 @@ abstract final class CitizenNotificationPresenter {
           : CitizenDateTimeFormatter.formatDateTime(lastSeen);
       final preview =
           (fullName != null && age != null && lastSeenFriendly != null)
-              ? MissingPersonAge.notificationPreview(
-                  fullName: fullName,
-                  ageOrRange: age,
-                  lastSeenFriendly: lastSeenFriendly,
-                )
-              : _sanitizePreview(body);
+          ? MissingPersonAge.notificationPreview(
+              fullName: fullName,
+              ageOrRange: age,
+              lastSeenFriendly: lastSeenFriendly,
+            )
+          : _sanitizePreview(body);
       return CitizenNotificationPresentation(
         category: "Broadcast Alert",
         title: title.trim().isEmpty ? "Broadcast Alert" : title.trim(),
@@ -69,15 +69,16 @@ abstract final class CitizenNotificationPresenter {
 
     if (_isReportSubmitted(normalizedType, title, body)) {
       final incidentLabel = _incidentLabel(meta);
-      final reportCategory = "$incidentLabel Report";
       final noun = incidentLabel.toLowerCase();
-      final reference = meta["publicReference"]?.toString() ??
+      final reference =
+          meta["publicReference"]?.toString() ??
           _extractReference(body) ??
           "your report";
       return CitizenNotificationPresentation(
-        category: reportCategory,
+        category: "Report Submitted",
         title: "Your $noun report has been received",
-        preview: "Your report $reference has been successfully submitted.",
+        preview:
+            "Your $noun report $reference has been successfully submitted.",
         timestampLabel: timestamp,
         isUnread: isUnread,
         routeHint: "OWN_ACTIVE_INCIDENT",
@@ -86,7 +87,8 @@ abstract final class CitizenNotificationPresenter {
     }
 
     if (_isVerifyIncident(normalizedType, title)) {
-      final categoryHint = meta["incidentCategory"]?.toString() ??
+      final categoryHint =
+          meta["incidentCategory"]?.toString() ??
           meta["category"]?.toString() ??
           "Emergency";
       final incidentLabel = citizenIncidentCategoryLabel(categoryHint);
@@ -114,7 +116,9 @@ abstract final class CitizenNotificationPresenter {
       final subject = _sightingSubject(meta);
       return CitizenNotificationPresentation(
         category: "New Sighting",
-        title: subject == null ? "New sighting reported" : "New sighting for $subject",
+        title: subject == null
+            ? "New sighting reported"
+            : "New sighting reported for $subject",
         preview: _sanitizePreview(body),
         timestampLabel: timestamp,
         isUnread: isUnread,
@@ -163,7 +167,8 @@ abstract final class CitizenNotificationPresenter {
   }
 
   static String _incidentLabel(Map<String, dynamic> metadata) {
-    final value = metadata["incidentCategory"]?.toString() ??
+    final value =
+        metadata["incidentCategory"]?.toString() ??
         metadata["reportType"]?.toString() ??
         metadata["category"]?.toString() ??
         "Emergency";
@@ -171,11 +176,11 @@ abstract final class CitizenNotificationPresenter {
   }
 
   static String? _sightingSubject(Map<String, dynamic> metadata) {
-    final broadcastType = metadata["broadcastType"]
-            ?.toString()
-            .trim()
-            .toLowerCase()
-            .replaceAll(RegExp(r"[^a-z0-9]"), "") ??
+    final broadcastType =
+        metadata["broadcastType"]?.toString().trim().toLowerCase().replaceAll(
+          RegExp(r"[^a-z0-9]"),
+          "",
+        ) ??
         "";
     final fullName = metadata["fullName"]?.toString().trim() ?? "";
     if (broadcastType == "missingperson" || fullName.isNotEmpty) {
@@ -183,14 +188,17 @@ abstract final class CitizenNotificationPresenter {
     }
     final make = metadata["make"]?.toString().trim() ?? "";
     final model = metadata["model"]?.toString().trim() ?? "";
-    final plate = metadata["registrationNumber"]?.toString().trim() ??
+    final plate =
+        metadata["registrationNumber"]?.toString().trim() ??
         metadata["registrationMasked"]?.toString().trim() ??
         "";
     final vehicle = [make, model].where((value) => value.isNotEmpty).join(" ");
     if (vehicle.isEmpty && plate.isEmpty) {
       return broadcastType == "stolenvehicle" ? "stolen vehicle" : null;
     }
-    return plate.isEmpty ? "stolen vehicle: $vehicle" : "stolen vehicle: $vehicle ($plate)";
+    return plate.isEmpty
+        ? "stolen vehicle: $vehicle"
+        : "stolen vehicle: $vehicle ($plate)";
   }
 
   static String _friendlyCategory(String type) {
@@ -229,8 +237,10 @@ abstract final class CitizenNotificationPresenter {
   }
 
   static String? _extractReference(String body) {
-    final match =
-        RegExp(r"EYE-[A-Z0-9-]+", caseSensitive: false).firstMatch(body);
+    final match = RegExp(
+      r"EYE-[A-Z0-9-]+",
+      caseSensitive: false,
+    ).firstMatch(body);
     return match?.group(0)?.toUpperCase();
   }
 }
