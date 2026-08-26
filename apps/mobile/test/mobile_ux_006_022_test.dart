@@ -119,14 +119,32 @@ void main() {
         createdAt: DateTime(2026, 8, 13, 14, 45),
         isUnread: true,
         metadata: const {
+          "broadcastType": "StolenVehicle",
           "make": "Toyota",
           "model": "Corolla",
           "registrationMasked": "ABJ 234 GG",
         },
       );
       expect(presented.category, "New Sighting");
+      expect(presented.title, contains("stolen vehicle"));
       expect(presented.title, contains("Toyota Corolla"));
       expect(presented.title, contains("ABJ 234 GG"));
+    });
+
+    test("identifies the subject of a missing person sighting", () {
+      final presented = CitizenNotificationPresenter.present(
+        type: "BroadcastSightingAlert",
+        title: "New sighting",
+        body: "A possible sighting was reported.",
+        createdAt: DateTime(2026, 8, 13, 14, 45),
+        isUnread: true,
+        metadata: const {
+          "broadcastType": "MissingPerson",
+          "fullName": "Ada Obi",
+        },
+      );
+      expect(presented.category, "New Sighting");
+      expect(presented.title, "New sighting for missing person: Ada Obi");
     });
   });
 

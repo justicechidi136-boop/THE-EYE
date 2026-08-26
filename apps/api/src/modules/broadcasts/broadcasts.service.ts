@@ -788,6 +788,8 @@ export class BroadcastsService {
               b.state,
               b.published_at,
               b.expires_at,
+              b.metadata,
+              b.creator_user_id,
               (SELECT COUNT(*)::int FROM broadcast_comments bc WHERE bc.broadcast_id = b.id AND bc.hidden_at IS NULL) AS comments_count,
               NULL::double precision AS distance_meters,
               CASE

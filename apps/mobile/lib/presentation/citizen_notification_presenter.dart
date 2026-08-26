@@ -171,15 +171,25 @@ abstract final class CitizenNotificationPresenter {
   }
 
   static String? _sightingSubject(Map<String, dynamic> metadata) {
+    final broadcastType = metadata["broadcastType"]
+            ?.toString()
+            .trim()
+            .toLowerCase()
+            .replaceAll(RegExp(r"[^a-z0-9]"), "") ??
+        "";
     final fullName = metadata["fullName"]?.toString().trim() ?? "";
-    if (fullName.isNotEmpty) return "missing person: $fullName";
+    if (broadcastType == "missingperson" || fullName.isNotEmpty) {
+      return fullName.isEmpty ? "missing person" : "missing person: $fullName";
+    }
     final make = metadata["make"]?.toString().trim() ?? "";
     final model = metadata["model"]?.toString().trim() ?? "";
     final plate = metadata["registrationNumber"]?.toString().trim() ??
         metadata["registrationMasked"]?.toString().trim() ??
         "";
     final vehicle = [make, model].where((value) => value.isNotEmpty).join(" ");
-    if (vehicle.isEmpty && plate.isEmpty) return null;
+    if (vehicle.isEmpty && plate.isEmpty) {
+      return broadcastType == "stolenvehicle" ? "stolen vehicle" : null;
+    }
     return plate.isEmpty ? "stolen vehicle: $vehicle" : "stolen vehicle: $vehicle ($plate)";
   }
 

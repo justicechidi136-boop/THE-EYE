@@ -138,6 +138,8 @@ describe("BroadcastsService citizen feed", () => {
           title: "Alert",
           body: "Body",
           priority: "P1LifeThreatening",
+          creator_user_id: "owner-1",
+          metadata: { source: "citizen" },
           published_at: new Date().toISOString(),
           expires_at: null,
           distance_meters: 1200,
@@ -153,8 +155,12 @@ describe("BroadcastsService citizen feed", () => {
         id: "b1",
         deepLink: "/broadcasts/b1",
         read: false,
+        creatorUserId: "owner-1",
       }),
     );
+    const sql = String(prisma.$queryRawUnsafe.mock.calls[0]?.[0]);
+    expect(sql).toContain("b.creator_user_id");
+    expect(sql).toContain("b.metadata");
   });
 
   it("keeps the national feed independent of location and community state", async () => {

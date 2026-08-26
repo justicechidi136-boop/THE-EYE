@@ -12331,6 +12331,8 @@ void _openSos(BuildContext context) {
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
     showDragHandle: true,
     builder: (sheetContext) => _SosBottomSheet(parentContext: context),
   );
@@ -12347,35 +12349,6 @@ class _SosBottomSheet extends StatefulWidget {
 
 class _SosBottomSheetState extends State<_SosBottomSheet> {
   bool sendingAlert = false;
-  bool sendingSilentAlert = false;
-  int silentCountdownSeconds = 0;
-  Timer? _silentCountdownTimer;
-
-  @override
-  void dispose() {
-    _silentCountdownTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startSilentCountdown() {
-    if (sendingAlert || sendingSilentAlert || silentCountdownSeconds > 0)
-      return;
-    setState(() => silentCountdownSeconds = 3);
-    _silentCountdownTimer?.cancel();
-    _silentCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (silentCountdownSeconds <= 1) {
-        timer.cancel();
-        setState(() => silentCountdownSeconds = 0);
-        unawaited(_sendSilentSosAlert());
-        return;
-      }
-      setState(() => silentCountdownSeconds -= 1);
-    });
-  }
 
   Future<void> _submitSosDraft({
     required BuildContext parentContext,
@@ -12430,50 +12403,6 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
       result.userMessage ?? "Unable to send SOS right now. Try again.",
       isError: true,
     );
-  }
-
-  Future<void> _sendSilentSosAlert() async {
-    if (sendingSilentAlert || sendingAlert) return;
-    setState(() => sendingSilentAlert = true);
-
-    final parentContext = widget.parentContext;
-    final controller = appOf(parentContext);
-    Navigator.of(context).pop();
-
-    try {
-      final access = await resolveLocationAccess(
-        timeout: kEmergencyLocationTimeout,
-        allowCachedFallback: true,
-      ).timeout(
-        kSosSubmissionTimeout,
-        onTimeout: () => const LocationAccessResult(
-          state: LocationPermissionState.timedOut,
-        ),
-      );
-      if (!parentContext.mounted) return;
-
-      final draft = buildSosIncidentDraft(
-        access: access,
-        description: "Discreet assistance request from mobile app.",
-        anonymous: true,
-        notifyEmergencyContacts: false,
-        silent: true,
-        title: "Silent SOS",
-        emergencyCategory: "SilentSos",
-      );
-
-      await _submitSosDraft(
-        parentContext: parentContext,
-        controller: controller,
-        draft: draft,
-        access: access,
-        silent: true,
-      );
-    } catch (_) {
-      // Silent SOS stays discreet — no alarm-style error UI.
-    } finally {
-      if (mounted) setState(() => sendingSilentAlert = false);
-    }
   }
 
   Future<void> _sendSosAlert() async {
@@ -12589,26 +12518,6 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
             label: Text(sendingAlert ? "Sending SOS..." : "Send SOS now"),
           ),
           const SizedBox(height: 10),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(EyeTokens.sosButtonHeight),
-            ),
-            onPressed: (sendingAlert || sendingSilentAlert)
-                ? null
-                : (silentCountdownSeconds > 0 ? null : _startSilentCountdown),
-            icon: Icon(silentCountdownSeconds > 0
-                ? Icons.hourglass_bottom
-                : Icons.visibility_off_outlined),
-            label: Text(silentCountdownSeconds > 0
-                ? "Sending in $silentCountdownSeconds..."
-                : (sendingSilentAlert ? "Sending..." : "Send silent alert")),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            "Silent alert shares your location without sound or obvious notifications.",
-            style: TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 10),
           FilledButton.icon(
             style: FilledButton.styleFrom(
               backgroundColor: semantics.primaryAction,
@@ -12624,11 +12533,6 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
             "Live video opens the emergency stream screen. GPS and contact alerts are sent when streaming starts.",
             style: TextStyle(fontSize: 12, color: semantics.secondaryText),
           ),
-          const SizedBox(height: 10),
-          OutlinedButton(
-              onPressed:
-                  sendingAlert ? null : () => Navigator.of(context).pop(),
-              child: const Text("Cancel")),
         ],
       ),
     );
