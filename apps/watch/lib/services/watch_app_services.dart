@@ -38,7 +38,10 @@ class WatchAppServices {
       api: api,
       credentials: creds,
       connectivity: this.connectivity,
-      authBootstrap: () => accountLanguage.syncFromAccount(),
+      authBootstrap: () async {
+        await _refreshPushRegistration();
+        await accountLanguage.syncFromAccount();
+      },
     );
     pairing = PairingService(
       api: api,
@@ -141,7 +144,17 @@ class WatchAppServices {
       );
     }
     await heartbeat.refreshAfterResume();
+    await _refreshPushRegistration();
     await accountLanguage.syncFromAccount();
+  }
+
+  Future<void> _refreshPushRegistration() async {
+    if (!_enablePush) return;
+    try {
+      await push.start().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Push registration is retried on the next resume without blocking UI.
+    }
   }
 
   void dispose() {
