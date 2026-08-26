@@ -281,10 +281,7 @@ class PushNotificationService {
 
     final navigation = PushNavigationRequest.fromMessageData(data);
     final route = navigation?.route ?? "/notifications";
-    final relayedDangerAlert =
-        DangerAlertPhoneHandler.shouldRelayToWatch(data) &&
-            DangerAlertPhoneHandler.hasTrustedAlertCode(data);
-    final silent = (navigation?.silent ?? false) || relayedDangerAlert;
+    final silent = navigation?.silent ?? false;
     final notificationId = data["notificationId"]?.toString() ?? "";
     final logicalId =
         data["idempotencyKey"]?.toString().trim().isNotEmpty == true
@@ -298,6 +295,9 @@ class PushNotificationService {
         notificationId: notificationId,
         source: "foreground",
       ));
+    }
+    if (data["nativeCriticalAlert"]?.toString() == "true") {
+      return;
     }
     final channelId = silent
         ? PushNotificationChannels.general.id
@@ -323,12 +323,14 @@ class PushNotificationService {
           icon: "ic_notification",
           importance: silent
               ? Importance.low
-              : channelId == PushNotificationChannels.emergency.id
+              : channelId == PushNotificationChannels.emergency.id ||
+                      channelId == PushNotificationChannels.dangerAlerts.id
                   ? Importance.max
                   : Importance.high,
           priority: silent
               ? Priority.low
-              : channelId == PushNotificationChannels.emergency.id
+              : channelId == PushNotificationChannels.emergency.id ||
+                      channelId == PushNotificationChannels.dangerAlerts.id
                   ? Priority.max
                   : Priority.high,
         ),

@@ -11,8 +11,9 @@ import io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService
  */
 class TheEyeFirebaseMessagingService : FlutterFirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
-        if (WatchDangerAlertRelayHandler.handle(this, message)) {
-            return
+        if (DangerAlertNotifier.canHandle(message)) {
+            DangerAlertNotifier.show(this, message)
+            WatchDangerAlertRelayHandler.handle(this, message)
         }
         super.onMessageReceived(message)
     }

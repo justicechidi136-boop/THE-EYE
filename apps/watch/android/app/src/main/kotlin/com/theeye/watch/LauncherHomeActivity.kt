@@ -19,6 +19,11 @@ open class LauncherHomeActivity : FlutterActivity() {
 
     private var companionRelayBridge: CompanionRelayBridge? = null
 
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        WatchDangerAlertListenerService.ensureChannel(this)
+    }
+
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
         return FlutterEngineCache.getInstance().get(FLUTTER_ENGINE_ID)
     }

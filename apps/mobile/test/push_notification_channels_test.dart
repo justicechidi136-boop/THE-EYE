@@ -10,6 +10,17 @@ void main() {
     );
   });
 
+  test("maps nearby danger alerts to the dedicated wake channel", () {
+    expect(
+      PushNotificationChannels.resolveChannelId(
+        type: "NearbyDangerWarning",
+        priority: "Critical",
+        route: "/danger-trigger/events/event-1",
+      ),
+      PushNotificationChannels.dangerAlerts.id,
+    );
+  });
+
   test("maps missing person alerts to dedicated channel", () {
     expect(
       PushNotificationChannels.resolveChannelId(type: "MissingPersonAlert"),

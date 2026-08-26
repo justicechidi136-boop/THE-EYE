@@ -344,7 +344,8 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.shield_outlined, color: semantics.warning),
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.amber.shade800),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(

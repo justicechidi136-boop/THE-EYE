@@ -4986,8 +4986,8 @@ class HomeScreen extends StatelessWidget {
                             Navigator.of(context).pushNamed("/stolen-vehicle")),
                     ActionTile(
                         "Danger Trigger",
-                        Icons.crisis_alert,
-                        Colors.red.shade800,
+                        Icons.warning_amber_rounded,
+                        Colors.amber.shade800,
                         () =>
                             Navigator.of(context).pushNamed("/danger-trigger")),
                     ActionTile(

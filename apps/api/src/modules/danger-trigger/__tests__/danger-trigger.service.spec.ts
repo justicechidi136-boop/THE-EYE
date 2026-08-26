@@ -144,6 +144,29 @@ describe("DangerTriggerService", () => {
     );
   });
 
+  it("notifies every distinct eligible user within four kilometres", async () => {
+    const { service, prisma, notifications } = buildService();
+    const now = new Date();
+    prisma.$queryRawUnsafe.mockResolvedValue([
+      { userId: "user-a", deviceId: null, latitude: 6.5244, longitude: 3.3792, lastEvaluatedAt: now },
+      { userId: "user-b", deviceId: "watch-b", latitude: 6.5424, longitude: 3.3792, lastEvaluatedAt: now },
+      { userId: "user-c", deviceId: null, latitude: 6.5594, longitude: 3.3792, lastEvaluatedAt: now },
+      { userId: "outside", deviceId: null, latitude: 6.5700, longitude: 3.3792, lastEvaluatedAt: now },
+    ]);
+
+    await service.activate(
+      "event-1",
+      { liveVoiceSessionId: "session-1", connectedAt: now.toISOString() },
+      actor,
+    );
+
+    const mobileRecipients = notifications.create.mock.calls
+      .map((call: any[]) => call[0])
+      .filter((input: any) => input.channels.includes("push"))
+      .map((input: any) => input.userId);
+    expect(mobileRecipients).toEqual(["user-a", "user-b", "user-c"]);
+  });
+
   it("ending voice preserves the danger event state", async () => {
     const { service, prisma, live } = buildService();
     prisma.dangerEvent.findUnique.mockResolvedValue({

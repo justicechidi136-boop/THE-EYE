@@ -1,6 +1,21 @@
+import "dart:typed_data";
+
+import "package:flutter/material.dart" show Color;
 import "package:flutter_local_notifications/flutter_local_notifications.dart";
 
 abstract final class PushNotificationChannels {
+  static final dangerAlerts = AndroidNotificationChannel(
+    "the_eye_danger_alerts_v2",
+    "Danger alerts",
+    description: "Urgent danger alerts within 4 km",
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+    vibrationPattern: Int64List.fromList([0, 500, 180, 500, 180, 850]),
+    enableLights: true,
+    ledColor: Color(0xFFFFB300),
+  );
+
   static const emergency = AndroidNotificationChannel(
     "the_eye_emergency",
     "Emergency",
@@ -44,7 +59,8 @@ abstract final class PushNotificationChannels {
     importance: Importance.defaultImportance,
   );
 
-  static const all = [
+  static final all = [
+    dangerAlerts,
     emergency,
     incidentUpdates,
     neighborhoodWatch,
@@ -58,6 +74,11 @@ abstract final class PushNotificationChannels {
     final normalizedType = (type ?? "").toLowerCase();
     final normalizedPriority = (priority ?? "").toLowerCase();
     final normalizedRoute = (route ?? "").toLowerCase();
+
+    if (normalizedType.contains("nearbydangerwarning") ||
+        normalizedRoute.contains("/danger-trigger")) {
+      return dangerAlerts.id;
+    }
 
     if (normalizedPriority.contains("critical") ||
         normalizedPriority.contains("p1") ||

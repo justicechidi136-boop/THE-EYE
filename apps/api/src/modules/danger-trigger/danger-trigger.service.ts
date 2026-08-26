@@ -18,6 +18,7 @@ import {
 import {
   dangerClusterKey,
   dangerRecipientEligibility,
+  OWNER_APPROVED_MAX_DANGER_RADIUS_METERS,
   resolveDangerRadius,
 } from "./danger-trigger.policy";
 
@@ -125,7 +126,7 @@ export class DangerTriggerService {
       trace,
     );
     const liveSession = (live as any).data;
-    const radiusMeters = resolveDangerRadius(this.config.get("DANGER_TRIGGER_MAX_RADIUS_METERS"));
+    const radiusMeters = OWNER_APPROVED_MAX_DANGER_RADIUS_METERS;
     const clusterKey = dangerClusterKey(dto.latitude, dto.longitude);
     const correlated = await this.findCorrelatedEvent(dto.latitude, dto.longitude);
     const event = correlated

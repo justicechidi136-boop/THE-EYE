@@ -137,6 +137,11 @@ export class FcmProvider implements OnModuleInit {
     const dangerAlertData = dangerAlert ? dangerAlertPayloadToFcmData(dangerAlert) : {};
     const relayToWatch = storedMetadata.relayToWatch === true ? "true" : "false";
     const alertId = dangerAlert?.alertId ?? dangerAlertData.alertId ?? "";
+    const nativeMobileDangerAlert =
+      payload.channel === "push" &&
+      payload.type === "NearbyDangerWarning" &&
+      emergency &&
+      !silent;
 
     for (const entry of tokens) {
       const tokenSuffix = maskToken(entry.token);
@@ -158,8 +163,13 @@ export class FcmProvider implements OnModuleInit {
           body: JSON.stringify({
             message: {
               token: entry.token,
-              notification: { title: payload.title, body: payload.body },
+              notification: nativeMobileDangerAlert
+                ? undefined
+                : { title: payload.title, body: payload.body },
               data: {
+                title: payload.title,
+                body: payload.body,
+                nativeCriticalAlert: nativeMobileDangerAlert ? "true" : "false",
                 notificationId: payload.notificationId ?? "",
                 type: payload.type ?? "",
                 priority: payload.priority ?? "Normal",
@@ -197,7 +207,7 @@ export class FcmProvider implements OnModuleInit {
               android: {
                 priority: emergency && !silent ? "high" : "normal",
                 notification: payload.channel === "watch_push" && emergency
-                  ? { channelId: "theeye_watch_critical_alerts" }
+                  ? { channelId: "theeye_watch_critical_alerts_v2" }
                   : undefined,
               },
               apns: {

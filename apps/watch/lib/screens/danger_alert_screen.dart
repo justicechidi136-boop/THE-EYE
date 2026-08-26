@@ -22,13 +22,26 @@ class DangerAlertScreen extends StatefulWidget {
   State<DangerAlertScreen> createState() => _DangerAlertScreenState();
 }
 
-class _DangerAlertScreenState extends State<DangerAlertScreen> {
+class _DangerAlertScreenState extends State<DangerAlertScreen>
+    with SingleTickerProviderStateMixin {
   bool _acknowledged = false;
   bool _languageFallback = false;
+  late final AnimationController _alertPulse;
+  late final Animation<double> _alertOpacity;
 
   @override
   void initState() {
     super.initState();
+    _alertPulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+    _alertOpacity = Tween<double>(begin: 0.35, end: 1).animate(
+      CurvedAnimation(parent: _alertPulse, curve: Curves.easeInOut),
+    );
+    if (!widget.payload.allClear) {
+      _alertPulse.repeat(reverse: true, count: 8);
+    }
     _languageFallback = widget.services.dangerAlerts.tts.languageUnavailable;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -38,6 +51,12 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
         Directionality.of(context),
       );
     });
+  }
+
+  @override
+  void dispose() {
+    _alertPulse.dispose();
+    super.dispose();
   }
 
   @override
@@ -57,14 +76,19 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> {
         child: Column(
           children: [
             const SizedBox(height: 8),
-            Icon(
-              payload.allClear
-                  ? Icons.check_circle_outline
-                  : Icons.warning_amber_rounded,
-              color: payload.allClear ? EyeColors.green : EyeColors.danger,
-              size: 42,
-              semanticLabel:
-                  payload.allClear ? l10n.areaCleared : l10n.dangerWarning,
+            FadeTransition(
+              opacity: payload.allClear
+                  ? const AlwaysStoppedAnimation<double>(1)
+                  : _alertOpacity,
+              child: Icon(
+                payload.allClear
+                    ? Icons.check_circle_outline
+                    : Icons.warning_amber_rounded,
+                color: payload.allClear ? EyeColors.green : EyeColors.orange,
+                size: 42,
+                semanticLabel:
+                    payload.allClear ? l10n.areaCleared : l10n.dangerWarning,
+              ),
             ),
             const SizedBox(height: 10),
             Text(

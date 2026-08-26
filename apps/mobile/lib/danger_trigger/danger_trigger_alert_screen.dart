@@ -25,22 +25,34 @@ class DangerTriggerAlertScreen extends StatefulWidget {
       _DangerTriggerAlertScreenState();
 }
 
-class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen> {
+class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
+    with SingleTickerProviderStateMixin {
   DangerTriggerEventDetail? _detail;
   Room? _room;
   bool _loading = true;
   bool _connecting = false;
   bool _listening = false;
   String? _error;
+  late final AnimationController _alertPulse;
+  late final Animation<double> _alertOpacity;
 
   @override
   void initState() {
     super.initState();
+    _alertPulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+    _alertOpacity = Tween<double>(begin: 0.35, end: 1).animate(
+      CurvedAnimation(parent: _alertPulse, curve: Curves.easeInOut),
+    );
+    unawaited(_alertPulse.repeat(reverse: true, count: 8));
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    _alertPulse.dispose();
     unawaited(_disconnect());
     super.dispose();
   }
@@ -140,7 +152,15 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen> {
             : ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  Icon(Icons.crisis_alert, size: 64, color: semantics.error),
+                  FadeTransition(
+                    opacity: _alertOpacity,
+                    child: Icon(
+                      Icons.warning_amber_rounded,
+                      size: 64,
+                      color: Colors.amber.shade800,
+                      semanticLabel: "Danger warning",
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     "A serious safety alert was triggered nearby.",
