@@ -415,10 +415,17 @@ describe("ActiveEmergencyService contract", () => {
     latitude: "6.6018",
     longitude: "3.3515",
     address: "Ikeja",
+    manualAddress: null,
+    lga: "Ikeja",
+    state: "Lagos",
+    country: "Nigeria",
     manualLocationAdjusted: false,
     liveLocationStale: false,
     liveLocationUpdatedAt: null,
-    metadata: { locationAccuracyMeters: 12.5 },
+    metadata: {
+      locationAccuracyMeters: 12.5,
+      locationCapturedAt: "2026-08-05T09:59:40.000Z",
+    },
     media: [],
     statusHistory: [],
     timeline: [],
@@ -441,7 +448,10 @@ describe("ActiveEmergencyService contract", () => {
     expect(result.allowedActions.cancel).toBe(true);
     expect(result.reportedLocation.accuracyMeters).toBe(12.5);
     expect(result.reportedLocation.capturedAt).toEqual(
-      new Date("2026-08-05T10:00:00.000Z").toISOString(),
+      new Date("2026-08-05T09:59:40.000Z").toISOString(),
+    );
+    expect(result.reportedLocation.locationLabel).toBe(
+      "Ikeja, Lagos, Nigeria",
     );
   });
 

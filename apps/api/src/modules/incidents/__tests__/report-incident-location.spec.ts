@@ -40,7 +40,18 @@ describe("validateReportIncidentDto location metadata", () => {
         ageSeconds: 42,
         quality: "acceptable",
         accuracyMeters: 80,
+        capturedAt: "2026-08-26T10:15:00.000Z",
       }),
     ).not.toThrow();
+  });
+
+  it("rejects an invalid human-location capture timestamp", () => {
+    expect(() =>
+      validateReportIncidentDto({
+        type: IncidentType.Accident,
+        description: "Vehicle collision near the junction.",
+        capturedAt: "not-a-date",
+      }),
+    ).toThrow(BadRequestException);
   });
 });

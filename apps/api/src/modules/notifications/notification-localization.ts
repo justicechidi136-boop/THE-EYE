@@ -45,6 +45,13 @@ const templates: Record<string, TemplateBundle> = {
     ig: ["Mmelite ihe omume", "Mmelite onodu maka ihe omume {incidentId}: {status}."],
     pcm: ["Incident update", "Update for incident {incidentId}: {status}."],
   }),
+  "report.submitted": bundle({
+    en: ["Report Submitted", "Your {reportType} report {publicReference} has been successfully submitted."],
+    ha: ["An aika rahoto", "An samu rahoton {reportType} dinka {publicReference}."],
+    yo: ["A fi ijabọ ranṣẹ", "A ti gba ijabọ {reportType} rẹ {publicReference}."],
+    ig: ["E zigara mkpesa", "Anatala mkpesa {reportType} gi {publicReference}."],
+    pcm: ["Report Submitted", "Your {reportType} report {publicReference} don submit successfully."],
+  }),
   "danger.armedRobberyNearby": bundle({
     en: ["Armed robbery nearby", "Armed robbery reported near {areaName}, about {distanceMeters}m away."],
     ha: ["Fashi da makami a kusa", "An samu rahoton fashi da makami kusa da {areaName}, kusan mita {distanceMeters}."],
@@ -81,14 +88,14 @@ const templates: Record<string, TemplateBundle> = {
     pcm: ["New sighting", "Person report sighting near {areaName}."],
   }),
   "sighting.missingPerson": bundle({
-    en: ["Missing person sighting", "A possible sighting of {personName} was reported."],
+    en: ["New Sighting", "New sighting reported for missing person: {personName}."],
     ha: ["An ga mutumin da ya bata", "An bayar da rahoton yiwuwar ganin {personName}."],
     yo: ["A ri eni ti o sonu", "A royin pe o seese ki won ti ri {personName}."],
     ig: ["Ahuru onye efuru", "A kọrọ na enwere ike ihuru {personName}."],
     pcm: ["Missing person sighting", "Person report say dem fit don see {personName}."],
   }),
   "sighting.stolenVehicle": bundle({
-    en: ["Stolen vehicle sighting", "A possible sighting of {vehicleDescription}, plate {plateNumber}, was reported."],
+    en: ["New Sighting", "New sighting reported for stolen vehicle: {vehicleDescription}, plate {plateNumber}."],
     ha: ["An ga motar da aka sace", "An bayar da rahoton yiwuwar ganin {vehicleDescription}, mai lamba {plateNumber}."],
     yo: ["A ri oko ti won ji", "A royin pe o seese ki won ti ri {vehicleDescription}, pelu nomba awo {plateNumber}."],
     ig: ["Ahuru ugbo ala ezuru", "A kọrọ na enwere ike ihuru {vehicleDescription}, nwere plate {plateNumber}."],
@@ -291,6 +298,8 @@ function extractNotificationParams(input: {
     communityName: stringParam(metadata.communityName) ?? "Community",
     assignmentId: stringParam(metadata.assignmentId) ?? "",
     officerName: stringParam(metadata.officerName) ?? "officer",
+    reportType: stringParam(metadata.incidentCategory)?.toLowerCase() ?? "emergency",
+    publicReference: stringParam(metadata.publicReference) ?? "",
   };
 
   if (metadata.dangerAlert && typeof metadata.dangerAlert === "object") {

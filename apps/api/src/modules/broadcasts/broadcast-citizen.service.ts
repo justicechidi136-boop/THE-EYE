@@ -1030,8 +1030,8 @@ export class BroadcastCitizenService {
       type: "BroadcastSightingAlert",
       priority: "High",
       channels: ["push"],
-      title: `New sighting for ${subject}`,
-      body: `Someone reported a possible sighting for your ${isMissingPerson ? "missing-person" : "stolen-vehicle"} broadcast.`,
+      title: "New Sighting",
+      body: `New sighting reported for ${subject}.`,
       metadata: {
         broadcastId: String(broadcast.id),
         sightingId,

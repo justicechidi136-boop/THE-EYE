@@ -55,15 +55,23 @@ export function buildMissingPersonBroadcastPreview(input: {
   return `${name}, approximately ${age} years old, was last seen on ${lastSeen}.`;
 }
 
-export function reportSubmittedNotificationCopy(publicReference: string) {
+export function reportSubmittedNotificationCopy(publicReference: string, incidentType: string) {
+  const incidentLabel = resolveCitizenIncidentTypeLabel(incidentType);
+  const reportType = incidentLabel.toLowerCase();
   return {
     type: "IncidentStatusUpdate" as const,
-    title: "Your emergency report has been received",
-    body: `Your report ${publicReference} has been successfully submitted.`,
+    title: `Your ${reportType} report has been received`,
+    body: `Your ${reportType} report ${publicReference} has been successfully submitted.`,
     metadata: {
       route: "OWN_ACTIVE_INCIDENT",
       publicReference,
       citizenCategory: "Report Submitted",
+      incidentCategory: incidentLabel,
+      notificationTemplateKey: "report.submitted",
+      notificationParams: {
+        reportType,
+        publicReference,
+      },
     },
   };
 }
@@ -81,8 +89,8 @@ export function verifyActiveIncidentNotificationCopyForType(incidentType: string
       : `Can you confirm this ${noun}?`;
   const body =
     incidentLabel === "Emergency"
-      ? "An emergency has been reported near your location. Tap to review the incident and confirm whether it is still active."
-      : `A ${noun} has been reported near your location. Tap to review the incident and confirm whether it is still active.`;
+      ? "An emergency has been reported near your location."
+      : `${incidentLabel === "Suspicious Activity" ? "Suspicious activity" : `A ${noun}`} has been reported near your location.`;
   return {
     type: "NearbyIncidentVerification" as const,
     title,

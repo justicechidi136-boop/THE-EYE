@@ -535,7 +535,8 @@ describe("BroadcastCitizenService", () => {
       expect.objectContaining({
         userId: "owner-1",
         type: "BroadcastSightingAlert",
-        title: "New sighting for stolen vehicle: Toyota Corolla (****-234)",
+        title: "New Sighting",
+        body: "New sighting reported for stolen vehicle: Toyota Corolla (****-234).",
         channels: ["push"],
         metadata: expect.objectContaining({
           broadcastId: "broadcast-1",

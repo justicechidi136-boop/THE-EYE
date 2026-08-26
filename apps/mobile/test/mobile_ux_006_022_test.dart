@@ -61,7 +61,12 @@ void main() {
         isUnread: false,
         metadata: {"publicReference": "EYE-260810-AE7C"},
       );
-      expect(submitted.category, "Emergency Report");
+      expect(submitted.category, "Report Submitted");
+      expect(submitted.title, "Your emergency report has been received");
+      expect(
+        submitted.preview,
+        "Your emergency report EYE-260810-AE7C has been successfully submitted.",
+      );
       expect(submitted.preview, contains("EYE-260810-AE7C"));
       expect(submitted.routeHint, "OWN_ACTIVE_INCIDENT");
     });
@@ -82,34 +87,36 @@ void main() {
       expect(verify.preview, isNot(contains("NearbyIncidentVerification")));
     });
 
-    test("uses report category templates instead of generic incident update",
-        () {
-      for (final category in const [
-        "Emergency",
-        "Accident",
-        "Crime",
-        "Fire",
-        "Kidnapping",
-        "Abuse",
-        "SuspiciousActivity",
-      ]) {
-        final presented = CitizenNotificationPresenter.present(
-          type: "ReportSubmitted",
-          title: "Incident update",
-          body: "Submitted",
-          createdAt: DateTime(2026, 8, 13, 14, 45),
-          isUnread: true,
-          metadata: {
-            "incidentCategory": category,
-            "publicReference": "EYE-260813-QA",
-          },
-          now: DateTime(2026, 8, 14, 14, 45),
-        );
-        expect(presented.category, isNot("Update"));
-        expect(presented.category, isNot("Incident update"));
-        expect(presented.timestampLabel, isNot(contains("2026-08-13T")));
-      }
-    });
+    test(
+      "uses report category templates instead of generic incident update",
+      () {
+        for (final category in const [
+          "Emergency",
+          "Accident",
+          "Crime",
+          "Fire",
+          "Kidnapping",
+          "Abuse",
+          "SuspiciousActivity",
+        ]) {
+          final presented = CitizenNotificationPresenter.present(
+            type: "ReportSubmitted",
+            title: "Incident update",
+            body: "Submitted",
+            createdAt: DateTime(2026, 8, 13, 14, 45),
+            isUnread: true,
+            metadata: {
+              "incidentCategory": category,
+              "publicReference": "EYE-260813-QA",
+            },
+            now: DateTime(2026, 8, 14, 14, 45),
+          );
+          expect(presented.category, isNot("Update"));
+          expect(presented.category, isNot("Incident update"));
+          expect(presented.timestampLabel, isNot(contains("2026-08-13T")));
+        }
+      },
+    );
 
     test("identifies the subject of a stolen vehicle sighting", () {
       final presented = CitizenNotificationPresenter.present(
@@ -144,15 +151,19 @@ void main() {
         },
       );
       expect(presented.category, "New Sighting");
-      expect(presented.title, "New sighting for missing person: Ada Obi");
+      expect(
+        presented.title,
+        "New sighting reported for missing person: Ada Obi",
+      );
     });
   });
 
   group("UX-015 cancellation reason", () {
     test("maps structured codes to audited reason strings", () {
       expect(
-        const CancellationReasonResult(reasonCode: "REPORTED_BY_MISTAKE")
-            .auditedReason,
+        const CancellationReasonResult(
+          reasonCode: "REPORTED_BY_MISTAKE",
+        ).auditedReason,
         "Reported by mistake",
       );
       expect(
@@ -166,8 +177,9 @@ void main() {
   });
 
   group("UX-022 destructive stop control", () {
-    testWidgets("renders high-contrast Stop Live Video control",
-        (tester) async {
+    testWidgets("renders high-contrast Stop Live Video control", (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark(),

@@ -21,7 +21,7 @@ function buildService(overrides: Partial<Record<string, unknown>> = {}) {
       requestsSent: 2,
       responsesReceived: 1,
       confirmedCount: 1,
-      safeSummaryText: "Community confirmed activity.",
+      safeSummaryText: "Community verification is in progress.",
     }),
     ...(overrides.communityVerification as object),
   };
@@ -186,7 +186,10 @@ describe("CitizenActivityService", () => {
       resolvedAt: new Date("2026-08-01T11:00:00.000Z"),
       closedAt: null,
       cancelledAt: null,
-      metadata: { locationAccuracyMeters: 17.4 },
+      metadata: {
+        locationAccuracyMeters: 17.4,
+        locationCapturedAt: "2026-08-01T08:59:30.000Z",
+      },
       address: "Lagos",
       manualAddress: null,
       latitude: 6.5,
@@ -227,7 +230,10 @@ describe("CitizenActivityService", () => {
     expect(archive.data.verificationStatus).toBe("Not verified");
     expect(archive.data.location.accuracyMeters).toBe(17.4);
     expect(archive.data.location.capturedAt).toBe(
-      "2026-08-01T09:00:00.000Z",
+      "2026-08-01T08:59:30.000Z",
+    );
+    expect(archive.data.communityVerificationSummary.safeSummaryText).toBe(
+      "Community verification is complete for this resolved incident.",
     );
     expect(archive.data.evidenceGallery[0].fileHash).toBeUndefined();
     expect(archive.data.auditSummary).toBeUndefined();
