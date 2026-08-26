@@ -43,4 +43,17 @@ void main() {
       "/neighborhood-watch/broadcasts",
     );
   });
+
+  test("allows an authorized danger-event alert destination", () {
+    expect(
+      PushDeepLinkRouter.resolveRoute(
+        {"route": "/danger-trigger/events/event-123"},
+      ),
+      "/danger-trigger/events/event-123",
+    );
+    expect(
+      PushDeepLinkRouter.isAllowedDestination("/danger-trigger/events/"),
+      isFalse,
+    );
+  });
 }

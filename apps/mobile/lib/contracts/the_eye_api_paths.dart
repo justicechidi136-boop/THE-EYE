@@ -13,6 +13,18 @@ abstract final class TheEyeApiPaths {
   static String liveVideoLocation(String sessionId) =>
       "/live-video/sessions/$sessionId/location";
 
+  static const dangerTriggerPrepare = "/danger-triggers/live-voice/prepare";
+  static String dangerTriggerActivate(String eventId) =>
+      "/danger-triggers/$eventId/activate";
+  static String dangerTriggerEndVoice(String eventId) =>
+      "/danger-triggers/$eventId/end-live-voice";
+  static String dangerTriggerCancel(String eventId) =>
+      "/danger-triggers/$eventId/cancel";
+  static String dangerTriggerDetail(String eventId) =>
+      "/danger-triggers/$eventId";
+  static String dangerTriggerListenToken(String eventId) =>
+      "/danger-triggers/$eventId/listen-token";
+
   static const smartwatchRegister = "/smartwatch/devices/register";
   static const smartwatchDevices = "/smartwatch/devices";
   static String smartwatchGps(String deviceId) =>

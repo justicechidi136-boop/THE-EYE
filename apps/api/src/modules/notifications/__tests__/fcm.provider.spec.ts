@@ -280,4 +280,68 @@ describe("FcmProvider", () => {
       notificationType: "MissingPersonAlert",
     }));
   });
+
+  it("uses a data-only high-priority payload for native mobile danger alerts", async () => {
+    const config = {
+      get: (key: string) => {
+        if (key === "THE_EYE_APP_ENV") return "production";
+        if (key === "FCM_PROJECT_ID") return PRODUCTION_FCM_PROJECT_ID;
+        if (key === "FCM_CLIENT_EMAIL") return "firebase-adminsdk@test.iam.gserviceaccount.com";
+        if (key === "FCM_PRIVATE_KEY") return "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n";
+        if (key === "FCM_MODE") return "real";
+        if (key === "FCM_ALLOW_SIMULATION" || key === "FCM_SIMULATION_MODE") return "false";
+        return "";
+      },
+    } as ConfigService;
+    const prisma = {
+      notification: {
+        findUnique: jest.fn().mockResolvedValue({
+          metadata: {
+            category: "DANGER_ALERT",
+            deepLink: "/danger-trigger/events/event-1",
+            dangerAlert: {
+              schemaVersion: 1,
+              alertId: "danger-event:event-1:user-1",
+              alertVersion: 1,
+              alertCode: "DANGER_ZONE_GENERAL_ENTRY",
+              priority: "critical",
+              issuedAt: new Date().toISOString(),
+              expiresAt: new Date(Date.now() + 600_000).toISOString(),
+            },
+          },
+        }),
+      },
+      userPushToken: {
+        findMany: async () => [{ token: "danger-device-token", userId: "user-1", appEnvironment: "production" }],
+      },
+    } as never;
+    const provider = new FcmProvider(config, prisma);
+    (provider as any).getAccessToken = async () => "oauth-token";
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ name: "projects/test/messages/danger-1" }),
+    });
+    globalThis.fetch = fetchMock as never;
+
+    try {
+      await provider.send({
+        notificationId: "notif-danger-1",
+        userId: "user-1",
+        channel: "push",
+        title: "Danger Alert Nearby",
+        body: "A serious safety alert was triggered nearby.",
+        type: "NearbyDangerWarning",
+        priority: "Critical",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(requestBody.message.notification).toBeUndefined();
+    expect(requestBody.message.android.priority).toBe("high");
+    expect(requestBody.message.data.nativeCriticalAlert).toBe("true");
+    expect(requestBody.message.data.title).toBe("Danger Alert Nearby");
+  });
 });

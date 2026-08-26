@@ -12,5 +12,6 @@ import { LiveVideoService } from "./live-video.service";
   imports: [ConfigModule, PrismaModule, AuditModule],
   controllers: [LiveVideoController],
   providers: [LiveVideoService, LiveKitTokenService, JwtAuthGuard, PermissionsGuard],
+  exports: [LiveVideoService, LiveKitTokenService],
 })
 export class LiveVideoModule {}

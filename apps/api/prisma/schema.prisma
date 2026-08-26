@@ -127,6 +127,20 @@ enum DangerDetectionState {
   FAILED
 }
 
+enum DangerEventState {
+  POTENTIAL
+  ACTIVE
+  VERIFIED
+  RESOLVED
+  FALSE_ALARM
+}
+
+enum DangerEventSourceType {
+  LIVE_VOICE
+  USER_REPORT
+  AI_SIGNAL
+}
+
 enum DangerLevel {
   LOW
   MEDIUM
@@ -543,6 +557,7 @@ model User {
   supportConversations      SupportConversation[]          @relation("SupportConversationOwner")
   incidentMessagesSent      IncidentMessage[]              @relation("IncidentMessageSenderUser")
   incidentMessageReceipts   IncidentMessageReceipt[]       @relation("IncidentMessageReceiptUser")
+  dangerEventsInitiated     DangerEvent[]                   @relation("DangerEventInitiator")
 
   @@map("users")
 }
@@ -867,6 +882,7 @@ model Incident {
   communityVerificationResponses CommunityVerificationResponse[]
   operationalResponses         OperationalResponse[]
   fieldBackupRequests          FieldBackupRequest[]
+  dangerEvent                  DangerEvent?
 
   @@index([country, state, lga])
   @@index([status, priority, createdAt])
@@ -1026,6 +1042,64 @@ model DangerDetectionAssessment {
   @@index([clusterKey, createdAt])
   @@index([dangerZoneId])
   @@map("danger_detection_assessments")
+}
+
+model DangerEvent {
+  id                    String                @id @default(uuid()) @db.Uuid
+  incidentId            String                @unique @map("incident_id") @db.Uuid
+  initiatorUserId       String?               @map("initiator_user_id") @db.Uuid
+  sourceType            DangerEventSourceType @map("source_type")
+  state                 DangerEventState      @default(ACTIVE)
+  severity              DangerLevel           @default(CRITICAL)
+  latitude              Decimal               @db.Decimal(9, 6)
+  longitude             Decimal               @db.Decimal(9, 6)
+  accuracyMeters        Decimal?              @map("accuracy_meters") @db.Decimal(8, 2)
+  locationSource        String                @map("location_source")
+  locationCapturedAt    DateTime              @map("location_captured_at") @db.Timestamptz(6)
+  areaName              String?               @map("area_name")
+  effectiveRadiusMeters Int                   @default(1000) @map("effective_radius_meters")
+  maxRadiusMeters       Int                   @default(4000) @map("max_radius_meters")
+  liveVoiceSessionId    String?               @unique @map("live_voice_session_id") @db.Uuid
+  clusterKey            String?               @map("cluster_key")
+  liveVoiceEndedAt      DateTime?             @map("live_voice_ended_at") @db.Timestamptz(6)
+  cancelledAt           DateTime?             @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason    String?               @map("cancellation_reason")
+  resolvedAt            DateTime?             @map("resolved_at") @db.Timestamptz(6)
+  metadata              Json                  @default("{}")
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  incident              Incident              @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  initiator             User?                 @relation("DangerEventInitiator", fields: [initiatorUserId], references: [id], onDelete: SetNull)
+  liveVoiceSession      LiveVideoSession?      @relation("DangerEventLiveVoice", fields: [liveVoiceSessionId], references: [id], onDelete: SetNull)
+  signals               DangerEventSignal[]
+
+  @@index([state, createdAt])
+  @@index([clusterKey, createdAt])
+  @@index([latitude, longitude])
+  @@map("danger_events")
+}
+
+model DangerEventSignal {
+  id                 String                @id @default(uuid()) @db.Uuid
+  dangerEventId      String                @map("danger_event_id") @db.Uuid
+  sourceType         DangerEventSourceType @map("source_type")
+  sourceId           String                @map("source_id")
+  incidentId         String?               @map("incident_id") @db.Uuid
+  liveVoiceSessionId String?               @map("live_voice_session_id") @db.Uuid
+  initiatorUserId    String?               @map("initiator_user_id") @db.Uuid
+  category           DangerCategory?
+  severity           DangerLevel
+  latitude           Decimal?              @db.Decimal(9, 6)
+  longitude          Decimal?              @db.Decimal(9, 6)
+  occurredAt         DateTime              @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  metadata           Json                  @default("{}")
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  dangerEvent        DangerEvent           @relation(fields: [dangerEventId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceId])
+  @@index([dangerEventId, occurredAt])
+  @@index([incidentId])
+  @@map("danger_event_signals")
 }
 
 model SpeechSynthesis {
@@ -2135,6 +2209,7 @@ model LiveVideoSession {
   createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   incident            Incident                  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   locationUpdates     LiveVideoLocationUpdate[]
+  dangerEvent         DangerEvent?              @relation("DangerEventLiveVoice")
 
   @@index([incidentId])
   @@index([status, startedAt])

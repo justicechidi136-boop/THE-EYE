@@ -14,6 +14,7 @@ abstract final class PushDeepLinkRouter {
     "/neighborhood-watch/alerts",
     "/neighborhood-watch/broadcasts",
     "/live-video",
+    "/danger-trigger",
     "/report/emergency",
     "/active-emergency",
     "/active-emergencies",
@@ -27,7 +28,8 @@ abstract final class PushDeepLinkRouter {
 
   static bool isAllowedDestination(String route) {
     if (allowedRoutes.contains(route)) return true;
-    if (route.startsWith("/broadcasts/") && route.length > "/broadcasts/".length) {
+    if (route.startsWith("/broadcasts/") &&
+        route.length > "/broadcasts/".length) {
       return true;
     }
     if (route.startsWith("/active-emergency/") && route.endsWith("/messages")) {
@@ -35,6 +37,10 @@ abstract final class PushDeepLinkRouter {
     }
     if (route.startsWith("/incident-detail/") && route.endsWith("/messages")) {
       return route.length > "/incident-detail/".length + "/messages".length;
+    }
+    if (route.startsWith("/danger-trigger/events/") &&
+        route.length > "/danger-trigger/events/".length) {
+      return true;
     }
     if (NeighborhoodWatchDestinations.isPostRoute(route)) return true;
     if (NeighborhoodWatchDestinations.isPatrolRoute(route)) return true;
