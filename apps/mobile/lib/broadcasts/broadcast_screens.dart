@@ -327,6 +327,7 @@ class BroadcastDetailScreen extends StatefulWidget {
 
 class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
   BroadcastFeedItem? _item;
+  String? _currentUserId;
   String? _error;
   bool _loading = true;
   bool _actionInFlight = false;
@@ -385,11 +386,20 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
         accessToken: session.accessToken!,
         broadcastId: broadcastId,
       );
+      var currentUserId = session.cachedCitizenProfile?.id;
+      if (currentUserId == null || currentUserId.trim().isEmpty) {
+        try {
+          currentUserId = (await session.loadCitizenProfile())?.id;
+        } catch (_) {
+          // Detail remains readable; owner-only actions stay fail-closed.
+        }
+      }
       // Never block detail rendering on read-receipt side effects.
       unawaited(session.markBroadcastRead(broadcastId));
       if (!mounted) return;
       setState(() {
         _item = item;
+        _currentUserId = currentUserId;
         _loading = false;
         _error = null;
       });
@@ -532,8 +542,7 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
         ? null
         : BroadcastActionPolicy.forViewer(
             broadcast: item,
-            currentUserId:
-                BroadcastSession.require(context).cachedCitizenProfile?.id,
+            currentUserId: _currentUserId,
           );
     final l10n = AppLocalizations.of(context);
     final returnToCenterOnBack = detailArgs is BroadcastDetailNavigationArgs &&

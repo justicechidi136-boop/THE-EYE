@@ -1013,23 +1013,42 @@ export class BroadcastCitizenService {
     const ownerUserId = typeof broadcast.creatorUserId === "string" ? broadcast.creatorUserId : "";
     if (!ownerUserId) return;
     const metadata = (broadcast.metadata as Record<string, unknown> | null) ?? {};
+    const isMissingPerson = String(broadcast.type) === BroadcastType.MissingPerson;
+    const fullName = String(metadata.fullName ?? "").trim();
     const make = String(metadata.make ?? "").trim();
     const model = String(metadata.model ?? "").trim();
     const vehicleName = [make, model].filter(Boolean).join(" ").trim() || "vehicle";
-    const subject = String(broadcast.type) === BroadcastType.MissingPerson
-      ? "missing person"
-      : vehicleName;
+    const registrationMasked = String(metadata.registrationMasked ?? "").trim();
+    const subject = isMissingPerson
+      ? fullName
+        ? `missing person: ${fullName}`
+        : "missing person"
+      : `stolen vehicle: ${vehicleName}${registrationMasked ? ` (${registrationMasked})` : ""}`;
     await this.notificationsService.create({
       userId: ownerUserId,
       broadcastId: String(broadcast.id),
       type: "BroadcastSightingAlert",
       priority: "High",
       channels: ["push"],
-      title: "New sighting reported",
-      body: `Someone reported a possible sighting for your ${subject} broadcast.`,
+      title: `New sighting for ${subject}`,
+      body: `Someone reported a possible sighting for your ${isMissingPerson ? "missing-person" : "stolen-vehicle"} broadcast.`,
       metadata: {
         broadcastId: String(broadcast.id),
         sightingId,
+        eventType: "BROADCAST_SIGHTING_REPORTED",
+        broadcastType: String(broadcast.type),
+        notificationTemplateKey: isMissingPerson
+          ? "sighting.missingPerson"
+          : "sighting.stolenVehicle",
+        ...(isMissingPerson
+          ? { personName: fullName || "this missing person", fullName }
+          : {
+              vehicleDescription: vehicleName,
+              plateNumber: registrationMasked,
+              make,
+              model,
+              registrationMasked,
+            }),
         idempotencyKey: `broadcast-sighting:${sightingId}:${ownerUserId}`,
         deepLink: `/broadcasts/${String(broadcast.id)}/sightings/${sightingId}`,
       },

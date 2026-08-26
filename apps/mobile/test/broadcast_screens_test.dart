@@ -118,6 +118,7 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   _FakeBroadcastSession({
     this.authenticated = true,
     this.currentUserId,
+    this.loadedUserId,
     BroadcastFeedItem? detail,
     List<BroadcastFeedItem> mineItems = const [],
     Object? listMineError,
@@ -136,6 +137,7 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
 
   final bool authenticated;
   final String? currentUserId;
+  final String? loadedUserId;
 
   @override
   bool get isAuthenticated => authenticated;
@@ -172,7 +174,14 @@ class _FakeBroadcastSession extends ChangeNotifier implements BroadcastSession {
   @override
   Future<CitizenProfile?> loadCitizenProfile(
           {bool forceRefresh = false}) async =>
-      null;
+      loadedUserId == null
+          ? null
+          : CitizenProfile(
+              id: loadedUserId!,
+              displayName: "Loaded QA Citizen",
+              kycStatus: "Verified",
+              profileComplete: true,
+            );
 
   @override
   void clearCitizenProfileCache() {}
@@ -875,6 +884,43 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text("Share"), findsOneWidget);
+    expect(find.text("Report Sighting"), findsOneWidget);
+    expect(find.text("Comments"), findsOneWidget);
+    expect(find.text("Resolve"), findsOneWidget);
+    expect(find.text("Withdraw"), findsOneWidget);
+    expect(find.text("Report Broadcast"), findsNothing);
+  });
+
+  testWidgets("restored owner session loads profile before choosing actions",
+      (tester) async {
+    final owned = BroadcastFeedItem(
+      id: "b-owned-restored",
+      type: "MissingPerson",
+      title: "Missing person alert",
+      body: "body",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 1),
+      status: "Active",
+      creatorUserId: "owner-1",
+    );
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-owned-restored"),
+        session: _FakeBroadcastSession(
+          loadedUserId: "owner-1",
+          detail: owned,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text("Actions"),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
 
     expect(find.text("Share"), findsOneWidget);
     expect(find.text("Report Sighting"), findsOneWidget);

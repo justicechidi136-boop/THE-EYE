@@ -80,6 +80,20 @@ const templates: Record<string, TemplateBundle> = {
     ig: ["Ihe ahuru ohuru", "A kọrọ ihe ahuru nso {areaName}."],
     pcm: ["New sighting", "Person report sighting near {areaName}."],
   }),
+  "sighting.missingPerson": bundle({
+    en: ["Missing person sighting", "A possible sighting of {personName} was reported."],
+    ha: ["An ga mutumin da ya bata", "An bayar da rahoton yiwuwar ganin {personName}."],
+    yo: ["A ri eni ti o sonu", "A royin pe o seese ki won ti ri {personName}."],
+    ig: ["Ahuru onye efuru", "A kọrọ na enwere ike ihuru {personName}."],
+    pcm: ["Missing person sighting", "Person report say dem fit don see {personName}."],
+  }),
+  "sighting.stolenVehicle": bundle({
+    en: ["Stolen vehicle sighting", "A possible sighting of {vehicleDescription}, plate {plateNumber}, was reported."],
+    ha: ["An ga motar da aka sace", "An bayar da rahoton yiwuwar ganin {vehicleDescription}, mai lamba {plateNumber}."],
+    yo: ["A ri oko ti won ji", "A royin pe o seese ki won ti ri {vehicleDescription}, pelu nomba awo {plateNumber}."],
+    ig: ["Ahuru ugbo ala ezuru", "A kọrọ na enwere ike ihuru {vehicleDescription}, nwere plate {plateNumber}."],
+    pcm: ["Stolen vehicle sighting", "Person report say dem fit don see {vehicleDescription}, plate {plateNumber}."],
+  }),
   "broadcast.alert": bundle({
     en: ["Broadcast update", "{broadcastTitle}"],
     ha: ["Sabunta watsawa", "{broadcastTitle}"],

@@ -83,6 +83,36 @@ describe("notification localization", () => {
     expect(result.body).toContain("ABC-123-LA");
   });
 
+  it("identifies missing-person and stolen-vehicle sighting subjects", () => {
+    const missingPerson = localizeNotification({
+      type: "BroadcastSightingAlert",
+      title: "New sighting",
+      body: "A sighting was reported.",
+      recipientPreferredLocale: "en",
+      metadata: {
+        notificationTemplateKey: "sighting.missingPerson",
+        personName: "Ada Okafor",
+      },
+    });
+    const stolenVehicle = localizeNotification({
+      type: "BroadcastSightingAlert",
+      title: "New sighting",
+      body: "A sighting was reported.",
+      recipientPreferredLocale: "en",
+      metadata: {
+        notificationTemplateKey: "sighting.stolenVehicle",
+        vehicleDescription: "Toyota Corolla",
+        plateNumber: "ABC-123-LA",
+      },
+    });
+
+    expect(missingPerson.title).toBe("Missing person sighting");
+    expect(missingPerson.body).toContain("Ada Okafor");
+    expect(stolenVehicle.title).toBe("Stolen vehicle sighting");
+    expect(stolenVehicle.body).toContain("Toyota Corolla");
+    expect(stolenVehicle.body).toContain("ABC-123-LA");
+  });
+
   it("maps trusted danger codes to structured locale templates", () => {
     expect(
       resolveNotificationTemplateKey("NearbyDangerWarning", {
