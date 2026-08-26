@@ -83,6 +83,7 @@ import "live_video/live_video_startup_trace.dart";
 import "live_video/live_video_start_validation.dart";
 import "danger_trigger/danger_trigger_screen.dart";
 import "danger_trigger/danger_trigger_alert_screen.dart";
+import "danger_trigger/incoming_danger_alert.dart";
 import "brand.dart";
 import "config/app_flavor.dart";
 import "config/firebase_bootstrap.dart";
@@ -930,6 +931,10 @@ class TheEyeApp extends StatefulWidget {
 class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
   AppController get controller => widget.controller;
   StreamSubscription<PushNavigationRequest>? _pushNavigationSubscription;
+  StreamSubscription<IncomingDangerAlert>? _dangerAlertSubscription;
+  final MobileDangerAlertAnnouncer _dangerAnnouncer =
+      MobileDangerAlertAnnouncer();
+  bool _dangerAlertVisible = false;
 
   @override
   void initState() {
@@ -939,12 +944,97 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
         widget.pushNotifications.navigationStream.listen((request) {
       unawaited(_handlePushNavigation(request));
     });
+    _dangerAlertSubscription =
+        widget.pushNotifications.dangerAlertStream.listen((alert) {
+      unawaited(_presentDangerAlert(alert));
+    });
+  }
+
+  Future<void> _presentDangerAlert(IncomingDangerAlert alert) async {
+    if (_dangerAlertVisible || !mounted) return;
+    final context = theEyeNavigatorKey.currentContext;
+    if (context == null) return;
+    _dangerAlertVisible = true;
+    unawaited(_dangerAnnouncer.speak(
+      alert,
+      locale: Localizations.localeOf(context).toLanguageTag(),
+    ));
+    final view = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.warning_rounded,
+          color: BrandColors.danger,
+          size: 56,
+          semanticLabel: "Red danger triangle",
+        ),
+        title: const Text(
+          "DANGER ALERT",
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              alert.dangerType.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(alert.area, textAlign: TextAlign.center),
+            if (alert.distanceMeters != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                alert.distanceMeters! < 1000
+                    ? "About ${alert.distanceMeters} m away"
+                    : "About ${(alert.distanceMeters! / 1000).toStringAsFixed(1)} km away",
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await _dangerAnnouncer.stop();
+              if (dialogContext.mounted) Navigator.pop(dialogContext, false);
+            },
+            child: const Text("I have seen this alert"),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.visibility_outlined),
+            label: const Text("View Alert"),
+          ),
+        ],
+      ),
+    );
+    await _dangerAnnouncer.stop();
+    _dangerAlertVisible = false;
+    if (view == true && mounted) {
+      theEyeNavigatorKey.currentState?.pushNamed(
+        "/danger-trigger/alert",
+        arguments: alert.eventId,
+      );
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(controller.ensureFreshSession());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pushNavigationSubscription?.cancel();
+    _dangerAlertSubscription?.cancel();
+    unawaited(_dangerAnnouncer.stop());
+    super.dispose();
   }
 
   Future<void> _handlePushNavigation(PushNavigationRequest request) async {
@@ -1047,13 +1137,6 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
       request.route,
       (existing) => existing.isFirst || existing.settings.name == "/home",
     );
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _pushNavigationSubscription?.cancel();
-    super.dispose();
   }
 
   @override

@@ -10,6 +10,7 @@ import "package:permission_handler/permission_handler.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
+import "../danger_trigger/incoming_danger_alert.dart";
 import "../startup/startup_diagnostics.dart";
 import "../config/app_flavor.dart";
 import "push_delivery_ack.dart";
@@ -52,16 +53,21 @@ class PushNotificationService {
   final WatchDangerAlertRelay _watchRelay;
   final StreamController<PushNavigationRequest> _navigationController =
       StreamController<PushNavigationRequest>.broadcast();
+  final StreamController<IncomingDangerAlert> _dangerAlertController =
+      StreamController<IncomingDangerAlert>.broadcast();
 
   Stream<PushNavigationRequest> get navigationStream =>
       _navigationController.stream;
   Stream<String> get routeStream =>
       navigationStream.map((request) => request.route);
+  Stream<IncomingDangerAlert> get dangerAlertStream =>
+      _dangerAlertController.stream;
   void Function(RemoteMessage message)? onForegroundMessage;
   bool _initialized = false;
   String? _lastRegisteredTokenSuffix;
   final Set<String> _relayedAlertIds = <String>{};
   final Set<String> _shownLogicalNotificationIds = <String>{};
+  final Set<String> _presentedDangerAlertVersions = <String>{};
 
   FirebaseMessaging get _messagingClient {
     final messaging = _messaging;
@@ -260,6 +266,7 @@ class PushNotificationService {
     onForegroundMessage?.call(message);
     final notification = message.notification;
     final data = message.data;
+    final dangerAlert = _emitDangerAlert(data);
 
     if (DangerAlertPhoneHandler.shouldRelayToWatch(data) &&
         DangerAlertPhoneHandler.hasTrustedAlertCode(data)) {
@@ -283,10 +290,10 @@ class PushNotificationService {
     final route = navigation?.route ?? "/notifications";
     final silent = navigation?.silent ?? false;
     final notificationId = data["notificationId"]?.toString() ?? "";
-    final logicalId =
-        data["idempotencyKey"]?.toString().trim().isNotEmpty == true
+    final logicalId = dangerAlert?.dedupeKey ??
+        (data["idempotencyKey"]?.toString().trim().isNotEmpty == true
             ? data["idempotencyKey"].toString()
-            : notificationId;
+            : notificationId);
     if (logicalId.isNotEmpty && !_shownLogicalNotificationIds.add(logicalId)) {
       return;
     }
@@ -295,9 +302,6 @@ class PushNotificationService {
         notificationId: notificationId,
         source: "foreground",
       ));
-    }
-    if (data["nativeCriticalAlert"]?.toString() == "true") {
-      return;
     }
     final channelId = silent
         ? PushNotificationChannels.general.id
@@ -333,6 +337,15 @@ class PushNotificationService {
                       channelId == PushNotificationChannels.dangerAlerts.id
                   ? Priority.max
                   : Priority.high,
+          category: channelId == PushNotificationChannels.dangerAlerts.id
+              ? AndroidNotificationCategory.alarm
+              : null,
+          visibility: NotificationVisibility.public,
+          enableVibration: !silent,
+          audioAttributesUsage:
+              channelId == PushNotificationChannels.dangerAlerts.id
+                  ? AudioAttributesUsage.alarm
+                  : AudioAttributesUsage.notification,
         ),
       ),
       payload:
@@ -342,6 +355,7 @@ class PushNotificationService {
 
   void _handleOpenedMessage(RemoteMessage message) {
     final data = message.data;
+    _emitDangerAlert(data);
     final notificationId = data["notificationId"]?.toString() ?? "";
     if (notificationId.isNotEmpty) {
       unawaited(_deliveryAck.acknowledge(
@@ -374,5 +388,14 @@ class PushNotificationService {
 
   Future<void> dispose() async {
     await _navigationController.close();
+    await _dangerAlertController.close();
+  }
+
+  IncomingDangerAlert? _emitDangerAlert(Map<String, dynamic> data) {
+    final alert = IncomingDangerAlert.fromData(data);
+    if (alert != null && _presentedDangerAlertVersions.add(alert.dedupeKey)) {
+      _dangerAlertController.add(alert);
+    }
+    return alert;
   }
 }

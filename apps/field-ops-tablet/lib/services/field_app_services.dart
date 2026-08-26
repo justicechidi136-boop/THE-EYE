@@ -12,6 +12,7 @@ import 'field_events_service.dart';
 import 'field_offline_queue.dart';
 import 'field_workflows_service.dart';
 import 'field_broadcast_media_service.dart';
+import '../danger_alerts/field_danger_alert_service.dart';
 
 class FieldAppServices {
   FieldAppServices({
@@ -49,6 +50,10 @@ class FieldAppServices {
       session: this.session,
     );
     pairing = FieldPairingService(api: this.api, keystore: this.keystore);
+    dangerAlerts = FieldDangerAlertService(
+      api: this.api,
+      session: this.session,
+    );
   }
 
   final FieldApiClient api;
@@ -64,15 +69,22 @@ class FieldAppServices {
   late final FieldEventsService events;
   late final LauncherPolicyService launcherPolicy;
   late final FieldPairingService pairing;
+  late final FieldDangerAlertService dangerAlerts;
 
   Future<void> restoreSession() async {
     await auth.restoreApiToken();
+    try {
+      await dangerAlerts.initialize();
+    } catch (_) {
+      // Operational workflows remain available if FCM is temporarily unavailable.
+    }
   }
 
   Future<void> dispose() async {
     events.dispose();
     broadcastMedia.dispose();
     accountLocale.dispose();
+    await dangerAlerts.dispose();
     api.dispose();
   }
 }

@@ -36,9 +36,10 @@ class _DangerAlertScreenState extends State<DangerAlertScreen>
       vsync: this,
       duration: const Duration(milliseconds: 650),
     );
-    _alertOpacity = Tween<double>(begin: 0.35, end: 1).animate(
-      CurvedAnimation(parent: _alertPulse, curve: Curves.easeInOut),
-    );
+    _alertOpacity = Tween<double>(
+      begin: 0.35,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _alertPulse, curve: Curves.easeInOut));
     if (!widget.payload.allClear) {
       _alertPulse.repeat(reverse: true, count: 8);
     }
@@ -84,10 +85,11 @@ class _DangerAlertScreenState extends State<DangerAlertScreen>
                 payload.allClear
                     ? Icons.check_circle_outline
                     : Icons.warning_amber_rounded,
-                color: payload.allClear ? EyeColors.green : EyeColors.orange,
+                color: payload.allClear ? EyeColors.green : EyeColors.danger,
                 size: 42,
-                semanticLabel:
-                    payload.allClear ? l10n.areaCleared : l10n.dangerWarning,
+                semanticLabel: payload.allClear
+                    ? l10n.areaCleared
+                    : l10n.dangerWarning,
               ),
             ),
             const SizedBox(height: 10),
@@ -184,9 +186,11 @@ class _DangerAlertScreenState extends State<DangerAlertScreen>
     if (area != null && area.isNotEmpty) parts.add(area);
     final distance = payload.distanceMeters;
     if (distance != null && distance > 0) {
-      parts.add(distance >= 1000
-          ? '${(distance / 1000).toStringAsFixed(1)} km'
-          : '$distance m');
+      parts.add(
+        distance >= 1000
+            ? '${(distance / 1000).toStringAsFixed(1)} km'
+            : '$distance m',
+      );
     }
     return parts.isEmpty ? null : parts.join(' - ');
   }

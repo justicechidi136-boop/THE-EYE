@@ -6,8 +6,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.android.gms.wearable.MessageEvent
@@ -42,14 +44,14 @@ class WatchDangerAlertListenerService : WearableListenerService() {
         )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_danger_alert)
-            .setColor(AMBER)
-            .setContentTitle(payload.optString("title", "Danger alert nearby"))
+            .setColor(DANGER_RED)
+            .setContentTitle(payload.optString("title", "DANGER ALERT"))
             .setContentText(payload.optString("body", "Move to safety and check THE EYE."))
-            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setVibrate(VIBRATION)
-            .setLights(AMBER, 700, 500)
+            .setLights(DANGER_RED, 700, 500)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
@@ -75,7 +77,7 @@ class WatchDangerAlertListenerService : WearableListenerService() {
     companion object {
         const val CHANNEL_ID = "theeye_watch_critical_alerts_v2"
         private val VIBRATION = longArrayOf(0, 500, 180, 500, 180, 850)
-        private val AMBER = Color.rgb(255, 179, 0)
+        private val DANGER_RED = Color.rgb(211, 47, 47)
 
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -88,8 +90,15 @@ class WatchDangerAlertListenerService : WearableListenerService() {
                 enableVibration(true)
                 vibrationPattern = VIBRATION
                 enableLights(true)
-                lightColor = AMBER
+                lightColor = DANGER_RED
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                setSound(
+                    Settings.System.DEFAULT_ALARM_ALERT_URI,
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
             }
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }

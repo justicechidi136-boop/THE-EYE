@@ -48,6 +48,11 @@ export type FieldDeviceHeartbeatDto = {
   crashCount?: number;
 };
 
+export type RegisterFieldPushTokenDto = {
+  token: string;
+  appEnvironment?: "development" | "staging" | "production";
+};
+
 export type FieldLoginDto = {
   email: string;
   password: string;

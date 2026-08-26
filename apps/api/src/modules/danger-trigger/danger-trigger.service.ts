@@ -36,6 +36,31 @@ type NearbyGeoState = {
   lastEvaluatedAt: Date;
 };
 
+const DANGER_ALERT_RELEVANCE_MS = 30 * 60 * 1000;
+
+function dangerLabel(code: string) {
+  switch (code) {
+    case DangerAlertCode.ARMED_ROBBERY_NEARBY: return "Active Robbery";
+    case DangerAlertCode.KIDNAPPING_NEARBY: return "Kidnapping";
+    case DangerAlertCode.FIRE_NEARBY: return "Fire";
+    case DangerAlertCode.FLOOD_NEARBY: return "Flood Emergency";
+    case DangerAlertCode.BUILDING_COLLAPSE_NEARBY: return "Building Collapse";
+    case DangerAlertCode.ROAD_DANGER_NEARBY: return "Road Hazard";
+    case DangerAlertCode.ACTIVE_SHOOTER_NEARBY: return "Gunfire";
+    case DangerAlertCode.VIOLENT_ATTACK_NEARBY: return "Violent Attack";
+    case DangerAlertCode.COMMUNAL_VIOLENCE_NEARBY: return "Communal Violence";
+    case DangerAlertCode.TERRORIST_THREAT_NEARBY: return "Terrorist Threat";
+    case DangerAlertCode.GAS_LEAK_NEARBY: return "Gas Leak";
+    case DangerAlertCode.HAZARDOUS_AREA_NEARBY: return "Hazardous Area";
+    case DangerAlertCode.CIVIL_DISTURBANCE_NEARBY: return "Civil Disturbance";
+    case DangerAlertCode.POLICE_ADVISORY_NEARBY: return "Police Safety Advisory";
+    case DangerAlertCode.MISSING_CHILD_NEARBY: return "Missing Child";
+    case DangerAlertCode.EVACUATION_NEARBY: return "Evacuation";
+    case DangerAlertCode.PROXIMITY_INCREASE: return "Danger Moved Closer";
+    default: return "Other Immediate Danger";
+  }
+}
+
 @Injectable()
 export class DangerTriggerService {
   constructor(
@@ -559,6 +584,11 @@ export class DangerTriggerService {
       list.push(entry);
       byUser.set(entry.row.userId, list);
     }
+    const alertCode = this.normalizedDangerCode(event);
+    const label = dangerLabel(alertCode);
+    const area = event.areaName?.trim() || "your area";
+    const version = Math.max(1, Number((event.metadata as any)?.alertRevision ?? 1));
+    const expiresAt = new Date(Date.now() + DANGER_ALERT_RELEVANCE_MS);
     for (const [userId, entries] of byUser) {
       entries.sort((a, b) => a.result.distanceMeters - b.result.distanceMeters);
       const nearest = entries[0]!;
@@ -577,8 +607,11 @@ export class DangerTriggerService {
         distanceMeters,
         areaName: event.areaName ?? undefined,
         notificationPriority: "Critical",
+        version,
+        sequence: version,
+        expiresAt,
         deepLink: `theeye://danger-trigger/events/${event.id}`,
-        metadata: { dangerAlertCode: DangerAlertCode.GENERAL_ENTRY },
+        metadata: { dangerAlertCode: alertCode },
         config: this.config as unknown as Record<string, unknown>,
       });
       const commonMetadata = {
@@ -598,8 +631,8 @@ export class DangerTriggerService {
         type: "NearbyDangerWarning",
         priority: "Critical",
         channels: ["push", "in_app"],
-        title: "Danger Alert Nearby",
-        body: `A serious safety alert was triggered approximately ${distanceLabel} from you.`,
+        title: "DANGER ALERT",
+        body: `${label} reported in ${area}. About ${distanceLabel} away.`,
         incidentId: event.incidentId,
         metadata: commonMetadata,
       });
@@ -609,12 +642,108 @@ export class DangerTriggerService {
         priority: "Critical",
         channels: ["watch_push"],
         title: "DANGER ALERT",
-        body: `Danger reported nearby. Approximately ${distanceLabel} away. Open THE EYE for details.`,
+        body: `${label} reported in ${area}. About ${distanceLabel} away.`,
         incidentId: event.incidentId,
         metadata: { ...commonMetadata, watchLiveAudioSupported: false },
       });
     }
-    return { recipients: byUser.size, eligibleDeviceLocations: eligible.length, radiusMeters: event.effectiveRadiusMeters };
+    const fieldRecipients = await this.fanoutToFieldDevices(event, {
+      alertCode,
+      label,
+      area,
+      version,
+      expiresAt,
+    });
+    return {
+      recipients: byUser.size,
+      eligibleDeviceLocations: eligible.length,
+      fieldRecipients,
+      radiusMeters: event.effectiveRadiusMeters,
+    };
+  }
+
+  private async fanoutToFieldDevices(
+    event: any,
+    alert: { alertCode: string; label: string; area: string; version: number; expiresAt: Date },
+  ) {
+    const devices = await (this.prisma as any).fieldDevice.findMany({
+      where: {
+        registrationStatus: "Active",
+        isRevoked: false,
+        isLost: false,
+        assignedUserId: { not: null },
+        lastKnownLatitude: { not: null },
+        lastKnownLongitude: { not: null },
+        lastLocationAt: { gte: new Date(Date.now() - 30 * 60_000) },
+      },
+      select: {
+        id: true,
+        assignedUserId: true,
+        lastKnownLatitude: true,
+        lastKnownLongitude: true,
+        lastLocationAt: true,
+      },
+      take: 500,
+    });
+    let delivered = 0;
+    for (const device of devices) {
+      const eligibility = dangerRecipientEligibility({
+        dangerLatitude: Number(event.latitude),
+        dangerLongitude: Number(event.longitude),
+        recipientLatitude: Number(device.lastKnownLatitude),
+        recipientLongitude: Number(device.lastKnownLongitude),
+        recipientLocationAt: new Date(device.lastLocationAt),
+        radiusMeters: Math.min(Number(event.effectiveRadiusMeters), OWNER_APPROVED_MAX_DANGER_RADIUS_METERS),
+      });
+      if (!eligibility.eligible) continue;
+      const dangerAlert = buildDangerZoneAlertPayload({
+        zoneId: event.id,
+        incidentId: event.incidentId,
+        safetyAlertId: event.id,
+        deviceId: device.id,
+        alertId: `danger-event:${event.id}:field:${device.id}`,
+        version: alert.version,
+        sequence: alert.version,
+        incidentType: IncidentType.Emergency,
+        alertState: eligibility.distanceMeters <= 1_000 ? "Critical" : "Awareness",
+        distanceMeters: eligibility.distanceMeters,
+        areaName: alert.area,
+        notificationPriority: "Critical",
+        expiresAt: alert.expiresAt,
+        deepLink: `theeye-field://danger-trigger/events/${event.id}`,
+        metadata: { dangerAlertCode: alert.alertCode },
+        config: this.config as unknown as Record<string, unknown>,
+      });
+      await this.notifications.create({
+        adminUserId: device.assignedUserId,
+        type: "NearbyDangerWarning",
+        priority: "Critical",
+        channels: ["push", "in_app"],
+        title: "DANGER ALERT",
+        body: `${alert.label} reported in ${alert.area}.`,
+        incidentId: event.incidentId,
+        metadata: {
+          category: "DANGER_ALERT",
+          dangerEventId: event.id,
+          deviceId: device.id,
+          approximateArea: alert.area,
+          distanceMeters: Math.round(eligibility.distanceMeters),
+          preciseReporterLocationExposed: false,
+          liveAvailable: true,
+          deepLink: `/danger-trigger/events/${event.id}`,
+          dangerAlert,
+        },
+      });
+      delivered += 1;
+    }
+    return delivered;
+  }
+
+  private normalizedDangerCode(event: any) {
+    const code = String((event.metadata as any)?.dangerAlertCode ?? "");
+    return Object.values(DangerAlertCode).includes(code as never)
+      ? code
+      : DangerAlertCode.GENERAL_ENTRY;
   }
 
   private buildWatchAlert(

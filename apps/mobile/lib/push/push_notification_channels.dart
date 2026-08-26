@@ -13,7 +13,8 @@ abstract final class PushNotificationChannels {
     enableVibration: true,
     vibrationPattern: Int64List.fromList([0, 500, 180, 500, 180, 850]),
     enableLights: true,
-    ledColor: Color(0xFFFFB300),
+    ledColor: Color(0xFFD32F2F),
+    audioAttributesUsage: AudioAttributesUsage.alarm,
   );
 
   static const emergency = AndroidNotificationChannel(

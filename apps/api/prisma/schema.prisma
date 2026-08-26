@@ -4103,6 +4103,7 @@ model FieldDevice {
   syncState              FieldDeviceSyncState?
   launcherPolicy         FieldDeviceLauncherPolicy?
   pairingTokens          FieldDevicePairingToken[]
+  pushTokens             FieldDevicePushToken[]
 
   @@index([assignedUserId, registrationStatus])
   @@index([agencyId, registrationStatus])
@@ -4114,6 +4115,21 @@ model FieldDevice {
   @@index([provisioningMode, preProvisionStatus])
   @@index([permissionProfileId])
   @@map("field_devices")
+}
+
+model FieldDevicePushToken {
+  id             String      @id @default(uuid()) @db.Uuid
+  fieldDeviceId  String      @map("field_device_id") @db.Uuid
+  token          String      @unique
+  provider       String      @default("firebase-cloud-messaging")
+  appEnvironment String      @default("development") @map("app_environment")
+  isActive       Boolean     @default(true) @map("is_active")
+  lastSeenAt     DateTime    @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  device         FieldDevice @relation(fields: [fieldDeviceId], references: [id], onDelete: Cascade)
+
+  @@index([fieldDeviceId, isActive, appEnvironment])
+  @@map("field_device_push_tokens")
 }
 
 enum FieldProvisioningMode {
