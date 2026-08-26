@@ -38,9 +38,27 @@ void main() {
 
   test("Home owns Tracking and the Services screen is removed", () {
     final mainSource = File("lib/main.dart").readAsStringSync();
+    final homeSource = mainSource.substring(
+      mainSource.indexOf("class HomeScreen"),
+      mainSource.indexOf("class ReportScreen"),
+    );
     expect(mainSource, contains('title: "Incident Tracking"'));
+    expect(homeSource, isNot(contains('title: "Safety broadcasts"')));
+    expect(
+        homeSource,
+        isNot(contains(
+            'ActionTile(\n                        "Safety broadcasts"')));
     expect(mainSource, isNot(contains("class ServicesHubScreen")));
     expect(mainSource, isNot(contains('"/services":')));
+  });
+
+  test("report submit action keeps Android navigation clearance", () {
+    final mainSource = File("lib/main.dart").readAsStringSync();
+    final reportSource = mainSource.substring(
+      mainSource.indexOf("class ReportScreen"),
+      mainSource.indexOf("class MissingPersonBroadcastScreen"),
+    );
+    expect(reportSource, contains("EyeTokens.contentBottomClearance"));
   });
 
   test("Watch opens the location-resolved feed-first experience", () {
