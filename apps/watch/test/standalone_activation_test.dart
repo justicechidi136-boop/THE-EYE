@@ -11,7 +11,8 @@ class _FakeWatchApiClient extends WatchApiClient {
     required this.handler,
   }) : super(skipEnvGuard: true, baseUrl: 'http://127.0.0.1:4000/v1');
 
-  final Future<Map<String, dynamic>> Function(String path, Map<String, dynamic>? body) handler;
+  final Future<Map<String, dynamic>> Function(
+      String path, Map<String, dynamic>? body) handler;
 
   @override
   Future<void> pingHealthReady() async {}
@@ -48,7 +49,8 @@ Map<String, dynamic> _validActivationResponse() {
 void main() {
   group('StandaloneActivationResult', () {
     test('parses valid activation response', () {
-      final parsed = StandaloneActivationResult.fromJson(_validActivationResponse());
+      final parsed =
+          StandaloneActivationResult.fromJson(_validActivationResponse());
       expect(parsed.deviceId, 'EYE-WATCH-001');
       expect(parsed.accessToken, 'ey.test.token');
       expect(parsed.deviceSecret, 'device-secret-value');
@@ -100,6 +102,29 @@ void main() {
       expect(await credentials.readDeviceSecret(), 'device-secret-value');
       expect(await credentials.readAccessToken(), 'ey.test.token');
       expect(await credentials.isActivationComplete(), isTrue);
+    });
+
+    test('runs post-auth bootstrap after credentials are available', () async {
+      final credentials = SecureCredentialStore(memory: <String, String>{});
+      final api = _FakeWatchApiClient(
+        handler: (_, __) async => _validActivationResponse(),
+      );
+      String? tokenSeenByBootstrap;
+      final service = StandaloneAuthService(
+        api: api,
+        credentials: credentials,
+        assertNetworkReady: (_) async {},
+        authBootstrap: () async {
+          tokenSeenByBootstrap = await credentials.readAccessToken();
+        },
+      );
+
+      await service.activateWithAdminCode(
+        deviceId: 'EYE-WATCH-001',
+        pairingCode: '123456',
+      );
+
+      expect(tokenSeenByBootstrap, 'ey.test.token');
     });
 
     test('maps HTTP 500 to server setup error', () async {

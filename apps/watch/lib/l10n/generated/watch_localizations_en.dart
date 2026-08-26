@@ -45,6 +45,30 @@ class WatchLocalizationsEn extends WatchLocalizations {
   String get areaSafe => 'Area safe';
 
   @override
+  String get greenSafeArea => 'Green safe area';
+
+  @override
+  String get checkingAreaRisk => 'Checking area risk';
+
+  @override
+  String get areaRiskUnavailable => 'Waiting for trusted location data';
+
+  @override
+  String get mediumRiskArea => 'Medium risk area';
+
+  @override
+  String get highRiskArea => 'High risk area';
+
+  @override
+  String get noRepeatedDangerPattern => 'No repeated danger pattern nearby.';
+
+  @override
+  String get someRepeatedDangerReports => 'Some recent danger reports nearby.';
+
+  @override
+  String get frequentDangerReports => 'Frequent danger reports nearby.';
+
+  @override
   String get stayAlertSuspiciousActivity =>
       'Stay alert for suspicious activity.';
 

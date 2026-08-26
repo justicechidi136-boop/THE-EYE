@@ -42,44 +42,54 @@ class PushMessagingService {
       _messagingOverride ?? (_messagingLazy ??= FirebaseMessaging.instance);
 
   StreamSubscription<String>? _refreshSubscription;
+  StreamSubscription<RemoteMessage>? _foregroundSubscription;
+  StreamSubscription<RemoteMessage>? _openedSubscription;
   bool _started = false;
+  bool _registrationAllowed = false;
   String? _lastIncidentPushKey;
   String? _lastDangerAlertKey;
 
   Future<void> start() async {
-    if (_started) return;
-    _started = true;
+    if (!_started) {
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    PushMessageRouter.onAlert = _handleAlert;
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      final permission = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      _registrationAllowed =
+          permission.authorizationStatus != AuthorizationStatus.denied;
 
-    await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    FirebaseMessaging.onMessage.listen(PushMessageRouter.handleForeground);
-    FirebaseMessaging.onMessageOpenedApp
-        .listen(PushMessageRouter.handleForeground);
-
-    final permission = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    if (permission.authorizationStatus == AuthorizationStatus.denied) {
-      return;
+      PushMessageRouter.onAlert = _handleAlert;
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      _foregroundSubscription = FirebaseMessaging.onMessage.listen(
+        PushMessageRouter.handleForeground,
+      );
+      _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
+        PushMessageRouter.handleForeground,
+      );
+      _refreshSubscription = _messaging.onTokenRefresh.listen((token) async {
+        await _alerts.registerPushToken(token);
+      });
+      _started = true;
     }
 
+    await refreshRegistration();
+  }
+
+  Future<bool> refreshRegistration() async {
+    if (!_started || !_registrationAllowed) return false;
     final token = await _messaging.getToken();
     if (token != null && token.isNotEmpty) {
       await _alerts.registerPushToken(token);
+      return true;
     }
-
-    _refreshSubscription = _messaging.onTokenRefresh.listen((token) async {
-      await _alerts.registerPushToken(token);
-    });
+    return _alerts.retryStoredPushTokenRegistration();
   }
 
   Future<void> revokeToken() async {
@@ -96,6 +106,10 @@ class PushMessagingService {
 
   Future<void> dispose() async {
     await _refreshSubscription?.cancel();
+    await _foregroundSubscription?.cancel();
+    await _openedSubscription?.cancel();
+    _started = false;
+    _registrationAllowed = false;
     PushMessageRouter.onAlert = null;
   }
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "../components/app-shell";
 import { DashboardActivityFeeds, DashboardChart } from "../components/dashboard-widgets";
+import { DashboardLiveRefresh } from "../components/dashboard-live-refresh";
 import { QuickLinkCard } from "../components/quick-link-card";
 import { MetricCard, PageHeader, Panel, StatusBadge } from "../components/ui";
 import { filterNavItems } from "../lib/nav-access";
@@ -40,6 +41,7 @@ export default async function DashboardPage() {
 
   return (
     <AppShell>
+      <DashboardLiveRefresh />
       <PageHeader
         eyebrow="Command dashboard"
         title="Dashboard"

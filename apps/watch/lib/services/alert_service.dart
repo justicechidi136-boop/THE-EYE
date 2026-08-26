@@ -26,7 +26,7 @@ class AlertService {
     await _credentials.savePushToken(token);
     final accessToken = await _credentials.readAccessToken();
     final deviceId = await _credentials.readDeviceId();
-    if (accessToken == null) return;
+    if (accessToken == null || accessToken.isEmpty) return;
 
     _api.accessToken = accessToken;
     await _api.post(
@@ -39,6 +39,19 @@ class AlertService {
         if (deviceId != null) 'deviceId': deviceId,
       },
     );
+  }
+
+  Future<bool> retryStoredPushTokenRegistration() async {
+    final token = await _credentials.readPushToken();
+    final accessToken = await _credentials.readAccessToken();
+    if (token == null ||
+        token.isEmpty ||
+        accessToken == null ||
+        accessToken.isEmpty) {
+      return false;
+    }
+    await registerPushToken(token);
+    return true;
   }
 
   Future<void> deactivatePushTokens() async {

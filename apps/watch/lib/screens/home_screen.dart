@@ -7,6 +7,7 @@ import '../design_system/design_system.dart';
 import '../l10n/generated/watch_localizations.dart';
 import '../models/emergency_mode.dart';
 import '../models/sos_event.dart';
+import '../models/watch_area_risk.dart';
 import '../models/watch_safety_status.dart';
 import '../services/launcher_service.dart';
 import '../services/watch_app_services.dart';
@@ -114,6 +115,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return parts.isEmpty ? null : parts.join(' - ');
   }
 
+  Color _areaRiskColor(WatchAreaRiskStatus status) {
+    return switch (status.level) {
+      WatchAreaRiskLevel.unknown => EyeColors.muted,
+      WatchAreaRiskLevel.highRisk => EyeColors.danger,
+      WatchAreaRiskLevel.mediumRisk => EyeColors.orange,
+      WatchAreaRiskLevel.greenSafe => EyeColors.green,
+    };
+  }
+
+  String _areaRiskTitle(WatchLocalizations l10n, WatchAreaRiskStatus status) {
+    return switch (status.level) {
+      WatchAreaRiskLevel.unknown => l10n.checkingAreaRisk,
+      WatchAreaRiskLevel.highRisk => l10n.highRiskArea,
+      WatchAreaRiskLevel.mediumRisk => l10n.mediumRiskArea,
+      WatchAreaRiskLevel.greenSafe => l10n.greenSafeArea,
+    };
+  }
+
+  String _areaRiskMessage(WatchLocalizations l10n, WatchAreaRiskStatus status) {
+    return switch (status.level) {
+      WatchAreaRiskLevel.unknown => l10n.areaRiskUnavailable,
+      WatchAreaRiskLevel.highRisk => l10n.frequentDangerReports,
+      WatchAreaRiskLevel.mediumRisk => l10n.someRepeatedDangerReports,
+      WatchAreaRiskLevel.greenSafe => l10n.noRepeatedDangerPattern,
+    };
+  }
+
+  String _areaRiskMeta(WatchAreaRiskStatus status) {
+    final area = status.approximateArea?.trim();
+    final count = '${status.eventCount} / ${status.windowDays} days';
+    return area == null || area.isEmpty ? count : '$area - $count';
+  }
+
   String _modeBadge() {
     if (WatchFlavor.isManagedLauncher) return 'Managed';
     return 'Consumer';
@@ -164,13 +198,32 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: EyeTokens.spaceSm),
               ValueListenableBuilder<WatchSafetyStatus>(
                 valueListenable: widget.services.dangerAlerts.safetyStatus,
-                builder: (context, safety, _) => _SafetyStatusCard(
-                  icon: _safetyIcon(safety),
-                  color: _safetyColor(safety),
-                  title: _safetyTitle(l10n, safety),
-                  message: _safetyMessage(l10n, safety),
-                  meta: _safetyMeta(safety),
-                ),
+                builder: (context, safety, _) {
+                  if (safety.isLive) {
+                    return _SafetyStatusCard(
+                      icon: _safetyIcon(safety),
+                      color: _safetyColor(safety),
+                      title: _safetyTitle(l10n, safety),
+                      message: _safetyMessage(l10n, safety),
+                      meta: _safetyMeta(safety),
+                    );
+                  }
+                  return ValueListenableBuilder<WatchAreaRiskStatus>(
+                    valueListenable: widget.services.areaRisk.status,
+                    builder: (context, areaRisk, _) => _SafetyStatusCard(
+                      icon: switch (areaRisk.level) {
+                        WatchAreaRiskLevel.unknown => Icons.location_searching,
+                        WatchAreaRiskLevel.greenSafe =>
+                          Icons.check_circle_outline,
+                        _ => Icons.warning_amber_rounded,
+                      },
+                      color: _areaRiskColor(areaRisk),
+                      title: _areaRiskTitle(l10n, areaRisk),
+                      message: _areaRiskMessage(l10n, areaRisk),
+                      meta: _areaRiskMeta(areaRisk),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: EyeTokens.spaceXs),
               Row(

@@ -19,6 +19,9 @@ import {
   validateStartDangerTriggerDto,
 } from "./dto/danger-trigger.dto";
 import {
+  classifyDangerAreaRisk,
+  DANGER_AREA_RISK_RADIUS_METERS,
+  DANGER_AREA_RISK_WINDOW_DAYS,
   dangerClusterKey,
   dangerRecipientEligibility,
   OWNER_APPROVED_MAX_DANGER_RADIUS_METERS,
@@ -287,6 +290,62 @@ export class DangerTriggerService {
       fanout,
       initiatorWatchAlertQueued: !metadata.alertFanoutCompletedAt,
       watchRelay: initiatorWatchAlert.relayData,
+    };
+  }
+
+  async areaRisk(latitude: number, longitude: number, actor: JwtPayload) {
+    this.assertCitizen(actor);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      throw new BadRequestException("latitude must be between -90 and 90");
+    }
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      throw new BadRequestException("longitude must be between -180 and 180");
+    }
+    if (latitude === 0 && longitude === 0) {
+      throw new BadRequestException("A valid location is required");
+    }
+
+    const since = new Date(Date.now() - DANGER_AREA_RISK_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const latitudeDelta = DANGER_AREA_RISK_RADIUS_METERS / 111_320;
+    const longitudeScale = Math.max(0.1, Math.cos((latitude * Math.PI) / 180));
+    const longitudeDelta = DANGER_AREA_RISK_RADIUS_METERS / (111_320 * longitudeScale);
+    const candidates = await (this.prisma as any).dangerEvent.findMany({
+      where: {
+        state: { in: ["ACTIVE", "VERIFIED", "RESOLVED"] },
+        createdAt: { gte: since },
+        latitude: { gte: latitude - latitudeDelta, lte: latitude + latitudeDelta },
+        longitude: { gte: longitude - longitudeDelta, lte: longitude + longitudeDelta },
+      },
+      select: { latitude: true, longitude: true, areaName: true, metadata: true },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+
+    const nearby = candidates
+      .filter((event: any) => event.metadata?.qaTest !== true)
+      .map((event: any) => ({
+        event,
+        distanceMeters: dangerRecipientEligibility({
+          dangerLatitude: Number(event.latitude),
+          dangerLongitude: Number(event.longitude),
+          recipientLatitude: latitude,
+          recipientLongitude: longitude,
+          recipientLocationAt: new Date(),
+          radiusMeters: DANGER_AREA_RISK_RADIUS_METERS,
+        }).distanceMeters,
+      }))
+      .filter((entry: any) => entry.distanceMeters <= DANGER_AREA_RISK_RADIUS_METERS)
+      .sort((a: any, b: any) => a.distanceMeters - b.distanceMeters);
+
+    return {
+      data: {
+        level: classifyDangerAreaRisk(nearby.length),
+        eventCount: nearby.length,
+        windowDays: DANGER_AREA_RISK_WINDOW_DAYS,
+        radiusMeters: DANGER_AREA_RISK_RADIUS_METERS,
+        approximateArea: nearby[0]?.event?.areaName ?? null,
+        evaluatedAt: new Date().toISOString(),
+      },
     };
   }
 

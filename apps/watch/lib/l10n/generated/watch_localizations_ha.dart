@@ -45,6 +45,31 @@ class WatchLocalizationsHa extends WatchLocalizations {
   String get areaSafe => 'Wurin lafiya';
 
   @override
+  String get greenSafeArea => 'Wurin lafiya mai kore';
+
+  @override
+  String get checkingAreaRisk => 'Ana duba hadarin yankin';
+
+  @override
+  String get areaRiskUnavailable => 'Ana jiran amintaccen bayanin wuri';
+
+  @override
+  String get mediumRiskArea => 'Wuri mai matsakaicin hadari';
+
+  @override
+  String get highRiskArea => 'Wuri mai babban hadari';
+
+  @override
+  String get noRepeatedDangerPattern => 'Babu yawan rahoton hadari a kusa.';
+
+  @override
+  String get someRepeatedDangerReports =>
+      'Akwai wasu rahoton hadari na baya-bayan nan a kusa.';
+
+  @override
+  String get frequentDangerReports => 'Ana yawan samun rahoton hadari a kusa.';
+
+  @override
   String get stayAlertSuspiciousActivity =>
       'Ka kasance a faake don abin tuhuma.';
 

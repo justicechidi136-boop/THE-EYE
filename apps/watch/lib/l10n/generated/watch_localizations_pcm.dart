@@ -45,6 +45,32 @@ class WatchLocalizationsPcm extends WatchLocalizations {
   String get areaSafe => 'Area safe';
 
   @override
+  String get greenSafeArea => 'Green safe area';
+
+  @override
+  String get checkingAreaRisk => 'Dey check area risk';
+
+  @override
+  String get areaRiskUnavailable => 'Dey wait for correct location data';
+
+  @override
+  String get mediumRiskArea => 'Medium risk area';
+
+  @override
+  String get highRiskArea => 'High risk area';
+
+  @override
+  String get noRepeatedDangerPattern =>
+      'No repeated danger pattern dey nearby.';
+
+  @override
+  String get someRepeatedDangerReports =>
+      'Some recent danger reports dey nearby.';
+
+  @override
+  String get frequentDangerReports => 'Danger reports dey happen often nearby.';
+
+  @override
   String get stayAlertSuspiciousActivity =>
       'Still shine your eye for suspicious activity.';
 
