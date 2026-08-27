@@ -133,6 +133,8 @@ describe("DangerTriggerService", () => {
         data: expect.objectContaining({
           metadata: expect.objectContaining({
             dangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+            userDeclaredDangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+            dangerAlertCodeSource: "USER_SELECTED",
           }),
         }),
       }),

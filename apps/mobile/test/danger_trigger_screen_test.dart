@@ -159,6 +159,14 @@ Widget _app({required bool connects, required _FakeGateway gateway}) {
   );
 }
 
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    220,
+    scrollable: find.byType(Scrollable).first,
+  );
+}
+
 void main() {
   testWidgets(
     "shows the explicit danger actions with human-readable location",
@@ -167,10 +175,17 @@ void main() {
       await tester.pumpWidget(_app(connects: true, gateway: gateway));
       await tester.pumpAndSettle();
 
-      expect(find.text("Start Live Danger Broadcast"), findsOneWidget);
-      expect(find.text("Type of danger"), findsOneWidget);
-      expect(find.text("Report Immediate Danger"), findsOneWidget);
+      expect(find.text("Select danger type"), findsOneWidget);
       expect(find.text("Ikeja, Lagos"), findsOneWidget);
+      final start = find.widgetWithText(
+        FilledButton,
+        "Start Live Danger Broadcast",
+      );
+      await _scrollTo(tester, start);
+      expect(start, findsOneWidget);
+      final reportImmediateDanger = find.text("Report Immediate Danger");
+      await _scrollTo(tester, reportImmediateDanger);
+      expect(reportImmediateDanger, findsOneWidget);
       expect(
         find.textContaining("microphone activates only after"),
         findsOneWidget,
@@ -183,10 +198,12 @@ void main() {
     await tester.pumpWidget(_app(connects: true, gateway: gateway));
     await tester.pumpAndSettle();
 
-    final start = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, "Start Live Danger Broadcast"),
+    final startFinder = find.widgetWithText(
+      FilledButton,
+      "Start Live Danger Broadcast",
     );
-    expect(start.onPressed, isNull);
+    await _scrollTo(tester, startFinder);
+    expect(tester.widget<FilledButton>(startFinder).onPressed, isNull);
     expect(gateway.activateCalls, 0);
   });
 
@@ -196,16 +213,28 @@ void main() {
       final gateway = _FakeGateway();
       await tester.pumpWidget(_app(connects: false, gateway: gateway));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key("danger-trigger-category")));
+      await tester.tap(
+        find.byKey(
+          const Key(
+            "danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.text("Armed robbery").last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text("Start Live Danger Broadcast"));
+      final start = find.widgetWithText(
+        FilledButton,
+        "Start Live Danger Broadcast",
+      );
+      await _scrollTo(tester, start);
+      await tester.tap(start);
       await tester.pumpAndSettle();
 
       expect(find.text("Live voice broadcasting"), findsNothing);
       expect(gateway.activateCalls, 0);
-      expect(find.text("Failed"), findsOneWidget);
+      expect(
+        find.text("Unable to establish the live voice connection."),
+        findsOneWidget,
+      );
     },
   );
 
@@ -215,15 +244,23 @@ void main() {
     final gateway = _FakeGateway();
     await tester.pumpWidget(_app(connects: true, gateway: gateway));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key("danger-trigger-category")));
+    await tester.tap(
+      find.byKey(
+        const Key("danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY"),
+      ),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Armed robbery").last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text("Start Live Danger Broadcast"));
+    final start = find.widgetWithText(
+      FilledButton,
+      "Start Live Danger Broadcast",
+    );
+    await _scrollTo(tester, start);
+    await tester.tap(start);
     await tester.pumpAndSettle();
 
     expect(gateway.activateCalls, 1);
     expect(gateway.preparedDangerAlertCode, "DANGER_ZONE_ARMED_ROBBERY_NEARBY");
+    await _scrollTo(tester, find.text("Live voice broadcasting"));
     expect(find.text("Live voice broadcasting"), findsOneWidget);
     expect(
       find.text("Alert active. Alerts sent to 3 nearby users."),
@@ -237,5 +274,70 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(endVoice, findsOneWidget);
+  });
+
+  test("defines the exact trusted nine-category mapping", () {
+    expect(
+      dangerTriggerCategories
+          .map((category) => "${category.label}|${category.code}")
+          .toList(growable: false),
+      const [
+        "Fire|DANGER_ZONE_FIRE_NEARBY",
+        "Armed robbery|DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+        "Kidnapping|DANGER_ZONE_KIDNAPPING_NEARBY",
+        "Shooting / gunfire|DANGER_ZONE_ACTIVE_SHOOTER_NEARBY",
+        "Riot|DANGER_ZONE_CIVIL_DISTURBANCE_NEARBY",
+        "Bandit / unknown gunmen|DANGER_ZONE_BANDIT_ATTACK_NEARBY",
+        "Cult clash|DANGER_ZONE_CULT_CLASH_NEARBY",
+        "Community crisis|DANGER_ZONE_COMMUNITY_CRISIS_NEARBY",
+        "Killing|DANGER_ZONE_KILLING_NEARBY",
+      ],
+    );
+  });
+
+  testWidgets("renders all category keys without small-screen overflow", (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _app(connects: true, gateway: _FakeGateway()),
+    );
+    await tester.pumpAndSettle();
+
+    for (final category in dangerTriggerCategories) {
+      expect(
+        find.byKey(Key("danger-category-${category.code}")),
+        findsOneWidget,
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets("allows changing the category before activation", (tester) async {
+    final gateway = _FakeGateway();
+    await tester.pumpWidget(_app(connects: true, gateway: gateway));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key("danger-category-DANGER_ZONE_FIRE_NEARBY")),
+    );
+    await tester.pump();
+    await _scrollTo(tester, find.text("Selected danger: FIRE"));
+    expect(find.text("Selected danger: FIRE"), findsOneWidget);
+
+    final communityCrisis = find.byKey(
+      const Key("danger-category-DANGER_ZONE_COMMUNITY_CRISIS_NEARBY"),
+    );
+    await _scrollTo(tester, communityCrisis);
+    await tester.tap(
+      communityCrisis,
+    );
+    await tester.pump();
+    await _scrollTo(tester, find.text("Selected danger: COMMUNITY CRISIS"));
+    expect(find.text("Selected danger: COMMUNITY CRISIS"), findsOneWidget);
   });
 }

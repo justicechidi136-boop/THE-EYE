@@ -85,6 +85,8 @@ export class DangerTriggerService {
     this.assertCitizen(actor);
     validateStartDangerTriggerDto(dto);
     const dangerAlertCode = dto.dangerAlertCode ?? DangerAlertCode.GENERAL_ENTRY;
+    const userDeclaredDangerAlertCode = dto.dangerAlertCode ?? null;
+    const dangerAlertCodeSource = dto.dangerAlertCode ? "USER_SELECTED" : "LEGACY_FALLBACK";
     const prisma = this.prisma as any;
     const existingSignal = await prisma.dangerEventSignal.findUnique({
       where: { sourceType_sourceId: { sourceType: "LIVE_VOICE", sourceId: dto.clientTriggerId } },
@@ -145,6 +147,8 @@ export class DangerTriggerService {
           aiDangerAnalysisIndependent: true,
           ambientMicrophoneSurveillance: false,
           dangerAlertCode,
+          userDeclaredDangerAlertCode,
+          dangerAlertCodeSource,
         },
       },
     });
@@ -209,6 +213,8 @@ export class DangerTriggerService {
               aiDangerAnalysisIndependent: true,
               ambientMicrophoneSurveillance: false,
               dangerAlertCode,
+              userDeclaredDangerAlertCode,
+              dangerAlertCodeSource,
             },
           },
         });
@@ -228,6 +234,8 @@ export class DangerTriggerService {
           locationUncertain,
           qaTest: dto.qaTest === true,
           dangerAlertCode,
+          userDeclaredDangerAlertCode,
+          dangerAlertCodeSource,
         },
       },
     });
