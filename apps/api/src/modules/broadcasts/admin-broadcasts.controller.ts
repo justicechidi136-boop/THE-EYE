@@ -25,6 +25,18 @@ export class AdminBroadcastsController {
     return this.broadcastAdmin.list(request.user, query);
   }
 
+  @Get(":id")
+  @RequirePermissions("broadcast:create")
+  getDetail(@Param("id") id: string, @Req() request: any) {
+    return this.broadcastAdmin.getDetail(id, request.user);
+  }
+
+  @Get(":id/media/:mediaId/view")
+  @RequirePermissions("broadcast:create")
+  viewMedia(@Param("id") id: string, @Param("mediaId") mediaId: string, @Req() request: any) {
+    return this.broadcastAdmin.viewMedia(id, mediaId, request.user);
+  }
+
   @Post()
   @RateLimit("broadcastCreate")
   @RequirePermissions("broadcast:create")

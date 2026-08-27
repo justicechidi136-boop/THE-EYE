@@ -105,19 +105,61 @@ export class IncidentTimelineService {
 
     for (const item of incident.timeline) {
       if (String(item.eventType).includes("internal") && audience !== "dispatcher") continue;
+      const itemMetadata = (item.metadata ?? {}) as Record<string, unknown>;
+      const mediaId = typeof itemMetadata.mediaId === "string" ? itemMetadata.mediaId : undefined;
+      const linkedMedia = mediaId ? incident.media.find((media) => media.id === mediaId) : undefined;
       entries.push({
         at: item.createdAt,
         type: item.eventType,
         label: item.message ?? item.eventType,
+        details: linkedMedia
+          ? {
+              media: {
+                id: linkedMedia.id,
+                mediaType: linkedMedia.mediaType,
+                contentType: linkedMedia.contentType,
+                durationSeconds: linkedMedia.durationSeconds,
+                transcriptionStatus: linkedMedia.transcriptionStatus,
+                transcript: linkedMedia.transcript,
+                translatedTranscript: linkedMedia.translatedTranscript,
+                selectedLanguage: linkedMedia.selectedLanguage,
+                detectedLanguage: linkedMedia.detectedLanguage,
+                transcriptionConfidence: linkedMedia.transcriptionConfidence,
+                uploadedAt: linkedMedia.uploadedAt,
+              },
+            }
+          : audience === "dispatcher"
+            ? itemMetadata
+            : undefined,
         audience: String(item.eventType).includes("internal") ? ["dispatcher"] : ["citizen", "responder", "dispatcher"],
       });
     }
 
-    if (incident.media.length) {
+    const timelineMediaIds = new Set(
+      incident.timeline
+        .map((item) => ((item.metadata ?? {}) as Record<string, unknown>).mediaId)
+        .filter((value): value is string => typeof value === "string"),
+    );
+    for (const media of incident.media.filter((item) => !timelineMediaIds.has(item.id))) {
       entries.push({
-        at: incident.media[0]?.uploadedAt ?? incident.submittedAt,
-        type: "evidence.uploaded",
-        label: `${incident.media.length} evidence item(s) uploaded`,
+        at: media.uploadedAt ?? incident.submittedAt,
+        type: "incident.media_attached",
+        label: media.mediaType === "Audio" ? "Voice note attached" : `${media.mediaType} evidence attached`,
+        details: {
+          media: {
+            id: media.id,
+            mediaType: media.mediaType,
+            contentType: media.contentType,
+            durationSeconds: media.durationSeconds,
+            transcriptionStatus: media.transcriptionStatus,
+            transcript: media.transcript,
+            translatedTranscript: media.translatedTranscript,
+            selectedLanguage: media.selectedLanguage,
+            detectedLanguage: media.detectedLanguage,
+            transcriptionConfidence: media.transcriptionConfidence,
+            uploadedAt: media.uploadedAt,
+          },
+        },
         audience: ["dispatcher", "responder"],
       });
     }

@@ -236,7 +236,7 @@ export async function fetchAdminBroadcasts(
 
 export async function fetchAdminBroadcast(id: string): Promise<BroadcastDetailView | null> {
   return withToken(async (token) => {
-    const response = await apiRequest<{ data: Record<string, unknown> }>(`/broadcasts/${encodeURIComponent(id)}`, { token });
+    const response = await apiRequest<{ data: Record<string, unknown> }>(`/admin/broadcasts/${encodeURIComponent(id)}`, { token });
     return toBroadcastDetailView(response.data);
   }, null);
 }

@@ -119,10 +119,11 @@ export function EvidencePicker({ label, allowedTypes, files, onChange, disabled 
 type EvidenceGalleryProps = {
   title?: string;
   incidentId?: string;
+  mediaAccessPath?: (mediaId: string) => string;
   items: AdminEvidenceItem[];
 };
 
-export function EvidenceGallery({ title = "Evidence", incidentId, items }: EvidenceGalleryProps) {
+export function EvidenceGallery({ title = "Evidence", incidentId, mediaAccessPath, items }: EvidenceGalleryProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -132,14 +133,17 @@ export function EvidenceGallery({ title = "Evidence", incidentId, items }: Evide
   const canShowPrevious = activeIndex != null && activeIndex > 0;
   const canShowNext = activeIndex != null && activeIndex < items.length - 1;
 
-  async function openItem(index: number) {
+  async function openItem(index: number, forceRefresh = false) {
     const item = items[index];
     setActiveIndex(index);
     setError(null);
-    if (item.url || item.signedUrl || !incidentId || !item.id || signedUrls[item.id]) return;
+    const accessPath = item.id
+      ? mediaAccessPath?.(item.id) ?? (incidentId ? `/api/admin/incidents/${incidentId}/media/${item.id}/view` : null)
+      : null;
+    if (item.url || item.signedUrl || !accessPath || !item.id || (!forceRefresh && signedUrls[item.id])) return;
     setLoadingId(item.id);
     try {
-      const response = await fetch(`/api/admin/incidents/${incidentId}/media/${item.id}/view`);
+      const response = await fetch(accessPath);
       const payload = (await response.json()) as { signedUrl?: string; message?: string };
       if (!response.ok || !payload.signedUrl) throw new Error(payload.message ?? "Evidence preview unavailable");
       setSignedUrls((current) => ({ ...current, [item.id!]: payload.signedUrl! }));
@@ -191,8 +195,9 @@ export function EvidenceGallery({ title = "Evidence", incidentId, items }: Evide
                 <p className="text-xs text-muted">{active.contentType ?? active.type}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="secondary" disabled={!canShowPrevious} onClick={() => setActiveIndex((current) => current == null ? current : current - 1)}>Previous</Button>
-                <Button type="button" variant="secondary" disabled={!canShowNext} onClick={() => setActiveIndex((current) => current == null ? current : current + 1)}>Next</Button>
+                <Button type="button" variant="secondary" disabled={!canShowPrevious} onClick={() => void openItem(activeIndex! - 1)}>Previous</Button>
+                <Button type="button" variant="secondary" disabled={!canShowNext} onClick={() => void openItem(activeIndex! + 1)}>Next</Button>
+                {active.id && (mediaAccessPath || incidentId) ? <Button type="button" variant="secondary" disabled={loadingId === active.id} onClick={() => void openItem(activeIndex!, true)}>Refresh access</Button> : null}
                 <Button type="button" variant="secondary" onClick={() => setActiveIndex(null)}>Close</Button>
               </div>
             </div>

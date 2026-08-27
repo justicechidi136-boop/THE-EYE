@@ -15,7 +15,9 @@ export type Incident = {
   confidenceScore: number;
   createdAt?: string;
   gps: { lat: number; lng: number; accuracy: string };
+  locationHistory: Array<{ latitude: number; longitude: number; accuracyMeters?: number | null; capturedAt: string }>;
   reporterStatus: string;
+  reporter: { label: string; accountReference: string | null; anonymous: boolean };
   reportingMode: "Anonymous" | "Identified";
   assignedAgency: string;
   responseStatus: string;
@@ -225,11 +227,14 @@ export type BroadcastDetailView = BroadcastView & {
   resolvedAt: string | null;
   suspendedAt: string | null;
   attachments: Array<{
+    id?: string;
     mediaType: string;
     label: string;
     contentType?: string;
     url?: string;
   }>;
+  location: string;
+  details: Array<{ label: string; value: string }>;
   sightings?: Array<{
     id: string;
     observedAt: string | null;
@@ -623,10 +628,19 @@ export type LiveVideoSessionView = {
   latitude: number;
   longitude: number;
   accuracy: string;
+  location: string;
   reporter: string;
   viewerScope: string;
   signedLocationPath: string;
-  locationHistory: Array<{ time: string; gps: string; accuracy: string }>;
+  locationHistory: Array<{
+    latitude: number;
+    longitude: number;
+    accuracyMeters?: number | null;
+    capturedAt: string;
+    time: string;
+    gps: string;
+    accuracy: string;
+  }>;
   recordingConfigured: boolean;
   connectionStatus: string;
 };

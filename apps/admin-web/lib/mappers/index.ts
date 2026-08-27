@@ -31,6 +31,7 @@ import type {
   WitnessConfirmationView,
 } from "../types/admin-views";
 import { normalizeBroadcastAttachments } from "../admin-media";
+import { humanLocation, sanitizeLocationTrail } from "../admin-presentation";
 
 function priorityLabel(priority: string): Incident["priority"] {
   if (priority === "P1LifeThreatening") return "P1";
@@ -70,6 +71,21 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
 
   const media = Array.isArray(record.media) ? record.media : [];
   const timeline = Array.isArray(record.timeline) ? record.timeline : [];
+  const statusHistory = Array.isArray(record.statusHistory) ? record.statusHistory : [];
+  const rawLocations = Array.isArray(record.locationUpdates) ? record.locationUpdates : [];
+  const locationHistory = sanitizeLocationTrail(rawLocations.map((entry) => {
+    const point = entry as Record<string, unknown>;
+    return {
+      latitude: toNumber(point.latitude),
+      longitude: toNumber(point.longitude),
+      accuracyMeters: point.accuracy != null ? toNumber(point.accuracy) : null,
+      capturedAt: String(point.capturedAt ?? point.receivedAt ?? record.createdAt ?? new Date(0).toISOString()),
+    };
+  }));
+  const reporter = (record.reporter as Record<string, unknown> | undefined) ?? {};
+  const reporterProfile = (reporter.profile as Record<string, unknown> | undefined) ?? {};
+  const reporterName = [reporterProfile.firstName, reporterProfile.lastName].filter(Boolean).join(" ");
+  const anonymous = Boolean(record.isAnonymous);
 
   return {
     id: String(record.id),
@@ -83,21 +99,48 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
     gps: {
       lat: toNumber(record.latitude),
       lng: toNumber(record.longitude),
-      accuracy: record.manualLocationAdjusted ? "Manual adjustment" : "GPS",
+      accuracy: locationHistory.at(-1)?.accuracyMeters != null
+        ? `${locationHistory.at(-1)?.accuracyMeters}m`
+        : record.manualLocationAdjusted ? "Manual adjustment" : "Unknown",
     },
-    reporterStatus: record.isAnonymous ? "Anonymous reporter" : "Identified reporter",
-    reportingMode: record.isAnonymous ? "Anonymous" : "Identified",
+    locationHistory,
+    reporterStatus: anonymous ? "Anonymous reporter" : reporterName || "Identified reporter",
+    reporter: {
+      label: anonymous ? "Anonymous reporter" : reporterName || "Identified reporter",
+      accountReference: anonymous || !reporter.id ? null : `User ${String(reporter.id).slice(0, 8)}`,
+      anonymous,
+    },
+    reportingMode: anonymous ? "Anonymous" : "Identified",
     assignedAgency: String((record.assignedAgency as { name?: string } | undefined)?.name ?? record.assignedAgencyId ?? "Unassigned"),
     responseStatus: String(record.status ?? "Submitted"),
-    location: [record.address, record.lga, record.state].filter(Boolean).join(", ") || "Unknown location",
-    timeline: timeline.map((entry) => {
+    location: humanLocation([record.address, record.lga, record.state, record.country]),
+    timeline: [...timeline.map((entry) => {
       const item = entry as Record<string, unknown>;
       return {
         time: formatTime(item.createdAt as string),
         event: String(item.message ?? item.eventType ?? "Update"),
-        actor: String(item.actorType ?? "system"),
+        actor: (() => {
+          const actor = (item.actor as Record<string, unknown> | undefined) ?? {};
+          const profile = (actor.profile as Record<string, unknown> | undefined) ?? {};
+          const name = [profile.firstName, profile.lastName].filter(Boolean).join(" ");
+          if (anonymous && String(item.actorType) === "user") return "Anonymous reporter";
+          if (name) return `${name} (reporter)`;
+          if (item.actorType === "admin") return "Administrator";
+          if (item.actorType === "user") return "Reporter";
+          return "System";
+        })(),
       };
-    }),
+    }), ...statusHistory.map((entry) => {
+      const item = entry as Record<string, unknown>;
+      const changedBy = (item.changedBy as Record<string, unknown> | undefined) ?? {};
+      const profile = (changedBy.profile as Record<string, unknown> | undefined) ?? {};
+      const name = [profile.firstName, profile.lastName].filter(Boolean).join(" ");
+      return {
+        time: formatTime(item.createdAt as string),
+        event: `Status changed to ${String(item.toStatus ?? "updated")}${item.note ? `: ${String(item.note)}` : ""}`,
+        actor: name ? `${name} (authorized actor)` : item.changedById ? "Authorized user" : "System",
+      };
+    })],
     evidence: media.map((item) => {
       const mediaItem = item as Record<string, unknown>;
       return {
@@ -244,6 +287,30 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
 export function toBroadcastDetailView(record: Record<string, unknown>): BroadcastDetailView {
   const sightingsRaw = Array.isArray(record.sightings) ? record.sightings : [];
   const metadata = (record.metadata as Record<string, unknown> | undefined) ?? {};
+  const persistedMedia = Array.isArray(record.media) ? record.media : [];
+  const location = humanLocation([
+    metadata.address,
+    metadata.lastSeenAddress,
+    metadata.lastKnownLocation,
+    metadata.approximateArea,
+    record.lga,
+    record.state,
+    record.country,
+  ]);
+  const detailKeys: Array<[string, string]> = [
+    ["Full name", "fullName"],
+    ["Age", "age"],
+    ["Gender", "gender"],
+    ["Last seen", "lastSeenAt"],
+    ["Last-seen location", "lastSeenAddress"],
+    ["Distinguishing information", "distinguishingFeatures"],
+    ["Make", "make"],
+    ["Model", "model"],
+    ["Year", "year"],
+    ["Colour", "color"],
+    ["Plate number", "plateNumber"],
+    ["VIN / chassis", "vin"],
+  ];
   return {
     ...toBroadcastView(record),
     body: String(record.body ?? ""),
@@ -251,7 +318,21 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
     publishedAt: record.publishedAt ? String(record.publishedAt) : null,
     resolvedAt: record.resolvedAt ? String(record.resolvedAt) : null,
     suspendedAt: record.suspendedAt ? String(record.suspendedAt) : null,
-    attachments: normalizeBroadcastAttachments(metadata.attachments),
+    attachments: persistedMedia.length
+      ? normalizeBroadcastAttachments(persistedMedia.map((item) => {
+          const media = item as Record<string, unknown>;
+          return {
+            id: media.id,
+            mediaType: String(media.mediaType ?? "").toLowerCase(),
+            label: media.role ?? media.mediaType ?? "Evidence",
+            contentType: media.contentType,
+          };
+        }))
+      : normalizeBroadcastAttachments(metadata.attachments),
+    location,
+    details: detailKeys
+      .map(([label, key]) => ({ label, value: metadata[key] == null ? "" : String(metadata[key]) }))
+      .filter((item) => item.value.trim().length > 0),
     sightings: sightingsRaw.map((entry) => {
       const row = entry as Record<string, unknown>;
       const metadata = (row.metadata as Record<string, unknown> | undefined) ?? {};
@@ -698,11 +779,23 @@ export function toNotificationOperationView(record: Record<string, unknown>): No
 
 export function toLiveVideoSessionView(record: Record<string, unknown>): LiveVideoSessionView {
   const incident = (record.incident as Record<string, unknown> | undefined) ?? {};
-  const latest = Array.isArray(record.locationUpdates) ? (record.locationUpdates[0] as Record<string, unknown> | undefined) : undefined;
+  const rawLocations = Array.isArray(record.locationUpdates) ? record.locationUpdates : [];
+  const latest = rawLocations[0] as Record<string, unknown> | undefined;
   const startedAt = record.startedAt ? new Date(String(record.startedAt)) : new Date();
   const latitude = toNumber(latest?.latitude ?? incident.latitude);
   const longitude = toNumber(latest?.longitude ?? incident.longitude);
   const accuracyMeters = toNumber(latest?.accuracy ?? latest?.accuracyMeters, 0);
+  const reporterProfile = ((incident.reporter as Record<string, unknown> | undefined)?.profile as Record<string, unknown> | undefined) ?? {};
+  const reporterName = [reporterProfile.firstName, reporterProfile.lastName].filter(Boolean).join(" ");
+  const trail = sanitizeLocationTrail(rawLocations.map((entry) => {
+    const point = entry as Record<string, unknown>;
+    return {
+      latitude: toNumber(point.latitude),
+      longitude: toNumber(point.longitude),
+      accuracyMeters: point.accuracy != null ? toNumber(point.accuracy) : null,
+      capturedAt: String(point.capturedAt ?? record.startedAt ?? new Date(0).toISOString()),
+    };
+  }));
 
   return {
     id: String(record.id),
@@ -715,12 +808,16 @@ export function toLiveVideoSessionView(record: Record<string, unknown>): LiveVid
     latitude,
     longitude,
     accuracy: accuracyMeters ? `${accuracyMeters}m` : "-",
-    reporter: incident.isAnonymous ? "Anonymous reporter" : "Identified reporter",
+    location: humanLocation([incident.address, incident.lga, incident.state, incident.country]),
+    reporter: incident.isAnonymous ? "Anonymous reporter" : reporterName || (incident.reporterId ? `User ${String(incident.reporterId).slice(0, 8)}` : "Unknown reporter"),
     viewerScope: "Admin jurisdiction",
     signedLocationPath: `/live-video/sessions/${String(record.id)}/location/history`,
-    locationHistory: latest
-      ? [{ time: formatTime(latest.capturedAt as string), gps: `${latitude}, ${longitude}`, accuracy: accuracyMeters ? `${accuracyMeters}m` : "-" }]
-      : [],
+    locationHistory: trail.map((point) => ({
+      ...point,
+      time: formatTime(point.capturedAt),
+      gps: `${point.latitude}, ${point.longitude}`,
+      accuracy: point.accuracyMeters ? `${point.accuracyMeters}m` : "-",
+    })),
     recordingConfigured: record.recordingMediaId != null,
     connectionStatus: String(record.status ?? "Inactive") === "Active" ? "Awaiting viewer" : "Inactive",
   };

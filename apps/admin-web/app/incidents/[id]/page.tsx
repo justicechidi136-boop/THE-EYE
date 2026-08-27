@@ -36,7 +36,8 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
       />
       <div className="mt-5">
         <IncidentTimelinePanel
-          entries={(unifiedTimeline.data ?? []) as Array<{ at?: string; type?: string; label?: string; silent?: boolean }>}
+          incidentId={incident.id}
+          entries={(unifiedTimeline.data ?? []) as Array<{ at?: string; type?: string; label?: string; silent?: boolean; details?: { media?: never } }>}
         />
       </div>
     </AppShell>

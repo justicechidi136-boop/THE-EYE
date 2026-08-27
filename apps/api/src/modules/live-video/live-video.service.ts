@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { IncidentStatus, IncidentType } from "@the-eye/shared";
+import { AdminRoleName, IncidentStatus, IncidentType } from "@the-eye/shared";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -429,7 +429,13 @@ export class LiveVideoService {
 
   async adminViewToken(sessionId: string, actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view incident live streams");
-    const session = await this.prisma.liveVideoSession.findUnique({ where: { id: sessionId }, include: { incident: true, locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 } } });
+    const session = await this.prisma.liveVideoSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        incident: { include: { reporter: { select: { profile: { select: { firstName: true, lastName: true } } } } } },
+        locationUpdates: { orderBy: { capturedAt: "desc" }, take: 100 },
+      },
+    });
     if (!session) throw new NotFoundException("Live video session not found");
     if (session.status !== "Active") throw new ForbiddenException("Live video session is not active");
     await this.assertAdminCanAccessIncident(session.incidentId, actor);
@@ -450,18 +456,14 @@ export class LiveVideoService {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list active live streams");
     const sessions = await this.prisma.liveVideoSession.findMany({
       where: { status: "Active" },
-      include: { incident: true, locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 } },
+      include: {
+        incident: { include: { reporter: { select: { profile: { select: { firstName: true, lastName: true } } } } } },
+        locationUpdates: { orderBy: { capturedAt: "desc" }, take: 100 },
+      },
       orderBy: { startedAt: "desc" },
       take: 100,
     });
-    if (actor.role === "Super Admin") return { data: sessions };
-    return {
-      data: sessions.filter((session) =>
-        session.incident.country === actor.country &&
-        session.incident.state === actor.state &&
-        session.incident.lga === actor.lga &&
-        (!actor.agencyId || session.incident.assignedAgencyId === actor.agencyId)),
-    };
+    return { data: sessions.filter((session) => this.adminCanAccessIncident(session.incident, actor)) };
   }
 
   async linkEvidence(sessionId: string, dto: LinkLiveVideoEvidenceDto, actor: JwtPayload) {
@@ -492,7 +494,13 @@ export class LiveVideoService {
 
   async latestLocation(sessionId: string, actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can view live video location");
-    const session = await this.prisma.liveVideoSession.findUnique({ where: { id: sessionId }, include: { incident: true, locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 } } });
+    const session = await this.prisma.liveVideoSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        incident: { include: { reporter: { select: { profile: { select: { firstName: true, lastName: true } } } } } },
+        locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 },
+      },
+    });
     if (!session) throw new NotFoundException("Live video session not found");
     await this.assertAdminCanAccessIncident(session.incidentId, actor);
     const latest = session.locationUpdates[0];
@@ -532,12 +540,29 @@ export class LiveVideoService {
   }
 
   private async assertAdminCanAccessIncident(incidentId: string, actor: JwtPayload) {
-    if (actor.role === "Super Admin") return;
     const incident = await this.prisma.incident.findUnique({ where: { id: incidentId } });
     if (!incident) throw new NotFoundException("Incident not found");
-    const jurisdictionAllowed = incident.country === actor.country && incident.state === actor.state && incident.lga === actor.lga;
-    const agencyAllowed = !actor.agencyId || incident.assignedAgencyId === actor.agencyId;
-    if (!jurisdictionAllowed || !agencyAllowed) throw new ForbiddenException("Admin cannot view live streams outside assigned scope");
+    if (!this.adminCanAccessIncident(incident, actor)) throw new ForbiddenException("Admin cannot view live streams outside assigned scope");
+  }
+
+  private adminCanAccessIncident(
+    incident: { country?: string | null; state?: string | null; lga?: string | null; assignedAgencyId?: string | null },
+    actor: JwtPayload,
+  ) {
+    if (actor.role === AdminRoleName.SuperAdmin) return true;
+    if (actor.role === AdminRoleName.CountryAdmin) return incident.country === actor.country;
+    if (actor.role === AdminRoleName.StateAdmin) return incident.country === actor.country && incident.state === actor.state;
+    if (
+      actor.role === AdminRoleName.LgaAdmin
+      || actor.role === AdminRoleName.CallCenterAgent
+      || actor.role === AdminRoleName.OversightAuditor
+    ) {
+      return incident.country === actor.country && incident.state === actor.state && incident.lga === actor.lga;
+    }
+    if (actor.role === AdminRoleName.AgencyAdmin || actor.role === AdminRoleName.PoliceSecurityOfficer) {
+      return Boolean(actor.agencyId) && incident.assignedAgencyId === actor.agencyId;
+    }
+    return false;
   }
 
   private async createLocationUpdate(sessionId: string, incidentId: string, dto: LiveVideoLocationUpdateDto | StartLiveVideoDto) {
@@ -558,15 +583,34 @@ export class LiveVideoService {
     });
   }
 
-  private evidenceOverlay(incident: { id: string; reporterId?: string | null; isAnonymous?: boolean; submittedAt?: Date }, session: { id: string }, location?: { latitude: unknown; longitude: unknown; accuracy?: unknown; capturedAt: Date } | null) {
+  private evidenceOverlay(
+    incident: {
+      id: string;
+      reporterId?: string | null;
+      isAnonymous?: boolean;
+      submittedAt?: Date;
+      address?: string | null;
+      lga?: string | null;
+      state?: string | null;
+      reporter?: { profile?: { firstName?: string | null; lastName?: string | null } | null } | null;
+    },
+    session: { id: string },
+    location?: { latitude: unknown; longitude: unknown; accuracy?: unknown; capturedAt: Date } | null,
+  ) {
     const capturedAt = location?.capturedAt ?? new Date();
-    const reporter = incident.isAnonymous ? `Anonymous-${incident.id.slice(0, 4)}` : incident.reporterId ?? "Unknown";
+    const profile = incident.reporter?.profile;
+    const reporterName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ");
+    const reporter = incident.isAnonymous
+      ? `Anonymous-${incident.id.slice(0, 4)}`
+      : reporterName || (incident.reporterId ? `User ${incident.reporterId.slice(0, 8)}` : "Unknown reporter");
+    const locationLabel = [incident.address, incident.lga, incident.state].filter(Boolean).join(", ") || "Location unavailable";
     return {
       title: "THE EYE LIVE EVIDENCE",
       incidentId: incident.id,
       date: new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "long", year: "numeric", timeZone: "Africa/Lagos" }).format(capturedAt),
       time: new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Africa/Lagos", timeZoneName: "short" }).format(capturedAt),
       gps: location ? `${location.latitude}, ${location.longitude}` : "Waiting for GPS",
+      locationLabel,
       accuracy: location?.accuracy !== undefined && location?.accuracy !== null ? `±${location.accuracy}m` : "Unknown",
       reporter,
       sessionId: session.id,

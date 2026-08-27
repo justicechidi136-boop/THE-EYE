@@ -14,15 +14,9 @@ import {
 import { StatusBadge } from "../../components/ui";
 import { fetchIncidentsPage } from "../../lib/api/data";
 import { getRouteById } from "../../lib/admin/admin-route-registry";
+import { humanPriority } from "../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
-
-function priorityLabel(priority: string) {
-  if (priority.startsWith("P1")) return "P1";
-  if (priority.startsWith("P2")) return "P2";
-  if (priority.startsWith("P3")) return "P3";
-  return "P4";
-}
 
 export default async function IncidentsPage({
   searchParams,
@@ -57,7 +51,7 @@ export default async function IncidentsPage({
         <ConsoleMetrics
           items={[
             { label: "Loaded incidents", value: String(incidents.length) },
-            { label: "P1 life-threatening", value: String(p1Count) },
+            { label: "High priority", value: String(p1Count) },
             { label: "Verifying", value: String(verifying) },
             { label: "Has more pages", value: page.hasMore ? "Yes" : "No" },
           ]}
@@ -86,10 +80,10 @@ export default async function IncidentsPage({
                 label="Priority"
                 defaultValue={params.priority}
                 options={[
-                  { value: "P1LifeThreatening", label: "P1" },
-                  { value: "P2ActiveCrimeAccident", label: "P2" },
-                  { value: "P3SuspiciousActivity", label: "P3" },
-                  { value: "P4GeneralSafety", label: "P4" },
+                  { value: "P1LifeThreatening", label: "HIGH" },
+                  { value: "P2ActiveCrimeAccident", label: "MID" },
+                  { value: "P3SuspiciousActivity", label: "LOW (suspicious activity)" },
+                  { value: "P4GeneralSafety", label: "LOW (general safety)" },
                 ]}
               />
               <ConsoleFilterSelect
@@ -117,7 +111,7 @@ export default async function IncidentsPage({
               </div>,
               incident.type,
               <StatusBadge key={`priority-${incident.id}`} tone={incident.priority === "P1" ? "danger" : incident.priority === "P2" ? "warning" : "info"}>
-                {priorityLabel(incident.priority)}
+                {humanPriority(incident.priority)}
               </StatusBadge>,
               incident.status,
               incident.reportingMode,

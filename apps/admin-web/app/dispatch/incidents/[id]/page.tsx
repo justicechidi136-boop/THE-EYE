@@ -18,6 +18,7 @@ import {
   fetchDispatchResponders,
 } from "../../../../lib/api/dispatch";
 import { fetchIncident as fetchIncidentEvidence } from "../../../../lib/api/data";
+import { humanPriority } from "../../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,7 @@ export default async function DispatchIncidentDetailPage({ params }: PageProps) 
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone="info">{incident.status}</StatusBadge>
-            <StatusBadge tone="warning">{incident.priority}</StatusBadge>
+            <StatusBadge tone="warning">{humanPriority(String(incident.priority))}</StatusBadge>
             {detail.data.silentIndicator ? <StatusBadge tone="danger">Silent SOS</StatusBadge> : null}
           </div>
         }
@@ -125,7 +126,7 @@ export default async function DispatchIncidentDetailPage({ params }: PageProps) 
             )}
           </Panel>
           <div className="xl:col-span-2">
-            <IncidentTimelinePanel entries={(timeline.data ?? []) as Array<{ at?: string; type?: string; label?: string; silent?: boolean }>} />
+            <IncidentTimelinePanel incidentId={incident.id} entries={(timeline.data ?? []) as Array<{ at?: string; type?: string; label?: string; silent?: boolean }>} />
           </div>
           <div className="xl:col-span-2">
             <IncidentCommunicationPanel incidentId={incident.id} />

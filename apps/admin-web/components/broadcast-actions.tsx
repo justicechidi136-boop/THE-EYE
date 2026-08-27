@@ -66,31 +66,31 @@ export function BroadcastActions({
       <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
         {(status === "Pending approval" || status === "Draft") && requiresApproval ? (
           <>
-            <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("approve", { note: "Approved from admin dashboard" })}>
+            <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("approve", { note: "Approved from admin dashboard" })}>
               Approve
             </Button>
-            <Button className="w-full whitespace-nowrap" disabled={busy !== null} variant="danger" onClick={() => runAction("reject", { reason: "Rejected from admin dashboard" })}>
+            <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} variant="danger" onClick={() => runAction("reject", { reason: "Rejected from admin dashboard" })}>
               Reject
             </Button>
           </>
         ) : null}
         {status === "Published" ? (
           <>
-            <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("dispatch")}>Dispatch</Button>
-            <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("retry")}>Retry failed</Button>
-            <Button className="w-full whitespace-nowrap" disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
+            <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("dispatch")}>Dispatch</Button>
+            <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("retry")}>Retry failed</Button>
+            <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
               Cancel
             </Button>
           </>
         ) : null}
         {status === "Scheduled" || status === "DispatchQueued" || status === "Failed" ? (
-          <Button className="w-full whitespace-nowrap" disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
+          <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
             Cancel schedule
           </Button>
         ) : null}
         {status === "Draft" || status === "Pending approval" || status === "Scheduled" || status === "Failed" ? (
           <Button
-            className="w-full whitespace-nowrap"
+            className="min-w-0 w-full whitespace-normal"
             disabled={busy !== null}
             onClick={() =>
               runAction("schedule", {
@@ -101,9 +101,9 @@ export function BroadcastActions({
             Schedule +1h
           </Button>
         ) : null}
-        <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("preview")}>Preview</Button>
-        <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("estimate")}>Estimate</Button>
-        <Button className="w-full whitespace-nowrap" disabled={busy !== null} onClick={() => runAction("progress")}>Progress</Button>
+        <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("preview")}>Preview</Button>
+        <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("estimate")}>Estimate</Button>
+        <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("progress")}>Progress</Button>
       </div>
       {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
       {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
