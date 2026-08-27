@@ -49,4 +49,18 @@ void main() {
       isNull,
     );
   });
+
+  test('speaks the selected trusted danger type', () {
+    final alert = FieldDangerAlert.fromData({
+      'type': 'NearbyDangerWarning',
+      'zoneId': 'event-2',
+      'alertId': 'alert-2',
+      'alertVersion': '1',
+      'dangerAlertCode': 'DANGER_ZONE_CULT_CLASH_NEARBY',
+      'areaName': 'Rumuola',
+      'issuedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    expect(alert?.speech, 'Danger alert. CULT CLASH reported in Rumuola.');
+  });
 }

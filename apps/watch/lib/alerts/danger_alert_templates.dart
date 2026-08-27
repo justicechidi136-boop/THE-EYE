@@ -1,9 +1,6 @@
 import 'danger_alert_models.dart';
 
-typedef DangerAlertTemplateParams = ({
-  String? areaName,
-  int? distanceMeters,
-});
+typedef DangerAlertTemplateParams = ({String? areaName, int? distanceMeters});
 
 abstract final class DangerAlertTemplates {
   static String resolve({
@@ -14,8 +11,11 @@ abstract final class DangerAlertTemplates {
     final area = _safeArea(params.areaName);
     final distance = _safeDistance(params.distanceMeters);
 
-    final languageTemplates = _templates[languageCode] ?? _templates[SpokenLanguageCodes.english]!;
-    final template = languageTemplates[alertCode] ?? languageTemplates[DangerAlertCodes.generalEntry]!;
+    final languageTemplates =
+        _templates[languageCode] ?? _templates[SpokenLanguageCodes.english]!;
+    final template =
+        languageTemplates[alertCode] ??
+        languageTemplates[DangerAlertCodes.generalEntry]!;
 
     return template
         .replaceAll('{area}', area)
@@ -45,9 +45,17 @@ abstract final class DangerAlertTemplates {
       DangerAlertCodes.violentAttackNearby:
           'Warning. A violent attack has been reported near {area}, {distance}. Move to safety.',
       DangerAlertCodes.activeShooterNearby:
-          'Critical warning. An active shooter or armed threat has been reported near {area}, {distance}. Seek cover immediately.',
+          'Critical warning. Shooting or gunfire has been reported near {area}, {distance}. Seek cover immediately.',
       DangerAlertCodes.communalViolenceNearby:
           'Warning. Communal violence has been reported near {area}, {distance}. Avoid the area.',
+      DangerAlertCodes.banditAttackNearby:
+          'Critical warning. Bandits or unknown gunmen have been reported near {area}, {distance}. Move to safety.',
+      DangerAlertCodes.cultClashNearby:
+          'Warning. A cult clash has been reported near {area}, {distance}. Avoid the area.',
+      DangerAlertCodes.communityCrisisNearby:
+          'Warning. A community crisis has been reported near {area}, {distance}. Avoid the area.',
+      DangerAlertCodes.killingNearby:
+          'Critical warning. A killing has been reported near {area}, {distance}. Move to safety and contact authorities.',
       DangerAlertCodes.terroristThreatNearby:
           'Critical warning. A terrorist threat has been reported near {area}, {distance}. Leave the area immediately.',
       DangerAlertCodes.fireNearby:
@@ -63,7 +71,7 @@ abstract final class DangerAlertTemplates {
       DangerAlertCodes.buildingCollapseNearby:
           'Warning. A building collapse has been reported near {area}, {distance}. Stay away from the structure.',
       DangerAlertCodes.civilDisturbanceNearby:
-          'Warning. Civil disturbance near {area}, {distance}. Avoid crowds and stay alert.',
+          'Warning. A riot has been reported near {area}, {distance}. Avoid crowds and stay alert.',
       DangerAlertCodes.policeAdvisoryNearby:
           'Police safety advisory for {area}, {distance}. Follow official guidance.',
       DangerAlertCodes.missingChildNearby:
@@ -85,9 +93,17 @@ abstract final class DangerAlertTemplates {
       DangerAlertCodes.violentAttackNearby:
           'Danger. Violent attack don happen near {area}, {distance}. Move go safe place now.',
       DangerAlertCodes.activeShooterNearby:
-          'Critical warning. Active shooter or armed threat dey near {area}, {distance}. Find cover immediately.',
+          'Critical warning. Shooting or gunfire dey near {area}, {distance}. Find cover immediately.',
       DangerAlertCodes.communalViolenceNearby:
           'Danger. Communal violence dey near {area}, {distance}. No enter that area.',
+      DangerAlertCodes.banditAttackNearby:
+          'Critical warning. Bandits or unknown gunmen dey near {area}, {distance}. Move go safe place now.',
+      DangerAlertCodes.cultClashNearby:
+          'Danger. Cult clash dey near {area}, {distance}. No enter that area.',
+      DangerAlertCodes.communityCrisisNearby:
+          'Danger. Community crisis dey near {area}, {distance}. Avoid that area.',
+      DangerAlertCodes.killingNearby:
+          'Critical warning. Dem report killing near {area}, {distance}. Move go safe place and contact authorities.',
       DangerAlertCodes.terroristThreatNearby:
           'Critical warning. Terrorist threat dey near {area}, {distance}. Comot from that area sharp sharp.',
       DangerAlertCodes.fireNearby:
@@ -103,7 +119,7 @@ abstract final class DangerAlertTemplates {
       DangerAlertCodes.buildingCollapseNearby:
           'Warning. Building collapse near {area}, {distance}. Stay away from the building.',
       DangerAlertCodes.civilDisturbanceNearby:
-          'Warning. Civil disturbance dey near {area}, {distance}. Avoid crowd.',
+          'Warning. Riot dey near {area}, {distance}. Avoid crowd.',
       DangerAlertCodes.policeAdvisoryNearby:
           'Police advisory for {area}, {distance}. Follow official guidance.',
       DangerAlertCodes.missingChildNearby:
@@ -127,8 +143,7 @@ abstract final class DangerAlertDisplayLabels {
       DangerAlertCodes.cleared => 'Area Cleared',
       DangerAlertCodes.proximityIncrease => 'Getting Closer',
       DangerAlertCodes.activeShooterNearby ||
-      DangerAlertCodes.terroristThreatNearby =>
-        'CRITICAL DANGER',
+      DangerAlertCodes.terroristThreatNearby => 'CRITICAL DANGER',
       _ => 'DANGER ALERT',
     };
   }

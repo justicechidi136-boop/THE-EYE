@@ -5,6 +5,10 @@ abstract final class DangerAlertCodes {
   static const violentAttackNearby = 'DANGER_ZONE_VIOLENT_ATTACK_NEARBY';
   static const activeShooterNearby = 'DANGER_ZONE_ACTIVE_SHOOTER_NEARBY';
   static const communalViolenceNearby = 'DANGER_ZONE_COMMUNAL_VIOLENCE_NEARBY';
+  static const banditAttackNearby = 'DANGER_ZONE_BANDIT_ATTACK_NEARBY';
+  static const cultClashNearby = 'DANGER_ZONE_CULT_CLASH_NEARBY';
+  static const communityCrisisNearby = 'DANGER_ZONE_COMMUNITY_CRISIS_NEARBY';
+  static const killingNearby = 'DANGER_ZONE_KILLING_NEARBY';
   static const terroristThreatNearby = 'DANGER_ZONE_TERRORIST_THREAT_NEARBY';
   static const fireNearby = 'DANGER_ZONE_FIRE_NEARBY';
   static const floodNearby = 'DANGER_ZONE_FLOOD_NEARBY';
@@ -26,6 +30,10 @@ abstract final class DangerAlertCodes {
     violentAttackNearby,
     activeShooterNearby,
     communalViolenceNearby,
+    banditAttackNearby,
+    cultClashNearby,
+    communityCrisisNearby,
+    killingNearby,
     terroristThreatNearby,
     fireNearby,
     floodNearby,
@@ -175,8 +183,7 @@ class DangerAlertPayload {
 
   String get dedupeKey => '$alertId-v$version';
 
-  bool get isExpired =>
-      expiresAt != null && DateTime.now().isAfter(expiresAt!);
+  bool get isExpired => expiresAt != null && DateTime.now().isAfter(expiresAt!);
 
   bool get isCleared =>
       lifecycleState == DangerAlertLifecycleState.cleared || allClear;
@@ -246,7 +253,8 @@ class DangerAlertPayload {
     final issuedAtRaw = data['issuedAt']?.toString() ?? '';
     final issuedAt = parseDate(issuedAtRaw) ?? DateTime.now();
     final expiresAt = parseDate(data['expiresAt']?.toString());
-    final lifecycle = DangerAlertLifecycleState.parse(
+    final lifecycle =
+        DangerAlertLifecycleState.parse(
           data['alertLifecycleState']?.toString(),
         ) ??
         (data['allClear'] == 'true'
@@ -256,7 +264,8 @@ class DangerAlertPayload {
     return DangerAlertPayload(
       schemaVersion:
           int.tryParse(data['dangerAlertSchemaVersion']?.toString() ?? '') ?? 1,
-      alertId: data['alertId']?.toString() ??
+      alertId:
+          data['alertId']?.toString() ??
           data['safetyAlertId']?.toString() ??
           '',
       version: int.tryParse(data['alertVersion']?.toString() ?? '') ?? 1,
@@ -271,8 +280,9 @@ class DangerAlertPayload {
       areaName: data['areaName']?.toString(),
       languageHint: data['languageHint']?.toString(),
       issuedAt: issuedAt,
-      issuedAtWire:
-          issuedAtRaw.isNotEmpty ? issuedAtRaw : issuedAt.toUtc().toIso8601String(),
+      issuedAtWire: issuedAtRaw.isNotEmpty
+          ? issuedAtRaw
+          : issuedAt.toUtc().toIso8601String(),
       expiresAt: expiresAt,
       acknowledgementRequired: data['acknowledgementRequired'] == 'true',
       repeatCount: int.tryParse(data['repeatCount']?.toString() ?? '') ?? 3,
@@ -361,7 +371,8 @@ class WatchAccessibilityPreferences {
       repeatIntervalSeconds:
           repeatIntervalSeconds ?? this.repeatIntervalSeconds,
       vibrationStrength: vibrationStrength ?? this.vibrationStrength,
-      criticalAlertsOverrideSilentMode: criticalAlertsOverrideSilentMode ??
+      criticalAlertsOverrideSilentMode:
+          criticalAlertsOverrideSilentMode ??
           this.criticalAlertsOverrideSilentMode,
       speakWhenPhoneConnected:
           speakWhenPhoneConnected ?? this.speakWhenPhoneConnected,
@@ -369,7 +380,8 @@ class WatchAccessibilityPreferences {
       speakOverHeadphones: speakOverHeadphones ?? this.speakOverHeadphones,
       speakSensitiveAlertsAloud:
           speakSensitiveAlertsAloud ?? this.speakSensitiveAlertsAloud,
-      allowCriticalAlertDuringQuietHours: allowCriticalAlertDuringQuietHours ??
+      allowCriticalAlertDuringQuietHours:
+          allowCriticalAlertDuringQuietHours ??
           this.allowCriticalAlertDuringQuietHours,
       acknowledgeRequired: acknowledgeRequired ?? this.acknowledgeRequired,
       autoLanguageFallback: autoLanguageFallback ?? this.autoLanguageFallback,
@@ -385,7 +397,7 @@ class WatchAccessibilityPreferences {
           json['spokenDangerAlertsEnabled'] as bool? ?? true,
       preferredSpokenLanguage:
           json['preferredSpokenLanguage'] as String? ??
-              SpokenLanguageCodes.english,
+          SpokenLanguageCodes.english,
       speechRate: (json['speechRate'] as num?)?.toDouble() ?? 0.45,
       speechPitch: (json['speechPitch'] as num?)?.toDouble() ?? 1.0,
       repeatCount: (json['repeatCount'] as num?)?.toInt() ?? 3,
@@ -410,26 +422,25 @@ class WatchAccessibilityPreferences {
   }
 
   Map<String, dynamic> toJson() => {
-        'spokenDangerAlertsEnabled': spokenDangerAlertsEnabled,
-        'preferredSpokenLanguage': preferredSpokenLanguage,
-        'speechRate': speechRate,
-        'speechPitch': speechPitch,
-        'repeatCount': repeatCount,
-        'repeatIntervalSeconds': repeatIntervalSeconds,
-        'vibrationStrength': vibrationStrength.name,
-        'criticalAlertsOverrideSilentMode': criticalAlertsOverrideSilentMode,
-        'speakWhenPhoneConnected': speakWhenPhoneConnected,
-        'speakWhenStandalone': speakWhenStandalone,
-        'speakOverHeadphones': speakOverHeadphones,
-        'speakSensitiveAlertsAloud': speakSensitiveAlertsAloud,
-        'allowCriticalAlertDuringQuietHours':
-            allowCriticalAlertDuringQuietHours,
-        'acknowledgeRequired': acknowledgeRequired,
-        'autoLanguageFallback': autoLanguageFallback,
-        'quietHoursStart': quietHoursStart,
-        'quietHoursEnd': quietHoursEnd,
-        'timeZoneId': timeZoneId,
-      };
+    'spokenDangerAlertsEnabled': spokenDangerAlertsEnabled,
+    'preferredSpokenLanguage': preferredSpokenLanguage,
+    'speechRate': speechRate,
+    'speechPitch': speechPitch,
+    'repeatCount': repeatCount,
+    'repeatIntervalSeconds': repeatIntervalSeconds,
+    'vibrationStrength': vibrationStrength.name,
+    'criticalAlertsOverrideSilentMode': criticalAlertsOverrideSilentMode,
+    'speakWhenPhoneConnected': speakWhenPhoneConnected,
+    'speakWhenStandalone': speakWhenStandalone,
+    'speakOverHeadphones': speakOverHeadphones,
+    'speakSensitiveAlertsAloud': speakSensitiveAlertsAloud,
+    'allowCriticalAlertDuringQuietHours': allowCriticalAlertDuringQuietHours,
+    'acknowledgeRequired': acknowledgeRequired,
+    'autoLanguageFallback': autoLanguageFallback,
+    'quietHoursStart': quietHoursStart,
+    'quietHoursEnd': quietHoursEnd,
+    'timeZoneId': timeZoneId,
+  };
 
   static VibrationStrength _parseVibrationStrength(Object? value) {
     final raw = value?.toString() ?? 'strong';

@@ -4,8 +4,12 @@ const _trustedDangerLabels = <String, String>{
   "DANGER_ZONE_ARMED_ROBBERY_NEARBY": "Active robbery",
   "DANGER_ZONE_KIDNAPPING_NEARBY": "Kidnapping",
   "DANGER_ZONE_VIOLENT_ATTACK_NEARBY": "Violent attack",
-  "DANGER_ZONE_ACTIVE_SHOOTER_NEARBY": "Gunfire",
+  "DANGER_ZONE_ACTIVE_SHOOTER_NEARBY": "Shooting or gunfire",
   "DANGER_ZONE_COMMUNAL_VIOLENCE_NEARBY": "Communal violence",
+  "DANGER_ZONE_BANDIT_ATTACK_NEARBY": "Bandit or unknown gunmen attack",
+  "DANGER_ZONE_CULT_CLASH_NEARBY": "Cult clash",
+  "DANGER_ZONE_COMMUNITY_CRISIS_NEARBY": "Community crisis",
+  "DANGER_ZONE_KILLING_NEARBY": "Killing",
   "DANGER_ZONE_TERRORIST_THREAT_NEARBY": "Terrorist threat",
   "DANGER_ZONE_FIRE_NEARBY": "Fire",
   "DANGER_ZONE_FLOOD_NEARBY": "Flood emergency",
@@ -13,7 +17,7 @@ const _trustedDangerLabels = <String, String>{
   "DANGER_ZONE_HAZARDOUS_AREA_NEARBY": "Hazardous area",
   "DANGER_ZONE_ROAD_DANGER_NEARBY": "Road hazard",
   "DANGER_ZONE_BUILDING_COLLAPSE_NEARBY": "Building collapse",
-  "DANGER_ZONE_CIVIL_DISTURBANCE_NEARBY": "Civil disturbance",
+  "DANGER_ZONE_CIVIL_DISTURBANCE_NEARBY": "Riot",
   "DANGER_ZONE_POLICE_ADVISORY_NEARBY": "Police safety advisory",
   "DANGER_ZONE_MISSING_CHILD_NEARBY": "Missing child",
   "DANGER_ZONE_EVACUATION_NEARBY": "Evacuation",
@@ -90,8 +94,10 @@ class MobileDangerAlertAnnouncer {
 
   final FlutterTts _tts;
 
-  Future<void> speak(IncomingDangerAlert alert,
-      {String locale = "en-NG"}) async {
+  Future<void> speak(
+    IncomingDangerAlert alert, {
+    String locale = "en-NG",
+  }) async {
     final available = await _tts.isLanguageAvailable(locale) == true;
     await _tts.setLanguage(available ? locale : "en-NG");
     await _tts.setSpeechRate(0.45);

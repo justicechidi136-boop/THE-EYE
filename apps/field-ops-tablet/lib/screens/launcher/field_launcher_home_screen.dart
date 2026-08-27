@@ -11,6 +11,7 @@ import '../../launcher/launcher_policy.dart';
 import '../../launcher/widgets/emergency_quick_actions.dart';
 import '../../launcher/widgets/operational_status_strip.dart';
 import '../../services/field_app_services.dart';
+import '../../services/field_device_context_service.dart';
 import '../../theme/field_branding.dart';
 import '../routes.dart';
 import 'approved_apps_screen.dart';
@@ -79,8 +80,9 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
         _unread = (dash['unreadAlerts'] as num?)?.toInt() ?? 0;
         _gps = locationLabel;
         _network = dash['networkType']?.toString() ?? 'Unknown';
-        _battery =
-            dash['batteryLevel'] != null ? '${dash['batteryLevel']}%' : '—';
+        _battery = dash['batteryLevel'] != null
+            ? '${dash['batteryLevel']}%'
+            : '—';
         _sync = dash['syncState']?.toString() ?? 'OK';
       });
     } catch (_) {
@@ -97,15 +99,20 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 8),
+          accuracy: LocationAccuracy.bestForNavigation,
+          timeLimit: Duration(seconds: 15),
         ),
       );
       final label = await widget.services.deviceContext.reverseGeocode(
         latitude: position.latitude,
         longitude: position.longitude,
       );
-      if (label != null && label.trim().isNotEmpty) return label;
+      if (label != null && label.trim().isNotEmpty) {
+        return FieldDeviceContextService.withMeasuredAccuracy(
+          label,
+          position.accuracy,
+        );
+      }
       return 'Address unavailable';
     } on Object {
       return _gps != '—' && _gps != 'Acquiring' ? _gps : 'Location unavailable';
@@ -154,19 +161,18 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
           children: [
             ValueListenableBuilder(
               valueListenable: widget.services.dangerAlerts.activeAlert,
-              builder:
-                  (context, activeAlert, _) => OperationalStatusStrip(
-                    gpsLabel: _gps,
-                    networkLabel: _network,
-                    batteryLabel: _battery,
-                    syncLabel: _sync,
-                    shiftLabel: _shift,
-                    modeLabel: _mode,
-                    assignmentLabel: _assignment,
-                    unreadAlerts: _unread,
-                    dangerAlertActive: activeAlert != null,
-                    onDangerAlertPressed: _openDangerAlert,
-                  ),
+              builder: (context, activeAlert, _) => OperationalStatusStrip(
+                gpsLabel: _gps,
+                networkLabel: _network,
+                batteryLabel: _battery,
+                syncLabel: _sync,
+                shiftLabel: _shift,
+                modeLabel: _mode,
+                assignmentLabel: _assignment,
+                unreadAlerts: _unread,
+                dangerAlertActive: activeAlert != null,
+                onDangerAlertPressed: _openDangerAlert,
+              ),
             ),
             Expanded(
               child: Padding(
@@ -224,13 +230,12 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                         ),
                         if (_policy.maintenanceModeAllowed)
                           TextButton(
-                            onPressed:
-                                () => showMaintenanceEscapeSheet(
-                                  context,
-                                  services: widget.services,
-                                  platform: _platform,
-                                  policy: _policy,
-                                ),
+                            onPressed: () => showMaintenanceEscapeSheet(
+                              context,
+                              services: widget.services,
+                              platform: _platform,
+                              policy: _policy,
+                            ),
                             child: Text(l10n.maintenance),
                           ),
                       ],
@@ -260,11 +265,10 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute<void>(
-                                    builder:
-                                        (_) => ApprovedAppsScreen(
-                                          policy: _policy,
-                                          launcher: _appLauncher,
-                                        ),
+                                    builder: (_) => ApprovedAppsScreen(
+                                      policy: _policy,
+                                      launcher: _appLauncher,
+                                    ),
                                   ),
                                 );
                               },

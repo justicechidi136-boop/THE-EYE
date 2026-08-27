@@ -1,4 +1,17 @@
 import { BadRequestException } from "@nestjs/common";
+import { DangerAlertCode, type DangerAlertCodeValue } from "@the-eye/shared";
+
+const USER_SELECTABLE_DANGER_CODES = new Set<DangerAlertCodeValue>([
+  DangerAlertCode.FIRE_NEARBY,
+  DangerAlertCode.ARMED_ROBBERY_NEARBY,
+  DangerAlertCode.KIDNAPPING_NEARBY,
+  DangerAlertCode.ACTIVE_SHOOTER_NEARBY,
+  DangerAlertCode.CIVIL_DISTURBANCE_NEARBY,
+  DangerAlertCode.BANDIT_ATTACK_NEARBY,
+  DangerAlertCode.CULT_CLASH_NEARBY,
+  DangerAlertCode.COMMUNITY_CRISIS_NEARBY,
+  DangerAlertCode.KILLING_NEARBY,
+]);
 
 export type StartDangerTriggerDto = {
   clientTriggerId: string;
@@ -8,6 +21,7 @@ export type StartDangerTriggerDto = {
   locationSource: "freshGps" | "cachedDevice" | "networkLocation";
   locationCapturedAt: string;
   areaName?: string;
+  dangerAlertCode?: DangerAlertCodeValue;
   lowBandwidthMode?: boolean;
   qaTest?: boolean;
 };
@@ -30,6 +44,12 @@ export function validateStartDangerTriggerDto(dto: StartDangerTriggerDto) {
   }
   if (!new Set(["freshGps", "cachedDevice", "networkLocation"]).has(dto.locationSource)) {
     throw new BadRequestException("locationSource is invalid");
+  }
+  if (
+    dto.dangerAlertCode != null &&
+    !USER_SELECTABLE_DANGER_CODES.has(dto.dangerAlertCode)
+  ) {
+    throw new BadRequestException("Select a valid danger type");
   }
   const capturedAt = new Date(dto.locationCapturedAt);
   if (Number.isNaN(capturedAt.getTime())) throw new BadRequestException("locationCapturedAt is invalid");

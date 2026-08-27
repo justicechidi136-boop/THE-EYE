@@ -18,4 +18,25 @@ void main() {
   test('returns null when no readable location fields are available', () {
     expect(FieldDeviceContextService.formatLocation(), isNull);
   });
+
+  test('prefers a street name and rejects a plus code', () {
+    expect(
+      FieldDeviceContextService.formatLocation(
+        name: 'VX96+Q39',
+        street: 'VX96+Q39',
+        thoroughfare: 'Stadium Road',
+        subLocality: 'Rumuola',
+        locality: 'Port Harcourt',
+        administrativeArea: 'Rivers',
+      ),
+      'Stadium Road, Rumuola, Port Harcourt, Rivers',
+    );
+  });
+
+  test('shows measured GPS accuracy without claiming a fixed accuracy', () {
+    expect(
+      FieldDeviceContextService.withMeasuredAccuracy('Stadium Road', 7.6),
+      'Stadium Road · GPS accuracy: 8 m',
+    );
+  });
 }

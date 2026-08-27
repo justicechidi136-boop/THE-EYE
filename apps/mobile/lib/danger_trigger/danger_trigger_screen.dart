@@ -33,11 +33,11 @@ class DangerTriggerScreen extends StatefulWidget {
     LiveVideoSessionController? liveVoiceController,
     WatchDangerAlertRelay? watchRelay,
     super.key,
-  })  : gateway = gateway ?? DangerTriggerApiService(apiClient),
-        locationService = locationService ?? DeviceLocationService(),
-        liveVoiceController =
-            liveVoiceController ?? LiveVideoSessionController(audioOnly: true),
-        watchRelay = watchRelay ?? WatchDangerAlertRelay();
+  }) : gateway = gateway ?? DangerTriggerApiService(apiClient),
+       locationService = locationService ?? DeviceLocationService(),
+       liveVoiceController =
+           liveVoiceController ?? LiveVideoSessionController(audioOnly: true),
+       watchRelay = watchRelay ?? WatchDangerAlertRelay();
 
   final String? Function() accessTokenProvider;
   final DangerTriggerGateway gateway;
@@ -59,6 +59,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
   bool _ending = false;
   DangerTriggerActivation? _activation;
   bool _pairedWatchAlerted = false;
+  String? _dangerAlertCode;
 
   bool get _isActive =>
       _viewState == DangerTriggerViewState.preparing ||
@@ -109,7 +110,8 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
           ? DangerTriggerViewState.ready
           : DangerTriggerViewState.failed;
       if (!location.hasCoordinates) {
-        _error = location.message ??
+        _error =
+            location.message ??
             "A current location is required to alert nearby users safely.";
       }
     });
@@ -119,6 +121,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
     if (_isActive) return;
     final token = widget.accessTokenProvider()?.trim() ?? "";
     final location = _location;
+    final dangerAlertCode = _dangerAlertCode;
     if (token.isEmpty) {
       setState(() {
         _viewState = DangerTriggerViewState.failed;
@@ -128,6 +131,12 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
     }
     if (location == null || !location.hasCoordinates) {
       await _refreshLocation();
+      return;
+    }
+    if (dangerAlertCode == null) {
+      setState(
+        () => _error = "Select the type of danger before starting the alert.",
+      );
       return;
     }
 
@@ -154,6 +163,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
         accuracyMeters: location.accuracyMeters,
         locationCapturedAt: location.capturedAt ?? DateTime.now(),
         locationSource: _apiLocationSource(location.source),
+        dangerAlertCode: dangerAlertCode,
         areaName: location.displayLocality,
       );
       if (!mounted) return;
@@ -201,8 +211,9 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
 
   Future<void> _relayToPairedWatch(DangerTriggerActivation activation) async {
     if (activation.watchRelayPayload.isEmpty) return;
-    final relayed =
-        await widget.watchRelay.relayDangerAlert(activation.watchRelayPayload);
+    final relayed = await widget.watchRelay.relayDangerAlert(
+      activation.watchRelayPayload,
+    );
     if (mounted && relayed) {
       setState(() => _pairedWatchAlerted = true);
     }
@@ -363,8 +374,10 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: Colors.amber.shade800),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.amber.shade800,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -386,8 +399,10 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.location_on_outlined,
-                        color: semantics.primaryAction),
+                    Icon(
+                      Icons.location_on_outlined,
+                      color: semantics.primaryAction,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -417,6 +432,31 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 20),
+              DropdownButtonFormField<String>(
+                key: const Key("danger-trigger-category"),
+                initialValue: _dangerAlertCode,
+                decoration: const InputDecoration(
+                  labelText: "Type of danger",
+                  helperText: "Choose the danger nearby users should hear.",
+                  border: OutlineInputBorder(),
+                ),
+                isExpanded: true,
+                items: dangerTriggerCategories
+                    .map(
+                      (category) => DropdownMenuItem(
+                        value: category.code,
+                        child: Text(category.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: _isActive
+                    ? null
+                    : (value) => setState(() {
+                        _dangerAlertCode = value;
+                        _error = null;
+                      }),
               ),
               const SizedBox(height: 20),
               if (_viewState == DangerTriggerViewState.broadcasting ||
@@ -450,8 +490,8 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                         _activation == null
                             ? "Activating nearby alerts..."
                             : _activation!.recipientCount == 0
-                                ? "Alert active. No other nearby users were eligible when the alert started."
-                                : "Alert active. Alerts sent to ${_activation!.recipientCount} nearby ${_activation!.recipientCount == 1 ? "user" : "users"}.",
+                            ? "Alert active. No other nearby users were eligible when the alert started."
+                            : "Alert active. Alerts sent to ${_activation!.recipientCount} nearby ${_activation!.recipientCount == 1 ? "user" : "users"}.",
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
@@ -480,7 +520,10 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                 ),
               ] else ...[
                 FilledButton.icon(
-                  onPressed: location?.hasCoordinates == true && !_isActive
+                  onPressed:
+                      location?.hasCoordinates == true &&
+                          _dangerAlertCode != null &&
+                          !_isActive
                       ? _start
                       : null,
                   icon: const Icon(Icons.mic),
@@ -504,15 +547,17 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 16),
-                Text(_error!,
-                    style: TextStyle(color: semantics.error),
-                    textAlign: TextAlign.center),
+                Text(
+                  _error!,
+                  style: TextStyle(color: semantics.error),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: _viewState == DangerTriggerViewState.failed
                       ? (location?.hasCoordinates == true
-                          ? _start
-                          : _refreshLocation)
+                            ? _start
+                            : _refreshLocation)
                       : null,
                   icon: const Icon(Icons.refresh),
                   label: const Text("Try again"),
