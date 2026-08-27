@@ -7,6 +7,7 @@ import { ConsoleEmptyState, ConsolePageHeader } from "../../../components/consol
 import { StatusBadge } from "../../../components/ui";
 import { fetchAdminBroadcast, fetchBroadcastReports } from "../../../lib/api/data";
 import { getRouteById } from "../../../lib/admin/admin-route-registry";
+import { humanPriority } from "../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,9 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={authorLabelTone(broadcast.authorLabel)}>{broadcast.authorLabel}</StatusBadge>
             <StatusBadge tone="info">{broadcast.status}</StatusBadge>
+            <StatusBadge tone={humanPriority(broadcast.severity) === "HIGH" ? "danger" : humanPriority(broadcast.severity) === "MID" ? "warning" : "neutral"}>
+              {humanPriority(broadcast.severity)}
+            </StatusBadge>
           </div>
         }
       />
@@ -46,11 +50,12 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
       <div className="grid min-w-0 gap-5 xl:grid-cols-3">
         <section className="min-w-0 space-y-5 xl:col-span-2">
           <article className="rounded-lg border border-line bg-surface p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-ink">Message</h2>
-            <p className="mt-3 whitespace-pre-wrap text-sm text-ink">{broadcast.body}</p>
+            <h2 className="text-base font-semibold text-ink">Broadcast overview</h2>
+            <p className="mt-3 break-words whitespace-pre-wrap text-sm leading-6 text-ink">{broadcast.body}</p>
             <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
               <div><dt className="text-muted">Type</dt><dd className="font-medium">{broadcast.type}</dd></div>
-              <div><dt className="text-muted">Priority</dt><dd className="font-medium">{broadcast.severity}</dd></div>
+              <div><dt className="text-muted">Priority</dt><dd className="font-medium">{humanPriority(broadcast.severity)}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-muted">Location</dt><dd className="break-words font-medium">{broadcast.location}</dd></div>
               <div><dt className="text-muted">Target</dt><dd className="font-medium">{broadcast.target}</dd></div>
               <div><dt className="text-muted">Author</dt><dd className="font-medium">{broadcast.author}</dd></div>
               <div><dt className="text-muted">Country</dt><dd className="font-medium">{broadcast.country ?? "—"}</dd></div>
@@ -58,6 +63,19 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
               <div><dt className="text-muted">Published</dt><dd className="font-medium">{broadcast.publishedAt ? new Date(broadcast.publishedAt).toLocaleString() : "—"}</dd></div>
               <div><dt className="text-muted">Created</dt><dd className="font-medium">{broadcast.createdAt ? new Date(broadcast.createdAt).toLocaleString() : "—"}</dd></div>
             </dl>
+            {broadcast.details.length ? (
+              <section className="mt-5 border-t border-line pt-5">
+                <h3 className="text-sm font-semibold text-ink">Case details</h3>
+                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                  {broadcast.details.map((detail) => (
+                    <div key={detail.label} className="min-w-0 rounded-md bg-surfaceMuted p-3">
+                      <dt className="text-xs text-muted">{detail.label}</dt>
+                      <dd className="mt-1 break-words font-medium text-ink">{detail.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ) : null}
             {broadcast.suspendedReason ? (
               <p className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
                 Suspended: {broadcast.suspendedReason}
@@ -68,7 +86,9 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
           <article className="rounded-lg border border-line bg-surface p-5 shadow-sm">
             <EvidenceGallery
               title="Broadcast media"
+              mediaAccessPath={(mediaId) => `/api/admin/broadcasts/${broadcast.id}/media/${mediaId}/view`}
               items={broadcast.attachments.map((item) => ({
+                id: item.id,
                 type: item.mediaType === "image" ? "Image" : item.mediaType === "video" ? "Video" : item.mediaType === "audio" ? "Audio" : "Media",
                 label: item.label,
                 contentType: item.contentType,
@@ -94,7 +114,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
                       <strong>{report.reason}</strong>
                       <StatusBadge tone={report.status === "Open" ? "warning" : "success"}>{report.status}</StatusBadge>
                     </div>
-                    {report.details ? <p className="mt-2 text-muted">{report.details}</p> : null}
+                    {report.details ? <p className="mt-2 break-words text-muted">{report.details}</p> : null}
                     <p className="mt-2 text-xs text-muted">
                       {report.createdAt ? new Date(report.createdAt).toLocaleString() : "Unknown time"}
                     </p>
@@ -118,7 +138,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
                 {broadcast.sightings.map((sighting) => (
                   <div key={sighting.id} className="rounded-lg border border-line bg-surfaceMuted p-4 text-sm">
                     <p className="font-semibold text-ink">{sighting.approximateArea ?? "Area not provided"}</p>
-                    <p className="mt-1 text-muted">{sighting.description}</p>
+                    <p className="mt-1 break-words text-muted">{sighting.description}</p>
                     <p className="mt-2 text-xs text-muted">
                       {sighting.observedAt ? new Date(sighting.observedAt).toLocaleString() : "Observed time not provided"} · {sighting.locationMode} · {sighting.attachmentsCount} attachment{sighting.attachmentsCount === 1 ? "" : "s"}
                     </p>
@@ -129,7 +149,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
           </article>
         </section>
 
-        <aside className="grid gap-5">
+        <aside className="grid min-w-0 content-start gap-5">
           <article className="rounded-lg border border-line bg-surface p-5 shadow-sm">
             <h2 className="text-base font-semibold text-ink">Moderation</h2>
             <div className="mt-4">

@@ -85,4 +85,47 @@ describe("IncidentTimelineService", () => {
     const labels = result.data.map((entry) => String(entry.label));
     expect(labels).toEqual(expect.arrayContaining(["Emergency report submitted", "Responder assigned", "Responder accepted"]));
   });
+
+  it("links voice-note evidence to the dispatcher timeline without replacing original audio", async () => {
+    const { service, prisma } = buildTimelineService({
+      prisma: {
+        incidentAssignment: { findMany: jest.fn().mockResolvedValue([]) },
+        dispatchEvent: { findMany: jest.fn().mockResolvedValue([]) },
+      },
+    });
+    prisma.incident.findUnique.mockResolvedValue({
+      id: "inc-voice",
+      submittedAt: new Date("2026-08-27T10:00:00Z"),
+      updatedAt: new Date("2026-08-27T10:00:00Z"),
+      metadata: {},
+      timeline: [{
+        createdAt: new Date("2026-08-27T10:01:00Z"),
+        eventType: "incident.media_attached",
+        message: "Voice note attached",
+        metadata: { mediaId: "media-voice" },
+      }],
+      statusHistory: [],
+      verifications: [],
+      assignedAgency: null,
+      media: [{
+        id: "media-voice",
+        mediaType: "Audio",
+        contentType: "audio/mp4",
+        durationSeconds: 12,
+        transcriptionStatus: "Completed",
+        transcript: "AI text",
+        translatedTranscript: null,
+        selectedLanguage: "en",
+        detectedLanguage: "en",
+        transcriptionConfidence: 0.9,
+        uploadedAt: new Date("2026-08-27T10:01:00Z"),
+      }],
+    });
+
+    const result = await service.buildTimeline("inc-voice", "dispatcher");
+    const entry = result.data.find((item) => item.type === "incident.media_attached") as any;
+    expect(entry.details.media.id).toBe("media-voice");
+    expect(entry.details.media.mediaType).toBe("Audio");
+    expect(entry.details.media.transcript).toBe("AI text");
+  });
 });

@@ -16,5 +16,9 @@ describe("admin live video controls", () => {
     expect(viewer.includes("absolute left-4 right-4 top-4")).toBe(false);
     expect(viewer.indexOf('data-testid="live-evidence-panel"') > viewer.indexOf('data-testid="live-video-player"')).toBe(true);
     expect(primitives.includes('inverse: "border border-white/20 bg-white text-command')).toBe(true);
+    expect(player.includes('"waiting"')).toBe(true);
+    expect(player.includes('Connected, waiting for video')).toBe(true);
+    expect(player.includes('setPlayerState(attached ? "connected" : "waiting")')).toBe(true);
+    expect(viewer.includes("Location: {displayOverlay.location}")).toBe(true);
   });
 });

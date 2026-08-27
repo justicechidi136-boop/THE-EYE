@@ -15,6 +15,7 @@ type LiveOverlay = {
   date: string;
   time: string;
   gps: string;
+  location: string;
   accuracy: string;
   reporter: string;
   connectionStatus: string;
@@ -48,6 +49,7 @@ export function LiveVideoViewer({ sessions }: Props) {
     latitude: 0,
     longitude: 0,
     accuracy: "-",
+    location: "Location unavailable",
     reporter: "-",
     viewerScope: "-",
     signedLocationPath: "#",
@@ -61,9 +63,16 @@ export function LiveVideoViewer({ sessions }: Props) {
     date: selected.date,
     time: selected.time,
     gps: `${selected.latitude}, ${selected.longitude}`,
+    location: selected.location,
     accuracy: selected.accuracy,
     reporter: selected.reporter,
-    connectionStatus: playerState === "connected" ? "Connected" : selected.connectionStatus,
+    connectionStatus: playerState === "connected"
+      ? "Live video connected"
+      : playerState === "waiting"
+        ? "Connected, waiting for video"
+        : playerState === "reconnecting"
+          ? "Reconnecting"
+          : selected.connectionStatus,
     signedLocationPath: safeLocationHref(selected.signedLocationPath, selected.latitude, selected.longitude),
   }), [playerState, selected]);
 
@@ -92,9 +101,10 @@ export function LiveVideoViewer({ sessions }: Props) {
           date: evidence.date ?? selected.date,
           time: evidence.time ?? selected.time,
           gps: evidence.gps ?? gps,
+          location: evidence.locationLabel ?? selected.location,
           accuracy: evidence.accuracy ?? selected.accuracy,
           reporter: evidence.reporter ?? selected.reporter,
-          connectionStatus: playerState === "connected" ? "Connected" : playerState === "reconnecting" ? "Reconnecting" : selected.connectionStatus,
+          connectionStatus: playerState === "connected" ? "Live video connected" : playerState === "waiting" ? "Connected, waiting for video" : playerState === "reconnecting" ? "Reconnecting" : selected.connectionStatus,
           signedLocationPath: safeLocationHref(payload.signedOpenLocationUrl ?? selected.signedLocationPath, selected.latitude, selected.longitude),
         });
       } catch {
@@ -108,7 +118,7 @@ export function LiveVideoViewer({ sessions }: Props) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [gps, playerState, selected.accuracy, selected.connectionStatus, selected.date, selected.id, selected.incidentId, selected.reporter, selected.signedLocationPath, selected.status, selected.time]);
+  }, [gps, playerState, selected.accuracy, selected.connectionStatus, selected.date, selected.id, selected.incidentId, selected.location, selected.reporter, selected.signedLocationPath, selected.status, selected.time]);
 
   return (
     <>
@@ -126,10 +136,11 @@ export function LiveVideoViewer({ sessions }: Props) {
                 <p>Incident: {displayOverlay.incidentId}</p>
                 <p>Date: {displayOverlay.date}</p>
                 <p>Time: {displayOverlay.time}</p>
-                <a className="font-semibold text-ink underline decoration-eye decoration-2 underline-offset-4" href={displayOverlay.signedLocationPath}>GPS: {gps}</a>
+                <a className="break-words font-semibold text-ink underline decoration-eye decoration-2 underline-offset-4 sm:col-span-2" href={displayOverlay.signedLocationPath}>Location: {displayOverlay.location}</a>
                 <p>Accuracy: {displayOverlay.accuracy}</p>
                 <p>Reporter: {displayOverlay.reporter}</p>
                 <p>Status: {displayOverlay.connectionStatus}</p>
+                <p className="break-all text-xs sm:col-span-2">Coordinates: {gps}</p>
               </div>
               {selected.recordingConfigured ? (
                 <p className="mt-3 text-xs font-semibold text-success">Server-side recording is configured for this session.</p>
@@ -145,8 +156,9 @@ export function LiveVideoViewer({ sessions }: Props) {
         <div className="grid gap-5">
           <Panel title="Latest live GPS">
             <div className="grid gap-3">
-              <a className="rounded-lg border border-line bg-surfaceMuted p-3 font-semibold text-ink underline decoration-eye decoration-2 underline-offset-4 hover:text-eyeDeep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye" href={displayOverlay.signedLocationPath}>{gps}</a>
+              <a className="break-words rounded-lg border border-line bg-surfaceMuted p-3 font-semibold text-ink underline decoration-eye decoration-2 underline-offset-4 hover:text-eyeDeep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye" href={displayOverlay.signedLocationPath}>{displayOverlay.location}</a>
               <p className="text-sm text-muted">Accuracy {displayOverlay.accuracy}</p>
+              <p className="break-all text-xs text-muted">Coordinates {gps}</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <a className="rounded-md bg-eye px-4 py-3 text-center text-sm font-semibold text-white hover:bg-eyeDeep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye" href={displayOverlay.signedLocationPath}>Open Live Location</a>
                 <button className="rounded-md border border-line px-4 py-3 text-center text-sm font-semibold" onClick={() => navigator.clipboard.writeText(gps)}>Copy Coordinates</button>
@@ -179,7 +191,7 @@ export function LiveVideoViewer({ sessions }: Props) {
       </div>
 
       <div className="mt-5 grid gap-5">
-        <LocationTrailMap title="Live map marker and movement trail" history={selected.locationHistory} openLocationHref={displayOverlay.signedLocationPath} />
+        <LocationTrailMap title="Live map marker and movement trail" initialPoints={selected.locationHistory} liveSessionId={selected.id} locationLabel={displayOverlay.location} openLocationHref={displayOverlay.signedLocationPath} />
       </div>
     </>
   );

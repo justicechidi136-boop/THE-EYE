@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./form-primitives";
 
-export type LivekitPlayerState = "idle" | "connecting" | "connected" | "paused" | "reconnecting" | "disconnected" | "failed" | "unavailable";
+export type LivekitPlayerState = "idle" | "connecting" | "waiting" | "connected" | "paused" | "reconnecting" | "disconnected" | "failed" | "unavailable";
 
 type Props = {
   sessionId: string;
@@ -57,16 +57,33 @@ export function LivekitAdminPlayer({ sessionId, sessionStatus, onStateChange }: 
       const room = new Room({ adaptiveStream: true, dynacast: true });
       roomRef.current = room;
       room.on(RoomEvent.Reconnecting, () => setPlayerState("reconnecting"));
-      room.on(RoomEvent.Reconnected, () => setPlayerState("connected"));
+      room.on(RoomEvent.Reconnected, () => setPlayerState(videoRef.current?.srcObject ? "connected" : "waiting"));
       room.on(RoomEvent.Disconnected, () => setPlayerState("disconnected"));
       room.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === Track.Kind.Video && videoRef.current) {
           track.attach(videoRef.current);
           void videoRef.current.play().catch(() => undefined);
+          setPlayerState("connected");
+        }
+      });
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Video) {
+          track.detach();
+          setPlayerState("waiting");
         }
       });
       await room.connect(url, token, { autoSubscribe: true });
-      setPlayerState("connected");
+      let attached = false;
+      for (const participant of room.remoteParticipants.values()) {
+        for (const publication of participant.videoTrackPublications.values()) {
+          if (publication.track && videoRef.current) {
+            publication.track.attach(videoRef.current);
+            void videoRef.current.play().catch(() => undefined);
+            attached = true;
+          }
+        }
+      }
+      setPlayerState(attached ? "connected" : "waiting");
     } catch (connectError) {
       setPlayerState("failed");
       setError(connectError instanceof Error ? connectError.message : "Connection failed");
@@ -97,6 +114,7 @@ export function LivekitAdminPlayer({ sessionId, sessionStatus, onStateChange }: 
         <div className="absolute inset-0 flex items-end justify-center bg-command/80 px-6 pb-8 text-center text-white">
           <div className="max-w-sm rounded-md bg-black/45 px-5 py-4">
             {playerState === "connecting" ? <p className="text-lg font-semibold">Connecting to authorized stream...</p> : null}
+            {playerState === "waiting" ? <><p className="text-lg font-semibold">Connected, waiting for video...</p><p className="mt-2 text-sm text-white/80">The publisher has not sent an active video track yet.</p></> : null}
             {playerState === "reconnecting" ? <p className="text-lg font-semibold">Reconnecting...</p> : null}
             {playerState === "disconnected" ? <p className="text-lg font-semibold">Stream disconnected</p> : null}
             {playerState === "failed" ? <p className="text-lg font-semibold">{error ?? "Connection failed"}</p> : null}

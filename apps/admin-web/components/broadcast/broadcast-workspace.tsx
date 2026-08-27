@@ -8,6 +8,7 @@ import { ConsoleEmptyState } from "../console";
 import { StatusBadge } from "../ui";
 import { BroadcastFilters } from "./broadcast-filters";
 import { authorLabelTone, BroadcastModerationActions } from "./broadcast-moderation-actions";
+import { humanPriority } from "../../lib/admin-presentation";
 
 type BroadcastWorkspaceProps = {
   broadcasts: BroadcastView[];
@@ -149,7 +150,7 @@ export function BroadcastWorkspace({
                         </td>
                         <td className="break-words px-4 py-3">{broadcast.type}</td>
                         <td className="px-4 py-3">
-                          <StatusBadge tone={broadcast.severity === "P1" ? "danger" : "warning"}>{broadcast.severity}</StatusBadge>
+                          <StatusBadge tone={humanPriority(broadcast.severity) === "HIGH" ? "danger" : humanPriority(broadcast.severity) === "MID" ? "warning" : "neutral"}>{humanPriority(broadcast.severity)}</StatusBadge>
                         </td>
                         <td className="break-words px-4 py-3 text-muted">{broadcast.target}</td>
                         <td className="px-4 py-3">
@@ -201,7 +202,7 @@ export function BroadcastWorkspace({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <StatusBadge tone={authorLabelTone(broadcast.authorLabel)}>{broadcast.authorLabel}</StatusBadge>
-                      <StatusBadge tone={broadcast.severity === "P1" ? "danger" : "warning"}>{broadcast.severity}</StatusBadge>
+                      <StatusBadge tone={humanPriority(broadcast.severity) === "HIGH" ? "danger" : humanPriority(broadcast.severity) === "MID" ? "warning" : "neutral"}>{humanPriority(broadcast.severity)}</StatusBadge>
                     </div>
                   </div>
                   <dl className="mt-3 grid gap-2 text-sm">

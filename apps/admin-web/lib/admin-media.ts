@@ -13,6 +13,7 @@ export type AdminEvidenceItem = {
 };
 
 export type BroadcastAttachmentView = {
+  id?: string;
   mediaType: string;
   label: string;
   contentType?: string;
@@ -86,6 +87,7 @@ export function normalizeBroadcastAttachments(raw: unknown): BroadcastAttachment
   return raw
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
     .map((item) => ({
+      id: item.id ? String(item.id) : undefined,
       mediaType: String(item.mediaType ?? ""),
       label: String(item.label ?? "Attachment"),
       contentType: item.contentType ? String(item.contentType) : undefined,

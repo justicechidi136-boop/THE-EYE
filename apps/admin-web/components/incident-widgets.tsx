@@ -9,12 +9,7 @@ import { IncidentAdminActions } from "./incident-admin-actions";
 import { EvidenceViewButton } from "./evidence-view-button";
 import { AudioEvidencePlayer } from "./audio-evidence-player";
 import { LaunchDroneMissionButton } from "./drone/launch-drone-mission-button";
-
-function gpsToMarker(lat: number, lng: number, label: string) {
-  const left = `${Math.min(90, Math.max(10, ((lng - 3.2) / 0.4) * 100))}%`;
-  const top = `${Math.min(90, Math.max(10, ((6.7 - lat) / 0.2) * 100))}%`;
-  return { left, top, label };
-}
+import { humanPriority } from "../lib/admin-presentation";
 
 function priorityTone(priority: Incident["priority"]) {
   if (priority === "P1") return "danger";
@@ -31,40 +26,10 @@ function confidenceTone(score: number) {
 }
 
 export function IncidentMap({ incidents }: { incidents: Incident[] }) {
-  return (
-    <Panel title="Live incident map" aside={<span className="text-xs text-muted">PostGIS feed ready</span>}>
-      <div
-        className="leaflet-grid relative min-h-[420px] overflow-hidden rounded-lg border border-line"
-        role="img"
-        aria-label={`Operational map showing ${incidents.length} incident positions in Ikeja`}
-      >
-        <div className="absolute left-[58%] top-[38%] h-4 w-4 rounded-full bg-red-600 ring-4 ring-red-600/20" />
-        {incidents.map((incident) => {
-          const marker = gpsToMarker(incident.gps.lat, incident.gps.lng, incident.id);
-          return (
-            <div
-              key={incident.id}
-              className="absolute h-4 w-4 rounded-full bg-red-600 ring-4 ring-red-600/20"
-              style={{ left: marker.left, top: marker.top }}
-              title={`${incident.id} ${incident.gps.lat}, ${incident.gps.lng}`}
-            />
-          );
-        })}
-        <div className="absolute bottom-4 left-4 rounded-lg border border-line bg-surface/95 p-3 shadow-soft">
-          <p className="text-sm font-semibold">Ikeja operational view</p>
-          <p className="mt-1 text-xs text-muted">GPS, manual adjustment, assigned agency, and confidence overlays.</p>
-        </div>
-        <div className="absolute right-4 top-4 grid gap-2 rounded-lg border border-line bg-surface/95 p-3 text-xs shadow-soft">
-          {incidents.map((incident) => (
-            <div key={incident.id} className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-eye" />
-              <span>{incident.id} - {incident.gps.lat.toFixed(4)}, {incident.gps.lng.toFixed(4)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </Panel>
-  );
+  const points = incidents.flatMap((incident) => incident.locationHistory.length
+    ? incident.locationHistory
+    : [{ latitude: incident.gps.lat, longitude: incident.gps.lng, capturedAt: incident.createdAt ?? new Date(0).toISOString() }]);
+  return <LocationTrailMap title="Live incident map" initialPoints={points} locationLabel={`${incidents.length} incident position${incidents.length === 1 ? "" : "s"} in scope`} />;
 }
 
 export function IncidentTable({ incidents }: { incidents: Incident[] }) {
@@ -96,7 +61,7 @@ export function IncidentTable({ incidents }: { incidents: Incident[] }) {
                 <Link href={`/incidents/${incident.id}`} className="font-semibold text-ink hover:text-eye">{incident.title}</Link>
                 <p className="mt-1 text-xs text-muted">{incident.id} - {incident.type}</p>
               </td>
-              <td className="px-4 py-3"><StatusBadge tone={priorityTone(incident.priority)}>{incident.priority}</StatusBadge></td>
+              <td className="px-4 py-3"><StatusBadge tone={priorityTone(incident.priority)}>{humanPriority(incident.priority)}</StatusBadge></td>
               <td className="px-4 py-3"><VerificationStatusBadge score={incident.confidenceScore} status={incident.status} /></td>
               <td className="px-4 py-3"><StatusBadge tone={confidenceTone(incident.confidenceScore)}>{incident.confidenceScore}%</StatusBadge></td>
               <td className="px-4 py-3 text-muted">{incident.gps.lat}, {incident.gps.lng}<br />Accuracy {incident.gps.accuracy}</td>
@@ -126,10 +91,11 @@ export function IncidentDetail({
     <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
       <Panel title="Incident summary" aside={<VerificationStatusBadge score={incident.confidenceScore} status={incident.status} />}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Priority level" value={incident.priority} />
+          <Field label="Priority level" value={humanPriority(incident.priority)} />
           <Field label="Response status" value={incident.responseStatus} />
           <Field label="GPS location" value={`${incident.gps.lat}, ${incident.gps.lng} (${incident.gps.accuracy})`} />
-          <Field label="Reporter status" value={`${incident.reporterStatus} - ${incident.reportingMode}`} />
+          <Field label="Reporter" value={incident.reporter.label} />
+          {incident.reporter.accountReference ? <Field label="Account reference" value={incident.reporter.accountReference} /> : null}
           <Field label="Assigned agency" value={incident.assignedAgency} />
           <Field label="Location" value={incident.location} />
           <Field label="Verification status" value={verificationStatusFromScore(incident.confidenceScore, incident.status)} />
@@ -180,8 +146,10 @@ export function IncidentDetail({
       <div className="xl:col-span-2">
         <LocationTrailMap
           title="Live map marker and movement trail"
+          incidentId={incident.id}
           openLocationHref={mapsHref}
-          points={[gpsToMarker(incident.gps.lat, incident.gps.lng, incident.id)]}
+          locationLabel={incident.location}
+          initialPoints={incident.locationHistory.length ? incident.locationHistory : [{ latitude: incident.gps.lat, longitude: incident.gps.lng, capturedAt: incident.createdAt ?? new Date(0).toISOString() }]}
         />
       </div>
     </div>

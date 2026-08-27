@@ -5,11 +5,13 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  AdminRoleName,
   BroadcastAuthorType,
   BroadcastStatus,
   BroadcastType,
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
+import { createStorageDownloadUrl } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { BroadcastLifecycleService } from "./broadcast-lifecycle.service";
@@ -39,6 +41,8 @@ export type AdminModerationReasonDto = {
 
 @Injectable()
 export class BroadcastAdminService {
+  private readonly signDownloadUrl = createStorageDownloadUrl;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -69,6 +73,49 @@ export class BroadcastAdminService {
       },
     });
     return { data: rows };
+  }
+
+  async getDetail(id: string, actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Admin access required");
+    const broadcast = await this.prisma.broadcast.findFirst({
+      where: { id, deletedAt: null, ...this.jurisdictionWhere(actor) },
+      include: {
+        creator: { select: { displayName: true } },
+        creatorUser: { select: { profile: { select: { firstName: true, lastName: true } } } },
+        media: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
+        sightings: { include: { media: { where: { deletedAt: null } } }, orderBy: { createdAt: "desc" } },
+        deliveries: { select: { id: true } },
+        _count: { select: { comments: true, reports: true, deliveries: true, sightings: true } },
+      },
+    });
+    if (!broadcast) throw new NotFoundException("Broadcast not found");
+    return { data: broadcast };
+  }
+
+  async viewMedia(id: string, mediaId: string, actor: JwtPayload) {
+    await this.getScoped(id, actor);
+    const media = await this.prisma.broadcastMedia.findFirst({
+      where: { id: mediaId, broadcastId: id, deletedAt: null },
+    });
+    if (!media) throw new NotFoundException("Broadcast evidence not found");
+    const signed = await this.signDownloadUrl(media.objectKey, 300);
+    await this.audit.record({
+      actor,
+      action: "broadcast.evidence_viewed",
+      entityType: "broadcast_media",
+      entityId: media.id,
+      metadata: { broadcastId: id, mediaType: media.mediaType },
+    });
+    return {
+      data: {
+        id: media.id,
+        mediaType: media.mediaType,
+        contentType: media.contentType,
+        durationSeconds: media.durationSeconds,
+      },
+      signedUrl: signed.url,
+      expiresInSeconds: signed.expiresInSeconds,
+    };
   }
 
   async create(dto: CreateBroadcastDto & { country?: string; state?: string; lga?: string }, actor: JwtPayload) {
@@ -283,13 +330,35 @@ export class BroadcastAdminService {
   }
 
   private jurisdictionWhere(actor: JwtPayload) {
-    if (actor.role === "Super Admin") return {};
-    return {
-      OR: [
-        { country: actor.country },
-        { jurisdiction: { country: actor.country } },
-      ],
-    } as never;
+    if (actor.role === AdminRoleName.SuperAdmin) return {};
+    const country = actor.country ?? "__no_country__";
+    if (actor.role === AdminRoleName.CountryAdmin) {
+      return { OR: [{ country }, { jurisdiction: { country } }] } as never;
+    }
+    if (actor.role === AdminRoleName.StateAdmin) {
+      return {
+        OR: [
+          { country, state: actor.state ?? "__no_state__" },
+          { jurisdiction: { country, state: actor.state ?? "__no_state__" } },
+        ],
+      } as never;
+    }
+    if (
+      actor.role === AdminRoleName.LgaAdmin
+      || actor.role === AdminRoleName.CallCenterAgent
+      || actor.role === AdminRoleName.OversightAuditor
+    ) {
+      return {
+        OR: [
+          { country, state: actor.state ?? "__no_state__", lga: actor.lga ?? "__no_lga__" },
+          { jurisdiction: { country, state: actor.state ?? "__no_state__", lga: actor.lga ?? "__no_lga__" } },
+        ],
+      } as never;
+    }
+    if (actor.role === AdminRoleName.AgencyAdmin || actor.role === AdminRoleName.PoliceSecurityOfficer) {
+      return { incident: { assignedAgencyId: actor.agencyId ?? "__no_agency__" } } as never;
+    }
+    return { id: "__deny_all__" } as never;
   }
 
   private async getScoped(id: string, actor: JwtPayload) {

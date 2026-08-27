@@ -78,11 +78,11 @@ export function AudioEvidencePlayer({ incidentId, media }: Props) {
       ) : null}
       {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
       <p className="mt-3 rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">
-        Automated transcript — verify against the original audio.
+        AI-generated text — verify against the original audio.
       </p>
       {media.transcript ? (
         <div className="mt-3">
-          <p className="text-xs uppercase text-muted">Transcript</p>
+          <p className="text-xs uppercase text-muted">AI Transcript</p>
           <p className="mt-1 whitespace-pre-wrap text-sm">{media.transcript}</p>
           <p className="mt-2 text-xs text-muted">
             Language: {media.selectedLanguage ?? "—"} · Detected: {media.detectedLanguage ?? "—"}
@@ -98,7 +98,7 @@ export function AudioEvidencePlayer({ incidentId, media }: Props) {
       )}
       {media.translatedTranscript ? (
         <div className="mt-3">
-          <p className="text-xs uppercase text-muted">Translation</p>
+          <p className="text-xs uppercase text-muted">AI Translation</p>
           <p className="mt-1 whitespace-pre-wrap text-sm">{media.translatedTranscript}</p>
         </div>
       ) : null}

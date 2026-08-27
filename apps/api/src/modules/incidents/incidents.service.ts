@@ -520,7 +520,14 @@ export class IncidentsService {
   async get(id: string, actor?: JwtPayload) {
     const incident = await this.prisma.incident.findFirst({
       where: { id, ...this.incidentScopeWhere(actor) },
-      include: { media: true, timeline: { orderBy: { createdAt: "asc" } }, statusHistory: { orderBy: { createdAt: "asc" } }, locationUpdates: { orderBy: { capturedAt: "asc" } } },
+      include: {
+        media: true,
+        reporter: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+        assignedAgency: { select: { name: true } },
+        timeline: { include: { actor: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } }, orderBy: { createdAt: "asc" } },
+        statusHistory: { include: { changedBy: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } } }, orderBy: { createdAt: "asc" } },
+        locationUpdates: { orderBy: { capturedAt: "asc" }, take: 500 },
+      },
     });
     if (!incident) throw new NotFoundException("Incident not found or outside your scope");
     await this.audit.record({
