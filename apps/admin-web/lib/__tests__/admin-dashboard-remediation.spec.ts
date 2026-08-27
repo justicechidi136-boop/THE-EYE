@@ -65,10 +65,12 @@ describe("admin dashboard remediation", () => {
     expect(page).toContain("mediaAccessPath");
   });
 
-  it("renders real road tiles and a chronological polylined trail", () => {
-    const map = readFileSync(join(process.cwd(), "components", "location-trail-map.tsx"), "utf8");
-    expect(map).toContain("openstreetmap.org/export/embed.html");
-    expect(map).toContain("<polyline");
+    it("renders real road tiles and a chronological polylined trail", () => {
+      const map = readFileSync(join(process.cwd(), "components", "location-trail-map.tsx"), "utf8");
+      expect(map).toContain("tile.openstreetmap.org");
+      expect(map).toContain("© OpenStreetMap contributors");
+      expect(map.includes("<iframe")).toBe(false);
+      expect(map).toContain("<polyline");
     expect(map).toContain("sanitizeLocationTrail");
     expect(map.includes("leaflet-grid")).toBe(false);
     expect(map).toContain("setInterval(refresh, 5000)");
