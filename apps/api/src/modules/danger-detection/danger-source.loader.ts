@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import type { DangerSourceType } from "@the-eye/shared";
+import type { DangerAlertCodeValue, DangerSourceType } from "@the-eye/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { isUserSelectableDangerCode } from "../danger-trigger/danger-trigger.policy";
 
 const SAFETY_POST_TYPES = new Set([
   "SuspiciousActivity", "LostChild", "MissingPerson", "CrimeAlert", "AccidentAlert",
@@ -17,6 +18,7 @@ export type LoadedDangerSource = {
   latitude?: number;
   longitude?: number;
   occurredAt?: Date;
+  userDeclaredDangerAlertCode?: DangerAlertCodeValue;
 };
 
 @Injectable()
@@ -83,6 +85,7 @@ export class DangerSourceLoader {
     if (!text) return null;
     const latitude = this.coordinate(location?.manualLatitude ?? location?.latitude, -90, 90);
     const longitude = this.coordinate(location?.manualLongitude ?? location?.longitude, -180, 180);
+    const declaredCode = location?.metadata?.userDeclaredDangerAlertCode;
     return {
       sourceType,
       sourceId,
@@ -93,6 +96,9 @@ export class DangerSourceLoader {
       latitude,
       longitude,
       occurredAt: occurredAt ?? location?.occurredAt ?? location?.createdAt,
+      userDeclaredDangerAlertCode: isUserSelectableDangerCode(declaredCode)
+        ? declaredCode
+        : undefined,
     };
   }
 

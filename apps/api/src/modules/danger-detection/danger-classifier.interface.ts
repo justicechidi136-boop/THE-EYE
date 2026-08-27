@@ -1,4 +1,8 @@
-import type { DangerClassification, DangerSourceType } from "@the-eye/shared";
+import type {
+  DangerAlertCodeValue,
+  DangerClassification,
+  DangerSourceType,
+} from "@the-eye/shared";
 
 export const DANGER_CLASSIFIER = Symbol("DANGER_CLASSIFIER");
 
@@ -8,6 +12,7 @@ export type DangerClassifierInput = {
   text: string;
   sourceLocale?: string;
   occurredAt?: Date;
+  userDeclaredDangerAlertCode?: DangerAlertCodeValue;
 };
 
 export type DangerClassifierResult = DangerClassification & {

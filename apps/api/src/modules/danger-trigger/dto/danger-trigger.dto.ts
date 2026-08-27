@@ -1,17 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
-import { DangerAlertCode, type DangerAlertCodeValue } from "@the-eye/shared";
-
-const USER_SELECTABLE_DANGER_CODES = new Set<DangerAlertCodeValue>([
-  DangerAlertCode.FIRE_NEARBY,
-  DangerAlertCode.ARMED_ROBBERY_NEARBY,
-  DangerAlertCode.KIDNAPPING_NEARBY,
-  DangerAlertCode.ACTIVE_SHOOTER_NEARBY,
-  DangerAlertCode.CIVIL_DISTURBANCE_NEARBY,
-  DangerAlertCode.BANDIT_ATTACK_NEARBY,
-  DangerAlertCode.CULT_CLASH_NEARBY,
-  DangerAlertCode.COMMUNITY_CRISIS_NEARBY,
-  DangerAlertCode.KILLING_NEARBY,
-]);
+import type { DangerAlertCodeValue } from "@the-eye/shared";
+import { isUserSelectableDangerCode } from "../danger-trigger.policy";
 
 export type StartDangerTriggerDto = {
   clientTriggerId: string;
@@ -47,7 +36,7 @@ export function validateStartDangerTriggerDto(dto: StartDangerTriggerDto) {
   }
   if (
     dto.dangerAlertCode != null &&
-    !USER_SELECTABLE_DANGER_CODES.has(dto.dangerAlertCode)
+    !isUserSelectableDangerCode(dto.dangerAlertCode)
   ) {
     throw new BadRequestException("Select a valid danger type");
   }
