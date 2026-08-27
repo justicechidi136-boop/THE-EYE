@@ -4,10 +4,8 @@ import 'package:the_eye_field_ops/danger_alerts/field_danger_alert.dart';
 import 'package:the_eye_field_ops/danger_alerts/field_danger_alert_dialog.dart';
 
 void main() {
-  testWidgets('danger alert fits a short landscape tablet without overlap', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1280, 600);
+  testWidgets('danger alert fits a 1280x800 landscape tablet', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -40,6 +38,53 @@ void main() {
     expect(find.text('About 1.4 km away'), findsOneWidget);
     expect(find.text('Open Map'), findsOneWidget);
     expect(find.text('I have seen this alert'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('danger alert remains usable at reduced height and large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final alert = FieldDangerAlert(
+      eventId: 'event-2',
+      alertId: 'alert-2',
+      version: 1,
+      dangerType: 'OTHER IMMEDIATE DANGER REQUIRING URGENT RESPONSE',
+      area:
+          'A deliberately long operational area label, Port Harcourt, Rivers State',
+      issuedAt: DateTime.now(),
+      distanceMeters: 350,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.5)),
+              child: child!,
+            ),
+        home: Scaffold(
+          body: FieldDangerAlertDialog(
+            alert: alert,
+            elapsedLabel: '2 minutes',
+            onOpenMap: () {},
+            onAcknowledge: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text(alert.dangerType), findsOneWidget);
+    expect(find.text(alert.area), findsOneWidget);
+    expect(find.text('Open Map'), findsOneWidget);
+    expect(find.text('I have seen this alert'), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

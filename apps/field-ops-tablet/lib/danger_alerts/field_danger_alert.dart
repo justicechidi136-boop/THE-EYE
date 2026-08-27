@@ -41,8 +41,7 @@ class FieldDangerAlert {
   final int? distanceMeters;
 
   String get dedupeKey => '$alertId:$version';
-  String get speech =>
-      '$dangerType danger alert. $dangerType reported in $area.';
+  String get speech => 'Danger alert. $dangerType reported in $area.';
   String get distanceLabel {
     final distance = distanceMeters;
     if (distance == null) return '';
