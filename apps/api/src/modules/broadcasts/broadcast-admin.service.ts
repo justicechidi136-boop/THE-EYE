@@ -82,8 +82,18 @@ export class BroadcastAdminService {
       include: {
         creator: { select: { displayName: true } },
         creatorUser: { select: { profile: { select: { firstName: true, lastName: true } } } },
-        media: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
-        sightings: { include: { media: { where: { deletedAt: null } } }, orderBy: { createdAt: "desc" } },
+        media: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            mediaType: true,
+            role: true,
+            contentType: true,
+            durationSeconds: true,
+          },
+        },
+        sightings: { orderBy: { createdAt: "desc" } },
         deliveries: { select: { id: true } },
         _count: { select: { comments: true, reports: true, deliveries: true, sightings: true } },
       },
