@@ -281,7 +281,7 @@ describe("FcmProvider", () => {
     }));
   });
 
-  it("uses a data-only high-priority payload for native mobile danger alerts", async () => {
+  it("uses a visible alarm payload for native mobile danger alerts", async () => {
     const config = {
       get: (key: string) => {
         if (key === "THE_EYE_APP_ENV") return "production";
@@ -339,8 +339,14 @@ describe("FcmProvider", () => {
     }
 
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(requestBody.message.notification).toBeUndefined();
+    expect(requestBody.message.notification).toEqual({
+      title: "Danger Alert Nearby",
+      body: "A serious safety alert was triggered nearby.",
+    });
     expect(requestBody.message.android.priority).toBe("high");
+    expect(requestBody.message.android.notification.channelId).toBe(
+      "the_eye_danger_alerts_v2",
+    );
     expect(requestBody.message.data.nativeCriticalAlert).toBe("true");
     expect(requestBody.message.data.title).toBe("Danger Alert Nearby");
   });

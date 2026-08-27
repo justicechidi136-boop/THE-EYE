@@ -17,6 +17,7 @@ import type {
   FieldLoginDto,
   FieldRefreshDto,
   RegisterFieldDeviceDto,
+  RegisterFieldPushTokenDto,
 } from "./dto/field-devices.dto";
 
 @ApiTags("field-devices")
@@ -69,6 +70,20 @@ export class FieldDevicesController {
     @Body() body: { action?: string; packageName?: string; ok?: boolean; environment?: string },
   ) {
     return this.launcherPolicy.recordLauncherAudit(request.user as never, body);
+  }
+
+  @Post("me/push-token")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  registerPushToken(@Req() request: { user: unknown }, @Body() dto: RegisterFieldPushTokenDto) {
+    return this.devices.registerPushToken(request.user as never, dto);
+  }
+
+  @Post("me/push-token/deactivate")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  deactivatePushTokens(@Req() request: { user: unknown }) {
+    return this.devices.deactivatePushTokens(request.user as never);
   }
 
   @Post("me/activation-code/regenerate")

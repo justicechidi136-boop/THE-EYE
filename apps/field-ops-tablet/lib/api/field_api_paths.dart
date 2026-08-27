@@ -116,6 +116,8 @@ abstract final class FieldApiPaths {
   // Sprint 3 — GIS, events, safety, backup, comms
   static const mapContext = '/field/map/context';
   static const eventsPoll = '/field/events';
+  static const pushToken = '/field/devices/me/push-token';
+  static const pushTokenDeactivate = '/field/devices/me/push-token/deactivate';
   static const safetyPanic = '/field/safety/panic';
   static const safetyOfficerDown = '/field/safety/officer-down';
   static const safetyDistress = '/field/safety/distress';

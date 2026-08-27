@@ -64,6 +64,7 @@ function buildService() {
       update: jest.fn().mockResolvedValue({ id: "session-1", metadata: {} }),
     },
     deviceGeoState: { findMany: jest.fn().mockResolvedValue([]) },
+    fieldDevice: { findMany: jest.fn().mockResolvedValue([]) },
     $queryRawUnsafe: jest.fn().mockResolvedValue([]),
   } as any;
   const jurisdiction = {
@@ -200,6 +201,42 @@ describe("DangerTriggerService", () => {
       .filter((input: any) => input.userId === "user-b" && input.channels.includes("watch_push"));
     expect(userBWatchAlerts.length).toBe(1);
     expect(userBWatchAlerts[0].metadata.deviceId).toBeUndefined();
+  });
+
+  it("notifies only active field tablets inside the authorized radius", async () => {
+    const { service, prisma, notifications } = buildService();
+    const now = new Date();
+    prisma.fieldDevice.findMany.mockResolvedValue([
+      {
+        id: "field-inside",
+        assignedUserId: "admin-inside",
+        lastKnownLatitude: 6.5244,
+        lastKnownLongitude: 3.3792,
+        lastLocationAt: now,
+      },
+      {
+        id: "field-outside",
+        assignedUserId: "admin-outside",
+        lastKnownLatitude: 6.58,
+        lastKnownLongitude: 3.3792,
+        lastLocationAt: now,
+      },
+    ]);
+
+    const result = await service.activate(
+      "event-1",
+      { liveVoiceSessionId: "session-1", connectedAt: now.toISOString() },
+      actor,
+    );
+
+    const fieldAlerts = notifications.create.mock.calls
+      .map((call: any[]) => call[0])
+      .filter((input: any) => input.metadata?.deviceId?.startsWith("field-"));
+    expect(fieldAlerts.length).toBe(1);
+    expect(fieldAlerts[0].adminUserId).toBe("admin-inside");
+    expect(fieldAlerts[0].metadata.preciseReporterLocationExposed).toBe(false);
+    expect(fieldAlerts[0].metadata.dangerAlert.expiresAt).toBeDefined();
+    expect(result.fanout.fieldRecipients).toBe(1);
   });
 
   it("classifies repeated non-QA danger triggers near the requested area", async () => {

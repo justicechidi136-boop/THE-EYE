@@ -88,8 +88,8 @@ export class FcmProvider implements OnModuleInit {
       );
     }
 
-    if (!payload.userId && !payload.targetToken) {
-      throw new NotificationDispatchError("Push notifications require a userId or targetToken", "firebase-cloud-messaging");
+    if (!payload.userId && !payload.adminUserId && !payload.targetToken) {
+      throw new NotificationDispatchError("Push notifications require a recipient or targetToken", "firebase-cloud-messaging");
     }
 
     const tokens = await this.resolveTargetTokens(payload);
@@ -163,9 +163,7 @@ export class FcmProvider implements OnModuleInit {
           body: JSON.stringify({
             message: {
               token: entry.token,
-              notification: nativeMobileDangerAlert
-                ? undefined
-                : { title: payload.title, body: payload.body },
+              notification: { title: payload.title, body: payload.body },
               data: {
                 title: payload.title,
                 body: payload.body,
@@ -206,8 +204,19 @@ export class FcmProvider implements OnModuleInit {
               },
               android: {
                 priority: emergency && !silent ? "high" : "normal",
-                notification: payload.channel === "watch_push" && emergency
-                  ? { channelId: "theeye_watch_critical_alerts_v2" }
+                ttl: nativeMobileDangerAlert ? "1800s" : undefined,
+                notification: emergency
+                  ? {
+                      channelId: payload.channel === "watch_push"
+                        ? "theeye_watch_critical_alerts_v2"
+                        : nativeMobileDangerAlert
+                          ? "the_eye_danger_alerts_v2"
+                          : "the_eye_emergency",
+                      sound: "default",
+                      ...(payload.channel === "watch_push" ? { icon: "ic_danger_alert", color: "#D32F2F" } : {}),
+                      visibility: "PUBLIC",
+                      notificationPriority: "PRIORITY_MAX",
+                    }
                   : undefined,
               },
               apns: {
@@ -284,6 +293,24 @@ export class FcmProvider implements OnModuleInit {
       return entry ? [entry] : [];
     }
 
+    if (payload.adminUserId) {
+      return (this.prisma as any).fieldDevicePushToken.findMany({
+        where: {
+          isActive: true,
+          ...environmentFilter,
+          device: {
+            assignedUserId: payload.adminUserId,
+            registrationStatus: "Active",
+            isRevoked: false,
+            isLost: false,
+            ...(payload.deviceId ? { id: payload.deviceId } : {}),
+          },
+        },
+        orderBy: { lastSeenAt: "desc" },
+        take: 3,
+      });
+    }
+
     return (this.prisma as any).userPushToken.findMany({
       where: {
         userId: payload.userId,
@@ -291,7 +318,7 @@ export class FcmProvider implements OnModuleInit {
         ...environmentFilter,
         ...(payload.channel === "watch_push"
           ? { platform: "android_watch", ...(payload.deviceId ? { deviceId: payload.deviceId } : {}) }
-          : {}),
+          : { platform: { not: "android_watch" } }),
       },
       orderBy: { lastSeenAt: "desc" },
       take: payload.channel === "watch_push" ? 3 : 10,
@@ -299,11 +326,17 @@ export class FcmProvider implements OnModuleInit {
   }
 
   private async deactivateInvalidToken(token: string) {
-    const updated = await (this.prisma as any).userPushToken.updateMany({
+    const [userUpdated, fieldUpdated] = await Promise.all([
+      (this.prisma as any).userPushToken.updateMany({
       where: { token, isActive: true },
       data: { isActive: false },
-    });
-    return updated.count > 0;
+      }),
+      (this.prisma as any).fieldDevicePushToken.updateMany({
+        where: { token, isActive: true },
+        data: { isActive: false },
+      }),
+    ]);
+    return userUpdated.count + fieldUpdated.count > 0;
   }
 
   private async getAccessToken(clientEmail: string, privateKey: string) {

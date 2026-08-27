@@ -25,7 +25,9 @@ import type {
   FieldDeviceHeartbeatDto,
   FieldDeviceRegistrationStatusQuery,
   RegisterFieldDeviceDto,
+  RegisterFieldPushTokenDto,
 } from "./dto/field-devices.dto";
+import { assertFieldSession } from "./field-session.util";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
@@ -36,6 +38,41 @@ export class FieldDevicesService {
     private readonly audit: AuditService,
     private readonly config: ConfigService,
   ) {}
+
+  async registerPushToken(actor: JwtPayload, dto: RegisterFieldPushTokenDto) {
+    const session = assertFieldSession(actor);
+    const token = dto.token?.trim();
+    if (!token || token.length < 20) throw new BadRequestException("A valid push token is required");
+    const expectedEnvironment = String(this.config.get("THE_EYE_APP_ENV") ?? "development").toLowerCase();
+    const appEnvironment = dto.appEnvironment ?? expectedEnvironment;
+    if (appEnvironment !== expectedEnvironment) {
+      throw new ForbiddenException(`Push tokens must be registered for ${expectedEnvironment}`);
+    }
+    const registered = await (this.prisma as any).fieldDevicePushToken.upsert({
+      where: { token },
+      update: {
+        fieldDeviceId: session.fieldDeviceId,
+        appEnvironment,
+        isActive: true,
+        lastSeenAt: new Date(),
+      },
+      create: {
+        fieldDeviceId: session.fieldDeviceId,
+        token,
+        appEnvironment,
+      },
+    });
+    return { data: { id: registered.id, registered: true } };
+  }
+
+  async deactivatePushTokens(actor: JwtPayload) {
+    const session = assertFieldSession(actor);
+    const result = await (this.prisma as any).fieldDevicePushToken.updateMany({
+      where: { fieldDeviceId: session.fieldDeviceId, isActive: true },
+      data: { isActive: false },
+    });
+    return { updated: result.count };
+  }
 
   async createRegistrationChallenge() {
     const challenge = randomToken(32);

@@ -1,0 +1,103 @@
+import "package:flutter_tts/flutter_tts.dart";
+
+const _trustedDangerLabels = <String, String>{
+  "DANGER_ZONE_ARMED_ROBBERY_NEARBY": "Active robbery",
+  "DANGER_ZONE_KIDNAPPING_NEARBY": "Kidnapping",
+  "DANGER_ZONE_VIOLENT_ATTACK_NEARBY": "Violent attack",
+  "DANGER_ZONE_ACTIVE_SHOOTER_NEARBY": "Gunfire",
+  "DANGER_ZONE_COMMUNAL_VIOLENCE_NEARBY": "Communal violence",
+  "DANGER_ZONE_TERRORIST_THREAT_NEARBY": "Terrorist threat",
+  "DANGER_ZONE_FIRE_NEARBY": "Fire",
+  "DANGER_ZONE_FLOOD_NEARBY": "Flood emergency",
+  "DANGER_ZONE_GAS_LEAK_NEARBY": "Gas leak",
+  "DANGER_ZONE_HAZARDOUS_AREA_NEARBY": "Hazardous area",
+  "DANGER_ZONE_ROAD_DANGER_NEARBY": "Road hazard",
+  "DANGER_ZONE_BUILDING_COLLAPSE_NEARBY": "Building collapse",
+  "DANGER_ZONE_CIVIL_DISTURBANCE_NEARBY": "Civil disturbance",
+  "DANGER_ZONE_POLICE_ADVISORY_NEARBY": "Police safety advisory",
+  "DANGER_ZONE_MISSING_CHILD_NEARBY": "Missing child",
+  "DANGER_ZONE_EVACUATION_NEARBY": "Evacuation",
+  "DANGER_ZONE_GENERAL_ENTRY": "Other immediate danger",
+  "DANGER_ZONE_PROXIMITY_INCREASE": "Danger moved closer",
+};
+
+class IncomingDangerAlert {
+  const IncomingDangerAlert({
+    required this.eventId,
+    required this.alertId,
+    required this.version,
+    required this.dangerType,
+    required this.area,
+    required this.issuedAt,
+    this.expiresAt,
+    this.distanceMeters,
+    this.liveAvailable = false,
+  });
+
+  final String eventId;
+  final String alertId;
+  final int version;
+  final String dangerType;
+  final String area;
+  final DateTime issuedAt;
+  final DateTime? expiresAt;
+  final int? distanceMeters;
+  final bool liveAvailable;
+
+  String get dedupeKey => "$alertId:$version";
+  bool get isExpired =>
+      expiresAt != null && !expiresAt!.isAfter(DateTime.now());
+  String get spokenText => "Danger alert. $dangerType reported in $area.";
+
+  static IncomingDangerAlert? fromData(Map<String, dynamic> data) {
+    if (data["type"]?.toString() != "NearbyDangerWarning") return null;
+    final state = data["alertLifecycleState"]?.toString().toUpperCase();
+    if (state == "CLEARED" || state == "RESOLVED" || state == "FALSE_ALARM") {
+      return null;
+    }
+    final code = data["dangerAlertCode"]?.toString() ?? "";
+    final label = _trustedDangerLabels[code];
+    if (label == null) return null;
+    final alertId = data["alertId"]?.toString().trim() ?? "";
+    final eventId = data["zoneId"]?.toString().trim().isNotEmpty == true
+        ? data["zoneId"].toString().trim()
+        : data["dangerEventId"]?.toString().trim() ?? "";
+    final issuedAt = DateTime.tryParse(data["issuedAt"]?.toString() ?? "");
+    if (alertId.isEmpty || eventId.isEmpty || issuedAt == null) return null;
+    final parsed = IncomingDangerAlert(
+      eventId: eventId,
+      alertId: alertId,
+      version: int.tryParse(data["alertVersion"]?.toString() ?? "") ?? 1,
+      dangerType: label,
+      area: _safeArea(data["areaName"]?.toString()),
+      issuedAt: issuedAt,
+      expiresAt: DateTime.tryParse(data["expiresAt"]?.toString() ?? ""),
+      distanceMeters: int.tryParse(data["distanceMeters"]?.toString() ?? ""),
+      liveAvailable: data["liveAvailable"]?.toString() == "true",
+    );
+    return parsed.isExpired ? null : parsed;
+  }
+
+  static String _safeArea(String? value) {
+    final normalized = value?.trim() ?? "";
+    if (normalized.isEmpty) return "your area";
+    return normalized.length <= 80 ? normalized : normalized.substring(0, 80);
+  }
+}
+
+class MobileDangerAlertAnnouncer {
+  MobileDangerAlertAnnouncer({FlutterTts? tts}) : _tts = tts ?? FlutterTts();
+
+  final FlutterTts _tts;
+
+  Future<void> speak(IncomingDangerAlert alert,
+      {String locale = "en-NG"}) async {
+    final available = await _tts.isLanguageAvailable(locale) == true;
+    await _tts.setLanguage(available ? locale : "en-NG");
+    await _tts.setSpeechRate(0.45);
+    await _tts.setPitch(1.0);
+    await _tts.speak(alert.spokenText);
+  }
+
+  Future<void> stop() => _tts.stop();
+}

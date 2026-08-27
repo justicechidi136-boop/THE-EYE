@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../config/app_flavor.dart';
 import '../../config/field_device_mode.dart';
@@ -66,6 +67,7 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
     try {
       await widget.services.restoreSession();
       final dash = await widget.services.workflows.getDashboard();
+      final locationLabel = await _resolveHumanReadableLocation();
       if (!mounted) return;
       setState(() {
         _officer = officer ?? dash['officerName']?.toString();
@@ -75,7 +77,7 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
         _mode = dash['operationalMode']?.toString() ?? 'Idle';
         _assignment = dash['activeAssignmentLabel']?.toString() ?? 'None';
         _unread = (dash['unreadAlerts'] as num?)?.toInt() ?? 0;
-        _gps = dash['gpsLabel']?.toString() ?? 'Acquiring';
+        _gps = locationLabel;
         _network = dash['networkType']?.toString() ?? 'Unknown';
         _battery =
             dash['batteryLevel'] != null ? '${dash['batteryLevel']}%' : '—';
@@ -89,6 +91,35 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
         _unit = deviceId;
       });
     }
+  }
+
+  Future<String> _resolveHumanReadableLocation() async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      final label = await widget.services.deviceContext.reverseGeocode(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      if (label != null && label.trim().isNotEmpty) return label;
+      return 'Address unavailable';
+    } on Object {
+      return _gps != '—' && _gps != 'Acquiring' ? _gps : 'Location unavailable';
+    }
+  }
+
+  void _openDangerAlert() {
+    if (widget.services.dangerAlerts.activeAlert.value != null) {
+      widget.services.dangerAlerts.reopenActiveAlert();
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('No active danger alerts.')));
   }
 
   Future<void> _openModule(LauncherModule module) async {
@@ -121,15 +152,21 @@ class _FieldLauncherHomeScreenState extends State<FieldLauncherHomeScreen> {
         backgroundColor: const Color(0xFF0B1420),
         body: Column(
           children: [
-            OperationalStatusStrip(
-              gpsLabel: _gps,
-              networkLabel: _network,
-              batteryLabel: _battery,
-              syncLabel: _sync,
-              shiftLabel: _shift,
-              modeLabel: _mode,
-              assignmentLabel: _assignment,
-              unreadAlerts: _unread,
+            ValueListenableBuilder(
+              valueListenable: widget.services.dangerAlerts.activeAlert,
+              builder:
+                  (context, activeAlert, _) => OperationalStatusStrip(
+                    gpsLabel: _gps,
+                    networkLabel: _network,
+                    batteryLabel: _battery,
+                    syncLabel: _sync,
+                    shiftLabel: _shift,
+                    modeLabel: _mode,
+                    assignmentLabel: _assignment,
+                    unreadAlerts: _unread,
+                    dangerAlertActive: activeAlert != null,
+                    onDangerAlertPressed: _openDangerAlert,
+                  ),
             ),
             Expanded(
               child: Padding(

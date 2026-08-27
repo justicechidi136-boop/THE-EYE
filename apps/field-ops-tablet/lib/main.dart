@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:the_eye_flutter_l10n/the_eye_locales.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'l10n/generated/field_localizations.dart';
 import 'screens/approval_pending_screen.dart';
@@ -28,6 +29,7 @@ import 'screens/splash_screen.dart';
 import 'screens/unauthorized_screen.dart';
 import 'services/field_app_services.dart';
 import 'theme/field_theme.dart';
+import 'danger_alerts/field_danger_alert.dart';
 
 void main() {
   // Bindings and runApp must share the same zone — otherwise async startup
@@ -63,6 +65,8 @@ class TheEyeFieldOpsApp extends StatefulWidget {
 class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
   final FieldAppServices _services = FieldAppServices();
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
+  StreamSubscription<FieldDangerAlert>? _dangerSubscription;
+  bool _dangerVisible = false;
 
   @override
   void initState() {
@@ -76,10 +80,94 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
         deviceLocales: PlatformDispatcher.instance.locales,
       ),
     );
+    _dangerSubscription = _services.dangerAlerts.alerts.listen((alert) {
+      unawaited(_showDangerAlert(alert));
+    });
+  }
+
+  Future<void> _showDangerAlert(FieldDangerAlert alert) async {
+    if (_dangerVisible) return;
+    final context = _navKey.currentContext;
+    if (context == null) return;
+    _dangerVisible = true;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (dialogContext) => AlertDialog(
+            icon: const Icon(
+              Icons.warning_rounded,
+              color: FieldColors.danger,
+              size: 64,
+              semanticLabel: 'Red danger triangle',
+            ),
+            title: const Text('DANGER ALERT', textAlign: TextAlign.center),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    alert.dangerType,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(dialogContext).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(alert.area, textAlign: TextAlign.center),
+                  if (alert.distanceMeters != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      alert.distanceMeters! < 1000
+                          ? 'About ${alert.distanceMeters} m away'
+                          : 'About ${(alert.distanceMeters! / 1000).toStringAsFixed(1)} km away',
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text('Triggered ${_elapsed(alert.issuedAt)} ago'),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Approximate area only. Reporter identity and exact GPS remain private.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              OutlinedButton.icon(
+                onPressed:
+                    () => launchUrl(
+                      Uri.parse('geo:0,0?q=${Uri.encodeComponent(alert.area)}'),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Open Map'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await _services.dangerAlerts.acknowledge(alert);
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                },
+                child: const Text('I have seen this alert'),
+              ),
+            ],
+          ),
+    );
+    _dangerVisible = false;
+  }
+
+  String _elapsed(DateTime issuedAt) {
+    final seconds = DateTime.now()
+        .difference(issuedAt)
+        .inSeconds
+        .clamp(0, 3600);
+    if (seconds < 60) return '$seconds seconds';
+    return '${seconds ~/ 60} minutes';
   }
 
   @override
   void dispose() {
+    _dangerSubscription?.cancel();
     _services.dispose();
     super.dispose();
   }
