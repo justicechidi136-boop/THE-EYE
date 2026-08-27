@@ -43,6 +43,16 @@ describe("BroadcastAdminService detail and media", () => {
     expect(prisma.broadcast.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ id: "broadcast-1", deletedAt: null }),
     }));
+    const detailQuery = prisma.broadcast.findFirst.mock.calls[0]?.[0];
+    expect(detailQuery.include.media.select).toEqual({
+      id: true,
+      mediaType: true,
+      role: true,
+      contentType: true,
+      durationSeconds: true,
+    });
+    expect(Object.prototype.hasOwnProperty.call(detailQuery.include.media.select, "sizeBytes")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(detailQuery.include.sightings, "include")).toBe(false);
   });
 
   it("returns not found for out-of-scope detail without leaking existence", async () => {
