@@ -124,9 +124,14 @@ class FieldDangerAlertService {
     final available = await _tts.isLanguageAvailable(preferred) == true;
     await _tts.setLanguage(available ? preferred : 'en-NG');
     await _tts.setSpeechRate(0.45);
-    await _tts.speak(alert.speech);
+    await _tts.setPitch(1.0);
+    await _tts.setVolume(1.0);
     activeAlert.value = alert;
     _alerts.add(alert);
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    await _tts.stop();
+    await _tts.awaitSpeakCompletion(true);
+    await _tts.speak(alert.speech);
   }
 
   Future<void> dismissSound() => _tts.stop();

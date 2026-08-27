@@ -25,8 +25,9 @@ void main() {
     expect(alert.area, 'Airport Road');
     expect(
       alert.speech,
-      'Danger alert. ACTIVE ROBBERY reported in Airport Road.',
+      'ACTIVE ROBBERY danger alert. ACTIVE ROBBERY reported in Airport Road.',
     );
+    expect(alert.distanceLabel, 'About 1.4 km away');
     expect(alert.dedupeKey, 'danger:event-1:field-1:2');
   });
 
