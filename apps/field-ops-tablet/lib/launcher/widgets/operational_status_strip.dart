@@ -12,6 +12,8 @@ class OperationalStatusStrip extends StatelessWidget {
     required this.modeLabel,
     required this.assignmentLabel,
     required this.unreadAlerts,
+    required this.dangerAlertActive,
+    required this.onDangerAlertPressed,
   });
 
   final String gpsLabel;
@@ -22,6 +24,8 @@ class OperationalStatusStrip extends StatelessWidget {
   final String modeLabel;
   final String assignmentLabel;
   final int unreadAlerts;
+  final bool dangerAlertActive;
+  final VoidCallback onDangerAlertPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +55,15 @@ class OperationalStatusStrip extends StatelessWidget {
                 theme,
                 emphasize: unreadAlerts > 0,
               ),
+              _chip(
+                Icons.warning_amber_rounded,
+                'DANGER',
+                dangerAlertActive ? 'ACTIVE' : 'CLEAR',
+                theme,
+                emphasize: dangerAlertActive,
+                iconColor: Colors.amber,
+                onTap: onDangerAlertPressed,
+              ),
             ],
           ),
         ),
@@ -64,9 +77,15 @@ class OperationalStatusStrip extends StatelessWidget {
     String value,
     ThemeData theme, {
     bool emphasize = false,
+    Color? iconColor,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 110, minHeight: 56),
+    final content = Container(
+      constraints: BoxConstraints(
+        minWidth: 110,
+        minHeight: 56,
+        maxWidth: title == 'GPS' ? 280 : 220,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: emphasize ? const Color(0xFF7A1F1F) : const Color(0xFF1A2A40),
@@ -76,30 +95,50 @@ class OperationalStatusStrip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 22, color: emphasize ? Colors.amber : Colors.white70),
+          Icon(
+            icon,
+            size: 22,
+            color: iconColor ?? (emphasize ? Colors.amber : Colors.white70),
+          ),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: Colors.white54,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white54,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
                 ),
-              ),
-              Text(
-                value,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return content;
+    return Tooltip(
+      message:
+          dangerAlertActive
+              ? 'Open active danger alert'
+              : 'No active danger alerts',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: content,
       ),
     );
   }

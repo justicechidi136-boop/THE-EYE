@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_eye_field_ops/config/field_device_mode.dart';
 import 'package:the_eye_field_ops/launcher/approved_app_registry.dart';
@@ -18,8 +20,14 @@ void main() {
     });
 
     test('standard mode is not a launcher shell', () {
-      expect(FieldDeviceModeConfig.isLauncherShell(FieldDeviceMode.standard), isFalse);
-      expect(FieldDeviceModeConfig.isLauncherShell(FieldDeviceMode.launcher), isTrue);
+      expect(
+        FieldDeviceModeConfig.isLauncherShell(FieldDeviceMode.standard),
+        isFalse,
+      );
+      expect(
+        FieldDeviceModeConfig.isLauncherShell(FieldDeviceMode.launcher),
+        isTrue,
+      );
     });
   });
 
@@ -61,10 +69,7 @@ void main() {
     test('home route prefers launcher when enabled', () {
       final policy = LauncherPolicy.defaults(mode: FieldDeviceMode.launcher);
       expect(homeRouteForPolicy(policy), FieldRoutes.launcherHome);
-      expect(
-        homeRouteForPolicy(LauncherPolicy.defaults()),
-        FieldRoutes.home,
-      );
+      expect(homeRouteForPolicy(LauncherPolicy.defaults()), FieldRoutes.home);
     });
 
     test('locked policy routes to device lock', () {
@@ -77,10 +82,26 @@ void main() {
     });
 
     test('cache round-trip preserves mode', () {
-      final original = LauncherPolicy.defaults(mode: FieldDeviceMode.managedKiosk);
+      final original = LauncherPolicy.defaults(
+        mode: FieldDeviceMode.managedKiosk,
+      );
       final restored = LauncherPolicy.tryDecodeCache(original.encodeCache());
       expect(restored?.deviceMode, FieldDeviceMode.managedKiosk);
       expect(restored?.kioskEnabled, isTrue);
     });
   });
+
+  test(
+    'launcher resolves a readable location instead of using raw GPS data',
+    () {
+      final source =
+          File(
+            'lib/screens/launcher/field_launcher_home_screen.dart',
+          ).readAsStringSync();
+
+      expect(source, contains('_resolveHumanReadableLocation()'));
+      expect(source, contains('deviceContext.reverseGeocode('));
+      expect(source, isNot(contains("dash['gpsLabel']")));
+    },
+  );
 }

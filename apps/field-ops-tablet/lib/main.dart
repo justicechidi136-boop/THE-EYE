@@ -145,7 +145,7 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
               ),
               TextButton(
                 onPressed: () async {
-                  await _services.dangerAlerts.dismissSound();
+                  await _services.dangerAlerts.acknowledge(alert);
                   if (dialogContext.mounted) Navigator.pop(dialogContext);
                 },
                 child: const Text('I have seen this alert'),

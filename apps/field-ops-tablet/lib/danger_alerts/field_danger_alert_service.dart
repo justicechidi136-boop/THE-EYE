@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -34,6 +34,7 @@ class FieldDangerAlertService {
   final FlutterTts _tts;
   final _alerts = StreamController<FieldDangerAlert>.broadcast();
   final _seen = <String>{};
+  final ValueNotifier<FieldDangerAlert?> activeAlert = ValueNotifier(null);
   FirebaseMessaging? _messaging;
   bool _initialized = false;
 
@@ -124,10 +125,25 @@ class FieldDangerAlertService {
     await _tts.setLanguage(available ? preferred : 'en-NG');
     await _tts.setSpeechRate(0.45);
     await _tts.speak(alert.speech);
+    activeAlert.value = alert;
     _alerts.add(alert);
   }
 
   Future<void> dismissSound() => _tts.stop();
+
+  Future<void> acknowledge(FieldDangerAlert alert) async {
+    await dismissSound();
+    if (activeAlert.value?.dedupeKey == alert.dedupeKey) {
+      activeAlert.value = null;
+    }
+  }
+
+  void reopenActiveAlert() {
+    final alert = activeAlert.value;
+    if (alert != null && !alert.expired) {
+      _alerts.add(alert);
+    }
+  }
 
   Future<void> dispose() async {
     try {
@@ -135,6 +151,7 @@ class FieldDangerAlertService {
     } catch (_) {
       // Platform channels are unavailable in unit tests and during teardown.
     }
+    activeAlert.dispose();
     await _alerts.close();
   }
 }
