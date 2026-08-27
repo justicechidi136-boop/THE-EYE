@@ -4,6 +4,34 @@ import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
 import "../live_video/live_video_api_models.dart";
 
+class DangerTriggerCategory {
+  const DangerTriggerCategory(this.code, this.label);
+
+  final String code;
+  final String label;
+}
+
+const dangerTriggerCategories = <DangerTriggerCategory>[
+  DangerTriggerCategory("DANGER_ZONE_FIRE_NEARBY", "Fire"),
+  DangerTriggerCategory("DANGER_ZONE_ARMED_ROBBERY_NEARBY", "Armed robbery"),
+  DangerTriggerCategory("DANGER_ZONE_KIDNAPPING_NEARBY", "Kidnapping"),
+  DangerTriggerCategory(
+    "DANGER_ZONE_ACTIVE_SHOOTER_NEARBY",
+    "Shooting / gunfire",
+  ),
+  DangerTriggerCategory("DANGER_ZONE_CIVIL_DISTURBANCE_NEARBY", "Riot"),
+  DangerTriggerCategory(
+    "DANGER_ZONE_BANDIT_ATTACK_NEARBY",
+    "Bandit / unknown gunmen",
+  ),
+  DangerTriggerCategory("DANGER_ZONE_CULT_CLASH_NEARBY", "Cult clash"),
+  DangerTriggerCategory(
+    "DANGER_ZONE_COMMUNITY_CRISIS_NEARBY",
+    "Community crisis",
+  ),
+  DangerTriggerCategory("DANGER_ZONE_KILLING_NEARBY", "Killing"),
+];
+
 class DangerTriggerException implements Exception {
   const DangerTriggerException(this.message, {this.statusCode});
 
@@ -82,6 +110,7 @@ abstract class DangerTriggerGateway {
     required double longitude,
     required DateTime locationCapturedAt,
     required String locationSource,
+    required String dangerAlertCode,
     double? accuracyMeters,
     String? areaName,
   });
@@ -128,6 +157,7 @@ class DangerTriggerApiService implements DangerTriggerGateway {
     required double longitude,
     required DateTime locationCapturedAt,
     required String locationSource,
+    required String dangerAlertCode,
     double? accuracyMeters,
     String? areaName,
   }) async {
@@ -139,6 +169,7 @@ class DangerTriggerApiService implements DangerTriggerGateway {
         "longitude": longitude,
         "accuracyMeters": accuracyMeters,
         "locationSource": locationSource,
+        "dangerAlertCode": dangerAlertCode,
         "locationCapturedAt": locationCapturedAt.toUtc().toIso8601String(),
         "areaName": areaName,
         "lowBandwidthMode": true,
@@ -155,10 +186,12 @@ class DangerTriggerApiService implements DangerTriggerGateway {
       );
     }
     final data = Map<String, dynamic>.from((body["data"] as Map?) ?? const {});
-    final event =
-        Map<String, dynamic>.from((data["event"] as Map?) ?? const {});
-    final liveSession =
-        Map<String, dynamic>.from((data["liveSession"] as Map?) ?? const {});
+    final event = Map<String, dynamic>.from(
+      (data["event"] as Map?) ?? const {},
+    );
+    final liveSession = Map<String, dynamic>.from(
+      (data["liveSession"] as Map?) ?? const {},
+    );
     final eventId = event["id"]?.toString() ?? "";
     final sessionId = liveSession["id"]?.toString() ?? "";
     if (eventId.isEmpty || sessionId.isEmpty) {
@@ -186,16 +219,16 @@ class DangerTriggerApiService implements DangerTriggerGateway {
     required String liveSessionId,
     required DateTime connectedAt,
   }) async {
-    final response = await _apiClient.postJson(
-      TheEyeApiPaths.dangerTriggerActivate(eventId),
-      {
-        "liveVoiceSessionId": liveSessionId,
-        "connectedAt": connectedAt.toUtc().toIso8601String(),
-      },
-      accessToken: accessToken,
+    final response = await _apiClient
+        .postJson(TheEyeApiPaths.dangerTriggerActivate(eventId), {
+          "liveVoiceSessionId": liveSessionId,
+          "connectedAt": connectedAt.toUtc().toIso8601String(),
+        }, accessToken: accessToken);
+    _requireSuccess(
+      response.statusCode,
+      response.body,
+      "The voice connection started, but nearby alerts could not be activated.",
     );
-    _requireSuccess(response.statusCode, response.body,
-        "The voice connection started, but nearby alerts could not be activated.");
     final body = _decode(response.body);
     final fanout = Map<String, dynamic>.from(
       (body["fanout"] as Map?) ?? const {},
@@ -220,8 +253,11 @@ class DangerTriggerApiService implements DangerTriggerGateway {
       const {},
       accessToken: accessToken,
     );
-    _requireSuccess(response.statusCode, response.body,
-        "Unable to end the live voice broadcast.");
+    _requireSuccess(
+      response.statusCode,
+      response.body,
+      "Unable to end the live voice broadcast.",
+    );
   }
 
   @override
@@ -236,7 +272,10 @@ class DangerTriggerApiService implements DangerTriggerGateway {
       accessToken: accessToken,
     );
     _requireSuccess(
-        response.statusCode, response.body, "Unable to cancel this alert.");
+      response.statusCode,
+      response.body,
+      "Unable to cancel this alert.",
+    );
   }
 
   @override
@@ -283,8 +322,9 @@ class DangerTriggerApiService implements DangerTriggerGateway {
         statusCode: response.statusCode,
       );
     }
-    final connection =
-        Map<String, dynamic>.from((body["connection"] as Map?) ?? const {});
+    final connection = Map<String, dynamic>.from(
+      (body["connection"] as Map?) ?? const {},
+    );
     final serverUrl = connection["serverUrl"]?.toString() ?? "";
     final token = connection["participantToken"]?.toString() ?? "";
     final roomName = connection["roomName"]?.toString() ?? "";
@@ -303,8 +343,10 @@ class DangerTriggerApiService implements DangerTriggerGateway {
 
   void _requireSuccess(int statusCode, String raw, String fallback) {
     if (statusCode >= 200 && statusCode < 300) return;
-    throw DangerTriggerException(_errorMessage(_decode(raw), fallback),
-        statusCode: statusCode);
+    throw DangerTriggerException(
+      _errorMessage(_decode(raw), fallback),
+      statusCode: statusCode,
+    );
   }
 
   Map<String, dynamic> _decode(String raw) {

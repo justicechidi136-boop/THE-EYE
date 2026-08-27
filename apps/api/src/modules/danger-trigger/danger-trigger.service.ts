@@ -46,13 +46,17 @@ function dangerLabel(code: string) {
     case DangerAlertCode.FLOOD_NEARBY: return "Flood Emergency";
     case DangerAlertCode.BUILDING_COLLAPSE_NEARBY: return "Building Collapse";
     case DangerAlertCode.ROAD_DANGER_NEARBY: return "Road Hazard";
-    case DangerAlertCode.ACTIVE_SHOOTER_NEARBY: return "Gunfire";
+    case DangerAlertCode.ACTIVE_SHOOTER_NEARBY: return "Shooting or Gunfire";
     case DangerAlertCode.VIOLENT_ATTACK_NEARBY: return "Violent Attack";
     case DangerAlertCode.COMMUNAL_VIOLENCE_NEARBY: return "Communal Violence";
+    case DangerAlertCode.BANDIT_ATTACK_NEARBY: return "Bandit or Unknown Gunmen Attack";
+    case DangerAlertCode.CULT_CLASH_NEARBY: return "Cult Clash";
+    case DangerAlertCode.COMMUNITY_CRISIS_NEARBY: return "Community Crisis";
+    case DangerAlertCode.KILLING_NEARBY: return "Killing";
     case DangerAlertCode.TERRORIST_THREAT_NEARBY: return "Terrorist Threat";
     case DangerAlertCode.GAS_LEAK_NEARBY: return "Gas Leak";
     case DangerAlertCode.HAZARDOUS_AREA_NEARBY: return "Hazardous Area";
-    case DangerAlertCode.CIVIL_DISTURBANCE_NEARBY: return "Civil Disturbance";
+    case DangerAlertCode.CIVIL_DISTURBANCE_NEARBY: return "Riot";
     case DangerAlertCode.POLICE_ADVISORY_NEARBY: return "Police Safety Advisory";
     case DangerAlertCode.MISSING_CHILD_NEARBY: return "Missing Child";
     case DangerAlertCode.EVACUATION_NEARBY: return "Evacuation";
@@ -80,6 +84,9 @@ export class DangerTriggerService {
   ) {
     this.assertCitizen(actor);
     validateStartDangerTriggerDto(dto);
+    const dangerAlertCode = dto.dangerAlertCode ?? DangerAlertCode.GENERAL_ENTRY;
+    const userDeclaredDangerAlertCode = dto.dangerAlertCode ?? null;
+    const dangerAlertCodeSource = dto.dangerAlertCode ? "USER_SELECTED" : "LEGACY_FALLBACK";
     const prisma = this.prisma as any;
     const existingSignal = await prisma.dangerEventSignal.findUnique({
       where: { sourceType_sourceId: { sourceType: "LIVE_VOICE", sourceId: dto.clientTriggerId } },
@@ -139,6 +146,9 @@ export class DangerTriggerService {
           locationUncertain,
           aiDangerAnalysisIndependent: true,
           ambientMicrophoneSurveillance: false,
+          dangerAlertCode,
+          userDeclaredDangerAlertCode,
+          dangerAlertCodeSource,
         },
       },
     });
@@ -159,7 +169,11 @@ export class DangerTriggerService {
     const liveSession = (live as any).data;
     const radiusMeters = OWNER_APPROVED_MAX_DANGER_RADIUS_METERS;
     const clusterKey = dangerClusterKey(dto.latitude, dto.longitude);
-    const correlated = await this.findCorrelatedEvent(dto.latitude, dto.longitude);
+    const correlated = await this.findCorrelatedEvent(
+      dto.latitude,
+      dto.longitude,
+      dangerAlertCode,
+    );
     const event = correlated
       ? await prisma.dangerEvent.update({
           where: { id: correlated.id },
@@ -170,6 +184,7 @@ export class DangerTriggerService {
               ...(correlated.metadata ?? {}),
               latestLiveVoiceSessionId: liveSession.id,
               correlatedTriggerCount: Number(correlated.metadata?.correlatedTriggerCount ?? 1) + 1,
+              dangerAlertCode,
             },
           },
         })
@@ -197,6 +212,9 @@ export class DangerTriggerService {
               liveConnectionConfirmed: false,
               aiDangerAnalysisIndependent: true,
               ambientMicrophoneSurveillance: false,
+              dangerAlertCode,
+              userDeclaredDangerAlertCode,
+              dangerAlertCodeSource,
             },
           },
         });
@@ -212,7 +230,13 @@ export class DangerTriggerService {
         severity: "CRITICAL",
         latitude: dto.latitude,
         longitude: dto.longitude,
-        metadata: { locationUncertain, qaTest: dto.qaTest === true },
+        metadata: {
+          locationUncertain,
+          qaTest: dto.qaTest === true,
+          dangerAlertCode,
+          userDeclaredDangerAlertCode,
+          dangerAlertCodeSource,
+        },
       },
     });
     await prisma.liveVideoSession.update({
@@ -539,21 +563,29 @@ export class DangerTriggerService {
     return this.startResponse(event, live, incidentId);
   }
 
-  private async findCorrelatedEvent(latitude: number, longitude: number) {
+  private async findCorrelatedEvent(
+    latitude: number,
+    longitude: number,
+    dangerAlertCode: string,
+  ) {
     const since = new Date(Date.now() - 20 * 60_000);
     const candidates = await (this.prisma as any).dangerEvent.findMany({
       where: { state: { in: ["POTENTIAL", "ACTIVE", "VERIFIED"] }, createdAt: { gte: since } },
       take: 50,
       orderBy: { createdAt: "desc" },
     });
-    return candidates.find((candidate: any) => dangerRecipientEligibility({
-      dangerLatitude: latitude,
-      dangerLongitude: longitude,
-      recipientLatitude: Number(candidate.latitude),
-      recipientLongitude: Number(candidate.longitude),
-      recipientLocationAt: new Date(),
-      radiusMeters: 750,
-    }).eligible);
+    return candidates.find(
+      (candidate: any) =>
+        this.normalizedDangerCode(candidate) === dangerAlertCode &&
+        dangerRecipientEligibility({
+          dangerLatitude: latitude,
+          dangerLongitude: longitude,
+          recipientLatitude: Number(candidate.latitude),
+          recipientLongitude: Number(candidate.longitude),
+          recipientLocationAt: new Date(),
+          radiusMeters: 750,
+        }).eligible,
+    );
   }
 
   private async fanout(event: any) {
@@ -765,7 +797,7 @@ export class DangerTriggerService {
       areaName: event.areaName ?? undefined,
       notificationPriority: "Critical",
       deepLink: `theeye://danger-trigger/events/${event.id}`,
-      metadata: { dangerAlertCode: DangerAlertCode.GENERAL_ENTRY },
+      metadata: { dangerAlertCode: this.normalizedDangerCode(event) },
       config: this.config as unknown as Record<string, unknown>,
     });
     return {

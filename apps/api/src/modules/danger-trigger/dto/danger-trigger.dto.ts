@@ -1,4 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
+import type { DangerAlertCodeValue } from "@the-eye/shared";
+import { isUserSelectableDangerCode } from "../danger-trigger.policy";
 
 export type StartDangerTriggerDto = {
   clientTriggerId: string;
@@ -8,6 +10,7 @@ export type StartDangerTriggerDto = {
   locationSource: "freshGps" | "cachedDevice" | "networkLocation";
   locationCapturedAt: string;
   areaName?: string;
+  dangerAlertCode?: DangerAlertCodeValue;
   lowBandwidthMode?: boolean;
   qaTest?: boolean;
 };
@@ -30,6 +33,12 @@ export function validateStartDangerTriggerDto(dto: StartDangerTriggerDto) {
   }
   if (!new Set(["freshGps", "cachedDevice", "networkLocation"]).has(dto.locationSource)) {
     throw new BadRequestException("locationSource is invalid");
+  }
+  if (
+    dto.dangerAlertCode != null &&
+    !isUserSelectableDangerCode(dto.dangerAlertCode)
+  ) {
+    throw new BadRequestException("Select a valid danger type");
   }
   const capturedAt = new Date(dto.locationCapturedAt);
   if (Number.isNaN(capturedAt.getTime())) throw new BadRequestException("locationCapturedAt is invalid");

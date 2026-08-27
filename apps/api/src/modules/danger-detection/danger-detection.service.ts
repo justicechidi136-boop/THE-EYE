@@ -71,6 +71,7 @@ export class DangerDetectionService {
         text: normalizedText,
         sourceLocale: source.sourceLocale,
         occurredAt: source.occurredAt,
+        userDeclaredDangerAlertCode: source.userDeclaredDangerAlertCode,
       });
       const since = new Date((source.occurredAt ?? new Date()).getTime() - runtime.correlationWindowMinutes * 60_000);
       const candidates = await prisma.dangerDetectionAssessment.findMany({
@@ -161,7 +162,13 @@ export class DangerDetectionService {
       locationUsable, latitude: locationUsable ? source.latitude : undefined, longitude: locationUsable ? source.longitude : undefined,
       occurredAt: source.occurredAt, state: decision.state, clusterKey: decision.clusterKey,
       correlatedSourceCount: decision.correlatedSourceCount, resultingAction: decision.resultingAction, errorCode: null,
-      metadata: { semanticTags: classification.semanticTags ?? [], contextSuppression: classification.contextSuppression ?? null, safetyCopy: "Observe -> Report -> Stay Safe" },
+      metadata: {
+        semanticTags: classification.semanticTags ?? [],
+        contextSuppression: classification.contextSuppression ?? null,
+        userDeclaredDangerAlertCode: source.userDeclaredDangerAlertCode ?? null,
+        classifierCategory: classification.category,
+        safetyCopy: "Observe -> Report -> Stay Safe",
+      },
     };
   }
 
@@ -224,6 +231,8 @@ export class DangerDetectionService {
           assessmentState: assessment.state,
           classifierVersion: classification.version,
           transcriptPersistedSeparately: true,
+          userDeclaredDangerAlertCode: source.userDeclaredDangerAlertCode ?? null,
+          classifierCategory: classification.category,
         },
       },
       create: {
@@ -240,6 +249,8 @@ export class DangerDetectionService {
           assessmentState: assessment.state,
           classifierVersion: classification.version,
           transcriptPersistedSeparately: true,
+          userDeclaredDangerAlertCode: source.userDeclaredDangerAlertCode ?? null,
+          classifierCategory: classification.category,
         },
       },
     });

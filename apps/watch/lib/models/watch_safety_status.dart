@@ -1,11 +1,7 @@
 import '../alerts/danger_alert_models.dart';
 import '../l10n/generated/watch_localizations.dart';
 
-enum WatchSafetyLevel {
-  safe,
-  highAlert,
-  danger,
-}
+enum WatchSafetyLevel { safe, highAlert, danger }
 
 class WatchSafetyStatus {
   const WatchSafetyStatus({
@@ -97,17 +93,16 @@ class WatchSafetyStatus {
   }
 
   Map<String, dynamic> toStorageJson() => {
-        'level': level.name,
-        if (alertId != null) 'alertId': alertId,
-        if (dangerCode != null) 'dangerCode': dangerCode,
-        if (dangerType != null) 'dangerType': dangerType,
-        if (areaName != null) 'areaName': areaName,
-        if (distanceMeters != null) 'distanceMeters': distanceMeters,
-        if (priority != null) 'priority': priority!.name,
-        if (issuedAt != null) 'issuedAt': issuedAt!.toUtc().toIso8601String(),
-        if (expiresAt != null)
-          'expiresAt': expiresAt!.toUtc().toIso8601String(),
-      };
+    'level': level.name,
+    if (alertId != null) 'alertId': alertId,
+    if (dangerCode != null) 'dangerCode': dangerCode,
+    if (dangerType != null) 'dangerType': dangerType,
+    if (areaName != null) 'areaName': areaName,
+    if (distanceMeters != null) 'distanceMeters': distanceMeters,
+    if (priority != null) 'priority': priority!.name,
+    if (issuedAt != null) 'issuedAt': issuedAt!.toUtc().toIso8601String(),
+    if (expiresAt != null) 'expiresAt': expiresAt!.toUtc().toIso8601String(),
+  };
 
   static DateTime? _parseDate(String? raw) {
     if (raw == null || raw.isEmpty) return null;
@@ -124,6 +119,10 @@ abstract final class WatchDangerLabels {
       DangerAlertCodes.activeShooterNearby => l10n.dangerTypeActiveShooter,
       DangerAlertCodes.communalViolenceNearby =>
         l10n.dangerTypeCommunalViolence,
+      DangerAlertCodes.banditAttackNearby ||
+      DangerAlertCodes.killingNearby => l10n.dangerTypeViolentAttack,
+      DangerAlertCodes.cultClashNearby ||
+      DangerAlertCodes.communityCrisisNearby => l10n.dangerTypeCommunalViolence,
       DangerAlertCodes.terroristThreatNearby => l10n.dangerTypeTerroristThreat,
       DangerAlertCodes.fireNearby => l10n.dangerTypeFire,
       DangerAlertCodes.floodNearby => l10n.dangerTypeFlood,

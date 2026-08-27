@@ -65,7 +65,35 @@ describe("danger trigger geographic policy", () => {
         longitude: 3.3792,
         locationSource: "freshGps",
         locationCapturedAt: new Date(Date.now() - 31 * 60_000).toISOString(),
+        dangerAlertCode: "DANGER_ZONE_FIRE_NEARBY",
       }),
     ).toThrow();
+  });
+
+  it("rejects an untrusted user-supplied danger type", () => {
+    let message = "";
+    try {
+      validateStartDangerTriggerDto({
+        clientTriggerId: "trigger-1",
+        latitude: 6.5244,
+        longitude: 3.3792,
+        locationSource: "freshGps",
+        locationCapturedAt: new Date().toISOString(),
+        dangerAlertCode: "USER_GENERATED_DANGER" as never,
+      });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toBe("Select a valid danger type");
+  });
+
+  it("keeps older clients safe when the category field is absent", () => {
+    validateStartDangerTriggerDto({
+      clientTriggerId: "legacy-trigger-1",
+      latitude: 6.5244,
+      longitude: 3.3792,
+      locationSource: "freshGps",
+      locationCapturedAt: new Date().toISOString(),
+    });
   });
 });

@@ -52,6 +52,7 @@ class _FakeLiveVoiceController extends LiveVideoSessionController {
 
 class _FakeGateway implements DangerTriggerGateway {
   int activateCalls = 0;
+  String? preparedDangerAlertCode;
 
   @override
   Future<PreparedDangerTrigger> prepare({
@@ -61,29 +62,32 @@ class _FakeGateway implements DangerTriggerGateway {
     required double longitude,
     required DateTime locationCapturedAt,
     required String locationSource,
+    required String dangerAlertCode,
     double? accuracyMeters,
     String? areaName,
-  }) async =>
-      PreparedDangerTrigger(
-        eventId: "event-1",
-        liveSessionId: "session-1",
-        approximateArea: "Ikeja, Lagos",
-        radiusMeters: 4000,
-        liveVideo: LiveVideoStartResult.fromResponse({
-          "data": {
-            "id": "session-1",
-            "incidentId": "incident-1",
-            "participantIdentity": "user-1",
-          },
-          "connection": {
-            "serverUrl": "wss://live.example.com",
-            "participantToken":
-                "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.signature",
-            "roomName": "danger-room-1",
-            "participantIdentity": "user-1",
-          },
-        }),
-      );
+  }) async {
+    preparedDangerAlertCode = dangerAlertCode;
+    return PreparedDangerTrigger(
+      eventId: "event-1",
+      liveSessionId: "session-1",
+      approximateArea: "Ikeja, Lagos",
+      radiusMeters: 4000,
+      liveVideo: LiveVideoStartResult.fromResponse({
+        "data": {
+          "id": "session-1",
+          "incidentId": "incident-1",
+          "participantIdentity": "user-1",
+        },
+        "connection": {
+          "serverUrl": "wss://live.example.com",
+          "participantToken":
+              "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.signature",
+          "roomName": "danger-room-1",
+          "participantIdentity": "user-1",
+        },
+      }),
+    );
+  }
 
   @override
   Future<DangerTriggerActivation> activate({
@@ -155,46 +159,185 @@ Widget _app({required bool connects, required _FakeGateway gateway}) {
   );
 }
 
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    220,
+    scrollable: find.byType(Scrollable).first,
+  );
+}
+
 void main() {
-  testWidgets("shows the explicit danger actions with human-readable location",
-      (tester) async {
+  testWidgets(
+    "shows the explicit danger actions with human-readable location",
+    (tester) async {
+      final gateway = _FakeGateway();
+      await tester.pumpWidget(_app(connects: true, gateway: gateway));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Select danger type"), findsOneWidget);
+      expect(find.text("Ikeja, Lagos"), findsOneWidget);
+      final start = find.widgetWithText(
+        FilledButton,
+        "Start Live Danger Broadcast",
+      );
+      await _scrollTo(tester, start);
+      expect(start, findsOneWidget);
+      final reportImmediateDanger = find.text("Report Immediate Danger");
+      await _scrollTo(tester, reportImmediateDanger);
+      expect(reportImmediateDanger, findsOneWidget);
+      expect(
+        find.textContaining("microphone activates only after"),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets("requires a danger type before activation", (tester) async {
     final gateway = _FakeGateway();
     await tester.pumpWidget(_app(connects: true, gateway: gateway));
     await tester.pumpAndSettle();
 
-    expect(find.text("Start Live Danger Broadcast"), findsOneWidget);
-    expect(find.text("Report Immediate Danger"), findsOneWidget);
-    expect(find.text("Ikeja, Lagos"), findsOneWidget);
-    expect(
-        find.textContaining("microphone activates only after"), findsOneWidget);
-  });
-
-  testWidgets("does not show broadcasting or activate alerts before connection",
-      (tester) async {
-    final gateway = _FakeGateway();
-    await tester.pumpWidget(_app(connects: false, gateway: gateway));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text("Start Live Danger Broadcast"));
-    await tester.pumpAndSettle();
-
-    expect(find.text("Live voice broadcasting"), findsNothing);
+    final startFinder = find.widgetWithText(
+      FilledButton,
+      "Start Live Danger Broadcast",
+    );
+    await _scrollTo(tester, startFinder);
+    expect(tester.widget<FilledButton>(startFinder).onPressed, isNull);
     expect(gateway.activateCalls, 0);
-    expect(find.text("Failed"), findsOneWidget);
   });
 
-  testWidgets("shows broadcasting only after connection and activation",
-      (tester) async {
+  testWidgets(
+    "does not show broadcasting or activate alerts before connection",
+    (tester) async {
+      final gateway = _FakeGateway();
+      await tester.pumpWidget(_app(connects: false, gateway: gateway));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const Key(
+            "danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final start = find.widgetWithText(
+        FilledButton,
+        "Start Live Danger Broadcast",
+      );
+      await _scrollTo(tester, start);
+      await tester.tap(start);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Live voice broadcasting"), findsNothing);
+      expect(gateway.activateCalls, 0);
+      expect(
+        find.text("Unable to establish the live voice connection."),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets("shows broadcasting only after connection and activation", (
+    tester,
+  ) async {
     final gateway = _FakeGateway();
     await tester.pumpWidget(_app(connects: true, gateway: gateway));
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Start Live Danger Broadcast"));
+    await tester.tap(
+      find.byKey(
+        const Key("danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY"),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final start = find.widgetWithText(
+      FilledButton,
+      "Start Live Danger Broadcast",
+    );
+    await _scrollTo(tester, start);
+    await tester.tap(start);
     await tester.pumpAndSettle();
 
     expect(gateway.activateCalls, 1);
+    expect(gateway.preparedDangerAlertCode, "DANGER_ZONE_ARMED_ROBBERY_NEARBY");
+    await _scrollTo(tester, find.text("Live voice broadcasting"));
     expect(find.text("Live voice broadcasting"), findsOneWidget);
-    expect(find.text("Alert active. Alerts sent to 3 nearby users."),
-        findsOneWidget);
+    expect(
+      find.text("Alert active. Alerts sent to 3 nearby users."),
+      findsOneWidget,
+    );
     expect(find.text("Paired smartwatch alerted."), findsOneWidget);
-    expect(find.text("End live voice"), findsOneWidget);
+    final endVoice = find.widgetWithText(FilledButton, "End live voice");
+    await tester.scrollUntilVisible(
+      endVoice,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(endVoice, findsOneWidget);
+  });
+
+  test("defines the exact trusted nine-category mapping", () {
+    expect(
+      dangerTriggerCategories
+          .map((category) => "${category.label}|${category.code}")
+          .toList(growable: false),
+      const [
+        "Fire|DANGER_ZONE_FIRE_NEARBY",
+        "Armed robbery|DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+        "Kidnapping|DANGER_ZONE_KIDNAPPING_NEARBY",
+        "Shooting / gunfire|DANGER_ZONE_ACTIVE_SHOOTER_NEARBY",
+        "Riot|DANGER_ZONE_CIVIL_DISTURBANCE_NEARBY",
+        "Bandit / unknown gunmen|DANGER_ZONE_BANDIT_ATTACK_NEARBY",
+        "Cult clash|DANGER_ZONE_CULT_CLASH_NEARBY",
+        "Community crisis|DANGER_ZONE_COMMUNITY_CRISIS_NEARBY",
+        "Killing|DANGER_ZONE_KILLING_NEARBY",
+      ],
+    );
+  });
+
+  testWidgets("renders all category keys without small-screen overflow", (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _app(connects: true, gateway: _FakeGateway()),
+    );
+    await tester.pumpAndSettle();
+
+    for (final category in dangerTriggerCategories) {
+      expect(
+        find.byKey(Key("danger-category-${category.code}")),
+        findsOneWidget,
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets("allows changing the category before activation", (tester) async {
+    final gateway = _FakeGateway();
+    await tester.pumpWidget(_app(connects: true, gateway: gateway));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const Key("danger-category-DANGER_ZONE_FIRE_NEARBY")),
+    );
+    await tester.pump();
+    await _scrollTo(tester, find.text("Selected danger: FIRE"));
+    expect(find.text("Selected danger: FIRE"), findsOneWidget);
+
+    final communityCrisis = find.byKey(
+      const Key("danger-category-DANGER_ZONE_COMMUNITY_CRISIS_NEARBY"),
+    );
+    await _scrollTo(tester, communityCrisis);
+    await tester.tap(
+      communityCrisis,
+    );
+    await tester.pump();
+    await _scrollTo(tester, find.text("Selected danger: COMMUNITY CRISIS"));
+    expect(find.text("Selected danger: COMMUNITY CRISIS"), findsOneWidget);
   });
 }

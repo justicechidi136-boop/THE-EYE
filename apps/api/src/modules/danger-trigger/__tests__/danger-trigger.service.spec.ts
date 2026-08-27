@@ -23,7 +23,10 @@ function buildService() {
     liveVoiceSessionId: "session-1",
     liveVoiceEndedAt: null,
     cancelledAt: null,
-    metadata: { liveConnectionConfirmed: false },
+    metadata: {
+      liveConnectionConfirmed: false,
+      dangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+    },
     createdAt: new Date(),
   };
   const prisma = {
@@ -116,6 +119,7 @@ const startDto = () => ({
   locationSource: "freshGps" as const,
   locationCapturedAt: new Date().toISOString(),
   areaName: "Ikeja, Lagos",
+  dangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY" as const,
 });
 
 describe("DangerTriggerService", () => {
@@ -124,6 +128,17 @@ describe("DangerTriggerService", () => {
     const result = await service.prepareLiveVoice(startDto(), actor);
 
     expect(result.data.event.state).toBe("POTENTIAL");
+    expect(prisma.dangerEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          metadata: expect.objectContaining({
+            dangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+            userDeclaredDangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+            dangerAlertCodeSource: "USER_SELECTED",
+          }),
+        }),
+      }),
+    );
     expect(notifications.create.mock.calls.length).toBe(0);
     expect(prisma.liveVideoSession.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -236,6 +251,9 @@ describe("DangerTriggerService", () => {
     expect(fieldAlerts[0].adminUserId).toBe("admin-inside");
     expect(fieldAlerts[0].metadata.preciseReporterLocationExposed).toBe(false);
     expect(fieldAlerts[0].metadata.dangerAlert.expiresAt).toBeDefined();
+    expect(fieldAlerts[0].metadata.dangerAlert.alertCode).toBe(
+      "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
+    );
     expect(result.fanout.fieldRecipients).toBe(1);
   });
 

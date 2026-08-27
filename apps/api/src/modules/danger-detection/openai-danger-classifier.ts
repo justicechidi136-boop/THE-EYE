@@ -42,6 +42,8 @@ export class OpenAiDangerClassifier implements DangerClassifier {
                 "Understand English, Hausa, Yoruba, Igbo, and Nigerian Pidgin in context.",
                 "Suppress historical accounts, news/movie discussion, hypotheticals, quotations, jokes, and resolved events.",
                 "Never infer facts not present. Classify current active threats conservatively.",
+                "Treat userDeclaredDangerAlertCode as trusted user context, while independently classifying the evidence.",
+                "Do not silently rewrite that declared value; return your probable category separately for backend policy review.",
                 "Return JSON only with dangerLevel, category, immediateThreat, activeIncident, confidence (0..1),",
                 "requiresVerification, detectedLocale, semanticTags, and contextSuppression.",
               ].join(" "),
@@ -52,6 +54,8 @@ export class OpenAiDangerClassifier implements DangerClassifier {
                 sourceType: input.sourceType,
                 sourceLocale: input.sourceLocale ?? "auto",
                 occurredAt: input.occurredAt?.toISOString(),
+                userDeclaredDangerAlertCode:
+                  input.userDeclaredDangerAlertCode ?? null,
                 text: input.text,
               }),
             },

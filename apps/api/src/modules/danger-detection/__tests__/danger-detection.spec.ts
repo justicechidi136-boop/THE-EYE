@@ -192,6 +192,29 @@ describe("danger detection source scope", () => {
     expect(source?.longitude).toBe(3.3);
   });
 
+  it("loads only trusted user-declared danger context", async () => {
+    const incident = (code: string) => ({
+      id: "incident-1",
+      title: "Danger Trigger Alert",
+      description: "Citizen started a live danger broadcast",
+      metadata: { userDeclaredDangerAlertCode: code },
+      createdAt: new Date(),
+    });
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce(incident("DANGER_ZONE_FIRE_NEARBY"))
+      .mockResolvedValueOnce(incident("UNTRUSTED_FREE_TEXT"));
+    const loader = new DangerSourceLoader({ incident: { findUnique } } as any);
+
+    const trusted = await loader.load("INCIDENT", "incident-1");
+    const untrusted = await loader.load("INCIDENT", "incident-2");
+
+    expect(trusted?.userDeclaredDangerAlertCode).toBe(
+      "DANGER_ZONE_FIRE_NEARBY",
+    );
+    expect(untrusted?.userDeclaredDangerAlertCode).toBeUndefined();
+  });
+
   it("requires completed STT before audio is eligible", async () => {
     const prisma = {
       speechArtifact: { findUnique: jest.fn().mockResolvedValue({ status: "PROCESSING", content: null }) },
@@ -235,6 +258,7 @@ describe("danger detection processing", () => {
         latitude: 6.5,
         longitude: 3.3,
         occurredAt: new Date(),
+        userDeclaredDangerAlertCode: "DANGER_ZONE_FIRE_NEARBY",
       }),
     } as any;
     const classifier = options.classifier ?? {
@@ -255,6 +279,17 @@ describe("danger detection processing", () => {
     const serialized = JSON.stringify(test.getStored());
     expect(serialized.includes("Original private safety report text")).toBe(false);
     expect(serialized.includes("Observe -> Report -> Stay Safe")).toBe(true);
+    expect(test.getStored().metadata.userDeclaredDangerAlertCode).toBe(
+      "DANGER_ZONE_FIRE_NEARBY",
+    );
+    expect(test.getStored().metadata.classifierCategory).toBe(
+      "ACTIVE_SHOOTING",
+    );
+    expect(test.classifier.classify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userDeclaredDangerAlertCode: "DANGER_ZONE_FIRE_NEARBY",
+      }),
+    );
   });
 
   it("does not classify an existing completed content hash twice", async () => {

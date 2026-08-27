@@ -59,12 +59,20 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
   bool _ending = false;
   DangerTriggerActivation? _activation;
   bool _pairedWatchAlerted = false;
+  String? _dangerAlertCode;
 
   bool get _isActive =>
       _viewState == DangerTriggerViewState.preparing ||
       _viewState == DangerTriggerViewState.connecting ||
       _viewState == DangerTriggerViewState.broadcasting ||
       _viewState == DangerTriggerViewState.reconnecting;
+
+  DangerTriggerCategory? get _selectedDangerCategory {
+    for (final category in dangerTriggerCategories) {
+      if (category.code == _dangerAlertCode) return category;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -119,6 +127,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
     if (_isActive) return;
     final token = widget.accessTokenProvider()?.trim() ?? "";
     final location = _location;
+    final dangerAlertCode = _dangerAlertCode;
     if (token.isEmpty) {
       setState(() {
         _viewState = DangerTriggerViewState.failed;
@@ -128,6 +137,12 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
     }
     if (location == null || !location.hasCoordinates) {
       await _refreshLocation();
+      return;
+    }
+    if (dangerAlertCode == null) {
+      setState(
+        () => _error = "Select the type of danger before starting the alert.",
+      );
       return;
     }
 
@@ -154,6 +169,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
         accuracyMeters: location.accuracyMeters,
         locationCapturedAt: location.capturedAt ?? DateTime.now(),
         locationSource: _apiLocationSource(location.source),
+        dangerAlertCode: dangerAlertCode,
         areaName: location.displayLocality,
       );
       if (!mounted) return;
@@ -201,8 +217,9 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
 
   Future<void> _relayToPairedWatch(DangerTriggerActivation activation) async {
     if (activation.watchRelayPayload.isEmpty) return;
-    final relayed =
-        await widget.watchRelay.relayDangerAlert(activation.watchRelayPayload);
+    final relayed = await widget.watchRelay.relayDangerAlert(
+      activation.watchRelayPayload,
+    );
     if (mounted && relayed) {
       setState(() => _pairedWatchAlerted = true);
     }
@@ -363,8 +380,10 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: Colors.amber.shade800),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.amber.shade800,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -386,8 +405,10 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.location_on_outlined,
-                        color: semantics.primaryAction),
+                    Icon(
+                      Icons.location_on_outlined,
+                      color: semantics.primaryAction,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -417,6 +438,82 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Select danger type",
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Choose what nearby users and responders should hear.",
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              GridView.builder(
+                key: const Key("danger-trigger-category-grid"),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  mainAxisExtent: 112,
+                ),
+                itemCount: dangerTriggerCategories.length,
+                itemBuilder: (context, index) {
+                  final category = dangerTriggerCategories[index];
+                  return _DangerCategoryKey(
+                    category: category,
+                    icon: _dangerCategoryIcon(category.code),
+                    selected: category.code == _dangerAlertCode,
+                    enabled: !_isActive,
+                    onTap: () => setState(() {
+                      _dangerAlertCode = category.code;
+                      _error = null;
+                    }),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: _selectedDangerCategory == null
+                    ? Container(
+                        key: const Key("danger-category-required"),
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: semantics.warning.withValues(alpha: 0.1),
+                          border: Border.all(color: semantics.warning),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          "Select a danger type to continue.",
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : Container(
+                        key: ValueKey(_dangerAlertCode),
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: semantics.warning.withValues(alpha: 0.16),
+                          border: Border.all(
+                            color: semantics.warning,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          "Selected danger: ${_selectedDangerCategory!.label.toUpperCase()}",
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
               ),
               const SizedBox(height: 20),
               if (_viewState == DangerTriggerViewState.broadcasting ||
@@ -480,7 +577,9 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                 ),
               ] else ...[
                 FilledButton.icon(
-                  onPressed: location?.hasCoordinates == true && !_isActive
+                  onPressed: location?.hasCoordinates == true &&
+                          _dangerAlertCode != null &&
+                          !_isActive
                       ? _start
                       : null,
                   icon: const Icon(Icons.mic),
@@ -504,9 +603,11 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 16),
-                Text(_error!,
-                    style: TextStyle(color: semantics.error),
-                    textAlign: TextAlign.center),
+                Text(
+                  _error!,
+                  style: TextStyle(color: semantics.error),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: _viewState == DangerTriggerViewState.failed
@@ -539,6 +640,103 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+IconData _dangerCategoryIcon(String code) => switch (code) {
+      "DANGER_ZONE_FIRE_NEARBY" => Icons.local_fire_department_outlined,
+      "DANGER_ZONE_ARMED_ROBBERY_NEARBY" => Icons.warning_amber_rounded,
+      "DANGER_ZONE_KIDNAPPING_NEARBY" => Icons.person_search_outlined,
+      "DANGER_ZONE_ACTIVE_SHOOTER_NEARBY" => Icons.crisis_alert_outlined,
+      "DANGER_ZONE_CIVIL_DISTURBANCE_NEARBY" => Icons.groups_outlined,
+      "DANGER_ZONE_BANDIT_ATTACK_NEARBY" => Icons.report_outlined,
+      "DANGER_ZONE_CULT_CLASH_NEARBY" => Icons.group_off_outlined,
+      "DANGER_ZONE_COMMUNITY_CRISIS_NEARBY" => Icons.location_city_outlined,
+      "DANGER_ZONE_KILLING_NEARBY" => Icons.dangerous_outlined,
+      _ => Icons.warning_amber_rounded,
+    };
+
+class _DangerCategoryKey extends StatelessWidget {
+  const _DangerCategoryKey({
+    required this.category,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final DangerTriggerCategory category;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
+    final foreground =
+        selected ? semantics.warning : Theme.of(context).colorScheme.onSurface;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      label: category.label,
+      child: Material(
+        color: selected
+            ? semantics.warning.withValues(alpha: 0.16)
+            : semantics.cardSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: selected ? semantics.warning : semantics.border,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: Key("danger-category-${category.code}"),
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+            child: Stack(
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, color: foreground, size: 26),
+                      const SizedBox(height: 7),
+                      Text(
+                        category.label.toUpperCase(),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: foreground,
+                              fontWeight: FontWeight.w700,
+                              height: 1.15,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Icon(
+                      Icons.check_circle,
+                      color: semantics.warning,
+                      size: 18,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

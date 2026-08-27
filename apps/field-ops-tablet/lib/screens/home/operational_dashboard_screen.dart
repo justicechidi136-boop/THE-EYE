@@ -5,6 +5,7 @@ import '../../api/field_api_client.dart';
 import '../../l10n/generated/field_localizations.dart';
 import '../../screens/routes.dart';
 import '../../services/field_app_services.dart';
+import '../../services/field_device_context_service.dart';
 import '../../theme/field_theme.dart';
 
 class OperationalDashboardScreen extends StatefulWidget {
@@ -42,21 +43,27 @@ class _OperationalDashboardScreenState
       await widget.services.restoreSession();
       final pending = await widget.services.offlineQueue.pendingCount();
       final dashboard = await widget.services.workflows.getDashboard();
-      final batteryLevel =
-          await widget.services.deviceContext.readBatteryLevel();
+      final batteryLevel = await widget.services.deviceContext
+          .readBatteryLevel();
       Position? position;
       String? locationLabel;
       try {
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 8),
+            accuracy: LocationAccuracy.bestForNavigation,
+            timeLimit: Duration(seconds: 15),
           ),
         );
         locationLabel = await widget.services.deviceContext.reverseGeocode(
           latitude: position.latitude,
           longitude: position.longitude,
         );
+        if (locationLabel != null) {
+          locationLabel = FieldDeviceContextService.withMeasuredAccuracy(
+            locationLabel,
+            position.accuracy,
+          );
+        }
         await widget.services.workflows.updateTelemetry({
           'latitude': position.latitude,
           'longitude': position.longitude,
@@ -145,10 +152,9 @@ class _OperationalDashboardScreenState
               Expanded(
                 child: _StatusCard(
                   title: 'Shift',
-                  value:
-                      shift == null
-                          ? l10n.noActiveShift
-                          : shift['status']?.toString() ?? l10n.active,
+                  value: shift == null
+                      ? l10n.noActiveShift
+                      : shift['status']?.toString() ?? l10n.active,
                   icon: Icons.schedule,
                 ),
               ),
