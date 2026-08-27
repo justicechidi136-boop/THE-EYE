@@ -67,12 +67,16 @@ describe("admin dashboard remediation", () => {
 
     it("renders real road tiles and a chronological polylined trail", () => {
       const map = readFileSync(join(process.cwd(), "components", "location-trail-map.tsx"), "utf8");
-      expect(map).toContain("tile.openstreetmap.org");
+      const tileRoute = readFileSync(join(process.cwd(), "app", "api", "admin", "map-tiles", "[z]", "[x]", "[y]", "route.ts"), "utf8");
+      expect(map).toContain("/api/admin/map-tiles/");
       expect(map).toContain("© OpenStreetMap contributors");
       expect(map.includes("<iframe")).toBe(false);
       expect(map).toContain("<polyline");
-    expect(map).toContain("sanitizeLocationTrail");
-    expect(map.includes("leaflet-grid")).toBe(false);
-    expect(map).toContain("setInterval(refresh, 5000)");
-  });
+      expect(map).toContain("sanitizeLocationTrail");
+      expect(map.includes("leaflet-grid")).toBe(false);
+      expect(map).toContain("setInterval(refresh, 5000)");
+      expect(tileRoute).toContain("https://tile.openstreetmap.org/${z}/${x}/${y}.png");
+      expect(tileRoute).toContain("Number.isSafeInteger");
+      expect(tileRoute).toContain("public, max-age=86400");
+    });
 });
