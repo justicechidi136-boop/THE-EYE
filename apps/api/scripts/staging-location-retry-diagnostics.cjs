@@ -39,7 +39,8 @@ async function inspect() {
     maxRetriesPerRequest: null,
   };
   const queueName = "the-eye-staging-incident-location-retry";
-  const queue = new Queue(queueName, { connection });
+  const prefix = String(process.env.BULLMQ_PREFIX || process.env.REDIS_QUEUE_PREFIX || "the-eye-staging");
+  const queue = new Queue(queueName, { connection, prefix });
   const prisma = new PrismaClient();
   try {
     const jobs = await queue.getJobs(["failed"], 0, 49, true);
