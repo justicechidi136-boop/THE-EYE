@@ -46,6 +46,13 @@ if [[ "$PROOF_ONLY" == "true" ]]; then
 else
   echo "STEP compose-ps-start"
   "${COMPOSE[@]}" ps || true
+  echo "STEP docker-disk-before"
+  docker system df || true
+  echo "STEP build-cache-prune-start"
+  docker builder prune --all --force --filter "until=1h"
+  docker image prune --force --filter "until=24h"
+  echo "STEP build-cache-prune-complete"
+  df -h / || true
   "${COMPOSE[@]}" pull api admin-web notification-worker || true
   echo "STEP compose-build-start"
   "${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools
