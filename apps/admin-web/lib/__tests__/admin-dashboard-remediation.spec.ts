@@ -75,6 +75,9 @@ describe("admin dashboard remediation", () => {
       expect(map).toContain("sanitizeLocationTrail");
       expect(map.includes("leaflet-grid")).toBe(false);
       expect(map).toContain("setInterval(refresh, 5000)");
-      expect(nextConfig).toContain("img-src 'self' data: blob: https://tile.openstreetmap.org");
+      expect(nextConfig).toContain("img-src 'self' data: blob: https://tile.openstreetmap.org https://storage.googleapis.com");
+      expect(nextConfig).toContain("media-src 'self' blob: https://storage.googleapis.com");
+      expect(nextConfig.includes("https://*.googleapis.com")).toBe(false);
+      expect(nextConfig.includes("https://*.firebasestorage.app")).toBe(false);
     });
 });
