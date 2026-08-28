@@ -50,7 +50,7 @@ function buildMap(points: LocationPoint[], width: number) {
       const wrappedX = ((tileX % tileCount) + tileCount) % tileCount;
       tiles.push({
         key: `${zoom}-${tileX}-${tileY}`,
-        url: `/api/admin/map-tiles/${zoom}/${wrappedX}/${tileY}`,
+        url: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`,
         left: tileX * tileSize - originX,
         top: tileY * tileSize - originY,
       });
