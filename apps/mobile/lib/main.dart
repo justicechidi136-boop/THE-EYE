@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 import "dart:io" show Directory, File, Platform;
 
 import "package:firebase_core/firebase_core.dart";
@@ -64,6 +65,8 @@ import "emergency/active_emergency_service.dart";
 import "emergency/active_emergency_store.dart";
 import "incidents/pending_submission_store.dart";
 import "location/location_permission_settings_section.dart";
+import "location/device_location_service.dart";
+import "location/device_location_state.dart";
 import "location/location_permission_service.dart";
 import "location/location_reverse_geocode.dart";
 import "presentation/citizen_location_presentation.dart";
@@ -84,6 +87,7 @@ import "live_video/live_video_start_validation.dart";
 import "danger_trigger/danger_trigger_screen.dart";
 import "danger_trigger/danger_trigger_alert_screen.dart";
 import "danger_trigger/incoming_danger_alert.dart";
+import "danger_trigger/danger_alert_audio_coordinator.dart";
 import "brand.dart";
 import "config/app_flavor.dart";
 import "config/firebase_bootstrap.dart";
@@ -932,9 +936,13 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
   AppController get controller => widget.controller;
   StreamSubscription<PushNavigationRequest>? _pushNavigationSubscription;
   StreamSubscription<IncomingDangerAlert>? _dangerAlertSubscription;
-  final MobileDangerAlertAnnouncer _dangerAnnouncer =
-      MobileDangerAlertAnnouncer();
+  final DangerAlertAudioCoordinator _dangerAudio =
+      DangerAlertAudioCoordinator();
+  final DeviceLocationService _dangerLocation = DeviceLocationService();
+  bool _dangerLocationBusy = false;
   bool _dangerAlertVisible = false;
+  BuildContext? _dangerDialogContext;
+  IncomingDangerAlert? _pendingDangerAlert;
 
   @override
   void initState() {
@@ -948,21 +956,39 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
         widget.pushNotifications.dangerAlertStream.listen((alert) {
       unawaited(_presentDangerAlert(alert));
     });
+    unawaited(_reportTrustedDangerLocation());
   }
 
   Future<void> _presentDangerAlert(IncomingDangerAlert alert) async {
-    if (_dangerAlertVisible || !mounted) return;
+    if (_dangerAlertVisible) {
+      final pending = _pendingDangerAlert;
+      if (pending == null || alert.priorityRank > pending.priorityRank ||
+          (alert.priorityRank == pending.priorityRank &&
+              alert.issuedAt.isAfter(pending.issuedAt))) {
+        _pendingDangerAlert = alert;
+      }
+      final activeContext = _dangerDialogContext;
+      if (activeContext != null && activeContext.mounted) {
+        await _dangerAudio.stop();
+        if (activeContext.mounted) Navigator.pop(activeContext, false);
+      }
+      return;
+    }
+    if (!mounted) return;
     final context = theEyeNavigatorKey.currentContext;
     if (context == null) return;
     _dangerAlertVisible = true;
-    unawaited(_dangerAnnouncer.speak(
+    unawaited(_dangerAudio.playAutomatic(
       alert,
       locale: Localizations.localeOf(context).toLanguageTag(),
+      loadOriginalVoice: () => _loadOriginalVoice(alert),
     ));
     final view = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) {
+        _dangerDialogContext = dialogContext;
+        return AlertDialog(
         icon: const Icon(
           Icons.warning_rounded,
           color: BrandColors.danger,
@@ -994,12 +1020,28 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 textAlign: TextAlign.center,
               ),
             ],
+            const SizedBox(height: 12),
+            ValueListenableBuilder<DangerAlertAudioState>(
+              valueListenable: _dangerAudio.state,
+              builder: (context, state, _) => Text(
+                switch (state) {
+                  DangerAlertAudioState.speakingWarning =>
+                    "THE EYE generated warning",
+                  DangerAlertAudioState.playingOriginalVoice =>
+                    "Original voice",
+                  DangerAlertAudioState.completed => "Audio alert completed",
+                  _ => "Preparing safety audio",
+                },
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () async {
-              await _dangerAnnouncer.stop();
+              await _dangerAudio.acknowledge();
               if (dialogContext.mounted) Navigator.pop(dialogContext, false);
             },
             child: const Text("I have seen this alert"),
@@ -1010,9 +1052,11 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
             label: const Text("View Alert"),
           ),
         ],
-      ),
+        );
+      },
     );
-    await _dangerAnnouncer.stop();
+    await _dangerAudio.acknowledge();
+    _dangerDialogContext = null;
     _dangerAlertVisible = false;
     if (view == true && mounted) {
       theEyeNavigatorKey.currentState?.pushNamed(
@@ -1020,12 +1064,68 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
         arguments: alert.eventId,
       );
     }
+    final pending = _pendingDangerAlert;
+    _pendingDangerAlert = null;
+    if (pending != null && mounted) unawaited(_presentDangerAlert(pending));
+  }
+
+  Future<String?> _loadOriginalVoice(IncomingDangerAlert alert) async {
+    final token = controller.accessToken;
+    if (!alert.hasOriginalVoice || token == null || token.isEmpty) return null;
+    try {
+      final response = await controller.apiClient.getJson(
+        TheEyeApiPaths.dangerTriggerOriginalVoice(alert.eventId),
+        accessToken: token,
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = body["data"] as Map<String, dynamic>?;
+      return data?["signedUrl"]?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _reportTrustedDangerLocation() async {
+    if (_dangerLocationBusy || !controller.isAuthenticated) return;
+    final token = controller.accessToken;
+    if (token == null || token.isEmpty) return;
+    _dangerLocationBusy = true;
+    try {
+      final location = await _dangerLocation.probeCurrentLocation(
+        requestIfDenied: false,
+        timeout: const Duration(seconds: 12),
+      );
+      if (!location.hasCoordinates ||
+          location.status != DeviceLocationStatus.acquired ||
+          location.capturedAt == null ||
+          location.accuracyMeters == null ||
+          location.accuracyMeters! > 150) {
+        return;
+      }
+      await controller.apiClient.postJson(
+        TheEyeApiPaths.dangerTriggerLocationEvaluations,
+        {
+          "latitude": location.latitude,
+          "longitude": location.longitude,
+          "accuracyMeters": location.accuracyMeters,
+          "capturedAt": location.capturedAt!.toUtc().toIso8601String(),
+          "source": "freshGps",
+        },
+        accessToken: token,
+      );
+    } catch (_) {
+      // Foreground location evaluation is best-effort and never blocks the app.
+    } finally {
+      _dangerLocationBusy = false;
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(controller.ensureFreshSession());
+    unawaited(_reportTrustedDangerLocation());
   }
 
   @override
@@ -1033,7 +1133,7 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _pushNavigationSubscription?.cancel();
     _dangerAlertSubscription?.cancel();
-    unawaited(_dangerAnnouncer.stop());
+    unawaited(_dangerAudio.dispose());
     super.dispose();
   }
 

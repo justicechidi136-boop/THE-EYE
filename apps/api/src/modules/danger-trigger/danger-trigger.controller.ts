@@ -8,6 +8,7 @@ import { DangerTriggerService } from "./danger-trigger.service";
 import type {
   ActivateDangerTriggerDto,
   CancelDangerTriggerDto,
+  EvaluateDangerLocationDto,
   StartDangerTriggerDto,
 } from "./dto/danger-trigger.dto";
 
@@ -53,6 +54,12 @@ export class DangerTriggerController {
     return this.dangerTrigger.areaRisk(Number(latitude), Number(longitude), request.user);
   }
 
+  @Post("location-evaluations")
+  @RequirePermissions("incident:read")
+  evaluateLocation(@Body() dto: EvaluateDangerLocationDto, @Req() request: any) {
+    return this.dangerTrigger.evaluateCitizenLocation(dto, request.user);
+  }
+
   @Get(":eventId")
   @RequirePermissions("incident:read")
   detail(@Param("eventId") eventId: string, @Req() request: any) {
@@ -63,5 +70,11 @@ export class DangerTriggerController {
   @RequirePermissions("incident:read")
   listen(@Param("eventId") eventId: string, @Req() request: any) {
     return this.dangerTrigger.listenerToken(eventId, request.user);
+  }
+
+  @Get(":eventId/original-voice")
+  @RequirePermissions("incident:read")
+  originalVoice(@Param("eventId") eventId: string, @Req() request: any) {
+    return this.dangerTrigger.originalVoice(eventId, request.user);
   }
 }

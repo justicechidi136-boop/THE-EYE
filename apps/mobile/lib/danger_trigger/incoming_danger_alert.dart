@@ -1,5 +1,3 @@
-import "package:flutter_tts/flutter_tts.dart";
-
 const _trustedDangerLabels = <String, String>{
   "DANGER_ZONE_ARMED_ROBBERY_NEARBY": "Active robbery",
   "DANGER_ZONE_KIDNAPPING_NEARBY": "Kidnapping",
@@ -36,6 +34,8 @@ class IncomingDangerAlert {
     this.expiresAt,
     this.distanceMeters,
     this.liveAvailable = false,
+    this.hasOriginalVoice = false,
+    this.priority = "MEDIUM",
   });
 
   final String eventId;
@@ -47,11 +47,19 @@ class IncomingDangerAlert {
   final DateTime? expiresAt;
   final int? distanceMeters;
   final bool liveAvailable;
+  final bool hasOriginalVoice;
+  final String priority;
 
   String get dedupeKey => "$alertId:$version";
   bool get isExpired =>
       expiresAt != null && !expiresAt!.isAfter(DateTime.now());
   String get spokenText => "Danger alert. $dangerType reported in $area.";
+  int get priorityRank => switch (priority.toUpperCase()) {
+    "CRITICAL" => 4,
+    "HIGH" => 3,
+    "MEDIUM" => 2,
+    _ => 1,
+  };
 
   static IncomingDangerAlert? fromData(Map<String, dynamic> data) {
     if (data["type"]?.toString() != "NearbyDangerWarning") return null;
@@ -78,6 +86,8 @@ class IncomingDangerAlert {
       expiresAt: DateTime.tryParse(data["expiresAt"]?.toString() ?? ""),
       distanceMeters: int.tryParse(data["distanceMeters"]?.toString() ?? ""),
       liveAvailable: data["liveAvailable"]?.toString() == "true",
+      hasOriginalVoice: data["hasOriginalVoice"]?.toString() == "true",
+      priority: data["dangerAlertPriority"]?.toString() ?? "MEDIUM",
     );
     return parsed.isExpired ? null : parsed;
   }
@@ -87,23 +97,4 @@ class IncomingDangerAlert {
     if (normalized.isEmpty) return "your area";
     return normalized.length <= 80 ? normalized : normalized.substring(0, 80);
   }
-}
-
-class MobileDangerAlertAnnouncer {
-  MobileDangerAlertAnnouncer({FlutterTts? tts}) : _tts = tts ?? FlutterTts();
-
-  final FlutterTts _tts;
-
-  Future<void> speak(
-    IncomingDangerAlert alert, {
-    String locale = "en-NG",
-  }) async {
-    final available = await _tts.isLanguageAvailable(locale) == true;
-    await _tts.setLanguage(available ? locale : "en-NG");
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.speak(alert.spokenText);
-  }
-
-  Future<void> stop() => _tts.stop();
 }

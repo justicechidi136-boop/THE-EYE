@@ -104,6 +104,7 @@ export function buildDangerZoneAlertPayload(input: {
   repeatCount?: number;
   expiresAt?: Date | null;
   deepLink?: string;
+  hasOriginalVoice?: boolean;
   metadata?: Record<string, unknown>;
   config?: Record<string, unknown>;
 }): DangerZoneAlertPayloadV1 {
@@ -148,6 +149,7 @@ export function buildDangerZoneAlertPayload(input: {
     alertState: input.alertState,
     allClear: input.allClear ?? false,
     deepLink: input.deepLink,
+    hasOriginalVoice: input.hasOriginalVoice === true ? true : undefined,
   };
 
   const signing = input.config ? resolveDangerAlertSigningConfig(input.config) : null;
@@ -180,6 +182,7 @@ export function dangerAlertPayloadToFcmData(payload: DangerZoneAlertPayloadV1): 
     ...(payload.alertState ? { alertState: payload.alertState } : {}),
     ...(payload.allClear ? { allClear: "true" } : {}),
     ...(payload.deepLink ? { deepLink: payload.deepLink } : {}),
+    ...(payload.hasOriginalVoice ? { hasOriginalVoice: "true" } : {}),
     ...(payload.signature
       ? {
           signatureKeyId: payload.signature.keyId,
@@ -247,6 +250,7 @@ export function validateDangerAlertPayload(raw: Record<string, unknown>): Danger
     alertState: raw.alertState ? String(raw.alertState) : undefined,
     allClear: raw.allClear === true || raw.allClear === "true",
     deepLink: raw.deepLink ? String(raw.deepLink) : undefined,
+    hasOriginalVoice: raw.hasOriginalVoice === true || raw.hasOriginalVoice === "true",
     signature:
       raw.signatureKeyId && raw.signature
         ? {

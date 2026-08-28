@@ -1,5 +1,7 @@
 /// API path constants aligned with NestJS `/v1/field/*` routes.
 abstract final class FieldApiPaths {
+  static String dangerTriggerOriginalVoice(String eventId) =>
+      '/danger-triggers/$eventId/original-voice';
   static const legacyDefaultBaseUrl = String.fromEnvironment(
     'THE_EYE_API_BASE_URL',
     defaultValue: 'http://10.0.2.2:4000/v1',

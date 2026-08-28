@@ -122,5 +122,7 @@ export type DangerZoneAlertPayloadV1 = {
   alertState?: string;
   allClear?: boolean;
   deepLink?: string;
+  /** True when an authorized recipient may request the reporter's original recording. */
+  hasOriginalVoice?: boolean;
   signature?: DangerAlertSignature;
 };

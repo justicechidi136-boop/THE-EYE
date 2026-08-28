@@ -10,6 +10,8 @@ Map<String, dynamic> payload({int version = 1, DateTime? expiresAt}) => {
       "zoneId": "event-1",
       "areaName": "Rumuola",
       "distanceMeters": "700",
+      "hasOriginalVoice": "true",
+      "dangerAlertPriority": "CRITICAL",
       "issuedAt": DateTime.now().toUtc().toIso8601String(),
       "expiresAt":
           (expiresAt ?? DateTime.now().add(const Duration(minutes: 20)))
@@ -25,6 +27,8 @@ void main() {
     expect(alert.area, "Rumuola");
     expect(alert.spokenText, "Danger alert. Fire reported in Rumuola.");
     expect(alert.dedupeKey, "danger-event:event-1:user-1:1");
+    expect(alert.hasOriginalVoice, isTrue);
+    expect(alert.priorityRank, 4);
   });
 
   test("rejects arbitrary category and expired alerts", () {

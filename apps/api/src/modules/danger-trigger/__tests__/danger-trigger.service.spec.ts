@@ -8,6 +8,7 @@ const actor = {
 } as any;
 
 function buildService() {
+  const claimedDeliveries = new Set<string>();
   const event = {
     id: "event-1",
     incidentId: "incident-1",
@@ -66,9 +67,33 @@ function buildService() {
       }),
       update: jest.fn().mockResolvedValue({ id: "session-1", metadata: {} }),
     },
-    deviceGeoState: { findMany: jest.fn().mockResolvedValue([]) },
+    dangerEventDelivery: {
+      create: jest.fn().mockImplementation(({ data }: any) => {
+        const key = `${data.dangerEventId}:${data.recipientKey}:${data.alertRevision}`;
+        if (claimedDeliveries.has(key)) {
+          const error = new Error("duplicate delivery") as any;
+          error.code = "P2002";
+          throw error;
+        }
+        claimedDeliveries.add(key);
+        return Promise.resolve({ id: `delivery-${claimedDeliveries.size}`, ...data });
+      }),
+      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    incidentMedia: { findFirst: jest.fn().mockResolvedValue(null) },
+    incidentMediaAccessLog: { create: jest.fn().mockResolvedValue({}) },
+    deviceGeoState: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({ id: "geo-1" }),
+      update: jest.fn().mockResolvedValue({ id: "geo-1" }),
+    },
     fieldDevice: { findMany: jest.fn().mockResolvedValue([]) },
     $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+    $executeRawUnsafe: jest.fn().mockResolvedValue(1),
   } as any;
   const jurisdiction = {
     resolve: jest.fn().mockResolvedValue({
@@ -95,7 +120,9 @@ function buildService() {
     }),
     stopIncidentLiveVideo: jest.fn().mockResolvedValue({}),
   } as any;
-  const notifications = { create: jest.fn().mockResolvedValue({}) } as any;
+  const notifications = {
+    create: jest.fn().mockResolvedValue({ data: [{ id: "notification-1" }] }),
+  } as any;
   const audit = { record: jest.fn().mockResolvedValue({}) } as any;
   const config = { get: jest.fn().mockReturnValue("4000") } as any;
   const tokens = {} as any;
@@ -210,12 +237,165 @@ describe("DangerTriggerService", () => {
       .map((call: any[]) => call[0])
       .filter((input: any) => input.userId && input.channels.includes("push"))
       .map((input: any) => input.userId);
-    expect(mobileRecipients).toEqual(["user-a", "user-b", "user-c"]);
+    expect(mobileRecipients).toEqual(["user-a", "user-c"]);
     const userBWatchAlerts = notifications.create.mock.calls
       .map((call: any[]) => call[0])
       .filter((input: any) => input.userId === "user-b" && input.channels.includes("watch_push"));
     expect(userBWatchAlerts.length).toBe(1);
-    expect(userBWatchAlerts[0].metadata.deviceId).toBeUndefined();
+    expect(userBWatchAlerts[0].metadata.deviceId).toBe("watch-b");
+  });
+
+  it("delivers once when a trusted user later enters an active danger zone", async () => {
+    const { service, prisma, notifications } = buildService();
+    const now = new Date();
+    prisma.dangerEvent.findMany.mockResolvedValue([{
+      id: "active-event",
+      incidentId: "incident-1",
+      initiatorUserId: actor.sub,
+      state: "ACTIVE",
+      latitude: 6.5244,
+      longitude: 3.3792,
+      effectiveRadiusMeters: 4_000,
+      areaName: "Ikeja, Lagos",
+      createdAt: now,
+      liveVoiceEndedAt: null,
+      metadata: {
+        alertRevision: 1,
+        expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
+        dangerAlertCode: "DANGER_ZONE_FIRE_NEARBY",
+      },
+    }]);
+
+    const input = {
+      recipientType: "mobile" as const,
+      recipientUserId: "late-user",
+      latitude: 6.525,
+      longitude: 3.3792,
+      accuracyMeters: 12,
+      capturedAt: now,
+    };
+    const first = await service.evaluateTrustedLocation(input);
+    const second = await service.evaluateTrustedLocation(input);
+
+    expect(first.alerts).toHaveLength(1);
+    expect(second.alerts[0]).toEqual(
+      expect.objectContaining({ suppressed: true, reason: "delivery_dedupe" }),
+    );
+    const lateNotifications = notifications.create.mock.calls
+      .map((call: any[]) => call[0])
+      .filter((value: any) => value.userId === "late-user");
+    expect(lateNotifications).toHaveLength(1);
+    expect(lateNotifications[0].metadata.deliveryReason).toBe("ACTIVE_ZONE_ENTRY");
+    expect(lateNotifications[0].metadata.preciseReporterLocationExposed).toBe(false);
+  });
+
+  it("does not deliver for stale, inaccurate, or terminal zone evaluations", async () => {
+    const stale = buildService();
+    const staleResult = await stale.service.evaluateTrustedLocation({
+      recipientType: "mobile",
+      recipientUserId: "late-user",
+      latitude: 6.525,
+      longitude: 3.3792,
+      accuracyMeters: 10,
+      capturedAt: new Date(Date.now() - 6 * 60_000),
+    });
+    expect(staleResult.reason).toBe("untrusted_location");
+
+    const inaccurate = buildService();
+    const inaccurateResult = await inaccurate.service.evaluateTrustedLocation({
+      recipientType: "mobile",
+      recipientUserId: "late-user",
+      latitude: 6.525,
+      longitude: 3.3792,
+      accuracyMeters: 151,
+      capturedAt: new Date(),
+    });
+    expect(inaccurateResult.reason).toBe("untrusted_location");
+
+    const terminal = buildService();
+    terminal.prisma.dangerEvent.findMany.mockResolvedValue([
+      {
+        id: "resolved-event",
+        state: "RESOLVED",
+        latitude: 6.5244,
+        longitude: 3.3792,
+        effectiveRadiusMeters: 4_000,
+        createdAt: new Date(),
+        metadata: {},
+      },
+      {
+        id: "cancelled-event",
+        state: "FALSE_ALARM",
+        latitude: 6.5244,
+        longitude: 3.3792,
+        effectiveRadiusMeters: 4_000,
+        createdAt: new Date(),
+        metadata: {},
+      },
+      {
+        id: "expired-event",
+        state: "ACTIVE",
+        latitude: 6.5244,
+        longitude: 3.3792,
+        effectiveRadiusMeters: 4_000,
+        createdAt: new Date(Date.now() - 7 * 60 * 60_000),
+        metadata: {
+          expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      },
+    ]);
+    const terminalResult = await terminal.service.evaluateTrustedLocation({
+      recipientType: "mobile",
+      recipientUserId: "late-user",
+      latitude: 6.525,
+      longitude: 3.3792,
+      accuracyMeters: 10,
+      capturedAt: new Date(),
+    });
+    expect(terminalResult.alerts).toHaveLength(0);
+    expect(terminal.notifications.create).toHaveBeenCalledTimes(0);
+  });
+
+  it("allows a backend-approved alert revision to notify the same device again", async () => {
+    const { service, prisma, notifications } = buildService();
+    const now = new Date();
+    const event = {
+      id: "active-event",
+      incidentId: "incident-1",
+      initiatorUserId: actor.sub,
+      state: "ACTIVE",
+      latitude: 6.5244,
+      longitude: 3.3792,
+      effectiveRadiusMeters: 4_000,
+      areaName: "Ikeja, Lagos",
+      createdAt: now,
+      liveVoiceEndedAt: null,
+      metadata: {
+        alertRevision: 1,
+        expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
+        dangerAlertCode: "DANGER_ZONE_FIRE_NEARBY",
+      },
+    };
+    prisma.dangerEvent.findMany.mockResolvedValue([event]);
+    const input = {
+      recipientType: "watch" as const,
+      recipientUserId: "late-user",
+      deviceId: "watch-1",
+      latitude: 6.525,
+      longitude: 3.3792,
+      accuracyMeters: 12,
+      capturedAt: now,
+    };
+
+    await service.evaluateTrustedLocation(input);
+    event.metadata.alertRevision = 2;
+    await service.evaluateTrustedLocation({ ...input, capturedAt: new Date() });
+
+    const watchNotifications = notifications.create.mock.calls
+      .map((call: any[]) => call[0])
+      .filter((value: any) => value.metadata?.deviceId === "watch-1");
+    expect(watchNotifications).toHaveLength(2);
+    expect(watchNotifications[1].metadata.dangerAlert.version).toBe(2);
   });
 
   it("notifies only active field tablets inside the authorized radius", async () => {
@@ -255,6 +435,50 @@ describe("DangerTriggerService", () => {
       "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
     );
     expect(result.fanout.fieldRecipients).toBe(1);
+  });
+
+  it("marks private original voice availability without exposing its object key", async () => {
+    const { service, prisma, notifications } = buildService();
+    const now = new Date();
+    prisma.$queryRawUnsafe.mockResolvedValue([
+      {
+        userId: "voice-recipient",
+        deviceId: null,
+        latitude: 6.525,
+        longitude: 3.3792,
+        accuracyMeters: 10,
+        lastEvaluatedAt: now,
+      },
+    ]);
+    prisma.incidentMedia.findFirst.mockResolvedValue({
+      id: "voice-media",
+      objectKey: "private/incident/original-voice.m4a",
+    });
+
+    await service.activate(
+      "event-1",
+      { liveVoiceSessionId: "session-1", connectedAt: now.toISOString() },
+      actor,
+    );
+
+    const alert = notifications.create.mock.calls
+      .map((call: any[]) => call[0])
+      .find((value: any) => value.userId === "voice-recipient");
+    expect(alert.metadata.dangerAlert.hasOriginalVoice).toBe(true);
+    expect(alert.metadata.originalVoiceProvenance).toBe("ORIGINAL_VOICE_NOTE");
+    expect(JSON.stringify(alert)).not.toContain("original-voice.m4a");
+    expect(JSON.stringify(alert)).not.toContain("signedUrl");
+  });
+
+  it("denies original voice access to a recipient outside the active zone", async () => {
+    const { service, prisma } = buildService();
+    prisma.deviceGeoState.findMany.mockResolvedValue([]);
+
+    await expect(service.originalVoice("event-1", {
+      ...actor,
+      sub: "22222222-2222-4222-8222-222222222222",
+    })).rejects.toThrow("outside your authorized area");
+    expect(prisma.incidentMedia.findFirst).toHaveBeenCalledTimes(0);
   });
 
   it("classifies repeated non-QA danger triggers near the requested area", async () => {

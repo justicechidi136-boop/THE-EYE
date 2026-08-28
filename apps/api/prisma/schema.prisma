@@ -1072,11 +1072,36 @@ model DangerEvent {
   initiator             User?                 @relation("DangerEventInitiator", fields: [initiatorUserId], references: [id], onDelete: SetNull)
   liveVoiceSession      LiveVideoSession?      @relation("DangerEventLiveVoice", fields: [liveVoiceSessionId], references: [id], onDelete: SetNull)
   signals               DangerEventSignal[]
+  deliveries            DangerEventDelivery[]
 
   @@index([state, createdAt])
   @@index([clusterKey, createdAt])
   @@index([latitude, longitude])
   @@map("danger_events")
+}
+
+model DangerEventDelivery {
+  id                 String      @id @default(uuid()) @db.Uuid
+  dangerEventId      String      @map("danger_event_id") @db.Uuid
+  recipientUserId    String?     @map("recipient_user_id") @db.Uuid
+  recipientKey       String      @map("recipient_key")
+  recipientType      String      @map("recipient_type")
+  alertRevision      Int         @default(1) @map("alert_revision")
+  status             String      @default("QUEUED")
+  attemptCount       Int         @default(1) @map("attempt_count")
+  distanceMeters     Decimal?    @map("distance_meters") @db.Decimal(10, 2)
+  locationCapturedAt DateTime    @map("location_captured_at") @db.Timestamptz(6)
+  notificationId     String?     @map("notification_id") @db.Uuid
+  lastError          String?     @map("last_error")
+  metadata           Json        @default("{}")
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  dangerEvent        DangerEvent @relation(fields: [dangerEventId], references: [id], onDelete: Cascade)
+
+  @@unique([dangerEventId, recipientKey, alertRevision])
+  @@index([recipientUserId, createdAt])
+  @@index([dangerEventId, status])
+  @@map("danger_event_deliveries")
 }
 
 model DangerEventSignal {

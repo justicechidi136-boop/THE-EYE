@@ -107,6 +107,8 @@ class _TheEyeFieldOpsAppState extends State<TheEyeFieldOpsApp> {
               await _services.dangerAlerts.acknowledge(alert);
               if (dialogContext.mounted) Navigator.pop(dialogContext);
             },
+            audioState: _services.dangerAlerts.audioState,
+            onReplay: () => unawaited(_services.dangerAlerts.replay(alert)),
           ),
     );
     _dangerVisible = false;

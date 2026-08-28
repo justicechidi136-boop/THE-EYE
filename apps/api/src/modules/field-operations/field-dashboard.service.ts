@@ -1,6 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { DispatchService } from "../dispatch/dispatch.service";
+import { DangerTriggerService } from "../danger-trigger/danger-trigger.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { assertFieldSession } from "./field-session.util";
 import { FieldCheckpointsService } from "./field-checkpoints.service";
@@ -15,6 +16,7 @@ export class FieldDashboardService {
     private readonly patrols: FieldPatrolsService,
     private readonly checkpoints: FieldCheckpointsService,
     private readonly dispatch: DispatchService,
+    @Optional() private readonly dangerTrigger?: DangerTriggerService,
   ) {}
 
   async getDashboard(actor: JwtPayload) {
@@ -137,6 +139,33 @@ export class FieldDashboardService {
     locationPermission?: string;
   }) {
     const ctx = assertFieldSession(actor);
+    const previousDevice = dto.latitude != null
+      ? await this.prisma.fieldDevice.findUnique({ where: { id: ctx.fieldDeviceId } })
+      : null;
+    const dangerTriggerEvaluation =
+      dto.latitude != null &&
+      dto.longitude != null &&
+      dto.accuracyMeters != null &&
+      this.dangerTrigger
+        ? await this.dangerTrigger.evaluateTrustedLocation({
+            recipientType: "field",
+            recipientUserId: ctx.officerId,
+            deviceId: ctx.fieldDeviceId,
+            latitude: dto.latitude,
+            longitude: dto.longitude,
+            accuracyMeters: dto.accuracyMeters,
+            capturedAt: new Date(),
+            previousLatitude:
+              previousDevice?.lastKnownLatitude == null
+                ? null
+                : Number(previousDevice.lastKnownLatitude),
+            previousLongitude:
+              previousDevice?.lastKnownLongitude == null
+                ? null
+                : Number(previousDevice.lastKnownLongitude),
+            previousCapturedAt: previousDevice?.lastLocationAt ?? null,
+          })
+        : null;
     const status = await this.prisma.officerStatus.upsert({
       where: { officerId: ctx.officerId },
       create: {
@@ -215,6 +244,7 @@ export class FieldDashboardService {
       data: {
         status: status.status,
         lastHeartbeatAt: status.lastHeartbeatAt?.toISOString?.() ?? null,
+        dangerTrigger: dangerTriggerEvaluation,
       },
     };
   }

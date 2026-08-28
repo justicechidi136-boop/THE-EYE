@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/field_theme.dart';
 import 'field_danger_alert.dart';
+import 'field_danger_alert_service.dart';
 
 class FieldDangerAlertDialog extends StatelessWidget {
   const FieldDangerAlertDialog({
@@ -10,12 +12,16 @@ class FieldDangerAlertDialog extends StatelessWidget {
     required this.elapsedLabel,
     required this.onOpenMap,
     required this.onAcknowledge,
+    required this.audioState,
+    required this.onReplay,
   });
 
   final FieldDangerAlert alert;
   final String elapsedLabel;
   final VoidCallback onOpenMap;
   final VoidCallback onAcknowledge;
+  final ValueListenable<FieldDangerAudioState> audioState;
+  final VoidCallback onReplay;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +76,32 @@ class FieldDangerAlertDialog extends StatelessWidget {
               const SizedBox(height: 8),
               Text('Triggered $elapsedLabel ago'),
               const SizedBox(height: 12),
+              ValueListenableBuilder<FieldDangerAudioState>(
+                valueListenable: audioState,
+                builder:
+                    (context, state, _) => Text(
+                      switch (state) {
+                        FieldDangerAudioState.speakingWarning =>
+                          'THE EYE generated warning',
+                        FieldDangerAudioState.playingOriginalVoice =>
+                          'Original voice',
+                        FieldDangerAudioState.completed =>
+                          'Audio alert completed',
+                        _ => 'Preparing safety audio',
+                      },
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.labelLarge,
+                    ),
+              ),
+              if (alert.hasOriginalVoice) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Original voice follows the THE EYE generated warning',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+              const SizedBox(height: 12),
               const Text(
                 'Approximate area only. Reporter identity and exact GPS remain private.',
                 textAlign: TextAlign.center,
@@ -84,6 +116,11 @@ class FieldDangerAlertDialog extends StatelessWidget {
                     onPressed: onOpenMap,
                     icon: const Icon(Icons.map_outlined),
                     label: const Text('Open Map'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onReplay,
+                    icon: const Icon(Icons.replay_outlined),
+                    label: const Text('Replay audio'),
                   ),
                   FilledButton.icon(
                     onPressed: onAcknowledge,

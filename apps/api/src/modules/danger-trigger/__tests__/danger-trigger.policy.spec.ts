@@ -1,4 +1,9 @@
-import { classifyDangerAreaRisk, dangerRecipientEligibility, resolveDangerRadius } from "../danger-trigger.policy";
+import {
+  classifyDangerAreaRisk,
+  dangerRecipientEligibility,
+  isPlausibleDangerLocationTransition,
+  resolveDangerRadius,
+} from "../danger-trigger.policy";
 import { validateStartDangerTriggerDto } from "../dto/danger-trigger.dto";
 
 const metersNorth = (meters: number) => meters / 111_320;
@@ -50,6 +55,28 @@ describe("danger trigger geographic policy", () => {
     });
     expect(result.eligible).toBe(false);
     expect(result.locationFresh).toBe(false);
+  });
+
+  it("excludes poor-accuracy locations and impossible jumps", () => {
+    const inaccurate = dangerRecipientEligibility({
+      dangerLatitude: 6.5244,
+      dangerLongitude: 3.3792,
+      recipientLatitude: 6.525,
+      recipientLongitude: 3.3792,
+      recipientLocationAt: new Date(),
+      recipientAccuracyMeters: 151,
+      radiusMeters: 4_000,
+    });
+    expect(inaccurate.eligible).toBe(false);
+    expect(inaccurate.locationAccurate).toBe(false);
+    expect(isPlausibleDangerLocationTransition({
+      previousLatitude: 6.0,
+      previousLongitude: 3.0,
+      previousCapturedAt: new Date(Date.now() - 30_000),
+      latitude: 6.5244,
+      longitude: 3.3792,
+      capturedAt: new Date(),
+    })).toBe(false);
   });
 
   it("never permits configuration above the owner-approved maximum", () => {

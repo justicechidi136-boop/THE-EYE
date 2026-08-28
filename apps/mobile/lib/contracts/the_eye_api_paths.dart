@@ -14,6 +14,10 @@ abstract final class TheEyeApiPaths {
       "/live-video/sessions/$sessionId/location";
 
   static const dangerTriggerPrepare = "/danger-triggers/live-voice/prepare";
+  static const dangerTriggerLocationEvaluations =
+      "/danger-triggers/location-evaluations";
+  static String dangerTriggerOriginalVoice(String eventId) =>
+      "/danger-triggers/$eventId/original-voice";
   static String dangerTriggerActivate(String eventId) =>
       "/danger-triggers/$eventId/activate";
   static String dangerTriggerEndVoice(String eventId) =>

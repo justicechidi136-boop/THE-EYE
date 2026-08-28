@@ -4,6 +4,7 @@ import { AuditModule } from "../audit/audit.module";
 import { DispatchModule } from "../dispatch/dispatch.module";
 import { DroneSurveillanceModule } from "../drone-surveillance/drone-surveillance.module";
 import { IncidentCommunicationsModule } from "../incident-communications/incident-communications.module";
+import { DangerTriggerModule } from "../danger-trigger/danger-trigger.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { FieldAssignmentsService } from "./field-assignments.service";
 import { FieldAuthService } from "./field-auth.service";
@@ -61,6 +62,7 @@ import {
     DroneSurveillanceModule,
     IncidentCommunicationsModule,
     AgenciesModule,
+    DangerTriggerModule,
   ],
   controllers: [
     FieldDevicesController,

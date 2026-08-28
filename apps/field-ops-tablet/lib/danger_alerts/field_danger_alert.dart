@@ -33,6 +33,8 @@ class FieldDangerAlert {
     required this.issuedAt,
     this.expiresAt,
     this.distanceMeters,
+    this.hasOriginalVoice = false,
+    this.priority = 'MEDIUM',
   });
 
   final String eventId;
@@ -43,6 +45,8 @@ class FieldDangerAlert {
   final DateTime issuedAt;
   final DateTime? expiresAt;
   final int? distanceMeters;
+  final bool hasOriginalVoice;
+  final String priority;
 
   String get dedupeKey => '$alertId:$version';
   String get speech => 'Danger alert. $dangerType reported in $area.';
@@ -55,6 +59,12 @@ class FieldDangerAlert {
   }
 
   bool get expired => expiresAt != null && !expiresAt!.isAfter(DateTime.now());
+  int get priorityRank => switch (priority.toUpperCase()) {
+    'CRITICAL' => 4,
+    'HIGH' => 3,
+    'MEDIUM' => 2,
+    _ => 1,
+  };
 
   static FieldDangerAlert? fromData(Map<String, dynamic> data) {
     if (data['type']?.toString() != 'NearbyDangerWarning') return null;
@@ -78,12 +88,15 @@ class FieldDangerAlert {
       alertId: alertId,
       version: int.tryParse(data['alertVersion']?.toString() ?? '') ?? 1,
       dangerType: label,
-      area: areaRaw.isEmpty
-          ? 'your operational area'
-          : (areaRaw.length <= 80 ? areaRaw : areaRaw.substring(0, 80)),
+      area:
+          areaRaw.isEmpty
+              ? 'your operational area'
+              : (areaRaw.length <= 80 ? areaRaw : areaRaw.substring(0, 80)),
       issuedAt: issuedAt,
       expiresAt: DateTime.tryParse(data['expiresAt']?.toString() ?? ''),
       distanceMeters: int.tryParse(data['distanceMeters']?.toString() ?? ''),
+      hasOriginalVoice: data['hasOriginalVoice']?.toString() == 'true',
+      priority: data['dangerAlertPriority']?.toString() ?? 'MEDIUM',
     );
     return value.expired ? null : value;
   }
