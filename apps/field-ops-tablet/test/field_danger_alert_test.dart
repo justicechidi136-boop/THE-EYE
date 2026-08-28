@@ -12,6 +12,7 @@ void main() {
       'zoneId': 'event-1',
       'areaName': 'Airport Road',
       'distanceMeters': '1400',
+      'hasOriginalVoice': 'true',
       'issuedAt': DateTime.now().toUtc().toIso8601String(),
       'expiresAt':
           DateTime.now()
@@ -29,6 +30,7 @@ void main() {
     );
     expect(alert.distanceLabel, 'About 1.4 km away');
     expect(alert.dedupeKey, 'danger:event-1:field-1:2');
+    expect(alert.hasOriginalVoice, isTrue);
   });
 
   test('rejects untrusted and stale alert payloads', () {

@@ -3,7 +3,10 @@ import { haversineMeters } from "../verification/verification-signals";
 
 export const OWNER_APPROVED_MAX_DANGER_RADIUS_METERS = 4_000;
 export const DANGER_LOCATION_FRESHNESS_MS = 30 * 60_000;
-export const DANGER_RECIPIENT_LOCATION_FRESHNESS_MS = 30 * 60_000;
+export const DANGER_RECIPIENT_LOCATION_FRESHNESS_MS = 5 * 60_000;
+export const DANGER_RECIPIENT_MAX_ACCURACY_METERS = 150;
+export const DANGER_LOCATION_MAX_SPEED_MPS = 100;
+export const DANGER_ACTIVE_EVENT_MAX_AGE_MS = 6 * 60 * 60_000;
 export const DANGER_AREA_RISK_WINDOW_DAYS = 30;
 export const DANGER_AREA_RISK_RADIUS_METERS = 4_000;
 
@@ -45,6 +48,7 @@ export function dangerRecipientEligibility(input: {
   recipientLatitude: number;
   recipientLongitude: number;
   recipientLocationAt: Date;
+  recipientAccuracyMeters?: number | null;
   now?: Date;
   radiusMeters?: number;
 }) {
@@ -52,6 +56,11 @@ export function dangerRecipientEligibility(input: {
   const radiusMeters = resolveDangerRadius(input.radiusMeters);
   const locationAgeMs = now.getTime() - input.recipientLocationAt.getTime();
   const locationFresh = locationAgeMs >= 0 && locationAgeMs <= DANGER_RECIPIENT_LOCATION_FRESHNESS_MS;
+  const locationAccurate =
+    input.recipientAccuracyMeters == null ||
+    (Number.isFinite(input.recipientAccuracyMeters) &&
+      input.recipientAccuracyMeters >= 0 &&
+      input.recipientAccuracyMeters <= DANGER_RECIPIENT_MAX_ACCURACY_METERS);
   const distanceMeters = haversineMeters(
     input.dangerLatitude,
     input.dangerLongitude,
@@ -59,11 +68,39 @@ export function dangerRecipientEligibility(input: {
     input.recipientLongitude,
   );
   return {
-    eligible: locationFresh && distanceMeters <= radiusMeters,
+    eligible: locationFresh && locationAccurate && distanceMeters <= radiusMeters,
     distanceMeters,
     locationFresh,
+    locationAccurate,
     radiusMeters,
   };
+}
+
+export function isPlausibleDangerLocationTransition(input: {
+  previousLatitude?: number | null;
+  previousLongitude?: number | null;
+  previousCapturedAt?: Date | null;
+  latitude: number;
+  longitude: number;
+  capturedAt: Date;
+}) {
+  if (
+    input.previousLatitude == null ||
+    input.previousLongitude == null ||
+    !input.previousCapturedAt
+  ) {
+    return true;
+  }
+  const elapsedSeconds =
+    (input.capturedAt.getTime() - input.previousCapturedAt.getTime()) / 1000;
+  if (elapsedSeconds <= 0) return false;
+  const distanceMeters = haversineMeters(
+    input.previousLatitude,
+    input.previousLongitude,
+    input.latitude,
+    input.longitude,
+  );
+  return distanceMeters / elapsedSeconds <= DANGER_LOCATION_MAX_SPEED_MPS;
 }
 
 export function dangerClusterKey(latitude: number, longitude: number) {

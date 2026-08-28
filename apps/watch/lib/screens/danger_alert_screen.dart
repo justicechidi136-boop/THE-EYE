@@ -139,6 +139,16 @@ class _DangerAlertScreenState extends State<DangerAlertScreen>
                 style: const TextStyle(color: EyeColors.orange, fontSize: 10),
               ),
             ],
+            if (payload.hasOriginalVoice) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Original voice available on phone',
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: EyeColors.muted, fontSize: 10),
+              ),
+            ],
             const Spacer(),
             WatchPrimaryButton(
               label: l10n.iUnderstand,

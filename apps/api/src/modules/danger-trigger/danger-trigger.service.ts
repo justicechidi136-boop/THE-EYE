@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { AdminRoleName, DangerAlertCode, IncidentPriority, IncidentStatus, IncidentType } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";
+import { createStorageDownloadUrl } from "../../common/storage/s3-presign";
 import {
   buildDangerZoneAlertPayload,
   dangerAlertPayloadToFcmData,
@@ -15,15 +16,20 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   type ActivateDangerTriggerDto,
   type CancelDangerTriggerDto,
+  type EvaluateDangerLocationDto,
   type StartDangerTriggerDto,
+  validateEvaluateDangerLocationDto,
   validateStartDangerTriggerDto,
 } from "./dto/danger-trigger.dto";
 import {
   classifyDangerAreaRisk,
   DANGER_AREA_RISK_RADIUS_METERS,
   DANGER_AREA_RISK_WINDOW_DAYS,
+  DANGER_ACTIVE_EVENT_MAX_AGE_MS,
+  DANGER_RECIPIENT_LOCATION_FRESHNESS_MS,
   dangerClusterKey,
   dangerRecipientEligibility,
+  isPlausibleDangerLocationTransition,
   OWNER_APPROVED_MAX_DANGER_RADIUS_METERS,
   resolveDangerRadius,
 } from "./danger-trigger.policy";
@@ -34,9 +40,25 @@ type NearbyGeoState = {
   latitude: number;
   longitude: number;
   lastEvaluatedAt: Date;
+  accuracyMeters?: number | null;
 };
 
 const DANGER_ALERT_RELEVANCE_MS = 30 * 60 * 1000;
+const DANGER_EVENT_DEFAULT_ACTIVE_MS = DANGER_ACTIVE_EVENT_MAX_AGE_MS;
+
+export type TrustedDangerLocation = {
+  recipientType: "mobile" | "watch" | "field";
+  recipientUserId: string;
+  deviceId?: string | null;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  capturedAt: Date;
+  previousLatitude?: number | null;
+  previousLongitude?: number | null;
+  previousCapturedAt?: Date | null;
+  persistMobileState?: boolean;
+};
 
 function dangerLabel(code: string) {
   switch (code) {
@@ -288,6 +310,10 @@ export class DangerTriggerService {
           liveConnectionConfirmed: true,
           activatedAt: connectedAt.toISOString(),
           latestLiveVoiceSessionId: dto.liveVoiceSessionId,
+          alertRevision: Math.max(1, Number(metadata.alertRevision ?? 1)),
+          expiresAt:
+            metadata.expiresAt ??
+            new Date(connectedAt.getTime() + DANGER_EVENT_DEFAULT_ACTIVE_MS).toISOString(),
         },
       },
     });
@@ -402,6 +428,115 @@ export class DangerTriggerService {
         radiusMeters: DANGER_AREA_RISK_RADIUS_METERS,
         approximateArea: nearby[0]?.event?.areaName ?? null,
         evaluatedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  async evaluateCitizenLocation(dto: EvaluateDangerLocationDto, actor: JwtPayload) {
+    this.assertCitizen(actor);
+    validateEvaluateDangerLocationDto(dto);
+    const existing = await (this.prisma as any).deviceGeoState.findFirst({
+      where: { userId: actor.sub, deviceId: null },
+      orderBy: { lastEvaluatedAt: "desc" },
+    });
+    return this.evaluateTrustedLocation({
+      recipientType: "mobile",
+      recipientUserId: actor.sub,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      accuracyMeters: dto.accuracyMeters,
+      capturedAt: new Date(dto.capturedAt),
+      previousLatitude: existing?.latitude == null ? null : Number(existing.latitude),
+      previousLongitude: existing?.longitude == null ? null : Number(existing.longitude),
+      previousCapturedAt: existing?.lastEvaluatedAt ?? null,
+      persistMobileState: true,
+    });
+  }
+
+  async evaluateTrustedLocation(input: TrustedDangerLocation) {
+    const now = new Date();
+    const ageMs = now.getTime() - input.capturedAt.getTime();
+    if (
+      ageMs < -30_000 ||
+      ageMs > DANGER_RECIPIENT_LOCATION_FRESHNESS_MS ||
+      !Number.isFinite(input.accuracyMeters) ||
+      input.accuracyMeters < 0 ||
+      input.accuracyMeters > 150
+    ) {
+      return { evaluated: false, reason: "untrusted_location", alerts: [] };
+    }
+    if (!isPlausibleDangerLocationTransition(input)) {
+      return { evaluated: false, reason: "impossible_location_jump", alerts: [] };
+    }
+
+    if (input.persistMobileState) {
+      await this.persistMobileGeoState(input);
+    }
+
+    const radius = OWNER_APPROVED_MAX_DANGER_RADIUS_METERS;
+    const latitudeDelta = radius / 111_320;
+    const longitudeScale = Math.max(0.1, Math.cos((input.latitude * Math.PI) / 180));
+    const longitudeDelta = radius / (111_320 * longitudeScale);
+    const candidates = await (this.prisma as any).dangerEvent.findMany({
+      where: {
+        state: "ACTIVE",
+        createdAt: { gte: new Date(now.getTime() - DANGER_ACTIVE_EVENT_MAX_AGE_MS) },
+        latitude: { gte: input.latitude - latitudeDelta, lte: input.latitude + latitudeDelta },
+        longitude: { gte: input.longitude - longitudeDelta, lte: input.longitude + longitudeDelta },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    const alerts = [] as Array<Record<string, unknown>>;
+    for (const event of candidates) {
+      if (event.initiatorUserId === input.recipientUserId) continue;
+      if (!this.eventIsCurrentlyEffective(event, now)) continue;
+      const eligibility = dangerRecipientEligibility({
+        dangerLatitude: Number(event.latitude),
+        dangerLongitude: Number(event.longitude),
+        recipientLatitude: input.latitude,
+        recipientLongitude: input.longitude,
+        recipientLocationAt: input.capturedAt,
+        recipientAccuracyMeters: input.accuracyMeters,
+        radiusMeters: Math.min(Number(event.effectiveRadiusMeters), radius),
+        now,
+      });
+      if (!eligibility.eligible) continue;
+      const delivered = await this.deliverDangerEvent(event, {
+        recipientType: input.recipientType,
+        recipientUserId: input.recipientUserId,
+        deviceId: input.deviceId,
+        distanceMeters: eligibility.distanceMeters,
+        locationCapturedAt: input.capturedAt,
+        reason: "ACTIVE_ZONE_ENTRY",
+      });
+      alerts.push(delivered);
+    }
+    return { evaluated: true, alerts };
+  }
+
+  async originalVoice(eventId: string, actor: JwtPayload) {
+    const event = await (this.prisma as any).dangerEvent.findUnique({ where: { id: eventId } });
+    if (!event) throw new NotFoundException("Danger event not found");
+    await this.assertCanAccess(event, actor);
+    const media = await this.findOriginalVoice(event);
+    if (!media) throw new NotFoundException("Original voice is not available for this alert");
+    const signed = await createStorageDownloadUrl(media.objectKey, 300);
+    await (this.prisma as any).incidentMediaAccessLog.create({
+      data: {
+        mediaId: media.id,
+        accessorId: actor.typ === "user" ? actor.sub : undefined,
+        adminUserId: actor.typ === "admin" || actor.typ === "field" ? actor.sub : undefined,
+        action: "view",
+        reason: "Authorized danger alert original voice playback",
+      },
+    });
+    return {
+      data: {
+        label: "Original voice",
+        signedUrl: signed.url,
+        expiresInSeconds: signed.expiresInSeconds,
       },
     };
   }
@@ -591,10 +726,10 @@ export class DangerTriggerService {
   private async fanout(event: any) {
     const rows = await this.prisma.$queryRawUnsafe<NearbyGeoState[]>(
       `SELECT user_id AS "userId", device_id AS "deviceId", latitude, longitude,
-              last_evaluated_at AS "lastEvaluatedAt"
+              accuracy_meters AS "accuracyMeters", last_evaluated_at AS "lastEvaluatedAt"
          FROM device_geo_states
         WHERE user_id <> $1::uuid
-          AND last_evaluated_at >= NOW() - INTERVAL '30 minutes'`,
+          AND last_evaluated_at >= NOW() - INTERVAL '5 minutes'`,
       event.initiatorUserId,
     );
     const eligible = rows
@@ -606,98 +741,39 @@ export class DangerTriggerService {
           recipientLatitude: Number(row.latitude),
           recipientLongitude: Number(row.longitude),
           recipientLocationAt: new Date(row.lastEvaluatedAt),
+          recipientAccuracyMeters:
+            row.accuracyMeters == null ? null : Number(row.accuracyMeters),
           radiusMeters: event.effectiveRadiusMeters,
         }),
       }))
       .filter((entry) => entry.result.eligible);
-    const byUser = new Map<string, typeof eligible>();
+    let deliveredLocations = 0;
+    const deliveredUsers = new Set<string>();
     for (const entry of eligible) {
-      const list = byUser.get(entry.row.userId) ?? [];
-      list.push(entry);
-      byUser.set(entry.row.userId, list);
+      const result = await this.deliverDangerEvent(event, {
+        recipientType: entry.row.deviceId ? "watch" : "mobile",
+        recipientUserId: entry.row.userId,
+        deviceId: entry.row.deviceId,
+        distanceMeters: entry.result.distanceMeters,
+        locationCapturedAt: new Date(entry.row.lastEvaluatedAt),
+        reason: "INITIAL_ACTIVATION",
+      });
+      if (!result.suppressed) {
+        deliveredLocations += 1;
+        deliveredUsers.add(entry.row.userId);
+      }
     }
-    const alertCode = this.normalizedDangerCode(event);
-    const label = dangerLabel(alertCode);
-    const area = event.areaName?.trim() || "your area";
-    const version = Math.max(1, Number((event.metadata as any)?.alertRevision ?? 1));
-    const expiresAt = new Date(Date.now() + DANGER_ALERT_RELEVANCE_MS);
-    for (const [userId, entries] of byUser) {
-      entries.sort((a, b) => a.result.distanceMeters - b.result.distanceMeters);
-      const nearest = entries[0]!;
-      const distanceMeters = nearest.result.distanceMeters;
-      const distanceLabel = distanceMeters < 1_000
-        ? `${Math.max(1, Math.round(distanceMeters))} m`
-        : `${(distanceMeters / 1_000).toFixed(1)} km`;
-      const dangerAlert = buildDangerZoneAlertPayload({
-        zoneId: event.id,
-        incidentId: event.incidentId,
-        safetyAlertId: event.id,
-        userId,
-        alertId: `danger-event:${event.id}:${userId}`,
-        incidentType: IncidentType.Emergency,
-        alertState: distanceMeters <= 1_000 ? "Critical" : "Awareness",
-        distanceMeters,
-        areaName: event.areaName ?? undefined,
-        notificationPriority: "Critical",
-        version,
-        sequence: version,
-        expiresAt,
-        deepLink: `theeye://danger-trigger/events/${event.id}`,
-        metadata: { dangerAlertCode: alertCode },
-        config: this.config as unknown as Record<string, unknown>,
-      });
-      const commonMetadata = {
-        category: "DANGER_ALERT",
-        dangerEventId: event.id,
-        distanceMeters: Math.round(distanceMeters),
-        approximateArea: event.areaName,
-        preciseReporterLocationExposed: false,
-        liveAvailable: true,
-        relayToWatch: true,
-        watchLiveAudioSupported: false,
-        deepLink: `/danger-trigger/events/${event.id}`,
-        dangerAlert,
-      };
-      await this.notifications.create({
-        userId,
-        type: "NearbyDangerWarning",
-        priority: "Critical",
-        channels: ["push", "in_app"],
-        title: "DANGER ALERT",
-        body: `${label} reported in ${area}. About ${distanceLabel} away.`,
-        incidentId: event.incidentId,
-        metadata: commonMetadata,
-      });
-      await this.notifications.create({
-        userId,
-        type: "NearbyDangerWarning",
-        priority: "Critical",
-        channels: ["watch_push"],
-        title: "DANGER ALERT",
-        body: `${label} reported in ${area}. About ${distanceLabel} away.`,
-        incidentId: event.incidentId,
-        metadata: { ...commonMetadata, watchLiveAudioSupported: false },
-      });
-    }
-    const fieldRecipients = await this.fanoutToFieldDevices(event, {
-      alertCode,
-      label,
-      area,
-      version,
-      expiresAt,
-    });
+    const fieldRecipients = await this.fanoutToFieldDevices(event);
     return {
-      recipients: byUser.size,
+      recipients: deliveredUsers.size,
       eligibleDeviceLocations: eligible.length,
+      deliveredDeviceLocations: deliveredLocations,
       fieldRecipients,
       radiusMeters: event.effectiveRadiusMeters,
     };
   }
 
-  private async fanoutToFieldDevices(
-    event: any,
-    alert: { alertCode: string; label: string; area: string; version: number; expiresAt: Date },
-  ) {
+  private async fanoutToFieldDevices(event: any) {
     const devices = await (this.prisma as any).fieldDevice.findMany({
       where: {
         registrationStatus: "Active",
@@ -714,6 +790,7 @@ export class DangerTriggerService {
         lastKnownLatitude: true,
         lastKnownLongitude: true,
         lastLocationAt: true,
+        lastLocationAccuracy: true,
       },
       take: 500,
     });
@@ -725,50 +802,221 @@ export class DangerTriggerService {
         recipientLatitude: Number(device.lastKnownLatitude),
         recipientLongitude: Number(device.lastKnownLongitude),
         recipientLocationAt: new Date(device.lastLocationAt),
+        recipientAccuracyMeters:
+          device.lastLocationAccuracy == null
+            ? null
+            : Number(device.lastLocationAccuracy),
         radiusMeters: Math.min(Number(event.effectiveRadiusMeters), OWNER_APPROVED_MAX_DANGER_RADIUS_METERS),
       });
       if (!eligibility.eligible) continue;
-      const dangerAlert = buildDangerZoneAlertPayload({
-        zoneId: event.id,
-        incidentId: event.incidentId,
-        safetyAlertId: event.id,
+      const result = await this.deliverDangerEvent(event, {
+        recipientType: "field",
+        recipientUserId: device.assignedUserId,
         deviceId: device.id,
-        alertId: `danger-event:${event.id}:field:${device.id}`,
-        version: alert.version,
-        sequence: alert.version,
-        incidentType: IncidentType.Emergency,
-        alertState: eligibility.distanceMeters <= 1_000 ? "Critical" : "Awareness",
         distanceMeters: eligibility.distanceMeters,
-        areaName: alert.area,
-        notificationPriority: "Critical",
-        expiresAt: alert.expiresAt,
-        deepLink: `theeye-field://danger-trigger/events/${event.id}`,
-        metadata: { dangerAlertCode: alert.alertCode },
-        config: this.config as unknown as Record<string, unknown>,
+        locationCapturedAt: new Date(device.lastLocationAt),
+        reason: "INITIAL_ACTIVATION",
       });
-      await this.notifications.create({
-        adminUserId: device.assignedUserId,
-        type: "NearbyDangerWarning",
-        priority: "Critical",
-        channels: ["push", "in_app"],
-        title: "DANGER ALERT",
-        body: `${alert.label} reported in ${alert.area}.`,
-        incidentId: event.incidentId,
-        metadata: {
-          category: "DANGER_ALERT",
-          dangerEventId: event.id,
-          deviceId: device.id,
-          approximateArea: alert.area,
-          distanceMeters: Math.round(eligibility.distanceMeters),
-          preciseReporterLocationExposed: false,
-          liveAvailable: true,
-          deepLink: `/danger-trigger/events/${event.id}`,
-          dangerAlert,
-        },
-      });
-      delivered += 1;
+      if (!result.suppressed) delivered += 1;
     }
     return delivered;
+  }
+
+  private async deliverDangerEvent(
+    event: any,
+    recipient: {
+      recipientType: "mobile" | "watch" | "field";
+      recipientUserId: string;
+      deviceId?: string | null;
+      distanceMeters: number;
+      locationCapturedAt: Date;
+      reason: "INITIAL_ACTIVATION" | "ACTIVE_ZONE_ENTRY";
+    },
+  ) {
+    const version = Math.max(1, Number((event.metadata as any)?.alertRevision ?? 1));
+    const recipientKey = `${recipient.recipientType}:${recipient.deviceId ?? recipient.recipientUserId}`;
+    const claim = await this.claimDelivery(event.id, recipientKey, version, recipient);
+    if (!claim) return { suppressed: true, reason: "delivery_dedupe" };
+
+    const alertCode = this.normalizedDangerCode(event);
+    const label = dangerLabel(alertCode);
+    const area = event.areaName?.trim() || "your area";
+    const distanceLabel = recipient.distanceMeters < 1_000
+      ? `${Math.max(1, Math.round(recipient.distanceMeters))} m`
+      : `${(recipient.distanceMeters / 1_000).toFixed(1)} km`;
+    const originalVoice = await this.findOriginalVoice(event);
+    const expiresAt = new Date(
+      Math.min(
+        this.eventExpiry(event).getTime(),
+        Date.now() + DANGER_ALERT_RELEVANCE_MS,
+      ),
+    );
+    const dangerAlert = buildDangerZoneAlertPayload({
+      zoneId: event.id,
+      incidentId: event.incidentId,
+      safetyAlertId: event.id,
+      userId: recipient.recipientType === "field" ? undefined : recipient.recipientUserId,
+      deviceId: recipient.deviceId,
+      alertId: `danger-event:${event.id}:${recipientKey}`,
+      incidentType: IncidentType.Emergency,
+      alertState: recipient.distanceMeters <= 1_000 ? "Critical" : "Awareness",
+      distanceMeters: recipient.distanceMeters,
+      areaName: area,
+      notificationPriority: "Critical",
+      version,
+      sequence: version,
+      expiresAt,
+      deepLink:
+        recipient.recipientType === "field"
+          ? `theeye-field://danger-trigger/events/${event.id}`
+          : `theeye://danger-trigger/events/${event.id}`,
+      hasOriginalVoice: originalVoice != null,
+      metadata: { dangerAlertCode: alertCode },
+      config: this.config as unknown as Record<string, unknown>,
+    });
+    const commonMetadata = {
+      category: "DANGER_ALERT",
+      dangerEventId: event.id,
+      deviceId: recipient.deviceId,
+      distanceMeters: Math.round(recipient.distanceMeters),
+      approximateArea: area,
+      preciseReporterLocationExposed: false,
+      liveAvailable: !event.liveVoiceEndedAt,
+      originalVoiceAvailable: originalVoice != null,
+      originalVoiceProvenance: originalVoice ? "ORIGINAL_VOICE_NOTE" : undefined,
+      deliveryReason: recipient.reason,
+      deepLink: `/danger-trigger/events/${event.id}`,
+      dangerAlert,
+    };
+
+    try {
+      const notification = await this.notifications.create({
+        ...(recipient.recipientType === "field"
+          ? { adminUserId: recipient.recipientUserId }
+          : { userId: recipient.recipientUserId }),
+        type: "NearbyDangerWarning",
+        priority: "Critical",
+        channels:
+          recipient.recipientType === "watch"
+            ? ["watch_push"]
+            : ["push", "in_app"],
+        title: "DANGER ALERT",
+        body: `${label} reported in ${area}. About ${distanceLabel} away.`,
+        incidentId: event.incidentId,
+        metadata: commonMetadata,
+      });
+      const notificationId = (notification as any)?.data?.[0]?.id ?? null;
+      await (this.prisma as any).dangerEventDelivery.update({
+        where: { id: claim.id },
+        data: { status: "SENT", notificationId },
+      });
+      return { suppressed: false, notificationId, recipientKey };
+    } catch (error) {
+      await (this.prisma as any).dangerEventDelivery.update({
+        where: { id: claim.id },
+        data: { status: "FAILED", lastError: this.safeDeliveryError(error) },
+      });
+      throw error;
+    }
+  }
+
+  private async claimDelivery(eventId: string, recipientKey: string, revision: number, recipient: any) {
+    try {
+      return await (this.prisma as any).dangerEventDelivery.create({
+        data: {
+          dangerEventId: eventId,
+          recipientUserId: recipient.recipientUserId,
+          recipientKey,
+          recipientType: recipient.recipientType,
+          alertRevision: revision,
+          distanceMeters: recipient.distanceMeters,
+          locationCapturedAt: recipient.locationCapturedAt,
+          metadata: { reason: recipient.reason },
+        },
+      });
+    } catch (error) {
+      if ((error as any)?.code === "P2002") {
+        const where = {
+          dangerEventId_recipientKey_alertRevision: {
+            dangerEventId: eventId,
+            recipientKey,
+            alertRevision: revision,
+          },
+        };
+        const existing = await (this.prisma as any).dangerEventDelivery.findUnique({ where });
+        if (existing?.status !== "FAILED" || Number(existing.attemptCount ?? 0) >= 3) {
+          return null;
+        }
+        const claimed = await (this.prisma as any).dangerEventDelivery.updateMany({
+          where: { id: existing.id, status: "FAILED", attemptCount: { lt: 3 } },
+          data: {
+            status: "QUEUED",
+            attemptCount: { increment: 1 },
+            lastError: null,
+            locationCapturedAt: recipient.locationCapturedAt,
+            distanceMeters: recipient.distanceMeters,
+          },
+        });
+        if (claimed.count !== 1) return null;
+        return (this.prisma as any).dangerEventDelivery.findUnique({ where });
+      }
+      throw error;
+    }
+  }
+
+  private async findOriginalVoice(event: any) {
+    return (this.prisma as any).incidentMedia.findFirst({
+      where: {
+        incidentId: event.incidentId,
+        uploaderId: event.initiatorUserId ?? undefined,
+        mediaType: "Audio",
+        deletedAt: null,
+      },
+      select: { id: true, objectKey: true },
+      orderBy: { uploadedAt: "asc" },
+    });
+  }
+
+  private eventExpiry(event: any) {
+    const metadataExpiry = Date.parse(String((event.metadata as any)?.expiresAt ?? ""));
+    const fallback = new Date(event.createdAt).getTime() + DANGER_EVENT_DEFAULT_ACTIVE_MS;
+    return new Date(Number.isFinite(metadataExpiry) ? metadataExpiry : fallback);
+  }
+
+  private eventIsCurrentlyEffective(event: any, now: Date) {
+    return event.state === "ACTIVE" && this.eventExpiry(event).getTime() > now.getTime();
+  }
+
+  private async persistMobileGeoState(input: TrustedDangerLocation) {
+    const prisma = this.prisma as any;
+    const existing = await prisma.deviceGeoState.findFirst({
+      where: { userId: input.recipientUserId, deviceId: null },
+      orderBy: { lastEvaluatedAt: "desc" },
+    });
+    const data = {
+      latitude: input.latitude,
+      longitude: input.longitude,
+      accuracyMeters: input.accuracyMeters,
+      lastEvaluatedAt: input.capturedAt,
+    };
+    const row = existing
+      ? await prisma.deviceGeoState.update({ where: { id: existing.id }, data })
+      : await prisma.deviceGeoState.create({
+          data: { userId: input.recipientUserId, deviceId: null, ...data },
+        });
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE device_geo_states
+          SET gps_location = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+        WHERE id = $3::uuid`,
+      input.longitude,
+      input.latitude,
+      row.id,
+    );
+  }
+
+  private safeDeliveryError(error: unknown) {
+    const name = error instanceof Error ? error.name : "DeliveryError";
+    return name.slice(0, 120);
   }
 
   private normalizedDangerCode(event: any) {
@@ -870,6 +1118,17 @@ export class DangerTriggerService {
 
   private async assertCanAccess(event: any, actor: JwtPayload) {
     if (actor.typ === "admin") return;
+    if (actor.typ === "field" && actor.fieldDeviceId) {
+      const delivery = await (this.prisma as any).dangerEventDelivery.findFirst({
+        where: {
+          dangerEventId: event.id,
+          recipientKey: `field:${actor.fieldDeviceId}`,
+          status: "SENT",
+        },
+      });
+      if (delivery) return;
+      throw new ForbiddenException("This danger event is outside your authorized operational area");
+    }
     if (actor.typ !== "user") throw new ForbiddenException("Citizen or authorized administrator required");
     if (event.initiatorUserId === actor.sub) return;
     const states = await (this.prisma as any).deviceGeoState.findMany({

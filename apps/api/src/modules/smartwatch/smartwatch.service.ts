@@ -54,6 +54,7 @@ import {
 } from "./dto/smartwatch.dto";
 import { DangerZoneTargetingService } from "../danger-zones/danger-zone-targeting.service";
 import { DangerZonesService } from "../danger-zones/danger-zones.service";
+import { DangerTriggerService } from "../danger-trigger/danger-trigger.service";
 import {
   mergeWatchAccessibilityPreferences,
   readAccessibilityPreferencesFromMetadata,
@@ -81,6 +82,7 @@ export class SmartwatchService {
     private readonly auditService: AuditService,
     @Optional() private readonly dangerZoneTargeting?: DangerZoneTargetingService,
     @Optional() private readonly dangerZones?: DangerZonesService,
+    @Optional() private readonly dangerTrigger?: DangerTriggerService,
   ) {}
 
   async registerDevice(dto: RegisterSmartwatchDeviceDto, actor: JwtPayload) {
@@ -727,6 +729,22 @@ export class SmartwatchService {
       } as never,
     });
 
+    let dangerTriggerEvaluation: Record<string, unknown> | null = null;
+    if (this.dangerTrigger && dto.latitude != null && dto.longitude != null && dto.accuracy != null) {
+      dangerTriggerEvaluation = await this.dangerTrigger.evaluateTrustedLocation({
+        recipientType: "watch",
+        recipientUserId: device.userId,
+        deviceId: device.id,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        accuracyMeters: dto.accuracy,
+        capturedAt: new Date(),
+        previousLatitude: (device as any).lastLatitude == null ? null : Number((device as any).lastLatitude),
+        previousLongitude: (device as any).lastLongitude == null ? null : Number((device as any).lastLongitude),
+        previousCapturedAt: (device as any).lastGpsAt ?? null,
+      });
+    }
+
     let threatEvaluation: Record<string, unknown> | null = null;
     if (this.dangerZoneTargeting && dto.latitude != null && dto.longitude != null) {
       threatEvaluation = await this.dangerZoneTargeting.evaluateLocation({
@@ -746,6 +764,7 @@ export class SmartwatchService {
       mode: nextMode,
       trackingIntervalMs,
       threat: threatEvaluation,
+      dangerTrigger: dangerTriggerEvaluation,
       commands: this.pendingDeviceCommands(updated as any),
     };
   }
@@ -755,6 +774,22 @@ export class SmartwatchService {
     const device = await this.findAuthorizedDevice(deviceIdOrPublicId, dto.deviceSecret, actor);
     const capturedAt = dto.capturedAt ? new Date(dto.capturedAt) : new Date();
     const sourceMode = dto.sourceMode ?? (device as any).connectivityMode ?? "PairedPhone";
+
+    const dangerTriggerEvaluation =
+      this.dangerTrigger && dto.accuracy != null
+        ? await this.dangerTrigger.evaluateTrustedLocation({
+            recipientType: "watch",
+            recipientUserId: device.userId,
+            deviceId: device.id,
+            latitude: dto.latitude,
+            longitude: dto.longitude,
+            accuracyMeters: dto.accuracy,
+            capturedAt,
+            previousLatitude: (device as any).lastLatitude == null ? null : Number((device as any).lastLatitude),
+            previousLongitude: (device as any).lastLongitude == null ? null : Number((device as any).lastLongitude),
+            previousCapturedAt: (device as any).lastGpsAt ?? null,
+          })
+        : null;
 
     const track = await (this.prisma as any).smartwatchGpsTrack.create({
       data: {
@@ -810,6 +845,7 @@ export class SmartwatchService {
         deviceId: device.id,
         pollIntervalMs: threatEvaluation?.trackingIntervalMs ?? 5000,
         threat: threatEvaluation,
+        dangerTrigger: dangerTriggerEvaluation,
       },
     };
   }

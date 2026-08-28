@@ -30,6 +30,7 @@ dependencies:
   firebase_messaging: ^15.1.6
   flutter_local_notifications: ^18.0.1
   flutter_tts: ^4.2.0
+  just_audio: ^0.9.46
   mobile_scanner: ^7.4.0
   image_picker: ^1.1.2
   record: ^6.1.0

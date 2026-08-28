@@ -5,6 +5,7 @@ import { OptionalJwtAuthGuard } from "../../common/auth/optional-jwt-auth.guard"
 import { PermissionsGuard } from "../../common/auth/permissions.guard";
 import { AuditModule } from "../audit/audit.module";
 import { DangerZonesModule } from "../danger-zones/danger-zones.module";
+import { DangerTriggerModule } from "../danger-trigger/danger-trigger.module";
 import { IncidentsModule } from "../incidents/incidents.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
@@ -14,7 +15,7 @@ import { AdminWatchNotificationsController } from "./admin-watch-notifications.c
 import { SmartwatchService } from "./smartwatch.service";
 
 @Module({
-  imports: [ConfigModule, PrismaModule, AuditModule, IncidentsModule, NotificationsModule, DangerZonesModule],
+  imports: [ConfigModule, PrismaModule, AuditModule, IncidentsModule, NotificationsModule, DangerZonesModule, DangerTriggerModule],
   controllers: [SmartwatchController, DevicesWatchController, AdminWatchNotificationsController],
   providers: [SmartwatchService, JwtAuthGuard, OptionalJwtAuthGuard, PermissionsGuard],
 })

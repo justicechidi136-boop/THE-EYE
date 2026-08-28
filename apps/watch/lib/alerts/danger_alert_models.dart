@@ -145,6 +145,7 @@ class DangerAlertPayload {
     this.notificationId,
     this.displayTitle,
     this.displayBody,
+    this.hasOriginalVoice = false,
     this.deliverySource = DangerAlertDeliverySource.fcm,
     this.signature,
     this.signatureKeyId,
@@ -175,6 +176,7 @@ class DangerAlertPayload {
   final String? notificationId;
   final String? displayTitle;
   final String? displayBody;
+  final bool hasOriginalVoice;
   final DangerAlertDeliverySource deliverySource;
   final String? signature;
   final String? signatureKeyId;
@@ -221,6 +223,7 @@ class DangerAlertPayload {
       notificationId: notificationId ?? this.notificationId,
       displayTitle: displayTitle ?? this.displayTitle,
       displayBody: displayBody ?? this.displayBody,
+      hasOriginalVoice: hasOriginalVoice,
       deliverySource: deliverySource ?? this.deliverySource,
       signature: signature,
       signatureKeyId: signatureKeyId,
@@ -292,6 +295,7 @@ class DangerAlertPayload {
       notificationId: data['notificationId']?.toString(),
       displayTitle: data['title']?.toString(),
       displayBody: data['body']?.toString(),
+      hasOriginalVoice: data['hasOriginalVoice'] == 'true',
       signature: data['signature']?.toString(),
       signatureKeyId: data['signatureKeyId']?.toString(),
       signedAt: data['signedAt']?.toString(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_eye_field_ops/danger_alerts/field_danger_alert.dart';
 import 'package:the_eye_field_ops/danger_alerts/field_danger_alert_dialog.dart';
+import 'package:the_eye_field_ops/danger_alerts/field_danger_alert_service.dart';
 
 void main() {
   testWidgets('danger alert fits a 1280x800 landscape tablet', (tester) async {
@@ -18,6 +19,7 @@ void main() {
       area: 'A deliberately long operational area label, Port Harcourt, Rivers',
       issuedAt: DateTime.now(),
       distanceMeters: 1400,
+      hasOriginalVoice: true,
     );
 
     await tester.pumpWidget(
@@ -26,6 +28,8 @@ void main() {
           body: FieldDangerAlertDialog(
             alert: alert,
             elapsedLabel: '1 minute',
+            audioState: ValueNotifier(FieldDangerAudioState.completed),
+            onReplay: () async {},
             onOpenMap: () {},
             onAcknowledge: () {},
           ),
@@ -38,6 +42,8 @@ void main() {
     expect(find.text('About 1.4 km away'), findsOneWidget);
     expect(find.text('Open Map'), findsOneWidget);
     expect(find.text('I have seen this alert'), findsOneWidget);
+    expect(find.textContaining('Original voice'), findsOneWidget);
+    expect(find.text('Replay audio'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -73,6 +79,8 @@ void main() {
           body: FieldDangerAlertDialog(
             alert: alert,
             elapsedLabel: '2 minutes',
+            audioState: ValueNotifier(FieldDangerAudioState.idle),
+            onReplay: () async {},
             onOpenMap: () {},
             onAcknowledge: () {},
           ),
