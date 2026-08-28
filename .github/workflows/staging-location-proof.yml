@@ -61,7 +61,7 @@ jobs:
               echo "=== Read-only failed location retry diagnostics ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
                 -v "$PWD/apps/api/scripts/staging-location-retry-diagnostics.cjs:/app/scripts/staging-location-retry-diagnostics.cjs:ro" \
-                api-tools node scripts/staging-location-retry-diagnostics.cjs
+                api-tools scripts/staging-location-retry-diagnostics.cjs
             else
               echo "=== Location persistence proof ==="
               docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
