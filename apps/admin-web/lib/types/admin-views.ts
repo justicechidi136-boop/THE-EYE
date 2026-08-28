@@ -226,6 +226,17 @@ export type BroadcastDetailView = BroadcastView & {
   publishedAt: string | null;
   resolvedAt: string | null;
   suspendedAt: string | null;
+  targetLatitude: number | null;
+  targetLongitude: number | null;
+  targetRadiusMeters: number | null;
+  approval: {
+    required: boolean;
+    approvedBy: string | null;
+    verifiedBy: string | null;
+    verifiedAt: string | null;
+  };
+  deliveryBreakdown: Array<{ status: string; count: number }>;
+  timeline: Array<{ at: string; label: string; actor: string }>;
   attachments: Array<{
     id?: string;
     mediaType: string;
@@ -242,6 +253,18 @@ export type BroadcastDetailView = BroadcastView & {
     description: string;
     locationMode: string;
     attachmentsCount: number;
+    reporter: string;
+    latitude: number | null;
+    longitude: number | null;
+    directionOfTravel: string | null;
+    confidence: string | null;
+    attachments: Array<{
+      id?: string;
+      mediaType: string;
+      label: string;
+      contentType?: string;
+      url?: string;
+    }>;
   }>;
 };
 

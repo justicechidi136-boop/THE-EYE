@@ -76,7 +76,7 @@ export function BroadcastActions({
         ) : null}
         {status === "Published" ? (
           <>
-            <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("dispatch")}>Dispatch</Button>
+            <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("dispatch")}>Broadcast</Button>
             <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("retry")}>Retry failed</Button>
             <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Cancelled from admin dashboard" })}>
               Cancel

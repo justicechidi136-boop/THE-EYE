@@ -1,15 +1,17 @@
 import Link from "next/link";
-import type { EvidenceAccessEntry, Incident } from "../lib/types/admin-views";
+import type { AgencyView, EvidenceAccessEntry, Incident } from "../lib/types/admin-views";
 import { verificationStatusFromScore } from "../lib/verification";
 import { EmptyState, TableScrollHint } from "./form-primitives";
 import { Panel, StatusBadge } from "./ui";
-import { EvidenceAccessLog, VerificationStatusBadge } from "./verification-ui";
+import { VerificationStatusBadge } from "./verification-ui";
 import { LocationTrailMap } from "./location-trail-map";
 import { IncidentAdminActions } from "./incident-admin-actions";
-import { EvidenceViewButton } from "./evidence-view-button";
-import { AudioEvidencePlayer } from "./audio-evidence-player";
 import { LaunchDroneMissionButton } from "./drone/launch-drone-mission-button";
 import { humanPriority } from "../lib/admin-presentation";
+import { formatReportCapturedAt, type ReportTimelineEntry } from "../lib/report-details-presentation";
+import { reportReporterLabel, reportTypeLabel } from "../lib/report-centre-presentation";
+import { ReportEvidenceGallery } from "./report-evidence-gallery";
+import { ReportActivityPanels } from "./report-activity-panels";
 
 function priorityTone(priority: Incident["priority"]) {
   if (priority === "P1") return "danger";
@@ -80,43 +82,48 @@ export function IncidentTable({ incidents }: { incidents: Incident[] }) {
 export function IncidentDetail({
   incident,
   evidenceAccessLogs,
+  timelineEntries,
+  agencies,
   canLaunchDroneMission = false,
 }: {
   incident: Incident;
   evidenceAccessLogs: EvidenceAccessEntry[];
+  timelineEntries: ReportTimelineEntry[];
+  agencies: AgencyView[];
   canLaunchDroneMission?: boolean;
 }) {
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${incident.gps.lat},${incident.gps.lng}`;
   return (
-    <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-      <Panel title="Incident summary" aside={<VerificationStatusBadge score={incident.confidenceScore} status={incident.status} />}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Priority level" value={humanPriority(incident.priority)} />
-          <Field label="Response status" value={incident.responseStatus} />
-          <Field label="GPS location" value={`${incident.gps.lat}, ${incident.gps.lng} (${incident.gps.accuracy})`} />
-          <Field label="Reporter" value={incident.reporter.label} />
-          {incident.reporter.accountReference ? <Field label="Account reference" value={incident.reporter.accountReference} /> : null}
-          <Field label="Assigned agency" value={incident.assignedAgency} />
-          <Field label="Location" value={incident.location} />
-          <Field label="Verification status" value={verificationStatusFromScore(incident.confidenceScore, incident.status)} />
-        </div>
-        <p className="mt-5 leading-7 text-muted">{incident.description}</p>
-      </Panel>
-      <Panel title="Evidence">
-        <div className="grid gap-3">
-          {incident.evidence.length ? incident.evidence.map((item) => (
-            <div key={item.id || item.hash} className="rounded-lg border border-line bg-surfaceMuted p-3">
-              <p className="font-semibold">{item.type}: {item.name}</p>
-              <p className="mt-1 break-all text-xs text-muted">{item.hash}</p>
-              {item.type === "Audio" || item.contentType?.startsWith("audio/") ? (
-                <AudioEvidencePlayer incidentId={incident.id} media={item} />
-              ) : item.id ? (
-                <EvidenceViewButton incidentId={incident.id} mediaId={item.id} label="View evidence" />
-              ) : null}
-            </div>
-          )) : <p className="text-sm text-muted">No evidence uploaded yet.</p>}
+    <div className="grid gap-5">
+      <Panel title="Report summary" aside={<StatusBadge tone={priorityTone(incident.priority)}>{humanPriority(incident.priority)}</StatusBadge>}>
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="min-w-0"><p className="text-xs font-semibold uppercase text-eye">{reportTypeLabel(incident.type)}</p><h2 className="mt-2 text-xl font-semibold text-ink">{incident.title}</h2><p className="mt-3 whitespace-pre-wrap break-words leading-7 text-muted">{incident.description || "No description was supplied with this report."}</p></div>
+          <dl className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
+            <SummaryField label="Report type" value={reportTypeLabel(incident.type)} />
+            <SummaryField label="Response status" value={incident.responseStatus} />
+            <SummaryField label="Reporter" value={reportReporterLabel(incident)} />
+            <SummaryField label="Captured" value={formatReportCapturedAt(incident.createdAt)} />
+            <SummaryField label="Location" value={incident.location} />
+            <SummaryField label="Assigned agency" value={incident.assignedAgency} />
+            <SummaryField label="Verification status" value={verificationStatusFromScore(incident.confidenceScore, incident.status)} />
+          </dl>
         </div>
       </Panel>
+
+      <Panel title="Evidence" aside={<span className="text-xs font-semibold text-muted">{incident.evidence.length} item{incident.evidence.length === 1 ? "" : "s"}</span>}><ReportEvidenceGallery incidentId={incident.id} items={incident.evidence} /></Panel>
+
+      <LocationTrailMap
+        title="Report location"
+        incidentId={incident.id}
+        openLocationHref={mapsHref}
+        locationLabel={incident.location}
+        initialPoints={incident.locationHistory.length ? incident.locationHistory : [{ latitude: incident.gps.lat, longitude: incident.gps.lng, capturedAt: incident.createdAt ?? new Date(0).toISOString() }]}
+      />
+      <details className="rounded-lg border border-line bg-surface px-4 py-3 text-sm">
+        <summary className="cursor-pointer font-semibold text-ink">View exact coordinates</summary>
+        <p className="mt-3 text-muted">Latitude {incident.gps.lat} · Longitude {incident.gps.lng} · Accuracy {incident.gps.accuracy}</p>
+      </details>
+
       <Panel title="Admin operations">
         <div className="grid gap-3">
           <LaunchDroneMissionButton
@@ -124,43 +131,20 @@ export function IncidentDetail({
             incidentTitle={incident.title}
             canLaunch={canLaunchDroneMission}
           />
-          <IncidentAdminActions incidentId={incident.id} currentStatus={incident.status} />
+          <IncidentAdminActions incidentId={incident.id} currentStatus={incident.status} agencies={agencies} />
         </div>
       </Panel>
-      <Panel title="Status history">
-        <ol className="grid gap-3">
-          {incident.timeline.map((event) => (
-            <li key={`${event.time}-${event.event}`} className="grid grid-cols-[58px_1fr] gap-3">
-              <span className="text-sm font-semibold text-eye">{event.time}</span>
-              <div>
-                <p className="font-medium">{event.event}</p>
-                <p className="text-sm text-muted">{event.actor}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </Panel>
-      <Panel title="Evidence access logs">
-        <EvidenceAccessLog entries={evidenceAccessLogs} />
-      </Panel>
-      <div className="xl:col-span-2">
-        <LocationTrailMap
-          title="Live map marker and movement trail"
-          incidentId={incident.id}
-          openLocationHref={mapsHref}
-          locationLabel={incident.location}
-          initialPoints={incident.locationHistory.length ? incident.locationHistory : [{ latitude: incident.gps.lat, longitude: incident.gps.lng, capturedAt: incident.createdAt ?? new Date(0).toISOString() }]}
-        />
-      </div>
+
+      <ReportActivityPanels report={incident} entries={timelineEntries} evidenceAccessLogs={evidenceAccessLogs} />
     </div>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function SummaryField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-line bg-surfaceMuted p-3">
-      <p className="text-xs uppercase text-muted">{label}</p>
-      <p className="mt-1 font-semibold text-ink">{value}</p>
+    <div className="min-w-0 border-b border-line pb-3">
+      <dt className="text-xs uppercase text-muted">{label}</dt>
+      <dd className="mt-1 break-words font-semibold text-ink">{value}</dd>
     </div>
   );
 }

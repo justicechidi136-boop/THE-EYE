@@ -34,6 +34,7 @@ export function ConsoleFilterSelect({
           if (value) params.set(name, value);
           else params.delete(name);
           params.delete("cursor");
+          params.delete("history");
           router.push(`?${params.toString()}`);
         }}
       >
@@ -79,6 +80,7 @@ export function ConsoleSearchInput({
           if (value) params.set(name, value);
           else params.delete(name);
           params.delete("cursor");
+          params.delete("history");
           router.push(`?${params.toString()}`);
         }}
       />

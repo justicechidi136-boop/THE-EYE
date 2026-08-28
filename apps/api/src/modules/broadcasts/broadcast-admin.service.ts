@@ -69,6 +69,10 @@ export class BroadcastAdminService {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit,
       include: {
+        creator: { select: { displayName: true } },
+        creatorUser: { select: { profile: { select: { firstName: true, lastName: true } } } },
+        approver: { select: { displayName: true } },
+        verifiedBy: { select: { displayName: true } },
         _count: { select: { comments: true, reports: true, deliveries: true, sightings: true } },
       },
     });
@@ -93,13 +97,47 @@ export class BroadcastAdminService {
             durationSeconds: true,
           },
         },
-        sightings: { orderBy: { createdAt: "desc" } },
-        deliveries: { select: { id: true } },
+        sightings: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            observedAt: true,
+            latitude: true,
+            longitude: true,
+            approximateArea: true,
+            description: true,
+            confidence: true,
+            anonymousPublic: true,
+            directionOfTravel: true,
+            metadata: true,
+            createdAt: true,
+            reporter: { select: { profile: { select: { firstName: true, lastName: true } } } },
+            media: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: "asc" },
+              select: { id: true, mediaType: true, role: true, contentType: true },
+            },
+          },
+        },
+        deliveries: { select: { id: true, status: true, channel: true, sentAt: true, readAt: true } },
         _count: { select: { comments: true, reports: true, deliveries: true, sightings: true } },
       },
     });
     if (!broadcast) throw new NotFoundException("Broadcast not found");
-    return { data: broadcast };
+    const targetRows = await this.prisma.$queryRawUnsafe<Array<{ latitude: number | null; longitude: number | null }>>(
+      `SELECT ST_Y(target_center::geometry) AS latitude,
+              ST_X(target_center::geometry) AS longitude
+         FROM broadcasts
+        WHERE id = $1::uuid`,
+      id,
+    );
+    return {
+      data: {
+        ...broadcast,
+        targetLatitude: targetRows[0]?.latitude ?? null,
+        targetLongitude: targetRows[0]?.longitude ?? null,
+      },
+    };
   }
 
   async viewMedia(id: string, mediaId: string, actor: JwtPayload) {
