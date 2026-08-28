@@ -37,6 +37,11 @@ on:
         required: false
         default: false
         type: boolean
+      inspect_failed_location_retries:
+        description: Staging proof-only — inspect failed location retries without retrying or deleting
+        required: false
+        default: false
+        type: boolean
       run_storage_proof:
         description: Staging only — run Firebase Storage signed PUT/GET runtime proof after deploy
         required: false
@@ -245,6 +250,7 @@ jobs:
             export RUN_MIGRATIONS=${{ github.event.inputs.run_migrations }}
             export PROOF_ONLY=${{ github.event.inputs.proof_only }}
             export RUN_LOCATION_PROOF=${{ github.event.inputs.run_location_proof }}
+            export INSPECT_FAILED_LOCATION_RETRIES=${{ github.event.inputs.inspect_failed_location_retries }}
             export RUN_STORAGE_PROOF=${{ github.event.inputs.run_storage_proof }}
             export SKIP_LIVE_VIDEO_PROOF=${{ github.event.inputs.skip_live_video_proof }}
             export LIVEKIT_ICE_CAPTURE_SECONDS='${{ github.event.inputs.livekit_ice_capture_seconds }}'
