@@ -19,6 +19,12 @@ const releaseValidation = read("scripts/lib/staging-release-validation.sh");
 const fullDeployStart = deployVpsCi.indexOf(
   '"${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web',
 );
+const buildCachePrune = deployVpsCi.indexOf(
+  'docker builder prune --all --force --filter "until=1h"',
+);
+const composeBuildStart = deployVpsCi.indexOf(
+  '"${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools',
+);
 const livekitRecreate = deployVpsCi.indexOf(
   "force_recreate_livekit_container",
   fullDeployStart,
@@ -50,6 +56,21 @@ const checks = [
       livekitRecreate > fullDeployStart &&
       nginxRecreate > livekitRecreate,
     "full staging deploy must recreate LiveKit after patching runtime RTC config",
+  ],
+  [
+    buildCachePrune >= 0 &&
+      composeBuildStart >= 0 &&
+      buildCachePrune < composeBuildStart,
+    "full staging deploy must prune unused build cache before rebuilding images",
+  ],
+  [
+    deployVpsCi.includes('docker image prune --force --filter "until=24h"'),
+    "full staging deploy must prune only old dangling images",
+  ],
+  [
+    !deployVpsCi.includes("docker volume prune") &&
+      !deployVpsCi.includes("docker system prune"),
+    "staging disk hygiene must never prune volumes or the full Docker system",
   ],
   [deployStaging.includes("reload-nginx-upstreams.sh"), "deploy-staging.sh must reload nginx"],
   [reloadScript.includes("nginx -t"), "reload script must run nginx -t"],
