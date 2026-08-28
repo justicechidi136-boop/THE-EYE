@@ -38,7 +38,11 @@ echo "STEP livekit-ice-capture-seconds=${LIVEKIT_ICE_CAPTURE_SECONDS}"
 
 if [[ "$PROOF_ONLY" == "true" ]]; then
   echo "=== Proof-only mode (skip full redeploy) ==="
-  "${COMPOSE[@]}" build api-tools --no-cache api-tools
+  if [[ "$INSPECT_FAILED_LOCATION_RETRIES" == "true" ]]; then
+    echo "Skipping tools image build for read-only queue diagnostics"
+  else
+    "${COMPOSE[@]}" build api-tools --no-cache api-tools
+  fi
 else
   echo "STEP compose-ps-start"
   "${COMPOSE[@]}" ps || true
@@ -210,8 +214,15 @@ if [[ "$INSPECT_FAILED_LOCATION_RETRIES" == "true" ]]; then
     exit 1
   fi
   echo "=== Read-only failed location retry diagnostics ==="
-  "${COMPOSE[@]}" --profile tools run --rm \
-    api-tools scripts/staging-location-retry-diagnostics.cjs
+  RUNTIME_API_IMAGE="$(docker inspect the-eye-api --format '{{.Config.Image}}')"
+  docker run --rm \
+    --network container:the-eye-api \
+    --env-file .env \
+    -e THE_EYE_APP_ENV=staging \
+    -e REDIS_HOST=redis \
+    -e REDIS_PORT=6379 \
+    -v "$REPO_ROOT/apps/api/scripts/staging-location-retry-diagnostics.cjs:/app/scripts/staging-location-retry-diagnostics.cjs:ro" \
+    "$RUNTIME_API_IMAGE" node scripts/staging-location-retry-diagnostics.cjs
 fi
 
 "${COMPOSE[@]}" ps
