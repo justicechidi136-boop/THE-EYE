@@ -96,8 +96,9 @@ export class IncidentsController {
     @Query("status") status?: string,
     @Query("priority") priority?: string,
     @Query("type") type?: string,
+    @Query("q") q?: string,
   ) {
-    return this.incidentsService.list(request.user, { status, priority, type }, { cursor, limit });
+    return this.incidentsService.list(request.user, { status, priority, type, q }, { cursor, limit });
   }
 
   @Get(":id")

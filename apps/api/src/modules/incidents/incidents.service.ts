@@ -92,7 +92,7 @@ export class IncidentsService {
 
   async list(
     actor?: JwtPayload,
-    filters: { status?: string; priority?: string; type?: string } = {},
+    filters: { status?: string; priority?: string; type?: string; q?: string } = {},
     query: CursorPageQuery = {},
   ) {
     const limit = resolvePageLimit(query.limit);
@@ -104,10 +104,28 @@ export class IncidentsService {
     if (filters.status?.trim()) filterWhere.status = filters.status.trim();
     if (filters.priority?.trim()) filterWhere.priority = filters.priority.trim();
     if (filters.type?.trim()) filterWhere.type = filters.type.trim();
+    const search = filters.q?.trim();
+    const searchWhere = search
+      ? {
+          OR: [
+            { title: { contains: search, mode: "insensitive" } },
+            { description: { contains: search, mode: "insensitive" } },
+            { address: { contains: search, mode: "insensitive" } },
+            { lga: { contains: search, mode: "insensitive" } },
+            { state: { contains: search, mode: "insensitive" } },
+            { country: { contains: search, mode: "insensitive" } },
+            { reporter: { profile: { firstName: { contains: search, mode: "insensitive" } } } },
+            { reporter: { profile: { lastName: { contains: search, mode: "insensitive" } } } },
+          ],
+        }
+      : {};
+    const scopeWhere = this.incidentScopeWhere(actor);
+    const filteredScopeWhere = { AND: [scopeWhere, filterWhere, searchWhere] };
     const rows = await this.prisma.incident.findMany({
-      where: { ...this.incidentScopeWhere(actor), ...dateIdCursorWhere(cursor), ...filterWhere } as never,
+      where: { AND: [scopeWhere, filterWhere, searchWhere, dateIdCursorWhere(cursor)] } as never,
       include: {
         media: true,
+        reporter: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
         timeline: { orderBy: { createdAt: "desc" }, take: 10 },
         statusHistory: { orderBy: { createdAt: "desc" }, take: 5 },
         locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 },
@@ -115,7 +133,26 @@ export class IncidentsService {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
-    return buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    const activeStatuses = [
+      IncidentStatus.Submitted,
+      IncidentStatus.Received,
+      IncidentStatus.Verifying,
+      IncidentStatus.Verified,
+      IncidentStatus.Assigned,
+      IncidentStatus.Responding,
+      IncidentStatus.UnderControl,
+      IncidentStatus.CancellationRequested,
+    ];
+    const [totalReports, activeReports, criticalReports, verifyingReports] = await Promise.all([
+      this.prisma.incident.count({ where: filteredScopeWhere as never }),
+      this.prisma.incident.count({ where: { AND: [filteredScopeWhere, { status: { in: activeStatuses } }] } as never }),
+      this.prisma.incident.count({ where: { AND: [filteredScopeWhere, { priority: IncidentPriority.P1LifeThreatening }] } as never }),
+      this.prisma.incident.count({ where: { AND: [filteredScopeWhere, { status: IncidentStatus.Verifying }] } as never }),
+    ]);
+    return {
+      ...buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id)),
+      meta: { totalReports, activeReports, criticalReports, verifyingReports },
+    };
   }
 
   async reportEmergency(dto: ReportIncidentDto, actor?: JwtPayload) {

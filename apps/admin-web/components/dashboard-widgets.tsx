@@ -1,18 +1,10 @@
 import { Panel } from "./ui";
-import type { DashboardChartPoint, Incident } from "../lib/types/admin-views";
-
-function formatTimestamp(value: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import {
+  dashboardReporterLabel,
+  dashboardReportType,
+  formatDashboardTimestamp,
+} from "../lib/dashboard-presentation";
+import type { DashboardChartPoint, Incident, LiveVideoSessionView } from "../lib/types/admin-views";
 
 export function DashboardChart({
   chartData,
@@ -28,7 +20,7 @@ export function DashboardChart({
       title="Operations overview"
       aside={
         <div className="flex flex-wrap gap-3 text-xs font-semibold">
-          <span className="inline-flex items-center gap-1 text-eye"><span className="h-2 w-2 rounded-full bg-eye" /> No. of Report</span>
+          <span className="inline-flex items-center gap-1 text-eye"><span className="h-2 w-2 rounded-full bg-eye" /> No. of Reports</span>
           <span className="inline-flex items-center gap-1 text-eyeOrange"><span className="h-2 w-2 rounded-full bg-eyeOrange" /> No. of Users</span>
           <span className="inline-flex items-center gap-1 text-ink"><span className="h-2 w-2 rounded-full bg-ink" /> No. of Live Videos</span>
         </div>
@@ -57,17 +49,27 @@ export function DashboardChart({
   );
 }
 
-export function DashboardActivityFeeds({ incidents }: { incidents: Incident[] }) {
-  const liveItems = incidents.slice(0, 4).map((incident) => ({
-    id: incident.id,
-    label: `${incident.reportingMode === "Anonymous" ? "Anonymous reporter" : "Citizen reporter"} just reported a live video`,
-    time: formatTimestamp(incident.createdAt ?? incident.timeline[0]?.time ?? ""),
-    href: "/live-video",
-  }));
+export function DashboardActivityFeeds({
+  incidents,
+  liveSessions,
+}: {
+  incidents: Incident[];
+  liveSessions: LiveVideoSessionView[];
+}) {
+  const incidentsById = new Map(incidents.map((incident) => [incident.id, incident]));
+  const liveItems = liveSessions.slice(0, 4).map((session) => {
+    const incident = incidentsById.get(session.incidentId);
+    return {
+      id: session.id,
+      label: `${dashboardReporterLabel(incident, session.reporter)} shared live video evidence for ${dashboardReportType(incident?.type)}`,
+      time: formatDashboardTimestamp(session.startedAt),
+      href: "/live-video",
+    };
+  });
   const reportItems = incidents.slice(0, 4).map((incident) => ({
     id: incident.id,
-    label: `${incident.reportingMode === "Anonymous" ? "Anonymous reporter" : "Citizen reporter"} just reported ${incident.type.toLowerCase()}`,
-    time: formatTimestamp(incident.createdAt ?? incident.timeline[0]?.time ?? ""),
+    label: `${dashboardReporterLabel(incident)} just reported ${dashboardReportType(incident.type)}`,
+    time: formatDashboardTimestamp(incident.createdAt ?? incident.timeline[0]?.time ?? ""),
     href: `/incidents/${incident.id}`,
   }));
 

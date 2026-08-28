@@ -14,7 +14,7 @@ const navGroups = [
     label: "Menu",
     items: [
       ["Dashboard", "/"],
-      ["Incidents", "/incidents"],
+      ["Reports", "/incidents"],
       ["Broadcast", "/broadcasts"],
       ["Users", "/users"],
     ] as [string, string][],

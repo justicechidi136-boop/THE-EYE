@@ -88,12 +88,13 @@ export function LocationTrailMap({ title, initialPoints, incidentId, liveSession
         const response = await fetch(path!);
         if (!response.ok || cancelled) return;
         const payload = (await response.json()) as { data?: Array<Record<string, unknown>> };
-        setPoints(sanitizeLocationTrail((payload.data ?? []).map((entry) => ({
+        const refreshed = sanitizeLocationTrail((payload.data ?? []).map((entry) => ({
           latitude: Number(entry.latitude),
           longitude: Number(entry.longitude),
           accuracyMeters: entry.accuracyMeters == null && entry.accuracy == null ? null : Number(entry.accuracyMeters ?? entry.accuracy),
           capturedAt: String(entry.capturedAt),
-        }))));
+        })));
+        if (refreshed.length) setPoints(refreshed);
       } catch {
         // Keep the last authorized trail while polling recovers.
       }
@@ -127,7 +128,7 @@ export function LocationTrailMap({ title, initialPoints, incidentId, liveSession
           </svg>
         ) : null}
         {map ? <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="absolute right-1 top-1 bg-surface/90 px-1.5 py-0.5 text-[10px] text-ink hover:underline">© OpenStreetMap contributors</a> : null}
-        <div className="absolute bottom-3 left-3 right-3 max-h-28 overflow-y-auto rounded-md border border-line bg-surface/95 p-3 text-xs shadow-soft">
+        <div className="absolute bottom-3 left-3 right-3 max-h-28 overflow-y-auto rounded-md border-2 border-line bg-surface p-3 text-xs shadow-xl">
           <p className="break-words font-semibold text-ink">{locationLabel}</p>
           <p className="mt-1 text-muted">{points.length} trusted point{points.length === 1 ? "" : "s"}; latest marker is red.</p>
           {latest ? <p className="mt-1 text-muted">Captured {formatCapturedAt(latest.capturedAt)} · Accuracy {latest.accuracyMeters ? `${latest.accuracyMeters}m` : "unknown"}</p> : null}

@@ -5,6 +5,7 @@ function buildService() {
   const prisma = {
     broadcast: { findFirst: jest.fn() },
     broadcastMedia: { findFirst: jest.fn() },
+    $queryRawUnsafe: jest.fn().mockResolvedValue([]),
   };
   const audit = { record: jest.fn().mockResolvedValue(undefined) };
   const service = new BroadcastAdminService(
@@ -52,7 +53,17 @@ describe("BroadcastAdminService detail and media", () => {
       durationSeconds: true,
     });
     expect(Object.prototype.hasOwnProperty.call(detailQuery.include.media.select, "sizeBytes")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(detailQuery.include.sightings, "include")).toBe(false);
+    expect(detailQuery.include.sightings.select.reporter.select.profile.select).toEqual({
+      firstName: true,
+      lastName: true,
+    });
+    expect(detailQuery.include.sightings.select.media.select).toEqual({
+      id: true,
+      mediaType: true,
+      role: true,
+      contentType: true,
+    });
+    expect(prisma.$queryRawUnsafe.mock.calls[0]?.[1]).toBe("broadcast-1");
   });
 
   it("returns not found for out-of-scope detail without leaking existence", async () => {

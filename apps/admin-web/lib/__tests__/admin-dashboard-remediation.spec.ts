@@ -59,9 +59,9 @@ describe("admin dashboard remediation", () => {
 
   it("uses scoped detail and fresh authorized media-read routes", () => {
     const data = readFileSync(join(process.cwd(), "lib", "api", "data.ts"), "utf8");
-    const page = readFileSync(join(process.cwd(), "app", "broadcasts", "[id]", "page.tsx"), "utf8");
+    const page = readFileSync(join(process.cwd(), "components", "broadcast", "broadcast-evidence-gallery.tsx"), "utf8");
     expect(data).toContain("/admin/broadcasts/${encodeURIComponent(id)}");
-    expect(page).toContain("/api/admin/broadcasts/${broadcast.id}/media/${mediaId}/view");
+    expect(page).toContain("/api/admin/broadcasts/${broadcastId}/media/${mediaId}/view");
     expect(page).toContain("mediaAccessPath");
   });
 

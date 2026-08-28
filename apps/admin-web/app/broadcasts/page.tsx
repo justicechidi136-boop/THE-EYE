@@ -26,7 +26,7 @@ export default async function BroadcastsPage({ searchParams }: BroadcastsPagePro
     author: readParam(params.author),
   };
   const [broadcasts, diagnostics, scheduler] = await Promise.all([
-    fetchAdminBroadcasts(filters),
+    fetchAdminBroadcasts({ ...filters, limit: "100" }),
     fetchNotificationDeliveryDiagnostics(),
     fetchBroadcastSchedulerHealth(),
   ]);
@@ -40,7 +40,7 @@ export default async function BroadcastsPage({ searchParams }: BroadcastsPagePro
   return (
     <AppShell>
       <ConsolePageHeader
-        title={route?.pageHeading ?? "Emergency broadcasts"}
+        title="Broadcasts"
         eyebrow="Location-based public messaging"
         breadcrumbs={route?.breadcrumb}
         action={<StatusBadge tone="warning">{pending} approvals pending</StatusBadge>}

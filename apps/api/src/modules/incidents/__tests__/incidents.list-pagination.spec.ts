@@ -6,6 +6,7 @@ function createListService() {
   const prisma = {
     incident: {
       findMany: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
     },
   };
   const service = Object.create(IncidentsService.prototype) as IncidentsService;
@@ -31,7 +32,7 @@ describe("IncidentsService.list pagination", () => {
     expect(page.hasMore).toBe(false);
     expect(prisma.incident.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { country: "Nigeria" },
+        where: { AND: [{ country: "Nigeria" }, {}, {}, {}] },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 101,
       }),
@@ -49,15 +50,19 @@ describe("IncidentsService.list pagination", () => {
 
     expect(prisma.incident.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          country: "Nigeria",
-          status: "Submitted",
-          priority: "P1LifeThreatening",
-          OR: [
-            { createdAt: { lt: new Date("2026-07-09T12:00:00.000Z") } },
-            { createdAt: new Date("2026-07-09T12:00:00.000Z"), id: { lt: "cursor-id" } },
+        where: {
+          AND: [
+            { country: "Nigeria" },
+            { status: "Submitted", priority: "P1LifeThreatening" },
+            {},
+            {
+              OR: [
+                { createdAt: { lt: new Date("2026-07-09T12:00:00.000Z") } },
+                { createdAt: new Date("2026-07-09T12:00:00.000Z"), id: { lt: "cursor-id" } },
+              ],
+            },
           ],
-        }),
+        },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 101,
       }),
@@ -86,5 +91,33 @@ describe("IncidentsService.list pagination", () => {
 
     expect(page.hasMore).toBe(true);
     expect(page.nextCursor).toBe(encodeDateIdCursor(lastPageCreatedAt, "page-1"));
+  });
+
+  it("searches the complete scoped result and returns authoritative metrics", async () => {
+    const { service, prisma } = createListService();
+    prisma.incident.findMany.mockResolvedValue([]);
+    prisma.incident.count
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(2);
+
+    const page = await service.list(undefined, { q: "Ada" }, { limit: "100" });
+
+    expect(page.meta).toEqual({ totalReports: 12, activeReports: 8, criticalReports: 3, verifyingReports: 2 });
+    expect(prisma.incident.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              OR: expect.arrayContaining([
+                { title: { contains: "Ada", mode: "insensitive" } },
+                { reporter: { profile: { firstName: { contains: "Ada", mode: "insensitive" } } } },
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    );
   });
 });

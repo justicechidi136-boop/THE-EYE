@@ -3,9 +3,15 @@ import { AppShell } from "../components/app-shell";
 import { DashboardActivityFeeds, DashboardChart } from "../components/dashboard-widgets";
 import { DashboardLiveRefresh } from "../components/dashboard-live-refresh";
 import { QuickLinkCard } from "../components/quick-link-card";
-import { MetricCard, PageHeader, Panel, StatusBadge } from "../components/ui";
+import { MetricCard, PageHeader, Panel } from "../components/ui";
 import { filterNavItems } from "../lib/nav-access";
-import { fetchBroadcasts, fetchIncidents, fetchLiveVideoSessions, fetchUsersDirectory } from "../lib/api/data";
+import {
+  fetchBroadcasts,
+  fetchIncidents,
+  fetchLiveVideoSessions,
+  fetchNotificationUnreadCount,
+  fetchUsersDirectory,
+} from "../lib/api/data";
 import { buildDashboardChart } from "../lib/dashboard-metrics";
 import { getAdminSession } from "../lib/session";
 import { roleScope } from "../lib/types/admin-views";
@@ -31,11 +37,12 @@ export default async function DashboardPage() {
     },
   );
   const initials = session?.email?.slice(0, 2).toUpperCase() ?? "AD";
-  const [incidents, broadcasts, users, liveSessions] = await Promise.all([
+  const [incidents, broadcasts, users, liveSessions, unreadNotifications] = await Promise.all([
     fetchIncidents(),
     fetchBroadcasts(),
     fetchUsersDirectory(),
     fetchLiveVideoSessions(),
+    fetchNotificationUnreadCount(),
   ]);
   const chart = buildDashboardChart(incidents, users.length, liveSessions);
 
@@ -47,8 +54,17 @@ export default async function DashboardPage() {
         title="Dashboard"
         action={
           <div className="flex items-center gap-3">
-            <StatusBadge tone="info">Notifications</StatusBadge>
-            <Link href="/notifications" className="text-sm font-semibold text-eye hover:underline">Open inbox →</Link>
+            <Link
+              href="/notifications"
+              aria-label={`Notifications, ${unreadNotifications} unread`}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-eye transition-colors hover:border-eye/40 hover:bg-surfaceMuted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-eye"
+            >
+              <span aria-hidden="true">🔔</span>
+              <span>Notifications</span>
+              <span className="min-w-6 rounded-full bg-eye px-2 py-0.5 text-center text-xs text-white">
+                {unreadNotifications}
+              </span>
+            </Link>
             <div className="flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2">
               <span className="grid h-9 w-9 place-items-center rounded-full bg-eye text-sm font-bold text-white">{initials}</span>
               <div>
@@ -62,8 +78,8 @@ export default async function DashboardPage() {
 
       <section className="mb-5 grid gap-4 md:grid-cols-3">
         <MetricCard label="Total Users" value={String(users.length)} detail="Registered citizens and admins" accent="eyeOrange" />
-        <MetricCard label="Total Report" value={String(incidents.length)} detail="Incidents in assigned scope" accent="eye" />
-        <MetricCard label="Total Live Videos" value={String(liveSessions.length)} detail="Active and recent sessions" accent="ink" />
+        <MetricCard label="Total Reports" value={String(incidents.length)} detail="Reports in assigned scope" accent="eye" />
+        <MetricCard label="Total Live Videos" value={String(liveSessions.length)} detail="Currently active live sessions" accent="ink" />
       </section>
 
       {quickLinks.length ? (
@@ -83,7 +99,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="mb-5">
-        <DashboardActivityFeeds incidents={incidents} />
+        <DashboardActivityFeeds incidents={incidents} liveSessions={liveSessions} />
       </section>
 
       <p className="text-xs text-muted">

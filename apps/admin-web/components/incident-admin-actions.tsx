@@ -3,13 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "./form-primitives";
+import type { AgencyView } from "../lib/types/admin-views";
 
 type Props = {
   incidentId: string;
   currentStatus: string;
+  agencies?: AgencyView[];
 };
 
-export function IncidentAdminActions({ incidentId, currentStatus }: Props) {
+export function IncidentAdminActions({ incidentId, currentStatus, agencies }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState(currentStatus);
   const [note, setNote] = useState("");
@@ -46,7 +48,7 @@ export function IncidentAdminActions({ incidentId, currentStatus }: Props) {
       const response = await fetch(`/api/admin/incidents/${incidentId}/assign`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agencyId: agencyId.trim() || undefined, reason: note.trim() || undefined }),
+        body: JSON.stringify({ agencyId, reason: note.trim() || undefined }),
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -69,12 +71,22 @@ export function IncidentAdminActions({ incidentId, currentStatus }: Props) {
         value={note}
         onChange={(event) => setNote(event.target.value)}
       />
-      <input
+      {agencies ? <label className="grid gap-1 text-sm">
+        <span className="font-medium text-muted">Response agency</span>
+        <select
+          className="rounded-md border border-line bg-surface px-3 py-2 text-ink"
+          value={agencyId}
+          onChange={(event) => setAgencyId(event.target.value)}
+        >
+          <option value="">Select agency…</option>
+          {agencies.map((agency) => <option key={agency.id} value={agency.id}>{agency.name}</option>)}
+        </select>
+      </label> : <input
         className="rounded border border-line bg-surface px-2 py-1 text-sm"
         placeholder="Agency ID (optional)"
         value={agencyId}
         onChange={(event) => setAgencyId(event.target.value)}
-      />
+      />}
       <div className="flex flex-wrap gap-2">
         <Button type="button" disabled={loading != null} onClick={() => updateStatus("Received")}>
           {loading === "status" ? "..." : "Mark received"}
@@ -88,7 +100,7 @@ export function IncidentAdminActions({ incidentId, currentStatus }: Props) {
         <Button type="button" variant="danger" disabled={loading != null} onClick={() => updateStatus("FalseReport")}>
           Mark false
         </Button>
-        <Button type="button" variant="secondary" disabled={loading != null} onClick={assignIncident}>
+        <Button type="button" variant="secondary" disabled={loading != null || (Boolean(agencies) && !agencyId)} onClick={assignIncident}>
           {loading === "assign" ? "..." : "Assign agency"}
         </Button>
       </div>

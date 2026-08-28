@@ -105,6 +105,13 @@ export type PaginatedResponse<T> = {
   limit: number;
 };
 
+export type IncidentPageMetrics = {
+  totalReports: number;
+  activeReports: number;
+  criticalReports: number;
+  verifyingReports: number;
+};
+
 const ADMIN_LIST_MAX_PAGES = 20;
 const ADMIN_LIST_PAGE_SIZE = "100";
 
@@ -159,17 +166,24 @@ export async function fetchIncidents(filters: { status?: string; priority?: stri
 
 export async function fetchIncidentsPage(
   query: Record<string, string | undefined> = {},
-): Promise<PaginatedResponse<Incident>> {
+): Promise<PaginatedResponse<Incident> & { meta: IncidentPageMetrics }> {
   return withToken(async (token) => {
-    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/incidents", {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta?: IncidentPageMetrics }>("/incidents", {
       token,
       query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
     });
     return {
       ...response,
+      meta: response.meta ?? { totalReports: 0, activeReports: 0, criticalReports: 0, verifyingReports: 0 },
       data: response.data.map(toIncidentView),
     };
-  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+  }, {
+    data: [],
+    nextCursor: null,
+    hasMore: false,
+    limit: 100,
+    meta: { totalReports: 0, activeReports: 0, criticalReports: 0, verifyingReports: 0 },
+  });
 }
 
 export async function fetchIncident(id: string): Promise<Incident | null> {
@@ -1364,6 +1378,13 @@ export async function fetchNotificationOperations(): Promise<NotificationOperati
     const rows = await fetchAllPages<Record<string, unknown>>("/notifications", token);
     return rows.map(toNotificationOperationView);
   }, []);
+}
+
+export async function fetchNotificationUnreadCount(): Promise<number> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ unreadCount: number }>("/notifications/unread-count", { token });
+    return Number.isFinite(response.unreadCount) ? response.unreadCount : 0;
+  }, 0);
 }
 
 export type NotificationDeliveryDiagnostics = {

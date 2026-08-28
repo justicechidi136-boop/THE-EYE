@@ -248,6 +248,20 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
             ? "Dispatched"
             : "Manual / pending";
 
+  const metadata = (record.metadata as Record<string, unknown> | undefined) ?? {};
+  const creatorProfile = ((record.creatorUser as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile);
+  const creatorUserName = [creatorProfile?.firstName, creatorProfile?.lastName].filter(Boolean).join(" ").trim();
+  const targetLocation = humanLocation([
+    metadata.address,
+    metadata.lastSeenAddress,
+    metadata.lastKnownLocation,
+    metadata.approximateArea,
+    record.lga,
+    record.state,
+    record.country,
+  ]);
+  const radiusMeters = record.targetRadiusMeters == null ? null : toNumber(record.targetRadiusMeters);
+
   return {
     id: String(record.id),
     type: `${String(record.type ?? "Broadcast")} broadcast`,
@@ -255,15 +269,15 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
     severity: priorityLabel(String(record.priority ?? "P4GeneralSafety")),
     status: status === "PendingApproval" ? "Pending approval" : status,
     target:
-      record.targetRadiusMeters != null
-        ? `${toNumber(record.targetRadiusMeters)} m geofence`
-        : record.targetArea
-          ? "Custom geofence area"
-          : "Jurisdiction target",
+      radiusMeters != null
+        ? `${targetLocation === "Location unavailable" ? "Selected area" : targetLocation} · ${radiusMeters >= 1000 ? `${Number((radiusMeters / 1000).toFixed(1))} km` : `${radiusMeters} m`} radius`
+        : targetLocation === "Location unavailable"
+          ? "Jurisdiction-wide"
+          : `${targetLocation} · Jurisdiction-wide`,
     author: String(
       (record.creator as { displayName?: string } | undefined)?.displayName
-        ?? (record.creatorUser as { displayName?: string } | undefined)?.displayName
-        ?? broadcastAuthorLabel(record),
+        || creatorUserName
+        || broadcastAuthorLabel(record),
     ),
     authorLabel: broadcastAuthorLabel(record),
     requiresApproval: Boolean(record.requiresApproval ?? true),
@@ -288,6 +302,23 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
   const sightingsRaw = Array.isArray(record.sightings) ? record.sightings : [];
   const metadata = (record.metadata as Record<string, unknown> | undefined) ?? {};
   const persistedMedia = Array.isArray(record.media) ? record.media : [];
+  const deliveries = Array.isArray(record.deliveries) ? record.deliveries : [];
+  const deliveryCounts = new Map<string, number>();
+  for (const entry of deliveries) {
+    const status = String((entry as Record<string, unknown>).status ?? "Unknown");
+    deliveryCounts.set(status, (deliveryCounts.get(status) ?? 0) + 1);
+  }
+  const approver = (record.approver as { displayName?: string } | undefined)?.displayName ?? null;
+  const verifier = (record.verifiedBy as { displayName?: string } | undefined)?.displayName ?? null;
+  const timeline = [
+    record.createdAt ? { at: String(record.createdAt), label: "Broadcast created", actor: toBroadcastView(record).author } : null,
+    record.publishedAt ? { at: String(record.publishedAt), label: "Broadcast published", actor: approver ?? toBroadcastView(record).author } : null,
+    record.verifiedAt ? { at: String(record.verifiedAt), label: "Broadcast verified", actor: verifier ?? "Authorized administrator" } : null,
+    record.suspendedAt ? { at: String(record.suspendedAt), label: "Broadcast suspended", actor: "Authorized administrator" } : null,
+    record.resolvedAt ? { at: String(record.resolvedAt), label: "Broadcast resolved", actor: "Authorized actor" } : null,
+    record.withdrawnAt ? { at: String(record.withdrawnAt), label: "Broadcast withdrawn", actor: "Broadcast owner" } : null,
+  ].filter((entry): entry is { at: string; label: string; actor: string } => entry !== null)
+    .sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime());
   const location = humanLocation([
     metadata.address,
     metadata.lastSeenAddress,
@@ -318,6 +349,17 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
     publishedAt: record.publishedAt ? String(record.publishedAt) : null,
     resolvedAt: record.resolvedAt ? String(record.resolvedAt) : null,
     suspendedAt: record.suspendedAt ? String(record.suspendedAt) : null,
+    targetLatitude: record.targetLatitude == null ? null : toNumber(record.targetLatitude),
+    targetLongitude: record.targetLongitude == null ? null : toNumber(record.targetLongitude),
+    targetRadiusMeters: record.targetRadiusMeters == null ? null : toNumber(record.targetRadiusMeters),
+    approval: {
+      required: Boolean(record.requiresApproval),
+      approvedBy: approver,
+      verifiedBy: verifier,
+      verifiedAt: record.verifiedAt ? String(record.verifiedAt) : null,
+    },
+    deliveryBreakdown: Array.from(deliveryCounts, ([status, count]) => ({ status, count })),
+    timeline,
     attachments: persistedMedia.length
       ? normalizeBroadcastAttachments(persistedMedia.map((item) => {
           const media = item as Record<string, unknown>;
@@ -336,7 +378,20 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
     sightings: sightingsRaw.map((entry) => {
       const row = entry as Record<string, unknown>;
       const metadata = (row.metadata as Record<string, unknown> | undefined) ?? {};
-      const attachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+      const persistedAttachments = Array.isArray(row.media) ? row.media : [];
+      const attachments = persistedAttachments.length
+        ? normalizeBroadcastAttachments(persistedAttachments.map((item) => {
+            const media = item as Record<string, unknown>;
+            return {
+              id: media.id,
+              mediaType: String(media.mediaType ?? "").toLowerCase(),
+              label: media.role ?? media.mediaType ?? "Sighting evidence",
+              contentType: media.contentType,
+            };
+          }))
+        : normalizeBroadcastAttachments(metadata.attachments);
+      const profile = ((row.reporter as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile);
+      const reporterName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ").trim();
       return {
         id: String(row.id ?? ""),
         observedAt: row.observedAt ? String(row.observedAt) : null,
@@ -344,6 +399,12 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
         description: String(row.description ?? ""),
         locationMode: String(metadata.locationMode ?? "NOT_PROVIDED"),
         attachmentsCount: attachments.length,
+        reporter: row.anonymousPublic ? "Anonymous" : reporterName || "Identified citizen",
+        latitude: row.latitude == null ? null : toNumber(row.latitude),
+        longitude: row.longitude == null ? null : toNumber(row.longitude),
+        directionOfTravel: row.directionOfTravel ? String(row.directionOfTravel) : null,
+        confidence: row.confidence ? String(row.confidence) : null,
+        attachments,
       };
     }),
   };
