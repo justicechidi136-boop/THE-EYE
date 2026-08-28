@@ -26,10 +26,12 @@ echo "STEP env-check-ok"
 
 PROOF_ONLY="${PROOF_ONLY:-false}"
 RUN_LOCATION_PROOF="${RUN_LOCATION_PROOF:-false}"
+INSPECT_FAILED_LOCATION_RETRIES="${INSPECT_FAILED_LOCATION_RETRIES:-false}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
 RUN_STORAGE_PROOF="${RUN_STORAGE_PROOF:-false}"
 LIVEKIT_ICE_CAPTURE_SECONDS="${LIVEKIT_ICE_CAPTURE_SECONDS:-0}"
 echo "STEP deploy-start proof_only=${PROOF_ONLY}"
+echo "STEP location-retry-diagnostics=${INSPECT_FAILED_LOCATION_RETRIES}"
 echo "STEP migration-mode run_migrations=${RUN_MIGRATIONS}"
 echo "STEP storage-proof-mode run_storage_proof=${RUN_STORAGE_PROOF}"
 echo "STEP livekit-ice-capture-seconds=${LIVEKIT_ICE_CAPTURE_SECONDS}"
@@ -193,13 +195,23 @@ docker run --rm --network host --env-file .env \
   npx tsx scripts/staging-live-video-room-join-proof.ts
 fi
 
-if [[ "$PROOF_ONLY" == "true" || "$RUN_LOCATION_PROOF" == "true" ]]; then
+if [[ "$RUN_LOCATION_PROOF" == "true" || ( "$PROOF_ONLY" == "true" && "$INSPECT_FAILED_LOCATION_RETRIES" != "true" ) ]]; then
   echo "=== SRB-039 location persistence proof ==="
   "${COMPOSE[@]}" --profile tools run --rm \
     -e STAGING_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:?}" \
     -e STAGING_API_PROBE_BASE_URL=http://api:4000 \
     -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
     api-tools scripts/staging-location-persistence-proof.ts
+fi
+
+if [[ "$INSPECT_FAILED_LOCATION_RETRIES" == "true" ]]; then
+  if [[ "$PROOF_ONLY" != "true" ]]; then
+    echo "FAIL location retry diagnostics require PROOF_ONLY=true"
+    exit 1
+  fi
+  echo "=== Read-only failed location retry diagnostics ==="
+  "${COMPOSE[@]}" --profile tools run --rm \
+    api-tools node scripts/staging-location-retry-diagnostics.cjs
 fi
 
 "${COMPOSE[@]}" ps
