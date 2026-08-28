@@ -211,7 +211,7 @@ if [[ "$INSPECT_FAILED_LOCATION_RETRIES" == "true" ]]; then
   fi
   echo "=== Read-only failed location retry diagnostics ==="
   "${COMPOSE[@]}" --profile tools run --rm \
-    api-tools node scripts/staging-location-retry-diagnostics.cjs
+    api-tools scripts/staging-location-retry-diagnostics.cjs
 fi
 
 "${COMPOSE[@]}" ps
