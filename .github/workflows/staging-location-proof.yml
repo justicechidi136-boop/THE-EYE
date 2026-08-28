@@ -7,6 +7,11 @@ on:
         description: Git ref to run proof scripts from on VPS (defaults to origin/staging)
         required: false
         default: origin/staging
+      inspect_failed_retries:
+        description: Read-only inspection of failed incident location retry jobs
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: staging-location-proof
@@ -53,8 +58,15 @@ jobs:
             echo "=== Readiness ==="
             curl -fsS "${{ vars.NEXT_PUBLIC_API_BASE_URL }}/health/ready" | head -c 4000
             echo ""
-            echo "=== Location persistence proof ==="
-            docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
-              -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
-              -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
-              api-tools scripts/staging-location-persistence-proof.ts
+            if [ "${{ github.event.inputs.inspect_failed_retries }}" = "true" ]; then
+              echo "=== Read-only failed location retry diagnostics ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+                -v "$PWD/apps/api/scripts/staging-location-retry-diagnostics.cjs:/app/scripts/staging-location-retry-diagnostics.cjs:ro" \
+                api-tools node scripts/staging-location-retry-diagnostics.cjs
+            else
+              echo "=== Location persistence proof ==="
+              docker compose -f infra/docker/docker-compose.yml --env-file .env --profile tools run --rm \
+                -e STAGING_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }} \
+                -e STAGING_LOGIN_PROBE_BASE_URL=http://api:4000 \
+                api-tools scripts/staging-location-persistence-proof.ts
+            fi
