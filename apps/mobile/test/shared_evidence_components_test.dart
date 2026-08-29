@@ -81,6 +81,25 @@ void main() {
     expect(find.byKey(const ValueKey("fake-video-view")), findsOneWidget);
   });
 
+  testWidgets("portrait video fits a constrained viewer without overflow",
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final session = _VideoSession(aspectRatio: 9 / 16);
+    await tester.pumpWidget(_app(EvidenceViewerScreen(
+      item: _video(),
+      videoSessionFactory: (_) => session,
+    )));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("fake-video-view")), findsOneWidget);
+    expect(find.byTooltip("Pause video"), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets("viewer handles playback error and retry", (tester) async {
     await tester.pumpWidget(_app(EvidenceViewerScreen(
       item: _video(),
@@ -170,15 +189,14 @@ class _ThumbnailProvider implements EvidenceVideoThumbnailProvider {
 }
 
 class _VideoSession implements EvidenceVideoSession {
-  _VideoSession({this.failPlay = false});
+  _VideoSession({this.failPlay = false, this.aspectRatio = 16 / 9});
 
   final bool failPlay;
+  @override
+  final double aspectRatio;
   bool initialized = false;
   bool playing = false;
   int playCalls = 0;
-
-  @override
-  double get aspectRatio => 16 / 9;
 
   @override
   bool get isInitialized => initialized;

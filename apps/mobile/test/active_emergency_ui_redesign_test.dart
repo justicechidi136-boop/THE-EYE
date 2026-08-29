@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:the_eye_mobile/design_system/components/eye_page_header.dart";
 import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
 import "package:the_eye_mobile/emergency/active_emergency_contract.dart";
 import "package:the_eye_mobile/emergency/active_emergency_progress_presentation.dart";
@@ -142,8 +143,11 @@ void main() {
     );
     expect(find.text("Active Emergency"), findsOneWidget);
     expect(find.text("Help is on the way"), findsOneWidget);
+    expect(find.byType(EyePageHeader), findsOneWidget);
     expect(find.byTooltip("Back"), findsOneWidget);
     expect(find.byTooltip("Refresh"), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    expect(find.byIcon(Icons.refresh), findsOneWidget);
   });
 
   testWidgets("live banner is factual for non-streaming video", (tester) async {
