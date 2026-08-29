@@ -141,6 +141,7 @@ export class DangerTriggerService {
     const locationCapturedAt = new Date(dto.locationCapturedAt);
     const locationAgeSeconds = Math.max(0, Math.round((Date.now() - locationCapturedAt.getTime()) / 1000));
     const locationUncertain = locationAgeSeconds > 120 || Number(dto.accuracyMeters ?? 0) > 150;
+    const spokenLocationName = this.spokenLocationName(dto.spokenLocationName);
     const incident = await prisma.incident.create({
       data: {
         reporterId: actor.sub,
@@ -171,6 +172,7 @@ export class DangerTriggerService {
           dangerAlertCode,
           userDeclaredDangerAlertCode,
           dangerAlertCodeSource,
+          spokenLocationName,
         },
       },
     });
@@ -207,6 +209,7 @@ export class DangerTriggerService {
               latestLiveVoiceSessionId: liveSession.id,
               correlatedTriggerCount: Number(correlated.metadata?.correlatedTriggerCount ?? 1) + 1,
               dangerAlertCode,
+              spokenLocationName,
             },
           },
         })
@@ -237,6 +240,7 @@ export class DangerTriggerService {
               dangerAlertCode,
               userDeclaredDangerAlertCode,
               dangerAlertCodeSource,
+              spokenLocationName,
             },
           },
         });
@@ -258,6 +262,7 @@ export class DangerTriggerService {
           dangerAlertCode,
           userDeclaredDangerAlertCode,
           dangerAlertCodeSource,
+          spokenLocationName,
         },
       },
     });
@@ -840,7 +845,9 @@ export class DangerTriggerService {
 
     const alertCode = this.normalizedDangerCode(event);
     const label = dangerLabel(alertCode);
-    const area = event.areaName?.trim() || "your area";
+    const area = this.spokenLocationName(
+      (event.metadata as any)?.spokenLocationName,
+    );
     const distanceLabel = recipient.distanceMeters < 1_000
       ? `${Math.max(1, Math.round(recipient.distanceMeters))} m`
       : `${(recipient.distanceMeters / 1_000).toFixed(1)} km`;
@@ -1026,6 +1033,14 @@ export class DangerTriggerService {
       : DangerAlertCode.GENERAL_ENTRY;
   }
 
+  private spokenLocationName(value: unknown) {
+    if (typeof value !== "string") return "the reported location";
+    const normalized = value.trim().replace(/\s+/g, " ");
+    return normalized && normalized.length <= 200
+      ? normalized
+      : "the reported location";
+  }
+
   private buildWatchAlert(
     event: any,
     userId: string,
@@ -1042,7 +1057,9 @@ export class DangerTriggerService {
       incidentType: IncidentType.Emergency,
       alertState: "Critical",
       distanceMeters,
-      areaName: event.areaName ?? undefined,
+      areaName: this.spokenLocationName(
+        (event.metadata as any)?.spokenLocationName,
+      ),
       notificationPriority: "Critical",
       deepLink: `theeye://danger-trigger/events/${event.id}`,
       metadata: { dangerAlertCode: this.normalizedDangerCode(event) },

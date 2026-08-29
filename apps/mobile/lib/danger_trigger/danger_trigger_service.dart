@@ -113,6 +113,7 @@ abstract class DangerTriggerGateway {
     required String dangerAlertCode,
     double? accuracyMeters,
     String? areaName,
+    String? spokenLocationName,
   });
 
   Future<DangerTriggerActivation> activate({
@@ -160,6 +161,7 @@ class DangerTriggerApiService implements DangerTriggerGateway {
     required String dangerAlertCode,
     double? accuracyMeters,
     String? areaName,
+    String? spokenLocationName,
   }) async {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.dangerTriggerPrepare,
@@ -172,6 +174,7 @@ class DangerTriggerApiService implements DangerTriggerGateway {
         "dangerAlertCode": dangerAlertCode,
         "locationCapturedAt": locationCapturedAt.toUtc().toIso8601String(),
         "areaName": areaName,
+        "spokenLocationName": spokenLocationName,
         "lowBandwidthMode": true,
       },
       accessToken: accessToken,
@@ -219,11 +222,13 @@ class DangerTriggerApiService implements DangerTriggerGateway {
     required String liveSessionId,
     required DateTime connectedAt,
   }) async {
-    final response = await _apiClient
-        .postJson(TheEyeApiPaths.dangerTriggerActivate(eventId), {
+    final response = await _apiClient.postJson(
+        TheEyeApiPaths.dangerTriggerActivate(eventId),
+        {
           "liveVoiceSessionId": liveSessionId,
           "connectedAt": connectedAt.toUtc().toIso8601String(),
-        }, accessToken: accessToken);
+        },
+        accessToken: accessToken);
     _requireSuccess(
       response.statusCode,
       response.body,

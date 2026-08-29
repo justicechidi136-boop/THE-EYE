@@ -171,6 +171,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
         locationSource: _apiLocationSource(location.source),
         dangerAlertCode: dangerAlertCode,
         areaName: location.displayLocality,
+        spokenLocationName: location.dangerSpokenLocation,
       );
       if (!mounted) return;
       setState(() {

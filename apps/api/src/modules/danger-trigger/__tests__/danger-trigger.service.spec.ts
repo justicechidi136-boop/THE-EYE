@@ -146,6 +146,7 @@ const startDto = () => ({
   locationSource: "freshGps" as const,
   locationCapturedAt: new Date().toISOString(),
   areaName: "Ikeja, Lagos",
+  spokenLocationName: "Allen Avenue",
   dangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY" as const,
 });
 
@@ -162,6 +163,7 @@ describe("DangerTriggerService", () => {
             dangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
             userDeclaredDangerAlertCode: "DANGER_ZONE_ARMED_ROBBERY_NEARBY",
             dangerAlertCodeSource: "USER_SELECTED",
+            spokenLocationName: "Allen Avenue",
           }),
         }),
       }),
@@ -196,6 +198,7 @@ describe("DangerTriggerService", () => {
     expect(result.initiatorWatchAlertQueued).toBe(true);
     expect(result.watchRelay.type).toBe("NearbyDangerWarning");
     expect(result.watchRelay.relayToWatch).toBe("true");
+    expect(result.watchRelay.areaName).toBe("the reported location");
     expect(notifications.create).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: actor.sub,
@@ -263,6 +266,7 @@ describe("DangerTriggerService", () => {
         alertRevision: 1,
         expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
         dangerAlertCode: "DANGER_ZONE_FIRE_NEARBY",
+        spokenLocationName: "Allen Avenue",
       },
     }]);
 
@@ -287,6 +291,7 @@ describe("DangerTriggerService", () => {
     expect(lateNotifications).toHaveLength(1);
     expect(lateNotifications[0].metadata.deliveryReason).toBe("ACTIVE_ZONE_ENTRY");
     expect(lateNotifications[0].metadata.preciseReporterLocationExposed).toBe(false);
+    expect(lateNotifications[0].metadata.approximateArea).toBe("Allen Avenue");
   });
 
   it("does not deliver for stale, inaccurate, or terminal zone evaluations", async () => {

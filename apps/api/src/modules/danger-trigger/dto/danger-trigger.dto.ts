@@ -10,6 +10,7 @@ export type StartDangerTriggerDto = {
   locationSource: "freshGps" | "cachedDevice" | "networkLocation";
   locationCapturedAt: string;
   areaName?: string;
+  spokenLocationName?: string;
   dangerAlertCode?: DangerAlertCodeValue;
   lowBandwidthMode?: boolean;
   qaTest?: boolean;
@@ -56,6 +57,12 @@ export function validateStartDangerTriggerDto(dto: StartDangerTriggerDto) {
   }
   if (dto.accuracyMeters != null && (!Number.isFinite(dto.accuracyMeters) || dto.accuracyMeters < 0)) {
     throw new BadRequestException("accuracyMeters must be positive");
+  }
+  if (dto.spokenLocationName != null) {
+    const spokenLocationName = dto.spokenLocationName.trim();
+    if (!spokenLocationName || spokenLocationName.length > 200) {
+      throw new BadRequestException("spokenLocationName is invalid");
+    }
   }
 }
 
