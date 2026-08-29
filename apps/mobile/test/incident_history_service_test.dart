@@ -21,6 +21,9 @@ void main() {
                   "type": "Crime",
                   "status": "Submitted",
                   "description": "Test incident",
+                  "address": "Stadium Road, Rumuola",
+                  "lga": "Obio-Akpor",
+                  "state": "Rivers State",
                   "submittedAt": "2026-07-22T00:00:00.000Z",
                 },
               ],
@@ -36,6 +39,9 @@ void main() {
             "type": "Crime",
             "status": "Submitted",
             "description": "Test incident",
+            "address": "Stadium Road, Rumuola",
+            "lga": "Obio-Akpor",
+            "state": "Rivers State",
             "timeline": [
               {
                 "createdAt": "2026-07-22T00:00:00.000Z",
@@ -64,11 +70,14 @@ void main() {
     final rows = await service.listIncidents(accessToken: "token");
     expect(rows, hasLength(1));
     expect(rows.first.id, "inc-1");
+    expect(rows.first.address, "Stadium Road, Rumuola");
+    expect(rows.first.administrativeLocation, "Obio-Akpor, Rivers State");
 
     final detail =
         await service.getIncident(accessToken: "token", incidentId: "inc-1");
     expect(detail.evidenceCount, 1);
     expect(detail.timeline, isNotEmpty);
     expect(detail.statusHistory, isNotEmpty);
+    expect(detail.administrativeLocation, "Obio-Akpor, Rivers State");
   });
 }

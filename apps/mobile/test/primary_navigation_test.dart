@@ -64,7 +64,7 @@ void main() {
   test("Watch opens the location-resolved feed-first experience", () {
     final homeSource =
         File("lib/neighborhood_watch/nw_home_screen.dart").readAsStringSync();
-    expect(homeSource, contains('title: "Neighborhood Feed"'));
+    expect(homeSource, contains('title: "Neighborhood Watch"'));
     expect(homeSource, contains("Eyes · See what is happening around you"));
     expect(homeSource, contains('tooltip: "Open community chat"'));
     expect(homeSource, isNot(contains('labels: const ["Home", "Feed"')));

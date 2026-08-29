@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:geolocator/geolocator.dart";
+import "package:share_plus/share_plus.dart";
 
 import "../app/app_scope.dart";
 import "../design_system/eye_semantic_colors.dart";
@@ -13,6 +14,27 @@ import "neighborhood_community_state.dart";
 import "neighborhood_watch_service.dart";
 import "neighborhood_watch_session.dart";
 import "nw_context_cache.dart";
+
+String formatNeighborhoodPostAge(DateTime? createdAt, {DateTime? now}) {
+  if (createdAt == null) return "Recently";
+  final reference = now ?? DateTime.now();
+  final difference = reference.difference(createdAt.toLocal());
+  if (difference.isNegative || difference.inMinutes < 1) return "Just now";
+  if (difference.inHours < 1) return "${difference.inMinutes}m ago";
+  if (difference.inDays < 1) return "${difference.inHours}h ago";
+  if (difference.inDays < 7) return "${difference.inDays}d ago";
+  final local = createdAt.toLocal();
+  return "${local.day}/${local.month}/${local.year}";
+}
+
+String neighborhoodVerificationLabel(String status) {
+  return switch (status.trim().toLowerCase()) {
+    "verified" => "Verified",
+    "confirmed" => "Confirmed",
+    "rejected" || "false" => "Unverified",
+    _ => "Unverified",
+  };
+}
 
 class NeighborhoodWatchHomeScreen extends StatefulWidget {
   const NeighborhoodWatchHomeScreen({
@@ -280,6 +302,87 @@ class _NeighborhoodWatchHomeScreenState
     nwSession?.clearNeighborhoodWatchParticipationContext();
   }
 
+  String? _currentCommunityId() {
+    final current = _context;
+    if (current == null) return null;
+    if (current.isMappedPublicCommunity) return current.publicCommunity?.id;
+    if (current.isDynamicPublicArea) {
+      return current.dynamicArea
+          ?.toCommunitySummary(
+            activeAlertsCount: current.safetySummary.activeAlerts,
+          )
+          .id;
+    }
+    return null;
+  }
+
+  void _openPost(CommunityPostItem post) {
+    Navigator.of(context).pushNamed(
+      NeighborhoodWatchDestinations.post(post.id),
+      arguments: CommunityPostDetailRouteArgs(
+        postId: post.id,
+        postTitle: post.title,
+        communityId: post.communityId ?? _currentCommunityId() ?? "",
+        currentUserId: AppScope.of(context).cachedCitizenProfile?.id,
+      ),
+    );
+  }
+
+  Future<void> _togglePostReaction(CommunityPostItem post) async {
+    final token = AppScope.of(context).accessToken;
+    final index = _feed.indexWhere((item) => item.id == post.id);
+    if (token == null || index < 0) return;
+    final wasReacted = post.viewerReacted;
+    setState(() {
+      _feed = List<CommunityPostItem>.from(_feed)
+        ..[index] = post.copyWith(
+          viewerReacted: !wasReacted,
+          reactionCount: wasReacted
+              ? (post.reactionCount > 0 ? post.reactionCount - 1 : 0)
+              : post.reactionCount + 1,
+        );
+    });
+    try {
+      if (wasReacted) {
+        await _service.removeReaction(accessToken: token, postId: post.id);
+      } else {
+        await _service.addReaction(accessToken: token, postId: post.id);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        final rollbackIndex = _feed.indexWhere((item) => item.id == post.id);
+        if (rollbackIndex >= 0) {
+          _feed = List<CommunityPostItem>.from(_feed)..[rollbackIndex] = post;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to update this reaction.")),
+      );
+    }
+  }
+
+  Future<void> _sharePost(CommunityPostItem post) async {
+    final shareLocation = post.approximateLocationLabel?.trim();
+    final text = [
+      post.title.trim(),
+      if (post.body.trim().isNotEmpty) post.body.trim(),
+      if (shareLocation != null && shareLocation.isNotEmpty)
+        "Location: $shareLocation",
+      "Shared from THE EYE Neighborhood Watch",
+    ].join("\n\n");
+    try {
+      await SharePlus.instance.share(
+        ShareParams(subject: post.title.trim(), text: text),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to open the share sheet.")),
+      );
+    }
+  }
+
   void _returnToAppHome() {
     Navigator.of(context).pushReplacementNamed("/home");
   }
@@ -287,9 +390,22 @@ class _NeighborhoodWatchHomeScreenState
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
+    final current = _context;
+    final headerLocation = current != null && current.isUsablePublicContext
+        ? NeighborhoodWatchContextPresentation.from(
+            current,
+            isStale: _contextIsStale,
+          )
+        : null;
+    final locationParts = [
+      headerLocation?.areaTitle,
+      headerLocation?.areaSubtitle,
+    ].whereType<String>().where((part) => part.trim().isNotEmpty).toList();
     return NwPrototypeScaffold(
-      title: "Neighborhood Feed",
-      subtitle: "Eyes · See what is happening around you",
+      title: "Neighborhood Watch",
+      subtitle: locationParts.isEmpty
+          ? "Finding your neighborhood..."
+          : locationParts.join(" · "),
       onBack: _returnToAppHome,
       actions: [
         IconButton(
@@ -378,8 +494,6 @@ class _NeighborhoodWatchHomeScreenState
     final areaSubtitle = presentation.areaSubtitle;
     final summary = ctx.safetySummary;
     final presence = _contextIsStale ? null : ctx.presence;
-    final areaBadgeColor =
-        _contextIsStale ? semantics.warning : semantics.success;
 
     return [
       if (!_contextIsStale &&
@@ -394,67 +508,58 @@ class _NeighborhoodWatchHomeScreenState
             color: const Color(0xFF4A9DFF),
           ),
         ),
-      NwPrototypeCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            NwPrototypeSectionHeading(
-              title: isDynamic ? "Current area" : "Current community",
+      Text(
+        "Eyes · See what is happening around you",
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: semantics.secondaryText,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 10),
-            NwPrototypePill(
-              label: _contextIsStale ? "Saved area" : "Location verified",
-              selected: true,
-              color: areaBadgeColor,
-            ),
-            if (_contextIsStale) ...[
-              const SizedBox(height: 8),
-              NwPrototypePill(
-                label: "Saved context",
-                selected: true,
-                color: semantics.warning,
-              ),
-            ],
-            const SizedBox(height: 10),
-            Text(
-              isDynamic ? "CURRENT AREA" : "REGISTERED COMMUNITY",
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: semantics.secondaryText,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              areaTitle,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: semantics.bodyText,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-            if (areaSubtitle.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(areaSubtitle),
-            ],
-            if (isDynamic) ...[
-              const SizedBox(height: 8),
-              Text(
-                "No registered community has been created for this area yet.\n"
-                "You can still participate in Neighborhood Watch for your current area.",
-                style: TextStyle(color: semantics.mutedText),
-              ),
-            ],
-            if (_contextIsStale && _contextCachedAt != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                "Saved at ${formatNwContextCachedAt(_contextCachedAt!)} — not current GPS.",
-                style: TextStyle(color: semantics.mutedText),
-              ),
-            ],
-          ],
-        ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 12),
+      const NwPrototypeSectionHeading(title: "What's happening nearby"),
+      const SizedBox(height: 10),
+      if (_feedLoading && _feed.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 32),
+          child: Center(child: CircularProgressIndicator()),
+        )
+      else if (_feedError != null && _feed.isEmpty)
+        _LocationIssueCard(
+          title: "Unable to load nearby activity",
+          message: _feedError!,
+          onRetry: () => _refreshFeed(ctx),
+        )
+      else if (_feed.isEmpty)
+        NwPrototypeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Nothing happening nearby right now",
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Share the first local update, or open Community Chat to talk with your neighborhood.",
+                style: TextStyle(color: semantics.mutedText),
+              ),
+            ],
+          ),
+        )
+      else
+        ..._feed.map(
+          (post) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _NeighborhoodFeedCard(
+              post: post,
+              onOpen: () => _openPost(post),
+              onLike: () => _togglePostReaction(post),
+              onComment: () => _openPost(post),
+              onShare: () => _sharePost(post),
+            ),
+          ),
+        ),
+      const SizedBox(height: 8),
       NwPrototypeCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,7 +570,7 @@ class _NeighborhoodWatchHomeScreenState
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  "STALE summary",
+                  "Saved summary",
                   style: TextStyle(
                     color: semantics.warning,
                     fontWeight: FontWeight.w600,
@@ -508,69 +613,22 @@ class _NeighborhoodWatchHomeScreenState
                 ),
               ],
             ),
-            if (summary.activeAlerts == 0 &&
-                summary.roadHazards == 0 &&
-                summary.communityWarnings == 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  "No local safety alerts in the last 7 days.",
-                  style: TextStyle(color: semantics.mutedText),
-                ),
-              ),
           ],
         ),
       ),
-      const SizedBox(height: 16),
-      const NwPrototypeSectionHeading(title: "What's happening nearby"),
-      const SizedBox(height: 10),
-      if (_feedLoading && _feed.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 32),
-          child: Center(child: CircularProgressIndicator()),
-        )
-      else if (_feedError != null && _feed.isEmpty)
-        _LocationIssueCard(
-          title: "Unable to load nearby activity",
-          message: _feedError!,
-          onRetry: () => _refreshFeed(ctx),
-        )
-      else if (_feed.isEmpty)
-        NwPrototypeCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Nothing happening nearby right now",
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "Share the first local update, or open Community Chat to talk with your neighborhood.",
-                style: TextStyle(color: semantics.mutedText),
-              ),
-            ],
-          ),
-        )
-      else
-        ..._feed.map(
-          (post) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _NeighborhoodFeedCard(
-              post: post,
-              onTap: () => Navigator.of(context).pushNamed(
-                NeighborhoodWatchDestinations.post(post.id),
-                arguments: CommunityPostDetailRouteArgs(
-                  postId: post.id,
-                  postTitle: post.title,
-                  communityId: post.communityId ?? "",
-                  currentUserId:
-                      AppScope.of(context).cachedCitizenProfile?.id,
-                ),
-              ),
-            ),
-          ),
+      if (isDynamic) ...[
+        const SizedBox(height: 12),
+        NwPrototypeNotice(
+          title: "Current area conversation",
+          message: [
+            areaTitle,
+            if (areaSubtitle.isNotEmpty) areaSubtitle,
+            "This geographic room is available without a manual join request.",
+          ].join(" · "),
+          icon: Icons.location_on_outlined,
+          color: semantics.success,
         ),
+      ],
       if (_loading)
         const Padding(
           padding: EdgeInsets.only(top: 16),
@@ -579,22 +637,62 @@ class _NeighborhoodWatchHomeScreenState
     ];
   }
 }
+
 class _NeighborhoodFeedCard extends StatelessWidget {
-  const _NeighborhoodFeedCard({required this.post, required this.onTap});
+  const _NeighborhoodFeedCard({
+    required this.post,
+    required this.onOpen,
+    required this.onLike,
+    required this.onComment,
+    required this.onShare,
+  });
 
   final CommunityPostItem post;
-  final VoidCallback onTap;
+  final VoidCallback onOpen;
+  final VoidCallback onLike;
+  final VoidCallback onComment;
+  final VoidCallback onShare;
+
+  String get _initials {
+    final parts = post.displayAuthor
+        .trim()
+        .split(RegExp(r"\s+"))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .toList();
+    if (parts.isEmpty) return "?";
+    return parts.map((part) => part[0].toUpperCase()).join();
+  }
+
+  String get _typeLabel => switch (post.type) {
+        "SafetyTip" => "Security tip",
+        "SuspiciousActivity" => "Suspicious activity",
+        "RoadHazard" => "Road hazard",
+        "CommunityAnnouncement" => "Community update",
+        "Discussion" => "Community conversation",
+        _ => post.type,
+      };
+
+  String? get _locationLabel {
+    final label = post.approximateLocationLabel?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    if (post.hasApproximateLocation) return "Location attached";
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
+    final verificationLabel = neighborhoodVerificationLabel(
+      post.verificationStatus,
+    );
     final imageCount = post.media.where((media) => media.isImage).length;
     final videoCount = post.media.where((media) => media.isVideo).length;
     final audioCount = post.media.where((media) => media.isAudio).length;
     return NwPrototypeCard(
       padding: EdgeInsets.zero,
       child: InkWell(
-        onTap: onTap,
+        onTap: onOpen,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -606,7 +704,10 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 18,
                     backgroundColor: semantics.elevatedSurface,
-                    child: const Icon(Icons.person_outline, size: 19),
+                    child: Text(
+                      _initials,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -617,7 +718,7 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                             style:
                                 const TextStyle(fontWeight: FontWeight.w700)),
                         Text(
-                          post.type,
+                          "${formatNeighborhoodPostAge(post.createdAt)} · $_typeLabel",
                           style: TextStyle(
                             color: semantics.secondaryText,
                             fontSize: 12,
@@ -626,7 +727,14 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right),
+                  NwPrototypePill(
+                    label: verificationLabel,
+                    selected: true,
+                    color: verificationLabel == "Verified" ||
+                            verificationLabel == "Confirmed"
+                        ? semantics.verified
+                        : semantics.warning,
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -638,10 +746,9 @@ class _NeighborhoodFeedCard extends StatelessWidget {
               ),
               if (post.body.trim().isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(post.body,
-                    maxLines: 4, overflow: TextOverflow.ellipsis),
+                Text(post.body, maxLines: 4, overflow: TextOverflow.ellipsis),
               ],
-              if (post.displayLocation != null) ...[
+              if (_locationLabel != null) ...[
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -649,7 +756,7 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
-                        post.displayLocation!,
+                        _locationLabel!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: semantics.secondaryText),
@@ -680,16 +787,34 @@ class _NeighborhoodFeedCard extends StatelessWidget {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  _FeedMeta(
-                    icon: post.viewerReacted
-                        ? Icons.favorite
-                        : Icons.favorite_border,
-                    label: "${post.reactionCount}",
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: onLike,
+                      icon: Icon(
+                        post.viewerReacted
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        size: 18,
+                      ),
+                      label: Text("Like ${post.reactionCount}"),
+                      style: _actionStyle,
+                    ),
                   ),
-                  const SizedBox(width: 16),
-                  _FeedMeta(
-                    icon: Icons.chat_bubble_outline,
-                    label: "${post.commentCount}",
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: onComment,
+                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                      label: Text("Comment ${post.commentCount}"),
+                      style: _actionStyle,
+                    ),
+                  ),
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: onShare,
+                      icon: const Icon(Icons.share_outlined, size: 18),
+                      label: const Text("Share"),
+                      style: _actionStyle,
+                    ),
                   ),
                 ],
               ),
@@ -699,6 +824,12 @@ class _NeighborhoodFeedCard extends StatelessWidget {
       ),
     );
   }
+
+  ButtonStyle get _actionStyle => TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+        minimumSize: const Size(0, 40),
+        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      );
 }
 
 class _FeedMeta extends StatelessWidget {

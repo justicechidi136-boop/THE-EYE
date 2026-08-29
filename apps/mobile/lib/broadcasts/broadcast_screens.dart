@@ -752,8 +752,8 @@ class _BroadcastDetailBody extends StatelessWidget {
         mediaType: attachment["mediaType"]?.toString() ?? "attachment",
         label: angleLabel ??
             (attachment["label"]?.toString().trim().isNotEmpty == true
-            ? attachment["label"].toString()
-            : "Evidence ${index + 1}"),
+                ? attachment["label"].toString()
+                : "Evidence ${index + 1}"),
         durationSeconds: duration is num ? duration.round() : null,
         authorizedUri: rawUrl.isEmpty ? null : Uri.tryParse(rawUrl),
       );
@@ -1097,6 +1097,7 @@ class BroadcastCommentsScreen extends StatefulWidget {
 
 class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
   final _commentController = TextEditingController();
+  final _commentFocusNode = FocusNode();
   List<BroadcastCommentItem> _comments = const [];
   bool _didLoad = false;
   bool _loading = true;
@@ -1115,7 +1116,17 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
   @override
   void dispose() {
     _commentController.dispose();
+    _commentFocusNode.dispose();
     super.dispose();
+  }
+
+  void _startVoiceTyping() {
+    _commentFocusNode.requestFocus();
+    unawaited(SystemChannels.textInput.invokeMethod<void>("TextInput.show"));
+    showBroadcastSnackBar(
+      context,
+      "Use your keyboard microphone to dictate a comment.",
+    );
   }
 
   Future<void> _load() async {
@@ -1285,7 +1296,7 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
   @override
   Widget build(BuildContext context) {
     return _BroadcastShell(
-      title: "Comments",
+      title: "Broadcast comments",
       child: Column(
         children: [
           Expanded(
@@ -1307,12 +1318,29 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
                         child: _comments.isEmpty
                             ? ListView(
                                 physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.all(16),
-                                children: const [
-                                  SectionCard(
-                                    title: "No comments yet",
-                                    child: Text(
-                                      "Be the first to share relevant information about this broadcast.",
+                                padding:
+                                    const EdgeInsets.fromLTRB(24, 72, 24, 24),
+                                children: [
+                                  Icon(
+                                    Icons.forum_outlined,
+                                    size: 44,
+                                    color:
+                                        EyeSemanticColors.of(context).mutedText,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    "No comments yet",
+                                    textAlign: TextAlign.center,
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    "Be the first to share relevant information about this broadcast.",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: EyeSemanticColors.of(context)
+                                          .mutedText,
                                     ),
                                   ),
                                 ],
@@ -1331,85 +1359,26 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
                                   ).cachedCitizenProfile?.id;
                                   final isOwner = currentUserId != null &&
                                       currentUserId == comment.authorUserId;
-                                  return Padding(
-                                    padding: EdgeInsets.only(
-                                      left: comment.parentId == null ? 0 : 24,
+                                  return _BroadcastCommentTile(
+                                    comment: comment,
+                                    isOwner: isOwner,
+                                    onHelpful: () => unawaited(
+                                      _react(comment, "Helpful"),
                                     ),
-                                    child: SectionCard(
-                                      title: comment.authorName,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(comment.body),
-                                          if (comment.createdAt != null) ...[
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              formatBroadcastAge(
-                                                comment.createdAt!,
-                                              ),
-                                              style: const TextStyle(
-                                                color:
-                                                    BrandColors.lightTextMuted,
-                                              ),
-                                            ),
-                                          ],
-                                          const SizedBox(height: 8),
-                                          Wrap(
-                                            spacing: 4,
-                                            runSpacing: 4,
-                                            children: [
-                                              TextButton.icon(
-                                                onPressed: () => unawaited(
-                                                  _react(comment, "Helpful"),
-                                                ),
-                                                icon: const Icon(
-                                                  Icons.thumb_up_outlined,
-                                                ),
-                                                label: Text(
-                                                  "Helpful ${comment.helpfulReactions}",
-                                                ),
-                                              ),
-                                              TextButton.icon(
-                                                onPressed: () => unawaited(
-                                                  _react(comment, "Thanks"),
-                                                ),
-                                                icon: const Icon(
-                                                  Icons
-                                                      .volunteer_activism_outlined,
-                                                ),
-                                                label: Text(
-                                                  "Thanks ${comment.thanksReactions}",
-                                                ),
-                                              ),
-                                              if (comment.parentId == null)
-                                                TextButton(
-                                                  onPressed: () => setState(
-                                                    () => _replyTo = comment,
-                                                  ),
-                                                  child: const Text("Reply"),
-                                                ),
-                                              if (isOwner)
-                                                IconButton(
-                                                  tooltip: "Edit comment",
-                                                  onPressed: () =>
-                                                      unawaited(_edit(comment)),
-                                                  icon: const Icon(
-                                                      Icons.edit_outlined),
-                                                ),
-                                              if (isOwner)
-                                                IconButton(
-                                                  tooltip: "Delete comment",
-                                                  onPressed: () => unawaited(
-                                                      _delete(comment)),
-                                                  icon: const Icon(
-                                                      Icons.delete_outline),
-                                                ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
+                                    onThanks: () => unawaited(
+                                      _react(comment, "Thanks"),
                                     ),
+                                    onReply: comment.parentId == null
+                                        ? () => setState(
+                                              () => _replyTo = comment,
+                                            )
+                                        : null,
+                                    onEdit: isOwner
+                                        ? () => unawaited(_edit(comment))
+                                        : null,
+                                    onDelete: isOwner
+                                        ? () => unawaited(_delete(comment))
+                                        : null,
                                   );
                                 },
                               ),
@@ -1417,49 +1386,231 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
           ),
           SafeArea(
             top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
+            child: Container(
+              decoration: BoxDecoration(
+                color: EyeSemanticColors.of(context).elevatedSurface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).dividerColor,
+                  ),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  if (_replyTo != null)
+                    Row(
                       children: [
-                        if (_replyTo != null)
-                          InputChip(
-                            label: Text("Replying to ${_replyTo!.authorName}"),
-                            onDeleted: () => setState(() => _replyTo = null),
+                        Expanded(
+                          child: Text(
+                            "Replying to ${_replyTo!.authorName}",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelMedium,
                           ),
-                        TextField(
-                          controller: _commentController,
-                          minLines: 1,
-                          maxLines: 3,
-                          maxLength: 2000,
-                          decoration: InputDecoration(
-                            hintText: _replyTo == null
-                                ? "Add a comment"
-                                : "Write a reply",
-                            counterText: "",
-                          ),
+                        ),
+                        IconButton(
+                          tooltip: "Cancel reply",
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => setState(() => _replyTo = null),
+                          icon: const Icon(Icons.close, size: 18),
                         ),
                       ],
                     ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const Key("broadcast-comment-input"),
+                          controller: _commentController,
+                          focusNode: _commentFocusNode,
+                          enabled: !_submitting,
+                          minLines: 1,
+                          maxLines: 4,
+                          maxLength: 2000,
+                          autocorrect: true,
+                          enableSuggestions: true,
+                          keyboardType: TextInputType.multiline,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            hintText: _replyTo == null
+                                ? "Add a comment..."
+                                : "Write a reply...",
+                            counterText: "",
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                          ),
+                          onSubmitted: (_) => unawaited(_submit()),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _commentController,
+                        builder: (context, value, _) {
+                          if (_submitting) {
+                            return const IconButton.filled(
+                              tooltip: "Posting comment",
+                              onPressed: null,
+                              icon: SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            );
+                          }
+                          if (value.text.trim().isEmpty) {
+                            return IconButton.filled(
+                              tooltip: "Use voice typing",
+                              onPressed: _startVoiceTyping,
+                              icon: const Icon(Icons.mic_rounded),
+                            );
+                          }
+                          return IconButton.filled(
+                            tooltip: "Send comment",
+                            onPressed: _submit,
+                            icon: const Icon(Icons.send_rounded),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(56, 56),
-                      padding: EdgeInsets.zero,
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BroadcastCommentTile extends StatelessWidget {
+  const _BroadcastCommentTile({
+    required this.comment,
+    required this.isOwner,
+    required this.onHelpful,
+    required this.onThanks,
+    this.onReply,
+    this.onEdit,
+    this.onDelete,
+  });
+
+  final BroadcastCommentItem comment;
+  final bool isOwner;
+  final VoidCallback onHelpful;
+  final VoidCallback onThanks;
+  final VoidCallback? onReply;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
+    final initial = comment.authorName.trim().isEmpty
+        ? "?"
+        : comment.authorName.trim().characters.first.toUpperCase();
+    return Padding(
+      padding: EdgeInsets.only(
+        left: comment.parentId == null ? 0 : 28,
+        bottom: 4,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: semantics.information.withAlpha(36),
+            child: Text(
+              initial,
+              style: TextStyle(color: semantics.information),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
+              decoration: BoxDecoration(
+                color: semantics.elevatedSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Theme.of(context).dividerColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          comment.authorName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                      ),
+                      if (comment.createdAt != null)
+                        Text(
+                          formatBroadcastAge(comment.createdAt!),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: semantics.mutedText,
+                                  ),
+                        ),
+                      if (isOwner)
+                        PopupMenuButton<String>(
+                          tooltip: "Comment options",
+                          padding: EdgeInsets.zero,
+                          onSelected: (value) {
+                            if (value == "edit") onEdit?.call();
+                            if (value == "delete") onDelete?.call();
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: "edit", child: Text("Edit")),
+                            PopupMenuItem(
+                              value: "delete",
+                              child: Text("Delete"),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  if (comment.isPinned || comment.isSighting) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      comment.isPinned ? "Pinned update" : "Sighting update",
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: semantics.warning,
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
-                    onPressed: _submitting ? null : _submit,
-                    child: _submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(comment.body),
+                  const SizedBox(height: 2),
+                  Wrap(
+                    spacing: 2,
+                    runSpacing: 0,
+                    children: [
+                      TextButton.icon(
+                        onPressed: onHelpful,
+                        icon: const Icon(Icons.thumb_up_outlined, size: 17),
+                        label: Text("Helpful ${comment.helpfulReactions}"),
+                      ),
+                      TextButton.icon(
+                        onPressed: onThanks,
+                        icon: const Icon(
+                          Icons.volunteer_activism_outlined,
+                          size: 17,
+                        ),
+                        label: Text("Thanks ${comment.thanksReactions}"),
+                      ),
+                      if (onReply != null)
+                        TextButton(
+                          onPressed: onReply,
+                          child: const Text("Reply"),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -2149,16 +2300,22 @@ class _SubmitSightingScreenState extends State<SubmitSightingScreen> {
                   if (_capturedLocation?.hasCoordinates == true)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: CitizenLocationDetails(
-                        address: CitizenLocationPresentation(
-                          streetAddress: _capturedLocation?.street,
-                          subLocality: _capturedLocation?.subLocality,
-                          cityTown: _capturedLocation?.locality,
-                          lga: _capturedLocation?.lga,
-                          state: _capturedLocation?.state,
-                        ).label,
-                        accuracyMeters: _capturedLocation?.accuracyMeters,
-                        capturedAt: _capturedLocation?.capturedAt,
+                      child: Builder(
+                        builder: (context) {
+                          final location = CitizenLocationPresentation(
+                            streetAddress: _capturedLocation?.street,
+                            subLocality: _capturedLocation?.subLocality,
+                            cityTown: _capturedLocation?.locality,
+                            lga: _capturedLocation?.lga,
+                            state: _capturedLocation?.state,
+                          );
+                          return CitizenLocationDetails(
+                            address: location.specificLine,
+                            secondaryLocation: location.administrativeLine,
+                            accuracyMeters: _capturedLocation?.accuracyMeters,
+                            capturedAt: _capturedLocation?.capturedAt,
+                          );
+                        },
                       ),
                     ),
                   if (_locationStatus != null)
@@ -2293,14 +2450,6 @@ class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
     final l10n = AppLocalizations.of(context);
     final detail = _detail;
     final location = detail?.location ?? const <String, dynamic>{};
-    final locationLabel = CitizenLocationPresentation(
-      streetAddress: location["streetAddress"]?.toString(),
-      subLocality: location["subLocality"]?.toString(),
-      cityTown: location["cityTown"]?.toString(),
-      lga: location["lga"]?.toString(),
-      state: location["state"]?.toString(),
-      country: location["country"]?.toString(),
-    ).label;
     final evidenceItems =
         detail == null ? const <EvidenceItem>[] : _evidenceItems(detail);
     return _BroadcastShell(
@@ -2354,7 +2503,18 @@ class _SightingDetailsScreenState extends State<SightingDetailsScreen> {
                                     .isNotEmpty ==
                                 true
                             ? location["displayAddress"].toString()
-                            : locationLabel,
+                            : CitizenLocationPresentation(
+                                streetAddress:
+                                    location["streetAddress"]?.toString(),
+                                subLocality:
+                                    location["subLocality"]?.toString(),
+                              ).specificLine,
+                        secondaryLocation: CitizenLocationPresentation(
+                          cityTown: location["cityTown"]?.toString(),
+                          lga: location["lga"]?.toString(),
+                          state: location["state"]?.toString(),
+                          country: location["country"]?.toString(),
+                        ).administrativeLine,
                         accuracyMeters:
                             (location["accuracyMeters"] as num?)?.toDouble(),
                         capturedAt: DateTime.tryParse(

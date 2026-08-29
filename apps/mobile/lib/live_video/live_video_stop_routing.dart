@@ -1,6 +1,7 @@
 enum LiveVideoStopDestination {
   returnToActiveEmergency,
   openActiveEmergency,
+  openIncidentArchive,
   stayOnLiveVideo,
 }
 
@@ -20,8 +21,15 @@ class LiveVideoStopRoutingDecision {
 LiveVideoStopRoutingDecision resolveLiveVideoStopRouting({
   required bool returnToActiveEmergency,
   required String? activeIncidentId,
+  bool incidentArchived = false,
 }) {
   final incidentId = activeIncidentId?.trim();
+  if (incidentArchived && incidentId != null && incidentId.isNotEmpty) {
+    return LiveVideoStopRoutingDecision(
+      destination: LiveVideoStopDestination.openIncidentArchive,
+      incidentId: incidentId,
+    );
+  }
   if (returnToActiveEmergency) {
     return LiveVideoStopRoutingDecision(
       destination: LiveVideoStopDestination.returnToActiveEmergency,
@@ -37,4 +45,9 @@ LiveVideoStopRoutingDecision resolveLiveVideoStopRouting({
   return const LiveVideoStopRoutingDecision(
     destination: LiveVideoStopDestination.stayOnLiveVideo,
   );
+}
+
+bool liveVideoStopArchivedIncident(Map<String, dynamic> response) {
+  final incident = response["incident"];
+  return incident is Map && incident["archived"] == true;
 }

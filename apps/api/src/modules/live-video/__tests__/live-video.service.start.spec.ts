@@ -43,11 +43,17 @@ function buildStartService(options: {
   const incident = {
     id: "incident-1",
     reporterId: "user-1",
+    type: "Emergency",
+    title: "Live emergency video",
+    metadata: {},
     isAnonymous: false,
     submittedAt: new Date("2026-07-31T00:00:00.000Z"),
   };
   const prisma = {
-    incident: { findUnique: jest.fn().mockResolvedValue(incident) },
+    incident: {
+      findUnique: jest.fn().mockResolvedValue(incident),
+      update: jest.fn().mockResolvedValue(incident),
+    },
     liveVideoSession: { upsert: jest.fn().mockResolvedValue(session) },
     incidentTimeline: { create: jest.fn().mockResolvedValue({ id: "timeline-1" }) },
     liveVideoLocationUpdate: { create: jest.fn() },
@@ -166,6 +172,35 @@ describe("LiveVideoService startFieldBroadcastLiveVideo", () => {
       }),
     );
     expect(result.connection.participantIdentity).toBe("field-field-officer-1");
+  });
+
+  it("marks an owned standalone live emergency for terminal stop handling", async () => {
+    const { service, prisma } = buildStartService();
+    await service.startIncidentLiveVideo(
+      "incident-1",
+      { standaloneEmergency: true },
+      citizen,
+      { requestId: "req-standalone" },
+    );
+
+    expect(prisma.incident.update).toHaveBeenCalledWith({
+      where: { id: "incident-1" },
+      data: {
+        metadata: {
+          source: "live_emergency_video",
+          standaloneLiveEmergency: true,
+        },
+      },
+    });
+    expect(prisma.liveVideoSession.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          metadata: expect.objectContaining({
+            standaloneLiveEmergency: true,
+          }),
+        }),
+      }),
+    );
   });
 
   it("rejects a field officer who did not submit the broadcast", async () => {

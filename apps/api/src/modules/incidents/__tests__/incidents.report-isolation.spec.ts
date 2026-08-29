@@ -27,7 +27,10 @@ function buildIncidentsService(overrides: Record<string, unknown> = {}) {
   const audit = { record: jest.fn().mockResolvedValue({ id: "audit-1" }) } as any;
   const metrics = { recordIncidentSubmission: jest.fn() } as any;
   const verification = { verifyIncident: jest.fn().mockResolvedValue(undefined) } as any;
-  const notifications = { enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }) } as any;
+  const notifications = {
+    create: jest.fn().mockResolvedValue({ data: [{ id: "notification-1" }] }),
+    enqueue: jest.fn().mockResolvedValue({ jobId: "job-1" }),
+  } as any;
   const dispatchService = { runTriageForIncident: jest.fn().mockResolvedValue(undefined) } as any;
   const emergencyClassification = {} as any;
   const locationTracking = {} as any;
@@ -128,6 +131,51 @@ describe("IncidentsService report isolation", () => {
     expect(incidentCreate).not.toHaveBeenCalled();
     expect(response.duplicate).toBe(true);
     expect(response.id).toBe("incident-existing");
+  });
+
+  it("does not emit another notification for an idempotent report retry", async () => {
+    const existing = {
+      id: "incident-existing",
+      status: IncidentStatus.Submitted,
+      priority: IncidentPriority.P2ActiveCrimeAccident,
+      submittedAt: new Date("2026-07-26T15:00:00.000Z"),
+    };
+    const { service, notifications, prisma } = buildIncidentsService();
+    prisma.incident.findUnique.mockResolvedValueOnce(existing);
+
+    await service.report(
+      {
+        ...baseDto,
+        anonymous: false,
+        clientSubmissionId: "mobile-draft-123",
+      },
+      { typ: "user", sub: "user-1" } as any,
+    );
+
+    expect(notifications.create).not.toHaveBeenCalled();
+  });
+
+  it("creates one canonical report-submitted notification event", async () => {
+    const { service, notifications } = buildIncidentsService();
+
+    await service.report(
+      { ...baseDto, anonymous: false },
+      { typ: "user", sub: "user-1" } as any,
+    );
+    await Promise.resolve();
+
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        incidentId: "incident-1",
+        channels: ["push"],
+        metadata: expect.objectContaining({
+          idempotencyKey:
+            "incident:incident-1:report-submitted:user-1",
+        }),
+      }),
+    );
   });
 
   it("uses jurisdiction fallback metadata without aborting emergency intake", async () => {

@@ -128,7 +128,7 @@ void main() {
     expect(observer.replaceCount, 0);
   });
 
-  testWidgets("terminal contract still routes to incident detail",
+  testWidgets("terminal contract routes to the canonical incident archive",
       (tester) async {
     const terminal = ActiveEmergencyTerminalContract(
       incidentId: "incident-123",
@@ -140,8 +140,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         routes: {
-          "/incident-detail": (_) => const Scaffold(
-                body: Text("Incident detail"),
+          "/incident-archive/incident-123": (_) => const Scaffold(
+                body: Text("Incident archive"),
               ),
         },
         home: Builder(
@@ -164,6 +164,6 @@ void main() {
     await tester.tap(find.text("Resolve emergency"));
     await tester.pumpAndSettle();
 
-    expect(find.text("Incident detail"), findsOneWidget);
+    expect(find.text("Incident archive"), findsOneWidget);
   });
 }

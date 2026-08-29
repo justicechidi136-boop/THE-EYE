@@ -15,6 +15,7 @@ const publicPaths = [
   "/app/sign-in",
   "/sign-in",
   "/share/broadcasts",
+  "/.well-known/assetlinks.json",
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/refresh",

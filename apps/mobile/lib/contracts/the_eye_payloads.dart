@@ -7,11 +7,13 @@ abstract final class TheEyePayloads {
   static Map<String, Object?> liveVideoStart({
     Position? position,
     bool lowBandwidthMode = true,
+    bool standaloneEmergency = false,
     String sourceDeviceId = "mobile-primary",
   }) {
     return {
       if (position != null) ...gpsFields(position),
       "lowBandwidthMode": lowBandwidthMode,
+      "standaloneEmergency": standaloneEmergency,
       "sourceDeviceId": sourceDeviceId,
     };
   }

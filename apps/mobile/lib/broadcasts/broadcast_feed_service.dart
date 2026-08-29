@@ -210,6 +210,10 @@ class BroadcastFeedService {
     bool unreadOnly = false,
     String? category,
     String? severity,
+    String? status,
+    bool nearMe = false,
+    double? latitude,
+    double? longitude,
   }) async {
     final query = <String, String>{
       "limit": "$limit",
@@ -217,6 +221,10 @@ class BroadcastFeedService {
       if (unreadOnly) "unreadOnly": "true",
       if (category != null && category.isNotEmpty) "category": category,
       if (severity != null && severity.isNotEmpty) "severity": severity,
+      if (status != null && status.isNotEmpty) "status": status,
+      if (nearMe) "nearMe": "true",
+      if (nearMe && latitude != null) "latitude": "$latitude",
+      if (nearMe && longitude != null) "longitude": "$longitude",
     };
     final response = await _apiClient.getJson(
       TheEyeApiPaths.broadcastsCountry,

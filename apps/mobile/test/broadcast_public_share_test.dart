@@ -60,6 +60,41 @@ void main() {
     expect(payload.locallyGenerated, isTrue);
   });
 
+  test("fallback share text uses the approved missing-person structure", () {
+    final payload = BroadcastPublicShareMapper.fromPartialSource(
+      {
+        "id": "b-missing",
+        "type": "MissingPerson",
+        "status": "Active",
+        "title": "Missing person: Pele Vic",
+        "approximateArea": "Rumuola, Port Harcourt, Rivers State",
+        "lastSeenAt": "2026-08-13T13:45:00.000Z",
+        "shareUrl": BroadcastPublicShareMapper.publicShareUrlForId(
+          "b-missing",
+          flavor: "staging",
+        ),
+      },
+      locallyGenerated: true,
+    );
+
+    expect(payload.shareText, startsWith("🚨 Missing Person Alert"));
+    expect(payload.shareText, contains("Missing person: Pele Vic"));
+    expect(
+      payload.shareText,
+      contains(
+        "Last known location: Rumuola, Port Harcourt, Rivers State",
+      ),
+    );
+    expect(payload.shareText, contains("Last seen:"));
+    expect(
+      payload.shareText,
+      contains(
+        "View full broadcast: https://staging-dashboard8jps.theeye.com.ng/share/broadcasts/b-missing",
+      ),
+    );
+    expect(payload.shareText, isNot(contains("\nLocation:")));
+  });
+
   test("api share payload parses public-safe fields only", () {
     final payload = BroadcastPublicSharePayload.fromApiJson({
       "data": {

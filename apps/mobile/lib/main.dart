@@ -105,6 +105,7 @@ import "push/push_deep_link_router.dart";
 import "push/push_navigation.dart";
 import "push/push_notification_service.dart";
 import "broadcasts/broadcast_feed_cache.dart";
+import "broadcasts/broadcast_filter_sheet.dart";
 import "broadcasts/broadcast_feed_service.dart";
 import "broadcasts/broadcast_media_upload_service.dart";
 import "broadcasts/broadcast_navigation.dart";
@@ -962,7 +963,8 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
   Future<void> _presentDangerAlert(IncomingDangerAlert alert) async {
     if (_dangerAlertVisible) {
       final pending = _pendingDangerAlert;
-      if (pending == null || alert.priorityRank > pending.priorityRank ||
+      if (pending == null ||
+          alert.priorityRank > pending.priorityRank ||
           (alert.priorityRank == pending.priorityRank &&
               alert.issuedAt.isAfter(pending.issuedAt))) {
         _pendingDangerAlert = alert;
@@ -989,69 +991,69 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
       builder: (dialogContext) {
         _dangerDialogContext = dialogContext;
         return AlertDialog(
-        icon: const Icon(
-          Icons.warning_rounded,
-          color: BrandColors.danger,
-          size: 56,
-          semanticLabel: "Red danger triangle",
-        ),
-        title: const Text(
-          "DANGER ALERT",
-          textAlign: TextAlign.center,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              alert.dangerType.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(alert.area, textAlign: TextAlign.center),
-            if (alert.distanceMeters != null) ...[
-              const SizedBox(height: 6),
+          icon: const Icon(
+            Icons.warning_rounded,
+            color: BrandColors.danger,
+            size: 56,
+            semanticLabel: "Red danger triangle",
+          ),
+          title: const Text(
+            "DANGER ALERT",
+            textAlign: TextAlign.center,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Text(
-                alert.distanceMeters! < 1000
-                    ? "About ${alert.distanceMeters} m away"
-                    : "About ${(alert.distanceMeters! / 1000).toStringAsFixed(1)} km away",
+                alert.dangerType.toUpperCase(),
                 textAlign: TextAlign.center,
+                style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(alert.area, textAlign: TextAlign.center),
+              if (alert.distanceMeters != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  alert.distanceMeters! < 1000
+                      ? "About ${alert.distanceMeters} m away"
+                      : "About ${(alert.distanceMeters! / 1000).toStringAsFixed(1)} km away",
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              const SizedBox(height: 12),
+              ValueListenableBuilder<DangerAlertAudioState>(
+                valueListenable: _dangerAudio.state,
+                builder: (context, state, _) => Text(
+                  switch (state) {
+                    DangerAlertAudioState.speakingWarning =>
+                      "THE EYE generated warning",
+                    DangerAlertAudioState.playingOriginalVoice =>
+                      "Original voice",
+                    DangerAlertAudioState.completed => "Audio alert completed",
+                    _ => "Preparing safety audio",
+                  },
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
               ),
             ],
-            const SizedBox(height: 12),
-            ValueListenableBuilder<DangerAlertAudioState>(
-              valueListenable: _dangerAudio.state,
-              builder: (context, state, _) => Text(
-                switch (state) {
-                  DangerAlertAudioState.speakingWarning =>
-                    "THE EYE generated warning",
-                  DangerAlertAudioState.playingOriginalVoice =>
-                    "Original voice",
-                  DangerAlertAudioState.completed => "Audio alert completed",
-                  _ => "Preparing safety audio",
-                },
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await _dangerAudio.acknowledge();
+                if (dialogContext.mounted) Navigator.pop(dialogContext, false);
+              },
+              child: const Text("I have seen this alert"),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text("View Alert"),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await _dangerAudio.acknowledge();
-              if (dialogContext.mounted) Navigator.pop(dialogContext, false);
-            },
-            child: const Text("I have seen this alert"),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.visibility_outlined),
-            label: const Text("View Alert"),
-          ),
-        ],
         );
       },
     );
@@ -1338,13 +1340,14 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/tracking": (_) => const IncidentTrackingScreen(),
               "/active-emergency": (context) =>
                   _buildActiveEmergencyRoute(context),
-              "/active-emergencies": (context) => FutureBuilder(
-                    future: appOf(context)
-                        .activeEmergencyService
-                        .listActiveReferences(),
-                    builder: (context, snapshot) {
-                      final refs = snapshot.data ?? const [];
-                      return ActiveEmergenciesSelectorScreen(references: refs);
+              "/active-emergencies": (context) =>
+                  ActiveEmergenciesSelectorScreen(
+                    loadItems: () {
+                      final controller = appOf(context);
+                      return controller.activeEmergencyService
+                          .listActiveEmergencySnapshots(
+                        controller.accessToken ?? "",
+                      );
                     },
                   ),
               "/active-emergency/none": (_) => const NoActiveEmergencyScreen(),
@@ -1808,6 +1811,7 @@ class AppController extends SessionAccessor
   String? broadcastNextCursor;
   int broadcastUnreadCount = 0;
   bool loadingMoreBroadcasts = false;
+  BroadcastFeedFilters _activeBroadcastFilters = const BroadcastFeedFilters();
   final NeighborhoodWatchService _neighborhoodWatchService;
   final CommunityMediaUploadService _communityMediaUploadService;
   final List<CommunitySummary> communities = [];
@@ -2930,7 +2934,10 @@ class AppController extends SessionAccessor
     }
   }
 
-  Future<void> loadBroadcastsFromApi({bool refresh = false}) async {
+  Future<void> loadBroadcastsFromApi({
+    bool refresh = false,
+    BroadcastFeedFilters? filters,
+  }) async {
     if (!isAuthenticated || accessToken == null) {
       broadcasts.clear();
       broadcastLoadError = null;
@@ -2941,6 +2948,7 @@ class AppController extends SessionAccessor
     }
     if (refresh) {
       broadcastNextCursor = null;
+      if (filters != null) _activeBroadcastFilters = filters;
     }
     loadingBroadcasts = true;
     broadcastLoadError = null;
@@ -2949,6 +2957,11 @@ class AppController extends SessionAccessor
       final page = await _broadcastFeedService.listCountryWide(
         accessToken: accessToken!,
         cursor: refresh ? null : broadcastNextCursor,
+        category: _activeBroadcastFilters.category,
+        status: _activeBroadcastFilters.status,
+        nearMe: _activeBroadcastFilters.isNearMe,
+        latitude: _activeBroadcastFilters.latitude,
+        longitude: _activeBroadcastFilters.longitude,
       );
       if (refresh || broadcastNextCursor == null) {
         broadcasts
@@ -2999,6 +3012,11 @@ class AppController extends SessionAccessor
       final page = await _broadcastFeedService.listCountryWide(
         accessToken: accessToken!,
         cursor: broadcastNextCursor,
+        category: _activeBroadcastFilters.category,
+        status: _activeBroadcastFilters.status,
+        nearMe: _activeBroadcastFilters.isNearMe,
+        latitude: _activeBroadcastFilters.latitude,
+        longitude: _activeBroadcastFilters.longitude,
       );
       final existingIds = broadcasts.map((item) => item.id).toSet();
       broadcasts.addAll(
@@ -6665,6 +6683,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             payload: TheEyePayloads.liveVideoStart(
               position: access.position,
               lowBandwidthMode: lowBandwidth,
+              standaloneEmergency: !resumeVideoOnly,
             ),
             accessToken: accessToken,
             clientTraceId: _startupTrace.clientTraceId,
@@ -6956,12 +6975,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
   Future<void> _stopStream(BuildContext context) async {
     if (stoppingStream) return;
-    final routingDecision = resolveLiveVideoStopRouting(
-      returnToActiveEmergency: widget.returnToActiveEmergency,
-      activeIncidentId: activeIncidentId,
-    );
     setState(() => stoppingStream = true);
     String? cleanupErrorMessage;
+    var incidentArchived = false;
     try {
       final listener = _locationListener;
       if (listener != null) {
@@ -6972,11 +6988,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         try {
           final accessToken = appOf(context).session?.accessToken ??
               (theEyeAccessToken.isNotEmpty ? theEyeAccessToken : null);
-          await apiClient
+          final stopResponse = await apiClient
               .stopLiveVideo(sessionId: liveSessionId, accessToken: accessToken)
               .timeout(const Duration(seconds: 15));
+          incidentArchived = liveVideoStopArchivedIncident(stopResponse);
         } catch (_) {
-          // Local stop still proceeds; server reconciliation happens on next start.
+          cleanupErrorMessage =
+              "Live stream stopped locally. Your emergency is still available.";
         }
       }
       await liveVideoController.stopSession(
@@ -6989,6 +7007,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           "Live stream stopped locally. Your emergency is still available.";
     } finally {
       if (!mounted) return;
+      final routingDecision = resolveLiveVideoStopRouting(
+        returnToActiveEmergency: widget.returnToActiveEmergency,
+        activeIncidentId: activeIncidentId,
+        incidentArchived: incidentArchived,
+      );
       setState(() {
         liveSessionId = "";
         if (routingDecision.shouldPreserveIncidentId) {
@@ -7014,6 +7037,16 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           if (cleanupErrorMessage != null && context.mounted) {
             showAppSnackBar(context, cleanupErrorMessage);
           }
+          return;
+        case LiveVideoStopDestination.openIncidentArchive:
+          final incidentId = routingDecision.incidentId;
+          if (incidentId == null || incidentId.isEmpty) return;
+          await appController.activeEmergencyService
+              .clearActiveIncident(incidentId);
+          if (!context.mounted) return;
+          Navigator.of(context).pushReplacementNamed(
+            "/incident-archive/$incidentId",
+          );
           return;
         case LiveVideoStopDestination.stayOnLiveVideo:
           showAppSnackBar(
@@ -7974,6 +8007,10 @@ class BroadcastCenterScreen extends StatefulWidget {
 }
 
 class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
+  final DeviceLocationService _filterLocationService = DeviceLocationService();
+  BroadcastFeedFilters _filters = const BroadcastFeedFilters();
+  bool _applyingFilters = false;
+
   @override
   void initState() {
     super.initState();
@@ -7983,8 +8020,40 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
         Navigator.of(context).pushReplacementNamed("/login");
         return;
       }
-      unawaited(controller.loadBroadcastsFromApi(refresh: true));
+      unawaited(
+        controller.loadBroadcastsFromApi(refresh: true, filters: _filters),
+      );
     });
+  }
+
+  Future<void> _openFilters(AppController controller) async {
+    final selected = await showBroadcastFilterSheet(
+      context,
+      initial: _filters,
+    );
+    if (selected == null || !mounted) return;
+    var applied = selected;
+    setState(() => _applyingFilters = true);
+    if (selected.isNearMe) {
+      final location = await _filterLocationService.probeCurrentLocation();
+      if (!mounted) return;
+      if (!location.hasCoordinates) {
+        setState(() => _applyingFilters = false);
+        showAppSnackBar(
+          context,
+          location.message ?? "Current location is required for Near me.",
+          isError: true,
+        );
+        return;
+      }
+      applied = selected.withCoordinates(
+        location.latitude!,
+        location.longitude!,
+      );
+    }
+    setState(() => _filters = applied);
+    await controller.loadBroadcastsFromApi(refresh: true, filters: applied);
+    if (mounted) setState(() => _applyingFilters = false);
   }
 
   @override
@@ -8026,9 +8095,34 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ActionChip(
+                avatar: _applyingFilters
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.filter_list, size: 18),
+                label: Text(
+                  _filters.activeCount == 0
+                      ? "Filters"
+                      : "Filters ${_filters.activeCount}",
+                ),
+                onPressed: _applyingFilters
+                    ? null
+                    : () => unawaited(_openFilters(controller)),
+              ),
+            ),
+          ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => controller.loadBroadcastsFromApi(refresh: true),
+              onRefresh: () => controller.loadBroadcastsFromApi(
+                refresh: true,
+                filters: _filters,
+              ),
               child: _buildBody(controller),
             ),
           ),
@@ -12604,7 +12698,6 @@ class SafetyScaffold extends StatelessWidget {
         : EyeNavRoutes.selectedIndexForRoute(routeName);
     final backLabel = l10n?.back ?? "Back";
     final homeLabel = l10n?.home ?? "Home";
-    final profileLabel = l10n?.profile ?? "Profile";
     final settingsLabel = l10n?.settings ?? "Settings";
 
     return Scaffold(
@@ -12629,48 +12722,15 @@ class SafetyScaffold extends StatelessWidget {
               ],
             ),
       body: body,
-      bottomNavigationBar: useFigmaShell
-          ? EyeBottomNav(
-              selectedIndex: navIndex,
-              homeLabel: homeLabel,
-              settingsLabel: settingsLabel,
-              onTabSelected: (index) {
-                if (index != 2) _navigateTab(context, index);
-              },
-              onEyePressed: () => _openSos(context),
-            )
-          : NavigationBar(
-              selectedIndex: selectedIndex.clamp(0, 4),
-              onDestinationSelected: (index) {
-                final routes = [
-                  "/home",
-                  "/police-stations",
-                  "/tracking",
-                  "/family",
-                  "/profile"
-                ];
-                final route = routes[index];
-                if (ModalRoute.of(context)?.settings.name != route) {
-                  Navigator.of(context).pushReplacementNamed(route);
-                }
-              },
-              destinations: [
-                NavigationDestination(
-                  icon: const Icon(Icons.home),
-                  label: homeLabel,
-                ),
-                NavigationDestination(
-                    icon: const Icon(Icons.local_police), label: "Police"),
-                NavigationDestination(
-                    icon: const Icon(Icons.route), label: "Tracking"),
-                NavigationDestination(
-                    icon: const Icon(Icons.family_restroom), label: "Family"),
-                NavigationDestination(
-                  icon: const Icon(Icons.person),
-                  label: profileLabel,
-                ),
-              ],
-            ),
+      bottomNavigationBar: EyeBottomNav(
+        selectedIndex: navIndex,
+        homeLabel: homeLabel,
+        settingsLabel: settingsLabel,
+        onTabSelected: (index) {
+          if (index != 2) _navigateTab(context, index);
+        },
+        onEyePressed: () => _openSos(context),
+      ),
     );
   }
 }

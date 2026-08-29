@@ -155,6 +155,31 @@ void main() {
         presented.title,
         "New sighting reported for missing person: Ada Obi",
       );
+      expect(presented.preview, "Open to view the sighting details.");
+    });
+
+    test("builds a structured stolen vehicle alert without raw ISO time", () {
+      final presented = CitizenNotificationPresenter.present(
+        type: "BroadcastAlert",
+        title: "Vehicle alert",
+        body: "Toyota Corolla 2026-08-29T00:44:06.598561Z",
+        createdAt: DateTime(2026, 8, 29, 1),
+        isUnread: true,
+        metadata: const {
+          "broadcastCategory": "StolenVehicle",
+          "make": "Toyota",
+          "model": "Corolla",
+          "colour": "Yellow",
+          "registrationMasked": "PHC 213BJ",
+          "stolenAt": "2026-08-13T13:45:00.000Z",
+        },
+      );
+
+      expect(presented.title, "Stolen vehicle: Toyota Corolla");
+      expect(presented.preview, contains("Yellow Toyota Corolla"));
+      expect(presented.preview, contains("PHC 213BJ"));
+      expect(presented.preview, isNot(contains("2026-08-13T")));
+      expect(presented.preview, isNot(contains("2026-08-29T")));
     });
   });
 

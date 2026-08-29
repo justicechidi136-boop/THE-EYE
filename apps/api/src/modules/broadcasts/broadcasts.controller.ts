@@ -88,6 +88,10 @@ export class BroadcastsController {
       limit: query.limit ? Number(query.limit) : undefined,
       category: query.category,
       severity: query.severity,
+      status: query.status,
+      nearMe: query.nearMe === "true",
+      latitude: query.latitude === undefined ? undefined : Number(query.latitude),
+      longitude: query.longitude === undefined ? undefined : Number(query.longitude),
       unreadOnly: query.unreadOnly === "true",
     });
   }

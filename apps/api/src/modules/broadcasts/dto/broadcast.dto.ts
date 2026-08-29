@@ -47,6 +47,8 @@ export type NearbyBroadcastsQuery = {
   limit?: string;
   category?: string;
   severity?: string;
+  status?: string;
+  nearMe?: string;
   unreadOnly?: string;
 };
 

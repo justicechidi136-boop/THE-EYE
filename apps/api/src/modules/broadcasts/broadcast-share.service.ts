@@ -92,7 +92,11 @@ export class BroadcastShareService {
         deepLink: shareUrl,
         shareText: this.buildShareText({
           type: broadcast.type as BroadcastType,
-          title: broadcast.title,
+          subject: this.shareSubject(
+            broadcast.type as BroadcastType,
+            broadcast.title,
+            metadata,
+          ),
           summary,
           approximateArea,
           lastSeenAt: metadata.lastSeenAt,
@@ -109,24 +113,36 @@ export class BroadcastShareService {
 
   private buildShareText(input: {
     type: BroadcastType;
-    title: string;
+    subject: string;
     summary: string;
     approximateArea: string | null;
     lastSeenAt: unknown;
     shareUrl: string;
   }) {
     const heading = input.type === BroadcastType.StolenVehicle
-      ? "Stolen Vehicle Alert"
+      ? "🚨 Stolen Vehicle Alert"
       : input.type === BroadcastType.MissingPerson
-        ? "Missing Person Alert"
-        : "Safety Broadcast";
+        ? "🚨 Missing Person Alert"
+        : "🚨 Safety Broadcast";
     const parsedLastSeen = typeof input.lastSeenAt === "string"
       ? new Date(input.lastSeenAt)
       : null;
+    const subjectLabel = input.type === BroadcastType.StolenVehicle
+      ? "Stolen vehicle"
+      : input.type === BroadcastType.MissingPerson
+        ? "Missing person"
+        : "Broadcast";
     return [
       heading,
-      input.title,
-      input.summary === input.title ? null : input.summary,
+      `${subjectLabel}: ${input.subject}`,
+      input.type !== BroadcastType.StolenVehicle &&
+      input.type !== BroadcastType.MissingPerson &&
+      input.summary !== input.subject
+        ? input.summary
+        : null,
+      input.approximateArea
+        ? `Last known location: ${input.approximateArea}`
+        : null,
       parsedLastSeen && !Number.isNaN(parsedLastSeen.getTime())
         ? `Last seen: ${parsedLastSeen.toLocaleString("en-GB", {
             day: "numeric",
@@ -137,9 +153,34 @@ export class BroadcastShareService {
             hour12: true,
           })}`
         : null,
-      input.approximateArea ? `Location: ${input.approximateArea}` : null,
       `View full broadcast: ${input.shareUrl}`,
     ].filter(Boolean).join("\n");
+  }
+
+  private shareSubject(
+    type: BroadcastType,
+    title: string,
+    metadata: Record<string, unknown>,
+  ) {
+    if (type === BroadcastType.MissingPerson) {
+      const name = typeof metadata.fullName === "string"
+        ? metadata.fullName.trim()
+        : "";
+      return name || title.replace(/^Missing person:\s*/i, "").trim();
+    }
+    if (type === BroadcastType.StolenVehicle) {
+      const make = typeof metadata.make === "string" ? metadata.make.trim() : "";
+      const model = typeof metadata.model === "string" ? metadata.model.trim() : "";
+      const registration = typeof metadata.registrationMasked === "string"
+        ? metadata.registrationMasked.trim()
+        : typeof metadata.registrationNumber === "string"
+          ? maskRegistrationNumber(metadata.registrationNumber)
+          : "";
+      const vehicle = [make, model].filter(Boolean).join(" ");
+      if (vehicle) return registration ? `${vehicle} (${registration})` : vehicle;
+      return title.replace(/^Stolen vehicle:\s*/i, "").trim();
+    }
+    return title.trim();
   }
 
   private buildSafeSummary(

@@ -39,6 +39,54 @@ export const LIVE_BROADCAST_STATUSES = new Set<string>([
   BroadcastStatus.Updated,
 ]);
 const LIVE_BROADCAST_STATUS_SQL = `'Published', 'Active', 'Updated'`;
+
+type CountryFeedQuery = {
+  cursor?: string;
+  limit?: number;
+  category?: string;
+  severity?: string;
+  status?: string;
+  nearMe?: boolean;
+  latitude?: number;
+  longitude?: number;
+  unreadOnly?: boolean;
+};
+
+function citizenFeedStatusSql(status?: string): { statusSql: string; expirySql: string } {
+  switch (status) {
+    case undefined:
+    case "Active":
+      return {
+        statusSql: `b.status IN (${LIVE_BROADCAST_STATUS_SQL})`,
+        expirySql: "AND (b.expires_at IS NULL OR b.expires_at > NOW())",
+      };
+    case "Resolved":
+      return { statusSql: "b.status = 'Resolved'", expirySql: "" };
+    case "Cancelled":
+      return {
+        statusSql: "b.status IN ('Cancelled', 'WithdrawnByAuthor')",
+        expirySql: "",
+      };
+    case "Expired":
+      return { statusSql: "b.status = 'Expired'", expirySql: "" };
+    default:
+      throw new BadRequestException("Unsupported broadcast status filter");
+  }
+}
+
+function assertNearMeCoordinates(query: CountryFeedQuery) {
+  if (!query.nearMe) return;
+  if (
+    !Number.isFinite(query.latitude) ||
+    !Number.isFinite(query.longitude) ||
+    query.latitude! < -90 ||
+    query.latitude! > 90 ||
+    query.longitude! < -180 ||
+    query.longitude! > 180
+  ) {
+    throw new BadRequestException("Valid coordinates are required for the Near me filter");
+  }
+}
 const PRIORITY_ORDER_SQL = `
   CASE b.priority
     WHEN 'P1LifeThreatening' THEN 1
@@ -53,6 +101,28 @@ const BROADCAST_ID_RE =
 
 function isBroadcastId(value: string): boolean {
   return BROADCAST_ID_RE.test(value.trim());
+}
+
+export function projectBroadcastNotificationMetadata(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const source = raw as Record<string, unknown>;
+  const allowedKeys = [
+    "fullName",
+    "ageOrApproximateAge",
+    "lastSeenAt",
+    "lastSeenAddress",
+    "make",
+    "model",
+    "colour",
+    "registrationMasked",
+    "stolenAt",
+    "lastKnownLocation",
+  ] as const;
+  return Object.fromEntries(
+    allowedKeys
+      .filter((key) => source[key] != null && String(source[key]).trim().length > 0)
+      .map((key) => [key, source[key]]),
+  );
 }
 
 @Injectable()
@@ -627,19 +697,23 @@ export class BroadcastsService {
       type?: string;
       country?: string | null;
       publishedAt?: Date | null;
+      metadata?: unknown;
     },
     id: string,
     recipient: { user_id: string; distance_meters: number | null },
     routingContext?: { countryCode: string; eventType: string },
   ) {
     const issuedAt = (broadcast.publishedAt ?? new Date()).toISOString();
-    const routingMetadata = buildBroadcastNotificationMetadata({
-      broadcastId: id,
-      broadcastCategory: String(broadcast.type ?? "Broadcast"),
-      countryCode: routingContext?.countryCode ?? String(broadcast.country ?? ""),
-      issuedAt,
-      eventType: routingContext?.eventType ?? "BROADCAST_ALERT",
-    });
+    const routingMetadata = {
+      ...buildBroadcastNotificationMetadata({
+        broadcastId: id,
+        broadcastCategory: String(broadcast.type ?? "Broadcast"),
+        countryCode: routingContext?.countryCode ?? String(broadcast.country ?? ""),
+        issuedAt,
+        eventType: routingContext?.eventType ?? "BROADCAST_ALERT",
+      }),
+      ...projectBroadcastNotificationMetadata(broadcast.metadata),
+    };
     // Idempotent: one BroadcastAlert notification per user+broadcast.
     const existing = await this.prisma.notification.findFirst({
       where: {
@@ -737,16 +811,12 @@ export class BroadcastsService {
 
   async countryFeedForUser(
     userId: string,
-    query: {
-      cursor?: string;
-      limit?: number;
-      category?: string;
-      severity?: string;
-      unreadOnly?: boolean;
-    } = {},
+    query: CountryFeedQuery = {},
   ) {
+    assertNearMeCoordinates(query);
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
+    const { statusSql, expirySql } = citizenFeedStatusSql(query.status);
     const params: unknown[] = [userId];
     let paramIndex = 2;
     let filterSql = "";
@@ -767,6 +837,16 @@ export class BroadcastsService {
           WHERE bd.broadcast_id = b.id AND bd.user_id = $1::uuid AND bd.read_at IS NOT NULL
         )
       )`;
+    }
+    if (query.nearMe) {
+      filterSql += ` AND (
+        b.target_area IS NULL
+        OR ST_Covers(
+          b.target_area::geometry,
+          ST_SetSRID(ST_MakePoint($${paramIndex++}, $${paramIndex++}), 4326)
+        )
+      )`;
+      params.push(query.longitude, query.latitude);
     }
     if (cursor) {
       filterSql += ` AND (b.published_at, b.id) < ($${paramIndex++}::timestamptz, $${paramIndex++}::uuid)`;
@@ -803,9 +883,9 @@ export class BroadcastsService {
          FROM broadcasts b
          LEFT JOIN profiles p ON p.user_id = $1::uuid
          LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
-        WHERE b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+        WHERE ${statusSql}
           AND b.deleted_at IS NULL
-          AND (b.expires_at IS NULL OR b.expires_at > NOW())
+          ${expirySql}
           AND p.user_id IS NOT NULL
           AND COALESCE(b.country, j.country) = p.country
           ${filterSql}
@@ -826,13 +906,7 @@ export class BroadcastsService {
 
   async countryFeed(
     actor: JwtPayload,
-    query: {
-      cursor?: string;
-      limit?: number;
-      category?: string;
-      severity?: string;
-      unreadOnly?: boolean;
-    } = {},
+    query: CountryFeedQuery = {},
   ) {
     if (actor.typ === "user") return this.countryFeedForUser(actor.sub, query);
     if (actor.typ !== "field") throw new ForbiddenException("Country broadcast feed is unavailable");
@@ -842,16 +916,12 @@ export class BroadcastsService {
 
   private async countryFeedForField(
     country: string,
-    query: {
-      cursor?: string;
-      limit?: number;
-      category?: string;
-      severity?: string;
-      unreadOnly?: boolean;
-    },
+    query: CountryFeedQuery,
   ) {
+    assertNearMeCoordinates(query);
     const limit = resolvePageLimit(query.limit);
     const cursor = decodeDateIdCursor(query.cursor);
+    const { statusSql, expirySql } = citizenFeedStatusSql(query.status);
     const params: unknown[] = [country];
     let paramIndex = 2;
     let filterSql = "";
@@ -863,6 +933,16 @@ export class BroadcastsService {
     if (query.severity) {
       filterSql += ` AND b.priority = $${paramIndex++}`;
       params.push(query.severity);
+    }
+    if (query.nearMe) {
+      filterSql += ` AND (
+        b.target_area IS NULL
+        OR ST_Covers(
+          b.target_area::geometry,
+          ST_SetSRID(ST_MakePoint($${paramIndex++}, $${paramIndex++}), 4326)
+        )
+      )`;
+      params.push(query.longitude, query.latitude);
     }
     if (cursor) {
       filterSql += ` AND (b.published_at, b.id) < ($${paramIndex++}::timestamptz, $${paramIndex++}::uuid)`;
@@ -889,9 +969,9 @@ export class BroadcastsService {
               FALSE AS read
          FROM broadcasts b
          LEFT JOIN jurisdictions j ON j.id = b.jurisdiction_id
-        WHERE b.status IN (${LIVE_BROADCAST_STATUS_SQL})
+        WHERE ${statusSql}
           AND b.deleted_at IS NULL
-          AND (b.expires_at IS NULL OR b.expires_at > NOW())
+          ${expirySql}
           AND COALESCE(b.country, j.country) = $1
           ${filterSql}
         ORDER BY ${PRIORITY_ORDER_SQL}

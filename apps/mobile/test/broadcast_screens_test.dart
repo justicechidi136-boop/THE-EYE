@@ -541,7 +541,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("No comments yet"), findsOneWidget);
-    expect(find.text("Add a comment"), findsOneWidget);
+    expect(find.text("Add a comment..."), findsOneWidget);
+    expect(find.byTooltip("Use voice typing"), findsOneWidget);
+    expect(find.byTooltip("Send comment"), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key("broadcast-comment-input")),
+      "I have useful information",
+    );
+    await tester.pump();
+
+    expect(find.byTooltip("Use voice typing"), findsNothing);
+    expect(find.byTooltip("Send comment"), findsOneWidget);
+    expect(find.byIcon(Icons.emoji_emotions_outlined), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
