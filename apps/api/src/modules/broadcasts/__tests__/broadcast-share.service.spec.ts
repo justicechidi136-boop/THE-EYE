@@ -45,7 +45,14 @@ describe("BroadcastShareService", () => {
       );
       expect(result.data.deepLink).toBe(result.data.shareUrl);
       expect(result.data.shareText).toContain("View full broadcast:");
-      expect(result.data.shareText).toContain("Ikeja, Lagos");
+      expect(result.data.shareText).toContain("🚨 Stolen Vehicle Alert");
+      expect(result.data.shareText).toContain(
+        "Stolen vehicle: Toyota Corolla (***53RT)",
+      );
+      expect(result.data.shareText).toContain(
+        "Last known location: Ikeja, Lagos",
+      );
+      expect(result.data.shareText).not.toContain("\nLocation:");
       expect(result.data.shareText).not.toContain("PRIVATE-VIN");
       expect(result.data.shareText).not.toContain("TTT53RT");
       expect(JSON.stringify(result.data)).not.toContain("PRIVATE-VIN");

@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AdminRoleName, IncidentStatus, IncidentType } from "@the-eye/shared";
+import { AdminRoleName, IncidentStatus, IncidentType, ResolutionSource } from "@the-eye/shared";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -11,6 +11,17 @@ import { buildLiveVideoConnectionDto } from "./live-video-connection.dto";
 import { buildLiveVideoConnectionDiagnostics, decodeJwtExpiryIso } from "./live-video-diagnostics";
 import { LiveVideoErrorCode, liveVideoErrorBody } from "./live-video.errors";
 import { LiveKitTokenService } from "./livekit-token.service";
+
+const LIVE_EMERGENCY_ACTIVE_STATUSES = new Set<IncidentStatus>([
+  IncidentStatus.Submitted,
+  IncidentStatus.Received,
+  IncidentStatus.Verifying,
+  IncidentStatus.Verified,
+  IncidentStatus.Assigned,
+  IncidentStatus.Responding,
+  IncidentStatus.UnderControl,
+  IncidentStatus.CancellationRequested,
+]);
 
 @Injectable()
 export class LiveVideoService {
@@ -142,6 +153,41 @@ export class LiveVideoService {
       );
     }
 
+    const incidentMetadata =
+      typeof incident.metadata === "object" && incident.metadata && !Array.isArray(incident.metadata)
+        ? (incident.metadata as Record<string, unknown>)
+        : {};
+    if (dto.standaloneEmergency === true) {
+      const isOwnedLiveEmergency =
+        actor.typ === "user" &&
+        incident.reporterId === actor.sub &&
+        incident.type === IncidentType.Emergency &&
+        incident.title.trim().toLowerCase() === "live emergency video";
+      if (!isOwnedLiveEmergency) {
+        throw new ForbiddenException(
+          liveVideoErrorBody(
+            LiveVideoErrorCode.NOT_AUTHORIZED,
+            "Standalone live emergency may only finalize its originating incident",
+            trace.requestId,
+          ),
+        );
+      }
+      await this.prisma.incident.update({
+        where: { id: incidentId },
+        data: {
+          metadata: {
+            ...incidentMetadata,
+            source: "live_emergency_video",
+            standaloneLiveEmergency: true,
+          },
+        } as never,
+      });
+    }
+    const standaloneLiveEmergency =
+      dto.standaloneEmergency === true ||
+      incidentMetadata.standaloneLiveEmergency === true ||
+      incidentMetadata.source === "live_emergency_video";
+
     try {
       this.livekitTokens.assertLiveKitConfigured({ requireWss: true });
     } catch (error) {
@@ -168,7 +214,11 @@ export class LiveVideoService {
           createdById: actor.sub,
           lowBandwidthMode: dto.lowBandwidthMode ?? false,
           participantIdentity: identity,
-          metadata: { lowBandwidthMode: dto.lowBandwidthMode ?? false, role: "publisher" },
+          metadata: {
+            lowBandwidthMode: dto.lowBandwidthMode ?? false,
+            role: "publisher",
+            standaloneLiveEmergency,
+          },
         } as never,
         create: {
           incidentId,
@@ -179,7 +229,11 @@ export class LiveVideoService {
           lowBandwidthMode: dto.lowBandwidthMode ?? false,
           participantIdentity: identity,
           startedAt: new Date(),
-          metadata: { lowBandwidthMode: dto.lowBandwidthMode ?? false, role: "publisher" },
+          metadata: {
+            lowBandwidthMode: dto.lowBandwidthMode ?? false,
+            role: "publisher",
+            standaloneLiveEmergency,
+          },
         } as never,
       });
     } catch (error) {
@@ -358,10 +412,93 @@ export class LiveVideoService {
     if (actor.typ === "field" && session.createdById !== actor.sub) throw new ForbiddenException("Only the stream owner can stop this live video");
     if (actor.typ === "admin") await this.assertAdminCanAccessIncident(session.incidentId, actor);
 
-    const updated = await this.prisma.liveVideoSession.update({ where: { id: sessionId }, data: { status: "Ended", endedAt: new Date() } as never });
-    await this.timeline(session.incidentId, actor, "live_video.stopped", "Emergency live video stopped.", { sessionId });
-    await this.audit(actor, "live_video.stopped", sessionId, { incidentId: session.incidentId });
-    return { data: updated };
+    const sessionMetadata =
+      typeof session.metadata === "object" && session.metadata && !Array.isArray(session.metadata)
+        ? (session.metadata as Record<string, unknown>)
+        : {};
+    const incidentMetadata =
+      typeof session.incident.metadata === "object" && session.incident.metadata && !Array.isArray(session.incident.metadata)
+        ? (session.incident.metadata as Record<string, unknown>)
+        : {};
+    const standaloneLiveEmergency =
+      actor.typ === "user" &&
+      session.incident.reporterId === actor.sub &&
+      (sessionMetadata.standaloneLiveEmergency === true ||
+        incidentMetadata.standaloneLiveEmergency === true ||
+        incidentMetadata.source === "live_emergency_video");
+    const currentStatus = session.incident.status as IncidentStatus;
+    const incidentAlreadyArchived = !LIVE_EMERGENCY_ACTIVE_STATUSES.has(currentStatus);
+    const now = new Date();
+
+    let updated;
+    let resultingIncidentStatus = currentStatus;
+    if (standaloneLiveEmergency && !incidentAlreadyArchived) {
+      const result = await this.prisma.$transaction(async (transaction) => {
+        const updatedSession = await transaction.liveVideoSession.update({
+          where: { id: sessionId },
+          data: { status: "Ended", endedAt: now } as never,
+        });
+        const updatedIncident = await transaction.incident.update({
+          where: { id: session.incidentId },
+          data: {
+            status: IncidentStatus.Resolved,
+            statusVersion: { increment: 1 },
+            lastTrustedUpdateAt: now,
+            resolvedAt: now,
+            resolvedById: actor.sub,
+            resolutionSource: ResolutionSource.Reporter,
+            resolutionReason: "Standalone live emergency video ended by reporter.",
+            timeline: {
+              create: {
+                actorId: actor.sub,
+                actorType: actor.typ,
+                eventType: "live_video.emergency_ended",
+                message: "Live emergency video ended and moved to archive.",
+                metadata: {
+                  sessionId,
+                  fromStatus: currentStatus,
+                  toStatus: IncidentStatus.Resolved,
+                },
+              },
+            },
+            statusHistory: {
+              create: {
+                fromStatus: currentStatus,
+                toStatus: IncidentStatus.Resolved,
+                changedById: actor.sub,
+                note: "Standalone live emergency video ended by reporter.",
+              },
+            },
+          } as never,
+        });
+        return { updatedSession, updatedIncident };
+      });
+      updated = result.updatedSession;
+      resultingIncidentStatus = result.updatedIncident.status as IncidentStatus;
+    } else {
+      updated = await this.prisma.liveVideoSession.update({
+        where: { id: sessionId },
+        data: { status: "Ended", endedAt: now } as never,
+      });
+      await this.timeline(session.incidentId, actor, "live_video.stopped", "Emergency live video stopped.", {
+        sessionId,
+      });
+    }
+    const incidentArchived = standaloneLiveEmergency &&
+      (!LIVE_EMERGENCY_ACTIVE_STATUSES.has(resultingIncidentStatus) || incidentAlreadyArchived);
+    await this.audit(actor, "live_video.stopped", sessionId, {
+      incidentId: session.incidentId,
+      standaloneLiveEmergency,
+      incidentArchived,
+    });
+    return {
+      data: updated,
+      incident: {
+        id: session.incidentId,
+        status: resultingIncidentStatus,
+        archived: incidentArchived,
+      },
+    };
   }
 
   private incidentTypeForBroadcast(type: string): IncidentType {

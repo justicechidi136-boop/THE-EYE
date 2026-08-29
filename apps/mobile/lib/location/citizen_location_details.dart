@@ -27,7 +27,11 @@ class CitizenLocationDetails extends StatelessWidget {
       for (final raw in (candidate ?? "").split(RegExp(r"[\r\n]+"))) {
         final value = raw.trim();
         if (value.isNotEmpty &&
-            !lines.any((line) => line.toLowerCase() == value.toLowerCase())) {
+            !lines.any((line) {
+              final existing = line.toLowerCase();
+              final incoming = value.toLowerCase();
+              return existing == incoming || existing.contains(incoming);
+            })) {
           lines.add(value);
         }
       }

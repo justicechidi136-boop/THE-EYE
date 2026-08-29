@@ -184,6 +184,7 @@ class _IncidentDetailScreenState extends State<IncidentDetailScreen> {
                           const SizedBox(height: 8),
                           CitizenLocationDetails(
                             address: detail.address,
+                            secondaryLocation: detail.administrativeLocation,
                             accuracyMeters: detail.locationAccuracyMeters,
                             capturedAt: detail.locationCapturedAt,
                           ),

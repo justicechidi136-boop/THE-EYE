@@ -124,8 +124,7 @@ class ActiveEmergencyNavigation {
     await Future<void>.delayed(delay);
     if (!context.mounted) return;
     Navigator.of(context).pushReplacementNamed(
-      "/incident-detail",
-      arguments: contract.incidentId,
+      "/incident-archive/${contract.incidentId}",
     );
   }
 }

@@ -2,6 +2,7 @@ import { BadRequestException } from "@nestjs/common";
 
 export type StartLiveVideoDto = {
   lowBandwidthMode?: boolean;
+  standaloneEmergency?: boolean;
   latitude?: number;
   longitude?: number;
   accuracy?: number;
@@ -32,6 +33,9 @@ export function validateEvidenceLink(dto: LinkLiveVideoEvidenceDto) {
 }
 
 export function validateLocationUpdate(dto: LiveVideoLocationUpdateDto | StartLiveVideoDto) {
+  if ("standaloneEmergency" in dto && dto.standaloneEmergency !== undefined && typeof dto.standaloneEmergency !== "boolean") {
+    throw new BadRequestException("standaloneEmergency must be a boolean");
+  }
   if (dto.latitude == null || dto.longitude == null) {
     return;
   }

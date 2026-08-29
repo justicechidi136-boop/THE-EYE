@@ -41,6 +41,8 @@ abstract final class CitizenNotificationPresenter {
     );
 
     if (_isBroadcast(normalizedType, title)) {
+      final broadcastType =
+          meta["broadcastCategory"]?.toString() ?? normalizedType;
       final fullName = (meta["fullName"] as String?)?.trim();
       final age = (meta["ageOrApproximateAge"] as String?)?.trim();
       final lastSeenRaw = meta["lastSeenAt"];
@@ -48,17 +50,40 @@ abstract final class CitizenNotificationPresenter {
       final lastSeenFriendly = lastSeen == null
           ? null
           : CitizenDateTimeFormatter.formatDateTime(lastSeen);
-      final preview =
-          (fullName != null && age != null && lastSeenFriendly != null)
+      final missingPerson =
+          _normalized(broadcastType).contains("missingperson") ||
+              title.trim().toLowerCase().startsWith("missing person:");
+      final stolenVehicle =
+          _normalized(broadcastType).contains("stolenvehicle");
+      final vehicle = _vehicleDescription(meta);
+      final plate = _first(meta, ["registrationMasked", "registrationNumber"]);
+      final colour = _first(meta, ["colour", "color"]);
+      final stolenAt = CitizenDateTimeFormatter.tryParse(meta["stolenAt"]);
+      final structuredTitle = missingPerson && fullName?.isNotEmpty == true
+          ? "Missing person: $fullName"
+          : stolenVehicle && vehicle.isNotEmpty
+              ? "Stolen vehicle: $vehicle"
+              : _sanitizeTitle(title);
+      final preview = missingPerson &&
+              fullName != null &&
+              age != null &&
+              lastSeenFriendly != null
           ? MissingPersonAge.notificationPreview(
               fullName: fullName,
               ageOrRange: age,
               lastSeenFriendly: lastSeenFriendly,
             )
-          : _sanitizePreview(body);
+          : stolenVehicle && vehicle.isNotEmpty
+              ? _stolenVehiclePreview(
+                  vehicle: vehicle,
+                  colour: colour,
+                  plate: plate,
+                  stolenAt: stolenAt,
+                )
+              : _sanitizePreview(body);
       return CitizenNotificationPresentation(
         category: "Broadcast Alert",
-        title: title.trim().isEmpty ? "Broadcast Alert" : title.trim(),
+        title: structuredTitle,
         preview: preview,
         timestampLabel: timestamp,
         isUnread: isUnread,
@@ -70,8 +95,7 @@ abstract final class CitizenNotificationPresenter {
     if (_isReportSubmitted(normalizedType, title, body)) {
       final incidentLabel = _incidentLabel(meta);
       final noun = incidentLabel.toLowerCase();
-      final reference =
-          meta["publicReference"]?.toString() ??
+      final reference = meta["publicReference"]?.toString() ??
           _extractReference(body) ??
           "your report";
       return CitizenNotificationPresentation(
@@ -87,8 +111,7 @@ abstract final class CitizenNotificationPresenter {
     }
 
     if (_isVerifyIncident(normalizedType, title)) {
-      final categoryHint =
-          meta["incidentCategory"]?.toString() ??
+      final categoryHint = meta["incidentCategory"]?.toString() ??
           meta["category"]?.toString() ??
           "Emergency";
       final incidentLabel = citizenIncidentCategoryLabel(categoryHint);
@@ -114,12 +137,15 @@ abstract final class CitizenNotificationPresenter {
 
     if (_isSighting(normalizedType, meta)) {
       final subject = _sightingSubject(meta);
+      final rawPreview = _sanitizePreview(body);
       return CitizenNotificationPresentation(
         category: "New Sighting",
         title: subject == null
             ? "New sighting reported"
             : "New sighting reported for $subject",
-        preview: _sanitizePreview(body),
+        preview: rawPreview.toLowerCase().contains("sighting")
+            ? "Open to view the sighting details."
+            : rawPreview,
         timestampLabel: timestamp,
         isUnread: isUnread,
         routeHint: "BROADCAST_DETAILS",
@@ -167,8 +193,7 @@ abstract final class CitizenNotificationPresenter {
   }
 
   static String _incidentLabel(Map<String, dynamic> metadata) {
-    final value =
-        metadata["incidentCategory"]?.toString() ??
+    final value = metadata["incidentCategory"]?.toString() ??
         metadata["reportType"]?.toString() ??
         metadata["category"]?.toString() ??
         "Emergency";
@@ -178,18 +203,17 @@ abstract final class CitizenNotificationPresenter {
   static String? _sightingSubject(Map<String, dynamic> metadata) {
     final broadcastType =
         metadata["broadcastType"]?.toString().trim().toLowerCase().replaceAll(
-          RegExp(r"[^a-z0-9]"),
-          "",
-        ) ??
-        "";
+                  RegExp(r"[^a-z0-9]"),
+                  "",
+                ) ??
+            "";
     final fullName = metadata["fullName"]?.toString().trim() ?? "";
     if (broadcastType == "missingperson" || fullName.isNotEmpty) {
       return fullName.isEmpty ? "missing person" : "missing person: $fullName";
     }
     final make = metadata["make"]?.toString().trim() ?? "";
     final model = metadata["model"]?.toString().trim() ?? "";
-    final plate =
-        metadata["registrationNumber"]?.toString().trim() ??
+    final plate = metadata["registrationNumber"]?.toString().trim() ??
         metadata["registrationMasked"]?.toString().trim() ??
         "";
     final vehicle = [make, model].where((value) => value.isNotEmpty).join(" ");
@@ -200,6 +224,45 @@ abstract final class CitizenNotificationPresenter {
         ? "stolen vehicle: $vehicle"
         : "stolen vehicle: $vehicle ($plate)";
   }
+
+  static String _vehicleDescription(Map<String, dynamic> metadata) {
+    return [
+      _first(metadata, ["make"]),
+      _first(metadata, ["model"]),
+    ].where((value) => value != null && value.isNotEmpty).join(" ");
+  }
+
+  static String _stolenVehiclePreview({
+    required String vehicle,
+    String? colour,
+    String? plate,
+    DateTime? stolenAt,
+  }) {
+    final description = [
+      if (colour?.isNotEmpty == true) colour,
+      vehicle,
+    ].whereType<String>().join(" ");
+    final identified =
+        plate?.isNotEmpty == true ? "$description ($plate)" : description;
+    final when = stolenAt == null
+        ? ""
+        : " on ${CitizenDateTimeFormatter.formatDateTime(stolenAt)}";
+    return "$identified was reported stolen$when.";
+  }
+
+  static String? _first(
+    Map<String, dynamic> metadata,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final value = metadata[key]?.toString().trim();
+      if (value?.isNotEmpty == true) return value;
+    }
+    return null;
+  }
+
+  static String _normalized(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r"[^a-z0-9]"), "");
 
   static String _friendlyCategory(String type) {
     switch (type) {
@@ -233,7 +296,18 @@ abstract final class CitizenNotificationPresenter {
         trimmed.contains("statusVersion")) {
       return "Open for details.";
     }
-    return trimmed;
+    return trimmed.replaceAllMapped(
+      RegExp(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?",
+        caseSensitive: false,
+      ),
+      (match) {
+        final parsed = DateTime.tryParse(match.group(0)!);
+        return parsed == null
+            ? "the reported time"
+            : CitizenDateTimeFormatter.formatDateTime(parsed);
+      },
+    );
   }
 
   static String? _extractReference(String body) {

@@ -1,5 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
+import "package:the_eye_mobile/contracts/the_eye_payloads.dart";
 import "package:the_eye_mobile/live_video/live_video_connection_attempt.dart";
 import "package:the_eye_mobile/live_video/live_video_connection_state.dart";
 import "package:the_eye_mobile/live_video/live_video_lifecycle_phase.dart";
@@ -112,6 +113,13 @@ void main() {
   });
 
   group("LiveVideoStopRoutingDecision", () {
+    test("standalone start payload declares terminal lifecycle ownership", () {
+      final payload = TheEyePayloads.liveVideoStart(
+        standaloneEmergency: true,
+      );
+      expect(payload["standaloneEmergency"], isTrue);
+    });
+
     test("standalone stop routes to active emergency when incident exists", () {
       final decision = resolveLiveVideoStopRouting(
         returnToActiveEmergency: false,
@@ -121,6 +129,27 @@ void main() {
           decision.destination, LiveVideoStopDestination.openActiveEmergency);
       expect(decision.incidentId, "inc-123");
       expect(decision.shouldPreserveIncidentId, isTrue);
+    });
+
+    test("standalone live emergency stop routes to its archive", () {
+      final decision = resolveLiveVideoStopRouting(
+        returnToActiveEmergency: false,
+        activeIncidentId: "inc-archive",
+        incidentArchived: true,
+      );
+      expect(
+          decision.destination, LiveVideoStopDestination.openIncidentArchive);
+      expect(decision.incidentId, "inc-archive");
+    });
+
+    test("reads the server-authoritative archived incident result", () {
+      expect(
+        liveVideoStopArchivedIncident({
+          "incident": {"id": "inc-archive", "archived": true},
+        }),
+        isTrue,
+      );
+      expect(liveVideoStopArchivedIncident(const {}), isFalse);
     });
 
     test("active-emergency stop returns to active emergency route", () {

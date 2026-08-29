@@ -177,6 +177,36 @@ describe("BroadcastsService citizen feed", () => {
     expect(sql.includes("gps_location")).toBe(false);
   });
 
+  it("applies status and explicit near-me target-area filters server-side", async () => {
+    const prisma = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+    };
+    const { service } = buildService(prisma);
+
+    await service.countryFeedForUser("user-1", {
+      category: "StolenVehicle",
+      status: "Resolved",
+      nearMe: true,
+      latitude: 6.5244,
+      longitude: 3.3792,
+    });
+
+    const call = prisma.$queryRawUnsafe.mock.calls[0];
+    const sql = String(call?.[0]);
+    expect(sql).toContain("b.status = 'Resolved'");
+    expect(sql).toContain("b.type = $2");
+    expect(sql).toContain("ST_Covers");
+    expect(sql).not.toContain("b.expires_at > NOW()");
+    expect(call).toEqual(expect.arrayContaining(["StolenVehicle", 3.3792, 6.5244]));
+  });
+
+  it("rejects near-me filtering without valid coordinates", async () => {
+    const { service } = buildService({ $queryRawUnsafe: jest.fn() });
+    await expect(
+      service.countryFeedForUser("user-1", { nearMe: true }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it("uses the same broadcast id for every country-scoped citizen context", async () => {
     const row = {
       id: "national-broadcast-1",

@@ -15,12 +15,23 @@ class CitizenLocationPresentation {
   final String? state;
   final String? country;
 
+  String get specificLine {
+    final cleanedStreet = _clean(streetAddress);
+    final cleanedSubLocality = _clean(subLocality);
+    final preferStreet = cleanedStreet != null &&
+        (!_looksLikePlusCode(cleanedStreet) || cleanedSubLocality == null);
+    return _unique([
+      if (preferStreet) cleanedStreet,
+      cleanedSubLocality,
+    ]).join(", ");
+  }
+
+  String get administrativeLine => _unique([cityTown, lga, state]).join(", ");
+
   List<String> get lines {
-    final first = _unique([streetAddress, subLocality]).join(", ");
-    final second = _unique([cityTown, lga, state]).join(", ");
     final result = <String>[
-      if (first.isNotEmpty) first,
-      if (second.isNotEmpty) second
+      if (specificLine.isNotEmpty) specificLine,
+      if (administrativeLine.isNotEmpty) administrativeLine,
     ];
     final countryLabel = _clean(country);
     if (result.isEmpty && countryLabel != null) {
@@ -44,4 +55,9 @@ class CitizenLocationPresentation {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
+
+  static bool _looksLikePlusCode(String value) => RegExp(
+        r"\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,}\b",
+        caseSensitive: false,
+      ).hasMatch(value);
 }

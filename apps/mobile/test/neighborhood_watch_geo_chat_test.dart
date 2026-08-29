@@ -21,6 +21,7 @@ void main() {
     VoidCallback? onBack,
     EvidenceCaptureController? evidenceController,
     VoidCallback? onToggleAttachments,
+    bool showAttachments = false,
   }) {
     final theme = ThemeData.light().copyWith(
       extensions: const [EyeSemanticColors.light],
@@ -32,7 +33,7 @@ void main() {
         messages: const [],
         canSend: true,
         loading: false,
-        showAttachments: false,
+        showAttachments: showAttachments,
         sending: false,
         attachmentCount: 0,
         messageController: messageController ?? TextEditingController(),
@@ -66,7 +67,10 @@ void main() {
     );
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text("Message your neighborhood..."), findsOneWidget);
-    expect(find.byTooltip("Add photo, video, or voice note"), findsOneWidget);
+    expect(
+      find.byTooltip("Add photo, video, GIF, sticker, or voice note"),
+      findsOneWidget,
+    );
 
     await tester.enterText(find.byType(TextField), "Hello neighbors");
     await tester.pump();
@@ -75,13 +79,18 @@ void main() {
     expect(sends, 1);
   });
 
-  testWidgets("composer offers emoji, GIF, and sticker controls",
+  testWidgets(
+      "composer uses native emoji and keeps GIFs and stickers under add",
       (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
+    final evidence = _evidenceController();
+    addTearDown(evidence.dispose);
     await tester.pumpWidget(buildChat(
       onSend: () async {},
       messageController: controller,
+      evidenceController: evidence,
+      showAttachments: true,
     ));
 
     final textField = tester.widget<TextField>(find.byType(TextField));
@@ -93,26 +102,20 @@ void main() {
       textField.contentInsertionConfiguration!.allowedMimeTypes,
       ["image/gif"],
     );
-    expect(
-      tester.getCenter(find.byKey(const Key("chat-expression-button"))).dy,
-      lessThan(
-        tester.getCenter(find.byKey(const Key("chat-attachment-button"))).dy,
-      ),
-    );
+    expect(find.byKey(const Key("chat-expression-button")), findsNothing);
+    expect(find.byKey(const Key("chat-attachment-button")), findsOneWidget);
+    expect(find.byKey(const Key("chat-gif-sticker-button")), findsOneWidget);
 
-    await tester.tap(find.byTooltip("Emoji, GIF, and stickers"));
-    await tester.pumpAndSettle();
-
-    expect(find.text("Emoji"), findsOneWidget);
-    expect(find.text("GIF"), findsOneWidget);
-    expect(find.text("Stickers"), findsOneWidget);
-
-    await tester.tap(find.byTooltip("Insert 😀"));
+    await tester.enterText(find.byType(TextField), "😀");
     await tester.pump();
     expect(controller.text, "😀");
 
-    await tester.tap(find.text("GIF"));
-    await tester.pump();
+    await tester.tap(find.byKey(const Key("chat-gif-sticker-button")));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Emoji"), findsNothing);
+    expect(find.text("GIF"), findsOneWidget);
+    expect(find.text("Stickers"), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text("Blush"), findsOneWidget);
     expect(find.byType(Image), findsWidgets);

@@ -157,7 +157,7 @@ class ActiveEmergencyStore {
     final refs = await readReferences();
     if (refs.isEmpty) return null;
     if (refs.length == 1) return refs.first.incidentId;
-    return readLastOpenedIncidentId() ?? refs.first.incidentId;
+    return await readLastOpenedIncidentId() ?? refs.first.incidentId;
   }
 
   Future<bool> readSilentModeFor(String incidentId) async {
@@ -193,6 +193,9 @@ class ActiveEmergencySnapshot {
     this.etaLabel,
     this.silent = false,
     this.contract,
+    this.publicReference,
+    this.reportedAt,
+    this.unreadUpdatesCount = 0,
   });
 
   final String incidentId;
@@ -207,6 +210,9 @@ class ActiveEmergencySnapshot {
   final String? etaLabel;
   final bool silent;
   final ActiveEmergencyContract? contract;
+  final String? publicReference;
+  final DateTime? reportedAt;
+  final int unreadUpdatesCount;
 
   factory ActiveEmergencySnapshot.fromContract(
     ActiveEmergencyContract contract, {
@@ -231,6 +237,9 @@ class ActiveEmergencySnapshot {
             .toList(growable: false),
         silent: silent,
         contract: contract,
+        publicReference: contract.publicReference,
+        reportedAt: contract.reportedAt,
+        unreadUpdatesCount: contract.communication.unreadMessageCount,
       );
     }
     final terminal = contract as ActiveEmergencyTerminalContract;
@@ -243,6 +252,7 @@ class ActiveEmergencySnapshot {
       timeline: const [],
       silent: silent,
       contract: terminal,
+      publicReference: terminal.publicReference,
     );
   }
 }

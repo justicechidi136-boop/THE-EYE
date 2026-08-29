@@ -27,6 +27,44 @@ class ActiveEmergencyService {
   Future<List<ActiveIncidentReference>> listActiveReferences() =>
       _store.readReferences();
 
+  Future<List<ActiveEmergencySnapshot>> listActiveEmergencySnapshots(
+    String accessToken,
+  ) async {
+    final references = await _store.readReferences();
+    final snapshots = <ActiveEmergencySnapshot>[];
+    for (final reference in references) {
+      try {
+        final contract = await fetchActiveEmergencyContract(
+          reference.incidentId,
+          accessToken,
+          silent: reference.silent,
+        );
+        if (contract is ActiveEmergencyActiveContract) {
+          snapshots.add(
+            ActiveEmergencySnapshot.fromContract(
+              contract,
+              silent: reference.silent,
+            ),
+          );
+        }
+      } catch (_) {
+        snapshots.add(
+          ActiveEmergencySnapshot(
+            incidentId: reference.incidentId,
+            status: reference.lastKnownStatus ?? "Submitted",
+            title: "Emergency",
+            type: "Emergency",
+            agencyName: "",
+            timeline: const [],
+            reportedAt: reference.activatedAt,
+            silent: reference.silent,
+          ),
+        );
+      }
+    }
+    return snapshots;
+  }
+
   Future<ActiveEmergencyContract?> fetchActiveEmergencyContract(
     String incidentId,
     String accessToken, {

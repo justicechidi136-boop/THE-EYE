@@ -115,6 +115,26 @@ class DeviceLocationState {
     return message ?? "Current device location is unavailable.";
   }
 
+  /// Precise label for spoken danger warnings. City and state are excluded
+  /// because they are too broad to identify a nearby danger location.
+  String get dangerSpokenLocation {
+    final streetName = street?.trim();
+    if (streetName != null && streetName.isNotEmpty) return streetName;
+
+    final nearbyLandmark = subLocality?.trim();
+    if (nearbyLandmark != null &&
+        nearbyLandmark.isNotEmpty &&
+        !_sameLabel(nearbyLandmark, locality) &&
+        !_sameLabel(nearbyLandmark, lga) &&
+        !_sameLabel(nearbyLandmark, state)) {
+      return nearbyLandmark;
+    }
+    return "the reported location";
+  }
+
+  bool _sameLabel(String value, String? other) =>
+      other != null && value.toLowerCase() == other.trim().toLowerCase();
+
   String get sourceLabel {
     switch (source) {
       case DeviceLocationSourceKind.freshGps:

@@ -1399,7 +1399,7 @@ class TheEyeApiClient {
     throw IncidentApiException.fromResponse(response);
   }
 
-  Future<void> stopLiveVideo({
+  Future<Map<String, dynamic>> stopLiveVideo({
     required String sessionId,
     String? accessToken,
   }) async {
@@ -1411,6 +1411,7 @@ class TheEyeApiClient {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw IncidentApiException.fromResponse(response);
     }
+    return _decodeEnvelope(response.body) ?? const <String, dynamic>{};
   }
 
   Future<void> reportLiveVideoClientFailure({

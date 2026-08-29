@@ -386,10 +386,15 @@ export class IncidentsService {
             userId: actor.sub,
             incidentId: incident.id,
             type: copy.type,
-            channels: ["in_app", "push"],
+            // Push notifications are also the canonical inbox record. Creating a
+            // second in-app channel row duplicates the same logical event.
+            channels: ["push"],
             title: copy.title,
             body: copy.body,
-            metadata: copy.metadata,
+            metadata: {
+              ...copy.metadata,
+              idempotencyKey: `incident:${incident.id}:report-submitted:${actor.sub}`,
+            },
           });
         },
         nonCriticalWarnings,

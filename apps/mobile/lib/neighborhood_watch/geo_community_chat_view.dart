@@ -11,29 +11,6 @@ import "../voice/voice_recorder.dart";
 import "neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch_service.dart";
 
-const _chatEmojis = <String>[
-  "😀",
-  "😂",
-  "😍",
-  "👍",
-  "🙏",
-  "👏",
-  "❤️",
-  "🎉",
-  "👀",
-  "🤝",
-  "✅",
-  "🚨",
-  "📍",
-  "🏠",
-  "🛡️",
-  "💡",
-  "⚠️",
-  "🔥",
-  "💬",
-  "🙌",
-];
-
 const _chatStickers = <({String label, String value})>[
   (label: "Stay safe", value: "🛡️✅"),
   (label: "Alert", value: "🚨⚠️"),
@@ -145,13 +122,12 @@ class GeoCommunityChatView extends StatelessWidget {
     );
   }
 
-  Future<void> _showExpressionPicker(BuildContext context) async {
+  Future<void> _showGifStickerPicker(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => _ChatExpressionSheet(
         gifEnabled: canSend && evidenceController != null,
-        onEmoji: _insertExpression,
         onSticker: (value) {
           _insertExpression(value);
           Navigator.of(sheetContext).pop();
@@ -310,9 +286,23 @@ class GeoCommunityChatView extends StatelessWidget {
                             BoxConstraints(maxHeight: attachmentHeight),
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                          child: EvidenceAttachmentPicker(
-                            controller: evidenceController!,
-                            lowDataMode: false,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              OutlinedButton.icon(
+                                key: const Key("chat-gif-sticker-button"),
+                                onPressed: canSend && !sending
+                                    ? () => _showGifStickerPicker(context)
+                                    : null,
+                                icon: const Icon(Icons.gif_box_outlined),
+                                label: const Text("GIFs and stickers"),
+                              ),
+                              const SizedBox(height: 8),
+                              EvidenceAttachmentPicker(
+                                controller: evidenceController!,
+                                lowDataMode: false,
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -487,36 +477,16 @@ class GeoCommunityChatView extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            SizedBox(
-              width: 42,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    key: const Key("chat-expression-button"),
-                    tooltip: "Emoji, GIF, and stickers",
-                    constraints:
-                        const BoxConstraints.tightFor(width: 40, height: 36),
-                    padding: EdgeInsets.zero,
-                    onPressed: canSend && !sending
-                        ? () => _showExpressionPicker(context)
-                        : null,
-                    icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
-                  ),
-                  IconButton(
-                    key: const Key("chat-attachment-button"),
-                    tooltip: "Add photo, video, or voice note",
-                    constraints:
-                        const BoxConstraints.tightFor(width: 40, height: 36),
-                    padding: EdgeInsets.zero,
-                    onPressed: canSend ? onToggleAttachments : null,
-                    icon: Badge(
-                      isLabelVisible: attachmentCount > 0,
-                      label: Text("$attachmentCount"),
-                      child: const Icon(Icons.add_circle_outline, size: 22),
-                    ),
-                  ),
-                ],
+            IconButton(
+              key: const Key("chat-attachment-button"),
+              tooltip: "Add photo, video, GIF, sticker, or voice note",
+              constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+              padding: EdgeInsets.zero,
+              onPressed: canSend ? onToggleAttachments : null,
+              icon: Badge(
+                isLabelVisible: attachmentCount > 0,
+                label: Text("$attachmentCount"),
+                child: const Icon(Icons.add_circle_outline, size: 23),
               ),
             ),
             Expanded(
@@ -722,14 +692,12 @@ class RoomMessageBubble extends StatelessWidget {
 class _ChatExpressionSheet extends StatelessWidget {
   const _ChatExpressionSheet({
     required this.gifEnabled,
-    required this.onEmoji,
     required this.onSticker,
     required this.onGif,
     required this.onGifAsset,
   });
 
   final bool gifEnabled;
-  final ValueChanged<String> onEmoji;
   final ValueChanged<String> onSticker;
   final Future<void> Function() onGif;
   final Future<void> Function(
@@ -740,14 +708,13 @@ class _ChatExpressionSheet extends StatelessWidget {
     final semantics = EyeSemanticColors.of(context);
     return SafeArea(
       child: DefaultTabController(
-        length: 3,
+        length: 2,
         child: SizedBox(
           height: 360,
           child: Column(
             children: [
               const TabBar(
                 tabs: [
-                  Tab(icon: Icon(Icons.emoji_emotions_outlined), text: "Emoji"),
                   Tab(icon: Icon(Icons.gif_box_outlined), text: "GIF"),
                   Tab(
                       icon: Icon(Icons.auto_awesome_outlined),
@@ -757,24 +724,6 @@ class _ChatExpressionSheet extends StatelessWidget {
               Expanded(
                 child: TabBarView(
                   children: [
-                    GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 6,
-                        mainAxisSpacing: 4,
-                        crossAxisSpacing: 4,
-                      ),
-                      itemCount: _chatEmojis.length,
-                      itemBuilder: (context, index) => IconButton(
-                        tooltip: "Insert ${_chatEmojis[index]}",
-                        onPressed: () => onEmoji(_chatEmojis[index]),
-                        icon: Text(
-                          _chatEmojis[index],
-                          style: const TextStyle(fontSize: 26),
-                        ),
-                      ),
-                    ),
                     Column(
                       children: [
                         Expanded(

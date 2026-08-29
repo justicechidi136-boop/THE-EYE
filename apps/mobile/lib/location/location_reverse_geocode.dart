@@ -106,7 +106,7 @@ class PlatformLocationReverseGeocoder implements LocationReverseGeocoder {
       final country = place.country?.trim();
       return ReverseGeocodeResult(
         street: _firstNonEmpty([place.street, place.thoroughfare]),
-        subLocality: _firstNonEmpty([place.subLocality]),
+        subLocality: _firstNonEmpty([place.subLocality, place.name]),
         locality: locality,
         lga: lga,
         state: state,

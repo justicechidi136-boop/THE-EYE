@@ -214,26 +214,48 @@ class _EvidenceViewerScreenState extends State<EvidenceViewerScreen> {
         );
       case EvidenceItemKind.video:
         final video = _video!;
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AspectRatio(
-                aspectRatio: video.aspectRatio,
-                child: ColoredBox(
-                  color: Colors.black,
-                  child: video.buildView(),
-                ),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            const horizontalPadding = 32.0;
+            const verticalPadding = 32.0;
+            const controlsHeight = 60.0;
+            final ratio = video.aspectRatio > 0 ? video.aspectRatio : 16 / 9;
+            final maxWidth = (constraints.maxWidth - horizontalPadding)
+                .clamp(0.0, double.infinity);
+            final maxHeight =
+                (constraints.maxHeight - verticalPadding - controlsHeight)
+                    .clamp(0.0, double.infinity);
+            var width = maxWidth;
+            var height = width / ratio;
+            if (height > maxHeight) {
+              height = maxHeight;
+              width = height * ratio;
+            }
+
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: width,
+                    height: height,
+                    child: ColoredBox(
+                      color: Colors.black,
+                      child: video.buildView(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  IconButton.filled(
+                    tooltip: video.isPlaying ? "Pause video" : "Play video",
+                    onPressed: _toggleVideo,
+                    icon:
+                        Icon(video.isPlaying ? Icons.pause : Icons.play_arrow),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              IconButton.filled(
-                tooltip: video.isPlaying ? "Pause video" : "Play video",
-                onPressed: _toggleVideo,
-                icon: Icon(video.isPlaying ? Icons.pause : Icons.play_arrow),
-              ),
-            ],
-          ),
+            );
+          },
         );
       case EvidenceItemKind.audio:
         return Column(

@@ -47,6 +47,29 @@ void main() {
     expect(page.items, isEmpty);
   });
 
+  test("sends type status and near-me filters with coordinates", () async {
+    final client = TheEyeApiClient(
+      baseUrl: "https://api.test/v1",
+      httpClient: MockClient((request) async {
+        expect(request.url.queryParameters["category"], "MissingPerson");
+        expect(request.url.queryParameters["status"], "Active");
+        expect(request.url.queryParameters["nearMe"], "true");
+        expect(request.url.queryParameters["latitude"], "6.5244");
+        expect(request.url.queryParameters["longitude"], "3.3792");
+        return http.Response(jsonEncode({"data": []}), 200);
+      }),
+    );
+
+    await BroadcastFeedService(apiClient: client).listCountryWide(
+      accessToken: "token",
+      category: "MissingPerson",
+      status: "Active",
+      nearMe: true,
+      latitude: 6.5244,
+      longitude: 3.3792,
+    );
+  });
+
   test("broadcast feed cache is scoped per user key", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();

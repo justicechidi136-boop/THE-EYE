@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../presentation/citizen_presentation.dart";
+import "../presentation/citizen_location_presentation.dart";
 import "../presentation/public_reference.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../contracts/the_eye_api_paths.dart";
@@ -17,6 +18,7 @@ class IncidentSummary {
     this.submittedAt,
     this.description,
     this.address,
+    this.administrativeLocation,
     this.publicReference,
     this.displayStatus,
     this.locationAccuracyMeters,
@@ -32,6 +34,7 @@ class IncidentSummary {
   final DateTime? submittedAt;
   final String? description;
   final String? address;
+  final String? administrativeLocation;
   final String? publicReference;
   final String? displayStatus;
   final double? locationAccuracyMeters;
@@ -63,6 +66,7 @@ class IncidentDetail extends IncidentSummary {
     super.submittedAt,
     super.description,
     super.address,
+    super.administrativeLocation,
     super.publicReference,
     super.displayStatus,
     super.locationAccuracyMeters,
@@ -174,6 +178,11 @@ class IncidentHistoryService {
       submittedAt: submittedAt,
       description: json["description"]?.toString(),
       address: json["address"]?.toString(),
+      administrativeLocation: CitizenLocationPresentation(
+        lga: json["lga"]?.toString(),
+        state: json["state"]?.toString(),
+        country: json["country"]?.toString(),
+      ).administrativeLine,
       publicReference: json["publicReference"]?.toString() ??
           (submittedAt == null
               ? null
@@ -254,6 +263,7 @@ class IncidentHistoryService {
       submittedAt: summary.submittedAt,
       description: summary.description,
       address: summary.address,
+      administrativeLocation: summary.administrativeLocation,
       publicReference: summary.publicReference,
       displayStatus: summary.displayStatus,
       locationAccuracyMeters: summary.locationAccuracyMeters,

@@ -25,6 +25,7 @@ class _FakeLocationService extends DeviceLocationService {
         capturedAt: DateTime.now(),
         source: DeviceLocationSourceKind.freshGps,
         quality: EmergencyLocationQuality.precise,
+        street: "Allen Avenue",
         locality: "Ikeja",
         state: "Lagos",
       );
@@ -53,6 +54,7 @@ class _FakeLiveVoiceController extends LiveVideoSessionController {
 class _FakeGateway implements DangerTriggerGateway {
   int activateCalls = 0;
   String? preparedDangerAlertCode;
+  String? preparedSpokenLocationName;
 
   @override
   Future<PreparedDangerTrigger> prepare({
@@ -65,8 +67,10 @@ class _FakeGateway implements DangerTriggerGateway {
     required String dangerAlertCode,
     double? accuracyMeters,
     String? areaName,
+    String? spokenLocationName,
   }) async {
     preparedDangerAlertCode = dangerAlertCode;
+    preparedSpokenLocationName = spokenLocationName;
     return PreparedDangerTrigger(
       eventId: "event-1",
       liveSessionId: "session-1",
@@ -260,6 +264,7 @@ void main() {
 
     expect(gateway.activateCalls, 1);
     expect(gateway.preparedDangerAlertCode, "DANGER_ZONE_ARMED_ROBBERY_NEARBY");
+    expect(gateway.preparedSpokenLocationName, "Allen Avenue");
     await _scrollTo(tester, find.text("Live voice broadcasting"));
     expect(find.text("Live voice broadcasting"), findsOneWidget);
     expect(

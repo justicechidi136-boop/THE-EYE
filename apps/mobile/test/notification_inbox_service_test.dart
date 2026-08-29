@@ -77,4 +77,37 @@ void main() {
     expect(deduped, hasLength(1));
     expect(deduped.single.id, "push-row");
   });
+
+  test("duplicate report submission delivery is one logical inbox item", () {
+    final items = [
+      InboxNotificationItem.fromJson({
+        "id": "report-push-row",
+        "type": "IncidentStatusUpdate",
+        "title": "Your crime report has been received",
+        "body":
+            "Your crime report EYE-260829-A172 has been successfully submitted.",
+        "priority": "Normal",
+        "createdAt": "2026-08-29T10:00:00.000Z",
+        "metadata": {
+          "idempotencyKey": "incident:incident-1:report-submitted:user-1",
+        },
+      }),
+      InboxNotificationItem.fromJson({
+        "id": "report-retry-row",
+        "type": "IncidentStatusUpdate",
+        "title": "Your crime report has been received",
+        "body":
+            "Your crime report EYE-260829-A172 has been successfully submitted.",
+        "priority": "Normal",
+        "createdAt": "2026-08-29T10:00:01.000Z",
+        "metadata": {
+          "idempotencyKey": "incident:incident-1:report-submitted:user-1",
+        },
+      }),
+    ];
+
+    final deduped = deduplicateLogicalNotifications(items);
+    expect(deduped, hasLength(1));
+    expect(deduped.single.id, "report-push-row");
+  });
 }

@@ -1,12 +1,9 @@
 import "package:flutter/material.dart";
 
+import "../../design_system/components/eye_page_header.dart";
 import "../../design_system/eye_semantic_colors.dart";
-import "active_emergency_tokens.dart";
 
-/// Secondary-page header matching the Claude Active Emergency top bar.
-///
-/// Uses THE EYE semantic colors and circular icon buttons (reference layout)
-/// while remaining a SafeArea secondary header (not a Material AppBar).
+/// Active Emergency header built on the canonical secondary-page header.
 class ActiveEmergencyHeader extends StatelessWidget {
   const ActiveEmergencyHeader({
     super.key,
@@ -26,54 +23,34 @@ class ActiveEmergencyHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = EyeSemanticColors.of(context);
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-        child: Row(
-          children: [
-            ActiveEmergencyIconButton(
-              icon: Icons.chevron_left,
-              tooltip: "Back",
-              onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        color: colors.bodyText,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: colors.mutedText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ActiveEmergencyIconButton(
-              icon: Icons.schedule,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EyePageHeader.secondary(
+          title: title,
+          onBack: onBack,
+          actions: [
+            IconButton(
               tooltip: "Refresh",
               onPressed: refreshEnabled ? onRefresh : null,
+              icon: const Icon(Icons.refresh),
             ),
           ],
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(56, 0, 56, 8),
+          child: Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: colors.mutedText,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

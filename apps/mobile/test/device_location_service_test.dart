@@ -32,6 +32,32 @@ void main() {
       expect(state.displayLocality, "Current device location is unavailable.");
     });
 
+    test("danger speech prefers street, then landmark, and never city", () {
+      const street = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        street: "Allen Avenue",
+        subLocality: "Computer Village",
+        locality: "Ikeja",
+        state: "Lagos",
+      );
+      const landmark = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        subLocality: "Computer Village",
+        locality: "Ikeja",
+        state: "Lagos",
+      );
+      const cityOnly = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        subLocality: "Ikeja",
+        locality: "Ikeja",
+        state: "Lagos",
+      );
+
+      expect(street.dangerSpokenLocation, "Allen Avenue");
+      expect(landmark.dangerSpokenLocation, "Computer Village");
+      expect(cityOnly.dangerSpokenLocation, "the reported location");
+    });
+
     test("profile jurisdiction display is explicit", () {
       const profile = ProfileJurisdictionDisplay(
         lga: "Ikeja",
@@ -63,7 +89,8 @@ void main() {
       expect(platform.readCount, 1);
     });
 
-    test("returns fresh Port Harcourt fix with reverse geocode labels", () async {
+    test("returns fresh Port Harcourt fix with reverse geocode labels",
+        () async {
       resetSharedEmergencyLocationCoordinator();
       final platform = _PortHarcourtLocationPlatform();
       final service = DeviceLocationService(
