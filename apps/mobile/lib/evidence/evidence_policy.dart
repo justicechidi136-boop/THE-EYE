@@ -41,6 +41,16 @@ class EvidencePolicy {
     supportedMimeTypes: EvidenceMimeTypes.image,
   );
 
+  static const primaryPhoto = EvidencePolicy(
+    maxPhotos: 1,
+    maxVideos: 0,
+    maxAudio: 0,
+    maxFiles: 1,
+    maxFileSize: 5 * 1024 * 1024,
+    maxTotalBytes: 5 * 1024 * 1024,
+    supportedMimeTypes: EvidenceMimeTypes.image,
+  );
+
   int maxForMediaType(String mediaType) {
     return switch (mediaType) {
       IncidentMediaType.image => maxPhotos,
@@ -67,10 +77,7 @@ class EvidencePolicy {
   }
 
   int totalBytes(Iterable<LocalEvidenceAttachment> attachments) {
-    return attachments.fold<int>(
-      0,
-      (sum, item) => sum + item.sizeBytes,
-    );
+    return attachments.fold<int>(0, (sum, item) => sum + item.sizeBytes);
   }
 
   bool canAddMediaType(
@@ -85,10 +92,7 @@ class EvidencePolicy {
     return true;
   }
 
-  String capacityLabel({
-    required String mediaType,
-    required int usedCount,
-  }) {
+  String capacityLabel({required String mediaType, required int usedCount}) {
     return "${labelForMediaType(mediaType)} $usedCount of ${maxForMediaType(mediaType)}";
   }
 

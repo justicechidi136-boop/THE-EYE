@@ -22,11 +22,26 @@ import { CreateBroadcastDto, validateCreateBroadcastDto } from "./dto/broadcast.
 export type AdminBroadcastListQuery = {
   country?: string;
   state?: string;
+  lga?: string;
+  communityId?: string;
   category?: string;
   status?: string;
   author?: string;
-  cursor?: string;
+  search?: string;
+  from?: string;
+  to?: string;
+  page?: string;
   limit?: string;
+};
+
+type ResolvedBroadcastTarget = {
+  level: "Country" | "State" | "LGA" | "Community";
+  country: string;
+  state?: string;
+  lga?: string;
+  jurisdictionId?: string;
+  communityId?: string;
+  label: string;
 };
 
 export type AdminBroadcastCommentDto = {
@@ -54,29 +69,123 @@ export class BroadcastAdminService {
   async list(actor: JwtPayload, query: AdminBroadcastListQuery = {}) {
     if (actor.typ !== "admin") throw new ForbiddenException("Admin access required");
     const limit = Math.min(Number(query.limit ?? 25) || 25, 100);
-    const where = {
+    const page = Math.max(Number(query.page ?? 1) || 1, 1);
+    const createdAt = this.createdAtFilter(query.from, query.to);
+    const search = query.search?.trim();
+    const where: any = {
       deletedAt: null,
       ...this.jurisdictionWhere(actor),
       ...(query.country ? { country: query.country } : {}),
       ...(query.state ? { state: query.state } : {}),
+      ...(query.lga ? { lga: query.lga } : {}),
+      ...(query.communityId
+        ? { metadata: { path: ["target", "communityId"], equals: query.communityId } }
+        : {}),
       ...(query.category ? { type: query.category as never } : {}),
       ...(query.status ? { status: query.status as never } : {}),
       ...(query.author === "Citizen" ? { authorType: BroadcastAuthorType.Citizen as never } : {}),
       ...(query.author === "Admin" ? { authorType: BroadcastAuthorType.Admin as never } : {}),
+      ...(createdAt ? { createdAt } : {}),
+      ...(search
+        ? {
+            AND: [{
+              OR: [
+                { title: { contains: search, mode: "insensitive" } },
+                { body: { contains: search, mode: "insensitive" } },
+                { country: { contains: search, mode: "insensitive" } },
+                { state: { contains: search, mode: "insensitive" } },
+                { lga: { contains: search, mode: "insensitive" } },
+                { creator: { displayName: { contains: search, mode: "insensitive" } } },
+                { creatorUser: { profile: { firstName: { contains: search, mode: "insensitive" } } } },
+                { creatorUser: { profile: { lastName: { contains: search, mode: "insensitive" } } } },
+              ],
+            }],
+          }
+        : {}),
     };
-    const rows = await this.prisma.broadcast.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: limit,
-      include: {
-        creator: { select: { displayName: true } },
-        creatorUser: { select: { profile: { select: { firstName: true, lastName: true } } } },
-        approver: { select: { displayName: true } },
-        verifiedBy: { select: { displayName: true } },
-        _count: { select: { comments: true, reports: true, deliveries: true, sightings: true } },
-      },
-    });
-    return { data: rows };
+    const lifecycleScope = { deletedAt: null, ...this.jurisdictionWhere(actor) };
+    const now = new Date();
+    const [rows, total, published, active, expired, cancelled] = await Promise.all([
+      this.prisma.broadcast.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          creator: { select: { displayName: true } },
+          creatorUser: { select: { profile: { select: { firstName: true, lastName: true } } } },
+          approver: { select: { displayName: true } },
+          verifiedBy: { select: { displayName: true } },
+          _count: { select: { comments: true, reports: true, deliveries: true, sightings: true } },
+        },
+      }),
+      this.prisma.broadcast.count({ where }),
+      this.prisma.broadcast.count({ where: { ...lifecycleScope, status: BroadcastStatus.Published as never } }),
+      this.prisma.broadcast.count({
+        where: {
+          ...lifecycleScope,
+          status: { in: [BroadcastStatus.Active, BroadcastStatus.Updated] as never },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+      }),
+      this.prisma.broadcast.count({
+        where: {
+          ...lifecycleScope,
+          OR: [
+            { status: BroadcastStatus.Expired as never },
+            {
+              status: { in: [BroadcastStatus.Published, BroadcastStatus.Active, BroadcastStatus.Updated] as never },
+              expiresAt: { lte: now },
+            },
+          ],
+        },
+      }),
+      this.prisma.broadcast.count({
+        where: {
+          ...lifecycleScope,
+          status: {
+            in: [
+              BroadcastStatus.Cancelled,
+              BroadcastStatus.WithdrawnByAuthor,
+              BroadcastStatus.DeletedByAdmin,
+            ] as never,
+          },
+        },
+      }),
+    ]);
+    return {
+      data: rows,
+      pagination: { page, limit, total, pageCount: Math.max(1, Math.ceil(total / limit)) },
+      meta: { published, active, expired, cancelled },
+    };
+  }
+
+  async targetOptions(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Admin access required");
+    const [jurisdictions, communities] = await Promise.all([
+      this.prisma.jurisdiction.findMany({
+        where: {
+          ...this.jurisdictionRecordWhere(actor),
+          NOT: [{ state: "All" }, { lga: "All" }],
+        },
+        orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }],
+        select: { id: true, country: true, state: true, lga: true, name: true },
+      }),
+      this.prisma.community.findMany({
+        where: { ...this.communityRecordWhere(actor), status: "Active" as never },
+        orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          jurisdictionId: true,
+          name: true,
+          level: true,
+          country: true,
+          state: true,
+          lga: true,
+        },
+      }),
+    ]);
+    return { data: { jurisdictions, communities } };
   }
 
   async getDetail(id: string, actor: JwtPayload) {
@@ -166,14 +275,15 @@ export class BroadcastAdminService {
     };
   }
 
-  async create(dto: CreateBroadcastDto & { country?: string; state?: string; lga?: string }, actor: JwtPayload) {
+  async create(dto: CreateBroadcastDto, actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Admin access required");
     this.assertCountryScope(actor, dto.country ?? actor.country);
     validateCreateBroadcastDto(dto);
     this.assertAdminCategory(dto.type);
 
-    const jurisdictionId = dto.jurisdictionId ?? (await this.inferJurisdictionId(dto));
-    const country = dto.country ?? actor.country;
+    const target = await this.resolveTarget(dto, actor);
+    const jurisdictionId = target.jurisdictionId ?? (await this.inferJurisdictionId(dto));
+    const country = target.country;
     const now = new Date();
     const broadcast = await this.prisma.broadcast.create({
       data: {
@@ -189,15 +299,24 @@ export class BroadcastAdminService {
         requiresApproval: false,
         autoPublished: false,
         country,
-        state: dto.state ?? actor.state,
-        lga: dto.lga ?? actor.lga,
-        targetRadiusMeters: dto.radiusMeters,
+        state: target.state,
+        lga: target.lga,
+        targetRadiusMeters: dto.deliveryMode === "Radius" ? dto.radiusMeters : null,
+        metadata: {
+          target: {
+            level: target.level,
+            label: target.label,
+            jurisdictionId: target.jurisdictionId,
+            communityId: target.communityId,
+            deliveryMode: dto.deliveryMode ?? "EntireArea",
+          },
+        },
         publishedAt: now,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
       } as never,
     });
 
-    await this.writeGeofence(broadcast.id, dto, jurisdictionId);
+    await this.writeGeofence(broadcast.id, dto, target);
     await this.recordAudit(actor, "broadcast.admin_created", broadcast.id, { type: dto.type, country });
 
     if (country) {
@@ -359,13 +478,11 @@ export class BroadcastAdminService {
 
   private assertAdminCategory(type: BroadcastType) {
     const allowed = new Set<BroadcastType>([
-      BroadcastType.Emergency,
-      BroadcastType.Crime,
-      BroadcastType.Accident,
-      BroadcastType.MissingPerson,
-      BroadcastType.StolenVehicle,
+      BroadcastType.SafetyAlert,
       BroadcastType.GovernmentAlert,
       BroadcastType.CommunityWarning,
+      BroadcastType.PublicAdvisory,
+      BroadcastType.EmergencyWarning,
     ]);
     if (!allowed.has(type)) throw new BadRequestException("Unsupported admin broadcast category");
   }
@@ -375,6 +492,92 @@ export class BroadcastAdminService {
     if (!country || country !== actor.country) {
       throw new ForbiddenException("Broadcast country is outside your jurisdiction");
     }
+  }
+
+  private createdAtFilter(from?: string, to?: string) {
+    if (!from && !to) return undefined;
+    const start = from ? new Date(from) : undefined;
+    const end = to ? new Date(to) : undefined;
+    if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) {
+      throw new BadRequestException("Invalid broadcast date range");
+    }
+    if (start && end && start > end) throw new BadRequestException("Broadcast date range is reversed");
+    return { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) };
+  }
+
+  private jurisdictionRecordWhere(actor: JwtPayload) {
+    if (actor.role === AdminRoleName.SuperAdmin) return {};
+    if (actor.role === AdminRoleName.CountryAdmin) return { country: actor.country ?? "__no_country__" };
+    if (actor.role === AdminRoleName.StateAdmin) {
+      return { country: actor.country ?? "__no_country__", state: actor.state ?? "__no_state__" };
+    }
+    if (actor.role === AdminRoleName.LgaAdmin) {
+      return {
+        country: actor.country ?? "__no_country__",
+        state: actor.state ?? "__no_state__",
+        lga: actor.lga ?? "__no_lga__",
+      };
+    }
+    return { id: "__deny_all__" };
+  }
+
+  private communityRecordWhere(actor: JwtPayload) {
+    const where = this.jurisdictionRecordWhere(actor) as Record<string, string>;
+    if (where.id) return where;
+    return {
+      ...(where.country ? { country: where.country } : {}),
+      ...(where.state ? { state: where.state } : {}),
+      ...(where.lga ? { lga: where.lga } : {}),
+    };
+  }
+
+  private async resolveTarget(dto: CreateBroadcastDto, actor: JwtPayload): Promise<ResolvedBroadcastTarget> {
+    const level = dto.targetLevel ?? (dto.communityId ? "Community" : dto.jurisdictionId ? "LGA" : dto.state ? "State" : "Country");
+    if (level === "Community") {
+      if (!dto.communityId) throw new BadRequestException("Select a community target");
+      const community = await this.prisma.community.findFirst({
+        where: { id: dto.communityId, ...this.communityRecordWhere(actor), status: "Active" as never },
+        select: { id: true, jurisdictionId: true, name: true, country: true, state: true, lga: true },
+      });
+      if (!community) throw new ForbiddenException("Community is outside your jurisdiction");
+      return {
+        level,
+        country: community.country,
+        state: community.state ?? undefined,
+        lga: community.lga ?? undefined,
+        jurisdictionId: community.jurisdictionId ?? undefined,
+        communityId: community.id,
+        label: community.name,
+      };
+    }
+    if (level === "LGA") {
+      if (!dto.jurisdictionId) throw new BadRequestException("Select a City / LGA target");
+      const jurisdiction = await this.prisma.jurisdiction.findFirst({
+        where: { id: dto.jurisdictionId, ...this.jurisdictionRecordWhere(actor) },
+      });
+      if (!jurisdiction) throw new ForbiddenException("City / LGA is outside your jurisdiction");
+      return {
+        level,
+        country: jurisdiction.country,
+        state: jurisdiction.state,
+        lga: jurisdiction.lga,
+        jurisdictionId: jurisdiction.id,
+        label: jurisdiction.name || jurisdiction.lga,
+      };
+    }
+    const where = {
+      ...this.jurisdictionRecordWhere(actor),
+      ...(dto.country ? { country: dto.country } : {}),
+      ...(level === "State" && dto.state ? { state: dto.state } : {}),
+    };
+    const canonical = await this.prisma.jurisdiction.findFirst({ where });
+    if (!canonical) throw new ForbiddenException("Target area is outside your jurisdiction");
+    return {
+      level,
+      country: canonical.country,
+      state: level === "State" ? canonical.state : undefined,
+      label: level === "State" ? canonical.state : canonical.country,
+    };
   }
 
   private jurisdictionWhere(actor: JwtPayload) {
@@ -434,7 +637,7 @@ export class BroadcastAdminService {
     return dto.jurisdictionId;
   }
 
-  private async writeGeofence(id: string, dto: CreateBroadcastDto, jurisdictionId?: string | null) {
+  private async writeGeofence(id: string, dto: CreateBroadcastDto, target: ResolvedBroadcastTarget) {
     if (dto.targetAreaWkt) {
       await this.prisma.$executeRawUnsafe(
         `UPDATE broadcasts SET target_area = ST_Multi(ST_GeomFromText($1, 4326))::geography WHERE id = $2::uuid`,
@@ -456,13 +659,49 @@ export class BroadcastAdminService {
       );
       return;
     }
-    if (jurisdictionId) {
+    const radius = dto.deliveryMode === "Radius" ? dto.radiusMeters ?? 5000 : null;
+    if (target.communityId) {
       await this.prisma.$executeRawUnsafe(
-        `UPDATE broadcasts b SET target_area = j.boundary FROM jurisdictions j WHERE b.id = $1::uuid AND j.id = $2::uuid`,
-        id,
-        jurisdictionId,
+        radius
+          ? `UPDATE broadcasts b SET target_area = ST_Multi(ST_Buffer(COALESCE(c.center, ST_Centroid(c.boundary::geometry)::geography), $1)::geometry)::geography,
+             target_center = COALESCE(c.center, ST_Centroid(c.boundary::geometry)::geography)
+             FROM communities c WHERE b.id = $2::uuid AND c.id = $3::uuid`
+          : `UPDATE broadcasts b SET target_area = c.boundary,
+             target_center = COALESCE(c.center, ST_Centroid(c.boundary::geometry)::geography)
+             FROM communities c WHERE b.id = $1::uuid AND c.id = $2::uuid`,
+        ...(radius ? [radius, id, target.communityId] : [id, target.communityId]),
       );
+      return;
     }
+    if (target.jurisdictionId) {
+      await this.prisma.$executeRawUnsafe(
+        radius
+          ? `UPDATE broadcasts b SET target_area = ST_Multi(ST_Buffer(ST_Centroid(j.boundary::geometry)::geography, $1)::geometry)::geography,
+             target_center = ST_Centroid(j.boundary::geometry)::geography
+             FROM jurisdictions j WHERE b.id = $2::uuid AND j.id = $3::uuid`
+          : `UPDATE broadcasts b SET target_area = j.boundary,
+             target_center = ST_Centroid(j.boundary::geometry)::geography
+             FROM jurisdictions j WHERE b.id = $1::uuid AND j.id = $2::uuid`,
+        ...(radius ? [radius, id, target.jurisdictionId] : [id, target.jurisdictionId]),
+      );
+      return;
+    }
+    await this.prisma.$executeRawUnsafe(
+      radius
+        ? `UPDATE broadcasts b SET target_area = source.area, target_center = source.center
+           FROM (
+             SELECT ST_Multi(ST_Buffer(ST_Centroid(ST_Union(boundary::geometry))::geography, $1)::geometry)::geography AS area,
+                    ST_Centroid(ST_Union(boundary::geometry))::geography AS center
+             FROM jurisdictions WHERE country = $2 AND ($3::text IS NULL OR state = $3)
+           ) source WHERE b.id = $4::uuid`
+        : `UPDATE broadcasts b SET target_area = source.area, target_center = source.center
+           FROM (
+             SELECT ST_Multi(ST_Union(boundary::geometry))::geography AS area,
+                    ST_Centroid(ST_Union(boundary::geometry))::geography AS center
+             FROM jurisdictions WHERE country = $1 AND ($2::text IS NULL OR state = $2)
+           ) source WHERE b.id = $3::uuid`,
+      ...(radius ? [radius, target.country, target.state ?? null, id] : [target.country, target.state ?? null, id]),
+    );
   }
 
   private recordAudit(actor: JwtPayload, action: string, entityId: string, metadata: Record<string, unknown>) {

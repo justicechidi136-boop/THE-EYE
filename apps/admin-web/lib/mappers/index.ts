@@ -249,9 +249,11 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
             : "Manual / pending";
 
   const metadata = (record.metadata as Record<string, unknown> | undefined) ?? {};
+  const targetMetadata = (metadata.target as Record<string, unknown> | undefined) ?? {};
   const creatorProfile = ((record.creatorUser as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile);
   const creatorUserName = [creatorProfile?.firstName, creatorProfile?.lastName].filter(Boolean).join(" ").trim();
   const targetLocation = humanLocation([
+    targetMetadata.label,
     metadata.address,
     metadata.lastSeenAddress,
     metadata.lastKnownLocation,
@@ -342,6 +344,11 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
     ["Plate number", "plateNumber"],
     ["VIN / chassis", "vin"],
   ];
+  const textValue = (key: string, fallback = "Not provided") => {
+    const value = metadata[key];
+    return value == null || String(value).trim().length === 0 ? fallback : String(value);
+  };
+  const nullableDate = (key: string) => metadata[key] == null ? null : String(metadata[key]);
   return {
     ...toBroadcastView(record),
     body: String(record.body ?? ""),
@@ -375,6 +382,29 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
     details: detailKeys
       .map(([label, key]) => ({ label, value: metadata[key] == null ? "" : String(metadata[key]) }))
       .filter((item) => item.value.trim().length > 0),
+    missingPerson: String(record.type) === "MissingPerson" ? {
+      fullName: textValue("fullName"),
+      age: textValue("ageOrApproximateAge"),
+      gender: textValue("gender"),
+      physicalDescription: textValue("physicalDescription"),
+      clothingDescription: textValue("clothingDescription"),
+      additionalInformation: textValue("additionalDescription"),
+      lastSeenAt: nullableDate("lastSeenAt"),
+      lastSeenLocation: textValue("lastSeenAddress", location),
+    } : null,
+    stolenVehicle: String(record.type) === "StolenVehicle" ? {
+      make: textValue("make"),
+      model: textValue("model"),
+      year: textValue("year"),
+      colour: textValue("colour", textValue("color")),
+      plateNumber: textValue("registrationNumber", textValue("plateNumber")),
+      vin: textValue("vin", textValue("vinLastFour")),
+      distinguishingFeatures: textValue("distinguishingFeatures"),
+      theftAccount: textValue("theftDescription", String(record.body ?? "Not provided")),
+      stolenAt: nullableDate("stolenAt"),
+      lastSeenAt: nullableDate("lastSeenAt"),
+      lastKnownLocation: textValue("lastKnownLocation", location),
+    } : null,
     sightings: sightingsRaw.map((entry) => {
       const row = entry as Record<string, unknown>;
       const metadata = (row.metadata as Record<string, unknown> | undefined) ?? {};
@@ -404,6 +434,11 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
         longitude: row.longitude == null ? null : toNumber(row.longitude),
         directionOfTravel: row.directionOfTravel ? String(row.directionOfTravel) : null,
         confidence: row.confidence ? String(row.confidence) : null,
+        reviewStatus: ["Verified", "Unverified", "Dismissed"].includes(String(metadata.reviewStatus))
+          ? String(metadata.reviewStatus) as "Verified" | "Unverified" | "Dismissed"
+          : "Pending review",
+        reviewNote: metadata.reviewNote ? String(metadata.reviewNote) : null,
+        reportedAt: row.createdAt ? String(row.createdAt) : null,
         attachments,
       };
     }),

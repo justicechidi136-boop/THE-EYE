@@ -8,7 +8,7 @@ import { filterNavItems } from "../lib/nav-access";
 import {
   fetchBroadcasts,
   fetchIncidents,
-  fetchLiveVideoSessions,
+  fetchLiveVideoOverview,
   fetchNotificationUnreadCount,
   fetchUsersDirectory,
 } from "../lib/api/data";
@@ -37,14 +37,15 @@ export default async function DashboardPage() {
     },
   );
   const initials = session?.email?.slice(0, 2).toUpperCase() ?? "AD";
-  const [incidents, broadcasts, users, liveSessions, unreadNotifications] = await Promise.all([
+  const [incidents, broadcasts, users, liveVideoOverview, unreadNotifications] = await Promise.all([
     fetchIncidents(),
     fetchBroadcasts(),
     fetchUsersDirectory(),
-    fetchLiveVideoSessions(),
+    fetchLiveVideoOverview(),
     fetchNotificationUnreadCount(),
   ]);
-  const chart = buildDashboardChart(incidents, users.length, liveSessions);
+  const chart = buildDashboardChart(incidents, users.length, liveVideoOverview.sessions);
+  const activeLiveSessions = liveVideoOverview.sessions.filter((session) => session.status === "Active");
 
   return (
     <AppShell>
@@ -79,7 +80,7 @@ export default async function DashboardPage() {
       <section className="mb-5 grid gap-4 md:grid-cols-3">
         <MetricCard label="Total Users" value={String(users.length)} detail="Registered citizens and admins" accent="eyeOrange" />
         <MetricCard label="Total Reports" value={String(incidents.length)} detail="Reports in assigned scope" accent="eye" />
-        <MetricCard label="Total Live Videos" value={String(liveSessions.length)} detail="Currently active live sessions" accent="ink" />
+        <MetricCard label="Total Live Videos" value={String(liveVideoOverview.total)} detail={`${liveVideoOverview.active} currently active`} accent="ink" />
       </section>
 
       {quickLinks.length ? (
@@ -99,7 +100,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="mb-5">
-        <DashboardActivityFeeds incidents={incidents} liveSessions={liveSessions} />
+        <DashboardActivityFeeds incidents={incidents} liveSessions={activeLiveSessions} />
       </section>
 
       <p className="text-xs text-muted">

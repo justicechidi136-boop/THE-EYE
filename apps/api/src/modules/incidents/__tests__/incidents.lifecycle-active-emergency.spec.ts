@@ -351,6 +351,23 @@ describe("IncidentsService cancellation and lifecycle", () => {
     );
   });
 
+  it("requires a resolution summary before an admin resolves a report", async () => {
+    const { service, prisma } = buildIncidentsService();
+
+    await expect(
+      service.updateStatus("inc-1", IncidentStatus.Resolved, "", lgaAdmin),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.incident.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("requires both an agency and reason before reassignment", async () => {
+    const { service, prisma } = buildIncidentsService();
+
+    await expect(service.assign("inc-1", { reason: "Coverage change" }, lgaAdmin)).rejects.toThrow(BadRequestException);
+    await expect(service.assign("inc-1", { agencyId: "agency-1" }, lgaAdmin)).rejects.toThrow(BadRequestException);
+    expect(prisma.incident.findFirst).not.toHaveBeenCalled();
+  });
+
   it("increments status version on transition", async () => {
     const { service, prisma, incidentUpdate } = buildIncidentsService();
     prisma.incident.findFirst.mockResolvedValue({ ...baseIncident, status: IncidentStatus.Submitted });

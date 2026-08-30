@@ -1,62 +1,69 @@
-"use client";
-
-import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { BroadcastView } from "../../lib/types/admin-views";
-import { broadcastApprovalLabel, broadcastAuthor, broadcastPublicReference, compactBroadcastType, matchesBroadcastSearch } from "../../lib/broadcast-list-presentation";
+import { broadcastApprovalLabel, broadcastAuthor, broadcastPublicReference, compactBroadcastType } from "../../lib/broadcast-list-presentation";
 import { humanPriority } from "../../lib/admin-presentation";
 import { ConsoleEmptyState } from "../console";
 import { StatusBadge } from "../ui";
 import { BroadcastListActions } from "./broadcast-list-actions";
 
-const PAGE_SIZE = 10;
+type Pagination = { page: number; limit: number; total: number; pageCount: number };
+type FilterState = Record<string, string | undefined>;
 
 function priorityTone(priority: string): "danger" | "warning" | "neutral" {
   return priority === "HIGH" ? "danger" : priority === "MID" ? "warning" : "neutral";
 }
 
-function deliveryTone(delivery: string): "success" | "info" | "warning" | "neutral" {
-  if (delivery === "Sent") return "success";
-  if (delivery === "Failed") return "warning";
-  return delivery === "Not dispatched" ? "neutral" : "info";
+function pageHref(page: number, filters?: FilterState) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters ?? {})) {
+    if (value && key !== "page") params.set(key, value);
+  }
+  params.set("page", String(page));
+  return `/broadcasts?${params.toString()}`;
 }
 
-export function BroadcastList({ broadcasts }: { broadcasts: BroadcastView[] }) {
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const matches = useMemo(() => broadcasts.filter((broadcast) => matchesBroadcastSearch(broadcast, query)), [broadcasts, query]);
-  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const visible = matches.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+function visiblePages(current: number, total: number): Array<number | "ellipsis"> {
+  if (total <= 5) return Array.from({ length: total }, (_, index) => index + 1);
+  const values = new Set([1, total, current - 1, current, current + 1]);
+  const sorted = [...values].filter((value) => value >= 1 && value <= total).sort((a, b) => a - b);
+  const pages: Array<number | "ellipsis"> = [];
+  sorted.forEach((value, index) => {
+    if (index && value - sorted[index - 1] > 1) pages.push("ellipsis");
+    pages.push(value);
+  });
+  return pages;
+}
 
-  function updateQuery(value: string) {
-    setQuery(value);
-    setPage(1);
-  }
+export function BroadcastList({
+  broadcasts,
+  pagination,
+  filterState,
+}: {
+  broadcasts: BroadcastView[];
+  pagination: Pagination;
+  filterState?: FilterState;
+}) {
+  const first = pagination.total ? (pagination.page - 1) * pagination.limit + 1 : 0;
+  const last = Math.min(pagination.page * pagination.limit, pagination.total);
 
   return (
     <div className="grid min-w-0 gap-4">
-      <label className="grid gap-2 text-sm font-medium text-ink">
-        <span className="sr-only">Search broadcasts</span>
-        <input className="h-11 rounded-md border border-line bg-surface px-3 outline-none focus:border-eye focus:ring-2 focus:ring-eye/20" placeholder="Search broadcasts by title, reference, author, or location…" value={query} onChange={(event) => updateQuery(event.target.value)} />
-      </label>
-
-      {!visible.length ? <ConsoleEmptyState title="No broadcasts found" detail="Adjust the search or filters to see broadcasts in your jurisdiction." /> : (
+      {!broadcasts.length ? <ConsoleEmptyState title="No broadcasts found" detail="Adjust the search or filters to see broadcasts in your jurisdiction." /> : (
         <>
           <div className="hidden overflow-x-auto xl:block">
-            <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
+            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
               <thead className="bg-surfaceMuted text-xs uppercase text-muted">
                 <tr>
-                  <th className="w-[22%] px-4 py-3">Broadcast</th>
-                  <th className="w-[14%] px-4 py-3">Author</th>
-                  <th className="w-[9%] px-4 py-3">Type</th>
-                  <th className="w-[16%] px-4 py-3">Target</th>
-                  <th className="w-[10%] px-4 py-3">Status</th>
-                  <th className="w-[9%] px-4 py-3">Delivery</th>
+                  <th className="w-[25%] px-4 py-3">Broadcast</th>
+                  <th className="w-[15%] px-4 py-3">Author</th>
+                  <th className="w-[11%] px-4 py-3">Type</th>
+                  <th className="w-[18%] px-4 py-3">Target</th>
+                  <th className="w-[11%] px-4 py-3">Status</th>
                   <th className="w-[20%] px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {visible.map((broadcast) => {
+                {broadcasts.map((broadcast) => {
                   const priority = humanPriority(broadcast.severity);
                   return (
                     <tr key={broadcast.id} className="align-middle hover:bg-surfaceMuted/40">
@@ -72,7 +79,6 @@ export function BroadcastList({ broadcasts }: { broadcasts: BroadcastView[] }) {
                       <td className="px-4 py-3"><span className="rounded bg-surfaceMuted px-2 py-1 text-xs font-medium">{compactBroadcastType(broadcast.type)}</span></td>
                       <td className="break-words px-4 py-3 text-muted">{broadcast.target}</td>
                       <td className="px-4 py-3"><StatusBadge tone={broadcast.status === "Published" || broadcast.status === "Active" ? "success" : "info"}>{broadcast.status}</StatusBadge></td>
-                      <td className="px-4 py-3"><StatusBadge tone={deliveryTone(broadcast.delivery)}>{broadcast.delivery}</StatusBadge></td>
                       <td className="px-4 py-3"><BroadcastListActions broadcastId={broadcast.id} status={broadcast.status} adminVerified={broadcast.adminVerified} authorLabel={broadcast.authorLabel} /></td>
                     </tr>
                   );
@@ -82,7 +88,7 @@ export function BroadcastList({ broadcasts }: { broadcasts: BroadcastView[] }) {
           </div>
 
           <div className="grid gap-3 xl:hidden">
-            {visible.map((broadcast) => {
+            {broadcasts.map((broadcast) => {
               const priority = humanPriority(broadcast.severity);
               return (
                 <article key={broadcast.id} className="min-w-0 rounded-lg border border-line bg-surfaceMuted p-4">
@@ -97,24 +103,26 @@ export function BroadcastList({ broadcasts }: { broadcasts: BroadcastView[] }) {
                     <div><dt className="text-xs uppercase text-muted">Author</dt><dd className="mt-1 break-words">{broadcastAuthor(broadcast)}</dd></div>
                     <div><dt className="text-xs uppercase text-muted">Type</dt><dd className="mt-1">{compactBroadcastType(broadcast.type)}</dd></div>
                     <div><dt className="text-xs uppercase text-muted">Target</dt><dd className="mt-1 break-words">{broadcast.target}</dd></div>
-                    <div><dt className="text-xs uppercase text-muted">Status / delivery</dt><dd className="mt-1">{broadcast.status} · {broadcast.delivery}</dd></div>
+                    <div><dt className="text-xs uppercase text-muted">Status</dt><dd className="mt-1">{broadcast.status}</dd></div>
                   </dl>
                   <div className="mt-4 border-t border-line pt-4"><BroadcastListActions broadcastId={broadcast.id} status={broadcast.status} adminVerified={broadcast.adminVerified} authorLabel={broadcast.authorLabel} /></div>
                 </article>
               );
             })}
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm">
-            <p className="text-muted">Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, matches.length)} of {matches.length}</p>
-            <div className="flex items-center gap-2">
-              <button className="rounded-md border border-line px-3 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-              <span className="min-w-20 text-center">Page {currentPage} of {pageCount}</span>
-              <button className="rounded-md border border-line px-3 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</button>
-            </div>
-          </div>
         </>
       )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm">
+        <p className="text-muted">Showing {first}–{last} of {pagination.total}</p>
+        <nav className="flex items-center gap-2" aria-label="Broadcast pages">
+          {pagination.page > 1 ? <Link className="rounded-md border border-line px-3 py-2 font-medium" href={pageHref(pagination.page - 1, filterState)}>Previous</Link> : <span className="rounded-md border border-line px-3 py-2 text-muted opacity-50">Previous</span>}
+          {visiblePages(pagination.page, pagination.pageCount).map((page, index) => page === "ellipsis"
+            ? <span key={`ellipsis-${index}`} className="px-1 text-muted">…</span>
+            : <Link key={page} aria-current={page === pagination.page ? "page" : undefined} className={`min-w-9 rounded-md border px-3 py-2 text-center font-semibold ${page === pagination.page ? "border-eye bg-eye text-white" : "border-line text-ink"}`} href={pageHref(page, filterState)}>{page}</Link>)}
+          {pagination.page < pagination.pageCount ? <Link className="rounded-md border border-line px-3 py-2 font-medium" href={pageHref(pagination.page + 1, filterState)}>Next</Link> : <span className="rounded-md border border-line px-3 py-2 text-muted opacity-50">Next</span>}
+        </nav>
+      </div>
     </div>
   );
 }

@@ -57,4 +57,13 @@ describe("Report Details presentation", () => {
     expect(actions).toContain("Select agency…");
     expect(detail).toContain("agencies={agencies}");
   });
+
+  it("keeps only monitored admin overrides and requires confirmation details", () => {
+    const actions = readFileSync(resolve(__dirname, "../../components/incident-admin-actions.tsx"), "utf8");
+    expect(actions.includes("Mark received")).toBe(false);
+    expect(actions.includes("Mark responding")).toBe(false);
+    expect(actions).toContain("Reassign agency");
+    expect(actions).toContain("Resolution summary");
+    expect(actions).toContain('role="dialog"');
+  });
 });

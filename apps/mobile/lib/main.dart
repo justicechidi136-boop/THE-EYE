@@ -183,8 +183,10 @@ import "theme/theme_provider.dart";
 import "widgets/section_card.dart";
 
 final theEyeApiUrl = TheEyeApiConfig.resolveBaseUrl();
-const theEyeAccessToken =
-    String.fromEnvironment("THE_EYE_ACCESS_TOKEN", defaultValue: "");
+const theEyeAccessToken = String.fromEnvironment(
+  "THE_EYE_ACCESS_TOKEN",
+  defaultValue: "",
+);
 
 final GlobalKey<NavigatorState> theEyeNavigatorKey =
     GlobalKey<NavigatorState>();
@@ -195,10 +197,13 @@ AppController appOf(BuildContext context) {
   return session as AppController;
 }
 
-Widget _buildActiveEmergencyRoute(BuildContext context,
-    {String? routeIncidentId}) {
+Widget _buildActiveEmergencyRoute(
+  BuildContext context, {
+  String? routeIncidentId,
+}) {
   final args = ModalRoute.of(context)?.settings.arguments;
-  final incidentId = routeIncidentId ??
+  final incidentId =
+      routeIncidentId ??
       (args is Map ? args["incidentId"] as String? : args as String?) ??
       "";
   final silent = args is Map ? args["silent"] == true : false;
@@ -257,14 +262,14 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
           const CreateCommunityPostScreen(),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          )),
+          position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+              .animate(
+                CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                  reverseCurve: Curves.easeInCubic,
+                ),
+              ),
           child: child,
         );
       },
@@ -300,8 +305,9 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
       name != "/active-emergency/none") {
     final remainder = name.substring("/active-emergency/".length).trim();
     if (remainder.endsWith("/messages")) {
-      final incidentId =
-          remainder.substring(0, remainder.length - "/messages".length).trim();
+      final incidentId = remainder
+          .substring(0, remainder.length - "/messages".length)
+          .trim();
       if (incidentId.isEmpty) return null;
       final messageArgs = settings.arguments is Map
           ? Map<String, dynamic>.from(settings.arguments as Map)
@@ -319,7 +325,8 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
             reportedAt: messageArgs["reportedAt"] is DateTime
                 ? messageArgs["reportedAt"] as DateTime
                 : DateTime.tryParse(
-                    messageArgs["reportedAt"]?.toString() ?? ""),
+                    messageArgs["reportedAt"]?.toString() ?? "",
+                  ),
             confirmStillOngoing: messageArgs["confirmStillOngoing"] == true,
             confirmResolved: messageArgs["confirmResolved"] == true,
           );
@@ -335,10 +342,8 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
     }
     return MaterialPageRoute(
       settings: settings,
-      builder: (context) => _buildActiveEmergencyRoute(
-        context,
-        routeIncidentId: incidentId,
-      ),
+      builder: (context) =>
+          _buildActiveEmergencyRoute(context, routeIncidentId: incidentId),
     );
   }
   final broadcastRoute = resolveBroadcastRoute(
@@ -434,7 +439,8 @@ Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
 
 Uri mapsUri(double latitude, double longitude) {
   return Uri.parse(
-      "https://www.google.com/maps/search/?api=1&query=$latitude,$longitude");
+    "https://www.google.com/maps/search/?api=1&query=$latitude,$longitude",
+  );
 }
 
 Future<void> openMaps(double latitude, double longitude) async {
@@ -461,8 +467,11 @@ String safeBroadcastPublishErrorLog(Object error, StackTrace stackTrace) {
   return "${error.runtimeType}: $redactedMessage\n$stackHead";
 }
 
-void showAppSnackBar(BuildContext context, String message,
-    {bool isError = false}) {
+void showAppSnackBar(
+  BuildContext context,
+  String message, {
+  bool isError = false,
+}) {
   final messenger = ScaffoldMessenger.maybeOf(context);
   if (messenger == null) return;
   messenger.hideCurrentSnackBar();
@@ -480,8 +489,9 @@ String formatEvidenceTimestamp(DateTime value) {
   final local = value.toLocal();
   final date =
       "${local.day.toString().padLeft(2, "0")}/${local.month.toString().padLeft(2, "0")}/${local.year}";
-  final hour =
-      local.hour > 12 ? local.hour - 12 : (local.hour == 0 ? 12 : local.hour);
+  final hour = local.hour > 12
+      ? local.hour - 12
+      : (local.hour == 0 ? 12 : local.hour);
   final minute = local.minute.toString().padLeft(2, "0");
   final suffix = local.hour >= 12 ? "PM" : "AM";
   return "$date $hour:$minute $suffix";
@@ -541,10 +551,7 @@ Future<void> main() async {
       }
     }
 
-    assertMobileApiBaseUrlMatchesFlavor(
-      AppFlavorConfig.current,
-      theEyeApiUrl,
-    );
+    assertMobileApiBaseUrlMatchesFlavor(AppFlavorConfig.current, theEyeApiUrl);
     StartupDiagnostics.checkpoint(
       "STARTUP 3: API base URL ${AppFlavorConfig.current.name} -> $theEyeApiUrl",
     );
@@ -609,19 +616,24 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
 
     final pendingStore = await SharedPreferencesPendingSubmissionStore.create()
         .timeout(const Duration(seconds: 5));
-    final authSessionStore = await SecureAuthSessionStore.create()
-        .timeout(const Duration(seconds: 5));
+    final authSessionStore = await SecureAuthSessionStore.create().timeout(
+      const Duration(seconds: 5),
+    );
     final authPersistencePreferenceStore =
-        await AuthPersistencePreferenceStore.create()
-            .timeout(const Duration(seconds: 5));
-    await authPersistencePreferenceStore
-        .applyColdLaunchPolicy(authSessionStore);
+        await AuthPersistencePreferenceStore.create().timeout(
+          const Duration(seconds: 5),
+        );
+    await authPersistencePreferenceStore.applyColdLaunchPolicy(
+      authSessionStore,
+    );
     final vehicleGarageStore =
-        await SharedPreferencesVehicleGarageStore.create()
-            .timeout(const Duration(seconds: 5));
+        await SharedPreferencesVehicleGarageStore.create().timeout(
+          const Duration(seconds: 5),
+        );
     final languageRegionPreferenceStore =
-        await LanguageRegionPreferenceStore.create()
-            .timeout(const Duration(seconds: 5));
+        await LanguageRegionPreferenceStore.create().timeout(
+          const Duration(seconds: 5),
+        );
     final initialLocale = TheEyeLocaleCatalog.resolvePreferredLocale(
       cachedLocale: languageRegionPreferenceStore.preferredLocale,
       deviceLocales: WidgetsBinding.instance.platformDispatcher.locales,
@@ -713,7 +725,8 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
   }
 
   static Future<void> _initializeDeferredServices(
-      TheEyeAppDependencies deps) async {
+    TheEyeAppDependencies deps,
+  ) async {
     StartupDiagnostics.checkpoint("STARTUP 06: deferred services starting");
 
     try {
@@ -721,13 +734,14 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
       StartupDiagnostics.checkpoint("STARTUP 07: connectivity ready");
     } catch (error) {
       StartupDiagnostics.checkpoint(
-          "STARTUP 07: connectivity skipped ($error)");
+        "STARTUP 07: connectivity skipped ($error)",
+      );
     }
 
     try {
-      await deps.pushNotifications
-          .initialize()
-          .timeout(const Duration(seconds: 15));
+      await deps.pushNotifications.initialize().timeout(
+        const Duration(seconds: 15),
+      );
     } catch (error) {
       StartupDiagnostics.checkpoint("STARTUP 3: push service skipped ($error)");
     }
@@ -735,12 +749,13 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
     deps.retryCoordinator.start();
 
     try {
-      await deps.controller
-          .refreshPendingDrafts()
-          .timeout(const Duration(seconds: 5));
+      await deps.controller.refreshPendingDrafts().timeout(
+        const Duration(seconds: 5),
+      );
     } catch (error) {
       StartupDiagnostics.checkpoint(
-          "STARTUP 09: pending draft refresh skipped ($error)");
+        "STARTUP 09: pending draft refresh skipped ($error)",
+      );
     }
 
     StartupDiagnostics.checkpoint("STARTUP 09: deferred services finished");
@@ -879,40 +894,40 @@ class StartupFailureScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline,
-                  color: BrandColors.danger, size: 48),
+              const Icon(
+                Icons.error_outline,
+                color: BrandColors.danger,
+                size: 48,
+              ),
               const SizedBox(height: 16),
               Text(
                 "THE EYE could not start",
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 12),
               Text(
                 "Restart the app. If this continues, reinstall the latest build.",
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: context.eyeMutedText,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: context.eyeMutedText),
               ),
               if (error != null) ...[
                 const SizedBox(height: 12),
                 Text(
                   "$error",
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: context.eyeMutedText,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: context.eyeMutedText),
                 ),
               ],
               if (onRetry != null) ...[
                 const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: onRetry,
-                  child: const Text("Retry"),
-                ),
+                FilledButton(onPressed: onRetry, child: const Text("Retry")),
               ],
             ],
           ),
@@ -923,8 +938,11 @@ class StartupFailureScreen extends StatelessWidget {
 }
 
 class TheEyeApp extends StatefulWidget {
-  const TheEyeApp(
-      {required this.controller, required this.pushNotifications, super.key});
+  const TheEyeApp({
+    required this.controller,
+    required this.pushNotifications,
+    super.key,
+  });
 
   final AppController controller;
   final PushNotificationService pushNotifications;
@@ -949,14 +967,14 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pushNavigationSubscription =
-        widget.pushNotifications.navigationStream.listen((request) {
-      unawaited(_handlePushNavigation(request));
-    });
-    _dangerAlertSubscription =
-        widget.pushNotifications.dangerAlertStream.listen((alert) {
-      unawaited(_presentDangerAlert(alert));
-    });
+    _pushNavigationSubscription = widget.pushNotifications.navigationStream
+        .listen((request) {
+          unawaited(_handlePushNavigation(request));
+        });
+    _dangerAlertSubscription = widget.pushNotifications.dangerAlertStream
+        .listen((alert) {
+          unawaited(_presentDangerAlert(alert));
+        });
     unawaited(_reportTrustedDangerLocation());
   }
 
@@ -980,11 +998,13 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
     final context = theEyeNavigatorKey.currentContext;
     if (context == null) return;
     _dangerAlertVisible = true;
-    unawaited(_dangerAudio.playAutomatic(
-      alert,
-      locale: Localizations.localeOf(context).toLanguageTag(),
-      loadOriginalVoice: () => _loadOriginalVoice(alert),
-    ));
+    unawaited(
+      _dangerAudio.playAutomatic(
+        alert,
+        locale: Localizations.localeOf(context).toLanguageTag(),
+        loadOriginalVoice: () => _loadOriginalVoice(alert),
+      ),
+    );
     final view = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -997,19 +1017,16 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
             size: 56,
             semanticLabel: "Red danger triangle",
           ),
-          title: const Text(
-            "DANGER ALERT",
-            textAlign: TextAlign.center,
-          ),
+          title: const Text("DANGER ALERT", textAlign: TextAlign.center),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 alert.dangerType.toUpperCase(),
                 textAlign: TextAlign.center,
-                style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  dialogContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               Text(alert.area, textAlign: TextAlign.center),
@@ -1105,17 +1122,14 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
           location.accuracyMeters! > 150) {
         return;
       }
-      await controller.apiClient.postJson(
-        TheEyeApiPaths.dangerTriggerLocationEvaluations,
-        {
-          "latitude": location.latitude,
-          "longitude": location.longitude,
-          "accuracyMeters": location.accuracyMeters,
-          "capturedAt": location.capturedAt!.toUtc().toIso8601String(),
-          "source": "freshGps",
-        },
-        accessToken: token,
-      );
+      await controller.apiClient
+          .postJson(TheEyeApiPaths.dangerTriggerLocationEvaluations, {
+            "latitude": location.latitude,
+            "longitude": location.longitude,
+            "accuracyMeters": location.accuracyMeters,
+            "capturedAt": location.capturedAt!.toUtc().toIso8601String(),
+            "source": "freshGps",
+          }, accessToken: token);
     } catch (_) {
       // Foreground location evaluation is best-effort and never blocks the app.
     } finally {
@@ -1149,8 +1163,10 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
     if (request.route.startsWith("/active-emergency/") &&
         request.route.endsWith("/messages")) {
       final incidentId = request.route
-          .substring("/active-emergency/".length,
-              request.route.length - "/messages".length)
+          .substring(
+            "/active-emergency/".length,
+            request.route.length - "/messages".length,
+          )
           .trim();
       if (incidentId.isEmpty) return;
       navigator.pushNamed("/active-emergency/$incidentId/messages");
@@ -1160,8 +1176,10 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
     if (request.route.startsWith("/incident-detail/") &&
         request.route.endsWith("/messages")) {
       final incidentId = request.route
-          .substring("/incident-detail/".length,
-              request.route.length - "/messages".length)
+          .substring(
+            "/incident-detail/".length,
+            request.route.length - "/messages".length,
+          )
           .trim();
       if (incidentId.isEmpty) return;
       navigator.pushNamed("/incident-detail/$incidentId/messages");
@@ -1169,8 +1187,9 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
     }
 
     if (request.route.startsWith("/danger-trigger/events/")) {
-      final eventId =
-          request.route.substring("/danger-trigger/events/".length).trim();
+      final eventId = request.route
+          .substring("/danger-trigger/events/".length)
+          .trim();
       if (eventId.isEmpty) return;
       navigator.pushNamed("/danger-trigger/alert", arguments: eventId);
       return;
@@ -1184,8 +1203,9 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
     }
 
     if (request.route == "/active-emergency") {
-      final currentRoute =
-          ModalRoute.of(theEyeNavigatorKey.currentContext!)?.settings.name;
+      final currentRoute = ModalRoute.of(
+        theEyeNavigatorKey.currentContext!,
+      )?.settings.name;
       if (currentRoute != null &&
           currentRoute.startsWith("/active-emergency")) {
         return;
@@ -1214,10 +1234,7 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
       navigator.pushNamedAndRemoveUntil(
         "/active-emergency/$incidentId",
         (existing) => existing.isFirst || existing.settings.name == "/home",
-        arguments: {
-          "incidentId": incidentId,
-          "silent": request.silent,
-        },
+        arguments: {"incidentId": incidentId, "silent": request.silent},
       );
       return;
     }
@@ -1275,8 +1292,8 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/": (_) => const SplashScreen(),
               "/login": (_) => const LoginRegisterScreen(),
               "/account-recovery": (context) => AccountRecoveryRequestScreen(
-                    authService: appOf(context).authService,
-                  ),
+                authService: appOf(context).authService,
+              ),
               "/account-recovery/complete": (context) {
                 final token =
                     ModalRoute.of(context)?.settings.arguments as String? ?? "";
@@ -1285,19 +1302,22 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                   token: token,
                   authService: controller.authService,
                   socialAuthService: controller.socialAuthService,
-                  onRecoveryComplete: (session,
-                      {required profileComplete}) async {
-                    await controller.setSession(session);
-                    if (!profileComplete) {
-                      await controller.loadCitizenProfile(forceRefresh: true);
-                    }
-                  },
+                  onRecoveryComplete:
+                      (session, {required profileComplete}) async {
+                        await controller.setSession(session);
+                        if (!profileComplete) {
+                          await controller.loadCitizenProfile(
+                            forceRefresh: true,
+                          );
+                        }
+                      },
                 );
               },
               "/register": (_) => const EmailRegistrationScreen(),
               "/otp-verification": (context) {
-                final args = ModalRoute.of(context)?.settings.arguments
-                    as OtpVerificationArgs?;
+                final args =
+                    ModalRoute.of(context)?.settings.arguments
+                        as OtpVerificationArgs?;
                 return OtpVerificationScreen(args: args);
               },
               "/home": (_) => const HomeScreen(),
@@ -1346,8 +1366,8 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                       final controller = appOf(context);
                       return controller.activeEmergencyService
                           .listActiveEmergencySnapshots(
-                        controller.accessToken ?? "",
-                      );
+                            controller.accessToken ?? "",
+                          );
                     },
                   ),
               "/active-emergency/none": (_) => const NoActiveEmergencyScreen(),
@@ -1364,9 +1384,9 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/family": (_) => const FamilySafetyCircleScreen(),
               "/smartwatch": (_) => const SmartwatchDeviceScreen(),
               "/danger-trigger": (context) => DangerTriggerScreen(
-                    apiClient: appOf(context).apiClient,
-                    accessTokenProvider: () => appOf(context).accessToken,
-                  ),
+                apiClient: appOf(context).apiClient,
+                accessTokenProvider: () => appOf(context).accessToken,
+              ),
               "/danger-trigger/alert": (context) {
                 final eventId =
                     ModalRoute.of(context)?.settings.arguments as String? ?? "";
@@ -1415,11 +1435,13 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               },
               "/neighborhood-watch/post": (context) {
                 final controller = appOf(context);
-                final args = ModalRoute.of(context)?.settings.arguments
-                    as CommunityPostDetailRouteArgs?;
+                final args =
+                    ModalRoute.of(context)?.settings.arguments
+                        as CommunityPostDetailRouteArgs?;
                 return CommunityPostDetailScreen(
                   accessToken: controller.accessToken ?? "",
-                  args: args ??
+                  args:
+                      args ??
                       CommunityPostDetailRouteArgs(
                         postId: "",
                         postTitle: "Post",
@@ -1431,12 +1453,14 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               },
               "/neighborhood-watch/report": (context) {
                 final controller = appOf(context);
-                final args = ModalRoute.of(context)?.settings.arguments
-                    as CommunityReportRouteArgs?;
+                final args =
+                    ModalRoute.of(context)?.settings.arguments
+                        as CommunityReportRouteArgs?;
                 return CommunityReportScreen(
                   accessToken: controller.accessToken ?? "",
                   apiClient: controller.apiClient,
-                  args: args ??
+                  args:
+                      args ??
                       CommunityReportRouteArgs(
                         communityId: controller.selectedCommunity?.id ?? "",
                         targetType: "Community",
@@ -1457,17 +1481,15 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
               "/settings/language-region": (_) =>
                   const LanguageRegionSettingsScreen(),
               "/support": (context) => SupportHomeScreen(
-                    accessToken: appOf(context).accessToken ?? "",
-                    onSendSos: () => _openSos(context),
-                    onOpenActiveEmergency: () => unawaited(
-                      ActiveEmergencyNavigation.open(
-                        context,
-                        appOf(context),
-                      ),
-                    ),
-                  ),
+                accessToken: appOf(context).accessToken ?? "",
+                onSendSos: () => _openSos(context),
+                onOpenActiveEmergency: () => unawaited(
+                  ActiveEmergencyNavigation.open(context, appOf(context)),
+                ),
+              ),
               "/support/new": (context) {
-                final prefill = ModalRoute.of(context)?.settings.arguments
+                final prefill =
+                    ModalRoute.of(context)?.settings.arguments
                         as SupportNewChatPrefill? ??
                     const SupportNewChatPrefill();
                 return SupportNewChatScreen(
@@ -1477,17 +1499,19 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 );
               },
               "/support/chats": (context) => SupportChatListScreen(
-                    accessToken: appOf(context).accessToken ?? "",
-                    apiClient: appOf(context).apiClient,
-                  ),
+                accessToken: appOf(context).accessToken ?? "",
+                apiClient: appOf(context).apiClient,
+              ),
               "/support/faq": (_) => const SupportFaqScreen(),
               "/support/conversation": (context) {
-                final args = ModalRoute.of(context)?.settings.arguments
-                    as SupportConversationRouteArgs?;
+                final args =
+                    ModalRoute.of(context)?.settings.arguments
+                        as SupportConversationRouteArgs?;
                 final controller = appOf(context);
                 if (args == null) {
                   return const Scaffold(
-                      body: Center(child: Text("Conversation not found")));
+                    body: Center(child: Text("Conversation not found")),
+                  );
                 }
                 return SupportConversationScreen(
                   accessToken: controller.accessToken ?? "",
@@ -1506,8 +1530,9 @@ class _TheEyeAppState extends State<TheEyeApp> with WidgetsBindingObserver {
                 );
               },
               "/account-status": (context) {
-                final args = ModalRoute.of(context)?.settings.arguments
-                    as AccountStatusArgs?;
+                final args =
+                    ModalRoute.of(context)?.settings.arguments
+                        as AccountStatusArgs?;
                 return AccountStatusScreen(
                   title: args?.title ?? "Account unavailable",
                   message:
@@ -1532,8 +1557,9 @@ ThemeData buildTheme(bool highContrast) {
   final textTheme = _montserratTextTheme(baseTextTheme);
   final scheme = highContrast
       ? ColorScheme.fromSeed(
-              seedColor: Colors.black, brightness: Brightness.light)
-          .copyWith(
+          seedColor: Colors.black,
+          brightness: Brightness.light,
+        ).copyWith(
           primary: Colors.black,
           onPrimary: Colors.white,
           secondary: BrandColors.orange,
@@ -1590,21 +1616,22 @@ ThemeData buildTheme(bool highContrast) {
       ),
     ),
     cardTheme: CardThemeData(
-        color: BrandColors.lightSurface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: BrandColors.lightBorder))),
+      color: BrandColors.lightSurface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: BrandColors.lightBorder),
+      ),
+    ),
   );
 }
 
 ThemeData buildDarkTheme(bool highContrast) {
   final baseTextTheme = ThemeData.dark().textTheme;
   const semantics = EyeSemanticColors.dark;
-  final textTheme = _montserratTextTheme(baseTextTheme).apply(
-    bodyColor: semantics.bodyText,
-    displayColor: semantics.bodyText,
-  );
+  final textTheme = _montserratTextTheme(
+    baseTextTheme,
+  ).apply(bodyColor: semantics.bodyText, displayColor: semantics.bodyText);
   final scheme = ColorScheme.fromSeed(
     seedColor: BrandColors.orange,
     brightness: Brightness.dark,
@@ -1654,11 +1681,13 @@ ThemeData buildDarkTheme(bool highContrast) {
       ),
     ),
     cardTheme: CardThemeData(
-        color: BrandColors.darkSurface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: BrandColors.darkBorder))),
+      color: BrandColors.darkSurface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: BrandColors.darkBorder),
+      ),
+    ),
     listTileTheme: ListTileThemeData(
       iconColor: semantics.interactiveText,
       textColor: semantics.bodyText,
@@ -1690,10 +1719,11 @@ ThemeData buildDarkTheme(bool highContrast) {
   );
 }
 
-typedef BackgroundPushContextPersister = Future<void> Function({
-  required String accessToken,
-  required String apiBaseUrl,
-});
+typedef BackgroundPushContextPersister =
+    Future<void> Function({
+      required String accessToken,
+      required String apiBaseUrl,
+    });
 
 class AppController extends SessionAccessor
     implements
@@ -1715,36 +1745,40 @@ class AppController extends SessionAccessor
     required VehicleGarageStore vehicleGarageStore,
     Locale initialLocale = TheEyeLocaleCatalog.defaultLocale,
     LanguageRegionPreferenceStore? languageRegionPreferenceStore,
-  })  : _apiClient = apiClient,
-        _submissionService = submissionService,
-        _historyService = IncidentHistoryService(apiClient: apiClient),
-        _notificationInboxService =
-            NotificationInboxService(apiClient: apiClient),
-        _broadcastFeedService = BroadcastFeedService(apiClient: apiClient),
-        _broadcastSubmissionService =
-            BroadcastSubmissionService(apiClient: apiClient),
-        _broadcastMediaUploadService =
-            BroadcastMediaUploadService(apiClient: apiClient),
-        _neighborhoodWatchService =
-            NeighborhoodWatchService(apiClient: apiClient),
-        _communityMediaUploadService =
-            CommunityMediaUploadService(apiClient: apiClient),
-        _connectivity = connectivity,
-        _authService = authService,
-        _socialAuthService = socialAuthService,
-        _authSessionStore = authSessionStore,
-        _authPersistencePreferenceStore = authPersistencePreferenceStore,
-        _biometricAuthService = biometricAuthService ?? BiometricAuthService(),
-        _biometricPreferenceStore =
-            biometricPreferenceStore ?? InMemoryBiometricPreferenceStore(),
-        _backgroundPushContextPersister =
-            backgroundPushContextPersister ?? persistBackgroundPushContext,
-        _remainSignedIn =
-            authPersistencePreferenceStore?.remainSignedIn ?? true,
-        _themeProvider = themeProvider,
-        _vehicleGarageStore = vehicleGarageStore,
-        _locale = initialLocale,
-        _languageRegionPreferenceStore = languageRegionPreferenceStore {
+  }) : _apiClient = apiClient,
+       _submissionService = submissionService,
+       _historyService = IncidentHistoryService(apiClient: apiClient),
+       _notificationInboxService = NotificationInboxService(
+         apiClient: apiClient,
+       ),
+       _broadcastFeedService = BroadcastFeedService(apiClient: apiClient),
+       _broadcastSubmissionService = BroadcastSubmissionService(
+         apiClient: apiClient,
+       ),
+       _broadcastMediaUploadService = BroadcastMediaUploadService(
+         apiClient: apiClient,
+       ),
+       _neighborhoodWatchService = NeighborhoodWatchService(
+         apiClient: apiClient,
+       ),
+       _communityMediaUploadService = CommunityMediaUploadService(
+         apiClient: apiClient,
+       ),
+       _connectivity = connectivity,
+       _authService = authService,
+       _socialAuthService = socialAuthService,
+       _authSessionStore = authSessionStore,
+       _authPersistencePreferenceStore = authPersistencePreferenceStore,
+       _biometricAuthService = biometricAuthService ?? BiometricAuthService(),
+       _biometricPreferenceStore =
+           biometricPreferenceStore ?? InMemoryBiometricPreferenceStore(),
+       _backgroundPushContextPersister =
+           backgroundPushContextPersister ?? persistBackgroundPushContext,
+       _remainSignedIn = authPersistencePreferenceStore?.remainSignedIn ?? true,
+       _themeProvider = themeProvider,
+       _vehicleGarageStore = vehicleGarageStore,
+       _locale = initialLocale,
+       _languageRegionPreferenceStore = languageRegionPreferenceStore {
     _connectivity.addListener(_onConnectivityChanged);
     _themeProvider.addListener(_onThemeChanged);
     unawaited(_loadVehicleGarageCache());
@@ -1901,8 +1935,9 @@ class AppController extends SessionAccessor
     _biometricUnlockRequired =
         session != null && _biometricPreference.hasAccountBinding;
     _cachedSession = _biometricUnlockRequired ? null : session;
-    _sessionAccessToken =
-        _biometricUnlockRequired ? null : session?.accessToken;
+    _sessionAccessToken = _biometricUnlockRequired
+        ? null
+        : session?.accessToken;
     final store = await _languageRegionStore();
     _setLocaleCode(store.preferredLocale, notify: false);
     notifyListeners();
@@ -1937,8 +1972,9 @@ class AppController extends SessionAccessor
   Future<void> _reconcileBiometricBinding(String accessToken) async {
     if (!_biometricPreference.hasAccountBinding) return;
     try {
-      final profile =
-          await _apiClient.fetchCitizenProfile(accessToken: accessToken);
+      final profile = await _apiClient.fetchCitizenProfile(
+        accessToken: accessToken,
+      );
       _cachedCitizenProfile = profile;
       if (profile.id != _biometricPreference.accountId) {
         await disableBiometricUnlock(notify: false);
@@ -1964,8 +2000,10 @@ class AppController extends SessionAccessor
         _remainSignedIn = true;
       }
       await _biometricPreferenceStore.enableForAccount(profile.id);
-      _biometricPreference =
-          BiometricPreference(enabled: true, accountId: profile.id);
+      _biometricPreference = BiometricPreference(
+        enabled: true,
+        accountId: profile.id,
+      );
       notifyListeners();
       return BiometricAuthenticationStatus.success;
     } catch (_) {
@@ -2103,8 +2141,9 @@ class AppController extends SessionAccessor
           ..clear()
           ..addAll(deduplicateLogicalNotifications(page.items));
       } else {
-        final existingKeys =
-            notifications.map((item) => item.logicalEventKey).toSet();
+        final existingKeys = notifications
+            .map((item) => item.logicalEventKey)
+            .toSet();
         notifications.addAll(
           page.items.where(
             (item) => !existingKeys.contains(item.logicalEventKey),
@@ -2147,8 +2186,9 @@ class AppController extends SessionAccessor
         accessToken: accessToken!,
         cursor: notificationNextCursor,
       );
-      final existingKeys =
-          notifications.map((item) => item.logicalEventKey).toSet();
+      final existingKeys = notifications
+          .map((item) => item.logicalEventKey)
+          .toSet();
       notifications.addAll(
         page.items.where(
           (item) => !existingKeys.contains(item.logicalEventKey),
@@ -2171,13 +2211,17 @@ class AppController extends SessionAccessor
         accessToken: accessToken!,
         notificationId: notificationId,
       );
-      final index =
-          notifications.indexWhere((item) => item.id == notificationId);
+      final index = notifications.indexWhere(
+        (item) => item.id == notificationId,
+      );
       if (index >= 0) {
-        notifications[index] =
-            notifications[index].copyWith(read: true, deliveryStatus: "Read");
-        notificationUnreadCount =
-            notifications.where((item) => !item.read).length;
+        notifications[index] = notifications[index].copyWith(
+          read: true,
+          deliveryStatus: "Read",
+        );
+        notificationUnreadCount = notifications
+            .where((item) => !item.read)
+            .length;
       }
       notifyListeners();
     } on IncidentApiException catch (error) {
@@ -2191,8 +2235,10 @@ class AppController extends SessionAccessor
     try {
       await _notificationInboxService.markAllRead(accessToken: accessToken!);
       for (var index = 0; index < notifications.length; index++) {
-        notifications[index] =
-            notifications[index].copyWith(read: true, deliveryStatus: "Read");
+        notifications[index] = notifications[index].copyWith(
+          read: true,
+          deliveryStatus: "Read",
+        );
       }
       notificationUnreadCount = 0;
       notifyListeners();
@@ -2211,8 +2257,9 @@ class AppController extends SessionAccessor
   }) async {
     if (!isAuthenticated || accessToken == null) return;
     if (notificationId != null && notificationId.isNotEmpty) {
-      final existingIndex =
-          notifications.indexWhere((item) => item.id == notificationId);
+      final existingIndex = notifications.indexWhere(
+        (item) => item.id == notificationId,
+      );
       if (existingIndex >= 0) return;
       try {
         final item = await _notificationInboxService.getById(
@@ -2248,8 +2295,9 @@ class AppController extends SessionAccessor
     incidentLoadError = null;
     notifyListeners();
     try {
-      final rows =
-          await _historyService.listIncidents(accessToken: accessToken!);
+      final rows = await _historyService.listIncidents(
+        accessToken: accessToken!,
+      );
       incidents
         ..clear()
         ..addAll(
@@ -2332,12 +2380,12 @@ class AppController extends SessionAccessor
   }
 
   ActiveEmergencyService get activeEmergencyService =>
-      _activeEmergencyService ??= ActiveEmergencyService(
-        apiClient: _apiClient,
-      );
+      _activeEmergencyService ??= ActiveEmergencyService(apiClient: _apiClient);
 
-  Future<void> activateActiveEmergency(String incidentId,
-      {bool silent = false}) {
+  Future<void> activateActiveEmergency(
+    String incidentId, {
+    bool silent = false,
+  }) {
     return activeEmergencyService.activateIncident(incidentId, silent: silent);
   }
 
@@ -2384,8 +2432,9 @@ class AppController extends SessionAccessor
   }
 
   @override
-  Future<CitizenProfile?> loadCitizenProfile(
-      {bool forceRefresh = false}) async {
+  Future<CitizenProfile?> loadCitizenProfile({
+    bool forceRefresh = false,
+  }) async {
     if (!isAuthenticated || accessToken == null) {
       clearCitizenProfileCache();
       return null;
@@ -2393,8 +2442,9 @@ class AppController extends SessionAccessor
     if (!forceRefresh && _cachedCitizenProfile != null) {
       return _cachedCitizenProfile;
     }
-    final profile =
-        await _apiClient.fetchCitizenProfile(accessToken: accessToken!);
+    final profile = await _apiClient.fetchCitizenProfile(
+      accessToken: accessToken!,
+    );
     await (await _languageRegionStore()).saveFromProfile(profile);
     _cachedCitizenProfile = profile;
     _setLocaleFromProfile(profile, notify: false);
@@ -2404,7 +2454,8 @@ class AppController extends SessionAccessor
 
   @override
   Future<CitizenProfile> updateCitizenProfile(
-      Map<String, Object?> payload) async {
+    Map<String, Object?> payload,
+  ) async {
     final token = accessToken;
     if (token == null) {
       throw StateError("Authenticated session required to update profile");
@@ -2424,7 +2475,8 @@ class AppController extends SessionAccessor
   Future<void> clearSession({bool preserveBiometricUnlock = true}) async {
     final cacheScope = _notificationCacheScope;
     final persistedSession = await _authSessionStore.load();
-    final canLockForBiometrics = preserveBiometricUnlock &&
+    final canLockForBiometrics =
+        preserveBiometricUnlock &&
         _remainSignedIn &&
         _biometricPreference.hasAccountBinding &&
         persistedSession != null;
@@ -2537,8 +2589,9 @@ class AppController extends SessionAccessor
           ..addAll(page.items);
       } else {
         final known = communityFeed.map((item) => item.id).toSet();
-        communityFeed
-            .addAll(page.items.where((item) => !known.contains(item.id)));
+        communityFeed.addAll(
+          page.items.where((item) => !known.contains(item.id)),
+        );
       }
       communityFeedNextCursor = page.nextCursor;
     } on IncidentApiException catch (error) {
@@ -2580,7 +2633,9 @@ class AppController extends SessionAccessor
         );
         communityAlerts
           ..clear()
-          ..addAll(page.items.where((post) => const {
+          ..addAll(
+            page.items.where(
+              (post) => const {
                 "SuspiciousActivity",
                 "LocalWarning",
                 "RoadHazard",
@@ -2588,7 +2643,9 @@ class AppController extends SessionAccessor
                 "AccidentAlert",
                 "FireAlert",
                 "FloodWarning",
-              }.contains(post.type)));
+              }.contains(post.type),
+            ),
+          );
       } else {
         final page = await _neighborhoodWatchService.communityAlerts(
           accessToken: accessToken!,
@@ -2619,8 +2676,8 @@ class AppController extends SessionAccessor
       viewerReacted: !wasLiked,
       reactionCount: wasLiked
           ? (communityFeed[index].reactionCount > 0
-              ? communityFeed[index].reactionCount - 1
-              : 0)
+                ? communityFeed[index].reactionCount - 1
+                : 0)
           : communityFeed[index].reactionCount + 1,
     );
     notifyListeners();
@@ -2664,10 +2721,12 @@ class AppController extends SessionAccessor
     try {
       communityPatrols
         ..clear()
-        ..addAll(await _neighborhoodWatchService.listPatrols(
-          accessToken: accessToken!,
-          communityId: community.id,
-        ));
+        ..addAll(
+          await _neighborhoodWatchService.listPatrols(
+            accessToken: accessToken!,
+            communityId: community.id,
+          ),
+        );
     } on IncidentApiException catch (error) {
       communityPatrolError = error.userMessage;
     } catch (_) {
@@ -2781,8 +2840,9 @@ class AppController extends SessionAccessor
       );
       await loadCommunitiesFromApi(refresh: true);
       if (selectedCommunity?.id == community.id) {
-        final remaining =
-            communities.where((item) => item.isMember).toList(growable: false);
+        final remaining = communities
+            .where((item) => item.isMember)
+            .toList(growable: false);
         selectedCommunity = remaining.isEmpty ? null : remaining.first;
       }
       communityActionMessage = "You left the community";
@@ -3036,8 +3096,9 @@ class AppController extends SessionAccessor
     final index = broadcasts.indexWhere((item) => item.id == broadcastId);
     if (index >= 0 && !broadcasts[index].read) {
       broadcasts[index] = broadcasts[index].copyWith(read: true);
-      broadcastUnreadCount =
-          broadcastUnreadCount > 0 ? broadcastUnreadCount - 1 : 0;
+      broadcastUnreadCount = broadcastUnreadCount > 0
+          ? broadcastUnreadCount - 1
+          : 0;
       notifyListeners();
     }
     try {
@@ -3208,10 +3269,7 @@ class AppController extends SessionAccessor
           await _vehicleGarageStore.clearLegacyCarProfile();
         }
       }
-      final merged = _mergeRemoteVehicles(
-        remote,
-        previous: vehicles,
-      );
+      final merged = _mergeRemoteVehicles(remote, previous: vehicles);
       vehicles = merged;
       await _vehicleGarageStore.saveVehicles(vehicles);
       notifyListeners();
@@ -3238,17 +3296,21 @@ class AppController extends SessionAccessor
         if (profile.isPrimary) "isPrimary": true,
       },
     );
-    final merged =
-        _mergeRemoteVehicles([created], previous: vehicles, replace: false);
+    final merged = _mergeRemoteVehicles(
+      [created],
+      previous: vehicles,
+      replace: false,
+    );
     vehicles = _upsertVehicle(
-        merged,
-        _fromApiVehicle(created).copyWith(
-          imagePath: profile.photos.isNotEmpty
-              ? profile.photos.first.previewUrl
-              : profile.imagePath,
-          photos: profile.photos,
-          notes: profile.notes,
-        ));
+      merged,
+      _fromApiVehicle(created).copyWith(
+        imagePath: profile.photos.isNotEmpty
+            ? profile.photos.first.previewUrl
+            : profile.imagePath,
+        photos: profile.photos,
+        notes: profile.notes,
+      ),
+    );
     await _vehicleGarageStore.saveVehicles(vehicles);
     notifyListeners();
     return vehicles.firstWhere((item) => item.id == created.id);
@@ -3302,8 +3364,11 @@ class AppController extends SessionAccessor
       accessToken: token,
       vehicleId: vehicleId,
     );
-    vehicles =
-        _mergeRemoteVehicles([updated], previous: vehicles, replace: false);
+    vehicles = _mergeRemoteVehicles(
+      [updated],
+      previous: vehicles,
+      replace: false,
+    );
     await loadVehicleGarage(refresh: true);
   }
 
@@ -3314,8 +3379,9 @@ class AppController extends SessionAccessor
     }
     final api = _apiClient;
     await api.deleteMyVehicle(accessToken: token, vehicleId: vehicleId);
-    vehicles =
-        vehicles.where((item) => item.id != vehicleId).toList(growable: false);
+    vehicles = vehicles
+        .where((item) => item.id != vehicleId)
+        .toList(growable: false);
     await _vehicleGarageStore.saveVehicles(vehicles);
     notifyListeners();
     await loadVehicleGarage(refresh: true);
@@ -3328,39 +3394,44 @@ class AppController extends SessionAccessor
   }) {
     final previousById = {
       for (final item in previous)
-        if (item.id != null && item.id!.isNotEmpty) item.id!: item
+        if (item.id != null && item.id!.isNotEmpty) item.id!: item,
     };
     final previousByPlate = {
-      for (final item in previous) item.plateNumber.trim().toUpperCase(): item
+      for (final item in previous) item.plateNumber.trim().toUpperCase(): item,
     };
-    final remoteMapped = remote.map((item) {
-      final byId = previousById[item.id];
-      final byPlate = previousByPlate[item.plateNumber.trim().toUpperCase()];
-      final photos = item.photos
-          .map(
-            (photo) => CarPhotoRef(
-              id: photo.id,
-              objectKey: photo.objectKey,
-              contentType: photo.contentType,
-              angle: photo.angle,
-              sizeBytes: photo.sizeBytes,
-              sortOrder: photo.sortOrder,
-              createdAt: photo.createdAt,
-              previewUrl: photo.signedGetUrl,
-            ),
-          )
-          .toList(growable: false);
-      final resolvedPhotos = photos.isNotEmpty
-          ? photos
-          : (byId?.photos ?? byPlate?.photos ?? const <CarPhotoRef>[]);
-      final firstPhotoPreview =
-          resolvedPhotos.isNotEmpty ? resolvedPhotos.first.previewUrl : null;
-      return _fromApiVehicle(item).copyWith(
-        imagePath: firstPhotoPreview ?? byId?.imagePath ?? byPlate?.imagePath,
-        photos: resolvedPhotos,
-        notes: byId?.notes ?? byPlate?.notes,
-      );
-    }).toList(growable: false);
+    final remoteMapped = remote
+        .map((item) {
+          final byId = previousById[item.id];
+          final byPlate =
+              previousByPlate[item.plateNumber.trim().toUpperCase()];
+          final photos = item.photos
+              .map(
+                (photo) => CarPhotoRef(
+                  id: photo.id,
+                  objectKey: photo.objectKey,
+                  contentType: photo.contentType,
+                  angle: photo.angle,
+                  sizeBytes: photo.sizeBytes,
+                  sortOrder: photo.sortOrder,
+                  createdAt: photo.createdAt,
+                  previewUrl: photo.signedGetUrl,
+                ),
+              )
+              .toList(growable: false);
+          final resolvedPhotos = photos.isNotEmpty
+              ? photos
+              : (byId?.photos ?? byPlate?.photos ?? const <CarPhotoRef>[]);
+          final firstPhotoPreview = resolvedPhotos.isNotEmpty
+              ? resolvedPhotos.first.previewUrl
+              : null;
+          return _fromApiVehicle(item).copyWith(
+            imagePath:
+                firstPhotoPreview ?? byId?.imagePath ?? byPlate?.imagePath,
+            photos: resolvedPhotos,
+            notes: byId?.notes ?? byPlate?.notes,
+          );
+        })
+        .toList(growable: false);
     if (replace) return remoteMapped;
 
     final next = previous.toList(growable: true);
@@ -3422,14 +3493,16 @@ class AppController extends SessionAccessor
     final primaryCount = next.where((item) => item.isPrimary).length;
     if (primaryCount <= 1) return next;
     var found = false;
-    return next.map((item) {
-      if (!item.isPrimary) return item;
-      if (!found) {
-        found = true;
-        return item;
-      }
-      return item.copyWith(isPrimary: false);
-    }).toList(growable: false);
+    return next
+        .map((item) {
+          if (!item.isPrimary) return item;
+          if (!found) {
+            found = true;
+            return item;
+          }
+          return item.copyWith(isPrimary: false);
+        })
+        .toList(growable: false);
   }
 
   Future<void> saveCarProfile(CarProfile profile) async {
@@ -3518,15 +3591,13 @@ class AppController extends SessionAccessor
   }
 
   Future<void> handleRetryResults(
-      List<IncidentSubmissionResult> results) async {
+    List<IncidentSubmissionResult> results,
+  ) async {
     for (final result in results) {
       if (result.isSuccess && result.incidentId != null) {
         unawaited(loadIncidentsFromApi());
         unawaited(
-          activateActiveEmergency(
-            result.incidentId!,
-            silent: result.silent,
-          ),
+          activateActiveEmergency(result.incidentId!, silent: result.silent),
         );
       }
     }
@@ -3724,27 +3795,38 @@ class AccountStatusScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset(BrandAssets.lockupDarkBg,
-                    height: 64, semanticLabel: "The Eye"),
+                Image.asset(
+                  BrandAssets.lockupDarkBg,
+                  height: 64,
+                  semanticLabel: "The Eye",
+                ),
                 const SizedBox(height: 24),
-                Text(title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: BrandColors.command)),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: BrandColors.command,
+                  ),
+                ),
                 const SizedBox(height: 12),
-                Text(message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 16, color: BrandColors.command)),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: BrandColors.command,
+                  ),
+                ),
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: () =>
                       Navigator.of(context).pushReplacementNamed("/login"),
                   style: FilledButton.styleFrom(
-                      backgroundColor: BrandColors.accentHover,
-                      minimumSize: const Size.fromHeight(48)),
+                    backgroundColor: BrandColors.accentHover,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
                   child: const Text("Back to sign in"),
                 ),
               ],
@@ -3757,10 +3839,7 @@ class AccountStatusScreen extends StatelessWidget {
 }
 
 class LoginRegisterScreen extends StatefulWidget {
-  const LoginRegisterScreen({
-    super.key,
-    this.authService,
-  });
+  const LoginRegisterScreen({super.key, this.authService});
 
   final AuthService? authService;
 
@@ -3800,8 +3879,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     super.didChangeDependencies();
     if (!_loadedBiometricCapability) {
       _loadedBiometricCapability = true;
-      final scopedSession =
-          context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
+      final scopedSession = context
+          .dependOnInheritedWidgetOfExactType<AppScope>()
+          ?.notifier;
       if (scopedSession is AppController) {
         unawaited(_loadBiometricCapability(scopedSession));
       }
@@ -3838,9 +3918,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     final result = await appOf(context).unlockWithBiometrics();
     if (!mounted) return;
     if (result.isSuccess) {
-      Navigator.of(context).pushReplacementNamed(
-        result.profileComplete ? "/home" : "/profile",
-      );
+      Navigator.of(
+        context,
+      ).pushReplacementNamed(result.profileComplete ? "/home" : "/profile");
       return;
     }
     setState(() {
@@ -4031,16 +4111,19 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
         return;
       }
 
-      final result =
-          await authService.requestPasswordReset(_identifierController.text);
+      final result = await authService.requestPasswordReset(
+        _identifierController.text,
+      );
       if (!mounted) return;
       setState(() {
         if (result.isSuccess) {
-          formSuccess = result.userMessage ??
+          formSuccess =
+              result.userMessage ??
               "If an account matches that email, password-reset instructions have been sent.";
           formError = null;
         } else {
-          formError = result.userMessage ??
+          formError =
+              result.userMessage ??
               "We couldn’t process your request right now.";
           formSuccess = null;
         }
@@ -4060,10 +4143,12 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final scopedSession =
-        context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
+    final scopedSession = context
+        .dependOnInheritedWidgetOfExactType<AppScope>()
+        ?.notifier;
     final appController = scopedSession is AppController ? scopedSession : null;
-    final canSubmit = !submitting &&
+    final canSubmit =
+        !submitting &&
         !socialBusy &&
         _identifierController.text.trim().isNotEmpty &&
         _passwordController.text.isNotEmpty;
@@ -4101,8 +4186,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                   context,
                   hintText: "Enter your correct email",
                   errorText: identifierError,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
                 ),
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.username],
@@ -4127,8 +4214,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                   context,
                   hintText: "Enter password",
                   errorText: passwordError,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
                   suffixIcon: IconButton(
                     onPressed: () =>
                         setState(() => obscurePassword = !obscurePassword),
@@ -4171,8 +4260,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                 child: TextButton(
                   onPressed: (submitting || forgotPasswordBusy)
                       ? null
-                      : () =>
-                          Navigator.of(context).pushNamed("/account-recovery"),
+                      : () => Navigator.of(
+                          context,
+                        ).pushNamed("/account-recovery"),
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
@@ -4196,8 +4286,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                       padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle_outline,
-                              color: semantics.success),
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: semantics.success,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -4336,8 +4428,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
                         child: GestureDetector(
                           onTap: socialBusy || submitting
                               ? null
-                              : () =>
-                                  Navigator.of(context).pushNamed("/register"),
+                              : () => Navigator.of(
+                                  context,
+                                ).pushNamed("/register"),
                           child: Text(
                             "Create an account",
                             style: EyeTypography.linkFor(context),
@@ -4458,10 +4551,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
     );
   }
 
-  Widget _labeledField({
-    required String label,
-    required Widget field,
-  }) {
+  Widget _labeledField({required String label, required Widget field}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4482,7 +4572,8 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
-    final canSubmit = !submitting &&
+    final canSubmit =
+        !submitting &&
         _emailController.text.trim().isNotEmpty &&
         _firstNameController.text.trim().isNotEmpty &&
         _lastNameController.text.trim().isNotEmpty &&
@@ -4597,8 +4688,9 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                     hintText: "Re-enter password",
                     errorText: confirmPasswordError,
                     suffixIcon: IconButton(
-                      onPressed: () => setState(() =>
-                          obscureConfirmPassword = !obscureConfirmPassword),
+                      onPressed: () => setState(
+                        () => obscureConfirmPassword = !obscureConfirmPassword,
+                      ),
                       icon: Icon(
                         obscureConfirmPassword
                             ? Icons.visibility_off_outlined
@@ -4654,10 +4746,7 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
               Center(
                 child: Text.rich(
                   TextSpan(
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: semantics.bodyText,
-                    ),
+                    style: TextStyle(fontSize: 14, color: semantics.bodyText),
                     children: [
                       const TextSpan(text: "Already have an account? "),
                       WidgetSpan(
@@ -4666,8 +4755,9 @@ class _EmailRegistrationScreenState extends State<EmailRegistrationScreen> {
                         child: GestureDetector(
                           onTap: submitting
                               ? null
-                              : () => Navigator.of(context)
-                                  .pushReplacementNamed("/login"),
+                              : () => Navigator.of(
+                                  context,
+                                ).pushReplacementNamed("/login"),
                           child: Text(
                             "Log in",
                             style: EyeTypography.linkFor(context),
@@ -4722,7 +4812,8 @@ class _SocialSignInButton extends StatelessWidget {
             ? const SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2))
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -4775,8 +4866,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   void _startResendCountdown() {
     _resendTimer?.cancel();
-    setState(() =>
-        resendSecondsRemaining = AuthValidationRules.resendCooldownSeconds);
+    setState(
+      () => resendSecondsRemaining = AuthValidationRules.resendCooldownSeconds,
+    );
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       if (resendSecondsRemaining <= 1) {
@@ -4793,8 +4885,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Future<void> _verify() async {
     final phone = _phone;
     if (phone == null) {
-      setState(() =>
-          formError = "Go back and request a code with your phone number.");
+      setState(
+        () => formError = "Go back and request a code with your phone number.",
+      );
       return;
     }
 
@@ -4861,11 +4954,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final args = widget.args ??
+    final args =
+        widget.args ??
         (ModalRoute.of(context)?.settings.arguments as OtpVerificationArgs?);
     final phone = args?.phone;
-    final maskedDestination =
-        phone == null ? "your phone" : maskPhoneForOtp(phone);
+    final maskedDestination = phone == null
+        ? "your phone"
+        : maskPhoneForOtp(phone);
     final codeComplete =
         _otpController.text.length == AuthValidationRules.otpLength;
 
@@ -4888,8 +4983,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     color: EyeTokens.greenMain,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.send_rounded,
-                      color: Colors.white, size: 56),
+                  child: const Icon(
+                    Icons.send_rounded,
+                    color: Colors.white,
+                    size: 56,
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -4905,8 +5003,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               Text(
                 "Please enter the 6-digit verification code sent to $maskedDestination",
                 textAlign: TextAlign.center,
-                style:
-                    EyeTypography.fieldHint.copyWith(color: EyeTokens.black1),
+                style: EyeTypography.fieldHint.copyWith(
+                  color: EyeTokens.black1,
+                ),
               ),
               const SizedBox(height: 48),
               EyeOtpInput(
@@ -4918,8 +5017,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   if (sanitized != value) {
                     _otpController.value = TextEditingValue(
                       text: sanitized,
-                      selection:
-                          TextSelection.collapsed(offset: sanitized.length),
+                      selection: TextSelection.collapsed(
+                        offset: sanitized.length,
+                      ),
                     );
                   }
                   if (otpError != null) setState(() => otpError = null);
@@ -4940,11 +5040,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 children: [
                   Text(
                     "Didn't receive code? ",
-                    style: EyeTypography.fieldHint
-                        .copyWith(color: EyeTokens.black1),
+                    style: EyeTypography.fieldHint.copyWith(
+                      color: EyeTokens.black1,
+                    ),
                   ),
                   GestureDetector(
-                    onTap: (resendSecondsRemaining > 0 ||
+                    onTap:
+                        (resendSecondsRemaining > 0 ||
                             resending ||
                             phone == null)
                         ? null
@@ -4953,8 +5055,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       resendSecondsRemaining > 0
                           ? "Resend code in ${formatResendCountdown(resendSecondsRemaining)}"
                           : resending
-                              ? "Resending..."
-                              : "Resend code",
+                          ? "Resending..."
+                          : "Resend code",
                       style: EyeTypography.link.copyWith(
                         decoration: TextDecoration.underline,
                         color: resendSecondsRemaining > 0 || resending
@@ -4971,8 +5073,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 children: [
                   Text(
                     "Experiencing issues? ",
-                    style: EyeTypography.fieldHint
-                        .copyWith(color: EyeTokens.black1),
+                    style: EyeTypography.fieldHint.copyWith(
+                      color: EyeTokens.black1,
+                    ),
                   ),
                   GestureDetector(
                     onTap: () => showAppSnackBar(
@@ -5062,16 +5165,14 @@ class HomeScreen extends StatelessWidget {
     final incidentId = incident.id.trim();
     if (incidentId.isEmpty) return;
     if (_terminalIncidentStatuses.contains(incident.status)) {
-      Navigator.of(context)
-          .pushNamed("/incident-detail", arguments: incidentId);
+      Navigator.of(
+        context,
+      ).pushNamed("/incident-detail", arguments: incidentId);
       return;
     }
     Navigator.of(context).pushNamed(
       "/active-emergency/$incidentId",
-      arguments: {
-        "incidentId": incidentId,
-        "silent": false,
-      },
+      arguments: {"incidentId": incidentId, "silent": false},
     );
   }
 
@@ -5085,8 +5186,9 @@ class HomeScreen extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding:
-              const EdgeInsets.only(bottom: EyeTokens.contentBottomClearance),
+          padding: const EdgeInsets.only(
+            bottom: EyeTokens.contentBottomClearance,
+          ),
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -5170,8 +5272,9 @@ class HomeScreen extends StatelessWidget {
               child: SectionCard(
                 title: "All services",
                 child: GridView.count(
-                  crossAxisCount:
-                      MediaQuery.sizeOf(context).width > 640 ? 3 : 2,
+                  crossAxisCount: MediaQuery.sizeOf(context).width > 640
+                      ? 3
+                      : 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 12,
@@ -5179,66 +5282,76 @@ class HomeScreen extends StatelessWidget {
                   childAspectRatio: 1.35,
                   children: [
                     ActionTile(
-                        "Live emergency video",
-                        Icons.videocam,
-                        Colors.red.shade900,
-                        () => Navigator.of(context).pushNamed("/live-video")),
+                      "Live emergency video",
+                      Icons.videocam,
+                      Colors.red.shade900,
+                      () => Navigator.of(context).pushNamed("/live-video"),
+                    ),
                     ActionTile(
-                        "Report crime",
-                        Icons.local_police,
-                        Colors.indigo.shade700,
-                        () => Navigator.of(context).pushNamed("/report/crime")),
+                      "Report crime",
+                      Icons.local_police,
+                      Colors.indigo.shade700,
+                      () => Navigator.of(context).pushNamed("/report/crime"),
+                    ),
                     ActionTile(
-                        "Fire report",
-                        Icons.local_fire_department,
-                        Colors.deepOrange.shade700,
-                        () => Navigator.of(context).pushNamed("/report/fire")),
+                      "Fire report",
+                      Icons.local_fire_department,
+                      Colors.deepOrange.shade700,
+                      () => Navigator.of(context).pushNamed("/report/fire"),
+                    ),
                     ActionTile(
-                        "Kidnapping report",
-                        Icons.report,
-                        Colors.red.shade900,
-                        () => Navigator.of(context)
-                            .pushNamed("/report/kidnapping")),
+                      "Kidnapping report",
+                      Icons.report,
+                      Colors.red.shade900,
+                      () =>
+                          Navigator.of(context).pushNamed("/report/kidnapping"),
+                    ),
                     ActionTile(
-                        "Abuse report",
-                        Icons.health_and_safety,
-                        Colors.pink.shade700,
-                        () => Navigator.of(context).pushNamed("/report/abuse")),
+                      "Abuse report",
+                      Icons.health_and_safety,
+                      Colors.pink.shade700,
+                      () => Navigator.of(context).pushNamed("/report/abuse"),
+                    ),
                     ActionTile(
-                        "Suspicious activity",
-                        Icons.visibility,
-                        Colors.amber.shade900,
-                        () => Navigator.of(context)
-                            .pushNamed("/report/suspicious-activity")),
+                      "Suspicious activity",
+                      Icons.visibility,
+                      Colors.amber.shade900,
+                      () => Navigator.of(
+                        context,
+                      ).pushNamed("/report/suspicious-activity"),
+                    ),
                     ActionTile(
-                        "Missing person",
-                        Icons.person_search,
-                        Colors.teal.shade700,
-                        () =>
-                            Navigator.of(context).pushNamed("/missing-person")),
+                      "Missing person",
+                      Icons.person_search,
+                      Colors.teal.shade700,
+                      () => Navigator.of(context).pushNamed("/missing-person"),
+                    ),
                     ActionTile(
-                        "Stolen vehicle",
-                        Icons.directions_car,
-                        Colors.blueGrey.shade700,
-                        () =>
-                            Navigator.of(context).pushNamed("/stolen-vehicle")),
+                      "Stolen vehicle",
+                      Icons.directions_car,
+                      Colors.blueGrey.shade700,
+                      () => Navigator.of(context).pushNamed("/stolen-vehicle"),
+                    ),
                     ActionTile(
-                        "Danger Trigger",
-                        Icons.warning_amber_rounded,
-                        Colors.amber.shade800,
-                        () =>
-                            Navigator.of(context).pushNamed("/danger-trigger")),
+                      "Danger Trigger",
+                      Icons.warning_amber_rounded,
+                      Colors.amber.shade800,
+                      () => Navigator.of(context).pushNamed("/danger-trigger"),
+                    ),
                     ActionTile(
-                        "Neighborhood Watch",
-                        Icons.groups,
-                        Colors.teal.shade800,
-                        () => Navigator.of(context)
-                            .pushNamed("/neighborhood-watch")),
+                      "Neighborhood Watch",
+                      Icons.groups,
+                      Colors.teal.shade800,
+                      () => Navigator.of(
+                        context,
+                      ).pushNamed("/neighborhood-watch"),
+                    ),
                     ActionTile(
-                        "Help & Support",
-                        Icons.support_agent,
-                        Colors.blue.shade800,
-                        () => Navigator.of(context).pushNamed("/support")),
+                      "Help & Support",
+                      Icons.support_agent,
+                      Colors.blue.shade800,
+                      () => Navigator.of(context).pushNamed("/support"),
+                    ),
                   ],
                 ),
               ),
@@ -5413,8 +5526,9 @@ class _ReportScreenState extends State<ReportScreen> {
       anonymous: anonymous,
       notifyEmergencyContacts: notifyEmergencyContact,
       emergencyContactIds: selectedEmergencyContactIds.toList(),
-      manualAddress:
-          manualLocation ? manualAddressController.text.trim() : null,
+      manualAddress: manualLocation
+          ? manualAddressController.text.trim()
+          : null,
       title: trimmed.isEmpty ? widget.type.label : trimmed,
       clientSubmissionId: composeDraftId,
     );
@@ -5452,8 +5566,10 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                Text("Location of the incident",
-                    style: EyeInputTheme.labelStyle(context)),
+                Text(
+                  "Location of the incident",
+                  style: EyeInputTheme.labelStyle(context),
+                ),
                 const SizedBox(height: 8),
                 if (locationError != null) ...[
                   LocationDeniedBanner(
@@ -5569,15 +5685,17 @@ class _ReportScreenState extends State<ReportScreen> {
                           .map(
                             (contact) => FilterChip(
                               label: Text(contact.name),
-                              selected: selectedEmergencyContactIds
-                                  .contains(contact.id),
+                              selected: selectedEmergencyContactIds.contains(
+                                contact.id,
+                              ),
                               onSelected: (selected) {
                                 setState(() {
                                   if (selected) {
                                     selectedEmergencyContactIds.add(contact.id);
                                   } else {
-                                    selectedEmergencyContactIds
-                                        .remove(contact.id);
+                                    selectedEmergencyContactIds.remove(
+                                      contact.id,
+                                    );
                                   }
                                 });
                                 _scheduleComposeDraftSave();
@@ -5615,12 +5733,18 @@ class _ReportScreenState extends State<ReportScreen> {
         _evidenceSectionKey.currentState?.attachments ?? const [];
     if (widget.type != ReportType.emergency &&
         !hasValidReportNarrative(
-            description: trimmed, localMedia: localMedia)) {
-      setState(() => descriptionError =
-          "Add a description, voice recording, or photo/video evidence");
-      showAppSnackBar(context,
-          "Add a description, voice recording, or photo/video evidence.",
-          isError: true);
+          description: trimmed,
+          localMedia: localMedia,
+        )) {
+      setState(
+        () => descriptionError =
+            "Add a description, voice recording, or photo/video evidence",
+      );
+      showAppSnackBar(
+        context,
+        "Add a description, voice recording, or photo/video evidence.",
+        isError: true,
+      );
       return;
     }
 
@@ -5633,9 +5757,10 @@ class _ReportScreenState extends State<ReportScreen> {
 
     final controller = appOf(context);
     final outcome = await captureLocationOutcome(
-        accuracy: controller.lowDataMode
-            ? LocationAccuracy.medium
-            : LocationAccuracy.high);
+      accuracy: controller.lowDataMode
+          ? LocationAccuracy.medium
+          : LocationAccuracy.high,
+    );
     if (!context.mounted) return;
 
     if (outcome.result != LocationCaptureResult.granted ||
@@ -5644,8 +5769,11 @@ class _ReportScreenState extends State<ReportScreen> {
         submitting = false;
         locationError = locationFailureMessage(outcome.result);
       });
-      showAppSnackBar(context, locationFailureMessage(outcome.result),
-          isError: true);
+      showAppSnackBar(
+        context,
+        locationFailureMessage(outcome.result),
+        isError: true,
+      );
       return;
     }
 
@@ -5653,16 +5781,17 @@ class _ReportScreenState extends State<ReportScreen> {
       type: widget.type.incidentType,
       description:
           trimmed.isEmpty && draftHasVoiceAttachment(localMedia: localMedia)
-              ? normalizeVoiceOnlyDescription(widget.type.label)
-              : trimmed.isEmpty
-                  ? "Emergency report submitted via THE EYE mobile."
-                  : trimmed,
+          ? normalizeVoiceOnlyDescription(widget.type.label)
+          : trimmed.isEmpty
+          ? "Emergency report submitted via THE EYE mobile."
+          : trimmed,
       position: outcome.position!,
       anonymous: anonymous,
       notifyEmergencyContacts: notifyEmergencyContact,
       emergencyContactIds: selectedEmergencyContactIds.toList(),
-      manualAddress:
-          manualLocation ? manualAddressController.text.trim() : null,
+      manualAddress: manualLocation
+          ? manualAddressController.text.trim()
+          : null,
       title: trimmed.isEmpty ? widget.type.label : trimmed,
       localMedia: _evidenceSectionKey.currentState?.attachments ?? const [],
       clientSubmissionId: composeDraftId,
@@ -5673,16 +5802,21 @@ class _ReportScreenState extends State<ReportScreen> {
     }
 
     try {
-      final result = await controller.submitIncident(
-        draft,
-        onEvidenceProgress: (localId, progress) {
-          if (progress >= 1) {
-            _evidenceSectionKey.currentState?.markUploaded(localId);
-          } else {
-            _evidenceSectionKey.currentState?.markUploading(localId, progress);
-          }
-        },
-      ).timeout(kSosSubmissionTimeout);
+      final result = await controller
+          .submitIncident(
+            draft,
+            onEvidenceProgress: (localId, progress) {
+              if (progress >= 1) {
+                _evidenceSectionKey.currentState?.markUploaded(localId);
+              } else {
+                _evidenceSectionKey.currentState?.markUploading(
+                  localId,
+                  progress,
+                );
+              }
+            },
+          )
+          .timeout(kSosSubmissionTimeout);
 
       if (!context.mounted) return;
       setState(() => submitting = false);
@@ -5691,8 +5825,10 @@ class _ReportScreenState extends State<ReportScreen> {
         if (result.isSuccess &&
             result.userMessage != null &&
             result.userMessage!.contains("Evidence upload failed")) {
-          _evidenceSectionKey.currentState
-              ?.markUploadFailed(attachment.localId, result.userMessage!);
+          _evidenceSectionKey.currentState?.markUploadFailed(
+            attachment.localId,
+            result.userMessage!,
+          );
         }
       }
 
@@ -5707,14 +5843,19 @@ class _ReportScreenState extends State<ReportScreen> {
           descriptionError = result.fieldErrors["description"];
         });
         showAppSnackBar(
-            context, result.userMessage ?? "Unable to submit report.",
-            isError: true);
+          context,
+          result.userMessage ?? "Unable to submit report.",
+          isError: true,
+        );
         return;
       }
 
       if (result.status == IncidentSubmissionStatus.unauthorized) {
-        showAppSnackBar(context, result.userMessage ?? "Sign in is required.",
-            isError: true);
+        showAppSnackBar(
+          context,
+          result.userMessage ?? "Sign in is required.",
+          isError: true,
+        );
         Navigator.of(context).pushNamed("/login");
         return;
       }
@@ -5722,17 +5863,22 @@ class _ReportScreenState extends State<ReportScreen> {
       if (result.isSuccess) {
         await controller.deleteComposeDraft(composeDraftId);
         showAppSnackBar(
-            context,
-            urgent
-                ? ActiveEmergencyNavigation.receivedCopy
-                : "${widget.type.label} report submitted.");
+          context,
+          urgent
+              ? ActiveEmergencyNavigation.receivedCopy
+              : "${widget.type.label} report submitted.",
+        );
       } else if (result.isQueued || result.canRetry) {
-        showAppSnackBar(context,
-            result.userMessage ?? "${widget.type.label} saved for retry.");
+        showAppSnackBar(
+          context,
+          result.userMessage ?? "${widget.type.label} saved for retry.",
+        );
       } else {
         showAppSnackBar(
-            context, result.userMessage ?? "Unable to submit report.",
-            isError: true);
+          context,
+          result.userMessage ?? "Unable to submit report.",
+          isError: true,
+        );
         return;
       }
 
@@ -5744,13 +5890,19 @@ class _ReportScreenState extends State<ReportScreen> {
     } on TimeoutException {
       if (!context.mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Report submission timed out (ERR-INC-408).",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Report submission timed out (ERR-INC-408).",
+        isError: true,
+      );
     } catch (_) {
       if (!context.mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Unable to submit report (ERR-INC-500).",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Unable to submit report (ERR-INC-500).",
+        isError: true,
+      );
     }
   }
 }
@@ -5771,6 +5923,7 @@ class _MissingPersonBroadcastScreenState
   final physicalController = TextEditingController();
   final clothingController = TextEditingController();
   final additionalController = TextEditingController();
+  final _primaryPhotoSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   final _evidenceSectionKey = GlobalKey<ManagedEvidenceSectionState>();
   String? _gender;
   String _ageMode = MissingPersonAge.exactMode;
@@ -5833,6 +5986,7 @@ class _MissingPersonBroadcastScreenState
     physicalController.clear();
     clothingController.clear();
     additionalController.clear();
+    _primaryPhotoSectionKey.currentState?.clearAttachments();
     _evidenceSectionKey.currentState?.clearAttachments();
     _gender = null;
     _ageMode = MissingPersonAge.exactMode;
@@ -5844,8 +5998,11 @@ class _MissingPersonBroadcastScreenState
 
   Future<void> _submit() async {
     if (fullNameController.text.trim().isEmpty) {
-      showAppSnackBar(context, "Enter the missing person's full name.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Enter the missing person's full name.",
+        isError: true,
+      );
       return;
     }
     final ageValue = _resolvedAge;
@@ -5872,13 +6029,29 @@ class _MissingPersonBroadcastScreenState
       return;
     }
     if (clothingController.text.trim().isEmpty) {
-      showAppSnackBar(context, "Describe what they were wearing.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Describe what they were wearing.",
+        isError: true,
+      );
+      return;
+    }
+    final primaryPhotos =
+        _primaryPhotoSectionKey.currentState?.attachments ?? const [];
+    if (primaryPhotos.length != 1 || !primaryPhotos.first.isImage) {
+      showAppSnackBar(
+        context,
+        "Add one clear primary face photo.",
+        isError: true,
+      );
       return;
     }
     if (!consent) {
-      showAppSnackBar(context, "Confirm consent to publish this broadcast.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Confirm consent to publish this broadcast.",
+        isError: true,
+      );
       return;
     }
 
@@ -5886,8 +6059,11 @@ class _MissingPersonBroadcastScreenState
     final controller = appOf(context);
     if (controller.accessToken == null) {
       setState(() => submitting = false);
-      showAppSnackBar(context, "Sign in to publish a broadcast.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Sign in to publish a broadcast.",
+        isError: true,
+      );
       return;
     }
     final outcome = await captureLocationOutcome();
@@ -5895,24 +6071,32 @@ class _MissingPersonBroadcastScreenState
     if (outcome.result != LocationCaptureResult.granted ||
         outcome.position == null) {
       setState(() => submitting = false);
-      showAppSnackBar(context, locationFailureMessage(outcome.result),
-          isError: true);
+      showAppSnackBar(
+        context,
+        locationFailureMessage(outcome.result),
+        isError: true,
+      );
       return;
     }
 
     final lastSeenLocation = lastSeenLocationController.text.trim();
     final additional = additionalController.text.trim();
     try {
+      final uploadedPrimary = await controller.broadcastMediaUploadService
+          .uploadAttachments(
+            attachments: primaryPhotos,
+            accessToken: controller.accessToken!,
+          );
       final localEvidence =
           _evidenceSectionKey.currentState?.attachments ?? const [];
       var uploadedEvidence = const <Map<String, Object?>>[];
       if (localEvidence.isNotEmpty) {
         try {
-          uploadedEvidence =
-              await controller.broadcastMediaUploadService.uploadAttachments(
-            attachments: localEvidence,
-            accessToken: controller.accessToken!,
-          );
+          uploadedEvidence = await controller.broadcastMediaUploadService
+              .uploadAttachments(
+                attachments: localEvidence,
+                accessToken: controller.accessToken!,
+              );
         } on BroadcastMediaUploadFailure catch (error) {
           if (!mounted) return;
           setState(() => submitting = false);
@@ -5920,28 +6104,33 @@ class _MissingPersonBroadcastScreenState
           return;
         }
       }
-      final result =
-          await controller.broadcastSubmissionService.createMissingPerson(
-        accessToken: controller.accessToken!,
-        payload: {
-          "clientBroadcastId": createClientSubmissionId(),
-          "fullName": fullNameController.text.trim(),
-          "ageOrApproximateAge": MissingPersonAge.normalizeForApi(ageValue),
-          if (_gender != null) "gender": _gender,
-          "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
-          "lastSeenLatitude": outcome.position!.latitude,
-          "lastSeenLongitude": outcome.position!.longitude,
-          if (lastSeenLocation.isNotEmpty) "lastSeenAddress": lastSeenLocation,
-          "clothingDescription": clothingController.text.trim(),
-          "physicalDescription": physicalController.text.trim(),
-          "contactMethod": "in_app",
-          "reporterRelationship": "Reporter",
-          "consentDeclaration": true,
-          if (additional.isNotEmpty) "additionalDescription": additional,
-          if (uploadedEvidence.isNotEmpty)
-            "metadata": {"attachments": uploadedEvidence},
-        },
-      ).timeout(kSosSubmissionTimeout);
+      final result = await controller.broadcastSubmissionService
+          .createMissingPerson(
+            accessToken: controller.accessToken!,
+            payload: {
+              "clientBroadcastId": createClientSubmissionId(),
+              "fullName": fullNameController.text.trim(),
+              "ageOrApproximateAge": MissingPersonAge.normalizeForApi(ageValue),
+              if (_gender != null) "gender": _gender,
+              "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
+              "lastSeenLatitude": outcome.position!.latitude,
+              "lastSeenLongitude": outcome.position!.longitude,
+              if (lastSeenLocation.isNotEmpty)
+                "lastSeenAddress": lastSeenLocation,
+              "clothingDescription": clothingController.text.trim(),
+              "physicalDescription": physicalController.text.trim(),
+              "contactMethod": "in_app",
+              "reporterRelationship": "Reporter",
+              "consentDeclaration": true,
+              if (additional.isNotEmpty) "additionalDescription": additional,
+              "metadata": {
+                "primaryPhoto": uploadedPrimary.first,
+                if (uploadedEvidence.isNotEmpty)
+                  "attachments": uploadedEvidence,
+              },
+            },
+          )
+          .timeout(kSosSubmissionTimeout);
       if (!mounted) return;
       setState(() => submitting = false);
       _clearDraft();
@@ -5962,6 +6151,10 @@ class _MissingPersonBroadcastScreenState
           ),
         );
       }
+    } on BroadcastMediaUploadFailure catch (error) {
+      if (!mounted) return;
+      setState(() => submitting = false);
+      showAppSnackBar(context, error.message, isError: true);
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       setState(() => submitting = false);
@@ -5969,8 +6162,11 @@ class _MissingPersonBroadcastScreenState
     } on TimeoutException {
       if (!mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Broadcast publish timed out (ERR-BRD-408).",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Broadcast publish timed out (ERR-BRD-408).",
+        isError: true,
+      );
     } catch (error, stackTrace) {
       debugPrint(
         "Missing person broadcast publish failed: "
@@ -5978,8 +6174,11 @@ class _MissingPersonBroadcastScreenState
       );
       if (!mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Unable to publish broadcast (ERR-BRD-500).",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Unable to publish broadcast (ERR-BRD-500).",
+        isError: true,
+      );
     }
   }
 
@@ -5995,8 +6194,11 @@ class _MissingPersonBroadcastScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.person_search,
-                    size: 52, color: BrandColors.green),
+                const Icon(
+                  Icons.person_search,
+                  size: 52,
+                  color: BrandColors.green,
+                ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: fullNameController,
@@ -6052,8 +6254,9 @@ class _MissingPersonBroadcastScreenState
                     DropdownMenuItem(value: "Male", child: Text("Male")),
                     DropdownMenuItem(value: "Other", child: Text("Other")),
                     DropdownMenuItem(
-                        value: "PreferNotToSay",
-                        child: Text("Prefer not to say")),
+                      value: "PreferNotToSay",
+                      child: Text("Prefer not to say"),
+                    ),
                   ],
                   onChanged: (value) => setState(() => _gender = value),
                 ),
@@ -6116,8 +6319,18 @@ class _MissingPersonBroadcastScreenState
                 ),
                 const SizedBox(height: 12),
                 ManagedEvidenceSection(
+                  key: _primaryPhotoSectionKey,
+                  lowDataMode: appOf(context).lowDataMode,
+                  policy: EvidencePolicy.primaryPhoto,
+                  title: "Primary face photo",
+                  description:
+                      "Required. Add one clear, recent photo that responders can use to identify the missing person.",
+                ),
+                const SizedBox(height: 12),
+                ManagedEvidenceSection(
                   key: _evidenceSectionKey,
                   lowDataMode: appOf(context).lowDataMode,
+                  title: "Additional evidence",
                 ),
                 const SizedBox(height: 8),
                 CheckboxListTile(
@@ -6237,8 +6450,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
   }
 
   Future<void> _preparePreview() async {
-    final ok =
-        await liveVideoController.startLocalPreview(lowBandwidth: lowBandwidth);
+    final ok = await liveVideoController.startLocalPreview(
+      lowBandwidth: lowBandwidth,
+    );
     if (!mounted) return;
     if (!ok && liveVideoController.errorMessage != null) {
       setState(() {
@@ -6278,16 +6492,18 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         : "±${latestPosition!.accuracy.toStringAsFixed(0)}m";
     return LiveVideoEvidenceOverlay.fromApi(
       liveVideoController.evidenceOverlayRaw,
-      connectionStatus:
-          liveVideoConnectionLabel(liveVideoController.connectionState),
+      connectionStatus: liveVideoConnectionLabel(
+        liveVideoController.connectionState,
+      ),
       fallbackIncidentId: activeIncidentId,
       fallbackSessionId: liveSessionId,
     ).copyWithFallbackGps(
-        gps: gps,
-        accuracy: accuracy,
-        time: lastCapturedAt == null
-            ? null
-            : formatEvidenceTimestamp(lastCapturedAt!));
+      gps: gps,
+      accuracy: accuracy,
+      time: lastCapturedAt == null
+          ? null
+          : formatEvidenceTimestamp(lastCapturedAt!),
+    );
   }
 
   @override
@@ -6307,7 +6523,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
               permissionError != null ||
               liveVideoController.errorMessage != null) ...[
             LocationDeniedBanner(
-              message: permissionError ??
+              message:
+                  permissionError ??
                   liveVideoController.errorMessage ??
                   "Camera and microphone permission are required for live emergency video.",
               onOpenSettings: () => openAppSettings(),
@@ -6325,28 +6542,34 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                       : (value) async {
                           setState(() => lowBandwidth = value);
                           await liveVideoController.startLocalPreview(
-                              lowBandwidth: value);
+                            lowBandwidth: value,
+                          );
                         },
                   title: const Text("Emergency low-bandwidth mode"),
                   subtitle: const Text(
-                      "Prioritizes audio and lower video bitrate for weak networks"),
+                    "Prioritizes audio and lower video bitrate for weak networks",
+                  ),
                 ),
                 if (streaming) ...[
                   SwitchListTile(
                     value: !liveVideoController.isMuted,
                     onChanged: (_) => liveVideoController.toggleMute(),
                     title: const Text("Microphone"),
-                    subtitle: Text(liveVideoController.isMuted
-                        ? "Muted"
-                        : "Live audio enabled"),
+                    subtitle: Text(
+                      liveVideoController.isMuted
+                          ? "Muted"
+                          : "Live audio enabled",
+                    ),
                   ),
                   SwitchListTile(
                     value: liveVideoController.isCameraEnabled,
                     onChanged: (_) => liveVideoController.toggleCamera(),
                     title: const Text("Camera"),
-                    subtitle: Text(liveVideoController.isCameraEnabled
-                        ? "Camera enabled"
-                        : "Camera off"),
+                    subtitle: Text(
+                      liveVideoController.isCameraEnabled
+                          ? "Camera enabled"
+                          : "Camera off",
+                    ),
                   ),
                   Row(
                     children: [
@@ -6376,9 +6599,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 8),
                     child: Text(
-                        "Server-side recording is configured for this session.",
-                        style: TextStyle(
-                            fontSize: 12, color: BrandColors.lightTextMuted)),
+                      "Server-side recording is configured for this session.",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: BrandColors.lightTextMuted,
+                      ),
+                    ),
                   ),
                 if (streaming)
                   EyeDestructiveButton(
@@ -6398,8 +6624,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                     ),
                     onPressed:
                         (startingStream || !liveVideoController.canStartSession)
-                            ? null
-                            : () => _startStream(context),
+                        ? null
+                        : () => _startStream(context),
                     icon: startingStream
                         ? const SizedBox(
                             width: 20,
@@ -6414,7 +6640,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                       startingStream
                           ? "Starting stream..."
                           : liveVideoRetryUserMessage(
-                              incidentActive: activeIncidentId != null &&
+                              incidentActive:
+                                  activeIncidentId != null &&
                                   activeIncidentId!.isNotEmpty,
                             ),
                     ),
@@ -6450,10 +6677,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
                       ),
                     ),
                   ),
-                Text(streaming
-                    ? (locationStatusMessage ??
-                        "Your live location is shared with authorized emergency admins while this stream is active.")
-                    : "Location is acquired in the background while your emergency is created. Precise GPS retry continues automatically."),
+                Text(
+                  streaming
+                      ? (locationStatusMessage ??
+                            "Your live location is shared with authorized emergency admins while this stream is active.")
+                      : "Location is acquired in the background while your emergency is created. Precise GPS retry continues automatically.",
+                ),
               ],
             ),
           ),
@@ -6482,8 +6711,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
   void _returnToActiveEmergency({String? errorMessage}) {
     if (!widget.returnToActiveEmergency || !mounted) return;
-    Navigator.of(context)
-        .pop(LiveVideoReturnResult(errorMessage: errorMessage));
+    Navigator.of(
+      context,
+    ).pop(LiveVideoReturnResult(errorMessage: errorMessage));
   }
 
   void _logStartFlowInterrupt({
@@ -6550,18 +6780,19 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         return;
       }
 
-      final alreadyPreviewing = liveVideoController.lifecyclePhase ==
+      final alreadyPreviewing =
+          liveVideoController.lifecyclePhase ==
               LiveVideoLifecyclePhase.stopped ||
           liveVideoController.connectionState ==
               LiveVideoConnectionState.previewing;
       final previewFuture = alreadyPreviewing
           ? Future.value(true)
           : liveVideoController
-              .startLocalPreview(lowBandwidth: lowBandwidth)
-              .timeout(kLiveVideoStartTimeout);
+                .startLocalPreview(lowBandwidth: lowBandwidth)
+                .timeout(kLiveVideoStartTimeout);
       _setStartupPhase(LiveVideoStartupPhase.acquiringLocation);
-      final accessFuture =
-          appController.locationCoordinator.resolveImmediateEmergencyAccess();
+      final accessFuture = appController.locationCoordinator
+          .resolveImmediateEmergencyAccess();
 
       final previewOk = await previewFuture;
       if (!mounted || _disposed) {
@@ -6584,8 +6815,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           incidentId: activeIncidentId,
         );
         if (liveVideoController.errorMessage != null) {
-          showAppSnackBar(context, liveVideoController.errorMessage!,
-              isError: true);
+          showAppSnackBar(
+            context,
+            liveVideoController.errorMessage!,
+            isError: true,
+          );
         }
         if (widget.returnToActiveEmergency && activeIncidentId != null) {
           _returnToActiveEmergency(
@@ -6641,9 +6875,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
             reason: "incident_submit_failed",
             location: "_startStream:incident_submit",
           );
-          showAppSnackBar(context,
-              "${_startupPhase.label}: ${submission.userMessage ?? "Unable to create incident for live video."}",
-              isError: true);
+          showAppSnackBar(
+            context,
+            "${_startupPhase.label}: ${submission.userMessage ?? "Unable to create incident for live video."}",
+            isError: true,
+          );
           return;
         }
 
@@ -6735,10 +6971,7 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
 
       _setStartupPhase(LiveVideoStartupPhase.connectingRoom);
       final connected = await liveVideoController
-          .startSession(
-            startResult,
-            incidentIdOverride: activeIncidentId,
-          )
+          .startSession(startResult, incidentIdOverride: activeIncidentId)
           .timeout(kLiveVideoStartTimeout);
       if (!mounted || _disposed) {
         _logStartFlowInterrupt(
@@ -6752,25 +6985,27 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       if (!connected) {
         _setStartupPhase(LiveVideoStartupPhase.recovering);
         final joinFlow = liveVideoController.joinFlow;
-        final failureCode = liveVideoController.lastConnectFailureReason ==
+        final failureCode =
+            liveVideoController.lastConnectFailureReason ==
                 LiveVideoErrorCodes.publishTracksFailed
             ? LiveVideoErrorCodes.publishTracksFailed
             : joinFlow.roomConnectBeginLogged
-                ? LiveVideoErrorCodes.connectLivekitFailed
-                : LiveVideoErrorCodes.joinFlowInterruptedBeforeConnect;
+            ? LiveVideoErrorCodes.connectLivekitFailed
+            : LiveVideoErrorCodes.joinFlowInterruptedBeforeConnect;
         final connectMessage = joinFlow.roomConnectBeginLogged
             ? (liveVideoController.errorMessage ??
-                "Unable to join live video room "
-                    "(${liveVideoController.lastConnectExceptionType}: "
-                    "${liveVideoController.lastConnectExceptionMessage}). "
-                    "Reference: $failureCode.")
+                  "Unable to join live video room "
+                      "(${liveVideoController.lastConnectExceptionType}: "
+                      "${liveVideoController.lastConnectExceptionMessage}). "
+                      "Reference: $failureCode.")
             : (liveVideoController.errorMessage ??
-                "Live video join flow stopped before Room.connect(). "
-                    "Reference: $failureCode.");
+                  "Live video join flow stopped before Room.connect(). "
+                      "Reference: $failureCode.");
         if (!joinFlow.roomConnectBeginLogged) {
           joinFlow.recordInterrupt(
             reason: joinFlow.interruptReason ?? "connect_publisher_false",
-            location: joinFlow.interruptLocation ??
+            location:
+                joinFlow.interruptLocation ??
                 "_startStream:connectPublisher_result",
           );
           logLiveVideoDiagnostic(
@@ -6790,11 +7025,12 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           clientTraceId: startResult.correlationId,
         );
         showAppSnackBar(
-            context,
-            connectMessage.contains("emergency was still submitted")
-                ? connectMessage
-                : "$connectMessage Your emergency was still submitted.",
-            isError: true);
+          context,
+          connectMessage.contains("emergency was still submitted")
+              ? connectMessage
+              : "$connectMessage Your emergency was still submitted.",
+          isError: true,
+        );
         if (widget.returnToActiveEmergency && activeIncidentId != null) {
           _returnToActiveEmergency(
             errorMessage:
@@ -6821,9 +7057,11 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       );
     } on LiveVideoStartValidationException catch (error) {
       if (!mounted || _disposed) return;
-      _setStartupPhase(activeIncidentId == null
-          ? LiveVideoStartupPhase.failed
-          : LiveVideoStartupPhase.recovering);
+      _setStartupPhase(
+        activeIncidentId == null
+            ? LiveVideoStartupPhase.failed
+            : LiveVideoStartupPhase.recovering,
+      );
       final message =
           "${liveVideoStartValidationUserMessage(error.reason)} Reference: ${LiveVideoErrorCodes.startResponseInvalid}.";
       logLiveVideoDiagnostic(
@@ -6865,12 +7103,16 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           );
         }
       }
-      _setStartupPhase(activeIncidentId == null
-          ? LiveVideoStartupPhase.failed
-          : LiveVideoStartupPhase.recovering);
-      showAppSnackBar(context,
-          "Live video start timed out ($error). Your emergency was still submitted. Retry live video when ready.",
-          isError: true);
+      _setStartupPhase(
+        activeIncidentId == null
+            ? LiveVideoStartupPhase.failed
+            : LiveVideoStartupPhase.recovering,
+      );
+      showAppSnackBar(
+        context,
+        "Live video start timed out ($error). Your emergency was still submitted. Retry live video when ready.",
+        isError: true,
+      );
       if (widget.returnToActiveEmergency && activeIncidentId != null) {
         _returnToActiveEmergency(
           errorMessage:
@@ -6887,11 +7129,16 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
               error.userMessage,
               apiCode: error.apiCode,
             );
-      _setStartupPhase(activeIncidentId == null
-          ? LiveVideoStartupPhase.failed
-          : LiveVideoStartupPhase.recovering);
-      showAppSnackBar(context, "${_startupPhase.label}: $message",
-          isError: true);
+      _setStartupPhase(
+        activeIncidentId == null
+            ? LiveVideoStartupPhase.failed
+            : LiveVideoStartupPhase.recovering,
+      );
+      showAppSnackBar(
+        context,
+        "${_startupPhase.label}: $message",
+        isError: true,
+      );
     } catch (error, stackTrace) {
       if (!mounted || _disposed) return;
       _logStartFlowInterrupt(
@@ -6910,7 +7157,9 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       );
       if (kDebugMode) {
         debugPrintStack(
-            stackTrace: stackTrace, label: "live_video_start_stream");
+          stackTrace: stackTrace,
+          label: "live_video_start_stream",
+        );
       }
       if (liveSessionId.isNotEmpty) {
         final token = appController.accessToken;
@@ -6924,12 +7173,16 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
           );
         }
       }
-      _setStartupPhase(activeIncidentId == null
-          ? LiveVideoStartupPhase.failed
-          : LiveVideoStartupPhase.recovering);
-      showAppSnackBar(context,
-          "Live video is temporarily unavailable ($error). Your emergency may still have been submitted.",
-          isError: true);
+      _setStartupPhase(
+        activeIncidentId == null
+            ? LiveVideoStartupPhase.failed
+            : LiveVideoStartupPhase.recovering,
+      );
+      showAppSnackBar(
+        context,
+        "Live video is temporarily unavailable ($error). Your emergency may still have been submitted.",
+        isError: true,
+      );
       if (widget.returnToActiveEmergency && activeIncidentId != null) {
         _returnToActiveEmergency(
           errorMessage:
@@ -6940,7 +7193,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       _streamStartInFlight = false;
       if (mounted && !_disposed) setState(() => startingStream = false);
       logLiveVideoEvent(
-          "Live video startup trace ${_startupTrace.toDiagnosticMap()} joinFlow=${liveVideoController.joinFlow.toDiagnosticMap()}");
+        "Live video startup trace ${_startupTrace.toDiagnosticMap()} joinFlow=${liveVideoController.joinFlow.toDiagnosticMap()}",
+      );
     }
   }
 
@@ -6986,7 +7240,8 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
       }
       if (liveSessionId.isNotEmpty) {
         try {
-          final accessToken = appOf(context).session?.accessToken ??
+          final accessToken =
+              appOf(context).session?.accessToken ??
               (theEyeAccessToken.isNotEmpty ? theEyeAccessToken : null);
           final stopResponse = await apiClient
               .stopLiveVideo(sessionId: liveSessionId, accessToken: accessToken)
@@ -7041,12 +7296,13 @@ class _LiveEmergencyVideoScreenState extends State<LiveEmergencyVideoScreen> {
         case LiveVideoStopDestination.openIncidentArchive:
           final incidentId = routingDecision.incidentId;
           if (incidentId == null || incidentId.isEmpty) return;
-          await appController.activeEmergencyService
-              .clearActiveIncident(incidentId);
-          if (!context.mounted) return;
-          Navigator.of(context).pushReplacementNamed(
-            "/incident-archive/$incidentId",
+          await appController.activeEmergencyService.clearActiveIncident(
+            incidentId,
           );
+          if (!context.mounted) return;
+          Navigator.of(
+            context,
+          ).pushReplacementNamed("/incident-archive/$incidentId");
           return;
         case LiveVideoStopDestination.stayOnLiveVideo:
           showAppSnackBar(
@@ -7316,13 +7572,19 @@ class _StolenVehicleBroadcastScreenState
     if (plateController.text.trim().isEmpty ||
         makeController.text.trim().isEmpty ||
         modelController.text.trim().isEmpty) {
-      showAppSnackBar(context, "Plate number, make, and model are required.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Plate number, make, and model are required.",
+        isError: true,
+      );
       return;
     }
     if (_lastSeenAt == null) {
-      showAppSnackBar(context, "Select the Last Seen date and time.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Select the Last Seen date and time.",
+        isError: true,
+      );
       return;
     }
     if (lastKnownLocationController.text.trim().isEmpty) {
@@ -7330,8 +7592,11 @@ class _StolenVehicleBroadcastScreenState
       return;
     }
     if (theftDescriptionController.text.trim().isEmpty) {
-      showAppSnackBar(context, "Describe the circumstances of the theft.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Describe the circumstances of the theft.",
+        isError: true,
+      );
       return;
     }
 
@@ -7339,8 +7604,11 @@ class _StolenVehicleBroadcastScreenState
     final controller = appOf(context);
     if (controller.accessToken == null) {
       setState(() => submitting = false);
-      showAppSnackBar(context, "Sign in to publish a broadcast.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Sign in to publish a broadcast.",
+        isError: true,
+      );
       return;
     }
     final outcome = await captureLocationOutcome();
@@ -7348,8 +7616,11 @@ class _StolenVehicleBroadcastScreenState
     if (outcome.result != LocationCaptureResult.granted ||
         outcome.position == null) {
       setState(() => submitting = false);
-      showAppSnackBar(context, locationFailureMessage(outcome.result),
-          isError: true);
+      showAppSnackBar(
+        context,
+        locationFailureMessage(outcome.result),
+        isError: true,
+      );
       return;
     }
 
@@ -7362,10 +7633,11 @@ class _StolenVehicleBroadcastScreenState
         : colorController.text.trim();
     final sourceVehicle =
         selectedVehicleId == null || selectedVehicleId!.isEmpty
-            ? null
-            : _findGarageVehicleById(selectedVehicleId!);
-    final savedVehiclePhotoObjectKeys =
-        _extractVehiclePhotoObjectKeys(sourceVehicle);
+        ? null
+        : _findGarageVehicleById(selectedVehicleId!);
+    final savedVehiclePhotoObjectKeys = _extractVehiclePhotoObjectKeys(
+      sourceVehicle,
+    );
     try {
       final localVehiclePhotos =
           _vehiclePhotosSectionKey.currentState?.attachments ?? const [];
@@ -7375,11 +7647,11 @@ class _StolenVehicleBroadcastScreenState
       var uploadedEvidence = const <Map<String, Object?>>[];
       if (localVehiclePhotos.isNotEmpty) {
         try {
-          uploadedVehiclePhotos =
-              await controller.broadcastMediaUploadService.uploadAttachments(
-            attachments: localVehiclePhotos,
-            accessToken: controller.accessToken!,
-          );
+          uploadedVehiclePhotos = await controller.broadcastMediaUploadService
+              .uploadAttachments(
+                attachments: localVehiclePhotos,
+                accessToken: controller.accessToken!,
+              );
         } on BroadcastMediaUploadFailure catch (error) {
           if (!mounted) return;
           setState(() => submitting = false);
@@ -7389,11 +7661,11 @@ class _StolenVehicleBroadcastScreenState
       }
       if (localEvidence.isNotEmpty) {
         try {
-          uploadedEvidence =
-              await controller.broadcastMediaUploadService.uploadAttachments(
-            attachments: localEvidence,
-            accessToken: controller.accessToken!,
-          );
+          uploadedEvidence = await controller.broadcastMediaUploadService
+              .uploadAttachments(
+                attachments: localEvidence,
+                accessToken: controller.accessToken!,
+              );
         } on BroadcastMediaUploadFailure catch (error) {
           if (!mounted) return;
           setState(() => submitting = false);
@@ -7401,46 +7673,50 @@ class _StolenVehicleBroadcastScreenState
           return;
         }
       }
-      final result =
-          await controller.broadcastSubmissionService.createStolenVehicle(
-        accessToken: controller.accessToken!,
-        payload: {
-          "clientBroadcastId": createClientSubmissionId(),
-          "vehicleType": "Car",
-          "make": makeController.text.trim(),
-          "model": modelController.text.trim(),
-          "colour": normalizedColor,
-          if (year.isNotEmpty) "year": parsedYear ?? year,
-          "registrationNumber": plateController.text.trim(),
-          "stolenAt": DateTime.now().toUtc().toIso8601String(),
-          "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
-          "lastKnownLatitude": outcome.position!.latitude,
-          "lastKnownLongitude": outcome.position!.longitude,
-          "distinguishingFeatures":
-              description.isEmpty ? "See broadcast details" : description,
-          "theftDescription": theftDescriptionController.text.trim(),
-          "contactMethod": "in_app",
-          "lastKnownLocation": lastKnownLocationController.text.trim(),
-          if (vin.isNotEmpty) "vin": vin.toUpperCase(),
-          if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
-          "metadata": {
-            if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty)
-              "sourceVehicleId": selectedVehicleId,
-            "make": makeController.text.trim(),
-            "model": modelController.text.trim(),
-            if (year.isNotEmpty) "year": parsedYear ?? year,
-            "colour": normalizedColor,
-            "registrationNumber": plateController.text.trim(),
-            if (vin.isNotEmpty) "vin": vin.toUpperCase(),
-            if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
-            if (savedVehiclePhotoObjectKeys.isNotEmpty)
-              "vehiclePhotoObjectKeys": savedVehiclePhotoObjectKeys,
-            if (uploadedVehiclePhotos.isNotEmpty)
-              "vehiclePhotos": uploadedVehiclePhotos,
-            if (uploadedEvidence.isNotEmpty) "attachments": uploadedEvidence,
-          },
-        },
-      ).timeout(kSosSubmissionTimeout);
+      final result = await controller.broadcastSubmissionService
+          .createStolenVehicle(
+            accessToken: controller.accessToken!,
+            payload: {
+              "clientBroadcastId": createClientSubmissionId(),
+              "vehicleType": "Car",
+              "make": makeController.text.trim(),
+              "model": modelController.text.trim(),
+              "colour": normalizedColor,
+              if (year.isNotEmpty) "year": parsedYear ?? year,
+              "registrationNumber": plateController.text.trim(),
+              "stolenAt": DateTime.now().toUtc().toIso8601String(),
+              "lastSeenAt": _lastSeenAt!.toUtc().toIso8601String(),
+              "lastKnownLatitude": outcome.position!.latitude,
+              "lastKnownLongitude": outcome.position!.longitude,
+              "distinguishingFeatures": description.isEmpty
+                  ? "See broadcast details"
+                  : description,
+              "theftDescription": theftDescriptionController.text.trim(),
+              "contactMethod": "in_app",
+              "lastKnownLocation": lastKnownLocationController.text.trim(),
+              if (vin.isNotEmpty) "vin": vin.toUpperCase(),
+              if (vin.length >= 4) "vinLastFour": vin.substring(vin.length - 4),
+              "metadata": {
+                if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty)
+                  "sourceVehicleId": selectedVehicleId,
+                "make": makeController.text.trim(),
+                "model": modelController.text.trim(),
+                if (year.isNotEmpty) "year": parsedYear ?? year,
+                "colour": normalizedColor,
+                "registrationNumber": plateController.text.trim(),
+                if (vin.isNotEmpty) "vin": vin.toUpperCase(),
+                if (vin.length >= 4)
+                  "vinLastFour": vin.substring(vin.length - 4),
+                if (savedVehiclePhotoObjectKeys.isNotEmpty)
+                  "vehiclePhotoObjectKeys": savedVehiclePhotoObjectKeys,
+                if (uploadedVehiclePhotos.isNotEmpty)
+                  "vehiclePhotos": uploadedVehiclePhotos,
+                if (uploadedEvidence.isNotEmpty)
+                  "attachments": uploadedEvidence,
+              },
+            },
+          )
+          .timeout(kSosSubmissionTimeout);
       if (!mounted) return;
       setState(() => submitting = false);
       _clearDraft();
@@ -7468,8 +7744,11 @@ class _StolenVehicleBroadcastScreenState
     } on TimeoutException {
       if (!mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Broadcast publish timed out (ERR-BRD-408).",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Broadcast publish timed out (ERR-BRD-408).",
+        isError: true,
+      );
     } catch (error, stackTrace) {
       debugPrint(
         "Stolen vehicle broadcast publish failed: "
@@ -7477,8 +7756,11 @@ class _StolenVehicleBroadcastScreenState
       );
       if (!mounted) return;
       setState(() => submitting = false);
-      showAppSnackBar(context, "Unable to publish broadcast (ERR-BRD-500).",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Unable to publish broadcast (ERR-BRD-500).",
+        isError: true,
+      );
     }
   }
 
@@ -7490,8 +7772,7 @@ class _StolenVehicleBroadcastScreenState
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    final garageVehicles = appOf(context)
-        .vehicles
+    final garageVehicles = appOf(context).vehicles
         .where((vehicle) => vehicle.hasRequiredFields)
         .toList(growable: false);
     CarProfile? selectedVehicle;
@@ -7502,7 +7783,8 @@ class _StolenVehicleBroadcastScreenState
       }
     }
     final hasSavedCar = garageVehicles.isNotEmpty;
-    final showVehicleForm = _entryMode == _StolenVehicleEntryMode.manualEntry ||
+    final showVehicleForm =
+        _entryMode == _StolenVehicleEntryMode.manualEntry ||
         (_entryMode == _StolenVehicleEntryMode.savedVehicle &&
             selectedVehicle != null);
     final l10n = AppLocalizations.of(context);
@@ -7515,8 +7797,11 @@ class _StolenVehicleBroadcastScreenState
             title: "Stolen vehicle broadcast",
             child: Column(
               children: [
-                const Icon(Icons.directions_car,
-                    size: 52, color: BrandColors.green),
+                const Icon(
+                  Icons.directions_car,
+                  size: 52,
+                  color: BrandColors.green,
+                ),
                 const SizedBox(height: 16),
                 if (_entryMode == _StolenVehicleEntryMode.choice) ...[
                   FilledButton(
@@ -7599,36 +7884,46 @@ class _StolenVehicleBroadcastScreenState
                 if (showVehicleForm) ...[
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text("Vehicle Information",
-                        style: Theme.of(context).textTheme.titleMedium),
+                    child: Text(
+                      "Vehicle Information",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: makeController,
-                      decoration: const InputDecoration(labelText: "Make")),
+                    controller: makeController,
+                    decoration: const InputDecoration(labelText: "Make"),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: modelController,
-                      decoration: const InputDecoration(labelText: "Model")),
+                    controller: modelController,
+                    decoration: const InputDecoration(labelText: "Model"),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: yearController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: "Year")),
+                    controller: yearController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: "Year"),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: colorController,
-                      decoration: const InputDecoration(labelText: "Color")),
+                    controller: colorController,
+                    decoration: const InputDecoration(labelText: "Color"),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: plateController,
-                      decoration:
-                          const InputDecoration(labelText: "Plate number")),
+                    controller: plateController,
+                    decoration: const InputDecoration(
+                      labelText: "Plate number",
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: vinController,
-                      decoration: const InputDecoration(
-                          labelText: "VIN / Chassis (optional)")),
+                    controller: vinController,
+                    decoration: const InputDecoration(
+                      labelText: "VIN / Chassis (optional)",
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   VehiclePhotoSection(
                     key: _vehiclePhotosSectionKey,
@@ -7637,18 +7932,23 @@ class _StolenVehicleBroadcastScreenState
                   const SizedBox(height: 20),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text("Last Seen",
-                        style: Theme.of(context).textTheme.titleMedium),
+                    child: Text(
+                      "Last Seen",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                   Material(
                     color: Colors.transparent,
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text("Last Seen Date"),
-                      subtitle: Text(_lastSeenDate == null
-                          ? "Tap to select date"
-                          : CitizenDateTimeFormatter.formatDate(
-                              _lastSeenDate!)),
+                      subtitle: Text(
+                        _lastSeenDate == null
+                            ? "Tap to select date"
+                            : CitizenDateTimeFormatter.formatDate(
+                                _lastSeenDate!,
+                              ),
+                      ),
                       trailing: const Icon(Icons.event_outlined),
                       onTap: submitting ? null : _pickLastSeenDate,
                     ),
@@ -7658,9 +7958,11 @@ class _StolenVehicleBroadcastScreenState
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text("Last Seen Time"),
-                      subtitle: Text(_lastSeenTime == null
-                          ? "Tap to select time"
-                          : formatCitizenTimeOfDay(_lastSeenTime!)),
+                      subtitle: Text(
+                        _lastSeenTime == null
+                            ? "Tap to select time"
+                            : formatCitizenTimeOfDay(_lastSeenTime!),
+                      ),
                       trailing: const Icon(Icons.schedule_outlined),
                       onTap: submitting ? null : _pickLastSeenTime,
                     ),
@@ -7675,32 +7977,41 @@ class _StolenVehicleBroadcastScreenState
                   const SizedBox(height: 20),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text("Description of Theft",
-                        style: Theme.of(context).textTheme.titleMedium),
+                    child: Text(
+                      "Description of Theft",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                      controller: theftDescriptionController,
-                      maxLines: 4,
-                      decoration:
-                          const InputDecoration(labelText: "What happened?")),
+                    controller: theftDescriptionController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: "What happened?",
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
-                      controller: descriptionController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                          labelText: "Distinguishing features")),
+                    controller: descriptionController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: "Distinguishing features",
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text("Incident Evidence",
-                        style: Theme.of(context).textTheme.titleMedium),
+                    child: Text(
+                      "Incident Evidence",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   ManagedEvidenceSection(
-                      key: _evidenceSectionKey,
-                      lowDataMode: appOf(context).lowDataMode,
-                      policy: EvidencePolicy.incident),
+                    key: _evidenceSectionKey,
+                    lowDataMode: appOf(context).lowDataMode,
+                    policy: EvidencePolicy.incident,
+                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: submitting ? null : _submit,
@@ -7708,7 +8019,8 @@ class _StolenVehicleBroadcastScreenState
                         ? const SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2))
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text("Submit broadcast"),
                   ),
                 ],
@@ -7731,7 +8043,8 @@ class _StolenVehicleBroadcastScreenState
         const SizedBox(height: 8),
         const Text("You haven't added any vehicles yet."),
         const Text(
-            "Add your vehicle first, then return here to report it stolen."),
+          "Add your vehicle first, then return here to report it stolen.",
+        ),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -7783,7 +8096,9 @@ class _StolenVehicleBroadcastScreenState
                     Container(
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: BrandColors.green.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(999),
@@ -7845,15 +8160,15 @@ class _StolenVehicleBroadcastScreenState
   }
 
   List<CarPhotoRef> _displayableSavedVehiclePhotos(CarProfile vehicle) {
-    final photos = vehicle.photos
-        .where((photo) => (photo.previewUrl ?? "").trim().isNotEmpty)
-        .toList(growable: true)
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final photos =
+        vehicle.photos
+            .where((photo) => (photo.previewUrl ?? "").trim().isNotEmpty)
+            .toList(growable: true)
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     if (photos.isEmpty && (vehicle.imagePath ?? "").trim().isNotEmpty) {
-      photos.add(CarPhotoRef(
-        previewUrl: vehicle.imagePath!.trim(),
-        angle: "OTHER",
-      ));
+      photos.add(
+        CarPhotoRef(previewUrl: vehicle.imagePath!.trim(), angle: "OTHER"),
+      );
     }
     return photos;
   }
@@ -7875,16 +8190,16 @@ class _StolenVehicleBroadcastScreenState
             children: [
               Text(
                 "Saved vehicle photos",
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
               Text(
                 "${photos.length} photo${photos.length == 1 ? "" : "s"}",
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: context.eyeMutedText,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: context.eyeMutedText),
               ),
             ],
           ),
@@ -8027,10 +8342,7 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
   }
 
   Future<void> _openFilters(AppController controller) async {
-    final selected = await showBroadcastFilterSheet(
-      context,
-      initial: _filters,
-    );
+    final selected = await showBroadcastFilterSheet(context, initial: _filters);
     if (selected == null || !mounted) return;
     var applied = selected;
     setState(() => _applyingFilters = true);
@@ -8178,7 +8490,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
           SectionCard(
             title: "National safety broadcasts",
             child: Text(
-                "There are no active country-wide safety broadcasts right now."),
+              "There are no active country-wide safety broadcasts right now.",
+            ),
           ),
         ],
       );
@@ -8212,8 +8525,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
             final tone = item.priority.contains("P1")
                 ? Colors.red.shade700
                 : item.priority.contains("P2")
-                    ? Colors.orange.shade800
-                    : EyeSemanticColors.of(context).verified;
+                ? Colors.orange.shade800
+                : EyeSemanticColors.of(context).verified;
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: ListTileCard(
@@ -8224,8 +8537,8 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
                     item.type.toLowerCase().contains("missing")
                         ? Icons.person_search
                         : item.type.toLowerCase().contains("vehicle")
-                            ? Icons.directions_car
-                            : Icons.campaign,
+                        ? Icons.directions_car
+                        : Icons.campaign,
                   ),
                 ),
                 title: presentation.title,
@@ -8255,12 +8568,13 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen> {
 }
 
 class BroadcastForm extends StatelessWidget {
-  const BroadcastForm(
-      {required this.icon,
-      required this.title,
-      required this.fields,
-      required this.onSubmit,
-      super.key});
+  const BroadcastForm({
+    required this.icon,
+    required this.title,
+    required this.fields,
+    required this.onSubmit,
+    super.key,
+  });
 
   final IconData icon;
   final String title;
@@ -8276,20 +8590,29 @@ class BroadcastForm extends StatelessWidget {
           title: title,
           child: Column(
             children: [
-              Icon(icon,
-                  size: 52, color: Theme.of(context).colorScheme.primary),
+              Icon(
+                icon,
+                size: 52,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: 16),
-              ...fields.map((field) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: TextField(
-                        decoration: InputDecoration(labelText: field)),
-                  )),
+              ...fields.map(
+                (field) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    decoration: InputDecoration(labelText: field),
+                  ),
+                ),
+              ),
               ManagedEvidenceSection(
-                  key: GlobalKey<ManagedEvidenceSectionState>(),
-                  lowDataMode: appOf(context).lowDataMode),
+                key: GlobalKey<ManagedEvidenceSectionState>(),
+                lowDataMode: appOf(context).lowDataMode,
+              ),
               const SizedBox(height: 16),
               FilledButton(
-                  onPressed: onSubmit, child: const Text("Submit broadcast")),
+                onPressed: onSubmit,
+                child: const Text("Submit broadcast"),
+              ),
             ],
           ),
         ),
@@ -8336,10 +8659,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (route == "/incident-detail") {
         final incidentId = alert.incidentId;
         if (incidentId == null || incidentId.isEmpty) return;
-        await navigator.pushNamed(
-          "/incident-detail",
-          arguments: incidentId,
-        );
+        await navigator.pushNamed("/incident-detail", arguments: incidentId);
         return;
       }
       if (route == "/active-emergency") {
@@ -8364,9 +8684,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final controller = appOf(context);
     if (!controller.isAuthenticated) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -8383,7 +8701,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   onPressed: () =>
                       unawaited(controller.markAllNotificationsRead()),
                   child: Text(
-                      "Mark all read (${controller.notificationUnreadCount})"),
+                    "Mark all read (${controller.notificationUnreadCount})",
+                  ),
                 ),
               ),
             ),
@@ -8436,8 +8755,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ListTile(
             leading: Icon(Icons.notifications_none),
             title: Text("No notifications yet"),
-            subtitle:
-                Text("Safety alerts and incident updates will appear here."),
+            subtitle: Text(
+              "Safety alerts and incident updates will appear here.",
+            ),
           ),
         ],
       );
@@ -8455,7 +8775,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        itemCount: controller.notifications.length +
+        itemCount:
+            controller.notifications.length +
             (controller.loadingMoreNotifications ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
@@ -8532,16 +8853,19 @@ class FamilySafetyCircleScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           FilledButton.icon(
-              onPressed: () => Navigator.of(context)
-                  .pushNamed("/profile/emergency-contacts"),
-              icon: const Icon(Icons.group_add),
-              label: const Text("Add family member")),
+            onPressed: () =>
+                Navigator.of(context).pushNamed("/profile/emergency-contacts"),
+            icon: const Icon(Icons.group_add),
+            label: const Text("Add family member"),
+          ),
           const SizedBox(height: 16),
-          ...members.map((member) => ListTileCard(
-                leading: Icon(member.$3),
-                title: member.$1,
-                subtitle: member.$2,
-              )),
+          ...members.map(
+            (member) => ListTileCard(
+              leading: Icon(member.$3),
+              title: member.$1,
+              subtitle: member.$2,
+            ),
+          ),
         ],
       ),
     );
@@ -8579,8 +8903,9 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => unawaited(_loadDevices()));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_loadDevices()),
+    );
   }
 
   Future<void> _loadDevices() async {
@@ -8595,8 +8920,10 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
       if (!mounted) return;
       SmartwatchDeviceRecord? device;
       if (devices.isNotEmpty) {
-        device = devices.firstWhere((item) => item.isActive,
-            orElse: () => devices.first);
+        device = devices.firstWhere(
+          (item) => item.isActive,
+          orElse: () => devices.first,
+        );
       }
       setState(() {
         selectedDevice = device;
@@ -8697,8 +9024,10 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
           else if (loadError != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: Text(loadError!,
-                  style: const TextStyle(color: BrandColors.danger)),
+              child: Text(
+                loadError!,
+                style: const TextStyle(color: BrandColors.danger),
+              ),
             ),
           const SizedBox(height: 16),
           SectionCard(
@@ -8707,18 +9036,23 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextField(
-                    controller: deviceIdController,
-                    decoration: const InputDecoration(labelText: "Device ID")),
+                  controller: deviceIdController,
+                  decoration: const InputDecoration(labelText: "Device ID"),
+                ),
                 const SizedBox(height: 12),
                 TextField(
-                    controller: pairingCodeController,
-                    decoration: const InputDecoration(
-                        labelText: "Pairing code from watch")),
+                  controller: pairingCodeController,
+                  decoration: const InputDecoration(
+                    labelText: "Pairing code from watch",
+                  ),
+                ),
                 const SizedBox(height: 12),
                 TextField(
-                    controller: deviceSecretController,
-                    decoration: const InputDecoration(
-                        labelText: "Device secret for standalone mode")),
+                  controller: deviceSecretController,
+                  decoration: const InputDecoration(
+                    labelText: "Device secret for standalone mode",
+                  ),
+                ),
                 const SizedBox(height: 12),
                 SwitchListTile(
                   value: standaloneCellular,
@@ -8726,28 +9060,36 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
                       setState(() => standaloneCellular = value),
                   title: const Text("Standalone cellular mode"),
                   subtitle: const Text(
-                      "Use when the watch sends SOS without the paired phone"),
+                    "Use when the watch sends SOS without the paired phone",
+                  ),
                 ),
                 DropdownButtonFormField<String>(
                   value: pairingMethod,
-                  decoration:
-                      const InputDecoration(labelText: "Pairing method"),
+                  decoration: const InputDecoration(
+                    labelText: "Pairing method",
+                  ),
                   items: const [
                     DropdownMenuItem(
-                        value: SmartwatchPairingMethod.qrCode,
-                        child: Text("QR Code")),
+                      value: SmartwatchPairingMethod.qrCode,
+                      child: Text("QR Code"),
+                    ),
                     DropdownMenuItem(
-                        value: SmartwatchPairingMethod.bluetooth,
-                        child: Text("Bluetooth")),
+                      value: SmartwatchPairingMethod.bluetooth,
+                      child: Text("Bluetooth"),
+                    ),
                     DropdownMenuItem(
-                        value: SmartwatchPairingMethod.pairingCode,
-                        child: Text("Pairing Code")),
+                      value: SmartwatchPairingMethod.pairingCode,
+                      child: Text("Pairing Code"),
+                    ),
                     DropdownMenuItem(
-                        value: SmartwatchPairingMethod.nfc,
-                        child: Text("NFC future")),
+                      value: SmartwatchPairingMethod.nfc,
+                      child: Text("NFC future"),
+                    ),
                   ],
-                  onChanged: (value) => setState(() => pairingMethod =
-                      value ?? SmartwatchPairingMethod.pairingCode),
+                  onChanged: (value) => setState(
+                    () => pairingMethod =
+                        value ?? SmartwatchPairingMethod.pairingCode,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SwitchListTile(
@@ -8760,12 +9102,14 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
                   onChanged: (value) => setState(() => failoverEnabled = value),
                   title: const Text("Automatic standalone failover"),
                   subtitle: const Text(
-                      "Use watch LTE or WiFi when phone connection is lost"),
+                    "Use watch LTE or WiFi when phone connection is lost",
+                  ),
                 ),
                 FilledButton.icon(
-                    onPressed: sending ? null : _pairDevice,
-                    icon: const Icon(Icons.watch),
-                    label: const Text("Pair device")),
+                  onPressed: sending ? null : _pairDevice,
+                  icon: const Icon(Icons.watch),
+                  label: const Text("Pair device"),
+                ),
               ],
             ),
           ),
@@ -8776,44 +9120,55 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 ProfileRow(
-                    "Mode",
-                    standaloneCellular
-                        ? "Standalone cellular"
-                        : "Paired phone"),
+                  "Mode",
+                  standaloneCellular ? "Standalone cellular" : "Paired phone",
+                ),
                 ProfileRow(
-                    "Critical alerts", criticalAlerts ? "Enabled" : "Disabled"),
+                  "Critical alerts",
+                  criticalAlerts ? "Enabled" : "Disabled",
+                ),
                 ProfileRow(
-                    "Failover", failoverEnabled ? "Enabled" : "Disabled"),
-                ProfileRow("Battery",
-                    batteryLevel == null ? "Unavailable" : "$batteryLevel%"),
+                  "Failover",
+                  failoverEnabled ? "Enabled" : "Disabled",
+                ),
                 ProfileRow(
-                    "Signal",
-                    signalStrength == null
-                        ? "Unavailable"
-                        : "$signalStrength%"),
+                  "Battery",
+                  batteryLevel == null ? "Unavailable" : "$batteryLevel%",
+                ),
                 ProfileRow(
-                    "Latest GPS",
-                    latestPosition == null
-                        ? "Waiting for location"
-                        : "${latestPosition!.latitude.toStringAsFixed(6)}, ${latestPosition!.longitude.toStringAsFixed(6)}"),
+                  "Signal",
+                  signalStrength == null ? "Unavailable" : "$signalStrength%",
+                ),
+                ProfileRow(
+                  "Latest GPS",
+                  latestPosition == null
+                      ? "Waiting for location"
+                      : "${latestPosition!.latitude.toStringAsFixed(6)}, ${latestPosition!.longitude.toStringAsFixed(6)}",
+                ),
                 if (latestPosition != null)
                   TextButton.icon(
                     onPressed: () => openMaps(
-                        latestPosition!.latitude, latestPosition!.longitude),
+                      latestPosition!.latitude,
+                      latestPosition!.longitude,
+                    ),
                     icon: const Icon(Icons.map),
                     label: const Text("Open GPS in maps"),
                     style: TextButton.styleFrom(
-                      foregroundColor:
-                          EyeSemanticColors.of(context).interactiveText,
+                      foregroundColor: EyeSemanticColors.of(
+                        context,
+                      ).interactiveText,
                     ),
                   ),
                 ProfileRow(
-                    "Accuracy",
-                    latestPosition == null
-                        ? "-"
-                        : "${latestPosition!.accuracy.toStringAsFixed(0)}m"),
-                Text(status,
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                  "Accuracy",
+                  latestPosition == null
+                      ? "-"
+                      : "${latestPosition!.accuracy.toStringAsFixed(0)}m",
+                ),
+                Text(
+                  status,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
                 if (locationDenied)
                   Padding(
                     padding: const EdgeInsets.only(top: 10),
@@ -8834,29 +9189,38 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
               decoration: const InputDecoration(labelText: "SOS workflow"),
               items: const [
                 DropdownMenuItem(
-                    value: SmartwatchEmergencyMode.silentSos,
-                    child: Text("Silent SOS")),
+                  value: SmartwatchEmergencyMode.silentSos,
+                  child: Text("Silent SOS"),
+                ),
                 DropdownMenuItem(
-                    value: SmartwatchEmergencyMode.normalSos,
-                    child: Text("Normal SOS")),
+                  value: SmartwatchEmergencyMode.normalSos,
+                  child: Text("Normal SOS"),
+                ),
                 DropdownMenuItem(
-                    value: SmartwatchEmergencyMode.medicalSos,
-                    child: Text("Medical SOS")),
+                  value: SmartwatchEmergencyMode.medicalSos,
+                  child: Text("Medical SOS"),
+                ),
                 DropdownMenuItem(
-                    value: SmartwatchEmergencyMode.kidnappingSos,
-                    child: Text("Kidnapping SOS")),
+                  value: SmartwatchEmergencyMode.kidnappingSos,
+                  child: Text("Kidnapping SOS"),
+                ),
                 DropdownMenuItem(
-                    value: SmartwatchEmergencyMode.fireSos,
-                    child: Text("Fire SOS")),
+                  value: SmartwatchEmergencyMode.fireSos,
+                  child: Text("Fire SOS"),
+                ),
                 DropdownMenuItem(
-                    value: SmartwatchEmergencyMode.childSos,
-                    child: Text("Child SOS")),
+                  value: SmartwatchEmergencyMode.childSos,
+                  child: Text("Child SOS"),
+                ),
                 DropdownMenuItem(
-                    value: SmartwatchEmergencyMode.womenSafetySos,
-                    child: Text("Women Safety SOS")),
+                  value: SmartwatchEmergencyMode.womenSafetySos,
+                  child: Text("Women Safety SOS"),
+                ),
               ],
-              onChanged: (value) => setState(() =>
-                  emergencyMode = value ?? SmartwatchEmergencyMode.normalSos),
+              onChanged: (value) => setState(
+                () =>
+                    emergencyMode = value ?? SmartwatchEmergencyMode.normalSos,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -8864,40 +9228,52 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
             title: "SOS event history",
             child: sosHistory.isEmpty
                 ? const Text(
-                    "No SOS events yet. Trigger SOS to populate history.")
+                    "No SOS events yet. Trigger SOS to populate history.",
+                  )
                 : Column(
                     children: sosHistory
-                        .map((entry) => ListTile(
+                        .map(
+                          (entry) => ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: Text(entry,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700))))
-                        .toList()),
+                            title: Text(
+                              entry,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
             style: FilledButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
-                foregroundColor: Colors.white),
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
             onPressed: sending ? null : _triggerSos,
             icon: const Icon(Icons.sos),
             label: const Text("Trigger watch SOS"),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-              onPressed: sending ? null : _sendGpsUpdate,
-              icon: const Icon(Icons.my_location),
-              label: const Text("Send GPS update")),
+            onPressed: sending ? null : _sendGpsUpdate,
+            icon: const Icon(Icons.my_location),
+            label: const Text("Send GPS update"),
+          ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-              onPressed: sending ? null : _sendHeartbeat,
-              icon: const Icon(Icons.favorite),
-              label: const Text("Send heartbeat")),
+            onPressed: sending ? null : _sendHeartbeat,
+            icon: const Icon(Icons.favorite),
+            label: const Text("Send heartbeat"),
+          ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-              onPressed: sending ? null : _syncOfflineEvents,
-              icon: const Icon(Icons.cloud_upload),
-              label: const Text("Sync offline watch events")),
+            onPressed: sending ? null : _syncOfflineEvents,
+            icon: const Icon(Icons.cloud_upload),
+            label: const Text("Sync offline watch events"),
+          ),
         ],
       ),
     );
@@ -8954,8 +9330,10 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
     }
     setState(() {
       latestPosition = position;
-      sosHistory.insert(0,
-          "${formatEvidenceTimestamp(DateTime.now())} — $emergencyMode (${standaloneCellular ? "Standalone" : "Paired"})");
+      sosHistory.insert(
+        0,
+        "${formatEvidenceTimestamp(DateTime.now())} — $emergencyMode (${standaloneCellular ? "Standalone" : "Paired"})",
+      );
     });
     await _sendRequest(
       () => apiClient.postSmartwatchSos(
@@ -9005,7 +9383,7 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
               "payload": {
                 "batteryLevel": batteryLevel,
                 "signalStrength": signalStrength,
-                "offline": true
+                "offline": true,
               },
             },
           ],
@@ -9016,13 +9394,16 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
   }
 
   Future<Position?> _captureLocation() async {
-    final outcome =
-        await captureLocationOutcome(accuracy: LocationAccuracy.high);
+    final outcome = await captureLocationOutcome(
+      accuracy: LocationAccuracy.high,
+    );
     return outcome.position;
   }
 
   Future<void> _sendRequest(
-      Future<void> Function() request, String successMessage) async {
+    Future<void> Function() request,
+    String successMessage,
+  ) async {
     setState(() {
       sending = true;
       status = "Sending request...";
@@ -9037,11 +9418,14 @@ class _SmartwatchDeviceScreenState extends State<SmartwatchDeviceScreen> {
       showAppSnackBar(context, successMessage);
     } catch (_) {
       if (!mounted) return;
-      setState(() =>
-          status = "Unable to reach THE EYE API. Request can be retried.");
+      setState(
+        () => status = "Unable to reach THE EYE API. Request can be retried.",
+      );
       showAppSnackBar(
-          context, "Unable to reach THE EYE API. Tap again to retry.",
-          isError: true);
+        context,
+        "Unable to reach THE EYE API. Tap again to retry.",
+        isError: true,
+      );
     } finally {
       if (mounted) setState(() => sending = false);
     }
@@ -9083,9 +9467,11 @@ class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
   Widget build(BuildContext context) {
     final controller = appOf(context);
     final memberships = controller.communities
-        .where((community) =>
-            community.membershipStatus == "Approved" ||
-            community.membershipStatus == "Pending")
+        .where(
+          (community) =>
+              community.membershipStatus == "Approved" ||
+              community.membershipStatus == "Pending",
+        )
         .toList();
     return NwPrototypeScaffold(
       title: "Neighborhood Watch",
@@ -9111,77 +9497,80 @@ class _MyCommunitiesScreenState extends State<MyCommunitiesScreen> {
                 (community) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: NwPrototypeListCard(
-                      leading: const Icon(Icons.groups),
-                      title: community.name,
-                      subtitle: [
-                        "${community.visibility} • ${community.membershipStatus ?? "Unknown"}",
-                        if (communityAccessStatus(
-                          selectedCommunity: community,
-                          currentAreaCommunityId:
-                              controller.nwContextCommunityId,
-                        ).isOutsideCurrentArea)
-                          "You are currently outside this community.",
-                      ].join("\n"),
-                      onTap: () {
-                        controller.selectCommunity(community);
-                        Navigator.of(context).pushReplacementNamed(
-                          NeighborhoodWatchDestinations.home,
-                        );
-                      },
-                      trailing: community.membershipStatus == "Approved"
-                          ? IconButton(
-                              icon: const Icon(Icons.logout),
-                              tooltip: "Leave community",
-                              onPressed: () async {
-                                controller.selectCommunity(community);
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text("Leave community"),
-                                    content: const Text(
-                                      "Leave this community? Owners and moderators must transfer responsibilities first.",
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, false),
-                                        child: const Text("Cancel"),
-                                      ),
-                                      FilledButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, true),
-                                        child: const Text("Leave"),
-                                      ),
-                                    ],
+                    leading: const Icon(Icons.groups),
+                    title: community.name,
+                    subtitle: [
+                      "${community.visibility} • ${community.membershipStatus ?? "Unknown"}",
+                      if (communityAccessStatus(
+                        selectedCommunity: community,
+                        currentAreaCommunityId: controller.nwContextCommunityId,
+                      ).isOutsideCurrentArea)
+                        "You are currently outside this community.",
+                    ].join("\n"),
+                    onTap: () {
+                      controller.selectCommunity(community);
+                      Navigator.of(context).pushReplacementNamed(
+                        NeighborhoodWatchDestinations.home,
+                      );
+                    },
+                    trailing: community.membershipStatus == "Approved"
+                        ? IconButton(
+                            icon: const Icon(Icons.logout),
+                            tooltip: "Leave community",
+                            onPressed: () async {
+                              controller.selectCommunity(community);
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text("Leave community"),
+                                  content: const Text(
+                                    "Leave this community? Owners and moderators must transfer responsibilities first.",
                                   ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: const Text("Cancel"),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: const Text("Leave"),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed != true || !context.mounted) {
+                                return;
+                              }
+                              final error = await controller
+                                  .leaveSelectedCommunity();
+                              if (!context.mounted) return;
+                              if (error != null) {
+                                showAppSnackBar(context, error, isError: true);
+                              } else {
+                                showAppSnackBar(
+                                  context,
+                                  "You left the community",
                                 );
-                                if (confirmed != true || !context.mounted) {
-                                  return;
-                                }
-                                final error =
-                                    await controller.leaveSelectedCommunity();
-                                if (!context.mounted) return;
-                                if (error != null) {
-                                  showAppSnackBar(context, error,
-                                      isError: true);
-                                } else {
-                                  showAppSnackBar(
-                                      context, "You left the community");
-                                  await controller.loadCommunitiesFromApi(
-                                      refresh: true);
-                                  setState(() {});
-                                }
-                              },
-                            )
-                          : null),
+                                await controller.loadCommunitiesFromApi(
+                                  refresh: true,
+                                );
+                                setState(() {});
+                              }
+                            },
+                          )
+                        : null,
+                  ),
                 ),
               ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => Navigator.of(context)
-                    .pushNamed(NeighborhoodWatchDestinations.join),
+                onPressed: () => Navigator.of(
+                  context,
+                ).pushNamed(NeighborhoodWatchDestinations.join),
                 icon: const Icon(Icons.travel_explore),
                 label: const Text("Discover Communities"),
               ),
@@ -9233,8 +9622,9 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
       _actionError = null;
     });
     try {
-      final updated =
-          await appOf(context).joinCommunityAndRefresh(community.id);
+      final updated = await appOf(
+        context,
+      ).joinCommunityAndRefresh(community.id);
       if (!mounted) return;
       showAppSnackBar(
         context,
@@ -9306,9 +9696,9 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).pushNamed(
-                NeighborhoodWatchDestinations.requestCommunity,
-              ),
+              onPressed: () => Navigator.of(
+                context,
+              ).pushNamed(NeighborhoodWatchDestinations.requestCommunity),
               icon: const Icon(Icons.add_home_work_outlined),
               label: const Text("Request community"),
             ),
@@ -9366,7 +9756,8 @@ class _JoinCommunityScreenState extends State<JoinCommunityScreen> {
                   ),
                   onTap: () => _openPreview(community),
                   trailing: FilledButton(
-                    onPressed: !communityJoinActionEnabled(community) ||
+                    onPressed:
+                        !communityJoinActionEnabled(community) ||
                             _joiningCommunityId != null
                         ? null
                         : () => _join(community),
@@ -9456,8 +9847,9 @@ class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
       _error = null;
     });
     try {
-      final updated =
-          await appOf(context).joinCommunityAndRefresh(community.id);
+      final updated = await appOf(
+        context,
+      ).joinCommunityAndRefresh(community.id);
       if (!mounted) return;
       setState(() {
         _community = updated;
@@ -9521,9 +9913,7 @@ class _CommunityPreviewScreenState extends State<CommunityPreviewScreen> {
                       Expanded(
                         child: Text(
                           community.name,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
+                          style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -10024,7 +10414,8 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       builder: (context) => AlertDialog(
         title: const Text("Delete message?"),
         content: const Text(
-            "This removes the message from the neighborhood conversation."),
+          "This removes the message from the neighborhood conversation.",
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -10077,9 +10468,9 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       subtitle: community == null
           ? null
           : [community.lga, community.state]
-              .whereType<String>()
-              .where((part) => part.trim().isNotEmpty)
-              .join(" · "),
+                .whereType<String>()
+                .where((part) => part.trim().isNotEmpty)
+                .join(" · "),
       messages: controller.communityFeed,
       canSend: controller.canStartCommunityConversation,
       loading: controller.loadingCommunityFeed,
@@ -10244,8 +10635,9 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
       return;
     }
     showAppSnackBar(context, "Conversation posted for this area");
-    Navigator.of(context)
-        .pushReplacementNamed(NeighborhoodWatchDestinations.feed);
+    Navigator.of(
+      context,
+    ).pushReplacementNamed(NeighborhoodWatchDestinations.feed);
   }
 
   @override
@@ -10278,8 +10670,9 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
             heightFactor: 0.9,
             widthFactor: 1,
             child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
               child: NwPrototypeScaffold(
                 title: "Share With Community",
                 leading: NwPrototypeIconButton(
@@ -10338,15 +10731,17 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                           TextField(
                             controller: _titleController,
                             maxLength: 120,
-                            decoration:
-                                const InputDecoration(labelText: "Title"),
+                            decoration: const InputDecoration(
+                              labelText: "Title",
+                            ),
                           ),
                           TextField(
                             controller: _bodyController,
                             minLines: 3,
                             maxLines: 5,
-                            decoration:
-                                const InputDecoration(labelText: "Details"),
+                            decoration: const InputDecoration(
+                              labelText: "Details",
+                            ),
                           ),
                         ],
                       ),
@@ -10379,8 +10774,9 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                             backgroundColor: semantics.error,
                             foregroundColor: semantics.textOnPrimary,
                           ),
-                          onPressed: () => Navigator.of(context)
-                              .pushNamed("/report/emergency"),
+                          onPressed: () => Navigator.of(
+                            context,
+                          ).pushNamed("/report/emergency"),
                           icon: const Icon(Icons.emergency),
                           label: const Text("Report Emergency"),
                         ),
@@ -10416,14 +10812,16 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                               ),
                               onPressed: _selectedLocation == null
                                   ? _attachLocation
-                                  : () =>
-                                      setState(() => _selectedLocation = null),
+                                  : () => setState(
+                                      () => _selectedLocation = null,
+                                    ),
                             ),
                       onTap: _capturingLocation
                           ? null
                           : (_selectedLocation == null
-                              ? _attachLocation
-                              : () => setState(() => _selectedLocation = null)),
+                                ? _attachLocation
+                                : () =>
+                                      setState(() => _selectedLocation = null)),
                     ),
                     const SizedBox(height: 12),
                     SizedBox(
@@ -10434,8 +10832,9 @@ class _CreateCommunityPostScreenState extends State<CreateCommunityPostScreen> {
                             ? const SizedBox(
                                 width: 22,
                                 height: 22,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text("Submit post"),
                       ),
@@ -10582,11 +10981,13 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
               subtitle: "Join an approved community to access channels.",
             )
           else
-            ...channels.map((channel) => ListTileCard(
-                  leading: const Icon(Icons.forum),
-                  title: channel.name,
-                  subtitle: channel.type,
-                )),
+            ...channels.map(
+              (channel) => ListTileCard(
+                leading: const Icon(Icons.forum),
+                title: channel.name,
+                subtitle: channel.type,
+              ),
+            ),
         ],
       ),
     );
@@ -10620,8 +11021,9 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
     setState(() => _registering = true);
     try {
       final location = await captureLocationOutcome();
-      await NeighborhoodWatchService(apiClient: appOf(context).apiClient)
-          .registerVolunteer(
+      await NeighborhoodWatchService(
+        apiClient: appOf(context).apiClient,
+      ).registerVolunteer(
         accessToken: controller.accessToken!,
         communityId: community.id,
         types: _selection.toPayload(),
@@ -10635,8 +11037,11 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
       showAppSnackBar(context, error.userMessage, isError: true);
     } catch (_) {
       if (!mounted) return;
-      showAppSnackBar(context, "Unable to register as volunteer",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Unable to register as volunteer",
+        isError: true,
+      );
     } finally {
       if (mounted) setState(() => _registering = false);
     }
@@ -10657,8 +11062,9 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
           FilledButton.icon(
             onPressed: _registering ? null : _register,
             icon: const Icon(Icons.volunteer_activism),
-            label:
-                Text(_registering ? "Registering..." : "Register as volunteer"),
+            label: Text(
+              _registering ? "Registering..." : "Register as volunteer",
+            ),
           ),
           const SizedBox(height: 16),
           ...canonicalVolunteerCategories.map(
@@ -10667,8 +11073,10 @@ class _VolunteersScreenState extends State<VolunteersScreen> {
               title: category.label,
               subtitle: "Notify nearby volunteers during emergencies",
               trailing: _selection.isSelected(category.apiType)
-                  ? Icon(Icons.check_circle,
-                      color: EyeSemanticColors.of(context).primaryAction)
+                  ? Icon(
+                      Icons.check_circle,
+                      color: EyeSemanticColors.of(context).primaryAction,
+                    )
                   : null,
               onTap: () => _toggleCategory(category.apiType),
             ),
@@ -10696,7 +11104,8 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
   }
 
   PatrolScheduleItem? _selectCheckpointPatrol(
-      List<PatrolScheduleItem> patrols) {
+    List<PatrolScheduleItem> patrols,
+  ) {
     final active = _activePatrols(patrols);
     if (active.isNotEmpty) return active.first;
     return null;
@@ -10736,12 +11145,16 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
     try {
       final location = await captureLocationOutcome();
       if (location.position == null) {
-        showAppSnackBar(context, "Location permission is required",
-            isError: true);
+        showAppSnackBar(
+          context,
+          "Location permission is required",
+          isError: true,
+        );
         return;
       }
-      await NeighborhoodWatchService(apiClient: appOf(context).apiClient)
-          .logCheckpoint(
+      await NeighborhoodWatchService(
+        apiClient: appOf(context).apiClient,
+      ).logCheckpoint(
         accessToken: controller.accessToken!,
         scheduleId: schedule.id,
         label: "Mobile checkpoint",
@@ -10764,10 +11177,8 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => PatrolDetailSheet(
-        accessToken: accessToken,
-        patrol: patrol,
-      ),
+      builder: (_) =>
+          PatrolDetailSheet(accessToken: accessToken, patrol: patrol),
     );
     if (mounted) await controller.loadCommunityPatrols();
   }
@@ -10816,11 +11227,13 @@ class _PatrolsScreenState extends State<PatrolsScreen> {
                       "Upcoming patrols are listed below. Checkpoints can only be logged during an active patrol you are authorized for.",
                 ),
               ...controller.communityPatrols.map((patrol) {
-                final highlighted = widget.highlightScheduleId != null &&
+                final highlighted =
+                    widget.highlightScheduleId != null &&
                     widget.highlightScheduleId == patrol.id;
                 final isActive = patrol.status.toLowerCase() == "active";
-                final tone =
-                    isActive ? BrandColors.green : const Color(0xFF4A9DFF);
+                final tone = isActive
+                    ? BrandColors.green
+                    : const Color(0xFF4A9DFF);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: NwPrototypeListCard(
@@ -10897,12 +11310,13 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
 
   Future<void> _load() async {
     try {
-      final patrol = await NeighborhoodWatchService(
-        apiClient: appOf(context).apiClient,
-      ).getPatrol(
-        accessToken: widget.accessToken,
-        scheduleId: widget.patrol.id,
-      );
+      final patrol =
+          await NeighborhoodWatchService(
+            apiClient: appOf(context).apiClient,
+          ).getPatrol(
+            accessToken: widget.accessToken,
+            scheduleId: widget.patrol.id,
+          );
       if (!mounted) return;
       setState(() {
         _patrol = patrol;
@@ -10927,11 +11341,9 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
     if (_joining || !_patrol.canJoin || _patrol.isParticipant) return;
     setState(() => _joining = true);
     try {
-      await NeighborhoodWatchService(apiClient: appOf(context).apiClient)
-          .joinPatrol(
-        accessToken: widget.accessToken,
-        scheduleId: _patrol.id,
-      );
+      await NeighborhoodWatchService(
+        apiClient: appOf(context).apiClient,
+      ).joinPatrol(accessToken: widget.accessToken, scheduleId: _patrol.id);
       if (!mounted) return;
       setState(() {
         _joining = false;
@@ -10951,15 +11363,15 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
     } on IncidentApiException catch (error) {
       if (!mounted) return;
       setState(() => _joining = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.userMessage)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.userMessage)));
     } catch (_) {
       if (!mounted) return;
       setState(() => _joining = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Unable to join patrol.")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Unable to join patrol.")));
     }
   }
 
@@ -10974,71 +11386,66 @@ class _PatrolDetailSheetState extends State<PatrolDetailSheet> {
                 child: Center(child: CircularProgressIndicator()),
               )
             : _error != null
-                ? SizedBox(
-                    height: 220,
-                    child: Center(child: Text(_error!)),
-                  )
-                : NwPrototypeCard(
-                    child: ListView(
-                      shrinkWrap: true,
+            ? SizedBox(height: 220, child: Center(child: Text(_error!)))
+            : NwPrototypeCard(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _patrol.title,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
-                                    ?.copyWith(fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                            NwPrototypePill(
-                              label: _patrol.status,
-                              selected:
-                                  _patrol.status.toLowerCase() == "active",
-                              color: _patrol.status.toLowerCase() == "active"
-                                  ? BrandColors.green
-                                  : const Color(0xFF4A9DFF),
-                            ),
-                          ],
+                        Expanded(
+                          child: Text(
+                            _patrol.title,
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        Text("Starts: ${_patrol.startsAt ?? "TBD"}"),
-                        Text("Ends: ${_patrol.endsAt ?? "TBD"}"),
-                        Text(
-                          "Participating members: ${_patrol.participantCount}",
-                        ),
-                        const SizedBox(height: 12),
-                        Text(_patrol.routeDescription ??
-                            "General route information is available to approved community members."),
-                        const SizedBox(height: 12),
-                        const Text(
-                            "Follow community safety instructions. Do not confront suspicious persons. Report immediate danger through THE EYE Emergency."),
-                        const SizedBox(height: 16),
-                        OutlinedButton.icon(
-                          onPressed: () => Navigator.of(context)
-                              .pushNamed("/report/emergency"),
-                          icon: const Icon(Icons.emergency_outlined),
-                          label:
-                              const Text("Immediate danger? Report Emergency"),
-                        ),
-                        const SizedBox(height: 8),
-                        FilledButton(
-                          onPressed: _patrol.isParticipant ||
-                                  !_patrol.canJoin ||
-                                  _joining
-                              ? null
-                              : _join,
-                          child: Text(_patrol.isParticipant
-                              ? "Joined"
-                              : _joining
-                                  ? "Joining..."
-                                  : "Join Patrol"),
+                        NwPrototypePill(
+                          label: _patrol.status,
+                          selected: _patrol.status.toLowerCase() == "active",
+                          color: _patrol.status.toLowerCase() == "active"
+                              ? BrandColors.green
+                              : const Color(0xFF4A9DFF),
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    Text("Starts: ${_patrol.startsAt ?? "TBD"}"),
+                    Text("Ends: ${_patrol.endsAt ?? "TBD"}"),
+                    Text("Participating members: ${_patrol.participantCount}"),
+                    const SizedBox(height: 12),
+                    Text(
+                      _patrol.routeDescription ??
+                          "General route information is available to approved community members.",
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Follow community safety instructions. Do not confront suspicious persons. Report immediate danger through THE EYE Emergency.",
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          Navigator.of(context).pushNamed("/report/emergency"),
+                      icon: const Icon(Icons.emergency_outlined),
+                      label: const Text("Immediate danger? Report Emergency"),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton(
+                      onPressed:
+                          _patrol.isParticipant || !_patrol.canJoin || _joining
+                          ? null
+                          : _join,
+                      child: Text(
+                        _patrol.isParticipant
+                            ? "Joined"
+                            : _joining
+                            ? "Joining..."
+                            : "Join Patrol",
+                      ),
+                    ),
+                  ],
+                ),
+              ),
       ),
     );
   }
@@ -11096,8 +11503,9 @@ class _NeighborhoodWatchBroadcastsScreenState
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error =
-            error is StateError ? error.message : "Unable to load broadcasts.";
+        _error = error is StateError
+            ? error.message
+            : "Unable to load broadcasts.";
         _loading = false;
       });
     }
@@ -11184,8 +11592,8 @@ class _NeighborhoodWatchBroadcastsScreenState
                   color: active
                       ? BrandColors.green
                       : item.adminVerified
-                          ? const Color(0xFFFF9933)
-                          : const Color(0xFF4A9DFF),
+                      ? const Color(0xFFFF9933)
+                      : const Color(0xFF4A9DFF),
                 ),
                 onTap: () {
                   final route = broadcastDetailRoute(item.id);
@@ -11203,10 +11611,7 @@ class _NeighborhoodWatchBroadcastsScreenState
     return NwPrototypeScaffold(
       title: "Neighborhood Watch",
       actions: _neighborhoodWatchHeaderActions(context),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _buildBroadcastList(),
-      ),
+      body: RefreshIndicator(onRefresh: _load, child: _buildBroadcastList()),
     );
   }
 }
@@ -11267,12 +11672,14 @@ class _CommunityAlertsScreenState extends State<CommunityAlertsScreen> {
                 subtitle: "Verified community alerts will appear here.",
               )
             else
-              ...controller.communityAlerts.map((alert) => ListTileCard(
-                    leading: const Icon(Icons.campaign),
-                    title: alert.title,
-                    subtitle:
-                        "${alert.type} • ${alert.verificationStatus} • ${alert.confidenceScore.round()}%",
-                  )),
+              ...controller.communityAlerts.map(
+                (alert) => ListTileCard(
+                  leading: const Icon(Icons.campaign),
+                  title: alert.title,
+                  subtitle:
+                      "${alert.type} • ${alert.verificationStatus} • ${alert.confidenceScore.round()}%",
+                ),
+              ),
           ],
         ),
       ),
@@ -11348,14 +11755,18 @@ class _YourCarScreenState extends State<YourCarScreen> {
                       title: Row(
                         children: [
                           Expanded(
-                              child: Text(label.isEmpty ? "Vehicle" : label)),
+                            child: Text(label.isEmpty ? "Vehicle" : label),
+                          ),
                           if (vehicle.isPrimary)
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
-                                color:
-                                    BrandColors.green.withValues(alpha: 0.16),
+                                color: BrandColors.green.withValues(
+                                  alpha: 0.16,
+                                ),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: const Text(
@@ -11397,16 +11808,20 @@ class _YourCarScreenState extends State<YourCarScreen> {
 }
 
 class _VehicleEditorArgs {
-  const _VehicleEditorArgs(
-      {this.vehicleId, this.returnToStolenVehicle = false});
+  const _VehicleEditorArgs({
+    this.vehicleId,
+    this.returnToStolenVehicle = false,
+  });
 
   final String? vehicleId;
   final bool returnToStolenVehicle;
 }
 
 class VehicleDetailScreen extends StatefulWidget {
-  const VehicleDetailScreen(
-      {super.key, this.args = const _VehicleEditorArgs()});
+  const VehicleDetailScreen({
+    super.key,
+    this.args = const _VehicleEditorArgs(),
+  });
 
   final _VehicleEditorArgs args;
 
@@ -11560,10 +11975,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     );
   }
 
-  Future<void> _pickImage(
-    ImageSource source,
-    VehiclePhotoAngle angle,
-  ) async {
+  Future<void> _pickImage(ImageSource source, VehiclePhotoAngle angle) async {
     final picker = ImagePicker();
     if (source == ImageSource.gallery) {
       final picked = await picker.pickMultiImage(
@@ -11598,10 +12010,14 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         picked.mimeType,
         fileName: fileName,
       );
-      if (!EvidencePolicy.vehiclePhotos.supportedMimeTypes
-          .contains(contentType)) {
-        showAppSnackBar(context, "Vehicle photos must be JPEG, PNG, or WebP.",
-            isError: true);
+      if (!EvidencePolicy.vehiclePhotos.supportedMimeTypes.contains(
+        contentType,
+      )) {
+        showAppSnackBar(
+          context,
+          "Vehicle photos must be JPEG, PNG, or WebP.",
+          isError: true,
+        );
         continue;
       }
       final savedPath = await _persistCarImage(picked);
@@ -11618,8 +12034,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       if (sizeBytes > EvidencePolicy.vehiclePhotos.maxFileSize) {
         await File(savedPath).delete();
         if (!mounted) return;
-        showAppSnackBar(context, "Each vehicle photo must be 5 MB or smaller.",
-            isError: true);
+        showAppSnackBar(
+          context,
+          "Each vehicle photo must be 5 MB or smaller.",
+          isError: true,
+        );
         continue;
       }
       setState(() {
@@ -11746,8 +12165,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         token.isEmpty ||
         resolvedVehicleId == null ||
         resolvedVehicleId.isEmpty) {
-      showAppSnackBar(context, "Save the vehicle first before retrying.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Save the vehicle first before retrying.",
+        isError: true,
+      );
       return;
     }
     if (index < 0 || index >= _photos.length) return;
@@ -11808,8 +12230,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       setState(() {
         _photos[index] = photo.copyWith(
           uploadState: _VehiclePhotoUploadState.failed,
-          errorMessage:
-              error is AuthApiException ? error.userMessage : "Upload failed.",
+          errorMessage: error is AuthApiException
+              ? error.userMessage
+              : "Upload failed.",
         );
       });
       showAppSnackBar(
@@ -11827,8 +12250,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         token.isEmpty ||
         resolvedVehicleId == null ||
         resolvedVehicleId.isEmpty) {
-      showAppSnackBar(context, "Save the vehicle first before retrying.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Save the vehicle first before retrying.",
+        isError: true,
+      );
       return;
     }
     final failedCount = await _uploadPendingPhotos(
@@ -11848,8 +12274,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (makeController.text.trim().isEmpty ||
         modelController.text.trim().isEmpty ||
         plateController.text.trim().isEmpty) {
-      showAppSnackBar(context, "Make, model, and plate number are required.",
-          isError: true);
+      showAppSnackBar(
+        context,
+        "Make, model, and plate number are required.",
+        isError: true,
+      );
       return;
     }
 
@@ -11858,8 +12287,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (yearText.isNotEmpty) {
       year = int.tryParse(yearText);
       if (year == null) {
-        showAppSnackBar(context, "Enter a valid year or leave it blank.",
-            isError: true);
+        showAppSnackBar(
+          context,
+          "Enter a valid year or leave it blank.",
+          isError: true,
+        );
         return;
       }
     }
@@ -11867,7 +12299,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     setState(() => saving = true);
     final uploadedPhotoRefs = _photos
         .where(
-            (photo) => photo.uploadState == _VehiclePhotoUploadState.uploaded)
+          (photo) => photo.uploadState == _VehiclePhotoUploadState.uploaded,
+        )
         .map(
           (photo) => CarPhotoRef(
             id: photo.id,
@@ -11946,17 +12379,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         return;
       }
       showAppSnackBar(context, "Vehicle saved.");
-      Navigator.of(context).pop(
-        widget.args.returnToStolenVehicle ? vehicleId : null,
-      );
+      Navigator.of(
+        context,
+      ).pop(widget.args.returnToStolenVehicle ? vehicleId : null);
     } catch (error) {
       if (!mounted) return;
       setState(() => saving = false);
       final message = error is AuthApiException
           ? error.userMessage
           : error is StateError
-              ? error.message
-              : "Unable to save vehicle details.";
+          ? error.message
+          : "Unable to save vehicle details.";
       showAppSnackBar(context, message, isError: true);
     }
   }
@@ -11969,14 +12402,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text("Delete this vehicle?"),
         content: const Text(
-            "If this is your primary vehicle, the most recently updated remaining vehicle becomes primary automatically."),
+          "If this is your primary vehicle, the most recently updated remaining vehicle becomes primary automatically.",
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text("Cancel")),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
+          ),
           FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text("Remove")),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Remove"),
+          ),
         ],
       ),
     );
@@ -12031,8 +12467,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: context.eyeBorder),
                     ),
-                    child: Icon(Icons.directions_car,
-                        size: 64, color: context.eyeMutedText),
+                    child: Icon(
+                      Icons.directions_car,
+                      size: 64,
+                      color: context.eyeMutedText,
+                    ),
                   )
                 else
                   GridView.builder(
@@ -12041,14 +12480,15 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                     itemCount: _photos.length,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                    ),
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                        ),
                     itemBuilder: (context, index) {
                       final photo = _photos[index];
                       final preview = photo.previewUrl ?? photo.localPath;
-                      final isNetwork = (preview ?? "").startsWith("http://") ||
+                      final isNetwork =
+                          (preview ?? "").startsWith("http://") ||
                           (preview ?? "").startsWith("https://");
                       return Stack(
                         children: [
@@ -12063,12 +12503,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                   child: preview == null
                                       ? Container(
-                                          color: context.eyeSurfaceMuted)
+                                          color: context.eyeSurfaceMuted,
+                                        )
                                       : isNetwork
-                                          ? Image.network(preview,
-                                              fit: BoxFit.cover)
-                                          : Image.file(File(preview),
-                                              fit: BoxFit.cover),
+                                      ? Image.network(
+                                          preview,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Image.file(
+                                          File(preview),
+                                          fit: BoxFit.cover,
+                                        ),
                                 ),
                               ),
                             ),
@@ -12104,8 +12549,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                               child: const CircleAvatar(
                                 radius: 12,
                                 backgroundColor: Colors.black54,
-                                child: Icon(Icons.close,
-                                    size: 14, color: Colors.white),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -12123,14 +12571,18 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                                 ),
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   child: Text(
                                     photo.uploadState ==
                                             _VehiclePhotoUploadState.uploading
                                         ? "UPLOADING"
                                         : "FAILED",
                                     style: const TextStyle(
-                                        fontSize: 10, color: Colors.white),
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -12141,10 +12593,14 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                               right: 0,
                               bottom: 0,
                               child: IconButton(
-                                onPressed:
-                                    saving ? null : () => _retryPhotoAt(index),
-                                icon: const Icon(Icons.refresh,
-                                    color: Colors.white, size: 18),
+                                onPressed: saving
+                                    ? null
+                                    : () => _retryPhotoAt(index),
+                                icon: const Icon(
+                                  Icons.refresh,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                               ),
                             ),
                         ],
@@ -12160,7 +12616,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: FilledButton.icon(
-                    onPressed: saving ||
+                    onPressed:
+                        saving ||
                             _photos.length >=
                                 EvidencePolicy.vehiclePhotos.maxPhotos
                         ? null
@@ -12206,15 +12663,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: vinController,
-                  decoration:
-                      const InputDecoration(labelText: "VIN (optional)"),
+                  decoration: const InputDecoration(
+                    labelText: "VIN (optional)",
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: notesController,
                   maxLines: 3,
-                  decoration:
-                      const InputDecoration(labelText: "Vehicle Description"),
+                  decoration: const InputDecoration(
+                    labelText: "Vehicle Description",
+                  ),
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -12223,7 +12682,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2))
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : Text(editingExisting ? "Save changes" : "Save vehicle"),
                 ),
                 if (editingExisting && !isPrimary) ...[
@@ -12286,8 +12746,11 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
     showAppSnackBar(context, error.userMessage, isError: true);
   } catch (_) {
     if (!context.mounted) return;
-    showAppSnackBar(context, "Unable to process deletion request.",
-        isError: true);
+    showAppSnackBar(
+      context,
+      "Unable to process deletion request.",
+      isError: true,
+    );
   }
 }
 
@@ -12361,12 +12824,12 @@ class _BiometricUnlockSettingsTileState
     final subtitle = enabled
         ? "Use your device $name to unlock your signed-in account."
         : capability == null
-            ? "Checking this device..."
-            : !capability.available
-                ? "Biometric authentication is unavailable on this device."
-                : !capability.enrolled
-                    ? "Enroll a fingerprint or face in device settings first."
-                    : "Unlock your saved session without entering a password.";
+        ? "Checking this device..."
+        : !capability.available
+        ? "Biometric authentication is unavailable on this device."
+        : !capability.enrolled
+        ? "Enroll a fingerprint or face in device settings first."
+        : "Unlock your saved session without entering a password.";
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
       secondary: Icon(
@@ -12412,7 +12875,8 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   title: const Text("Help & Support"),
                   subtitle: const Text(
-                      "Chat with THE EYE support — not for emergencies"),
+                    "Chat with THE EYE support — not for emergencies",
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).pushNamed("/support"),
                 ),
@@ -12443,8 +12907,9 @@ class SettingsScreen extends StatelessWidget {
                       "${l10n.countryRegion} / ${l10n.preferredLanguage}",
                     ),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context)
-                        .pushNamed("/settings/language-region"),
+                    onTap: () => Navigator.of(
+                      context,
+                    ).pushNamed("/settings/language-region"),
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -12456,8 +12921,9 @@ class SettingsScreen extends StatelessWidget {
                     onTap: () async {
                       await controller.clearSession();
                       if (!context.mounted) return;
-                      Navigator.of(context)
-                          .pushNamedAndRemoveUntil("/login", (_) => false);
+                      Navigator.of(
+                        context,
+                      ).pushNamedAndRemoveUntil("/login", (_) => false);
                     },
                   ),
                   ListTile(
@@ -12602,14 +13068,16 @@ class SettingsScreen extends StatelessWidget {
                   onChanged: controller.toggleHighContrast,
                   title: const Text("High contrast mode"),
                   subtitle: const Text(
-                      "Improves readability in bright or stressful conditions"),
+                    "Improves readability in bright or stressful conditions",
+                  ),
                 ),
                 SwitchListTile(
                   value: controller.lowDataMode,
                   onChanged: controller.toggleLowData,
                   title: const Text("Low-data mode"),
-                  subtitle:
-                      const Text("Reduces media upload size before sending"),
+                  subtitle: const Text(
+                    "Reduces media upload size before sending",
+                  ),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -12617,9 +13085,9 @@ class SettingsScreen extends StatelessWidget {
                     controller.online
                         ? Icons.cloud_done
                         : controller.connectivityState ==
-                                ConnectivityState.reconnecting
-                            ? Icons.cloud_sync
-                            : Icons.cloud_off,
+                              ConnectivityState.reconnecting
+                        ? Icons.cloud_sync
+                        : Icons.cloud_off,
                     color: controller.online
                         ? EyeSemanticColors.of(context).success
                         : BrandColors.orange,
@@ -12688,10 +13156,7 @@ class SafetyScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = Localizations.of<AppLocalizations>(
-      context,
-      AppLocalizations,
-    );
+    final l10n = Localizations.of<AppLocalizations>(context, AppLocalizations);
     final routeName = ModalRoute.of(context)?.settings.name;
     final navIndex = useFigmaShell
         ? selectedIndex
@@ -12766,8 +13231,9 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     required LocationAccessResult access,
     required bool silent,
   }) async {
-    final result =
-        await controller.submitIncident(draft).timeout(kSosSubmissionTimeout);
+    final result = await controller
+        .submitIncident(draft)
+        .timeout(kSosSubmissionTimeout);
     if (!parentContext.mounted) return;
 
     if (result.status == IncidentSubmissionStatus.duplicateInFlight) {
@@ -12827,15 +13293,16 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     showAppSnackBar(parentContext, "Sending SOS alert...");
 
     try {
-      final access = await resolveLocationAccess(
-        timeout: kEmergencyLocationTimeout,
-        allowCachedFallback: true,
-      ).timeout(
-        kSosSubmissionTimeout,
-        onTimeout: () => const LocationAccessResult(
-          state: LocationPermissionState.timedOut,
-        ),
-      );
+      final access =
+          await resolveLocationAccess(
+            timeout: kEmergencyLocationTimeout,
+            allowCachedFallback: true,
+          ).timeout(
+            kSosSubmissionTimeout,
+            onTimeout: () => const LocationAccessResult(
+              state: LocationPermissionState.timedOut,
+            ),
+          );
       if (!parentContext.mounted) return;
 
       if (!access.allowsEmergencySubmission) {
@@ -12897,19 +13364,26 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
     final semantics = EyeSemanticColors.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          20, 8, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
+        20,
+        8,
+        20,
+        20 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Semantics(
             header: true,
-            child: const Text("Send SOS alert?",
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+            child: const Text(
+              "Send SOS alert?",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
-              "Choose a fast GPS alert or start live emergency video for responders."),
+            "Choose a fast GPS alert or start live emergency video for responders.",
+          ),
           const SizedBox(height: 20),
           FilledButton.icon(
             style: FilledButton.styleFrom(
@@ -12922,7 +13396,10 @@ class _SosBottomSheetState extends State<_SosBottomSheet> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                 : const Icon(Icons.flash_on),
             label: Text(sendingAlert ? "Sending SOS..." : "Send SOS now"),
           ),
@@ -12986,8 +13463,11 @@ class OfflineStatusBanner extends StatelessWidget {
 }
 
 class LocationDeniedBanner extends StatelessWidget {
-  const LocationDeniedBanner(
-      {required this.message, this.onOpenSettings, super.key});
+  const LocationDeniedBanner({
+    required this.message,
+    this.onOpenSettings,
+    super.key,
+  });
 
   final String message;
   final VoidCallback? onOpenSettings;
@@ -13010,8 +13490,11 @@ class LocationDeniedBanner extends StatelessWidget {
               Icon(Icons.location_off, color: Colors.red.shade700),
               const SizedBox(width: 12),
               Expanded(
-                  child: Text(message,
-                      style: const TextStyle(fontWeight: FontWeight.w700))),
+                child: Text(
+                  message,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
             ],
           ),
           if (onOpenSettings != null) ...[
@@ -13043,15 +13526,15 @@ class StatusStrip extends StatelessWidget {
           icon: controller.online
               ? Icons.cloud_done
               : controller.connectivityState == ConnectivityState.reconnecting
-                  ? Icons.cloud_sync
-                  : Icons.cloud_off,
+              ? Icons.cloud_sync
+              : Icons.cloud_off,
           label: controller.connectivityState == ConnectivityState.online
               ? "Online"
               : controller.connectivityState == ConnectivityState.reconnecting
-                  ? "Reconnecting"
-                  : controller.connectivityState == ConnectivityState.limited
-                      ? "Limited connectivity"
-                      : "Offline drafts active",
+              ? "Reconnecting"
+              : controller.connectivityState == ConnectivityState.limited
+              ? "Limited connectivity"
+              : "Offline drafts active",
         ),
         if (controller.lowDataMode)
           const StatusPill(icon: Icons.data_saver_on, label: "Low-data"),
@@ -13105,14 +13588,19 @@ class EmergencyHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text("Need help now?",
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900)),
+          const Text(
+            "Need help now?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 8),
-          const Text("SOS sends your GPS and alerts emergency contacts.",
-              style: TextStyle(color: Colors.white70)),
+          const Text(
+            "SOS sends your GPS and alerts emergency contacts.",
+            style: TextStyle(color: Colors.white70),
+          ),
           const SizedBox(height: 18),
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
@@ -13182,13 +13670,14 @@ class ActionTile extends StatelessWidget {
 }
 
 class ListTileCard extends StatelessWidget {
-  const ListTileCard(
-      {required this.leading,
-      required this.title,
-      required this.subtitle,
-      this.trailing,
-      this.onTap,
-      super.key});
+  const ListTileCard({
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+    this.onTap,
+    super.key,
+  });
 
   final Widget leading;
   final String title;
@@ -13255,8 +13744,8 @@ class IncidentStatusTile extends StatelessWidget {
       semanticsSuffix: onTap == null
           ? null
           : (isTerminal
-              ? "Tap to open incident details"
-              : "Tap to open active emergency"),
+                ? "Tap to open incident details"
+                : "Tap to open active emergency"),
     );
   }
 }
@@ -13341,16 +13830,20 @@ class _ModeCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style:
-                    TextStyle(fontWeight: FontWeight.w800, color: titleColor)),
+            Text(
+              title,
+              style: TextStyle(fontWeight: FontWeight.w800, color: titleColor),
+            ),
             const SizedBox(height: 4),
-            Text(subtitle,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: context.isDarkTheme
-                        ? semantics.secondaryText
-                        : BrandColors.lightTextMuted)),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: context.isDarkTheme
+                    ? semantics.secondaryText
+                    : BrandColors.lightTextMuted,
+              ),
+            ),
           ],
         ),
       ),
@@ -13387,7 +13880,9 @@ class SmartwatchCompanionPreview extends StatelessWidget {
             color: BrandColors.commandSurface,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-                color: sosActive ? Colors.red : BrandColors.green, width: 2),
+              color: sosActive ? Colors.red : BrandColors.green,
+              width: 2,
+            ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -13396,43 +13891,51 @@ class SmartwatchCompanionPreview extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Icon(
-                      standalone
-                          ? Icons.signal_cellular_alt
-                          : Icons.bluetooth_connected,
-                      color: Colors.white,
-                      size: 16),
-                  Text(standalone ? "LTE" : "Phone",
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 10)),
+                    standalone
+                        ? Icons.signal_cellular_alt
+                        : Icons.bluetooth_connected,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  Text(
+                    standalone ? "LTE" : "Phone",
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
                 ],
               ),
               Column(
                 children: [
-                  Icon(sosActive ? Icons.sos : Icons.watch,
-                      color: sosActive ? Colors.red : BrandColors.green,
-                      size: 36),
+                  Icon(
+                    sosActive ? Icons.sos : Icons.watch,
+                    color: sosActive ? Colors.red : BrandColors.green,
+                    size: 36,
+                  ),
                   const SizedBox(height: 6),
                   Text(
-                      sosActive
-                          ? "SOS sent"
-                          : standalone
-                              ? "Standalone"
-                              : "Paired",
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12)),
+                    sosActive
+                        ? "SOS sent"
+                        : standalone
+                        ? "Standalone"
+                        : "Paired",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(hasTelemetry ? "Bat $batteryLevel%" : "Bat —",
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 10)),
-                  Text(hasTelemetry ? "Sig $signalStrength%" : "Sig —",
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 10)),
+                  Text(
+                    hasTelemetry ? "Bat $batteryLevel%" : "Bat —",
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
+                  Text(
+                    hasTelemetry ? "Sig $signalStrength%" : "Sig —",
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
                 ],
               ),
             ],

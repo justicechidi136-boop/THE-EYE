@@ -592,7 +592,7 @@ export class LiveVideoService {
   async activeSessions(actor: JwtPayload) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list active live streams");
     const sessions = await this.prisma.liveVideoSession.findMany({
-      where: { status: "Active" },
+      where: { ...this.adminSessionScope(actor), status: "Active" } as never,
       include: {
         incident: { include: { reporter: { select: { profile: { select: { firstName: true, lastName: true } } } } } },
         locationUpdates: { orderBy: { capturedAt: "desc" }, take: 100 },
@@ -600,7 +600,31 @@ export class LiveVideoService {
       orderBy: { startedAt: "desc" },
       take: 100,
     });
-    return { data: sessions.filter((session) => this.adminCanAccessIncident(session.incident, actor)) };
+    return { data: sessions };
+  }
+
+  async sessionOverview(actor: JwtPayload) {
+    if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list live streams");
+    const scope = this.adminSessionScope(actor);
+    const [sessions, total, active] = await Promise.all([
+      this.prisma.liveVideoSession.findMany({
+        where: scope as never,
+        include: {
+          incident: { include: { reporter: { select: { profile: { select: { firstName: true, lastName: true } } } } } },
+          locationUpdates: { orderBy: { capturedAt: "desc" }, take: 100 },
+        },
+        orderBy: { startedAt: "desc" },
+        take: 100,
+      }),
+      this.prisma.liveVideoSession.count({ where: scope as never }),
+      this.prisma.liveVideoSession.count({
+        where: { ...scope, status: "Active" } as never,
+      }),
+    ]);
+    return {
+      data: sessions,
+      meta: { total, active, returned: sessions.length },
+    };
   }
 
   async linkEvidence(sessionId: string, dto: LinkLiveVideoEvidenceDto, actor: JwtPayload) {
@@ -700,6 +724,27 @@ export class LiveVideoService {
       return Boolean(actor.agencyId) && incident.assignedAgencyId === actor.agencyId;
     }
     return false;
+  }
+
+  private adminSessionScope(actor: JwtPayload): Record<string, unknown> {
+    if (actor.role === AdminRoleName.SuperAdmin) return {};
+    if (actor.role === AdminRoleName.CountryAdmin) {
+      return { incident: { country: actor.country } };
+    }
+    if (actor.role === AdminRoleName.StateAdmin) {
+      return { incident: { country: actor.country, state: actor.state } };
+    }
+    if (
+      actor.role === AdminRoleName.LgaAdmin
+      || actor.role === AdminRoleName.CallCenterAgent
+      || actor.role === AdminRoleName.OversightAuditor
+    ) {
+      return { incident: { country: actor.country, state: actor.state, lga: actor.lga } };
+    }
+    if (actor.role === AdminRoleName.AgencyAdmin || actor.role === AdminRoleName.PoliceSecurityOfficer) {
+      return { incident: { assignedAgencyId: actor.agencyId ?? "__unassigned__" } };
+    }
+    return { id: "__unauthorized__" };
   }
 
   private async createLocationUpdate(sessionId: string, incidentId: string, dto: LiveVideoLocationUpdateDto | StartLiveVideoDto) {

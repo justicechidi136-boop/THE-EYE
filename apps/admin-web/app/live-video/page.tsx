@@ -1,14 +1,14 @@
 import { AppShell } from "../../components/app-shell";
-import { fetchLiveVideoSessions } from "../../lib/api/data";
+import { fetchLiveVideoOverview } from "../../lib/api/data";
 import { LiveVideoViewer } from "./live-video-viewer";
 
 export const dynamic = "force-dynamic";
 
 export default async function LiveVideoPage() {
-  const sessions = await fetchLiveVideoSessions();
+  const overview = await fetchLiveVideoOverview();
   return (
     <AppShell>
-      <LiveVideoViewer sessions={sessions} />
+      <LiveVideoViewer sessions={overview.sessions} activeCount={overview.active} totalCount={overview.total} />
     </AppShell>
   );
 }

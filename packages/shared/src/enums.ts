@@ -228,8 +228,11 @@ export enum BroadcastType {
   Accident = "Accident",
   MissingPerson = "MissingPerson",
   StolenVehicle = "StolenVehicle",
+  SafetyAlert = "SafetyAlert",
   GovernmentAlert = "GovernmentAlert",
   CommunityWarning = "CommunityWarning",
+  PublicAdvisory = "PublicAdvisory",
+  EmergencyWarning = "EmergencyWarning",
 }
 
 export enum BroadcastStatus {

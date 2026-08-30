@@ -8,6 +8,8 @@ import type { LiveVideoSessionView } from "../../lib/types/admin-views";
 
 type Props = {
   sessions: LiveVideoSessionView[];
+  activeCount: number;
+  totalCount: number;
 };
 
 type LiveOverlay = {
@@ -33,11 +35,12 @@ function safeLocationHref(candidate: string | null | undefined, latitude: number
   return mapHref(latitude, longitude);
 }
 
-export function LiveVideoViewer({ sessions }: Props) {
-  const [selectedId, setSelectedId] = useState(sessions[0]?.id ?? "");
+export function LiveVideoViewer({ sessions, activeCount, totalCount }: Props) {
+  const [selectedId, setSelectedId] = useState(
+    sessions.find((session) => session.status === "Active")?.id ?? sessions[0]?.id ?? "",
+  );
   const [playerState, setPlayerState] = useState<LivekitPlayerState>("idle");
   const [overlay, setOverlay] = useState<LiveOverlay | null>(null);
-  const active = sessions.filter((session) => session.status === "Active");
   const selected = sessions.find((session) => session.id === selectedId) ?? sessions[0] ?? {
     id: "-",
     incidentId: "-",
@@ -122,7 +125,7 @@ export function LiveVideoViewer({ sessions }: Props) {
 
   return (
     <>
-      <PageHeader eyebrow="LiveKit incident streams" title="Live video viewer" action={<StatusBadge tone={active.length ? "success" : "neutral"}>{active.length} active</StatusBadge>} />
+      <PageHeader eyebrow="LiveKit incident streams" title="Live video viewer" action={<StatusBadge tone={activeCount ? "success" : "neutral"}>{activeCount} active / {totalCount} total</StatusBadge>} />
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <Panel title="Authorized stream viewer">
           <div className="grid gap-4">
@@ -184,7 +187,7 @@ export function LiveVideoViewer({ sessions }: Props) {
                   </div>
                   <p className="mt-2 text-xs text-muted">Started {session.startedAt} - {session.viewerScope}</p>
                 </button>
-              )) : <p className="text-sm text-muted">No live video sessions returned from `/live-video/sessions/active`.</p>}
+              )) : <p className="text-sm text-muted">No live video sessions are available in your assigned scope.</p>}
             </div>
           </Panel>
         </div>

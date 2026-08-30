@@ -10,6 +10,12 @@ export type CreateBroadcastDto = {
   body: string;
   priority: IncidentPriority;
   jurisdictionId?: string;
+  communityId?: string;
+  targetLevel?: "Country" | "State" | "LGA" | "Community";
+  deliveryMode?: "EntireArea" | "Radius";
+  country?: string;
+  state?: string;
+  lga?: string;
   incidentId?: string;
   latitude?: number;
   longitude?: number;
@@ -70,7 +76,7 @@ export function validateCreateBroadcastDto(dto: CreateBroadcastDto) {
   if (dto.radiusMeters !== undefined && (dto.radiusMeters < 100 || dto.radiusMeters > 100000)) {
     throw new BadRequestException("radiusMeters must be between 100 and 100000");
   }
-  if (!dto.targetAreaWkt && dto.latitude === undefined && !dto.jurisdictionId && !dto.incidentId) {
+  if (!dto.targetAreaWkt && dto.latitude === undefined && !dto.jurisdictionId && !dto.communityId && !dto.country && !dto.incidentId) {
     throw new BadRequestException("A broadcast needs an incident, jurisdiction, target point, or target area");
   }
 }

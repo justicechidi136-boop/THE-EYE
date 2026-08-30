@@ -23,6 +23,7 @@ import {
   ReviewKycDto,
   SubmitKycDto,
   UpdateCitizenProfileDto,
+  UpdateUserAccountStatusDto,
   UpsertEmergencyContactDto,
 } from "./dto/users.dto";
 import { UsersService } from "./users.service";
@@ -124,8 +125,22 @@ export class UsersController {
     @Query("status") status?: string,
     @Query("role") role?: string,
     @Query("kind") kind?: string,
+    @Query("country") country?: string,
+    @Query("state") state?: string,
+    @Query("lga") lga?: string,
+    @Query("communityId") communityId?: string,
   ) {
-    return this.users.listDirectory(request.user, { cursor, limit, q, searchType, searchBy, status, role, kind });
+    return this.users.listDirectory(request.user, {
+      cursor, limit, q, searchType, searchBy, status, role, kind, country, state, lga, communityId,
+    });
+  }
+
+  @Get("directory-options")
+  @RequirePermissions("user:manage")
+  directoryOptions(
+    @Req() request: { user: Parameters<UsersService["listDirectoryOptions"]>[0] },
+  ) {
+    return this.users.listDirectoryOptions(request.user);
   }
 
   @Get("admin-account-options")
@@ -172,6 +187,26 @@ export class UsersController {
     @Param("id") id: string,
   ) {
     return this.users.getAdminDetail(request.user, id);
+  }
+
+  @Patch("admin/:id/status")
+  @RequirePermissions("user:manage")
+  updateAdminStatus(
+    @Req() request: { user: Parameters<UsersService["updateAdminAccountStatus"]>[0] },
+    @Param("id") id: string,
+    @Body() dto: UpdateUserAccountStatusDto,
+  ) {
+    return this.users.updateAdminAccountStatus(request.user, id, dto);
+  }
+
+  @Patch(":id/status")
+  @RequirePermissions("user:manage")
+  updateCitizenStatus(
+    @Req() request: { user: Parameters<UsersService["updateCitizenAccountStatus"]>[0] },
+    @Param("id") id: string,
+    @Body() dto: UpdateUserAccountStatusDto,
+  ) {
+    return this.users.updateCitizenAccountStatus(request.user, id, dto);
   }
 
   @Get(":id")

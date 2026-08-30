@@ -15,11 +15,26 @@ function worldPoint(latitude: number, longitude: number, zoom: number) {
   };
 }
 
-export function BroadcastDetailMap({ latitude, longitude, location, radiusMeters }: {
+export function BroadcastDetailMap({
+  latitude,
+  longitude,
+  location,
+  radiusMeters,
+  markers = [],
+  title = "Target location",
+  description,
+  showCenterMarker = true,
+  showOpenLocation = true,
+}: {
   latitude: number | null;
   longitude: number | null;
   location: string;
   radiusMeters: number | null;
+  markers?: Array<{ id: string; latitude: number; longitude: number; label: string }>;
+  title?: string;
+  description?: string;
+  showCenterMarker?: boolean;
+  showOpenLocation?: boolean;
 }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
@@ -47,21 +62,46 @@ export function BroadcastDetailMap({ latitude, longitude, location, radiusMeters
         tiles.push({ key: `${zoom}-${tileX}-${tileY}`, url: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`, left: tileX * tileSize - originX, top: tileY * tileSize - originY });
       }
     }
-    return { tiles };
+    return { tiles, originX, originY, zoom };
   }, [latitude, longitude, radiusMeters, width]);
 
   return (
     <section className="rounded-lg border border-line bg-surface p-4 shadow-sm">
       <div className="mb-3">
-        <h2 className="font-semibold text-ink">Target location</h2>
-        <p className="mt-1 break-words text-sm text-muted">{location}</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-ink">{title}</h2>
+            <p className="mt-1 break-words text-sm text-muted">{location}</p>
+            {description ? <p className="mt-1 text-xs text-muted">{description}</p> : null}
+          </div>
+          {showOpenLocation && latitude != null && longitude != null ? (
+            <a className="text-sm font-semibold text-eye hover:underline" href={`https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`} target="_blank" rel="noreferrer">Open Location</a>
+          ) : null}
+        </div>
       </div>
       <div ref={mapRef} className="relative min-h-[360px] overflow-hidden rounded-lg border border-line bg-surfaceMuted" aria-label="Broadcast target map">
         {map ? (
           <>
             {map.tiles.map((tile) => <img key={tile.key} src={tile.url} alt="" aria-hidden="true" className="pointer-events-none absolute h-64 w-64 max-w-none select-none" style={{ left: tile.left, top: tile.top }} />)}
-            <div className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-danger/25 shadow-soft" aria-hidden="true" />
-            <div className="absolute left-1/2 top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-danger text-xs font-bold text-white shadow-soft" aria-label="Broadcast target marker">!</div>
+            {showCenterMarker ? <>
+              <div className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-danger/25 shadow-soft" aria-hidden="true" />
+              <div className="absolute left-1/2 top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-danger text-xs font-bold text-white shadow-soft" aria-label="Broadcast target marker">!</div>
+            </> : null}
+            {markers.map((marker, index) => {
+              const point = worldPoint(marker.latitude, marker.longitude, map.zoom);
+              return (
+                <a
+                  key={marker.id}
+                  href={`#sighting-${marker.id}`}
+                  title={marker.label}
+                  aria-label={`Sighting ${index + 1}: ${marker.label}`}
+                  className="absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-eye text-xs font-bold text-white shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-eye"
+                  style={{ left: point.x - map.originX, top: point.y - map.originY }}
+                >
+                  {index + 1}
+                </a>
+              );
+            })}
           </>
         ) : (
           <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-muted">A geographic target was not captured for this broadcast.</div>

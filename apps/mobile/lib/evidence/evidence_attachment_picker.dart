@@ -25,6 +25,8 @@ class ManagedEvidenceSection extends StatefulWidget {
   const ManagedEvidenceSection({
     required this.lowDataMode,
     this.policy = EvidencePolicy.incident,
+    this.title = "Evidence",
+    this.description,
     this.figmaStyle = false,
     this.onAttachmentsChanged,
     super.key,
@@ -32,6 +34,8 @@ class ManagedEvidenceSection extends StatefulWidget {
 
   final bool lowDataMode;
   final EvidencePolicy policy;
+  final String title;
+  final String? description;
   final bool figmaStyle;
   final ValueChanged<int>? onAttachmentsChanged;
 
@@ -53,8 +57,9 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
   void clearAttachments() {
     final controller = _controller;
     if (controller == null || controller.attachments.isEmpty) return;
-    for (final attachment
-        in List<LocalEvidenceAttachment>.from(controller.attachments)) {
+    for (final attachment in List<LocalEvidenceAttachment>.from(
+      controller.attachments,
+    )) {
       controller.remove(attachment.localId);
     }
   }
@@ -67,14 +72,29 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
 
   @override
   Widget build(BuildContext context) {
-    _controller ??= createEvidenceCaptureController(context,
-        lowDataMode: widget.lowDataMode, policy: widget.policy);
+    _controller ??= createEvidenceCaptureController(
+      context,
+      lowDataMode: widget.lowDataMode,
+      policy: widget.policy,
+    );
     return SectionCard(
-      title: "Evidence",
-      child: EvidenceAttachmentPicker(
-        controller: _controller!,
-        lowDataMode: widget.lowDataMode,
-        onAttachmentsChanged: widget.onAttachmentsChanged,
+      title: widget.title,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.description != null) ...[
+            Text(
+              widget.description!,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+          ],
+          EvidenceAttachmentPicker(
+            controller: _controller!,
+            lowDataMode: widget.lowDataMode,
+            onAttachmentsChanged: widget.onAttachmentsChanged,
+          ),
+        ],
       ),
     );
   }
@@ -94,8 +114,9 @@ Future<bool> presentEvidencePermissionRationale(
         content: Text(message),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text("Not now")),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Not now"),
+          ),
           if (showSettingsLink)
             TextButton(
               onPressed: () async {
@@ -105,8 +126,9 @@ Future<bool> presentEvidencePermissionRationale(
               child: const Text("Open settings"),
             ),
           FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text("Continue")),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Continue"),
+          ),
         ],
       );
     },
@@ -129,15 +151,15 @@ EvidenceCaptureController createEvidenceCaptureController(
     lowDataMode: lowDataMode,
     latitude: latitude,
     longitude: longitude,
-    rationalePresenter: (
-        {required title, required message, required showSettingsLink}) {
-      return presentEvidencePermissionRationale(
-        context,
-        title: title,
-        message: message,
-        showSettingsLink: showSettingsLink,
-      );
-    },
+    rationalePresenter:
+        ({required title, required message, required showSettingsLink}) {
+          return presentEvidencePermissionRationale(
+            context,
+            title: title,
+            message: message,
+            showSettingsLink: showSettingsLink,
+          );
+        },
   );
 }
 
@@ -178,14 +200,21 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
         controller.lowDataMode = widget.lowDataMode;
         _reportAttachmentCount(controller.attachments.length);
         final attachments = controller.attachments.toList(growable: false);
-        final presentations =
-            EvidencePresentationMapper.mapLocalAttachments(attachments);
-        final photoCount = controller.policy
-            .countForMediaType(attachments, IncidentMediaType.image);
-        final videoCount = controller.policy
-            .countForMediaType(attachments, IncidentMediaType.video);
-        final audioCount = controller.policy
-            .countForMediaType(attachments, IncidentMediaType.audio);
+        final presentations = EvidencePresentationMapper.mapLocalAttachments(
+          attachments,
+        );
+        final photoCount = controller.policy.countForMediaType(
+          attachments,
+          IncidentMediaType.image,
+        );
+        final videoCount = controller.policy.countForMediaType(
+          attachments,
+          IncidentMediaType.video,
+        );
+        final audioCount = controller.policy.countForMediaType(
+          attachments,
+          IncidentMediaType.audio,
+        );
         final visualIndexes = <int>[
           for (var i = 0; i < attachments.length; i++)
             if (attachments[i].isImage || attachments[i].isVideo) i,
@@ -221,8 +250,10 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
               const SizedBox(height: 12),
               const LinearProgressIndicator(),
               const SizedBox(height: 8),
-              const Text("Preparing evidence...",
-                  style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text(
+                "Preparing evidence...",
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
             ],
             if (controller.lastError != null) ...[
               const SizedBox(height: 12),
@@ -231,21 +262,23 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: EyeSemanticColors.of(context)
-                        .error
-                        .withValues(alpha: 0.08),
+                    color: EyeSemanticColors.of(
+                      context,
+                    ).error.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: EyeSemanticColors.of(context)
-                          .error
-                          .withValues(alpha: 0.35),
+                      color: EyeSemanticColors.of(
+                        context,
+                      ).error.withValues(alpha: 0.35),
                     ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.error_outline,
-                          color: EyeSemanticColors.of(context).error),
+                      Icon(
+                        Icons.error_outline,
+                        color: EyeSemanticColors.of(context).error,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -284,8 +317,8 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                               controller.remove(attachments[index].localId),
                           onRetry: presentations[index].canRetry
                               ? () => controller.retryFailedUpload(
-                                    attachments[index].localId,
-                                  )
+                                  attachments[index].localId,
+                                )
                               : null,
                         ),
                     ],
@@ -299,14 +332,15 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                 _AudioAttachmentRow(
                   attachment: attachments[index],
                   presentation: presentations[index],
-                  isPlaying:
-                      _audioPreview.isPlaying(attachments[index].localId),
+                  isPlaying: _audioPreview.isPlaying(
+                    attachments[index].localId,
+                  ),
                   onPlay: () => _toggleAudio(attachments[index]),
                   onRemove: () => controller.remove(attachments[index].localId),
                   onRetry: presentations[index].canRetry
                       ? () => controller.retryFailedUpload(
-                            attachments[index].localId,
-                          )
+                          attachments[index].localId,
+                        )
                       : null,
                 ),
                 if (index != audioIndexes.last) const SizedBox(height: 8),
@@ -328,9 +362,7 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                 ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
-                  side: BorderSide(
-                    color: EyeSemanticColors.of(context).border,
-                  ),
+                  side: BorderSide(color: EyeSemanticColors.of(context).border),
                 ),
               ),
             ),
@@ -364,19 +396,21 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-                leading: const Icon(Icons.videocam),
-                title: const Text("Record video"),
-                onTap: () {
-                  Navigator.pop(context);
-                  controller.recordVideo();
-                }),
+              leading: const Icon(Icons.videocam),
+              title: const Text("Record video"),
+              onTap: () {
+                Navigator.pop(context);
+                controller.recordVideo();
+              },
+            ),
             ListTile(
-                leading: const Icon(Icons.video_library),
-                title: const Text("Choose video"),
-                onTap: () {
-                  Navigator.pop(context);
-                  controller.pickVideos();
-                }),
+              leading: const Icon(Icons.video_library),
+              title: const Text("Choose video"),
+              onTap: () {
+                Navigator.pop(context);
+                controller.pickVideos();
+              },
+            ),
           ],
         ),
       ),
@@ -432,9 +466,11 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
       // The player will surface its own platform failure if playback cannot start.
     }
     if (mounted) setState(() {});
-    unawaited(playback.whenComplete(() {
-      if (mounted) setState(() {});
-    }));
+    unawaited(
+      playback.whenComplete(() {
+        if (mounted) setState(() {});
+      }),
+    );
   }
 
   Future<void> _openAttachmentPreview(
@@ -484,7 +520,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
         final colors = EyeSemanticColors.of(context);
         final voiceAttachments = controller.attachments
             .where(
-                (item) => item.isAudio && item.metadata["voiceReport"] == true)
+              (item) => item.isAudio && item.metadata["voiceReport"] == true,
+            )
             .toList(growable: false);
         final photoCount = controller.policy.countForMediaType(
           controller.attachments,
@@ -527,8 +564,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                       child: Text(
                         "Add evidence",
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                     IconButton(
@@ -551,7 +588,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.photo_camera_outlined,
                             label: "Camera",
-                            enabled: !controller.busy &&
+                            enabled:
+                                !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.image,
                                 ),
@@ -561,7 +599,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.photo_library_outlined,
                             label: "Gallery",
-                            enabled: !controller.busy &&
+                            enabled:
+                                !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.image,
                                 ),
@@ -573,7 +612,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.videocam_outlined,
                             label: "Video",
-                            enabled: !controller.busy &&
+                            enabled:
+                                !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.video,
                                 ),
@@ -584,7 +624,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.mic_none_outlined,
                             label: "Record voice",
-                            enabled: !controller.busy &&
+                            enabled:
+                                !controller.busy &&
                                 (controller.canAddMoreFor(
                                       IncidentMediaType.audio,
                                     ) ||
@@ -595,7 +636,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.audio_file_outlined,
                             label: "Choose audio file",
-                            enabled: !controller.busy &&
+                            enabled:
+                                !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.audio,
                                 ),
@@ -609,7 +651,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                 if (_showRecorder) ...[
                   const SizedBox(height: 14),
                   VoiceRecorder(
-                    enabled: !controller.busy &&
+                    enabled:
+                        !controller.busy &&
                         (controller.canAddMoreFor(IncidentMediaType.audio) ||
                             voiceAttachments.isNotEmpty),
                     uploadProgress: voiceAttachments.isEmpty
@@ -703,8 +746,10 @@ class _EvidenceActionTile extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon,
-                      color: enabled ? colors.interactiveText : foreground),
+                  Icon(
+                    icon,
+                    color: enabled ? colors.interactiveText : foreground,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     label,
@@ -960,9 +1005,7 @@ class _AudioAttachmentRow extends StatelessWidget {
                           Text(
                             attachment.durationSeconds == null
                                 ? "--:--"
-                                : _evidenceClock(
-                                    attachment.durationSeconds!,
-                                  ),
+                                : _evidenceClock(attachment.durationSeconds!),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],

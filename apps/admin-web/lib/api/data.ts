@@ -62,6 +62,7 @@ import type {
   MissingPersonCaseView,
   StolenVehicleCaseView,
   LiveVideoSessionView,
+  LiveVideoOverviewView,
   NotificationOperationView,
   PatrolScheduleView,
   ResidentView,
@@ -221,31 +222,75 @@ export async function fetchBroadcasts(): Promise<BroadcastView[]> {
 export type AdminBroadcastListQuery = {
   country?: string;
   state?: string;
+  lga?: string;
+  communityId?: string;
   category?: string;
   status?: string;
   author?: string;
-  cursor?: string;
+  search?: string;
+  from?: string;
+  to?: string;
+  page?: string;
   limit?: string;
 };
+
+export type AdminBroadcastMetrics = {
+  published: number;
+  active: number;
+  expired: number;
+  cancelled: number;
+};
+
+export type BroadcastTargetOptions = {
+  jurisdictions: Array<{ id: string; country: string; state: string; lga: string; name: string }>;
+  communities: Array<{
+    id: string;
+    jurisdictionId: string | null;
+    name: string;
+    level: string;
+    country: string;
+    state: string | null;
+    lga: string | null;
+  }>;
+};
+
+export type AdminBroadcastPage = {
+  data: BroadcastView[];
+  pagination: { page: number; limit: number; total: number; pageCount: number };
+  meta: AdminBroadcastMetrics;
+};
+
+export async function fetchAdminBroadcastsPage(
+  query: AdminBroadcastListQuery = {},
+): Promise<AdminBroadcastPage> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{
+      data: Record<string, unknown>[];
+      pagination: AdminBroadcastPage["pagination"];
+      meta: AdminBroadcastMetrics;
+    }>("/admin/broadcasts", {
+      token,
+      query,
+    });
+    return { ...response, data: response.data.map(toBroadcastView) };
+  }, {
+    data: [],
+    pagination: { page: 1, limit: Number(query.limit ?? 10), total: 0, pageCount: 1 },
+    meta: { published: 0, active: 0, expired: 0, cancelled: 0 },
+  });
+}
 
 export async function fetchAdminBroadcasts(
   query: AdminBroadcastListQuery = {},
 ): Promise<BroadcastView[]> {
+  return (await fetchAdminBroadcastsPage({ ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE })).data;
+}
+
+export async function fetchBroadcastTargetOptions(): Promise<BroadcastTargetOptions> {
   return withToken(async (token) => {
-    const response = await apiRequest<{ data: Record<string, unknown>[] }>("/admin/broadcasts", {
-      token,
-      query: {
-        country: query.country,
-        state: query.state,
-        category: query.category,
-        status: query.status,
-        author: query.author,
-        cursor: query.cursor,
-        limit: query.limit ?? ADMIN_LIST_PAGE_SIZE,
-      },
-    });
-    return response.data.map(toBroadcastView);
-  }, []);
+    const response = await apiRequest<{ data: BroadcastTargetOptions }>("/admin/broadcasts/target-options", { token });
+    return response.data;
+  }, { jurisdictions: [], communities: [] });
 }
 
 export async function fetchAdminBroadcast(id: string): Promise<BroadcastDetailView | null> {
@@ -367,19 +412,41 @@ export async function fetchUsersDirectory(): Promise<UserDirectoryEntry[]> {
   }, []);
 }
 
+export type UserDirectoryMetrics = {
+  totalUsers: number;
+  activeUsers: number;
+  pendingUsers: number;
+  deactivatedUsers: number;
+};
+
+export type UserDirectoryPage = PaginatedResponse<UserDirectoryEntry> & { meta: UserDirectoryMetrics };
+
 export async function fetchUsersDirectoryPage(
   query: Record<string, string | undefined> = {},
-): Promise<PaginatedResponse<UserDirectoryEntry>> {
+): Promise<UserDirectoryPage> {
   return withToken(async (token) => {
-    const response = await apiRequest<PaginatedResponse<Record<string, unknown>>>("/users/directory", {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta: UserDirectoryMetrics }>("/users/directory", {
       token,
-      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+      query: { ...query, limit: query.limit ?? "10" },
     });
     return {
       ...response,
       data: response.data.map(toUserDirectoryEntry),
     };
-  }, { data: [], nextCursor: null, hasMore: false, limit: 100 });
+  }, {
+    data: [],
+    nextCursor: null,
+    hasMore: false,
+    limit: 10,
+    meta: { totalUsers: 0, activeUsers: 0, pendingUsers: 0, deactivatedUsers: 0 },
+  });
+}
+
+export async function fetchUserDirectoryOptions(): Promise<BroadcastTargetOptions> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{ data: BroadcastTargetOptions }>("/users/directory-options", { token });
+    return response.data;
+  }, { jurisdictions: [], communities: [] });
 }
 
 export type SupportChatView = {
@@ -1498,6 +1565,36 @@ export async function fetchLiveVideoSessions(): Promise<LiveVideoSessionView[]> 
   }, []);
 }
 
+export async function updateDirectoryAccountStatus(
+  id: string,
+  kind: "admin" | "citizen",
+  status: "Active" | "Suspended" | "Deactivated",
+  reason: string,
+) {
+  const token = await getAccessToken();
+  if (!token) throw new ApiError("Authentication required", 401);
+  return apiRequest<{ data: { id: string; status: string } }>(
+    kind === "admin"
+      ? `/users/admin/${encodeURIComponent(id)}/status`
+      : `/users/${encodeURIComponent(id)}/status`,
+    { method: "PATCH", token, body: JSON.stringify({ status, reason }) },
+  );
+}
+
+export async function fetchLiveVideoOverview(): Promise<LiveVideoOverviewView> {
+  return withToken(async (token) => {
+    const response = await apiRequest<{
+      data: Record<string, unknown>[];
+      meta: { total: number; active: number; returned: number };
+    }>("/live-video/sessions", { token });
+    return {
+      sessions: response.data.map(toLiveVideoSessionView),
+      total: Number(response.meta.total ?? 0),
+      active: Number(response.meta.active ?? 0),
+    };
+  }, { sessions: [], total: 0, active: 0 });
+}
+
 export async function fetchLiveVideoAdminToken(sessionId: string) {
   return withToken(async (token) => {
     return apiRequest<{
@@ -1679,6 +1776,13 @@ export type CreateBroadcastInput = {
   title: string;
   body: string;
   priority: string;
+  jurisdictionId?: string;
+  communityId?: string;
+  targetLevel?: "Country" | "State" | "LGA" | "Community";
+  deliveryMode?: "EntireArea" | "Radius";
+  country?: string;
+  state?: string;
+  lga?: string;
   latitude?: number;
   longitude?: number;
   radiusMeters?: number;
@@ -1701,7 +1805,7 @@ export type SendNotificationInput = {
 export async function createBroadcast(input: CreateBroadcastInput) {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");
-  return apiRequest<Record<string, unknown>>("/broadcasts", {
+  return apiRequest<Record<string, unknown>>("/admin/broadcasts", {
     method: "POST",
     token,
     body: JSON.stringify(input),
