@@ -249,7 +249,9 @@ void main() {
       final source = File("lib/main.dart").readAsStringSync();
       expect(source.contains("required TheEyeApiClient apiClient"), isTrue);
       expect(
-        source.contains("BroadcastMediaUploadService(apiClient: apiClient)"),
+        RegExp(
+          r"BroadcastMediaUploadService\(\s*apiClient:\s*apiClient,?\s*\)",
+        ).hasMatch(source),
         isTrue,
       );
       expect(source.contains("TheEyeApiClient get apiClient"), isTrue);
