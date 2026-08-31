@@ -4,6 +4,10 @@ const path = require("path");
 const root = path.join(__dirname, "..", "..");
 const composePath = path.join(root, "infra", "docker", "docker-compose.yml");
 const compose = fs.readFileSync(composePath, "utf8");
+const stagingDeploy = fs.readFileSync(
+  path.join(root, "scripts", "deploy-staging-vps-ci.sh"),
+  "utf8",
+);
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(root, "apps", "api", "package.json"), "utf8"),
 );
@@ -32,6 +36,26 @@ if (!packageJson.scripts["seed:staging:test-accounts"]) {
 if (!packageJson.scripts["verify:staging:certification-data"]) {
   console.error(
     "validate-api-tools-compose failed. Missing verify:staging:certification-data script.",
+  );
+  process.exit(1);
+}
+
+const requiredReferenceDataSteps = [
+  "run_reference_data_certification",
+  "prisma/import-nigeria-reference-data.ts",
+  "prisma/import-agency-directory.ts",
+  "prisma/validate-nigeria-reference-data.ts",
+  "prisma/validate-agency-directory.ts",
+  "prisma/report-agency-directory.ts",
+  "idempotency pass ${pass}/2",
+];
+const missingReferenceDataSteps = requiredReferenceDataSteps.filter(
+  (needle) => !stagingDeploy.includes(needle),
+);
+if (missingReferenceDataSteps.length) {
+  console.error(
+    "validate-api-tools-compose failed. Missing staging reference-data steps:",
+    missingReferenceDataSteps.join(", "),
   );
   process.exit(1);
 }
