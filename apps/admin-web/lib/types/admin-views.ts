@@ -246,6 +246,29 @@ export type BroadcastDetailView = BroadcastView & {
   }>;
   location: string;
   details: Array<{ label: string; value: string }>;
+  missingPerson: {
+    fullName: string;
+    age: string;
+    gender: string;
+    physicalDescription: string;
+    clothingDescription: string;
+    additionalInformation: string;
+    lastSeenAt: string | null;
+    lastSeenLocation: string;
+  } | null;
+  stolenVehicle: {
+    make: string;
+    model: string;
+    year: string;
+    colour: string;
+    plateNumber: string;
+    vin: string;
+    distinguishingFeatures: string;
+    theftAccount: string;
+    stolenAt: string | null;
+    lastSeenAt: string | null;
+    lastKnownLocation: string;
+  } | null;
   sightings?: Array<{
     id: string;
     observedAt: string | null;
@@ -258,6 +281,9 @@ export type BroadcastDetailView = BroadcastView & {
     longitude: number | null;
     directionOfTravel: string | null;
     confidence: string | null;
+    reviewStatus: "Pending review" | "Verified" | "Unverified" | "Dismissed";
+    reviewNote: string | null;
+    reportedAt: string | null;
     attachments: Array<{
       id?: string;
       mediaType: string;
@@ -666,6 +692,12 @@ export type LiveVideoSessionView = {
   }>;
   recordingConfigured: boolean;
   connectionStatus: string;
+};
+
+export type LiveVideoOverviewView = {
+  sessions: LiveVideoSessionView[];
+  total: number;
+  active: number;
 };
 
 export type VerificationDashboardView = {

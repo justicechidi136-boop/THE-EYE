@@ -758,18 +758,59 @@ describe("BroadcastCitizenService", () => {
     });
     await expect(service.listSightings("broadcast-1", reporter)).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it("persists the dedicated missing-person primary photo separately from evidence", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue(null);
+    await service.createMissingPerson(
+      {
+        clientBroadcastId: "client-primary-photo",
+        fullName: "Ada Okoye",
+        ageOrApproximateAge: "12",
+        lastSeenAt: "2026-08-06T10:00:00.000Z",
+        lastSeenLatitude: 6.5,
+        lastSeenLongitude: 3.4,
+        clothingDescription: "Blue dress",
+        physicalDescription: "Medium height",
+        contactMethod: "in_app",
+        reporterRelationship: "Parent",
+        consentDeclaration: true,
+        metadata: {
+          primaryPhoto: {
+            bucket: "the-eye-staging-private",
+            objectKey: "evidence/broadcast-user-1/face.jpg",
+            mediaType: "image",
+            contentType: "image/jpeg",
+          },
+          attachments: [{
+            bucket: "the-eye-staging-private",
+            objectKey: "evidence/broadcast-user-1/voice.m4a",
+            mediaType: "audio",
+            contentType: "audio/mp4",
+          }],
+        },
+      },
+      reporter,
+    );
+    const roles = prisma.broadcastMedia.upsert.mock.calls.map((call: any[]) => call[0]?.create?.role);
+    expect(roles).toContain("PersonPhoto");
+    expect(roles).toContain("IncidentEvidence");
+  });
 });
 
 describe("BroadcastAdminService", () => {
   const prisma = {
     broadcast: {
       findMany: jest.fn(),
+      count: jest.fn(),
       findFirst: jest.fn(),
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
     incident: { findUnique: jest.fn() },
+    jurisdiction: { findMany: jest.fn(), findFirst: jest.fn() },
+    community: { findMany: jest.fn(), findFirst: jest.fn() },
     broadcastComment: { create: jest.fn() },
     broadcastReport: { findMany: jest.fn() },
     $executeRawUnsafe: jest.fn(),
@@ -782,6 +823,7 @@ describe("BroadcastAdminService", () => {
 
   function resetAdminMocks() {
     prisma.broadcast.findMany.mock.calls = [];
+    prisma.broadcast.count.mock.calls = [];
     prisma.broadcast.findFirst.mock.calls = [];
     prisma.broadcast.create.mock.calls = [];
     prisma.broadcast.update.mock.calls = [];
@@ -798,6 +840,16 @@ describe("BroadcastAdminService", () => {
     });
     prisma.broadcast.create.mockResolvedValue({ id: "admin-broadcast-1" });
     prisma.broadcast.findUnique.mockResolvedValue({ id: "admin-broadcast-1", status: BroadcastStatus.Active });
+    prisma.broadcast.count.mockResolvedValue(0);
+    prisma.jurisdiction.findMany.mockResolvedValue([]);
+    prisma.community.findMany.mockResolvedValue([]);
+    prisma.jurisdiction.findFirst.mockResolvedValue({
+      id: "jurisdiction-ng",
+      country: "NG",
+      state: "Lagos",
+      lga: "Ikeja",
+      name: "Ikeja",
+    });
   }
 
   it("lists national broadcasts across states within the admin country", async () => {
@@ -830,6 +882,48 @@ describe("BroadcastAdminService", () => {
         countryAdmin,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("creates an Admin safety alert with an authoritative target ID", async () => {
+    resetAdminMocks();
+    await service.create(
+      {
+        type: BroadcastType.SafetyAlert,
+        title: "Road safety warning",
+        body: "Avoid the flooded section of the main road.",
+        priority: "P2ActiveCrimeAccident" as never,
+        country: "NG",
+        state: "Lagos",
+        jurisdictionId: "jurisdiction-ng",
+        targetLevel: "LGA",
+        deliveryMode: "EntireArea",
+      },
+      countryAdmin,
+    );
+
+    expect(prisma.broadcast.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        type: BroadcastType.SafetyAlert,
+        jurisdictionId: "jurisdiction-ng",
+        metadata: expect.objectContaining({
+          target: expect.objectContaining({ jurisdictionId: "jurisdiction-ng", level: "LGA" }),
+        }),
+      }),
+    }));
+  });
+
+  it("returns scoped target options without synthetic All rows", async () => {
+    resetAdminMocks();
+    await service.targetOptions(countryAdmin);
+    expect(prisma.jurisdiction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        country: "NG",
+        NOT: [{ state: "All" }, { lga: "All" }],
+      }),
+    }));
+    expect(prisma.community.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ country: "NG", status: "Active" }),
+    }));
   });
 
   it("suspends and restores broadcasts", async () => {

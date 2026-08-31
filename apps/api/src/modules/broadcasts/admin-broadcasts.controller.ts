@@ -25,6 +25,12 @@ export class AdminBroadcastsController {
     return this.broadcastAdmin.list(request.user, query);
   }
 
+  @Get("target-options")
+  @RequirePermissions("broadcast:create")
+  targetOptions(@Req() request: any) {
+    return this.broadcastAdmin.targetOptions(request.user);
+  }
+
   @Get(":id")
   @RequirePermissions("broadcast:create")
   getDetail(@Param("id") id: string, @Req() request: any) {
@@ -40,7 +46,7 @@ export class AdminBroadcastsController {
   @Post()
   @RateLimit("broadcastCreate")
   @RequirePermissions("broadcast:create")
-  create(@Body() dto: CreateBroadcastDto & { country?: string; state?: string; lga?: string }, @Req() request: any) {
+  create(@Body() dto: CreateBroadcastDto, @Req() request: any) {
     return this.broadcastAdmin.create(dto, request.user);
   }
 

@@ -41,16 +41,17 @@ describe("Dashboard Home presentation", () => {
     expect(formatDashboardTimestamp("2026-08-28T11:00:00.000Z")).toContain("12:00");
   });
 
-  it("uses the active live-video contract and unified notification control", () => {
+  it("uses the authoritative live-video overview contract and unified notification control", () => {
     const page = readFileSync(join(process.cwd(), "app", "page.tsx"), "utf8");
     const data = readFileSync(join(process.cwd(), "lib", "api", "data.ts"), "utf8");
     const client = readFileSync(join(process.cwd(), "lib", "api", "client.ts"), "utf8");
 
     expect(page.includes('label="Total Reports"')).toBe(true);
-    expect(page.includes('detail="Currently active live sessions"')).toBe(true);
+    expect(page.includes("liveVideoOverview.total")).toBe(true);
+    expect(page.includes("liveVideoOverview.active")).toBe(true);
     expect(page.includes("fetchNotificationUnreadCount()")).toBe(true);
     expect(page.includes("Open inbox")).toBe(false);
-    expect(data.includes('"/live-video/sessions/active"')).toBe(true);
+    expect(data.includes('"/live-video/sessions"')).toBe(true);
     expect(data.includes('"/notifications/unread-count"')).toBe(true);
     expect(client.includes('cache: "no-store"')).toBe(true);
   });

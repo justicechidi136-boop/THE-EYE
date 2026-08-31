@@ -9,6 +9,13 @@ export async function POST(request: Request) {
       title?: string;
       body?: string;
       priority?: string;
+      jurisdictionId?: string;
+      communityId?: string;
+      targetLevel?: "Country" | "State" | "LGA" | "Community";
+      deliveryMode?: "EntireArea" | "Radius";
+      country?: string;
+      state?: string;
+      lga?: string;
       latitude?: number;
       longitude?: number;
       radiusMeters?: number;
@@ -24,6 +31,13 @@ export async function POST(request: Request) {
       title: body.title,
       body: body.body,
       priority: body.priority,
+      jurisdictionId: body.jurisdictionId,
+      communityId: body.communityId,
+      targetLevel: body.targetLevel,
+      deliveryMode: body.deliveryMode,
+      country: body.country,
+      state: body.state,
+      lga: body.lga,
       latitude: body.latitude,
       longitude: body.longitude,
       radiusMeters: body.radiusMeters,

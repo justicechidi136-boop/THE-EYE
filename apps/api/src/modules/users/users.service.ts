@@ -10,6 +10,7 @@ import { createHash } from "crypto";
 import {
   AdminRoleName,
   UserRole,
+  buildIncidentPublicReference,
   effectivePreferredLocale,
   isEnabledCountryCode,
   isEnabledPreferredLocale,
@@ -53,6 +54,7 @@ import type {
   UpsertEmergencyContactDto,
   CreateCitizenVehicleDto,
   CreateOperationalAdminDto,
+  UpdateUserAccountStatusDto,
 } from "./dto/users.dto";
 import { incompleteProfileLocation, isCitizenProfileComplete } from "./profile-complete";
 
@@ -75,6 +77,8 @@ type DirectoryRow = {
   scope: string;
   agency: string | null;
 };
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class UsersService {
@@ -750,7 +754,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        profile: true,
+        profile: { include: { homeCommunity: { select: { id: true, name: true } } } },
         trustedReporter: true,
         kycRecords: { orderBy: { createdAt: "desc" }, take: 5 },
         emergencyContacts: { orderBy: { priority: "asc" } },
@@ -758,6 +762,60 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException("User not found");
     this.assertCitizenInAdminScope(actor, user.profile);
+
+    const [reports, broadcasts, sightings, communityPosts, verifications, auditHistory, lastDeviceActivity] = await Promise.all([
+      this.prisma.incident.findMany({
+        where: { reporterId: userId },
+        select: {
+          id: true, type: true, title: true, status: true, priority: true, address: true,
+          country: true, state: true, lga: true, submittedAt: true,
+          assignedAgency: { select: { name: true } },
+        },
+        orderBy: { submittedAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.broadcast.findMany({
+        where: { creatorUserId: userId },
+        select: {
+          id: true, type: true, title: true, status: true, country: true, state: true,
+          lga: true, createdAt: true, publishedAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.broadcastSighting.findMany({
+        where: { reporterUserId: userId },
+        select: {
+          id: true, approximateArea: true, observedAt: true, createdAt: true,
+          broadcast: { select: { id: true, title: true, type: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.communityPost.findMany({
+        where: { authorId: userId },
+        select: { id: true, title: true, type: true, verificationStatus: true, areaLabel: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.incidentVerification.findMany({
+        where: { verifierId: userId },
+        select: { id: true, result: true, method: true, createdAt: true, incident: { select: { id: true, title: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.auditLog.findMany({
+        where: { OR: [{ actorUserId: userId }, { entityType: "users", entityId: userId }] },
+        include: { actorAdmin: { select: { displayName: true } }, actorUser: { select: { profile: { select: { firstName: true, lastName: true } } } } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      this.prisma.userPushToken.findFirst({
+        where: { userId },
+        select: { lastSeenAt: true },
+        orderBy: { lastSeenAt: "desc" },
+      }),
+    ]);
 
     const trusted =
       user.trustedReporter && !user.trustedReporter.revokedAt ? user.trustedReporter : null;
@@ -790,6 +848,9 @@ export class UsersService {
             effectivePreferredLocale: effectivePreferredLocale(user.profile.preferredLocale),
             state: user.profile.state || null,
             lga: user.profile.lga || null,
+            community: user.profile.homeCommunity
+              ? { id: user.profile.homeCommunity.id, name: user.profile.homeCommunity.name }
+              : null,
             avatarUrl: await this.resolveProfileAvatarUrl(user.profile.avatarUrl),
             dateOfBirth: user.profile.dateOfBirth?.toISOString().slice(0, 10) ?? null,
             gender: user.profile.gender,
@@ -797,7 +858,98 @@ export class UsersService {
           }
         : null,
       emergencyContacts: user.emergencyContacts.map((contact) => this.mapEmergencyContact(contact)),
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+      lastActiveAt: lastDeviceActivity?.lastSeenAt?.toISOString() ?? null,
+      reports: reports.map((report) => ({
+        id: report.id,
+        reference: buildIncidentPublicReference({ incidentId: report.id, submittedAt: report.submittedAt }),
+        type: report.type,
+        title: report.title,
+        status: report.status,
+        priority: report.priority,
+        location: [report.address, report.lga, report.state, report.country].filter(Boolean).join(", "),
+        capturedAt: report.submittedAt.toISOString(),
+        assignedAgency: report.assignedAgency?.name ?? null,
+      })),
+      broadcasts: broadcasts.map((broadcast) => ({
+        id: broadcast.id,
+        reference: `Broadcast ${broadcast.id.slice(0, 8).toUpperCase()}`,
+        type: broadcast.type,
+        title: broadcast.title,
+        status: broadcast.status,
+        scope: [broadcast.lga, broadcast.state, broadcast.country].filter(Boolean).join(", ") || "Nationwide",
+        createdAt: broadcast.createdAt.toISOString(),
+        publishedAt: broadcast.publishedAt?.toISOString() ?? null,
+      })),
+      sightings: sightings.map((sighting) => ({
+        id: sighting.id,
+        reference: `Sighting ${sighting.id.slice(0, 8).toUpperCase()}`,
+        broadcastId: sighting.broadcast.id,
+        relatedBroadcast: sighting.broadcast.title,
+        type: sighting.broadcast.type,
+        location: sighting.approximateArea ?? null,
+        reportedAt: (sighting.observedAt ?? sighting.createdAt).toISOString(),
+        reviewStatus: "Submitted",
+      })),
+      activity: [
+        ...communityPosts.map((post) => ({
+          id: post.id, category: "Community", label: post.title, detail: `${post.type} · ${post.verificationStatus}`,
+          location: post.areaLabel ?? null, createdAt: post.createdAt.toISOString(),
+        })),
+        ...verifications.map((verification) => ({
+          id: verification.id, category: "Verification", label: verification.incident.title,
+          detail: `${verification.method} · ${verification.result}`, reportId: verification.incident.id,
+          createdAt: verification.createdAt.toISOString(),
+        })),
+      ].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 12),
+      auditHistory: auditHistory.map((entry) => ({
+        id: entry.id,
+        event: entry.action,
+        createdAt: entry.createdAt.toISOString(),
+        actor: entry.actorAdmin?.displayName
+          || [entry.actorUser?.profile?.firstName, entry.actorUser?.profile?.lastName].filter(Boolean).join(" ")
+          || (entry.actorType === "system" ? "System" : "Account user"),
+        reason: entry.reason ?? null,
+        beforeStatus: this.auditStateValue(entry.beforeState, "status"),
+        afterStatus: this.auditStateValue(entry.afterState, "status"),
+      })),
     };
+  }
+
+  async updateCitizenAccountStatus(actor: JwtPayload, userId: string, dto: UpdateUserAccountStatusDto) {
+    this.assertAdminWithUserManage(actor);
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { profile: true } });
+    if (!user) throw new NotFoundException("User not found");
+    this.assertCitizenInAdminScope(actor, user.profile);
+    const reason = dto.reason.trim();
+    if (reason.length < 3) throw new BadRequestException("A reason is required");
+    if (user.status === dto.status) throw new ConflictException(`Account is already ${dto.status.toLowerCase()}`);
+
+    const allowed = user.status === "Active"
+      ? ["Suspended", "Deactivated"]
+      : user.status === "Suspended"
+        ? ["Active", "Deactivated"]
+        : ["Active"];
+    if (!allowed.includes(dto.status)) throw new ConflictException("Account status transition is not allowed");
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { status: dto.status as never } }),
+      ...(dto.status === "Active" ? [] : [
+        this.prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+        this.prisma.userPushToken.updateMany({ where: { userId, isActive: true }, data: { isActive: false } }),
+      ]),
+    ]);
+    await this.audit.record({
+      actor,
+      action: dto.status === "Active" ? "account.reactivated" : dto.status === "Suspended" ? "account.suspended" : "account.deactivated",
+      entityType: "users",
+      entityId: userId,
+      reason,
+      beforeState: { status: user.status },
+      afterState: { status: dto.status },
+    });
+    return { data: { id: userId, status: dto.status } };
   }
 
   async requestAccountDeletion(actor: JwtPayload, confirm: boolean) {
@@ -846,6 +998,10 @@ export class UsersService {
       status?: string;
       role?: string;
       kind?: string;
+      country?: string;
+      state?: string;
+      lga?: string;
+      communityId?: string;
     } = {},
   ) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list users");
@@ -857,21 +1013,35 @@ export class UsersService {
     const cursor = decodeDateIdCursor(query.cursor);
     const take = limit + 1;
     const textFilter = this.buildDirectoryTextFilter(query.q, query.searchType, query.searchBy);
+    const adminScope = this.adminScopeWhere(actor) as Record<string, unknown>;
+    const citizenScope = this.citizenScopeWhere(actor) as { profile?: { is?: Record<string, unknown> }; [key: string]: unknown };
+    const citizenProfileFilter = {
+      ...(citizenScope.profile?.is ?? {}),
+      ...(query.country ? { country: query.country } : {}),
+      ...(query.state ? { state: query.state } : {}),
+      ...(query.lga ? { lga: query.lga } : {}),
+      ...(query.communityId ? { homeCommunityId: query.communityId } : {}),
+    };
     const adminWhere = {
-      ...this.adminScopeWhere(actor),
+      ...adminScope,
       ...dateIdCursorWhere(cursor),
-      ...(query.status === "active" ? { isActive: true } : query.status === "inactive" ? { isActive: false } : {}),
+      ...(query.status === "active" ? { isActive: true } : query.status === "deactivated" ? { isActive: false } : {}),
+      ...(query.status === "suspended" || query.communityId ? { id: "__deny_all__" } : {}),
       ...(query.role ? { role: { name: query.role } } : {}),
+      ...(query.country ? { country: query.country } : {}),
+      ...(query.state ? { state: query.state } : {}),
+      ...(query.lga ? { lga: query.lga } : {}),
       ...textFilter.admin,
     } as never;
     const citizenWhere = {
-      ...this.citizenScopeWhere(actor),
+      ...citizenScope,
+      ...(Object.keys(citizenProfileFilter).length ? { profile: { is: citizenProfileFilter } } : {}),
       ...dateIdCursorWhere(cursor),
       ...(query.status === "active"
         ? { status: "Active" as const }
         : query.status === "suspended"
           ? { status: "Suspended" as const }
-          : query.status === "locked"
+          : query.status === "deactivated"
             ? { status: "Deactivated" as const }
             : {}),
       ...textFilter.citizen,
@@ -890,14 +1060,24 @@ export class UsersService {
       : this.prisma.user.findMany({
           where: citizenWhere,
           include: {
-            profile: true,
+            profile: { include: { homeCommunity: { select: { name: true } } } },
             trustedReporter: true,
             kycRecords: { orderBy: { createdAt: "desc" }, take: 1 },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take,
         });
-    const [admins, citizens] = await Promise.all([adminsPromise, citizensPromise]);
+    const [admins, citizens, totalAdmins, totalCitizens, activeAdmins, activeCitizens, pendingCitizens, deactivatedAdmins, deactivatedCitizens] = await Promise.all([
+      adminsPromise,
+      citizensPromise,
+      this.prisma.adminUser.count({ where: this.adminScopeWhere(actor) as never }),
+      this.prisma.user.count({ where: this.citizenScopeWhere(actor) as never }),
+      this.prisma.adminUser.count({ where: { ...this.adminScopeWhere(actor), isActive: true } as never }),
+      this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), status: "Active" } as never }),
+      this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), kycRecords: { some: { status: "Pending" } } } as never }),
+      this.prisma.adminUser.count({ where: { ...this.adminScopeWhere(actor), isActive: false } as never }),
+      this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), status: "Deactivated" } as never }),
+    ]);
 
     const merged: DirectoryRow[] = [
       ...admins.map((admin) => ({
@@ -907,7 +1087,7 @@ export class UsersService {
         name: admin.displayName,
         email: admin.email,
         role: admin.role.name,
-        status: admin.isActive ? "Active" : "Inactive",
+        status: admin.isActive ? "Active" : "Deactivated",
         scope: [admin.country, admin.state, admin.lga].filter(Boolean).join(" / ") || "Global",
         agency: admin.agency?.name ?? null,
       })),
@@ -918,8 +1098,8 @@ export class UsersService {
         name: [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(" ") || user.email,
         email: user.email,
         role: user.trustedReporter ? "Trusted Reporter" : "Citizen",
-        status: String(user.kycRecords[0]?.status ?? (user.status === "Active" ? "Active" : user.status)),
-        scope: [user.profile?.lga, user.profile?.state].filter(Boolean).join(", ") || "Unscoped",
+        status: String(user.status),
+        scope: [user.profile?.country, user.profile?.state, user.profile?.lga, user.profile?.homeCommunity?.name].filter(Boolean).join(" / ") || "None / Not assigned",
         agency: null,
       })),
     ].sort((left, right) => {
@@ -932,7 +1112,31 @@ export class UsersService {
     return {
       ...page,
       data: page.data.map(({ createdAt: _createdAt, kind: _kind, agency, ...entry }) => entry),
+      meta: {
+        totalUsers: totalAdmins + totalCitizens,
+        activeUsers: activeAdmins + activeCitizens,
+        pendingUsers: pendingCitizens,
+        deactivatedUsers: deactivatedAdmins + deactivatedCitizens,
+      },
     };
+  }
+
+  async listDirectoryOptions(actor: JwtPayload) {
+    this.assertAdminWithUserManage(actor);
+    const geographyWhere = this.adminJurisdictionWhere(actor);
+    const [jurisdictions, communities] = await Promise.all([
+      this.prisma.jurisdiction.findMany({
+        where: { ...geographyWhere, NOT: [{ state: "All" }, { lga: "All" }] },
+        orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }],
+        select: { id: true, country: true, state: true, lga: true, name: true },
+      }),
+      this.prisma.community.findMany({
+        where: { ...geographyWhere, status: "Active" as never },
+        orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }, { name: "asc" }],
+        select: { id: true, jurisdictionId: true, name: true, level: true, country: true, state: true, lga: true },
+      }),
+    ]);
+    return { data: { jurisdictions, communities } };
   }
 
   async getAdminAccountOptions(actor: JwtPayload) {
@@ -1147,18 +1351,76 @@ export class UsersService {
     });
     if (!admin) throw new NotFoundException("Admin account not found");
 
+    const [auditHistory, lastSession] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: { OR: [{ actorAdminId: adminId }, { entityType: "admin_user", entityId: adminId }] },
+        include: { actorAdmin: { select: { displayName: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      this.prisma.refreshToken.findFirst({ where: { adminUserId: adminId }, select: { createdAt: true }, orderBy: { createdAt: "desc" } }),
+    ]);
+
     return {
       id: admin.id,
       typ: "admin" as const,
       displayName: admin.displayName,
       email: admin.email,
       role: admin.role.name,
-      status: admin.isActive ? "Active" : "Inactive",
+      status: admin.isActive ? "Active" : "Deactivated",
       scope: [admin.country, admin.state, admin.lga].filter(Boolean).join(" / ") || "Global",
       agency: admin.agency?.name ?? null,
       createdAt: admin.createdAt.toISOString(),
       updatedAt: admin.updatedAt.toISOString(),
+      lastActiveAt: lastSession?.createdAt?.toISOString() ?? null,
+      canManageStatus: actor.sub !== admin.id,
+      auditHistory: auditHistory.map((entry) => ({
+        id: entry.id,
+        event: entry.action,
+        createdAt: entry.createdAt.toISOString(),
+        actor: entry.actorAdmin?.displayName ?? (entry.actorType === "system" ? "System" : "Administrator"),
+        reason: entry.reason ?? null,
+        beforeStatus: this.auditStateValue(entry.beforeState, "status"),
+        afterStatus: this.auditStateValue(entry.afterState, "status"),
+      })),
     };
+  }
+
+  async updateAdminAccountStatus(actor: JwtPayload, adminId: string, dto: UpdateUserAccountStatusDto) {
+    this.assertAdminWithUserManage(actor);
+    if (actor.sub === adminId) throw new ForbiddenException("You cannot change your own account status");
+    if (dto.status === "Suspended") throw new BadRequestException("Operational accounts support Active or Deactivated status");
+    const admin = await this.prisma.adminUser.findFirst({ where: { id: adminId, ...this.adminScopeWhere(actor) } });
+    if (!admin) throw new NotFoundException("Admin account not found");
+    const currentStatus = admin.isActive ? "Active" : "Deactivated";
+    if (currentStatus === dto.status) throw new ConflictException(`Account is already ${dto.status.toLowerCase()}`);
+    const reason = dto.reason.trim();
+    if (reason.length < 3) throw new BadRequestException("A reason is required");
+
+    await this.prisma.$transaction([
+      this.prisma.adminUser.update({ where: { id: adminId }, data: { isActive: dto.status === "Active" } }),
+      ...(dto.status === "Active" ? [] : [
+        this.prisma.refreshToken.updateMany({ where: { adminUserId: adminId, revokedAt: null }, data: { revokedAt: new Date() } }),
+      ]),
+    ]);
+    await this.audit.record({
+      actor,
+      action: dto.status === "Active" ? "admin.account.reactivated" : "admin.account.deactivated",
+      entityType: "admin_user",
+      entityId: adminId,
+      reason,
+      beforeState: { status: currentStatus },
+      afterState: { status: dto.status },
+    });
+    return { data: { id: adminId, status: dto.status } };
+  }
+
+  private auditStateValue(value: Prisma.JsonValue | null, key: string) {
+    if (!value || Array.isArray(value) || typeof value !== "object") return null;
+    const candidate = (value as Record<string, unknown>)[key];
+    return typeof candidate === "string" || typeof candidate === "number" || typeof candidate === "boolean"
+      ? String(candidate)
+      : null;
   }
 
   private async resolveProfileAvatarUrl(value?: string | null) {
@@ -1393,7 +1655,7 @@ export class UsersService {
       return { contains: value, mode: "insensitive" };
     };
 
-    const by = searchBy ?? "name";
+    const by = searchBy ?? "all";
     if (by === "email") {
       return {
         admin: { email: stringFilter(term) },
@@ -1408,6 +1670,21 @@ export class UsersService {
     }
     if (by === "role") {
       return { admin: { role: { name: stringFilter(term) } }, citizen: { id: "__deny_all__" } };
+    }
+    if (by === "all") {
+      const idFilter = UUID_PATTERN.test(term) ? [{ id: term }] : [];
+      return {
+        admin: { OR: [{ displayName: stringFilter(term) }, { email: stringFilter(term) }, ...idFilter] },
+        citizen: {
+          OR: [
+            { email: stringFilter(term) },
+            { phone: stringFilter(term) },
+            { profile: { is: { firstName: stringFilter(term) } } },
+            { profile: { is: { lastName: stringFilter(term) } } },
+            ...idFilter,
+          ],
+        },
+      };
     }
     return {
       admin: { displayName: stringFilter(term) },

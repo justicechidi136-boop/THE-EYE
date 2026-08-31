@@ -88,7 +88,7 @@ function buildStartService(options: {
 
 describe("LiveVideoService startIncidentLiveVideo", () => {
   it("returns public connection details and legacy livekit envelope", async () => {
-    const { service, tokens } = buildStartService();
+    const { service, tokens, prisma } = buildStartService();
     const result = await service.startIncidentLiveVideo(
       "incident-1",
       {},
@@ -110,6 +110,13 @@ describe("LiveVideoService startIncidentLiveVideo", () => {
     expect(result.livekit.url).toBe(result.connection.serverUrl);
     expect(result.livekit.token).toBe(result.connection.participantToken);
     expect(result.data.correlationId).toBe("trace-1");
+    expect(prisma.liveVideoSession.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { roomName: "eye-incident-incident-1" },
+        create: expect.objectContaining({ incidentId: "incident-1" }),
+      }),
+    );
+    expect(prisma.incident.create).toBe(undefined);
   });
 
   it("fails instead of returning success when token generation yields empty token", async () => {

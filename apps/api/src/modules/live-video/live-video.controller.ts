@@ -20,6 +20,12 @@ export class LiveVideoController {
     return this.liveVideo.activeSessions(request.user);
   }
 
+  @Get("sessions")
+  @RequirePermissions("incident:read")
+  sessions(@Req() request: any) {
+    return this.liveVideo.sessionOverview(request.user);
+  }
+
   @Post("incidents/:incidentId/start")
   @RateLimit("liveStreamCreate")
   @RequirePermissions("incident:create")

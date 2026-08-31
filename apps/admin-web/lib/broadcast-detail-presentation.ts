@@ -1,6 +1,7 @@
 import type { BroadcastDetailView } from "./types/admin-views";
 
-const identityRolePattern = /front|rear|side|profile|face|portrait|identity|primary|person|vehicle/i;
+const primaryRolePattern = /personphoto|primary|face|portrait/i;
+const vehicleIdentityRolePattern = /vehiclephoto|front|rear|side|other/i;
 
 export function broadcastTypeLabel(value: string) {
   return value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ");
@@ -21,10 +22,19 @@ export function formatBroadcastDate(value: string | null) {
 
 export function splitBroadcastMedia(broadcast: BroadcastDetailView) {
   const shouldSeparateIdentity = broadcast.type === "MissingPerson" || broadcast.type === "StolenVehicle";
-  if (!shouldSeparateIdentity) return { identity: [], evidence: broadcast.attachments };
-  const identity = broadcast.attachments.filter((item) => item.mediaType === "image" && identityRolePattern.test(item.label));
-  const identityIds = new Set(identity.map((item) => item.id ?? item.label));
+  if (!shouldSeparateIdentity) return { primary: [], identity: [], evidence: broadcast.attachments };
+  const images = broadcast.attachments.filter((item) => item.mediaType.toLowerCase() === "image");
+  const primary = broadcast.type === "MissingPerson"
+    ? images.filter((item) => primaryRolePattern.test(item.label)).slice(0, 1)
+    : [];
+  if (broadcast.type === "MissingPerson" && !primary.length && images.length) primary.push(images[0]);
+  const primaryIds = new Set(primary.map((item) => item.id ?? item.label));
+  const identity = broadcast.type === "StolenVehicle"
+    ? images.filter((item) => vehicleIdentityRolePattern.test(item.label))
+    : [];
+  const identityIds = new Set([...primaryIds, ...identity.map((item) => item.id ?? item.label)]);
   return {
+    primary,
     identity,
     evidence: broadcast.attachments.filter((item) => !identityIds.has(item.id ?? item.label)),
   };

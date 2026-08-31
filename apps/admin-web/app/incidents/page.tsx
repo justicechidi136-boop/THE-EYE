@@ -47,7 +47,7 @@ export default async function IncidentsPage({ searchParams }: { searchParams: Pr
           { label: "Verifying", value: String(page.meta.verifyingReports) },
         ]} />
 
-        <section className="rounded-lg border border-line bg-surface p-4 shadow-sm">
+        <section id="report-table" className="scroll-mt-4 rounded-lg border border-line bg-surface p-4 shadow-sm">
           <Suspense fallback={null}>
             <ConsoleFilterBar>
               <ConsoleSearchInput name="q" label="Search" placeholder="Search reports by title, reporter, or location…" defaultValue={params.q} />

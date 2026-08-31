@@ -51,13 +51,34 @@ describe("Broadcast list presentation", () => {
     expect(matchesBroadcastSearch(broadcast, "Abuja")).toBe(false);
   });
 
-  it("keeps the create form human-readable and moves secondary actions into overflow", () => {
+  it("uses the approved lifecycle workspace and hierarchical Admin creation flow", () => {
     const root = join(process.cwd());
     const form = readFileSync(join(root, "components", "broadcast-create-form.tsx"), "utf8");
+    const workspace = readFileSync(join(root, "components", "broadcast", "broadcast-workspace.tsx"), "utf8");
+    const filters = readFileSync(join(root, "components", "broadcast", "broadcast-filters.tsx"), "utf8");
+    const list = readFileSync(join(root, "components", "broadcast", "broadcast-list.tsx"), "utf8");
     const listActions = readFileSync(join(root, "components", "broadcast", "broadcast-list-actions.tsx"), "utf8");
     expect(form.includes("Message / content")).toBe(true);
-    expect(form.includes("Search a neighborhood, LGA, or address")).toBe(true);
+    expect(form.includes("Safety Alert")).toBe(true);
+    expect(form.includes("Public Advisory")).toBe(true);
+    expect(form.includes("Emergency Warning")).toBe(true);
+    expect(form.includes("Missing person")).toBe(false);
+    expect(form.includes("City / LGA")).toBe(true);
+    expect(form.includes("Location level")).toBe(true);
+    expect(form.includes("changeLocationLevel")).toBe(true);
+    expect(form.includes("Search community")).toBe(true);
+    expect(form.includes("EntireArea")).toBe(true);
+    expect(form.includes("jurisdictionId")).toBe(true);
+    expect(form.includes("communityId")).toBe(true);
     expect(form.includes("Lat, lng, radius")).toBe(false);
+    expect(workspace.includes("Published")).toBe(true);
+    expect(workspace.includes("Active")).toBe(true);
+    expect(workspace.includes("Expired")).toBe(true);
+    expect(workspace.includes("Cancelled")).toBe(true);
+    expect(filters.includes("Last 7 days")).toBe(true);
+    expect(filters.includes("Custom range")).toBe(true);
+    expect(list.includes('>Delivery<')).toBe(false);
+    expect(list.includes("visiblePages")).toBe(true);
     expect(listActions.includes('aria-label="More actions"')).toBe(true);
   });
 });

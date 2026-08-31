@@ -8,6 +8,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       findUnique: jest.fn(),
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
       update: jest.fn(),
     },
     adminUserPreference: {
@@ -17,7 +18,9 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
       create: jest.fn(),
+      update: jest.fn(),
     },
     adminRole: {
       findUnique: jest.fn(),
@@ -30,6 +33,15 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
     },
+    community: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    incident: { findMany: jest.fn().mockResolvedValue([]) },
+    broadcast: { findMany: jest.fn().mockResolvedValue([]) },
+    broadcastSighting: { findMany: jest.fn().mockResolvedValue([]) },
+    communityPost: { findMany: jest.fn().mockResolvedValue([]) },
+    incidentVerification: { findMany: jest.fn().mockResolvedValue([]) },
+    auditLog: { findMany: jest.fn().mockResolvedValue([]) },
     profile: {
       upsert: jest.fn(),
       findUnique: jest.fn(),
@@ -66,8 +78,8 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       create: jest.fn(),
       update: jest.fn(),
     },
-    refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-    userPushToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    refreshToken: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    userPushToken: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     $transaction: jest.fn(async (arg: unknown) => {
       if (typeof arg === "function") return (arg as (tx: unknown) => Promise<unknown>)(prisma);
       if (Array.isArray(arg)) return Promise.all(arg);
@@ -249,6 +261,157 @@ describe("UsersService directory account-kind filtering", () => {
     expect(prisma.adminUser.findMany).toHaveBeenCalled();
     expect(prisma.user.findMany).not.toHaveBeenCalled();
     expect(result.data[0].role).toBe("Police/Security Officer");
+  });
+
+  it("applies combined directory search and geographic filters with authoritative metrics", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.adminUser.count.mockResolvedValue(2);
+    prisma.user.count.mockResolvedValue(3);
+
+    const result = await service.listDirectory({
+      sub: "super-admin",
+      typ: "admin",
+      role: "Super Admin",
+      permissions: ["user:manage"],
+    } as never, {
+      q: "ada@example.test",
+      status: "active",
+      country: "Nigeria",
+      state: "Lagos",
+      lga: "Ikeja",
+      communityId: "community-1",
+    });
+
+    expect(prisma.adminUser.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: "__deny_all__", country: "Nigeria", state: "Lagos", lga: "Ikeja", isActive: true }),
+    }));
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: "Active",
+        profile: { is: { country: "Nigeria", state: "Lagos", lga: "Ikeja", homeCommunityId: "community-1" } },
+      }),
+    }));
+    expect(result.meta.totalUsers).toBe(5);
+    expect(result.meta.activeUsers).toBe(5);
+    expect(result.meta.pendingUsers).toBe(3);
+    expect(result.meta.deactivatedUsers).toBe(5);
+  });
+
+  it("returns scoped geographic options for directory filters", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.jurisdiction.findMany.mockResolvedValue([{ id: "jur-1", country: "NG", state: "LA", lga: "Ikeja", name: "Ikeja" }]);
+    prisma.community.findMany.mockResolvedValue([{ id: "community-1", country: "NG", state: "LA", lga: "Ikeja", name: "Allen Avenue" }]);
+
+    const result = await service.listDirectoryOptions({
+      sub: "state-admin",
+      typ: "admin",
+      role: "State Admin",
+      country: "NG",
+      state: "LA",
+      permissions: ["user:manage"],
+    } as never);
+
+    expect(prisma.jurisdiction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ country: "NG", state: "LA" }),
+    }));
+    expect(result.data.communities[0].name).toBe("Allen Avenue");
+  });
+});
+
+describe("UsersService operational user details", () => {
+  const superAdmin = {
+    sub: "super-admin",
+    typ: "admin",
+    role: "Super Admin",
+    permissions: ["user:manage"],
+  } as never;
+
+  it("returns authoritative profile, operational activity and audit history", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.user.findUnique.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      email: "ada@example.test",
+      phone: "+2348000000000",
+      status: "Active",
+      createdAt: new Date("2026-08-01T08:00:00.000Z"),
+      updatedAt: new Date("2026-08-20T08:00:00.000Z"),
+      profile: {
+        firstName: "Ada", lastName: "Okeke", country: "Nigeria", countryCode: "NG",
+        state: "Lagos", lga: "Ikeja", address: "Allen Avenue", avatarUrl: null,
+        dateOfBirth: null, gender: null, preferredLocale: "en",
+        homeCommunity: { id: "community-1", name: "Allen Avenue Estate" },
+      },
+      trustedReporter: null,
+      kycRecords: [],
+      emergencyContacts: [],
+    });
+    prisma.incident.findMany.mockResolvedValue([{
+      id: "22222222-2222-4222-8222-222222222222", type: "Crime", title: "Road incident",
+      status: "Submitted", priority: "P2ActiveCrimeAccident", address: "Allen Avenue",
+      country: "Nigeria", state: "Lagos", lga: "Ikeja", assignedAgency: { name: "Ikeja Command" },
+      submittedAt: new Date("2026-08-20T10:00:00.000Z"),
+    }]);
+    prisma.broadcast.findMany.mockResolvedValue([]);
+    prisma.broadcastSighting.findMany.mockResolvedValue([]);
+    prisma.communityPost.findMany.mockResolvedValue([]);
+    prisma.incidentVerification.findMany.mockResolvedValue([]);
+    prisma.auditLog.findMany.mockResolvedValue([{
+      id: "audit-1", action: "account.created", actorType: "system", actorAdmin: null,
+      actorUser: null, reason: null, beforeState: null, afterState: { status: "Active" },
+      createdAt: new Date("2026-08-01T08:00:00.000Z"),
+    }]);
+    prisma.userPushToken.findFirst.mockResolvedValue({ lastSeenAt: new Date("2026-08-29T12:00:00.000Z") });
+
+    const result = await service.getCitizenDetail(superAdmin, "11111111-1111-4111-8111-111111111111");
+
+    expect(result.profile?.community?.name).toBe("Allen Avenue Estate");
+    expect(result.reports[0].assignedAgency).toBe("Ikeja Command");
+    expect(result.auditHistory[0].actor).toBe("System");
+    expect(result.lastActiveAt).toBe("2026-08-29T12:00:00.000Z");
+    expect(JSON.stringify(result).includes("objectKey")).toBe(false);
+  });
+
+  it("suspends a scoped citizen, revokes active sessions and records the reason", async () => {
+    const { service, prisma, audit } = createUsersService();
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1", status: "Active", profile: { country: "Nigeria", state: "Lagos", lga: "Ikeja" },
+    });
+
+    const result = await service.updateCitizenAccountStatus(superAdmin, "user-1", {
+      status: "Suspended",
+      reason: "Confirmed safety investigation",
+    });
+
+    expect(result.data.status).toBe("Suspended");
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalled();
+    expect(prisma.userPushToken.updateMany).toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "account.suspended",
+      reason: "Confirmed safety investigation",
+      beforeState: { status: "Active" },
+      afterState: { status: "Suspended" },
+    }));
+  });
+
+  it("rejects account actions without a meaningful reason", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.user.findUnique.mockResolvedValue({ id: "user-1", status: "Active", profile: null });
+
+    await expect(service.updateCitizenAccountStatus(superAdmin, "user-1", {
+      status: "Deactivated",
+      reason: " ",
+    })).rejects.toThrow("A reason is required");
+  });
+
+  it("rejects account status mutations without user:manage", async () => {
+    const { service, prisma } = createUsersService();
+    const actorWithoutPermission = { ...superAdmin, permissions: [] };
+
+    await expect(service.updateCitizenAccountStatus(actorWithoutPermission, "user-1", {
+      status: "Suspended",
+      reason: "Unauthorized mutation attempt",
+    })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
 

@@ -584,8 +584,8 @@ export class IncidentsService {
 
   async updateStatus(id: string, status: IncidentStatus, note?: string, actor?: JwtPayload) {
     if (actor?.role === AdminRoleName.OversightAuditor) throw new ForbiddenException("Oversight Auditor cannot modify incidents");
-    if ((status === IncidentStatus.Closed || status === IncidentStatus.FalseReport) && !note?.trim()) {
-      throw new BadRequestException("A reason is required to close an incident or mark it false");
+    if ((status === IncidentStatus.Closed || status === IncidentStatus.FalseReport || status === IncidentStatus.Resolved) && !note?.trim()) {
+      throw new BadRequestException("A reason or resolution summary is required for this action");
     }
 
     const incident = await this.get(id, actor);
@@ -634,6 +634,8 @@ export class IncidentsService {
 
   async assign(id: string, dto: { agencyId?: string; adminId?: string; reason?: string }, actor?: JwtPayload) {
     if (actor?.role === AdminRoleName.OversightAuditor) throw new ForbiddenException("Oversight Auditor cannot modify incidents");
+    if (!dto.agencyId?.trim()) throw new BadRequestException("A response agency is required");
+    if (!dto.reason?.trim()) throw new BadRequestException("A reassignment reason is required");
     const incident = await this.get(id, actor);
     const currentStatus = incident.status as IncidentStatus;
     const nextStatus = IncidentStatus.Assigned;

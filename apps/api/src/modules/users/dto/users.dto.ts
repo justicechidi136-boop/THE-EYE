@@ -229,6 +229,19 @@ export class ReviewKycDto {
   reason?: string;
 }
 
+export class UpdateUserAccountStatusDto {
+  @ApiProperty({ enum: ["Active", "Suspended", "Deactivated"] })
+  @IsString()
+  @IsIn(["Active", "Suspended", "Deactivated"])
+  status!: "Active" | "Suspended" | "Deactivated";
+
+  @ApiProperty({ example: "Confirmed account safety review" })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  reason!: string;
+}
+
 export class RequestAccountDeletionDto {
   @ApiProperty({ description: "Must be true to acknowledge irreversible account deactivation request" })
   @IsBoolean()

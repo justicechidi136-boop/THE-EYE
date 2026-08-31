@@ -147,7 +147,9 @@ export class BroadcastCitizenService {
   async createMissingPerson(dto: CreateMissingPersonBroadcastDto, actor: JwtPayload) {
     validateMissingPersonBroadcastDto(dto);
     const attachments = sanitizeBroadcastAttachments(dto.metadata?.attachments);
-    const { attachments: _ignoredAttachments, ...safeMetadata } = (dto.metadata ?? {}) as Record<string, unknown>;
+    const primaryPhoto = sanitizeBroadcastAttachments(dto.metadata?.primaryPhoto ? [dto.metadata.primaryPhoto] : [])
+      .find((attachment) => attachment.mediaType === "image");
+    const { attachments: _ignoredAttachments, primaryPhoto: _ignoredPrimaryPhoto, ...safeMetadata } = (dto.metadata ?? {}) as Record<string, unknown>;
     return this.createCitizenBroadcast(BroadcastType.MissingPerson, dto, actor, {
       title: `Missing person: ${dto.fullName.trim()}`,
       body: this.buildMissingPersonBody(dto),
@@ -168,6 +170,7 @@ export class BroadcastCitizenService {
         medicalVulnerability: dto.medicalVulnerability,
         language: dto.language,
         rewardNotice: dto.rewardNotice,
+        ...(primaryPhoto ? { primaryPhoto } : {}),
         ...(attachments.length > 0 ? { attachments } : {}),
       },
       latitude: dto.lastSeenLatitude,
@@ -701,7 +704,7 @@ export class BroadcastCitizenService {
     broadcastId: string;
     sightingId?: string;
     uploaderId: string;
-    role: "VehiclePhoto" | "IncidentEvidence" | "SightingEvidence";
+    role: "PersonPhoto" | "VehiclePhoto" | "IncidentEvidence" | "SightingEvidence";
     attachments: Array<Record<string, string | number>>;
   }) {
     for (const attachment of input.attachments) {
@@ -802,6 +805,14 @@ export class BroadcastCitizenService {
       } as never,
     });
 
+    await this.persistBroadcastMedia({
+      broadcastId: broadcast.id,
+      uploaderId: actor.sub,
+      role: "PersonPhoto",
+      attachments: sanitizeBroadcastAttachments(
+        payload.metadata.primaryPhoto ? [payload.metadata.primaryPhoto] : [],
+      ).filter((attachment) => attachment.mediaType === "image"),
+    });
     await this.persistBroadcastMedia({
       broadcastId: broadcast.id,
       uploaderId: actor.sub,

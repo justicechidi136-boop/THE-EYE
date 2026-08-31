@@ -4,6 +4,8 @@ import { ConsoleEmptyState, ConsolePageHeader } from "../../../components/consol
 import { StatusBadge } from "../../../components/ui";
 import { getRouteById } from "../../../lib/admin/admin-route-registry";
 import { humanPriority } from "../../../lib/admin-presentation";
+import { broadcastTypeLabel } from "../../../lib/broadcast-detail-presentation";
+import { broadcastPublicReference } from "../../../lib/broadcast-list-presentation";
 import { fetchAdminBroadcast, fetchBroadcastReports } from "../../../lib/api/data";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +33,12 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
   return (
     <AppShell>
       <ConsolePageHeader
-        title="Broadcast Details"
-        eyebrow={broadcast.title}
+        title={broadcast.title}
+        eyebrow={broadcastPublicReference(broadcast.id)}
         breadcrumbs={[...(route?.breadcrumb ?? []), "Details"]}
-        action={<div className="flex flex-wrap gap-2"><StatusBadge tone={authorTone(broadcast.authorLabel)}>{broadcast.authorLabel}</StatusBadge><StatusBadge tone="info">{broadcast.status}</StatusBadge><StatusBadge tone={humanPriority(broadcast.severity) === "HIGH" ? "danger" : humanPriority(broadcast.severity) === "MID" ? "warning" : "neutral"}>{humanPriority(broadcast.severity)}</StatusBadge></div>}
+        action={<div className="flex flex-wrap gap-2"><StatusBadge tone={authorTone(broadcast.authorLabel)}>{broadcast.authorLabel}</StatusBadge><StatusBadge tone="info">{broadcastTypeLabel(broadcast.type)}</StatusBadge><StatusBadge tone="info">{broadcast.status}</StatusBadge><StatusBadge tone={humanPriority(broadcast.severity) === "HIGH" ? "danger" : humanPriority(broadcast.severity) === "MID" ? "warning" : "neutral"}>{humanPriority(broadcast.severity)}</StatusBadge></div>}
       />
+      <p className="-mt-3 mb-6 max-w-5xl whitespace-pre-wrap break-words text-sm leading-6 text-muted">{broadcast.body}</p>
       <BroadcastDetailWorkspace broadcast={broadcast} reports={reports} />
     </AppShell>
   );

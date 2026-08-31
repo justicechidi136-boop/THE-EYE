@@ -193,8 +193,11 @@ enum BroadcastType {
   Accident
   MissingPerson
   StolenVehicle
+  SafetyAlert
   GovernmentAlert
   CommunityWarning
+  PublicAdvisory
+  EmergencyWarning
 }
 
 enum BroadcastDeliveryStatus {

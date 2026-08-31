@@ -58,7 +58,7 @@ export function StatusBadge({
 
 export function Panel({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
   return (
-    <section className="rounded-lg border border-line bg-surface shadow-sm">
+    <section className="min-w-0 rounded-lg border border-line bg-surface shadow-sm">
       <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3">
         <h2 className="text-base font-semibold text-ink">{title}</h2>
         {aside}
