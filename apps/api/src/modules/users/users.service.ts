@@ -1673,6 +1673,19 @@ export class UsersService {
     }
     if (by === "all") {
       const idFilter = UUID_PATTERN.test(term) ? [{ id: term }] : [];
+      const nameTerms = searchType === "exact"
+        ? []
+        : term.split(/\s+/).filter(Boolean);
+      const fullNameFilter = nameTerms.length > 1
+        ? [{
+            AND: nameTerms.map((nameTerm) => ({
+              OR: [
+                { profile: { is: { firstName: stringFilter(nameTerm) } } },
+                { profile: { is: { lastName: stringFilter(nameTerm) } } },
+              ],
+            })),
+          }]
+        : [];
       return {
         admin: { OR: [{ displayName: stringFilter(term) }, { email: stringFilter(term) }, ...idFilter] },
         citizen: {
@@ -1681,6 +1694,7 @@ export class UsersService {
             { phone: stringFilter(term) },
             { profile: { is: { firstName: stringFilter(term) } } },
             { profile: { is: { lastName: stringFilter(term) } } },
+            ...fullNameFilter,
             ...idFilter,
           ],
         },
