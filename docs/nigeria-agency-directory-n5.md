@@ -103,4 +103,4 @@ Official existence-only sources used to retain candidates as pending include cur
 - Stale findings: 0.
 - Missing provenance findings: 0.
 
-NATIONAL STRUCTURAL COVERAGE = VERIFIED for the nationwide NPF, NSCDC, FRSC, and Federal Fire formations represented by N4. Operational and routing-ready coverage remain limited to the counts above.
+CORE FEDERAL STRUCTURAL COVERAGE = VERIFIED for the nationwide NPF, NSCDC, FRSC, and Federal Fire formation categories represented by N4. This is not blanket verification of all 259 State/FCT category cells. Structural category, operational, and routing-ready coverage remain limited to the measured counts above.

@@ -30,6 +30,9 @@ const contactTypes = [
 const verificationStates = [
   "VERIFIED", "PARTIALLY_VERIFIED", "PENDING_VERIFICATION", "DISPUTED", "RETIRED",
 ] as const;
+const coordinateEvidenceClasses = [
+  "AUTHORITATIVE_COORDINATE", "VERIFIED_ADDRESS_GEOCODE", "THIRD_PARTY_REFERENCE", "UNKNOWN",
+] as const;
 
 class CanonicalGeographyDto {
   @IsUUID()
@@ -83,8 +86,32 @@ export class CreateAgencyOfficeDto extends CanonicalGeographyDto {
   coordinatesVerified?: boolean;
 
   @IsOptional()
+  @IsIn(coordinateEvidenceClasses)
+  coordinateEvidenceClass?: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  coordinatesSourceUrl?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  addressVerified?: boolean;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  addressSourceUrl?: string;
+
+  @IsOptional()
   @IsBoolean()
   is24Hours?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  operatingHoursVerified?: boolean;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  operatingHoursSourceUrl?: string;
 
   @IsIn(verificationStates)
   verificationStatus!: string;
@@ -101,7 +128,13 @@ export class UpdateAgencyOfficeDto {
   @IsOptional() @IsLatitude() latitude?: number | null;
   @IsOptional() @IsLongitude() longitude?: number | null;
   @IsOptional() @IsBoolean() coordinatesVerified?: boolean;
+  @IsOptional() @IsIn(coordinateEvidenceClasses) coordinateEvidenceClass?: string;
+  @IsOptional() @IsUrl({ require_protocol: true, protocols: ["https"] }) coordinatesSourceUrl?: string | null;
+  @IsOptional() @IsBoolean() addressVerified?: boolean;
+  @IsOptional() @IsUrl({ require_protocol: true, protocols: ["https"] }) addressSourceUrl?: string | null;
   @IsOptional() @IsBoolean() is24Hours?: boolean | null;
+  @IsOptional() @IsBoolean() operatingHoursVerified?: boolean;
+  @IsOptional() @IsUrl({ require_protocol: true, protocols: ["https"] }) operatingHoursSourceUrl?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsIn(verificationStates) verificationStatus?: string;
   @IsOptional() @IsUrl({ require_protocol: true, protocols: ["https"] }) sourceUrl?: string | null;
@@ -168,4 +201,16 @@ export class AgencyVerificationFreshnessQueryDto {
 
 export class AgencyCoverageReportQueryDto {
   @IsOptional() @IsUUID() stateId?: string;
+}
+
+export class AgencyDataQualityQueueQueryDto {
+  @IsOptional() @IsUUID() stateId?: string;
+  @IsOptional() @IsUUID() agencyId?: string;
+  @IsOptional() @IsString() @MaxLength(80) category?: string;
+  @IsOptional() @IsIn([
+    "MISSING_OPERATIONAL_CONTACT", "MISSING_VERIFIED_ADDRESS", "MISSING_COORDINATES",
+    "MISSING_EMERGENCY_CONTACT", "NO_OPERATIONAL_ENDPOINT", "STALE_ENDPOINT", "CONFLICTING_CONTACT_EVIDENCE",
+  ]) missingField?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) staleDays?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number;
 }

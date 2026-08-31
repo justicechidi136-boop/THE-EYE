@@ -103,4 +103,31 @@ describe("verified Nigeria agency reference seed", () => {
     expect(preserveStrongerVerification("RETIRED", "VERIFIED")).toBe("RETIRED");
     expect(preserveStrongerVerification("DISPUTED", "VERIFIED")).toBe("DISPUTED");
   });
+
+  it("requires explicit provenance for imported coordinates", async () => {
+    const document = await loadAgencySeed(resolve("prisma/data/nigeria-state-agencies.n5-operational-2026-08-31.json"));
+    const invalid = structuredClone(document);
+    invalid.agencies[0].office = {
+      ...invalid.agencies[0].office!,
+      latitude: 7.4,
+      longitude: 3.9,
+      coordinateEvidenceClass: "UNKNOWN",
+    };
+
+    expect(validateAgencySeed(invalid).some((error) => error.includes("unclassified coordinates"))).toBe(true);
+  });
+
+  it("accepts verified-address geocodes only with an HTTPS coordinate source", async () => {
+    const document = await loadAgencySeed(resolve("prisma/data/nigeria-state-agencies.n5-operational-2026-08-31.json"));
+    const valid = structuredClone(document);
+    valid.agencies[0].office = {
+      ...valid.agencies[0].office!,
+      latitude: 7.4,
+      longitude: 3.9,
+      coordinateEvidenceClass: "VERIFIED_ADDRESS_GEOCODE",
+      coordinatesSourceUrl: "https://geocoder.example.test/result/1",
+    };
+
+    expect(validateAgencySeed(valid)).toEqual([]);
+  });
 });

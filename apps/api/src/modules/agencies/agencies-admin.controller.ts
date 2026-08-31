@@ -19,6 +19,7 @@ import { AgencyDirectoryService } from "./agency-directory.service";
 import {
   CreateAgencyContactDto,
   AgencyCoverageReportQueryDto,
+  AgencyDataQualityQueueQueryDto,
   AgencyVerificationFreshnessQueryDto,
   CreateAgencyJurisdictionDto,
   CreateAgencyOfficeDto,
@@ -64,6 +65,14 @@ export class AgenciesAdminController {
     @Req() request: { user: unknown },
   ) {
     return this.directory.getCoverageReport(request.user as never, query);
+  }
+
+  @Get("admin/agency-directory/reports/data-quality")
+  getDataQualityQueue(
+    @Query() query: AgencyDataQualityQueueQueryDto,
+    @Req() request: { user: unknown },
+  ) {
+    return this.directory.getDataQualityQueue(request.user as never, query);
   }
 
   @Post("admin/agencies")

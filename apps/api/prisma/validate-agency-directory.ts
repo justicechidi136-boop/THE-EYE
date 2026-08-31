@@ -46,6 +46,26 @@ async function main() {
     for (const office of agency.offices) {
       if (office.wardId && !office.lgaId) errors.push(`${agency.code}/${office.name}: Ward without LGA`);
       if (office.lgaId && !office.stateId) errors.push(`${agency.code}/${office.name}: LGA without State`);
+      if (office.addressVerified && (!office.physicalAddress || !office.addressSourceUrl || !office.addressVerifiedAt)) {
+        errors.push(`${agency.code}/${office.name}: verified address lacks value/provenance/date`);
+      }
+      const hasCoordinatePair = office.latitude != null && office.longitude != null;
+      const coordinateClassQualified = ["AUTHORITATIVE_COORDINATE", "VERIFIED_ADDRESS_GEOCODE"].includes(
+        office.coordinateEvidenceClass,
+      );
+      if (office.coordinatesVerified && (
+        !hasCoordinatePair || !coordinateClassQualified || !office.coordinatesSourceUrl || !office.coordinatesVerifiedAt
+      )) {
+        errors.push(`${agency.code}/${office.name}: verified coordinates lack qualified evidence/provenance/date`);
+      }
+      if (office.coordinateEvidenceClass === "THIRD_PARTY_REFERENCE" && office.coordinatesVerified) {
+        errors.push(`${agency.code}/${office.name}: third-party coordinates marked verified`);
+      }
+      if (office.operatingHoursVerified && (
+        office.is24Hours == null || !office.operatingHoursSourceUrl || !office.operatingHoursVerifiedAt
+      )) {
+        errors.push(`${agency.code}/${office.name}: verified operating hours lack value/provenance/date`);
+      }
     }
   }
   for (const formation of normalizeFederalFormations(document)) {

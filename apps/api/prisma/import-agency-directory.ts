@@ -93,6 +93,9 @@ async function main() {
 
     let office = null;
     if (entry.office) {
+      const coordinateEvidenceClass = entry.office.coordinateEvidenceClass ?? "UNKNOWN";
+      const coordinatesVerified = coordinateEvidenceClass === "AUTHORITATIVE_COORDINATE"
+        || coordinateEvidenceClass === "VERIFIED_ADDRESS_GEOCODE";
       const existingOffice = await prisma.agencyOffice.findFirst({
         where: { agencyId: agency.id, name: entry.office.name, countryId: country.id },
       });
@@ -105,9 +108,21 @@ async function main() {
             where: { id: existingOffice.id },
             data: {
               officeType: entry.office.type as never,
-              physicalAddress: entry.office.address ?? null,
+              physicalAddress: entry.office.address,
+              addressVerified: entry.office.address ? true : undefined,
+              addressSourceUrl: entry.office.address ? entry.sourceUrl : undefined,
+              addressVerifiedAt: entry.office.address ? verifiedAt : undefined,
+              latitude: entry.office.latitude,
+              longitude: entry.office.longitude,
+              coordinatesVerified: entry.office.latitude == null ? undefined : coordinatesVerified,
+              coordinateEvidenceClass: entry.office.latitude == null ? undefined : coordinateEvidenceClass as never,
+              coordinatesSourceUrl: entry.office.coordinatesSourceUrl,
+              coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
               stateId: state?.id ?? null,
-              is24Hours: entry.office.is24Hours ?? null,
+              is24Hours: entry.office.is24Hours,
+              operatingHoursVerified: entry.office.is24Hours == null ? undefined : true,
+              operatingHoursSourceUrl: entry.office.is24Hours == null ? undefined : entry.sourceUrl,
+              operatingHoursVerifiedAt: entry.office.is24Hours == null ? undefined : verifiedAt,
               verificationStatus: officeVerificationStatus,
               verifiedAt,
               sourceUrl: entry.sourceUrl,
@@ -122,7 +137,19 @@ async function main() {
               name: entry.office.name,
               officeType: entry.office.type as never,
               physicalAddress: entry.office.address,
+              addressVerified: Boolean(entry.office.address),
+              addressSourceUrl: entry.office.address ? entry.sourceUrl : undefined,
+              addressVerifiedAt: entry.office.address ? verifiedAt : undefined,
+              latitude: entry.office.latitude,
+              longitude: entry.office.longitude,
+              coordinatesVerified,
+              coordinateEvidenceClass: coordinateEvidenceClass as never,
+              coordinatesSourceUrl: entry.office.coordinatesSourceUrl,
+              coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
               is24Hours: entry.office.is24Hours ?? null,
+              operatingHoursVerified: entry.office.is24Hours != null,
+              operatingHoursSourceUrl: entry.office.is24Hours == null ? undefined : entry.sourceUrl,
+              operatingHoursVerifiedAt: entry.office.is24Hours == null ? undefined : verifiedAt,
               verificationStatus,
               verifiedAt,
               sourceUrl: entry.sourceUrl,
@@ -222,6 +249,9 @@ async function main() {
       throw new Error(`${entry.name}: office State/FCT is outside its canonical jurisdictions`);
     }
     const requestedStatus = entry.verificationStatus ?? "VERIFIED";
+    const coordinateEvidenceClass = entry.coordinateEvidenceClass ?? "UNKNOWN";
+    const coordinatesVerified = coordinateEvidenceClass === "AUTHORITATIVE_COORDINATE"
+      || coordinateEvidenceClass === "VERIFIED_ADDRESS_GEOCODE";
     const existingOffice = await prisma.agencyOffice.findFirst({
       where: { agencyId: agency.id, name: entry.name, countryId: country.id },
     });
@@ -234,7 +264,16 @@ async function main() {
           where: { id: existingOffice.id },
           data: {
             officeType: entry.type as never,
-            physicalAddress: entry.address ?? null,
+            physicalAddress: entry.address,
+            addressVerified: entry.address ? true : undefined,
+            addressSourceUrl: entry.address ? entry.sourceUrl : undefined,
+            addressVerifiedAt: entry.address ? verifiedAt : undefined,
+            latitude: entry.latitude,
+            longitude: entry.longitude,
+            coordinatesVerified: entry.latitude == null ? undefined : coordinatesVerified,
+            coordinateEvidenceClass: entry.latitude == null ? undefined : coordinateEvidenceClass as never,
+            coordinatesSourceUrl: entry.coordinatesSourceUrl,
+            coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
             stateId: officeState?.id ?? null,
             verificationStatus,
             verifiedAt,
@@ -250,6 +289,15 @@ async function main() {
             name: entry.name,
             officeType: entry.type as never,
             physicalAddress: entry.address,
+            addressVerified: Boolean(entry.address),
+            addressSourceUrl: entry.address ? entry.sourceUrl : undefined,
+            addressVerifiedAt: entry.address ? verifiedAt : undefined,
+            latitude: entry.latitude,
+            longitude: entry.longitude,
+            coordinatesVerified,
+            coordinateEvidenceClass: coordinateEvidenceClass as never,
+            coordinatesSourceUrl: entry.coordinatesSourceUrl,
+            coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
             verificationStatus,
             verifiedAt,
             sourceUrl: entry.sourceUrl,

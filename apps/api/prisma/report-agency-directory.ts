@@ -12,12 +12,14 @@ function duplicateCount<T>(rows: T[], key: (row: T) => string) {
 async function main() {
   const service = new AgencyDirectoryService(prisma as never);
   const actor = { typ: "admin", sub: "directory-certification", role: "Super Admin" } as never;
-  const [coverage, freshness, agencies, offices, contacts, jurisdictions, capabilities] = await Promise.all([
+  const [coverage, freshness, qualityQueue, agencies, offices, contacts, jurisdictions, capabilities, policeStations] = await Promise.all([
     service.getCoverageReport(actor, {}),
     service.getVerificationFreshnessReport(actor, { staleDays: 365, limit: 10_000 }),
+    service.getDataQualityQueue(actor, { staleDays: 365, limit: 500 }),
     prisma.agency.findMany({ where: { isActive: true }, select: { id: true, code: true, governmentLevel: true } }),
     prisma.agencyOffice.findMany({ where: { isActive: true }, select: {
       id: true, agencyId: true, countryId: true, name: true, latitude: true, longitude: true, physicalAddress: true,
+      addressVerified: true, coordinateEvidenceClass: true, coordinatesVerified: true,
       agency: { select: { governmentLevel: true } },
     } }),
     prisma.agencyContact.findMany({ where: { isActive: true }, select: {
@@ -29,6 +31,9 @@ async function main() {
     } }),
     prisma.agencyIncidentCapability.findMany({ where: { isActive: true }, select: {
       id: true, canDispatch: true, canEscalate: true,
+    } }),
+    prisma.policeStation.findMany({ where: { isActive: true }, select: {
+      id: true, agency: { select: { code: true } }, directoryOffice: { select: { id: true } },
     } }),
   ]);
   const [orphanResult] = await prisma.$queryRaw<Array<{ count: bigint }>>`
@@ -55,7 +60,6 @@ async function main() {
     const emergencyContacts = cells.reduce((sum, cell) => sum + cell.evidence.verifiedEmergencyContactCount, 0);
     const publicOffices = cells.reduce((sum, cell) => sum + cell.evidence.verifiedPublicOfficeCount, 0);
     const coordinates = cells.reduce((sum, cell) => sum + cell.evidence.verifiedCoordinatesCount, 0);
-    const pendingResearch = cells.some((cell) => cell.operationalStatus !== "VERIFIED") ? "YES" : "NO";
     console.log([
       row.state,
       row.emergencyManagement.operationalStatus,
@@ -64,7 +68,7 @@ async function main() {
       row.ambulanceEms.operationalStatus,
       row.traffic.operationalStatus,
       row.policeCommand.structuralStatus,
-      row.policeCommand.operationalStatus,
+      row.policeOperationalEndpointCount,
       row.nscdcCommand.structuralStatus,
       row.nscdcCommand.operationalStatus,
       row.frscCommand.structuralStatus,
@@ -72,7 +76,7 @@ async function main() {
       emergencyContacts,
       publicOffices,
       coordinates,
-      pendingResearch,
+      row.pendingResearchCount,
     ].join("\t"));
   }
 
@@ -93,6 +97,24 @@ async function main() {
     incidentCapabilities: capabilities.length,
     recordsMissingCoordinates: offices.filter((office) => office.latitude == null || office.longitude == null).length,
     recordsMissingPublicAddress: offices.filter((office) => !office.physicalAddress?.trim()).length,
+    verifiedAddresses: offices.filter((office) => office.addressVerified && office.physicalAddress?.trim()).length,
+    coordinateQualifiedOffices: offices.filter((office) => (
+      office.coordinatesVerified
+      && ["AUTHORITATIVE_COORDINATE", "VERIFIED_ADDRESS_GEOCODE"].includes(office.coordinateEvidenceClass)
+      && office.latitude != null
+      && office.longitude != null
+    )).length,
+    coordinateProvenance: {
+      authoritative: offices.filter((office) => office.coordinateEvidenceClass === "AUTHORITATIVE_COORDINATE").length,
+      verifiedAddressGeocode: offices.filter((office) => office.coordinateEvidenceClass === "VERIFIED_ADDRESS_GEOCODE").length,
+      thirdPartyReference: offices.filter((office) => office.coordinateEvidenceClass === "THIRD_PARTY_REFERENCE").length,
+      unknown: offices.filter((office) => office.coordinateEvidenceClass === "UNKNOWN").length,
+    },
+    policeStations: policeStations.length,
+    policeStationsLinkedToNpf: policeStations.filter((station) => (
+      station.agency?.code === "NG-NPF" && station.directoryOffice != null
+    )).length,
+    dataQualityQueueFindings: qualityQueue.meta.findings,
     staleVerificationRecords: freshness.data.filter((finding) => finding.issue === "STALE_VERIFICATION").length,
     recordsMissingProvenance: freshness.data.filter((finding) => finding.issue === "MISSING_PROVENANCE").length,
     duplicateAgencies: duplicateCount(agencies, (agency) => agency.code),

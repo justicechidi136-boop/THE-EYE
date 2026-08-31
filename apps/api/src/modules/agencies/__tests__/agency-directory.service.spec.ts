@@ -9,6 +9,7 @@ describe("AgencyDirectoryService", () => {
       agencyContact: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
       agencyJurisdiction: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
       agencyIncidentCapability: { findUnique: jest.fn(), upsert: jest.fn() },
+      policeStation: { findMany: jest.fn().mockResolvedValue([]) },
       country: { findFirst: jest.fn() },
       ward: { findFirst: jest.fn() },
       localGovernmentArea: { findFirst: jest.fn() },
@@ -202,7 +203,8 @@ describe("AgencyDirectoryService", () => {
     expect(result.data[0].fire.operationalStatus).toBe("PARTIAL");
     expect(result.data[0].fire.routingReadiness).toBe("NOT_READY");
     expect(result.data[0].fire.evidence.publicAddressVerified).toBe(false);
-    expect(result.data[0].fire.evidence.publicContactVerified).toBe(false);
+    expect(result.data[0].fire.evidence.publicContactVerified).toBe(true);
+    expect(result.data[0].fire.records[0].operationalContactVerified).toBe(false);
   });
 
   it("reports a verified address without inventing coordinates or emergency contact status", async () => {
@@ -235,9 +237,17 @@ describe("AgencyDirectoryService", () => {
         name: "Oyo State Fire Services Agency Headquarters",
         isActive: true,
         physicalAddress: "Oyo State Government Secretariat Area, Ibadan, Oyo State",
+        addressVerified: true,
+        addressSourceUrl: "https://oyostate.gov.ng/fire-stations-directory/",
+        addressVerifiedAt: new Date(),
         latitude: null,
         longitude: null,
         coordinatesVerified: false,
+        coordinateEvidenceClass: "UNKNOWN",
+        coordinatesSourceUrl: null,
+        coordinatesVerifiedAt: null,
+        is24Hours: null,
+        operatingHoursVerified: false,
         verificationStatus: "VERIFIED",
         verifiedAt: new Date(),
         contacts: [{
@@ -264,6 +274,82 @@ describe("AgencyDirectoryService", () => {
     expect(result.data[0].fire.evidence.emergencyContactVerified).toBe(false);
     expect(result.meta.automaticDispatchEnabled).toBe(false);
     expect(result.meta.automaticEscalationEnabled).toBe(false);
+  });
+
+  it("labels core federal structural coverage without claiming blanket category verification", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "lagos-id", code: "LA", name: "Lagos", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.meta.coreFederalStructuralCoverage).toBe("VERIFIED");
+    expect(result.meta.structuralCategoryCoverageIsBlanketVerified).toBe(false);
+    expect(result.meta.definitions.CORE_FEDERAL_STRUCTURAL_COVERAGE.includes("not blanket")).toBe(true);
+    expect(result.data[0].emergencyManagement.structuralStatus).toBe("NOT_VERIFIED");
+  });
+
+  it("keeps an address-only endpoint out of contact routing readiness", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "enugu-id", code: "EN", name: "Enugu", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([{
+      id: "fire-id", code: "NG-ENUGU-FIRE", name: "Enugu Fire", type: "FIRE_RESCUE",
+      governmentLevel: "STATE", stateCode: "Enugu", isActive: true,
+      verificationStatus: "VERIFIED", verifiedAt: new Date(),
+      directoryJurisdictions: [{ stateId: "enugu-id" }],
+      directoryContacts: [], incidentCapabilities: [{ id: "fire-capability" }],
+      offices: [{
+        id: "fire-office", stateId: "enugu-id", name: "Enugu Fire Headquarters", isActive: true,
+        physicalAddress: "Verified Road, Enugu", addressVerified: true,
+        addressSourceUrl: "https://enugustate.gov.ng/fire", addressVerifiedAt: new Date(),
+        latitude: null, longitude: null, coordinatesVerified: false,
+        coordinateEvidenceClass: "UNKNOWN", coordinatesSourceUrl: null, coordinatesVerifiedAt: null,
+        verificationStatus: "VERIFIED", verifiedAt: new Date(), contacts: [],
+        jurisdictions: [{ stateId: "enugu-id" }],
+      }],
+    }]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data[0].fire.operationalStatus).toBe("VERIFIED");
+    expect(result.data[0].fire.records[0].locationReadiness).toBe("ADDRESS_READY");
+    expect(result.data[0].fire.records[0].contactReadiness).toBe("NOT_READY");
+    expect(result.data[0].fire.routingReadiness).toBe("NOT_READY");
+  });
+
+  it("reports verified local PoliceStation endpoints without treating commands as stations", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "lagos-id", code: "LA", name: "Lagos", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([]);
+    prisma.policeStation.findMany.mockResolvedValue([
+      {
+        id: "station-1",
+        agency: { code: "NG-NPF" },
+        directoryOffice: { id: "station-office-1" },
+        jurisdiction: { stateRefId: "lagos-id", state: "Lagos" },
+      },
+    ]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data[0].policeOperationalEndpointCount).toBe(1);
+    expect(result.data[0].policeStationsLinkedToNpfCount).toBe(1);
+    expect(result.data[0].policeCommand.structuralStatus).toBe("NOT_VERIFIED");
   });
 
   it("keeps independent State traffic separate from federal FRSC structural coverage", async () => {
@@ -418,6 +504,102 @@ describe("AgencyDirectoryService", () => {
     const result = await service.nearby({ lat: 6.5, lng: 3.4, radiusMeters: 100000 });
 
     expect(result.data[0].id).toBe("office-near");
+    const where = prisma.agencyOffice.findMany.mock.calls[0][0].where;
+    expect(where.coordinatesVerified).toBe(true);
+    expect(where.latitude).toEqual({ not: null });
+    expect(where.longitude).toEqual({ not: null });
+    expect(where.coordinateEvidenceClass).toEqual({
+      in: ["AUTHORITATIVE_COORDINATE", "VERIFIED_ADDRESS_GEOCODE"],
+    });
+    expect(result.meta.centroidFallbackUsed).toBe(false);
+  });
+
+  it("returns a clear no-location-qualified result without State or LGA centroid fallback", async () => {
+    const { prisma, service } = buildService();
+    prisma.agencyOffice.findMany.mockResolvedValue([]);
+
+    const result = await service.nearby({ lat: 6.5, lng: 3.4, radiusMeters: 100000 });
+
+    expect(result.data).toEqual([]);
+    expect(result.meta.noLocationQualifiedResult).toBe(true);
+    expect(result.meta.distanceRankingUsesVerifiedCoordinatesOnly).toBe(true);
+    expect(result.meta.centroidFallbackUsed).toBe(false);
+  });
+
+  it("rejects third-party coordinate evidence as verified", async () => {
+    const { prisma, service } = buildService();
+    prisma.agency.findUnique.mockResolvedValue({
+      id: "agency-1", countryCode: "NG", stateCode: null, lgaCode: null, governmentLevel: "FEDERAL",
+    });
+    prisma.country.findFirst.mockResolvedValue({ id: "country-1" });
+
+    await expect(service.createOffice(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      "agency-1",
+      {
+        countryId: "country-1",
+        name: "Reference office",
+        officeType: "STATE_OFFICE",
+        latitude: 6.5,
+        longitude: 3.4,
+        coordinatesVerified: true,
+        coordinateEvidenceClass: "THIRD_PARTY_REFERENCE",
+        coordinatesSourceUrl: "https://maps.example.test/reference",
+        verificationStatus: "VERIFIED",
+        sourceUrl: "https://agency.gov.ng/office",
+      },
+    )).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("prioritizes verified formations missing operational evidence without enabling dispatch", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "benue-id", code: "BE", name: "Benue", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([{
+      id: "npf-id",
+      code: "NG-NPF",
+      name: "Nigeria Police Force",
+      type: "POLICE",
+      stateCode: null,
+      governmentLevel: "FEDERAL",
+      verificationStatus: "VERIFIED",
+      verifiedAt: new Date(),
+      isEmergencyResponder: true,
+      directoryContacts: [],
+      incidentCapabilities: [{ id: "capability-1" }],
+      offices: [{
+        id: "command-1",
+        name: "Benue State Police Command",
+        state: { id: "benue-id", name: "Benue" },
+        stateId: "benue-id",
+        verificationStatus: "VERIFIED",
+        verifiedAt: new Date(),
+        physicalAddress: null,
+        addressVerified: false,
+        addressSourceUrl: null,
+        addressVerifiedAt: null,
+        latitude: null,
+        longitude: null,
+        coordinatesVerified: false,
+        coordinateEvidenceClass: "UNKNOWN",
+        coordinatesSourceUrl: null,
+        coordinatesVerifiedAt: null,
+        contacts: [],
+        jurisdictions: [{ stateId: "benue-id" }],
+      }],
+    }]);
+
+    const result = await service.getDataQualityQueue(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      { stateId: "benue-id" },
+    );
+
+    expect(result.data.some((finding) => finding.missingField === "MISSING_OPERATIONAL_CONTACT")).toBe(true);
+    expect(result.data.some((finding) => finding.missingField === "MISSING_VERIFIED_ADDRESS")).toBe(true);
+    expect(result.data.some((finding) => finding.missingField === "NO_OPERATIONAL_ENDPOINT")).toBe(true);
+    expect(result.meta.automaticDispatchEnabled).toBe(false);
+    expect(result.meta.automaticEscalationEnabled).toBe(false);
   });
 
   it("does not let a State Admin mutate a federal directory record", async () => {

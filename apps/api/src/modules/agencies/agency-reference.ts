@@ -13,6 +13,12 @@ const phoneTypes = new Set(["PHONE", "EMERGENCY_PHONE", "WHATSAPP"]);
 const shortCodeTypes = new Set(["TOLL_FREE", "SMS"]);
 const urlTypes = new Set(["WEBSITE", "REPORTING_PORTAL", "SOCIAL_MEDIA_OFFICIAL"]);
 const incidentTypes = new Set<string>(Object.values(IncidentType));
+const coordinateEvidenceClasses = new Set([
+  "AUTHORITATIVE_COORDINATE",
+  "VERIFIED_ADDRESS_GEOCODE",
+  "THIRD_PARTY_REFERENCE",
+  "UNKNOWN",
+]);
 export function preserveStrongerVerification<T extends string>(
   current: T | null | undefined,
   requested: T,
@@ -54,6 +60,10 @@ export type AgencyOfficeSeed = {
   address?: string;
   type: string;
   is24Hours?: boolean;
+  latitude?: number;
+  longitude?: number;
+  coordinateEvidenceClass?: "AUTHORITATIVE_COORDINATE" | "VERIFIED_ADDRESS_GEOCODE" | "THIRD_PARTY_REFERENCE" | "UNKNOWN";
+  coordinatesSourceUrl?: string;
 };
 
 export type FederalFormationSeed = {
@@ -62,6 +72,10 @@ export type FederalFormationSeed = {
   name: string;
   type: string;
   address?: string;
+  latitude?: number;
+  longitude?: number;
+  coordinateEvidenceClass?: AgencyOfficeSeed["coordinateEvidenceClass"];
+  coordinatesSourceUrl?: string;
   sourceUrl: string;
   verificationStatus?: "VERIFIED" | "PARTIALLY_VERIFIED";
   contacts: AgencyContactSeed[];
@@ -77,6 +91,10 @@ export type FederalFormationGroupSeed = {
     officeStateName?: string;
     jurisdictionStateNames: string[];
     address?: string;
+    latitude?: number;
+    longitude?: number;
+    coordinateEvidenceClass?: AgencyOfficeSeed["coordinateEvidenceClass"];
+    coordinatesSourceUrl?: string;
     contacts?: AgencyContactSeed[];
   }>;
 };
@@ -130,6 +148,7 @@ export function validateAgencySeed(document: AgencySeedDocument): string[] {
     for (const incidentType of agency.incidentTypes) {
       if (!incidentTypes.has(incidentType)) errors.push(`${agency.code}: unknown incident type ${incidentType}`);
     }
+    if (agency.office) validateCoordinateEvidence(agency.code, agency.office, errors);
     validateContacts(agency.code, agency.contacts, errors);
   }
 
@@ -148,6 +167,7 @@ export function validateAgencySeed(document: AgencySeedDocument): string[] {
     }
     if (!officeTypes.has(formation.type)) errors.push(`${key}: unknown office type ${formation.type}`);
     if (!isSecureUrl(formation.sourceUrl)) errors.push(`${key}: formation lacks HTTPS provenance`);
+    validateCoordinateEvidence(key, formation, errors);
     validateContacts(key, formation.contacts, errors);
   }
   return errors;
@@ -162,6 +182,10 @@ export function normalizeFederalFormations(
       name: formation.name,
       type: formation.type,
       address: formation.address,
+      latitude: formation.latitude,
+      longitude: formation.longitude,
+      coordinateEvidenceClass: formation.coordinateEvidenceClass,
+      coordinatesSourceUrl: formation.coordinatesSourceUrl,
       sourceUrl: formation.sourceUrl,
       verificationStatus: formation.verificationStatus,
       contacts: formation.contacts,
@@ -173,6 +197,10 @@ export function normalizeFederalFormations(
       name: formation.name,
       type: group.type,
       address: formation.address,
+      latitude: formation.latitude,
+      longitude: formation.longitude,
+      coordinateEvidenceClass: formation.coordinateEvidenceClass,
+      coordinatesSourceUrl: formation.coordinatesSourceUrl,
       sourceUrl: group.sourceUrl,
       verificationStatus: group.verificationStatus,
       contacts: formation.contacts ?? [],
@@ -180,6 +208,24 @@ export function normalizeFederalFormations(
       jurisdictionStateNames: formation.jurisdictionStateNames,
     }))),
   ];
+}
+
+function validateCoordinateEvidence(
+  owner: string,
+  office: Pick<AgencyOfficeSeed, "latitude" | "longitude" | "coordinateEvidenceClass" | "coordinatesSourceUrl">,
+  errors: string[],
+) {
+  const hasLatitude = office.latitude != null;
+  const hasLongitude = office.longitude != null;
+  if (hasLatitude !== hasLongitude) errors.push(`${owner}: latitude and longitude must be supplied together`);
+  const evidenceClass = office.coordinateEvidenceClass ?? "UNKNOWN";
+  if (!coordinateEvidenceClasses.has(evidenceClass)) errors.push(`${owner}: invalid coordinate evidence class`);
+  if (evidenceClass !== "UNKNOWN" && (!hasLatitude || !isSecureUrl(office.coordinatesSourceUrl ?? ""))) {
+    errors.push(`${owner}: coordinate evidence requires a coordinate pair and HTTPS provenance`);
+  }
+  if (evidenceClass === "UNKNOWN" && (hasLatitude || office.coordinatesSourceUrl)) {
+    errors.push(`${owner}: unclassified coordinates cannot be imported`);
+  }
 }
 
 function validateContacts(owner: string, contacts: AgencyContactSeed[], errors: string[]) {
