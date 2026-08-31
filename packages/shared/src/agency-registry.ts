@@ -14,6 +14,16 @@ export enum AgencyType {
   Corrections = "CORRECTIONS",
   MaritimeSecurity = "MARITIME_SECURITY",
   Customs = "CUSTOMS",
+  DrugEnforcement = "DRUG_ENFORCEMENT",
+  AntiTrafficking = "ANTI_TRAFFICKING",
+  AntiCorruption = "ANTI_CORRUPTION",
+  Cybercrime = "CYBERCRIME",
+  ChildProtection = "CHILD_PROTECTION",
+  GbvResponse = "GBV_RESPONSE",
+  EnvironmentalResponse = "ENVIRONMENTAL_RESPONSE",
+  PublicHealthEmergency = "PUBLIC_HEALTH_EMERGENCY",
+  StateEmergencyAgency = "STATE_EMERGENCY_AGENCY",
+  TrafficManagement = "TRAFFIC_MANAGEMENT",
   PrivateSecurity = "PRIVATE_SECURITY",
   LocalGovernment = "LOCAL_GOVERNMENT",
   Other = "OTHER",
@@ -167,6 +177,45 @@ export const AGENCY_TYPE_FIELD_ROLES: Record<AgencyType, FieldOperationalRole[]>
   ],
   [AgencyType.Customs]: [
     FieldOperationalRole.CheckpointOfficer,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.DrugEnforcement]: [
+    FieldOperationalRole.CheckpointOfficer,
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.AntiTrafficking]: [
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.AntiCorruption]: [FieldOperationalRole.AgencySupervisor],
+  [AgencyType.Cybercrime]: [
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.ChildProtection]: [
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.GbvResponse]: [
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.EnvironmentalResponse]: [
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.PublicHealthEmergency]: [
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.StateEmergencyAgency]: [
+    FieldOperationalRole.Dispatcher,
+    FieldOperationalRole.AgencySupervisor,
+  ],
+  [AgencyType.TrafficManagement]: [
+    FieldOperationalRole.PatrolOfficer,
+    FieldOperationalRole.Dispatcher,
     FieldOperationalRole.AgencySupervisor,
   ],
   [AgencyType.PrivateSecurity]: [

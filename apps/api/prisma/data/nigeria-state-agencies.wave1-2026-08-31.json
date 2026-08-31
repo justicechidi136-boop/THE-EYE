@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "countryCode": "NG",
+  "retrievedAt": "2026-08-31T00:00:00.000Z",
+  "agencies": [
+    {
+      "code": "NG-BENUE-SEMA",
+      "governmentLevel": "STATE",
+      "stateName": "Benue",
+      "officialName": "Benue State Emergency Management Agency",
+      "shortName": "BENUE-SEMA",
+      "aliases": ["BENSEMA", "BSEMA"],
+      "description": "Benue State agency responsible for coordinating emergency preparedness, response, relief, and recovery within Benue State.",
+      "type": "STATE_EMERGENCY_AGENCY",
+      "website": "https://sema.benuestate.gov.ng/",
+      "sourceUrl": "https://sema.benuestate.gov.ng/about-us",
+      "office": {
+        "name": "Benue State Emergency Management Agency Headquarters",
+        "address": "No. 7 Kashim Ibrahim Road, Makurdi, Benue State",
+        "type": "HEADQUARTERS"
+      },
+      "contacts": [
+        {
+          "type": "PHONE",
+          "value": "+2348167863568",
+          "label": "Public contact",
+          "sourceUrl": "https://sema.benuestate.gov.ng/about-us"
+        },
+        {
+          "type": "EMAIL",
+          "value": "sema@benuestate.gov.ng",
+          "label": "Public email",
+          "sourceUrl": "https://sema.benuestate.gov.ng/about-us"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://sema.benuestate.gov.ng/",
+          "label": "Official website",
+          "sourceUrl": "https://sema.benuestate.gov.ng/about-us"
+        }
+      ],
+      "incidentTypes": ["Emergency", "Medical", "CommunitySafety"]
+    },
+    {
+      "code": "NG-RIVERS-EAS",
+      "governmentLevel": "STATE",
+      "stateName": "Rivers",
+      "officialName": "Rivers State Emergency and Ambulance Service",
+      "shortName": "Rivers EAS",
+      "aliases": ["Rivers State Emergency & Ambulance Service"],
+      "description": "Rivers State Ministry of Health emergency and ambulance service supporting public emergency medical response within Rivers State.",
+      "type": "EMS",
+      "website": "https://www.riversstatemoh.gov.ng/emergency-department",
+      "sourceUrl": "https://www.riversstatemoh.gov.ng/emergency-department",
+      "office": {
+        "name": "Rivers State Ministry of Health Emergency and Ambulance Service",
+        "address": "Block A, Second Floor, State Secretariat Complex, Port Harcourt, Rivers State",
+        "type": "STATE_OFFICE"
+      },
+      "contacts": [
+        {
+          "type": "EMAIL",
+          "value": "contact@riversstatemoh.gov.ng",
+          "label": "Ministry public contact",
+          "sourceUrl": "https://www.riversstatemoh.gov.ng/emergency-department"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://www.riversstatemoh.gov.ng/emergency-department",
+          "label": "Official service page",
+          "sourceUrl": "https://www.riversstatemoh.gov.ng/emergency-department"
+        }
+      ],
+      "incidentTypes": ["Emergency", "Medical"]
+    }
+  ]
+}

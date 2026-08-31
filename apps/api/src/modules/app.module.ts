@@ -18,6 +18,7 @@ import { HealthController } from "./health.controller";
 import { HealthModule } from "./health/health.module";
 import { IncidentsModule } from "./incidents/incidents.module";
 import { LiveVideoModule } from "./live-video/live-video.module";
+import { LocationsModule } from "./locations/locations.module";
 import { NeighborhoodWatchModule } from "./neighborhood-watch/neighborhood-watch.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PoliceStationsModule } from "./police-stations/police-stations.module";
@@ -88,6 +89,7 @@ const redisDisabled = !shouldRegisterBullMq();
     NeighborhoodWatchModule,
     PoliceStationsModule,
     LiveVideoModule,
+    LocationsModule,
     SmartwatchModule,
     WatchFleetModule,
     DangerZonesModule,

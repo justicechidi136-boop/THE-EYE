@@ -68,6 +68,63 @@ enum IncidentType {
   SOS
 }
 
+enum AdministrativeStateType {
+  STATE
+  FCT
+}
+
+enum LocalGovernmentAreaType {
+  LGA
+  AREA_COUNCIL
+}
+
+enum ReferenceVerificationStatus {
+  VERIFIED
+  PARTIALLY_VERIFIED
+  PENDING_VERIFICATION
+  DISPUTED
+  RETIRED
+}
+
+enum AgencyGovernmentLevel {
+  FEDERAL
+  STATE
+  LOCAL
+  MULTI_LEVEL
+}
+
+enum AgencyOfficeType {
+  HEADQUARTERS
+  COMMAND
+  FORMATION
+  DIVISION
+  STATION
+  ZONAL_OFFICE
+  STATE_OFFICE
+  LOCAL_OFFICE
+  OTHER
+}
+
+enum AgencyCoverageType {
+  NATIONAL
+  STATE
+  LGA
+  WARD
+  CUSTOM_COVERAGE_AREA
+}
+
+enum AgencyContactType {
+  PHONE
+  EMERGENCY_PHONE
+  TOLL_FREE
+  SMS
+  WHATSAPP
+  EMAIL
+  WEBSITE
+  REPORTING_PORTAL
+  SOCIAL_MEDIA_OFFICIAL
+}
+
 enum MediaType {
   Image
   Video
@@ -639,8 +696,134 @@ model EmergencyContact {
   @@map("emergency_contacts")
 }
 
+model ReferenceDataSource {
+  id           String                @id @default(uuid()) @db.Uuid
+  organization String
+  title        String
+  url          String                @unique
+  version      String?
+  retrievedAt  DateTime              @map("retrieved_at") @db.Timestamptz(6)
+  checksum     String?
+  metadata     Json                  @default("{}")
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  countries    Country[]
+  states       AdministrativeState[]
+  lgas         LocalGovernmentArea[]
+  wards        Ward[]
+
+  @@map("reference_data_sources")
+}
+
+model Country {
+  id                  String                @id @default(uuid()) @db.Uuid
+  sourceId            String?               @map("source_id") @db.Uuid
+  code                String                @unique
+  name                String                @unique
+  officialName        String                @map("official_name")
+  slug                String                @unique
+  aliases             String[]              @default([])
+  isActive            Boolean               @default(true) @map("is_active")
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  source              ReferenceDataSource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  states              AdministrativeState[]
+  jurisdictions       Jurisdiction[]        @relation("JurisdictionCountryRef")
+  agencyOffices       AgencyOffice[]
+  agencyJurisdictions AgencyJurisdiction[]
+
+  @@index([isActive, name])
+  @@map("countries")
+}
+
+model AdministrativeState {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  countryId           String                  @map("country_id") @db.Uuid
+  sourceId            String?                 @map("source_id") @db.Uuid
+  sourceRecordId      String?                 @map("source_record_id")
+  code                String
+  name                String
+  officialName        String                  @map("official_name")
+  type                AdministrativeStateType
+  slug                String
+  aliases             String[]                @default([])
+  isActive            Boolean                 @default(true) @map("is_active")
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  country             Country                 @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  source              ReferenceDataSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  lgas                LocalGovernmentArea[]
+  jurisdictions       Jurisdiction[]          @relation("JurisdictionStateRef")
+  agencyOffices       AgencyOffice[]
+  agencyJurisdictions AgencyJurisdiction[]
+
+  @@unique([countryId, code])
+  @@unique([countryId, name])
+  @@unique([countryId, slug])
+  @@index([countryId, isActive, name])
+  @@map("administrative_states")
+}
+
+model LocalGovernmentArea {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  stateId             String                  @map("state_id") @db.Uuid
+  sourceId            String?                 @map("source_id") @db.Uuid
+  sourceRecordId      String?                 @map("source_record_id")
+  code                String
+  name                String
+  officialName        String                  @map("official_name")
+  type                LocalGovernmentAreaType
+  slug                String
+  aliases             String[]                @default([])
+  isActive            Boolean                 @default(true) @map("is_active")
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  state               AdministrativeState     @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  source              ReferenceDataSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  wards               Ward[]
+  jurisdictions       Jurisdiction[]          @relation("JurisdictionLgaRef")
+  agencyOffices       AgencyOffice[]
+  agencyJurisdictions AgencyJurisdiction[]
+
+  @@unique([stateId, code])
+  @@unique([stateId, name])
+  @@unique([stateId, slug])
+  @@index([stateId, isActive, name])
+  @@map("local_government_areas")
+}
+
+model Ward {
+  id                  String               @id @default(uuid()) @db.Uuid
+  lgaId               String               @map("lga_id") @db.Uuid
+  sourceId            String?              @map("source_id") @db.Uuid
+  sourceRecordId      String?              @map("source_record_id")
+  code                String
+  name                String
+  officialName        String               @map("official_name")
+  slug                String
+  aliases             String[]             @default([])
+  isActive            Boolean              @default(true) @map("is_active")
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lga                 LocalGovernmentArea  @relation(fields: [lgaId], references: [id], onDelete: Restrict)
+  source              ReferenceDataSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  jurisdictions       Jurisdiction[]       @relation("JurisdictionWardRef")
+  agencyOffices       AgencyOffice[]
+  agencyJurisdictions AgencyJurisdiction[]
+
+  @@unique([lgaId, code])
+  @@unique([lgaId, name])
+  @@unique([lgaId, slug])
+  @@index([lgaId, isActive, name])
+  @@map("wards")
+}
+
 model Jurisdiction {
   id                 String                                       @id @default(uuid()) @db.Uuid
+  countryRefId       String?                                      @map("country_ref_id") @db.Uuid
+  stateRefId         String?                                      @map("state_ref_id") @db.Uuid
+  lgaRefId           String?                                      @map("lga_ref_id") @db.Uuid
+  wardRefId          String?                                      @map("ward_ref_id") @db.Uuid
   country            String
   state              String
   lga                String
@@ -655,9 +838,14 @@ model Jurisdiction {
   neighborhoodGroups NeighborhoodGroup[]
   communities        Community[]
   dangerZones        DangerZone[]
+  countryRef         Country?                                     @relation("JurisdictionCountryRef", fields: [countryRefId], references: [id], onDelete: SetNull)
+  stateRef           AdministrativeState?                         @relation("JurisdictionStateRef", fields: [stateRefId], references: [id], onDelete: SetNull)
+  lgaRef             LocalGovernmentArea?                         @relation("JurisdictionLgaRef", fields: [lgaRefId], references: [id], onDelete: SetNull)
+  wardRef            Ward?                                        @relation("JurisdictionWardRef", fields: [wardRefId], references: [id], onDelete: SetNull)
 
   @@unique([country, state, lga])
   @@index([country, state, lga])
+  @@index([countryRefId, stateRefId, lgaRefId, wardRefId])
   @@map("jurisdictions")
 }
 
@@ -667,6 +855,15 @@ model Agency {
   parentAgencyId           String?                               @map("parent_agency_id") @db.Uuid
   code                     String                                @unique
   name                     String
+  officialName             String?                               @map("official_name")
+  description              String?
+  aliases                  String[]                              @default([])
+  governmentLevel          AgencyGovernmentLevel?                @map("government_level")
+  officialWebsite          String?                               @map("official_website")
+  verificationStatus       ReferenceVerificationStatus           @default(PENDING_VERIFICATION) @map("verification_status")
+  verifiedAt               DateTime?                             @map("verified_at") @db.Timestamptz(6)
+  verificationSource       String?                               @map("verification_source")
+  dataQualityNotes         String?                               @map("data_quality_notes")
   shortName                String?                               @map("short_name")
   type                     String
   jurisdictionLevel        String                                @default("LGA") @map("jurisdiction_level")
@@ -711,6 +908,10 @@ model Agency {
   fieldBackupRequests      FieldBackupRequest[]
   fieldOperationalEvents   FieldOperationalEvent[]
   fieldOfficerSafetyAlerts FieldOfficerSafetyAlert[]
+  offices                  AgencyOffice[]
+  directoryJurisdictions   AgencyJurisdiction[]
+  directoryContacts        AgencyContact[]
+  incidentCapabilities     AgencyIncidentCapability[]
 
   @@index([jurisdictionId, type])
   @@index([jurisdictionId, isActive])
@@ -718,6 +919,112 @@ model Agency {
   @@index([type, isActive])
   @@index([parentAgencyId])
   @@map("agencies")
+}
+
+model AgencyOffice {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  agencyId            String                      @map("agency_id") @db.Uuid
+  parentOfficeId      String?                     @map("parent_office_id") @db.Uuid
+  policeStationId     String?                     @unique @map("police_station_id") @db.Uuid
+  countryId           String                      @map("country_id") @db.Uuid
+  stateId             String?                     @map("state_id") @db.Uuid
+  lgaId               String?                     @map("lga_id") @db.Uuid
+  wardId              String?                     @map("ward_id") @db.Uuid
+  name                String
+  officeType          AgencyOfficeType            @map("office_type")
+  physicalAddress     String?                     @map("physical_address")
+  latitude            Decimal?                    @db.Decimal(9, 6)
+  longitude           Decimal?                    @db.Decimal(9, 6)
+  coordinatesVerified Boolean                     @default(false) @map("coordinates_verified")
+  is24Hours           Boolean?                    @map("is_24_hours")
+  isActive            Boolean                     @default(true) @map("is_active")
+  verificationStatus  ReferenceVerificationStatus @default(PENDING_VERIFICATION) @map("verification_status")
+  verifiedAt          DateTime?                   @map("verified_at") @db.Timestamptz(6)
+  sourceUrl           String?                     @map("source_url")
+  createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  agency              Agency                      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  parentOffice        AgencyOffice?               @relation("AgencyOfficeHierarchy", fields: [parentOfficeId], references: [id], onDelete: SetNull)
+  childOffices        AgencyOffice[]              @relation("AgencyOfficeHierarchy")
+  policeStation       PoliceStation?              @relation(fields: [policeStationId], references: [id], onDelete: SetNull)
+  country             Country                     @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  state               AdministrativeState?        @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  lga                 LocalGovernmentArea?        @relation(fields: [lgaId], references: [id], onDelete: Restrict)
+  ward                Ward?                       @relation(fields: [wardId], references: [id], onDelete: Restrict)
+  jurisdictions       AgencyJurisdiction[]
+  contacts            AgencyContact[]
+
+  @@index([agencyId, isActive])
+  @@index([stateId, lgaId, wardId])
+  @@index([latitude, longitude])
+  @@map("agency_offices")
+}
+
+model AgencyJurisdiction {
+  id             String               @id @default(uuid()) @db.Uuid
+  agencyId       String               @map("agency_id") @db.Uuid
+  officeId       String?              @map("office_id") @db.Uuid
+  countryId      String               @map("country_id") @db.Uuid
+  stateId        String?              @map("state_id") @db.Uuid
+  lgaId          String?              @map("lga_id") @db.Uuid
+  wardId         String?              @map("ward_id") @db.Uuid
+  coverageType   AgencyCoverageType   @map("coverage_type")
+  customCoverage Json?                @map("custom_coverage")
+  priority       Int                  @default(0)
+  isPrimary      Boolean              @default(false) @map("is_primary")
+  isActive       Boolean              @default(true) @map("is_active")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  agency         Agency               @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  office         AgencyOffice?        @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  country        Country              @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  state          AdministrativeState? @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  lga            LocalGovernmentArea? @relation(fields: [lgaId], references: [id], onDelete: Restrict)
+  ward           Ward?                @relation(fields: [wardId], references: [id], onDelete: Restrict)
+
+  @@index([coverageType, countryId, stateId, lgaId, wardId, isActive])
+  @@map("agency_jurisdictions")
+}
+
+model AgencyContact {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  agencyId           String                      @map("agency_id") @db.Uuid
+  officeId           String?                     @map("office_id") @db.Uuid
+  type               AgencyContactType
+  value              String
+  label              String?
+  emergencyOnly      Boolean                     @default(false) @map("emergency_only")
+  publiclyVerified   Boolean                     @default(false) @map("publicly_verified")
+  verificationStatus ReferenceVerificationStatus @default(PENDING_VERIFICATION) @map("verification_status")
+  sourceUrl          String?                     @map("source_url")
+  lastVerifiedAt     DateTime?                   @map("last_verified_at") @db.Timestamptz(6)
+  isActive           Boolean                     @default(true) @map("is_active")
+  createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  agency             Agency                      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  office             AgencyOffice?               @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, publiclyVerified, isActive])
+  @@map("agency_contacts")
+}
+
+model AgencyIncidentCapability {
+  id               String       @id @default(uuid()) @db.Uuid
+  agencyId         String       @map("agency_id") @db.Uuid
+  incidentType     IncidentType @map("incident_type")
+  priority         Int          @default(0)
+  canReceiveReport Boolean      @default(true) @map("can_receive_report")
+  canDispatch      Boolean      @default(false) @map("can_dispatch")
+  canEscalate      Boolean      @default(false) @map("can_escalate")
+  notes            String?
+  isActive         Boolean      @default(true) @map("is_active")
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  agency           Agency       @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@unique([agencyId, incidentType])
+  @@index([incidentType, priority, isActive])
+  @@map("agency_incident_capabilities")
 }
 
 model AdminRole {
@@ -1630,6 +1937,7 @@ model PoliceStation {
   updatedAt          DateTime                             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   agency             Agency?                              @relation(fields: [agencyId], references: [id])
   jurisdiction       Jurisdiction                         @relation(fields: [jurisdictionId], references: [id])
+  directoryOffice    AgencyOffice?
 
   @@index([jurisdictionId])
   @@index([agencyType])
