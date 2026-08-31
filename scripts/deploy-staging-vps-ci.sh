@@ -36,6 +36,49 @@ echo "STEP migration-mode run_migrations=${RUN_MIGRATIONS}"
 echo "STEP storage-proof-mode run_storage_proof=${RUN_STORAGE_PROOF}"
 echo "STEP livekit-ice-capture-seconds=${LIVEKIT_ICE_CAPTURE_SECONDS}"
 
+REFERENCE_DATA_IMPORTS=(
+  "prisma/import-nigeria-reference-data.ts"
+  "prisma/import-agency-directory.ts"
+  "prisma/import-agency-directory.ts prisma/data/nigeria-state-agencies.wave1-2026-08-31.json"
+  "prisma/import-agency-directory.ts prisma/data/nigeria-state-agencies.wave2-2026-08-31.json"
+  "prisma/import-agency-directory.ts prisma/data/nigeria-federal-formations.national-2026-08-31.json"
+  "prisma/import-agency-directory.ts prisma/data/nigeria-state-agencies.n5-operational-2026-08-31.json"
+  "prisma/import-agency-directory.ts prisma/data/nigeria-agency-directory.n11-operational-2026-08-31.json"
+  "prisma/import-agency-directory.ts prisma/data/nigeria-agency-directory.n12-operational-2026-08-31.json"
+)
+
+REFERENCE_DATA_VALIDATORS=(
+  "prisma/validate-nigeria-reference-data.ts"
+  "prisma/validate-agency-directory.ts"
+  "prisma/validate-agency-directory.ts prisma/data/nigeria-state-agencies.wave1-2026-08-31.json"
+  "prisma/validate-agency-directory.ts prisma/data/nigeria-state-agencies.wave2-2026-08-31.json"
+  "prisma/validate-agency-directory.ts prisma/data/nigeria-federal-formations.national-2026-08-31.json"
+  "prisma/validate-agency-directory.ts prisma/data/nigeria-state-agencies.n5-operational-2026-08-31.json"
+  "prisma/validate-agency-directory.ts prisma/data/nigeria-agency-directory.n11-operational-2026-08-31.json"
+  "prisma/validate-agency-directory.ts prisma/data/nigeria-agency-directory.n12-operational-2026-08-31.json"
+)
+
+run_reference_data_certification() {
+  local pass command
+  echo "STEP reference-data-import-start"
+  for pass in 1 2; do
+    echo "=== Reference data import (idempotency pass ${pass}/2) ==="
+    for command in "${REFERENCE_DATA_IMPORTS[@]}"; do
+      # Each command is a fixed repository-owned script plus an optional fixed data path.
+      # shellcheck disable=SC2086
+      "${COMPOSE[@]}" --profile tools run --rm api-tools ${command}
+    done
+  done
+
+  echo "STEP reference-data-validation-start"
+  for command in "${REFERENCE_DATA_VALIDATORS[@]}"; do
+    # shellcheck disable=SC2086
+    "${COMPOSE[@]}" --profile tools run --rm api-tools ${command}
+  done
+  "${COMPOSE[@]}" --profile tools run --rm api-tools prisma/report-agency-directory.ts
+  echo "STEP reference-data-validation-complete"
+}
+
 if [[ "$PROOF_ONLY" == "true" ]]; then
   echo "=== Proof-only mode (skip full redeploy) ==="
   if [[ "$INSPECT_FAILED_LOCATION_RETRIES" == "true" ]]; then
@@ -60,6 +103,7 @@ else
     echo "STEP migrations-start"
     "${COMPOSE[@]}" --profile tools run --rm api-migrate
     echo "STEP migrations-complete"
+    run_reference_data_certification
   else
     echo "Skipping staging migrations (RUN_MIGRATIONS=${RUN_MIGRATIONS})"
   fi
