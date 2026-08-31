@@ -20,7 +20,7 @@ const fullDeployStart = deployVpsCi.indexOf(
   '"${COMPOSE[@]}" up -d --force-recreate api notification-worker admin-web',
 );
 const buildCachePrune = deployVpsCi.indexOf(
-  'docker builder prune --all --force --filter "until=1h"',
+  "docker builder prune --all --force",
 );
 const composeBuildStart = deployVpsCi.indexOf(
   '"${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools',
