@@ -28,11 +28,13 @@ describe("AgencyDirectoryService", () => {
     description: "Federal fire and rescue service",
     type: "FIRE_RESCUE",
     governmentLevel: "FEDERAL",
+    verificationStatus: "PARTIALLY_VERIFIED",
+    verifiedAt: new Date("2026-08-31T00:00:00.000Z"),
     officialWebsite: "https://www.fedfire.gov.ng/",
     verificationSource: "private-admin-source",
     dataQualityNotes: "private-admin-note",
     directoryContacts: [
-      { id: "contact-1", type: "EMERGENCY_PHONE", value: "+2348032003557", label: "Emergency", emergencyOnly: true },
+      { id: "contact-1", type: "EMERGENCY_PHONE", value: "+2348032003557", label: "Emergency", emergencyOnly: true, verificationStatus: "VERIFIED" },
     ],
     incidentCapabilities: [{ incidentType: "Fire", canReceiveReport: true }],
   };
@@ -92,6 +94,7 @@ describe("AgencyDirectoryService", () => {
         code: "NG-LAGOS-LASEMA",
         name: "LASEMA",
         type: "STATE_EMERGENCY_AGENCY",
+        governmentLevel: "STATE",
         stateCode: "Lagos",
         verificationStatus: "VERIFIED",
         offices: [],
@@ -101,10 +104,11 @@ describe("AgencyDirectoryService", () => {
         code: "NG-FRSC",
         name: "FRSC",
         type: "ROAD_SAFETY",
+        governmentLevel: "FEDERAL",
         stateCode: null,
         verificationStatus: "VERIFIED",
         offices: [
-          { id: "frsc-lagos", stateId: "lagos-id", name: "FRSC Lagos Sector Command", verificationStatus: "VERIFIED" },
+          { id: "frsc-lagos", stateId: "lagos-id", name: "FRSC Lagos Sector Command", verificationStatus: "VERIFIED", jurisdictions: [] },
         ],
       },
     ]);
@@ -118,6 +122,41 @@ describe("AgencyDirectoryService", () => {
     expect(result.data[0].frscCommand.status).toBe("VERIFIED");
     expect(result.data[0].policeCommand.status).toBe("NOT_VERIFIED");
     expect(result.meta.semantics.includes("does not mean the service is absent")).toBe(true);
+    expect(result.meta.definitions.NOT_VERIFIED.includes("service may still exist")).toBe(true);
+    expect(result.data[0].sourceEvidenceCount).toBe(2);
+  });
+
+  it("counts an official multi-State federal formation in each covered jurisdiction", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "benue-id", code: "BE", name: "Benue", type: "STATE" },
+      { id: "nasarawa-id", code: "NA", name: "Nasarawa", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([
+      {
+        id: "ffs-id",
+        code: "NG-FFS",
+        name: "Federal Fire Service",
+        type: "FIRE_RESCUE",
+        governmentLevel: "FEDERAL",
+        stateCode: null,
+        verificationStatus: "VERIFIED",
+        offices: [{
+          id: "zone-a",
+          stateId: null,
+          name: "Federal Fire Service Zone A",
+          verificationStatus: "VERIFIED",
+          jurisdictions: [{ stateId: "benue-id" }, { stateId: "nasarawa-id" }],
+        }],
+      },
+    ]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data.map((row) => row.fire.status)).toEqual(["VERIFIED", "VERIFIED"]);
   });
 
   it("scopes coverage geography to the State admin's canonical State", async () => {
@@ -145,8 +184,35 @@ describe("AgencyDirectoryService", () => {
 
     expect(result.data[0].name).toBe("Federal Fire Service");
     expect(result.data[0].contacts[0].value).toBe("+2348032003557");
+    expect(result.data[0].verificationStatus).toBe("PARTIALLY_VERIFIED");
+    expect(result.data[0].contacts[0].verificationStatus).toBe("VERIFIED");
     expect(Object.prototype.hasOwnProperty.call(result.data[0], "verificationSource")).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(result.data[0], "dataQualityNotes")).toBe(false);
+  });
+
+  it("keeps provenance available to an authorized directory administrator", async () => {
+    const { prisma, service } = buildService();
+    prisma.agency.findUnique
+      .mockResolvedValueOnce({
+        id: "agency-1",
+        countryCode: "NG",
+        stateCode: null,
+        lgaCode: null,
+        governmentLevel: "FEDERAL",
+      })
+      .mockResolvedValueOnce({
+        id: "agency-1",
+        verificationSource: "https://www.npf.gov.ng/news/details/635",
+        dataQualityNotes: "Admin review note",
+      });
+
+    const result = await service.getAdminDirectory(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      "agency-1",
+    );
+
+    expect(result.data.verificationSource).toBe("https://www.npf.gov.ng/news/details/635");
+    expect(result.data.dataQualityNotes).toBe("Admin review note");
   });
 
   it("includes national and matching State/LGA/Ward jurisdictions", async () => {

@@ -58,11 +58,31 @@ export type FederalFormationSeed = {
   contacts: AgencyContactSeed[];
 };
 
+export type FederalFormationGroupSeed = {
+  parentAgencyCode: string;
+  type: string;
+  sourceUrl: string;
+  verificationStatus?: "VERIFIED" | "PARTIALLY_VERIFIED";
+  formations: Array<{
+    name: string;
+    officeStateName?: string;
+    jurisdictionStateNames: string[];
+    address?: string;
+    contacts?: AgencyContactSeed[];
+  }>;
+};
+
+export type NormalizedFederalFormationSeed = Omit<FederalFormationSeed, "stateName"> & {
+  officeStateName?: string;
+  jurisdictionStateNames: string[];
+};
+
 export type AgencySeedDocument = {
   countryCode: string;
   retrievedAt: string;
   agencies: AgencySeed[];
   federalFormations?: FederalFormationSeed[];
+  federalFormationGroups?: FederalFormationGroupSeed[];
 };
 
 export async function loadAgencySeed(path: string): Promise<AgencySeedDocument> {
@@ -104,18 +124,53 @@ export function validateAgencySeed(document: AgencySeedDocument): string[] {
     validateContacts(agency.code, agency.contacts, errors);
   }
 
-  for (const formation of document.federalFormations ?? []) {
-    const key = `${formation.parentAgencyCode}:${formation.stateName}:${formation.name}`;
+  for (const formation of normalizeFederalFormations(document)) {
+    const key = `${formation.parentAgencyCode}:${formation.jurisdictionStateNames.join("|")}:${formation.name}`;
     if (formationKeys.has(key)) errors.push(`${key}: duplicate federal formation`);
     formationKeys.add(key);
-    if (!formation.parentAgencyCode.trim() || !formation.stateName.trim() || !formation.name.trim()) {
-      errors.push(`${key}: missing parent agency, canonical State, or formation name`);
+    if (!formation.parentAgencyCode.trim() || formation.jurisdictionStateNames.length === 0 || !formation.name.trim()) {
+      errors.push(`${key}: missing parent agency, canonical jurisdiction, or formation name`);
+    }
+    if (formation.jurisdictionStateNames.some((stateName) => !stateName.trim())) {
+      errors.push(`${key}: blank canonical jurisdiction`);
+    }
+    if (new Set(formation.jurisdictionStateNames).size !== formation.jurisdictionStateNames.length) {
+      errors.push(`${key}: duplicate canonical jurisdiction`);
     }
     if (!officeTypes.has(formation.type)) errors.push(`${key}: unknown office type ${formation.type}`);
     if (!isSecureUrl(formation.sourceUrl)) errors.push(`${key}: formation lacks HTTPS provenance`);
     validateContacts(key, formation.contacts, errors);
   }
   return errors;
+}
+
+export function normalizeFederalFormations(
+  document: AgencySeedDocument,
+): NormalizedFederalFormationSeed[] {
+  return [
+    ...(document.federalFormations ?? []).map((formation) => ({
+      parentAgencyCode: formation.parentAgencyCode,
+      name: formation.name,
+      type: formation.type,
+      address: formation.address,
+      sourceUrl: formation.sourceUrl,
+      verificationStatus: formation.verificationStatus,
+      contacts: formation.contacts,
+      officeStateName: formation.stateName,
+      jurisdictionStateNames: [formation.stateName],
+    })),
+    ...(document.federalFormationGroups ?? []).flatMap((group) => group.formations.map((formation) => ({
+      parentAgencyCode: group.parentAgencyCode,
+      name: formation.name,
+      type: group.type,
+      address: formation.address,
+      sourceUrl: group.sourceUrl,
+      verificationStatus: group.verificationStatus,
+      contacts: formation.contacts ?? [],
+      officeStateName: formation.officeStateName,
+      jurisdictionStateNames: formation.jurisdictionStateNames,
+    }))),
+  ];
 }
 
 function validateContacts(owner: string, contacts: AgencyContactSeed[], errors: string[]) {

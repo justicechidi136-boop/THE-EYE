@@ -1,6 +1,10 @@
 import { resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { loadAgencySeed, validateAgencySeed } from "../src/modules/agencies/agency-reference";
+import {
+  loadAgencySeed,
+  normalizeFederalFormations,
+  validateAgencySeed,
+} from "../src/modules/agencies/agency-reference";
 
 const prisma = new PrismaClient();
 
@@ -15,7 +19,7 @@ async function main() {
   if (process.argv.includes("--source-only")) {
     console.log("Agency directory source validation: PASS");
     console.log(`Agency seeds: ${document.agencies.length}`);
-    console.log(`Federal formation seeds: ${document.federalFormations?.length ?? 0}`);
+    console.log(`Federal formation seeds: ${normalizeFederalFormations(document).length}`);
     return;
   }
   const agencies = await prisma.agency.findMany({
@@ -44,7 +48,7 @@ async function main() {
       if (office.lgaId && !office.stateId) errors.push(`${agency.code}/${office.name}: LGA without State`);
     }
   }
-  for (const formation of document.federalFormations ?? []) {
+  for (const formation of normalizeFederalFormations(document)) {
     const agency = agencies.find((candidate) => candidate.code === formation.parentAgencyCode);
     const office = agency?.offices.find((candidate) => candidate.name === formation.name);
     if (!agency || agency.governmentLevel !== "FEDERAL") {
@@ -55,12 +59,17 @@ async function main() {
       errors.push(`${formation.name}: formation office missing`);
       continue;
     }
-    const state = await prisma.administrativeState.findUnique({ where: { id: office.stateId ?? "" } });
-    if (state?.name !== formation.stateName) errors.push(`${formation.name}: canonical State mismatch`);
-    if (!agency.directoryJurisdictions.some((row) => (
-      row.officeId === office.id && row.stateId === office.stateId && row.coverageType === "STATE"
-    ))) {
-      errors.push(`${formation.name}: State formation jurisdiction missing`);
+    if (formation.officeStateName) {
+      const state = await prisma.administrativeState.findUnique({ where: { id: office.stateId ?? "" } });
+      if (state?.name !== formation.officeStateName) errors.push(`${formation.name}: canonical office State mismatch`);
+    }
+    for (const stateName of formation.jurisdictionStateNames) {
+      const state = await prisma.administrativeState.findFirst({ where: { countryId: office.countryId, name: stateName } });
+      if (!state || !agency.directoryJurisdictions.some((row) => (
+        row.officeId === office.id && row.stateId === state.id && row.coverageType === "STATE"
+      ))) {
+        errors.push(`${formation.name}: ${stateName} formation jurisdiction missing`);
+      }
     }
   }
   if (errors.length > 0) throw new Error(errors.join("\n"));

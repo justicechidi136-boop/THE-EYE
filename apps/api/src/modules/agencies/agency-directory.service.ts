@@ -31,6 +31,7 @@ const publicContactSelect = {
   value: true,
   label: true,
   emergencyOnly: true,
+  verificationStatus: true,
 } as const;
 
 const coverageColumns = [
@@ -130,6 +131,8 @@ export class AgencyDirectoryService {
             latitude: true,
             longitude: true,
             coordinatesVerified: true,
+            verificationStatus: true,
+            verifiedAt: true,
             is24Hours: true,
             state: { select: { name: true } },
             lga: { select: { name: true } },
@@ -346,8 +349,23 @@ export class AgencyDirectoryService {
         stateCode: true,
         verificationStatus: true,
         offices: {
-          where: { stateId: { in: stateIds }, isActive: true },
-          select: { id: true, stateId: true, name: true, verificationStatus: true },
+          where: {
+            isActive: true,
+            OR: [
+              { stateId: { in: stateIds } },
+              { jurisdictions: { some: { stateId: { in: stateIds }, isActive: true } } },
+            ],
+          },
+          select: {
+            id: true,
+            stateId: true,
+            name: true,
+            verificationStatus: true,
+            jurisdictions: {
+              where: { stateId: { in: stateIds }, isActive: true },
+              select: { stateId: true },
+            },
+          },
         },
       },
       orderBy: [{ name: "asc" }],
@@ -362,6 +380,9 @@ export class AgencyDirectoryService {
         stateCode: state.code,
         state: state.name,
         stateType: state.type,
+        sourceEvidenceCount: new Set(
+          Object.values(cells).flatMap((cell) => cell.records.map((record) => record.id)),
+        ).size,
         ...cells,
       };
     });
@@ -370,6 +391,13 @@ export class AgencyDirectoryService {
       meta: {
         states: data.length,
         semantics: "NOT_VERIFIED means THE EYE lacks authoritative verified data; it does not mean the service is absent.",
+        definitions: {
+          VERIFIED: "At least one appropriately verified directory record supports this category in the jurisdiction.",
+          PARTIAL: "Relevant evidence exists, but the matching directory record is only partially verified.",
+          NOT_VERIFIED: "THE EYE currently has no sufficiently verified directory record for this category; the service may still exist.",
+          UNKNOWN: "A matching record exists, but available evidence is insufficient to classify it as verified or partial.",
+          NOT_APPLICABLE: "The category is confirmed not to apply to the jurisdiction; absence alone never produces this status.",
+        },
       },
     };
   }
@@ -674,20 +702,30 @@ export class AgencyDirectoryService {
       ambulanceEms: ["EMS"],
       traffic: ["TRAFFIC_MANAGEMENT"],
     };
-    const federalTypeByColumn: Partial<Record<CoverageColumn, string>> = {
-      policeCommand: "POLICE",
-      nscdcCommand: "CIVIL_DEFENCE",
-      frscCommand: "ROAD_SAFETY",
+    const federalTypesByColumn: Partial<Record<CoverageColumn, string[]>> = {
+      fire: ["FIRE_RESCUE"],
+      policeCommand: ["POLICE"],
+      nscdcCommand: ["CIVIL_DEFENCE"],
+      frscCommand: ["ROAD_SAFETY"],
     };
-    const matches = stateTypeByColumn[column]
-      ? agencies.filter((agency) => agency.stateCode === stateName && stateTypeByColumn[column]?.includes(agency.type))
-      : agencies.flatMap((agency) => agency.type === federalTypeByColumn[column]
-        ? agency.offices.filter((office: Record<string, any>) => office.stateId === stateId).map((office: Record<string, any>) => ({
+    const stateMatches = stateTypeByColumn[column]
+      ? agencies.filter((agency) => (
+          agency.governmentLevel !== "FEDERAL"
+          && agency.stateCode === stateName
+          && stateTypeByColumn[column]?.includes(agency.type)
+        ))
+      : [];
+    const federalMatches = agencies.flatMap((agency) => federalTypesByColumn[column]?.includes(agency.type)
+      ? agency.offices.filter((office: Record<string, any>) => (
+          office.stateId === stateId
+          || office.jurisdictions.some((jurisdiction: Record<string, any>) => jurisdiction.stateId === stateId)
+        )).map((office: Record<string, any>) => ({
             ...office,
             code: agency.code,
             name: office.name,
           }))
-        : []);
+      : []);
+    const matches = [...stateMatches, ...federalMatches];
     const status: CoverageStatus = matches.some((record) => record.verificationStatus === "VERIFIED")
       ? "VERIFIED"
       : matches.some((record) => record.verificationStatus === "PARTIALLY_VERIFIED")
@@ -816,6 +854,8 @@ export class AgencyDirectoryService {
       description: agency.description,
       type: agency.type,
       governmentLevel: agency.governmentLevel,
+      verificationStatus: agency.verificationStatus,
+      verifiedAt: agency.verifiedAt,
       officialWebsite: agency.officialWebsite,
       contacts: agency.directoryContacts,
       offices: agency.offices,

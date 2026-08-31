@@ -1,6 +1,10 @@
 import { resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { loadAgencySeed, validateAgencySeed } from "../src/modules/agencies/agency-reference";
+import {
+  loadAgencySeed,
+  normalizeFederalFormations,
+  validateAgencySeed,
+} from "../src/modules/agencies/agency-reference";
 
 const prisma = new PrismaClient();
 const path = resolve(
@@ -13,7 +17,7 @@ async function main() {
   const sourceErrors = validateAgencySeed(document);
   if (sourceErrors.length > 0) throw new Error(sourceErrors.join("\n"));
   if (process.argv.includes("--dry-run")) {
-    console.log(`Validated ${document.agencies.length} agency seeds and ${document.federalFormations?.length ?? 0} federal formation seeds`);
+    console.log(`Validated ${document.agencies.length} agency seeds and ${normalizeFederalFormations(document).length} federal formation seeds`);
     return;
   }
   const verifiedAt = new Date(document.retrievedAt);
@@ -199,15 +203,21 @@ async function main() {
     }
   }
 
-  for (const entry of document.federalFormations ?? []) {
+  for (const entry of normalizeFederalFormations(document)) {
     const agency = await prisma.agency.findUnique({ where: { code: entry.parentAgencyCode } });
     if (!agency || agency.governmentLevel !== "FEDERAL") {
       throw new Error(`${entry.parentAgencyCode}: verified federal parent agency not found`);
     }
-    const state = await prisma.administrativeState.findFirst({
-      where: { countryId: country.id, name: entry.stateName, isActive: true },
+    const states = await prisma.administrativeState.findMany({
+      where: { countryId: country.id, name: { in: entry.jurisdictionStateNames }, isActive: true },
     });
-    if (!state) throw new Error(`${entry.name}: canonical State/FCT not found for ${entry.stateName}`);
+    const statesByName = new Map(states.map((state) => [state.name, state]));
+    const missingState = entry.jurisdictionStateNames.find((stateName) => !statesByName.has(stateName));
+    if (missingState) throw new Error(`${entry.name}: canonical State/FCT not found for ${missingState}`);
+    const officeState = entry.officeStateName ? statesByName.get(entry.officeStateName) : undefined;
+    if (entry.officeStateName && !officeState) {
+      throw new Error(`${entry.name}: office State/FCT is outside its canonical jurisdictions`);
+    }
     const requestedStatus = entry.verificationStatus ?? "VERIFIED";
     const existingOffice = await prisma.agencyOffice.findFirst({
       where: { agencyId: agency.id, name: entry.name, countryId: country.id },
@@ -221,7 +231,7 @@ async function main() {
           data: {
             officeType: entry.type as never,
             physicalAddress: entry.address ?? null,
-            stateId: state.id,
+            stateId: officeState?.id ?? null,
             verificationStatus,
             verifiedAt,
             sourceUrl: entry.sourceUrl,
@@ -232,7 +242,7 @@ async function main() {
           data: {
             agencyId: agency.id,
             countryId: country.id,
-            stateId: state.id,
+            stateId: officeState?.id,
             name: entry.name,
             officeType: entry.type as never,
             physicalAddress: entry.address,
@@ -242,31 +252,34 @@ async function main() {
           },
         });
 
-    const jurisdiction = await prisma.agencyJurisdiction.findFirst({
-      where: {
-        agencyId: agency.id,
-        officeId: office.id,
-        coverageType: "STATE",
-        countryId: country.id,
-        stateId: state.id,
-      },
-    });
-    if (jurisdiction) {
-      await prisma.agencyJurisdiction.update({
-        where: { id: jurisdiction.id },
-        data: { isPrimary: true, isActive: true },
-      });
-    } else {
-      await prisma.agencyJurisdiction.create({
-        data: {
+    for (const [index, stateName] of entry.jurisdictionStateNames.entries()) {
+      const state = statesByName.get(stateName)!;
+      const jurisdiction = await prisma.agencyJurisdiction.findFirst({
+        where: {
           agencyId: agency.id,
           officeId: office.id,
+          coverageType: "STATE",
           countryId: country.id,
           stateId: state.id,
-          coverageType: "STATE",
-          isPrimary: true,
         },
       });
+      if (jurisdiction) {
+        await prisma.agencyJurisdiction.update({
+          where: { id: jurisdiction.id },
+          data: { isPrimary: index === 0, isActive: true },
+        });
+      } else {
+        await prisma.agencyJurisdiction.create({
+          data: {
+            agencyId: agency.id,
+            officeId: office.id,
+            countryId: country.id,
+            stateId: state.id,
+            coverageType: "STATE",
+            isPrimary: index === 0,
+          },
+        });
+      }
     }
 
     for (const contact of entry.contacts) {
@@ -298,7 +311,7 @@ async function main() {
     }
   }
 
-  console.log(`Imported ${document.agencies.length} agencies and ${document.federalFormations?.length ?? 0} federal formations`);
+  console.log(`Imported ${document.agencies.length} agencies and ${normalizeFederalFormations(document).length} federal formations`);
 }
 
 main()
