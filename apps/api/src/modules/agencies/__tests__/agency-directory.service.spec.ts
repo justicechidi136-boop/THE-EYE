@@ -207,6 +207,46 @@ describe("AgencyDirectoryService", () => {
     expect(result.data[0].fire.records[0].operationalContactVerified).toBe(false);
   });
 
+  it("keeps a routing-ready coverage cell distinct from a concrete actionable office", async () => {
+    const { prisma, service } = buildService();
+    const verifiedAt = new Date();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "fct-id", code: "FC", name: "Federal Capital Territory", type: "FCT" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([{
+      id: "fct-ems-id",
+      code: "NG-FCT-HHSS",
+      name: "FCT Health and Human Services Secretariat",
+      type: "EMS",
+      governmentLevel: "STATE",
+      stateCode: "Federal Capital Territory",
+      isActive: true,
+      verificationStatus: "VERIFIED",
+      verifiedAt,
+      directoryJurisdictions: [{ stateId: "fct-id" }],
+      directoryContacts: [{
+        id: "medical-line",
+        officeId: null,
+        type: "EMERGENCY_PHONE",
+        emergencyOnly: true,
+        lastVerifiedAt: verifiedAt,
+      }],
+      incidentCapabilities: [{ id: "medical-capability" }],
+      offices: [],
+    }]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data[0].ambulanceEms.structuralStatus).toBe("VERIFIED");
+    expect(result.data[0].ambulanceEms.routingReadiness).toBe("READY");
+    expect(result.data[0].ambulanceEms.evidence.publicOfficeVerified).toBe(false);
+    expect(result.data[0].ambulanceEms.records[0].publicOfficeVerified).toBe(false);
+    expect(result.data[0].ambulanceEms.records[0].id).toBe("fct-ems-id");
+  });
+
   it("reports a verified address without inventing coordinates or emergency contact status", async () => {
     const { prisma, service } = buildService();
     prisma.administrativeState.findMany.mockResolvedValue([

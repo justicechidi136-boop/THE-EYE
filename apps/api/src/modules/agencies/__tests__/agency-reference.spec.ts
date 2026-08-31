@@ -102,6 +102,20 @@ describe("verified Nigeria agency reference seed", () => {
       .every((contact) => contact.emergencyUseVerified === true)).toBe(true);
   });
 
+  it("validates N12 FCT EMS enrichment without inferred coordinates or channels", async () => {
+    const document = await loadAgencySeed(resolve("prisma/data/nigeria-agency-directory.n12-operational-2026-08-31.json"));
+
+    expect(validateAgencySeed(document)).toEqual([]);
+    expect(document.agencies.map((agency) => agency.code)).toEqual(["NG-FCT-HHSS"]);
+    expect(document.agencies[0].officialName).toBe("FCT Health and Human Services Secretariat");
+    expect(document.agencies[0].office?.name).toBe("FCT Emergency Medical Services");
+    expect(document.agencies[0].incidentTypes).toEqual(["Medical"]);
+    expect(Object.prototype.hasOwnProperty.call(document.agencies[0].office ?? {}, "latitude")).toBe(false);
+    expect(document.agencies[0].contacts.filter((contact) => contact.type === "EMERGENCY_PHONE")
+      .every((contact) => contact.emergencyOnly && contact.emergencyUseVerified)).toBe(true);
+    expect(document.agencies[0].contacts.some((contact) => ["SMS", "WHATSAPP"].includes(contact.type))).toBe(false);
+  });
+
   it("rejects duplicate canonical jurisdictions inside a federal formation", async () => {
     const document = await loadAgencySeed(resolve("prisma/data/nigeria-federal-formations.national-2026-08-31.json"));
     const invalid = structuredClone(document);
