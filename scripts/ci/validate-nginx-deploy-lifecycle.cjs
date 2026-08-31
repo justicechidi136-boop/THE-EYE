@@ -25,6 +25,10 @@ const buildCachePrune = deployVpsCi.indexOf(
 const composeBuildStart = deployVpsCi.indexOf(
   '"${COMPOSE[@]}" build api admin-web api-tools --no-cache api-tools',
 );
+const preSyncBuildCachePrune = deployYml.indexOf(
+  "docker builder prune --all --force",
+);
+const stagingGitFetch = deployYml.indexOf("git fetch --tags origin");
 const livekitRecreate = deployVpsCi.indexOf(
   "force_recreate_livekit_container",
   fullDeployStart,
@@ -62,6 +66,12 @@ const checks = [
       composeBuildStart >= 0 &&
       buildCachePrune < composeBuildStart,
     "full staging deploy must prune unused build cache before rebuilding images",
+  ],
+  [
+    preSyncBuildCachePrune >= 0 &&
+      stagingGitFetch >= 0 &&
+      preSyncBuildCachePrune < stagingGitFetch,
+    "staging SSH bootstrap must reclaim unused build cache before repository sync",
   ],
   [
     deployVpsCi.includes('docker image prune --force --filter "until=24h"'),
