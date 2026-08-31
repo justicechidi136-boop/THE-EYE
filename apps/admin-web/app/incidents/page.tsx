@@ -39,7 +39,7 @@ export default async function IncidentsPage({ searchParams }: { searchParams: Pr
         breadcrumbs={route?.breadcrumb}
         action={<StatusBadge tone="info">{page.meta.totalReports} reports</StatusBadge>}
       />
-      <div className="grid gap-5">
+      <div className="grid min-w-0 max-w-full gap-5">
         <ConsoleMetrics items={[
           { label: "Total Reports", value: String(page.meta.totalReports) },
           { label: "Active Reports", value: String(page.meta.activeReports) },
@@ -68,9 +68,9 @@ export default async function IncidentsPage({ searchParams }: { searchParams: Pr
 
         <ReportCentreMap reports={page.data} />
 
-        <section className="rounded-lg border border-line bg-surface p-4 shadow-sm">
+        <section className="min-w-0 max-w-full rounded-lg border border-line bg-surface p-4 shadow-sm">
           <ReportCentreTable reports={page.data} />
-          <nav className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4" aria-label="Report pages">
+          <nav data-onscreen-navigation-avoid className="relative z-50 mt-4 flex items-center justify-between gap-3 border-t border-line bg-surface pt-4" aria-label="Report pages">
             {previousHref ? <Link href={previousHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Previous</Link> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Previous</span>}
             <span className="text-sm font-semibold text-ink" aria-current="page">Page {currentPage}</span>
             {nextHref ? <Link href={nextHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Next</Link> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Next</span>}

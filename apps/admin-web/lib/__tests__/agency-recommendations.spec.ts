@@ -142,20 +142,32 @@ describe("Agency recommendation presentation", () => {
   it("keeps View Report reachable in a local horizontal scroller with a sticky action column", () => {
     const table = readFileSync(resolve(__dirname, "../../components/report-centre-table.tsx"), "utf8");
     expect(table).toContain("data-admin-horizontal-scroll");
+    expect(table).toContain('data-horizontal-scroll-region="reports"');
     expect(table).toContain("overflow-x-auto");
+    expect(table).toContain("max-w-full");
     expect(table).toContain("sticky right-0");
     expect(table).toContain("whitespace-nowrap");
+    expect(table).toContain("min-w-[980px]");
+    expect(table.includes("min-w-[1120px]")).toBe(false);
     expect(table.includes("break-all")).toBe(false);
+    expect(table).toContain("break-normal whitespace-normal");
   });
 
   it("provides keyboard-accessible directional page and table controls", () => {
     const control = readFileSync(resolve(__dirname, "../../components/directional-scroll-control.tsx"), "utf8");
+    const styles = readFileSync(resolve(__dirname, "../../app/styles.css"), "utf8");
     expect(control).toContain("Scroll page up");
     expect(control).toContain("Scroll page down");
-    expect(control).toContain("Scroll table left");
-    expect(control).toContain("Scroll table right");
-    expect(control).toContain("pointer-events-none");
-    expect(control).toContain("pointer-events-auto");
+    expect(control).toContain("Scroll reports left");
+    expect(control).toContain("Scroll reports right");
+    expect(control).toContain('[data-horizontal-scroll-region="reports"]');
+    expect(control).toContain('document.getElementById("main-content")');
+    expect(control).toContain("on-screen-navigation-hidden");
+    expect(styles).toContain(".on-screen-navigation");
+    expect(styles).toContain("pointer-events: none");
+    expect(styles).toContain("pointer-events: auto");
+    expect(styles).toContain("left: calc(50% + 140px)");
+    expect(styles).toContain("opacity: 0.42");
   });
 
   it("renders the admin-only review entry point for actionable and structural matches", () => {

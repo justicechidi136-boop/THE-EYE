@@ -8,7 +8,7 @@ import { roleScope } from "../lib/types/admin-views";
 import { EnvironmentBadge } from "./environment-badge";
 import { NavSection } from "./nav-section";
 import { ShellNavLink } from "./shell-nav-link";
-import { DirectionalScrollControl } from "./directional-scroll-control";
+import { OnScreenNavigation } from "./directional-scroll-control";
 
 const navGroups = [
   {
@@ -96,7 +96,7 @@ export function AppShellFrame({
     .filter((group) => group.items.length > 0);
 
   return (
-    <div className="min-h-screen bg-field text-ink lg:grid lg:grid-cols-[280px_1fr]">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-field text-ink lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-soft"
@@ -138,10 +138,10 @@ export function AppShellFrame({
           </div>
         </nav>
       </aside>
-      <main id="main-content" className="min-w-0 p-4 sm:p-6 lg:p-8 lg:pr-44 2xl:pr-8">
+      <main id="main-content" className="w-full min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8">
         {children}
       </main>
-      <DirectionalScrollControl />
+      <OnScreenNavigation />
     </div>
   );
 }

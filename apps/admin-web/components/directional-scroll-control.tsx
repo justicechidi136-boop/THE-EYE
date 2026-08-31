@@ -1,6 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 function visibleHorizontalScroller() {
+  const reports = document.querySelector<HTMLElement>('[data-horizontal-scroll-region="reports"]');
+  if (reports) return reports;
+
   return Array.from(document.querySelectorAll<HTMLElement>("[data-admin-horizontal-scroll]"))
     .find((element) => {
       const bounds = element.getBoundingClientRect();
@@ -8,18 +13,30 @@ function visibleHorizontalScroller() {
     });
 }
 
-export function DirectionalScrollControl() {
+export function OnScreenNavigation() {
+  const [mainContentVisible, setMainContentVisible] = useState(false);
+
+  useEffect(() => {
+    const main = document.getElementById("main-content");
+    if (!main) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setMainContentVisible(entry?.isIntersecting ?? false),
+      { threshold: 0 },
+    );
+    observer.observe(main);
+    return () => observer.disconnect();
+  }, []);
+
   const scrollVertical = (top: number) => window.scrollBy({ top, behavior: "smooth" });
   const scrollHorizontal = (left: number) => visibleHorizontalScroller()?.scrollBy({ left, behavior: "smooth" });
-  const buttonClass = "pointer-events-auto grid size-10 place-items-center rounded-md border border-line bg-surface/90 text-lg font-semibold text-ink shadow-sm backdrop-blur hover:bg-surfaceMuted focus:outline-none focus:ring-2 focus:ring-eye";
+  const buttonClass = "nav-direction";
+
   return (
-    <nav className="pointer-events-none fixed right-3 top-1/2 z-30 hidden -translate-y-1/2 grid-cols-3 gap-1 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100 lg:grid" aria-label="Page and table navigation">
-      <span />
-      <button type="button" className={buttonClass} aria-label="Scroll page up" title="Scroll page up" onClick={() => scrollVertical(-window.innerHeight * 0.7)}>↑</button>
-      <span />
-      <button type="button" className={buttonClass} aria-label="Scroll table left" title="Scroll visible table left" onClick={() => scrollHorizontal(-420)}>←</button>
-      <button type="button" className={buttonClass} aria-label="Scroll page down" title="Scroll page down" onClick={() => scrollVertical(window.innerHeight * 0.7)}>↓</button>
-      <button type="button" className={buttonClass} aria-label="Scroll table right" title="Scroll visible table right" onClick={() => scrollHorizontal(420)}>→</button>
+    <nav className={`on-screen-navigation${mainContentVisible ? "" : " on-screen-navigation-hidden"}`} aria-label="Page navigation">
+      <button type="button" className={`${buttonClass} nav-up`} aria-label="Scroll page up" title="Scroll page up" onClick={() => scrollVertical(-window.innerHeight * 0.7)}>↑</button>
+      <button type="button" className={`${buttonClass} nav-left`} aria-label="Scroll reports left" title="Scroll reports left" onClick={() => scrollHorizontal(-360)}>←</button>
+      <button type="button" className={`${buttonClass} nav-down`} aria-label="Scroll page down" title="Scroll page down" onClick={() => scrollVertical(window.innerHeight * 0.7)}>↓</button>
+      <button type="button" className={`${buttonClass} nav-right`} aria-label="Scroll reports right" title="Scroll reports right" onClick={() => scrollHorizontal(360)}>→</button>
     </nav>
   );
 }
