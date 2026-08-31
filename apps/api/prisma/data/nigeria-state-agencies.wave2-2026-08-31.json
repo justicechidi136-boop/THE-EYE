@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 2,
+  "countryCode": "NG",
+  "retrievedAt": "2026-08-31T00:00:00.000Z",
+  "agencies": [
+    {
+      "code": "NG-LAGOS-LASEMA",
+      "governmentLevel": "STATE",
+      "stateName": "Lagos",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Lagos State Emergency Management Agency",
+      "shortName": "LASEMA",
+      "aliases": [],
+      "description": "Lagos State agency responsible for coordinating and responding to emergencies and disasters within Lagos State.",
+      "type": "STATE_EMERGENCY_AGENCY",
+      "website": "https://lagosstate.gov.ng/services/disasters_emergencies",
+      "sourceUrl": "https://lagosstate.gov.ng/services/disasters_emergencies",
+      "contacts": [
+        { "type": "TOLL_FREE", "value": "767", "label": "LASEMA emergency line", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://lagosstate.gov.ng/services/disasters_emergencies" },
+        { "type": "TOLL_FREE", "value": "112", "label": "LASEMA emergency line", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://lagosstate.gov.ng/services/disasters_emergencies" },
+        { "type": "WEBSITE", "value": "https://lagosstate.gov.ng/services/disasters_emergencies", "label": "Official State service page", "sourceUrl": "https://lagosstate.gov.ng/services/disasters_emergencies" }
+      ],
+      "incidentTypes": ["Emergency", "CommunitySafety"]
+    },
+    {
+      "code": "NG-LAGOS-FIRE",
+      "governmentLevel": "STATE",
+      "stateName": "Lagos",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Lagos State Fire and Rescue Service",
+      "shortName": "LSFRS",
+      "aliases": ["Lagos State Fire Service"],
+      "description": "Lagos State fire and rescue service responsible for protecting lives and property and responding to fire and rescue calls.",
+      "type": "FIRE_RESCUE",
+      "website": "https://lagosstate.gov.ng/services/disasters_emergencies",
+      "sourceUrl": "https://lagosstate.gov.ng/services/disasters_emergencies",
+      "contacts": [
+        { "type": "WEBSITE", "value": "https://lagosstate.gov.ng/services/disasters_emergencies", "label": "Official State service page", "sourceUrl": "https://lagosstate.gov.ng/services/disasters_emergencies" }
+      ],
+      "incidentTypes": ["Emergency", "Fire"]
+    },
+    {
+      "code": "NG-LAGOS-LASAMBUS",
+      "governmentLevel": "STATE",
+      "stateName": "Lagos",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Lagos State Ambulance Service",
+      "shortName": "LASAMBUS",
+      "aliases": ["Lagos State Emergency Medical Services"],
+      "description": "Lagos State ambulance service providing 24-hour pre-hospital response for medical emergencies and road-traffic trauma.",
+      "type": "EMS",
+      "website": "https://lagosstate.gov.ng/news/all/view/6890c63bfe883fedf8d71960",
+      "sourceUrl": "https://lagosstate.gov.ng/news/all/view/6890c63bfe883fedf8d71960",
+      "contacts": [
+        { "type": "TOLL_FREE", "value": "767", "label": "Emergency ambulance service", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://lagosstate.gov.ng/news/all/view/6890c63bfe883fedf8d71960" },
+        { "type": "TOLL_FREE", "value": "112", "label": "Emergency ambulance service", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://lagosstate.gov.ng/news/all/view/6890c63bfe883fedf8d71960" },
+        { "type": "WEBSITE", "value": "https://lagosstate.gov.ng/news/all/view/6890c63bfe883fedf8d71960", "label": "Official State service information", "sourceUrl": "https://lagosstate.gov.ng/news/all/view/6890c63bfe883fedf8d71960" }
+      ],
+      "incidentTypes": ["Emergency", "Medical", "Accident"]
+    },
+    {
+      "code": "NG-LAGOS-LASTMA",
+      "governmentLevel": "STATE",
+      "stateName": "Lagos",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Lagos State Traffic Management Authority",
+      "shortName": "LASTMA",
+      "aliases": [],
+      "description": "Lagos State traffic management authority responsible for traffic flow, road-safety intervention, obstruction response, and road-traffic incident support.",
+      "type": "TRAFFIC_MANAGEMENT",
+      "website": "https://lastma.lagosstate.gov.ng",
+      "sourceUrl": "https://lagosstate.gov.ng/news/all/view/678d5b70db5e7ef4cd967036",
+      "contacts": [
+        { "type": "TOLL_FREE", "value": "+23480000527862", "label": "Public traffic and incident hotline", "sourceUrl": "https://lagosstate.gov.ng/news/all/view/678d5b70db5e7ef4cd967036" },
+        { "type": "WEBSITE", "value": "https://lastma.lagosstate.gov.ng", "label": "Official agency website", "sourceUrl": "https://citizensgate.lagosstate.gov.ng/lasg_das.php" }
+      ],
+      "incidentTypes": ["Accident"]
+    },
+    {
+      "code": "NG-FCT-FIRE",
+      "governmentLevel": "STATE",
+      "stateName": "Federal Capital Territory",
+      "verificationStatus": "VERIFIED",
+      "officialName": "FCT Fire Service",
+      "shortName": "FCT Fire Service",
+      "aliases": [],
+      "description": "Federal Capital Territory service established to protect lives and property from fire emergencies within the FCT.",
+      "type": "FIRE_RESCUE",
+      "website": "https://fcta.gov.ng/ova_dep/fct-fire-service/",
+      "sourceUrl": "https://fcta.gov.ng/ova_dep/fct-fire-service/",
+      "contacts": [
+        { "type": "TOLL_FREE", "value": "112", "label": "Fire emergency", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fcta.gov.ng/faq/" },
+        { "type": "EMERGENCY_PHONE", "value": "+2348031230330", "label": "FCTA fire emergency call centre", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fcta.gov.ng/faq/" },
+        { "type": "EMERGENCY_PHONE", "value": "+2348031230331", "label": "FCTA fire emergency call centre", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fcta.gov.ng/faq/" },
+        { "type": "EMERGENCY_PHONE", "value": "+2348031230332", "label": "FCTA fire emergency call centre", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fcta.gov.ng/faq/" },
+        { "type": "EMERGENCY_PHONE", "value": "+2348099936312", "label": "FCTA fire emergency call centre", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fcta.gov.ng/faq/" },
+        { "type": "EMERGENCY_PHONE", "value": "+2348099936313", "label": "FCTA fire emergency call centre", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fcta.gov.ng/faq/" },
+        { "type": "EMERGENCY_PHONE", "value": "+2348099936314", "label": "FCTA fire emergency call centre", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fcta.gov.ng/faq/" },
+        { "type": "WEBSITE", "value": "https://fcta.gov.ng/ova_dep/fct-fire-service/", "label": "Official service page", "sourceUrl": "https://fcta.gov.ng/ova_dep/fct-fire-service/" }
+      ],
+      "incidentTypes": ["Emergency", "Fire"]
+    },
+    {
+      "code": "NG-FCT-FEMD",
+      "governmentLevel": "STATE",
+      "stateName": "Federal Capital Territory",
+      "verificationStatus": "PARTIALLY_VERIFIED",
+      "officialName": "FCT Emergency Management Department",
+      "shortName": "FEMD",
+      "aliases": [],
+      "description": "Emergency management department listed as a constituent department of the Abuja Metropolitan Management Council.",
+      "type": "STATE_EMERGENCY_AGENCY",
+      "website": "https://www.fcta.gov.ng/ova_dep/abuja-metropolitan-management-council/",
+      "sourceUrl": "https://www.fcta.gov.ng/ova_dep/abuja-metropolitan-management-council/",
+      "contacts": [
+        { "type": "WEBSITE", "value": "https://www.fcta.gov.ng/ova_dep/abuja-metropolitan-management-council/", "label": "Official supervising council page", "sourceUrl": "https://www.fcta.gov.ng/ova_dep/abuja-metropolitan-management-council/" }
+      ],
+      "incidentTypes": []
+    },
+    {
+      "code": "NG-KANO-SEMA",
+      "governmentLevel": "STATE",
+      "stateName": "Kano",
+      "verificationStatus": "PARTIALLY_VERIFIED",
+      "officialName": "Kano State Emergency Management Agency",
+      "shortName": "Kano SEMA",
+      "aliases": ["SEMA Kano"],
+      "description": "Kano State emergency management agency identified in official State budget and federal emergency-management publications; public office and contact details remain pending verification.",
+      "type": "STATE_EMERGENCY_AGENCY",
+      "sourceUrl": "https://kanostate.gov.ng/wp-content/uploads/2026/04/KANO-STATE-2026-Q1-BPR-FINAL.pdf",
+      "contacts": [],
+      "incidentTypes": []
+    },
+    {
+      "code": "NG-ENUGU-FIRE",
+      "governmentLevel": "STATE",
+      "stateName": "Enugu",
+      "verificationStatus": "PARTIALLY_VERIFIED",
+      "officialName": "Enugu State Fire Service Department",
+      "shortName": "Enugu Fire Service",
+      "aliases": ["Fire Service Department"],
+      "description": "Enugu State Fire Service Department funded for State-wide fire-protection services; public office address and contacts remain pending verification.",
+      "type": "FIRE_RESCUE",
+      "sourceUrl": "https://enugustate.gov.ng/wp-content/uploads/2025/01/Enugu-State-FY-2025-Approved-Budget-1.pdf",
+      "contacts": [],
+      "incidentTypes": ["Fire"]
+    },
+    {
+      "code": "NG-BORNO-SEMA",
+      "governmentLevel": "STATE",
+      "stateName": "Borno",
+      "verificationStatus": "PARTIALLY_VERIFIED",
+      "officialName": "Borno State Emergency Management Agency",
+      "shortName": "Borno SEMA",
+      "aliases": ["Borno SEMA"],
+      "description": "Borno State Emergency Management Agency identified as an administrative unit in the official State budget; public office and contact details remain pending verification.",
+      "type": "STATE_EMERGENCY_AGENCY",
+      "sourceUrl": "https://budgetandplan.bornostate.gov.ng/storage/documents/tuyrlWS6ElX3KREryzq92LcLisuUOCDm9TeeIMql.pdf",
+      "contacts": [],
+      "incidentTypes": []
+    }
+  ],
+  "federalFormations": [
+    { "parentAgencyCode": "NG-FRSC", "stateName": "Lagos", "name": "FRSC RS2.1 Lagos Sector Command", "type": "STATE_OFFICE", "sourceUrl": "https://frsc.gov.ng/wp-content/uploads/2020/12/2019-Annual-Report2.pdf", "verificationStatus": "VERIFIED", "contacts": [] },
+    { "parentAgencyCode": "NG-FRSC", "stateName": "Federal Capital Territory", "name": "FRSC RS7.1 FCT Sector Command", "type": "STATE_OFFICE", "sourceUrl": "https://frsc.gov.ng/wp-content/uploads/2020/12/2019-Annual-Report2.pdf", "verificationStatus": "VERIFIED", "contacts": [] },
+    { "parentAgencyCode": "NG-FRSC", "stateName": "Kano", "name": "FRSC RS1.2 Kano Sector Command", "type": "STATE_OFFICE", "sourceUrl": "https://frsc.gov.ng/wp-content/uploads/2020/12/2019-Annual-Report2.pdf", "verificationStatus": "VERIFIED", "contacts": [] },
+    { "parentAgencyCode": "NG-FRSC", "stateName": "Enugu", "name": "FRSC RS9.1 Enugu Sector Command", "type": "STATE_OFFICE", "sourceUrl": "https://frsc.gov.ng/wp-content/uploads/2020/12/2019-Annual-Report2.pdf", "verificationStatus": "VERIFIED", "contacts": [] },
+    { "parentAgencyCode": "NG-FRSC", "stateName": "Borno", "name": "FRSC RS12.2 Borno Sector Command", "type": "STATE_OFFICE", "sourceUrl": "https://frsc.gov.ng/wp-content/uploads/2020/12/2019-Annual-Report2.pdf", "verificationStatus": "VERIFIED", "contacts": [] }
+  ]
+}

@@ -45,7 +45,7 @@
       "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/",
       "office": { "name": "FRSC National Headquarters", "address": "No. 3 Maputo Street, Zone 3, Wuse, Abuja, FCT", "type": "HEADQUARTERS" },
       "contacts": [
-        { "type": "TOLL_FREE", "value": "122", "label": "Road emergency", "emergencyOnly": true, "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/" },
+        { "type": "TOLL_FREE", "value": "122", "label": "Road emergency", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/" },
         { "type": "EMAIL", "value": "info@frsc.gov.ng", "label": "Public email", "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/" },
         { "type": "WEBSITE", "value": "https://frsc.gov.ng/", "label": "Official website", "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/" }
       ],
@@ -62,7 +62,7 @@
       "sourceUrl": "https://www.fedfire.gov.ng/home/",
       "office": { "name": "Federal Fire Service Headquarters", "address": "Muhammadu Buhari Way, Area 10, Garki, Abuja", "type": "HEADQUARTERS", "is24Hours": true },
       "contacts": [
-        { "type": "EMERGENCY_PHONE", "value": "+2348032003557", "label": "Emergency line", "emergencyOnly": true, "sourceUrl": "https://www.fedfire.gov.ng/home/" },
+        { "type": "EMERGENCY_PHONE", "value": "+2348032003557", "label": "Emergency line", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fedfire.gov.ng/home/" },
         { "type": "EMAIL", "value": "info@fedfire.gov.ng", "label": "Public email", "sourceUrl": "https://www.fedfire.gov.ng/home/" },
         { "type": "WEBSITE", "value": "https://www.fedfire.gov.ng/", "label": "Official website", "sourceUrl": "https://www.fedfire.gov.ng/home/" }
       ],

@@ -1,4 +1,5 @@
 import { IncidentType } from "@the-eye/shared";
+import { Type } from "class-transformer";
 import {
   IsBoolean,
   IsIn,
@@ -154,4 +155,17 @@ export class UpsertAgencyIncidentCapabilityDto {
   @IsOptional() @IsBoolean() canEscalate?: boolean;
   @IsOptional() @IsString() @MaxLength(500) notes?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+export class AgencyVerificationFreshnessQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) staleDays?: number;
+  @IsOptional() @IsIn(verificationStates) verificationStatus?: string;
+  @IsOptional() @IsString() @MaxLength(500) source?: string;
+  @IsOptional() @IsUUID() agencyId?: string;
+  @IsOptional() @IsUUID() stateId?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number;
+}
+
+export class AgencyCoverageReportQueryDto {
+  @IsOptional() @IsUUID() stateId?: string;
 }

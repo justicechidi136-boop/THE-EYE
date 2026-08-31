@@ -7,12 +7,15 @@ import {
   Optional,
 } from "@nestjs/common";
 import { AdminRoleName } from "@the-eye/shared";
+import type { Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { assertCanManageAgency, type AgencyScopeRow } from "./agency-scope";
 import type {
   CreateAgencyContactDto,
+  AgencyCoverageReportQueryDto,
+  AgencyVerificationFreshnessQueryDto,
   CreateAgencyJurisdictionDto,
   CreateAgencyOfficeDto,
   UpdateAgencyContactDto,
@@ -29,6 +32,18 @@ const publicContactSelect = {
   label: true,
   emergencyOnly: true,
 } as const;
+
+const coverageColumns = [
+  "emergencyManagement",
+  "fire",
+  "ambulanceEms",
+  "traffic",
+  "policeCommand",
+  "nscdcCommand",
+  "frscCommand",
+] as const;
+type CoverageColumn = typeof coverageColumns[number];
+type CoverageStatus = "VERIFIED" | "PARTIAL" | "NOT_VERIFIED" | "NOT_APPLICABLE" | "UNKNOWN";
 
 const radians = (degrees: number) => degrees * Math.PI / 180;
 function distanceMeters(latA: number, lngA: number, latB: number, lngB: number) {
@@ -189,6 +204,174 @@ export class AgencyDirectoryService {
       },
     });
     return { data: detail };
+  }
+
+  async getVerificationFreshnessReport(
+    actor: JwtPayload,
+    query: AgencyVerificationFreshnessQueryDto,
+  ) {
+    const states = await this.getScopedStates(actor, query.stateId);
+    const stateIds = states.map((state) => state.id);
+    const stateNames = states.map((state) => state.name);
+    const staleDays = query.staleDays ?? 365;
+    const staleBefore = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000);
+    const source = query.source?.trim();
+    const agencyScope = this.agencyReportWhere(actor, stateIds, stateNames);
+    const agencies = await this.prisma.agency.findMany({
+      where: {
+        AND: [
+          agencyScope,
+          query.agencyId ? { id: query.agencyId } : {},
+        ],
+      },
+      include: {
+        offices: {
+          where: stateIds.length > 0 ? { OR: [{ stateId: null }, { stateId: { in: stateIds } }] } : undefined,
+          select: {
+            id: true,
+            name: true,
+            stateId: true,
+            isActive: true,
+            verificationStatus: true,
+            verifiedAt: true,
+            sourceUrl: true,
+          },
+        },
+        directoryContacts: {
+          select: {
+            id: true,
+            officeId: true,
+            type: true,
+            label: true,
+            isActive: true,
+            publiclyVerified: true,
+            verificationStatus: true,
+            sourceUrl: true,
+            lastVerifiedAt: true,
+          },
+        },
+      },
+      orderBy: [{ name: "asc" }],
+    });
+
+    const findings: Array<Record<string, unknown>> = [];
+    let totalFindings = 0;
+    const limit = query.limit ?? 200;
+    const add = (finding: Record<string, unknown>) => {
+      totalFindings += 1;
+      if (findings.length < limit) findings.push(finding);
+    };
+    const matchesStatus = (status: string) => !query.verificationStatus || status === query.verificationStatus;
+    const matchesSource = (...values: Array<string | null | undefined>) => !source
+      || values.some((value) => value?.toLowerCase().includes(source.toLowerCase()));
+    for (const agency of agencies) {
+      const agencyBase = {
+        agencyId: agency.id,
+        agencyCode: agency.code,
+        agencyName: agency.name,
+        verificationStatus: agency.verificationStatus,
+      };
+      if (matchesStatus(agency.verificationStatus) && matchesSource(agency.verificationSource, agency.officialWebsite)) {
+        if (!agency.verificationSource) add({ ...agencyBase, recordType: "AGENCY", recordId: agency.id, issue: "MISSING_PROVENANCE" });
+        if (agency.verificationStatus === "VERIFIED" && !agency.verifiedAt) {
+          add({ ...agencyBase, recordType: "AGENCY", recordId: agency.id, issue: "VERIFIED_MISSING_DATE" });
+        }
+        if (agency.verificationStatus === "VERIFIED" && !agency.officialWebsite) {
+          add({ ...agencyBase, recordType: "AGENCY", recordId: agency.id, issue: "MISSING_OFFICIAL_URL" });
+        }
+        if (agency.verificationStatus === "RETIRED" && agency.isActive) {
+          add({ ...agencyBase, recordType: "AGENCY", recordId: agency.id, issue: "RETIRED_BUT_ACTIVE" });
+        }
+      }
+      for (const office of agency.offices) {
+        if (!matchesStatus(office.verificationStatus) || !matchesSource(office.sourceUrl)) continue;
+        const officeBase = { ...agencyBase, verificationStatus: office.verificationStatus };
+        if (!office.sourceUrl) add({ ...officeBase, recordType: "OFFICE", recordId: office.id, recordName: office.name, issue: "MISSING_PROVENANCE" });
+        if (office.verificationStatus === "VERIFIED" && !office.verifiedAt) {
+          add({ ...officeBase, recordType: "OFFICE", recordId: office.id, recordName: office.name, issue: "VERIFIED_MISSING_DATE" });
+        }
+        if (office.verificationStatus === "RETIRED" && office.isActive) {
+          add({ ...officeBase, recordType: "OFFICE", recordId: office.id, recordName: office.name, issue: "RETIRED_BUT_ACTIVE" });
+        }
+      }
+      for (const contact of agency.directoryContacts) {
+        if (!matchesStatus(contact.verificationStatus) || !matchesSource(contact.sourceUrl)) continue;
+        const contactBase = {
+          ...agencyBase,
+          recordType: "CONTACT",
+          recordId: contact.id,
+          contactType: contact.type,
+          label: contact.label,
+          verificationStatus: contact.verificationStatus,
+        };
+        if (!contact.sourceUrl) add({ ...contactBase, issue: "MISSING_PROVENANCE" });
+        if (contact.verificationStatus === "VERIFIED" && !contact.lastVerifiedAt) {
+          add({ ...contactBase, issue: "VERIFIED_MISSING_DATE" });
+        } else if (contact.lastVerifiedAt && contact.lastVerifiedAt < staleBefore) {
+          add({ ...contactBase, issue: "STALE_VERIFICATION", lastVerifiedAt: contact.lastVerifiedAt });
+        }
+        if (contact.verificationStatus === "RETIRED" && contact.isActive) {
+          add({ ...contactBase, issue: "RETIRED_BUT_ACTIVE" });
+        }
+        if (contact.publiclyVerified && contact.isActive && contact.verificationStatus !== "VERIFIED") {
+          add({ ...contactBase, issue: "PUBLIC_CONTACT_NOT_VERIFIED" });
+        }
+      }
+    }
+
+    return {
+      data: findings,
+      meta: {
+        staleDays,
+        staleBefore,
+        agenciesReviewed: agencies.length,
+        findings: totalFindings,
+        returned: findings.length,
+        truncated: totalFindings > findings.length,
+      },
+    };
+  }
+
+  async getCoverageReport(actor: JwtPayload, query: AgencyCoverageReportQueryDto) {
+    const states = await this.getScopedStates(actor, query.stateId);
+    const stateIds = states.map((state) => state.id);
+    const stateNames = states.map((state) => state.name);
+    const agencies = await this.prisma.agency.findMany({
+      where: this.agencyReportWhere(actor, stateIds, stateNames),
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        stateCode: true,
+        verificationStatus: true,
+        offices: {
+          where: { stateId: { in: stateIds }, isActive: true },
+          select: { id: true, stateId: true, name: true, verificationStatus: true },
+        },
+      },
+      orderBy: [{ name: "asc" }],
+    });
+
+    const data = states.map((state) => {
+      const cells = Object.fromEntries(
+        coverageColumns.map((column) => [column, this.coverageCell(column, state.id, state.name, agencies)]),
+      );
+      return {
+        stateId: state.id,
+        stateCode: state.code,
+        state: state.name,
+        stateType: state.type,
+        ...cells,
+      };
+    });
+    return {
+      data,
+      meta: {
+        states: data.length,
+        semantics: "NOT_VERIFIED means THE EYE lacks authoritative verified data; it does not mean the service is absent.",
+      },
+    };
   }
 
   async createOffice(actor: JwtPayload, agencyId: string, dto: CreateAgencyOfficeDto) {
@@ -421,6 +604,101 @@ export class AgencyDirectoryService {
       if (!state) throw new NotFoundException("State/FCT not found");
     }
     return { stateId: query.stateId, lgaId: undefined, wardId: undefined };
+  }
+
+  private async getScopedStates(actor: JwtPayload, requestedStateId?: string) {
+    const where: Record<string, unknown> = {
+      isActive: true,
+      country: { code: "NG" },
+      ...(requestedStateId ? { id: requestedStateId } : {}),
+    };
+    if (actor.role === AdminRoleName.CountryAdmin) {
+      const country = actor.country?.trim().toLowerCase();
+      if (country !== "ng" && country !== "nigeria") where.id = "__none__";
+    } else if (actor.role !== AdminRoleName.SuperAdmin) {
+      if (actor.state) {
+        where.OR = [
+          { name: { equals: actor.state, mode: "insensitive" } },
+          { code: { equals: actor.state, mode: "insensitive" } },
+          { officialName: { equals: actor.state, mode: "insensitive" } },
+        ];
+      } else if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId) {
+        where.OR = [
+          { agencyOffices: { some: { agencyId: actor.agencyId, isActive: true } } },
+          { agencyJurisdictions: { some: { agencyId: actor.agencyId, isActive: true } } },
+        ];
+      } else {
+        where.id = "__none__";
+      }
+    }
+    return this.prisma.administrativeState.findMany({
+      where,
+      select: { id: true, code: true, name: true, type: true },
+      orderBy: [{ name: "asc" }],
+    });
+  }
+
+  private agencyReportWhere(
+    actor: JwtPayload,
+    stateIds: string[],
+    stateNames: string[],
+  ): Prisma.AgencyWhereInput {
+    const geography: Prisma.AgencyWhereInput = {
+      countryCode: "NG",
+      OR: [
+        { stateCode: { in: stateNames } },
+        { offices: { some: { stateId: { in: stateIds }, isActive: true } } },
+      ],
+    };
+    if (actor.role === AdminRoleName.AgencyAdmin) {
+      return { countryCode: "NG", id: actor.agencyId ?? "__none__" };
+    }
+    if (actor.role === AdminRoleName.SuperAdmin || actor.role === AdminRoleName.CountryAdmin) {
+      return {
+        ...geography,
+        OR: [...(geography.OR ?? []), { governmentLevel: "FEDERAL" }],
+      };
+    }
+    return geography;
+  }
+
+  private coverageCell(
+    column: CoverageColumn,
+    stateId: string,
+    stateName: string,
+    agencies: Array<Record<string, any>>,
+  ) {
+    const stateTypeByColumn: Partial<Record<CoverageColumn, string[]>> = {
+      emergencyManagement: ["STATE_EMERGENCY_AGENCY", "EMERGENCY_MANAGEMENT"],
+      fire: ["FIRE_RESCUE"],
+      ambulanceEms: ["EMS"],
+      traffic: ["TRAFFIC_MANAGEMENT"],
+    };
+    const federalTypeByColumn: Partial<Record<CoverageColumn, string>> = {
+      policeCommand: "POLICE",
+      nscdcCommand: "CIVIL_DEFENCE",
+      frscCommand: "ROAD_SAFETY",
+    };
+    const matches = stateTypeByColumn[column]
+      ? agencies.filter((agency) => agency.stateCode === stateName && stateTypeByColumn[column]?.includes(agency.type))
+      : agencies.flatMap((agency) => agency.type === federalTypeByColumn[column]
+        ? agency.offices.filter((office: Record<string, any>) => office.stateId === stateId).map((office: Record<string, any>) => ({
+            ...office,
+            code: agency.code,
+            name: office.name,
+          }))
+        : []);
+    const status: CoverageStatus = matches.some((record) => record.verificationStatus === "VERIFIED")
+      ? "VERIFIED"
+      : matches.some((record) => record.verificationStatus === "PARTIALLY_VERIFIED")
+        ? "PARTIAL"
+        : matches.length > 0
+          ? "UNKNOWN"
+          : "NOT_VERIFIED";
+    return {
+      status,
+      records: matches.map((record) => ({ id: record.id, code: record.code, name: record.name })),
+    };
   }
 
   private async requireManagedAgency(actor: JwtPayload, agencyId: string) {

@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -17,6 +18,8 @@ import { AgenciesService } from "./agencies.service";
 import { AgencyDirectoryService } from "./agency-directory.service";
 import {
   CreateAgencyContactDto,
+  AgencyCoverageReportQueryDto,
+  AgencyVerificationFreshnessQueryDto,
   CreateAgencyJurisdictionDto,
   CreateAgencyOfficeDto,
   UpdateAgencyContactDto,
@@ -45,6 +48,22 @@ export class AgenciesAdminController {
   @Get("admin/agencies/:id/directory")
   getDirectory(@Param("id", ParseUUIDPipe) id: string, @Req() request: { user: unknown }) {
     return this.directory.getAdminDirectory(request.user as never, id);
+  }
+
+  @Get("admin/agency-directory/reports/freshness")
+  getVerificationFreshness(
+    @Query() query: AgencyVerificationFreshnessQueryDto,
+    @Req() request: { user: unknown },
+  ) {
+    return this.directory.getVerificationFreshnessReport(request.user as never, query);
+  }
+
+  @Get("admin/agency-directory/reports/coverage")
+  getCoverageReport(
+    @Query() query: AgencyCoverageReportQueryDto,
+    @Req() request: { user: unknown },
+  ) {
+    return this.directory.getCoverageReport(request.user as never, query);
   }
 
   @Post("admin/agencies")

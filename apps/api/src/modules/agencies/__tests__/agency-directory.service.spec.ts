@@ -12,7 +12,7 @@ describe("AgencyDirectoryService", () => {
       country: { findFirst: jest.fn() },
       ward: { findFirst: jest.fn() },
       localGovernmentArea: { findFirst: jest.fn() },
-      administrativeState: { findFirst: jest.fn() },
+      administrativeState: { findFirst: jest.fn(), findMany: jest.fn() },
     };
     const audit = { record: jest.fn().mockResolvedValue({}) };
     return { prisma, audit, service: new AgencyDirectoryService(prisma as never, audit as never) };
@@ -36,6 +36,106 @@ describe("AgencyDirectoryService", () => {
     ],
     incidentCapabilities: [{ incidentType: "Fire", canReceiveReport: true }],
   };
+
+  it("reports stale and incomplete verification metadata without exposing contact values", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "state-1", code: "LA", name: "Lagos", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([
+      {
+        id: "agency-1",
+        code: "NG-LAGOS-TEST",
+        name: "Test agency",
+        verificationStatus: "VERIFIED",
+        verifiedAt: null,
+        verificationSource: "https://lagosstate.gov.ng/test",
+        officialWebsite: null,
+        isActive: true,
+        offices: [],
+        directoryContacts: [
+          {
+            id: "contact-1",
+            officeId: null,
+            type: "PHONE",
+            label: "Public line",
+            isActive: true,
+            publiclyVerified: true,
+            verificationStatus: "VERIFIED",
+            sourceUrl: "https://lagosstate.gov.ng/test",
+            lastVerifiedAt: new Date("2020-01-01T00:00:00.000Z"),
+            value: "+2348000000000",
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getVerificationFreshnessReport(
+      { typ: "admin", sub: "admin-1", role: "State Admin", country: "NG", state: "Lagos" } as never,
+      { staleDays: 365 },
+    );
+
+    expect(result.data.some((finding) => finding.issue === "VERIFIED_MISSING_DATE")).toBe(true);
+    expect(result.data.some((finding) => finding.issue === "MISSING_OFFICIAL_URL")).toBe(true);
+    expect(result.data.some((finding) => finding.issue === "STALE_VERIFICATION")).toBe(true);
+    expect(JSON.stringify(result.data).includes("+2348000000000")).toBe(false);
+  });
+
+  it("reports verified State agencies and federal formations against canonical States", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "lagos-id", code: "LA", name: "Lagos", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([
+      {
+        id: "lasema-id",
+        code: "NG-LAGOS-LASEMA",
+        name: "LASEMA",
+        type: "STATE_EMERGENCY_AGENCY",
+        stateCode: "Lagos",
+        verificationStatus: "VERIFIED",
+        offices: [],
+      },
+      {
+        id: "frsc-id",
+        code: "NG-FRSC",
+        name: "FRSC",
+        type: "ROAD_SAFETY",
+        stateCode: null,
+        verificationStatus: "VERIFIED",
+        offices: [
+          { id: "frsc-lagos", stateId: "lagos-id", name: "FRSC Lagos Sector Command", verificationStatus: "VERIFIED" },
+        ],
+      },
+    ]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data[0].emergencyManagement.status).toBe("VERIFIED");
+    expect(result.data[0].frscCommand.status).toBe("VERIFIED");
+    expect(result.data[0].policeCommand.status).toBe("NOT_VERIFIED");
+    expect(result.meta.semantics.includes("does not mean the service is absent")).toBe(true);
+  });
+
+  it("scopes coverage geography to the State admin's canonical State", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "lagos-id", code: "LA", name: "Lagos", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([]);
+
+    await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "State Admin", country: "NG", state: "Lagos" } as never,
+      {},
+    );
+
+    const stateWhere = prisma.administrativeState.findMany.mock.calls[0][0].where;
+    expect(stateWhere.OR[0].name.equals).toBe("Lagos");
+    expect(stateWhere.country.code).toBe("NG");
+  });
 
   it("returns a verified federal agency with only public contact fields", async () => {
     const { prisma, service } = buildService();

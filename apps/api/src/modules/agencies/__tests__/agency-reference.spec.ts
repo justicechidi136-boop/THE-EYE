@@ -35,4 +35,23 @@ describe("verified Nigeria agency reference seed", () => {
 
     expect(validateAgencySeed(invalid).some((error) => error.includes("requires stateName"))).toBe(true);
   });
+
+  it("validates Wave 2 State agencies and federal formations without duplicate parents", async () => {
+    const document = await loadAgencySeed(resolve("prisma/data/nigeria-state-agencies.wave2-2026-08-31.json"));
+
+    expect(validateAgencySeed(document)).toEqual([]);
+    expect(document.agencies.length).toBe(9);
+    expect(document.federalFormations?.length).toBe(5);
+    expect(document.federalFormations?.every((formation) => formation.parentAgencyCode === "NG-FRSC")).toBe(true);
+    expect(document.agencies.some((agency) => agency.code === "NG-FRSC")).toBe(false);
+    expect(document.agencies.every((agency) => Boolean(agency.stateName))).toBe(true);
+  });
+
+  it("rejects emergency contact classification without explicit source evidence", async () => {
+    const document = await loadAgencySeed(resolve("prisma/data/nigeria-state-agencies.wave2-2026-08-31.json"));
+    const invalid = structuredClone(document);
+    invalid.agencies[0].contacts[0].emergencyUseVerified = false;
+
+    expect(validateAgencySeed(invalid).some((error) => error.includes("explicit classification evidence"))).toBe(true);
+  });
 });
