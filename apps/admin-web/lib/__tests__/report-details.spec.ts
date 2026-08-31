@@ -66,4 +66,10 @@ describe("Report Details presentation", () => {
     expect(actions).toContain("Resolution summary");
     expect(actions).toContain('role="dialog"');
   });
+
+  it("integrates the independent Recommended Responders section", () => {
+    const detail = readFileSync(resolve(__dirname, "../../components/incident-widgets.tsx"), "utf8");
+    expect(detail).toContain("RecommendedResponders");
+    expect(detail).toContain("incidentId={incident.id}");
+  });
 });

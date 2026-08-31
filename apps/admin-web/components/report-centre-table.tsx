@@ -36,14 +36,14 @@ export function ReportCentreTable({ reports }: { reports: Incident[] }) {
           </article>
         ))}
       </div>
-      <div className="hidden overflow-hidden rounded-lg border border-line lg:block">
-        <table className="w-full table-fixed border-collapse text-left text-sm">
+      <div data-admin-horizontal-scroll className="hidden overflow-x-auto rounded-lg border border-line lg:block">
+        <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-sm">
           <colgroup>
-            <col className="w-[22%]" /><col className="w-[10%]" /><col className="w-[8%]" /><col className="w-[10%]" />
-            <col className="w-[13%]" /><col className="w-[17%]" /><col className="w-[14%]" /><col className="w-[6%]" />
+            <col className="w-[20%]" /><col className="w-[9%]" /><col className="w-[8%]" /><col className="w-[9%]" />
+            <col className="w-[12%]" /><col className="w-[16%]" /><col className="w-[15%]" /><col className="w-[11%]" />
           </colgroup>
           <thead className="bg-surfaceMuted text-xs uppercase tracking-wide text-muted">
-            <tr>{["Report", "Type", "Priority", "Status", "Reporter", "Location", "Captured", "Action"].map((column) => <th key={column} className="px-3 py-3 font-semibold">{column}</th>)}</tr>
+            <tr>{["Report", "Type", "Priority", "Status", "Reporter", "Location", "Captured", "Action"].map((column) => <th key={column} className={column === "Action" ? "sticky right-0 bg-surfaceMuted px-3 py-3 font-semibold" : "px-3 py-3 font-semibold"}>{column}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-line">
             {reports.map((report) => (
@@ -55,7 +55,7 @@ export function ReportCentreTable({ reports }: { reports: Incident[] }) {
                 <td className="break-words px-3 py-3">{reportReporterLabel(report)}</td>
                 <td className="break-words px-3 py-3"><span className="line-clamp-2">{report.location}</span></td>
                 <td className="break-words px-3 py-3 text-muted">{formatReportCapturedAt(report.createdAt)}</td>
-                <td className="px-3 py-3"><Link href={`/incidents/${report.id}`} className="font-semibold text-eye hover:underline">View Report</Link></td>
+                <td className="sticky right-0 whitespace-nowrap bg-surface px-3 py-3"><Link href={`/incidents/${report.id}`} className="inline-flex min-h-10 items-center font-semibold text-eye hover:underline">View Report</Link></td>
               </tr>
             ))}
           </tbody>

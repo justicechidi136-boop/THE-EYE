@@ -22,6 +22,7 @@ export type AdvisoryAgencyRecommendation = {
   verificationStatus: string;
   operationalReady: boolean;
   coordinateQualified: boolean;
+  coordinates: { latitude: number; longitude: number } | null;
   distanceMeters: number | null;
   publicAddress: string | null;
   publicContacts: Array<{ type: string; value: string; label: string | null; emergencyOnly: boolean }>;
@@ -91,6 +92,57 @@ export type RoutingInput = {
 @Injectable()
 export class AgencyRoutingService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async previewIncident(
+    incident: {
+      type: unknown;
+      priority: unknown;
+      country: string;
+      state: string;
+      lga: string;
+      latitude: unknown;
+      longitude: unknown;
+      manualLatitude?: unknown;
+      manualLongitude?: unknown;
+      manualLocationAdjusted?: boolean;
+    },
+    actor: JwtPayload,
+  ) {
+    const country = await this.prisma.country.findFirst({
+      where: { name: incident.country, isActive: true },
+      select: { id: true },
+    });
+    if (!country) throw new BadRequestException("Incident country is not in the canonical directory");
+    const state = await this.prisma.administrativeState.findFirst({
+      where: { countryId: country.id, name: incident.state, isActive: true },
+      select: { id: true },
+    });
+    if (!state) throw new BadRequestException("Incident State/FCT is not in the canonical directory");
+    const lga = await this.prisma.localGovernmentArea.findFirst({
+      where: { stateId: state.id, name: incident.lga, isActive: true },
+      select: { id: true },
+    });
+    if (!lga) throw new BadRequestException("Incident LGA/Area Council is not in the canonical directory");
+
+    const latitudeValue = incident.manualLocationAdjusted ? incident.manualLatitude : incident.latitude;
+    const longitudeValue = incident.manualLocationAdjusted ? incident.manualLongitude : incident.longitude;
+    const latitude = latitudeValue == null ? undefined : Number(latitudeValue);
+    const longitude = longitudeValue == null ? undefined : Number(longitudeValue);
+    const hasUsableCoordinates = Number.isFinite(latitude)
+      && Number.isFinite(longitude)
+      && !(latitude === 0 && longitude === 0);
+
+    return this.preview({
+      incidentType: String(incident.type),
+      priority: String(incident.priority),
+      countryId: country.id,
+      stateId: state.id,
+      lgaId: lga.id,
+      latitude: hasUsableCoordinates ? latitude : undefined,
+      longitude: hasUsableCoordinates ? longitude : undefined,
+      limit: 20,
+    }, actor);
+  }
 
   async preview(input: AgencyRecommendationPreviewDto, actor: JwtPayload) {
     this.assertPreviewCoordinates(input.latitude, input.longitude);
@@ -374,6 +426,10 @@ export class AgencyRoutingService {
       verificationStatus: office.verificationStatus,
       operationalReady,
       coordinateQualified,
+      coordinates: coordinateQualified ? {
+        latitude: Number(office.latitude),
+        longitude: Number(office.longitude),
+      } : null,
       distanceMeters: distance,
       publicAddress: addressVerified ? office.physicalAddress : null,
       publicContacts,
@@ -416,6 +472,7 @@ export class AgencyRoutingService {
       verificationStatus: agency.verificationStatus,
       operationalReady: false,
       coordinateQualified: false,
+      coordinates: null,
       distanceMeters: null,
       publicAddress: null,
       publicContacts: [],
@@ -493,6 +550,10 @@ export class AgencyRoutingService {
           verificationStatus: station.verificationStatus,
           operationalReady,
           coordinateQualified: coordinatesQualified,
+          coordinates: coordinatesQualified ? {
+            latitude: Number(station.latitude),
+            longitude: Number(station.longitude),
+          } : null,
           distanceMeters: latitude != null && longitude != null && coordinatesQualified
             ? Math.round(haversineMeters(latitude, longitude, Number(station.latitude), Number(station.longitude)))
             : null,

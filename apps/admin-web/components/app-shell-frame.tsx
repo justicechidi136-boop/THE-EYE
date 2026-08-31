@@ -8,6 +8,7 @@ import { roleScope } from "../lib/types/admin-views";
 import { EnvironmentBadge } from "./environment-badge";
 import { NavSection } from "./nav-section";
 import { ShellNavLink } from "./shell-nav-link";
+import { DirectionalScrollControl } from "./directional-scroll-control";
 
 const navGroups = [
   {
@@ -137,9 +138,10 @@ export function AppShellFrame({
           </div>
         </nav>
       </aside>
-      <main id="main-content" className="min-w-0 p-4 sm:p-6 lg:p-8">
+      <main id="main-content" className="min-w-0 p-4 sm:p-6 lg:p-8 lg:pr-44 2xl:pr-8">
         {children}
       </main>
+      <DirectionalScrollControl />
     </div>
   );
 }

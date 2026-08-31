@@ -67,14 +67,27 @@ function agency(type: string, overrides: Record<string, unknown> = {}) {
 
 function buildService(agencies: Record<string, unknown>[] = [], stations: Record<string, unknown>[] = []) {
   const prisma = {
-    country: { findFirst: jest.fn() },
+    country: { findFirst: jest.fn().mockResolvedValue({
+      id: "11111111-1111-1111-1111-111111111111",
+      name: "Nigeria",
+    }) },
     administrativeState: { findFirst: jest.fn().mockResolvedValue({
       id: "22222222-2222-2222-2222-222222222222",
       name: "Lagos",
       countryId: "11111111-1111-1111-1111-111111111111",
       country: { id: "11111111-1111-1111-1111-111111111111", name: "Nigeria" },
     }) },
-    localGovernmentArea: { findFirst: jest.fn() },
+    localGovernmentArea: { findFirst: jest.fn().mockResolvedValue({
+      id: "33333333-3333-3333-3333-333333333333",
+      name: "Ikeja",
+      stateId: "22222222-2222-2222-2222-222222222222",
+      state: {
+        id: "22222222-2222-2222-2222-222222222222",
+        name: "Lagos",
+        countryId: "11111111-1111-1111-1111-111111111111",
+        country: { id: "11111111-1111-1111-1111-111111111111", name: "Nigeria" },
+      },
+    }) },
     ward: { findFirst: jest.fn() },
     agency: { findMany: jest.fn().mockResolvedValue(agencies) },
     policeStation: { findMany: jest.fn().mockResolvedValue(stations) },
@@ -346,6 +359,44 @@ describe("AgencyRoutingService advisory recommendations", () => {
     expect(prisma.notification.create.mock.calls.length).toBe(0);
     expect(result.meta.outboundCommunicationCalls).toBe(0);
     expect(result.meta.incidentStateChanged).toBe(false);
+  });
+
+  it("derives canonical recommendation input from an authorized incident", async () => {
+    const { service, prisma } = buildService([agency("Fire")]);
+    const result = await service.previewIncident({
+      type: "Fire",
+      priority: "P1LifeThreatening",
+      country: "Nigeria",
+      state: "Lagos",
+      lga: "Ikeja",
+      latitude: 6.6,
+      longitude: 3.35,
+      manualLocationAdjusted: false,
+    }, actor);
+
+    expect(result.input.geography.countryName).toBe("Nigeria");
+    expect(result.input.geography.stateName).toBe("Lagos");
+    expect(result.input.geography.lgaName).toBe("Ikeja");
+    expect(prisma.incident.update.mock.calls.length).toBe(0);
+    expect(prisma.dispatchEvent.create.mock.calls.length).toBe(0);
+    expect(prisma.notification.create.mock.calls.length).toBe(0);
+  });
+
+  it("does not turn missing incident coordinates into a zero-distance match", async () => {
+    const { service } = buildService([agency("Fire")]);
+    const result = await service.previewIncident({
+      type: "Fire",
+      priority: "P1LifeThreatening",
+      country: "Nigeria",
+      state: "Lagos",
+      lga: "Ikeja",
+      latitude: null,
+      longitude: null,
+      manualLocationAdjusted: false,
+    }, actor);
+
+    expect(result.input.hasVerifiedCoordinates).toBe(false);
+    expect(result.actionableRecommendations[0].distanceMeters).toBe(null);
   });
 
   it("does not fabricate legacy routing distance from incident coordinates", () => {
