@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "countryCode": "NG",
+  "retrievedAt": "2026-08-31T00:00:00.000Z",
+  "agencies": [
+    {
+      "code": "NG-NPF",
+      "officialName": "Nigeria Police Force",
+      "shortName": "NPF",
+      "aliases": ["Nigerian Police Force", "The Police"],
+      "description": "Federal law-enforcement agency providing public policing, crime response, investigation, and emergency support across Nigeria.",
+      "type": "POLICE",
+      "website": "https://www.police.gov.ng/",
+      "sourceUrl": "https://www.police.gov.ng/",
+      "office": { "name": "Nigeria Police Force Headquarters", "address": "Louis Edet House, Shehu Shagari Way, Garki, Abuja", "type": "HEADQUARTERS" },
+      "contacts": [
+        { "type": "WEBSITE", "value": "https://www.police.gov.ng/", "label": "Official website", "sourceUrl": "https://www.police.gov.ng/" }
+      ],
+      "incidentTypes": ["Emergency", "Crime", "Kidnapping", "Abuse", "SuspiciousActivity", "MissingPerson", "StolenVehicle", "SOS"]
+    },
+    {
+      "code": "NG-NSCDC",
+      "officialName": "Nigeria Security and Civil Defence Corps",
+      "shortName": "NSCDC",
+      "aliases": ["Civil Defence"],
+      "description": "Federal paramilitary agency supporting civil protection, critical infrastructure protection, community safety, and emergency response.",
+      "type": "CIVIL_DEFENCE",
+      "website": "https://nscdc.gov.ng/",
+      "sourceUrl": "https://nscdc.gov.ng/about-nscdc/",
+      "office": { "name": "NSCDC National Headquarters", "address": "Airport Road, Sauka, Abuja, FCT", "type": "HEADQUARTERS" },
+      "contacts": [
+        { "type": "PHONE", "value": "+23492914164", "label": "Public contact", "sourceUrl": "https://nscdc.gov.ng/about-nscdc/" },
+        { "type": "WEBSITE", "value": "https://nscdc.gov.ng/", "label": "Official website", "sourceUrl": "https://nscdc.gov.ng/about-nscdc/" }
+      ],
+      "incidentTypes": ["Emergency", "Crime", "Fire", "CommunitySafety", "Kidnapping", "SOS"]
+    },
+    {
+      "code": "NG-FRSC",
+      "officialName": "Federal Road Safety Corps",
+      "shortName": "FRSC",
+      "aliases": ["Federal Road Safety Commission"],
+      "description": "Federal road-safety agency responsible for road safety administration, crash response, rescue, and safer use of Nigerian highways.",
+      "type": "ROAD_SAFETY",
+      "website": "https://frsc.gov.ng/",
+      "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/",
+      "office": { "name": "FRSC National Headquarters", "address": "No. 3 Maputo Street, Zone 3, Wuse, Abuja, FCT", "type": "HEADQUARTERS" },
+      "contacts": [
+        { "type": "TOLL_FREE", "value": "122", "label": "Road emergency", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/" },
+        { "type": "EMAIL", "value": "info@frsc.gov.ng", "label": "Public email", "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/" },
+        { "type": "WEBSITE", "value": "https://frsc.gov.ng/", "label": "Official website", "sourceUrl": "https://frsc.gov.ng/commands/national-headquarters/" }
+      ],
+      "incidentTypes": ["Emergency", "Accident", "Medical"]
+    },
+    {
+      "code": "NG-FFS",
+      "officialName": "Federal Fire Service",
+      "shortName": "FFS",
+      "aliases": [],
+      "description": "Federal fire and rescue service responsible for fire prevention, mitigation, extinction, rescue, and related emergencies.",
+      "type": "FIRE_RESCUE",
+      "website": "https://www.fedfire.gov.ng/",
+      "sourceUrl": "https://www.fedfire.gov.ng/home/",
+      "office": { "name": "Federal Fire Service Headquarters", "address": "Muhammadu Buhari Way, Area 10, Garki, Abuja", "type": "HEADQUARTERS", "is24Hours": true },
+      "contacts": [
+        { "type": "EMERGENCY_PHONE", "value": "+2348032003557", "label": "Emergency line", "emergencyOnly": true, "emergencyUseVerified": true, "sourceUrl": "https://www.fedfire.gov.ng/home/" },
+        { "type": "EMAIL", "value": "info@fedfire.gov.ng", "label": "Public email", "sourceUrl": "https://www.fedfire.gov.ng/home/" },
+        { "type": "WEBSITE", "value": "https://www.fedfire.gov.ng/", "label": "Official website", "sourceUrl": "https://www.fedfire.gov.ng/home/" }
+      ],
+      "incidentTypes": ["Emergency", "Fire", "Accident", "Medical"]
+    },
+    {
+      "code": "NG-NEMA",
+      "officialName": "National Emergency Management Agency",
+      "shortName": "NEMA",
+      "aliases": [],
+      "description": "Federal agency coordinating disaster prevention, preparedness, mitigation, and response in Nigeria.",
+      "type": "EMERGENCY_MANAGEMENT",
+      "website": "https://nema.gov.ng/",
+      "sourceUrl": "https://nema.gov.ng/about-nema/",
+      "office": { "name": "NEMA Headquarters", "address": "No. 8 Adetokunbo Ademola Crescent, Maitama, Abuja", "type": "HEADQUARTERS" },
+      "contacts": [
+        { "type": "EMAIL", "value": "info@nema.gov.ng", "label": "Public email", "sourceUrl": "https://nema.gov.ng/about-nema/" },
+        { "type": "WEBSITE", "value": "https://nema.gov.ng/", "label": "Official website", "sourceUrl": "https://nema.gov.ng/about-nema/" }
+      ],
+      "incidentTypes": ["Emergency", "Fire", "Accident", "Medical", "CommunitySafety", "SOS"]
+    }
+  ]
+}

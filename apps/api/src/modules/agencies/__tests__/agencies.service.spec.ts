@@ -188,4 +188,33 @@ describe("AgenciesService", () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it("requires provenance before marking an agency verified", async () => {
+    const { service } = createService();
+    await expect(
+      service.create(actor({ role: AdminRoleName.SuperAdmin }), {
+        code: "NG-VERIFIED",
+        name: "Verified agency",
+        type: AgencyType.Police,
+        jurisdictionLevel: "COUNTRY",
+        countryCode: "NG",
+        governmentLevel: "FEDERAL",
+        verificationStatus: "VERIFIED",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("prevents State Admin mutation of a federal agency through the legacy agency endpoint", async () => {
+    const { service, prisma } = createService();
+    prisma.agency.findUnique.mockResolvedValue({
+      ...agencyRow,
+      governmentLevel: "FEDERAL",
+      verificationStatus: "VERIFIED",
+      verificationSource: "https://agency.gov.ng/",
+    });
+
+    await expect(service.update(actor(), "agency-1", { name: "Changed" })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
 });

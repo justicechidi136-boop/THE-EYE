@@ -1,0 +1,374 @@
+import { resolve } from "node:path";
+import { PrismaClient } from "@prisma/client";
+import {
+  loadAgencySeed,
+  normalizeFederalFormations,
+  preserveStrongerVerification,
+  validateAgencySeed,
+} from "../src/modules/agencies/agency-reference";
+
+const prisma = new PrismaClient();
+const path = resolve(
+  process.argv.find((argument) => argument.endsWith(".json"))
+    ?? "prisma/data/nigeria-federal-agencies.official-2026-08-31.json",
+);
+
+async function main() {
+  const document = await loadAgencySeed(path);
+  const sourceErrors = validateAgencySeed(document);
+  if (sourceErrors.length > 0) throw new Error(sourceErrors.join("\n"));
+  if (process.argv.includes("--dry-run")) {
+    console.log(`Validated ${document.agencies.length} agency seeds and ${normalizeFederalFormations(document).length} federal formation seeds`);
+    return;
+  }
+  const verifiedAt = new Date(document.retrievedAt);
+  const country = await prisma.country.findUnique({ where: { code: document.countryCode } });
+  if (!country) throw new Error("Import Nigeria geography before importing the agency directory");
+
+  for (const entry of document.agencies) {
+    const governmentLevel = entry.governmentLevel ?? "FEDERAL";
+    const requestedVerificationStatus = entry.verificationStatus ?? "VERIFIED";
+    const state = entry.stateName
+      ? await prisma.administrativeState.findFirst({
+          where: { countryId: country.id, name: entry.stateName, isActive: true },
+        })
+      : null;
+    if (governmentLevel === "STATE" && !state) {
+      throw new Error(`${entry.code}: canonical State/FCT not found for ${entry.stateName}`);
+    }
+    const jurisdictionLevel = governmentLevel === "STATE" ? "STATE" : "COUNTRY";
+    const coverageType = governmentLevel === "STATE" ? "STATE" : "NATIONAL";
+
+    const currentAgency = await prisma.agency.findUnique({ where: { code: entry.code } });
+    const verificationStatus = preserveStrongerVerification(
+      currentAgency?.verificationStatus,
+      requestedVerificationStatus,
+    );
+    const agency = await prisma.agency.upsert({
+      where: { code: entry.code },
+      create: {
+        code: entry.code,
+        name: entry.officialName,
+        officialName: entry.officialName,
+        shortName: entry.shortName,
+        aliases: entry.aliases,
+        description: entry.description,
+        type: entry.type,
+        governmentLevel,
+        jurisdictionLevel,
+        countryCode: document.countryCode,
+        stateCode: state?.name,
+        officialWebsite: entry.website,
+        verificationStatus,
+        verifiedAt,
+        verificationSource: entry.sourceUrl,
+        isGovernment: true,
+        isEmergencyResponder: true,
+        isDispatchable: false,
+        isActive: verificationStatus !== "RETIRED",
+        status: verificationStatus === "RETIRED" ? "Inactive" : "Active",
+      },
+      update: {
+        name: entry.officialName,
+        officialName: entry.officialName,
+        shortName: entry.shortName,
+        aliases: entry.aliases,
+        description: entry.description,
+        type: entry.type,
+        governmentLevel,
+        jurisdictionLevel,
+        countryCode: document.countryCode,
+        stateCode: state?.name,
+        officialWebsite: entry.website ?? null,
+        verificationStatus,
+        verifiedAt,
+        verificationSource: entry.sourceUrl,
+        isGovernment: true,
+        isEmergencyResponder: true,
+        isDispatchable: false,
+        isActive: verificationStatus !== "RETIRED",
+        status: verificationStatus === "RETIRED" ? "Inactive" : "Active",
+      },
+    });
+
+    let office = null;
+    if (entry.office) {
+      const coordinateEvidenceClass = entry.office.coordinateEvidenceClass ?? "UNKNOWN";
+      const coordinatesVerified = coordinateEvidenceClass === "AUTHORITATIVE_COORDINATE"
+        || coordinateEvidenceClass === "VERIFIED_ADDRESS_GEOCODE";
+      const existingOffice = await prisma.agencyOffice.findFirst({
+        where: { agencyId: agency.id, name: entry.office.name, countryId: country.id },
+      });
+      const officeVerificationStatus = preserveStrongerVerification(
+        existingOffice?.verificationStatus,
+        verificationStatus,
+      );
+      office = existingOffice
+        ? await prisma.agencyOffice.update({
+            where: { id: existingOffice.id },
+            data: {
+              officeType: entry.office.type as never,
+              physicalAddress: entry.office.address,
+              addressVerified: entry.office.address ? true : undefined,
+              addressSourceUrl: entry.office.address ? entry.sourceUrl : undefined,
+              addressVerifiedAt: entry.office.address ? verifiedAt : undefined,
+              latitude: entry.office.latitude,
+              longitude: entry.office.longitude,
+              coordinatesVerified: entry.office.latitude == null ? undefined : coordinatesVerified,
+              coordinateEvidenceClass: entry.office.latitude == null ? undefined : coordinateEvidenceClass as never,
+              coordinatesSourceUrl: entry.office.coordinatesSourceUrl,
+              coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
+              stateId: state?.id ?? null,
+              is24Hours: entry.office.is24Hours,
+              operatingHoursVerified: entry.office.is24Hours == null ? undefined : true,
+              operatingHoursSourceUrl: entry.office.is24Hours == null ? undefined : entry.sourceUrl,
+              operatingHoursVerifiedAt: entry.office.is24Hours == null ? undefined : verifiedAt,
+              verificationStatus: officeVerificationStatus,
+              verifiedAt,
+              sourceUrl: entry.sourceUrl,
+              isActive: officeVerificationStatus !== "RETIRED",
+            },
+          })
+        : await prisma.agencyOffice.create({
+            data: {
+              agencyId: agency.id,
+              countryId: country.id,
+              stateId: state?.id,
+              name: entry.office.name,
+              officeType: entry.office.type as never,
+              physicalAddress: entry.office.address,
+              addressVerified: Boolean(entry.office.address),
+              addressSourceUrl: entry.office.address ? entry.sourceUrl : undefined,
+              addressVerifiedAt: entry.office.address ? verifiedAt : undefined,
+              latitude: entry.office.latitude,
+              longitude: entry.office.longitude,
+              coordinatesVerified,
+              coordinateEvidenceClass: coordinateEvidenceClass as never,
+              coordinatesSourceUrl: entry.office.coordinatesSourceUrl,
+              coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
+              is24Hours: entry.office.is24Hours ?? null,
+              operatingHoursVerified: entry.office.is24Hours != null,
+              operatingHoursSourceUrl: entry.office.is24Hours == null ? undefined : entry.sourceUrl,
+              operatingHoursVerifiedAt: entry.office.is24Hours == null ? undefined : verifiedAt,
+              verificationStatus,
+              verifiedAt,
+              sourceUrl: entry.sourceUrl,
+            },
+          });
+    }
+
+    const jurisdiction = await prisma.agencyJurisdiction.findFirst({
+      where: {
+        agencyId: agency.id,
+        officeId: null,
+        coverageType,
+        countryId: country.id,
+        stateId: state?.id ?? null,
+      },
+    });
+    if (jurisdiction) {
+      await prisma.agencyJurisdiction.update({
+        where: { id: jurisdiction.id },
+        data: { isPrimary: true, isActive: true },
+      });
+    } else {
+      await prisma.agencyJurisdiction.create({
+        data: {
+          agencyId: agency.id,
+          countryId: country.id,
+          stateId: state?.id,
+          coverageType,
+          isPrimary: true,
+        },
+      });
+    }
+
+    for (const contact of entry.contacts) {
+      const existing = await prisma.agencyContact.findFirst({
+        where: { agencyId: agency.id, officeId: office?.id ?? null, type: contact.type as never, value: contact.value },
+      });
+      const data = {
+        label: contact.label,
+        emergencyOnly: contact.emergencyOnly ?? false,
+        publiclyVerified: true,
+        verificationStatus: "VERIFIED" as const,
+        sourceUrl: contact.sourceUrl,
+        lastVerifiedAt: verifiedAt,
+        isActive: true,
+      };
+      if (existing) {
+        await prisma.agencyContact.update({ where: { id: existing.id }, data });
+      } else {
+        await prisma.agencyContact.create({
+          data: {
+            agencyId: agency.id,
+            officeId: office?.id,
+            type: contact.type as never,
+            value: contact.value,
+            ...data,
+          },
+        });
+      }
+    }
+
+    for (const incidentType of entry.incidentTypes) {
+      await prisma.agencyIncidentCapability.upsert({
+        where: { agencyId_incidentType: { agencyId: agency.id, incidentType: incidentType as never } },
+        create: {
+          agencyId: agency.id,
+          incidentType: incidentType as never,
+          priority: 100,
+          canReceiveReport: true,
+          canDispatch: false,
+          canEscalate: false,
+        },
+        update: {
+          priority: 100,
+          canReceiveReport: true,
+          canDispatch: false,
+          canEscalate: false,
+          isActive: true,
+        },
+      });
+    }
+  }
+
+  for (const entry of normalizeFederalFormations(document)) {
+    const agency = await prisma.agency.findUnique({ where: { code: entry.parentAgencyCode } });
+    if (!agency || agency.governmentLevel !== "FEDERAL") {
+      throw new Error(`${entry.parentAgencyCode}: verified federal parent agency not found`);
+    }
+    const states = await prisma.administrativeState.findMany({
+      where: { countryId: country.id, name: { in: entry.jurisdictionStateNames }, isActive: true },
+    });
+    const statesByName = new Map(states.map((state) => [state.name, state]));
+    const missingState = entry.jurisdictionStateNames.find((stateName) => !statesByName.has(stateName));
+    if (missingState) throw new Error(`${entry.name}: canonical State/FCT not found for ${missingState}`);
+    const officeState = entry.officeStateName ? statesByName.get(entry.officeStateName) : undefined;
+    if (entry.officeStateName && !officeState) {
+      throw new Error(`${entry.name}: office State/FCT is outside its canonical jurisdictions`);
+    }
+    const requestedStatus = entry.verificationStatus ?? "VERIFIED";
+    const coordinateEvidenceClass = entry.coordinateEvidenceClass ?? "UNKNOWN";
+    const coordinatesVerified = coordinateEvidenceClass === "AUTHORITATIVE_COORDINATE"
+      || coordinateEvidenceClass === "VERIFIED_ADDRESS_GEOCODE";
+    const existingOffice = await prisma.agencyOffice.findFirst({
+      where: { agencyId: agency.id, name: entry.name, countryId: country.id },
+    });
+    const verificationStatus = preserveStrongerVerification(
+      existingOffice?.verificationStatus,
+      requestedStatus,
+    );
+    const office = existingOffice
+      ? await prisma.agencyOffice.update({
+          where: { id: existingOffice.id },
+          data: {
+            officeType: entry.type as never,
+            physicalAddress: entry.address,
+            addressVerified: entry.address ? true : undefined,
+            addressSourceUrl: entry.address ? entry.sourceUrl : undefined,
+            addressVerifiedAt: entry.address ? verifiedAt : undefined,
+            latitude: entry.latitude,
+            longitude: entry.longitude,
+            coordinatesVerified: entry.latitude == null ? undefined : coordinatesVerified,
+            coordinateEvidenceClass: entry.latitude == null ? undefined : coordinateEvidenceClass as never,
+            coordinatesSourceUrl: entry.coordinatesSourceUrl,
+            coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
+            stateId: officeState?.id ?? null,
+            verificationStatus,
+            verifiedAt,
+            sourceUrl: entry.sourceUrl,
+            isActive: verificationStatus !== "RETIRED",
+          },
+        })
+      : await prisma.agencyOffice.create({
+          data: {
+            agencyId: agency.id,
+            countryId: country.id,
+            stateId: officeState?.id,
+            name: entry.name,
+            officeType: entry.type as never,
+            physicalAddress: entry.address,
+            addressVerified: Boolean(entry.address),
+            addressSourceUrl: entry.address ? entry.sourceUrl : undefined,
+            addressVerifiedAt: entry.address ? verifiedAt : undefined,
+            latitude: entry.latitude,
+            longitude: entry.longitude,
+            coordinatesVerified,
+            coordinateEvidenceClass: coordinateEvidenceClass as never,
+            coordinatesSourceUrl: entry.coordinatesSourceUrl,
+            coordinatesVerifiedAt: coordinatesVerified ? verifiedAt : undefined,
+            verificationStatus,
+            verifiedAt,
+            sourceUrl: entry.sourceUrl,
+          },
+        });
+
+    for (const [index, stateName] of entry.jurisdictionStateNames.entries()) {
+      const state = statesByName.get(stateName)!;
+      const jurisdiction = await prisma.agencyJurisdiction.findFirst({
+        where: {
+          agencyId: agency.id,
+          officeId: office.id,
+          coverageType: "STATE",
+          countryId: country.id,
+          stateId: state.id,
+        },
+      });
+      if (jurisdiction) {
+        await prisma.agencyJurisdiction.update({
+          where: { id: jurisdiction.id },
+          data: { isPrimary: index === 0, isActive: true },
+        });
+      } else {
+        await prisma.agencyJurisdiction.create({
+          data: {
+            agencyId: agency.id,
+            officeId: office.id,
+            countryId: country.id,
+            stateId: state.id,
+            coverageType: "STATE",
+            isPrimary: index === 0,
+          },
+        });
+      }
+    }
+
+    for (const contact of entry.contacts) {
+      const existing = await prisma.agencyContact.findFirst({
+        where: { agencyId: agency.id, officeId: office.id, type: contact.type as never, value: contact.value },
+      });
+      const data = {
+        label: contact.label,
+        emergencyOnly: contact.emergencyOnly ?? false,
+        publiclyVerified: true,
+        verificationStatus: "VERIFIED" as const,
+        sourceUrl: contact.sourceUrl,
+        lastVerifiedAt: verifiedAt,
+        isActive: true,
+      };
+      if (existing) {
+        await prisma.agencyContact.update({ where: { id: existing.id }, data });
+      } else {
+        await prisma.agencyContact.create({
+          data: {
+            agencyId: agency.id,
+            officeId: office.id,
+            type: contact.type as never,
+            value: contact.value,
+            ...data,
+          },
+        });
+      }
+    }
+  }
+
+  console.log(`Imported ${document.agencies.length} agencies and ${normalizeFederalFormations(document).length} federal formations`);
+}
+
+main()
+  .catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

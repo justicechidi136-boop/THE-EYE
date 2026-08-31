@@ -9,6 +9,8 @@ import { AuditModule } from "../audit/audit.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { AgencyRoutingService } from "./agency-routing.service";
+import { AgencyRecommendationController } from "./agency-recommendation.controller";
+import { AgencyRecommendationReviewService } from "./agency-recommendation-review.service";
 import { DispatchController } from "./dispatch.controller";
 import { DispatchService } from "./dispatch.service";
 import { EmergencyClassificationService } from "./emergency-classification.service";
@@ -27,11 +29,12 @@ import { IncidentsModule } from "../incidents/incidents.module";
     forwardRef(() => IncidentsModule),
     ...(shouldRegisterBullMq() ? [BullModule.registerQueue({ name: INCIDENT_LOCATION_RETRY_QUEUE_NAME })] : []),
   ],
-  controllers: [DispatchController],
+  controllers: [DispatchController, AgencyRecommendationController],
   providers: [
     DispatchService,
     TriageService,
     AgencyRoutingService,
+    AgencyRecommendationReviewService,
     EmergencyClassificationService,
     LocationTrackingService,
     LocationRetryService,

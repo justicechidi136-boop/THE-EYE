@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import {
   AGENCY_CAPABILITIES,
@@ -20,6 +22,7 @@ import {
   validateAgencyCapabilities,
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
+import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   agencyListWhere,
@@ -44,7 +47,10 @@ function parseBool(value?: string): boolean | undefined {
 
 @Injectable()
 export class AgenciesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly audit?: AuditService,
+  ) {}
 
   async list(actor: JwtPayload, query: ListAgenciesQueryDto) {
     const scopeWhere = agencyListWhere(actor);
@@ -140,6 +146,8 @@ export class AgenciesService {
     if (actor.role === AdminRoleName.AgencyAdmin) {
       throwAgencyScope();
     }
+    this.assertFederalMutation(actor, dto.governmentLevel);
+    this.assertVerificationSource(dto.verificationStatus, dto.verificationSource);
 
     const capabilities = this.normalizeCapabilities(dto.capabilities ?? []);
     const flags = this.flagsFromCapabilities(dto, capabilities);
@@ -155,6 +163,15 @@ export class AgenciesService {
         data: {
           code,
           name: dto.name.trim(),
+          officialName: dto.officialName?.trim() || null,
+          description: dto.description?.trim() || null,
+          aliases: dto.aliases ?? [],
+          governmentLevel: dto.governmentLevel as never,
+          officialWebsite: dto.officialWebsite?.trim() || null,
+          verificationStatus: (dto.verificationStatus ?? "PENDING_VERIFICATION") as never,
+          verifiedAt: dto.verificationStatus === "VERIFIED" ? new Date() : null,
+          verificationSource: dto.verificationSource?.trim() || null,
+          dataQualityNotes: dto.dataQualityNotes?.trim() || null,
           shortName: dto.shortName?.trim() || null,
           type,
           jurisdictionLevel: dto.jurisdictionLevel,
@@ -178,6 +195,13 @@ export class AgenciesService {
           isActive: true,
         },
       });
+      await this.audit?.record({
+        actor,
+        action: "agency.created",
+        entityType: "agencies",
+        entityId: created.id,
+        afterState: created,
+      });
       return { data: this.mapAgency(created) };
     } catch (error: unknown) {
       if (this.isUniqueViolation(error)) {
@@ -193,6 +217,11 @@ export class AgenciesService {
   async update(actor: JwtPayload, id: string, dto: UpdateAgencyDto) {
     const agency = await this.requireAgency(id);
     assertCanManageAgency(actor, agency);
+    this.assertFederalMutation(actor, dto.governmentLevel ?? agency.governmentLevel);
+    this.assertVerificationSource(
+      dto.verificationStatus ?? agency.verificationStatus,
+      dto.verificationSource === undefined ? agency.verificationSource : dto.verificationSource,
+    );
 
     const type = dto.type !== undefined ? this.requireAgencyType(dto.type) : undefined;
     const capabilities =
@@ -220,6 +249,15 @@ export class AgenciesService {
       where: { id },
       data: {
         name: dto.name?.trim(),
+        officialName: dto.officialName === undefined ? undefined : dto.officialName?.trim() || null,
+        description: dto.description === undefined ? undefined : dto.description?.trim() || null,
+        aliases: dto.aliases,
+        governmentLevel: dto.governmentLevel as never,
+        officialWebsite: dto.officialWebsite === undefined ? undefined : dto.officialWebsite?.trim() || null,
+        verificationStatus: dto.verificationStatus as never,
+        verifiedAt: dto.verificationStatus === "VERIFIED" ? new Date() : undefined,
+        verificationSource: dto.verificationSource === undefined ? undefined : dto.verificationSource?.trim() || null,
+        dataQualityNotes: dto.dataQualityNotes === undefined ? undefined : dto.dataQualityNotes?.trim() || null,
         shortName: dto.shortName !== undefined ? dto.shortName?.trim() || null : undefined,
         type,
         jurisdictionLevel: dto.jurisdictionLevel,
@@ -243,6 +281,15 @@ export class AgenciesService {
         status,
         isActive: status === undefined ? undefined : status === AgencyStatus.Active,
       },
+    });
+
+    await this.audit?.record({
+      actor,
+      action: "agency.updated",
+      entityType: "agencies",
+      entityId: id,
+      beforeState: agency,
+      afterState: updated,
     });
 
     return { data: this.mapAgency(updated) };
@@ -561,6 +608,18 @@ export class AgenciesService {
       lgaCode: row.lgaCode,
       isActive: row.isActive,
     };
+  }
+
+  private assertFederalMutation(actor: JwtPayload, governmentLevel?: string | null) {
+    if (governmentLevel === "FEDERAL" && actor.role !== AdminRoleName.SuperAdmin) {
+      throw new ForbiddenException("Only Super Admin may create or change a federal agency record");
+    }
+  }
+
+  private assertVerificationSource(status?: string | null, source?: string | null) {
+    if ((status === "VERIFIED" || status === "PARTIALLY_VERIFIED") && !source?.trim()) {
+      throw new BadRequestException("Verified agency records require an official source URL");
+    }
   }
 
   private isUniqueViolation(error: unknown): boolean {

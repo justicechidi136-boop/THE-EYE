@@ -12,6 +12,7 @@ import { formatReportCapturedAt, type ReportTimelineEntry } from "../lib/report-
 import { reportReporterLabel, reportTypeLabel } from "../lib/report-centre-presentation";
 import { ReportEvidenceGallery } from "./report-evidence-gallery";
 import { ReportActivityPanels } from "./report-activity-panels";
+import { RecommendedResponders } from "./recommended-responders";
 
 function priorityTone(priority: Incident["priority"]) {
   if (priority === "P1") return "danger";
@@ -123,6 +124,8 @@ export function IncidentDetail({
         <summary className="cursor-pointer font-semibold text-ink">View exact coordinates</summary>
         <p className="mt-3 text-muted">Latitude {incident.gps.lat} · Longitude {incident.gps.lng} · Accuracy {incident.gps.accuracy}</p>
       </details>
+
+      <RecommendedResponders incidentId={incident.id} />
 
       <Panel title="Admin operations">
         <div className="grid gap-3">

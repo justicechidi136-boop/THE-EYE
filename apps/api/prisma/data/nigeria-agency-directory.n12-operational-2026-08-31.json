@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 3,
+  "countryCode": "NG",
+  "retrievedAt": "2026-08-31T00:00:00.000Z",
+  "agencies": [
+    {
+      "code": "NG-FCT-HHSS",
+      "governmentLevel": "STATE",
+      "stateName": "Federal Capital Territory",
+      "verificationStatus": "VERIFIED",
+      "officialName": "FCT Health and Human Services Secretariat",
+      "shortName": "FCT HHSS",
+      "aliases": [],
+      "description": "FCT mandate secretariat responsible for the health sector, with FCT Emergency Medical Services listed as an operational service unit for public medical emergency response.",
+      "type": "EMS",
+      "website": "https://www.fcta.gov.ng/ova_dep/health-and-human-services-secretariat/",
+      "sourceUrl": "https://www.fcta.gov.ng/ova_dep/health-and-human-services-secretariat/",
+      "office": {
+        "name": "FCT Emergency Medical Services",
+        "address": "Plot 1, Kapital Street, Area 11, Garki, Federal Capital Territory",
+        "type": "STATE_OFFICE"
+      },
+      "contacts": [
+        {
+          "type": "EMERGENCY_PHONE",
+          "value": "+2348097520012",
+          "label": "FCT medical emergency",
+          "emergencyOnly": true,
+          "emergencyUseVerified": true,
+          "sourceUrl": "https://www.fcta.gov.ng/faq/"
+        },
+        {
+          "type": "EMERGENCY_PHONE",
+          "value": "+2348097519764",
+          "label": "FCT medical emergency",
+          "emergencyOnly": true,
+          "emergencyUseVerified": true,
+          "sourceUrl": "https://www.fcta.gov.ng/faq/"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://www.fcta.gov.ng/ova_dep/health-and-human-services-secretariat/",
+          "label": "Official supervising secretariat page",
+          "sourceUrl": "https://www.fcta.gov.ng/ova_dep/health-and-human-services-secretariat/"
+        }
+      ],
+      "incidentTypes": ["Medical"]
+    }
+  ]
+}

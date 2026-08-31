@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsUrl,
   MaxLength,
   MinLength,
 } from "class-validator";
@@ -65,6 +66,42 @@ export class CreateAgencyDto {
   @MinLength(2)
   @MaxLength(200)
   name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  officialName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  aliases?: string[];
+
+  @IsOptional()
+  @IsIn(["FEDERAL", "STATE", "LOCAL", "MULTI_LEVEL"])
+  governmentLevel?: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  officialWebsite?: string;
+
+  @IsOptional()
+  @IsIn(["VERIFIED", "PARTIALLY_VERIFIED", "PENDING_VERIFICATION", "DISPUTED", "RETIRED"])
+  verificationStatus?: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  verificationSource?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  dataQualityNotes?: string;
 
   @IsOptional()
   @IsString()
@@ -151,6 +188,42 @@ export class UpdateAgencyDto {
   @MinLength(2)
   @MaxLength(200)
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  officialName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  aliases?: string[];
+
+  @IsOptional()
+  @IsIn(["FEDERAL", "STATE", "LOCAL", "MULTI_LEVEL"])
+  governmentLevel?: string | null;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  officialWebsite?: string | null;
+
+  @IsOptional()
+  @IsIn(["VERIFIED", "PARTIALLY_VERIFIED", "PENDING_VERIFICATION", "DISPUTED", "RETIRED"])
+  verificationStatus?: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["https"] })
+  verificationSource?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  dataQualityNotes?: string | null;
 
   @IsOptional()
   @IsString()
