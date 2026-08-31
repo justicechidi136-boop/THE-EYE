@@ -297,6 +297,44 @@ describe("UsersService directory account-kind filtering", () => {
     expect(result.meta.deactivatedUsers).toBe(5);
   });
 
+  it("searches citizen full names across separate profile name fields", async () => {
+    const { service, prisma } = createUsersService();
+
+    await service.listDirectory({
+      sub: "super-admin",
+      typ: "admin",
+      role: "Super Admin",
+      permissions: ["user:manage"],
+    } as never, {
+      q: "Nna Okere ibe",
+      kind: "citizen",
+      country: "Nigeria",
+    });
+
+    const where = prisma.user.findMany.mock.calls[0][0].where;
+    expect(where.profile).toEqual({ is: { country: "Nigeria" } });
+    expect(where.OR[4].AND).toEqual([
+      {
+        OR: [
+          { profile: { is: { firstName: { contains: "Nna", mode: "insensitive" } } } },
+          { profile: { is: { lastName: { contains: "Nna", mode: "insensitive" } } } },
+        ],
+      },
+      {
+        OR: [
+          { profile: { is: { firstName: { contains: "Okere", mode: "insensitive" } } } },
+          { profile: { is: { lastName: { contains: "Okere", mode: "insensitive" } } } },
+        ],
+      },
+      {
+        OR: [
+          { profile: { is: { firstName: { contains: "ibe", mode: "insensitive" } } } },
+          { profile: { is: { lastName: { contains: "ibe", mode: "insensitive" } } } },
+        ],
+      },
+    ]);
+  });
+
   it("returns scoped geographic options for directory filters", async () => {
     const { service, prisma } = createUsersService();
     prisma.jurisdiction.findMany.mockResolvedValue([{ id: "jur-1", country: "NG", state: "LA", lga: "Ikeja", name: "Ikeja" }]);
