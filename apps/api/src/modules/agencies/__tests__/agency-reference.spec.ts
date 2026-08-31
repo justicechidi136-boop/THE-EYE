@@ -88,6 +88,20 @@ describe("verified Nigeria agency reference seed", () => {
       .some((contact) => contact.type === "TOLL_FREE" && contact.emergencyUseVerified)).toBe(true);
   });
 
+  it("validates N11 operational enrichment without inferred coordinates or contacts", async () => {
+    const document = await loadAgencySeed(resolve("prisma/data/nigeria-agency-directory.n11-operational-2026-08-31.json"));
+
+    expect(validateAgencySeed(document)).toEqual([]);
+    expect(document.agencies.map((agency) => agency.code)).toEqual(["NG-FCT-FIRE"]);
+    expect(document.agencies[0].office?.address).toBe(
+      "Plot 1, Kapital Street, Area 11, Garki, Federal Capital Territory",
+    );
+    expect(Object.prototype.hasOwnProperty.call(document.agencies[0].office ?? {}, "latitude")).toBe(false);
+    expect(document.agencies[0].contacts.every((contact) => contact.sourceUrl.startsWith("https://www.fcta.gov.ng/"))).toBe(true);
+    expect(document.agencies[0].contacts.filter((contact) => contact.emergencyOnly)
+      .every((contact) => contact.emergencyUseVerified === true)).toBe(true);
+  });
+
   it("rejects duplicate canonical jurisdictions inside a federal formation", async () => {
     const document = await loadAgencySeed(resolve("prisma/data/nigeria-federal-formations.national-2026-08-31.json"));
     const invalid = structuredClone(document);

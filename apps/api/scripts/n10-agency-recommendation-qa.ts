@@ -13,7 +13,8 @@ import { PrismaService } from "../src/modules/prisma/prisma.service";
 
 const DATASET_VERSION = "n10-v1";
 const APPROVED_DATABASE = "the_eye_n1_cert_20260831";
-const REVIEW_NOTE_PREFIX = "[N10 v1]";
+const REVIEW_COHORT = process.env.N10_REVIEW_COHORT?.trim() || "v1";
+const REVIEW_NOTE_PREFIX = `[N10 ${REVIEW_COHORT}]`;
 
 type QaScenario = {
   key: string;
@@ -448,6 +449,7 @@ async function main() {
   const result = {
     dataset: {
       version: DATASET_VERSION,
+      reviewCohort: REVIEW_COHORT,
       ruleVersion: AGENCY_RECOMMENDATION_RULE_VERSION,
       incidentsEvaluated: N10_QA_CASES.length,
       jurisdictions: [...new Set(N10_QA_CASES.map((item) => item.state))],
