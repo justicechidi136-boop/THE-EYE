@@ -26,6 +26,8 @@
     "db:validate:agency-directory:state-wave2": "tsx prisma/validate-agency-directory.ts prisma/data/nigeria-state-agencies.wave2-2026-08-31.json",
     "db:import:agency-directory:national-formations": "tsx prisma/import-agency-directory.ts prisma/data/nigeria-federal-formations.national-2026-08-31.json",
     "db:validate:agency-directory:national-formations": "tsx prisma/validate-agency-directory.ts prisma/data/nigeria-federal-formations.national-2026-08-31.json",
+    "db:import:agency-directory:n5-operational": "tsx prisma/import-agency-directory.ts prisma/data/nigeria-state-agencies.n5-operational-2026-08-31.json",
+    "db:validate:agency-directory:n5-operational": "tsx prisma/validate-agency-directory.ts prisma/data/nigeria-state-agencies.n5-operational-2026-08-31.json",
     "db:report:agency-directory": "tsx prisma/report-agency-directory.ts",
     "db:create-admin": "tsx prisma/create-admin.ts",
     "seed:staging:test-accounts": "tsx --require ./src/preload-env.cjs prisma/seed-staging-test-accounts.ts",

@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 3,
+  "countryCode": "NG",
+  "retrievedAt": "2026-08-31T00:00:00.000Z",
+  "agencies": [
+    {
+      "code": "NG-OYO-SEMA",
+      "governmentLevel": "STATE",
+      "stateName": "Oyo",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Oyo State Emergency Management Agency",
+      "shortName": "OYSEMA",
+      "aliases": [],
+      "description": "Oyo State agency responsible for emergency preparedness, coordination, response, relief, and recovery within Oyo State.",
+      "type": "STATE_EMERGENCY_AGENCY",
+      "website": "https://oysema.oyostate.gov.ng/",
+      "sourceUrl": "https://oysema.oyostate.gov.ng/contact-us/",
+      "office": {
+        "name": "Oyo State Emergency Management Agency Headquarters",
+        "address": "Office of the Executive Governor, Oyo State Government Secretariat, Agodi, Ibadan, Oyo State",
+        "type": "HEADQUARTERS"
+      },
+      "contacts": [
+        {
+          "type": "EMAIL",
+          "value": "info@oyostate.gov.ng",
+          "label": "Public email",
+          "sourceUrl": "https://oysema.oyostate.gov.ng/contact-us/"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://oysema.oyostate.gov.ng/",
+          "label": "Official agency website",
+          "sourceUrl": "https://oysema.oyostate.gov.ng/contact-us/"
+        }
+      ],
+      "incidentTypes": ["Emergency", "CommunitySafety"]
+    },
+    {
+      "code": "NG-OYO-FIRE",
+      "governmentLevel": "STATE",
+      "stateName": "Oyo",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Oyo State Fire Services Agency",
+      "shortName": "Oyo Fire Services",
+      "aliases": ["Oyo State Fire Service"],
+      "description": "Oyo State fire service responsible for fire prevention, suppression, rescue, and emergency response across Oyo State.",
+      "type": "FIRE_RESCUE",
+      "website": "https://oyostate.gov.ng/fire-stations-directory/",
+      "sourceUrl": "https://oyostate.gov.ng/fire-stations-directory/",
+      "office": {
+        "name": "Oyo State Fire Services Agency Headquarters",
+        "address": "Oyo State Government Secretariat Area, Agodi, Ibadan, Oyo State",
+        "type": "HEADQUARTERS"
+      },
+      "contacts": [
+        {
+          "type": "PHONE",
+          "value": "+2348054353501",
+          "label": "Headquarters public phone",
+          "sourceUrl": "https://oyostate.gov.ng/fire-stations-directory/"
+        },
+        {
+          "type": "PHONE",
+          "value": "+2348067439223",
+          "label": "Headquarters public phone",
+          "sourceUrl": "https://oyostate.gov.ng/fire-stations-directory/"
+        },
+        {
+          "type": "TOLL_FREE",
+          "value": "615",
+          "label": "Oyo emergency line",
+          "emergencyOnly": true,
+          "emergencyUseVerified": true,
+          "sourceUrl": "https://oyostate.gov.ng/fire-stations-directory/"
+        },
+        {
+          "type": "EMAIL",
+          "value": "fireserviceoyostate@yahoo.com",
+          "label": "Public email",
+          "sourceUrl": "https://oyostate.gov.ng/fire-stations-directory/"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://oyostate.gov.ng/fire-stations-directory/",
+          "label": "Official fire stations directory",
+          "sourceUrl": "https://oyostate.gov.ng/fire-stations-directory/"
+        }
+      ],
+      "incidentTypes": ["Emergency", "Fire"]
+    },
+    {
+      "code": "NG-OYO-OYRTMA",
+      "governmentLevel": "STATE",
+      "stateName": "Oyo",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Oyo State Road Traffic Management Authority",
+      "shortName": "OYRTMA",
+      "aliases": ["Oyo State Road Traffic Management"],
+      "description": "Oyo State authority established to regulate, control, and manage road traffic and reduce road traffic incidents within Oyo State.",
+      "type": "TRAFFIC_MANAGEMENT",
+      "website": "https://oyrtma.oyostate.gov.ng/",
+      "sourceUrl": "https://oyrtma.oyostate.gov.ng/contact-us/",
+      "office": {
+        "name": "Oyo State Road Traffic Management Authority Headquarters",
+        "address": "Oyo State Road Traffic Management Building, Oyo State Government Secretariat, Agodi, Ibadan, Oyo State",
+        "type": "HEADQUARTERS"
+      },
+      "contacts": [
+        {
+          "type": "EMAIL",
+          "value": "info@oyostate.gov.ng",
+          "label": "Public email",
+          "sourceUrl": "https://oyrtma.oyostate.gov.ng/contact-us/"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://oyrtma.oyostate.gov.ng/",
+          "label": "Official agency website",
+          "sourceUrl": "https://oyrtma.oyostate.gov.ng/contact-us/"
+        }
+      ],
+      "incidentTypes": ["Accident"]
+    },
+    {
+      "code": "NG-ABIA-FIRE",
+      "governmentLevel": "STATE",
+      "stateName": "Abia",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Abia State Fire Service",
+      "shortName": "Abia Fire Service",
+      "aliases": [],
+      "description": "Abia State fire service operating under the State Homeland Security, Fire, and Emergency Medical Services public-safety structure.",
+      "type": "FIRE_RESCUE",
+      "website": "https://abiastate.gov.ng/homelandsecurity/",
+      "sourceUrl": "https://abiastate.gov.ng/homelandsecurity/",
+      "office": {
+        "name": "Abia State Homeland Security, Fire, and Emergency Medical Services Headquarters",
+        "address": "Plot 9B Factory Road, Umuahia North, Abia State",
+        "type": "HEADQUARTERS",
+        "is24Hours": true
+      },
+      "contacts": [
+        {
+          "type": "PHONE",
+          "value": "+2342013309388",
+          "label": "Public contact",
+          "sourceUrl": "https://abiastate.gov.ng/homelandsecurity/"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://abiastate.gov.ng/homelandsecurity/",
+          "label": "Official State service page",
+          "sourceUrl": "https://abiastate.gov.ng/homelandsecurity/"
+        }
+      ],
+      "incidentTypes": ["Emergency", "Fire"]
+    },
+    {
+      "code": "NG-ABIA-EMS",
+      "governmentLevel": "STATE",
+      "stateName": "Abia",
+      "verificationStatus": "VERIFIED",
+      "officialName": "Abia State Emergency Medical Services",
+      "shortName": "Abia EMS",
+      "aliases": [],
+      "description": "Abia State emergency medical service operating under the State Homeland Security, Fire, and Emergency Medical Services public-safety structure.",
+      "type": "EMS",
+      "website": "https://abiastate.gov.ng/homelandsecurity/",
+      "sourceUrl": "https://abiastate.gov.ng/homelandsecurity/",
+      "office": {
+        "name": "Abia State Homeland Security, Fire, and Emergency Medical Services Headquarters",
+        "address": "Plot 9B Factory Road, Umuahia North, Abia State",
+        "type": "HEADQUARTERS",
+        "is24Hours": true
+      },
+      "contacts": [
+        {
+          "type": "PHONE",
+          "value": "+2342013309388",
+          "label": "Public contact",
+          "sourceUrl": "https://abiastate.gov.ng/homelandsecurity/"
+        },
+        {
+          "type": "WEBSITE",
+          "value": "https://abiastate.gov.ng/homelandsecurity/",
+          "label": "Official State service page",
+          "sourceUrl": "https://abiastate.gov.ng/homelandsecurity/"
+        }
+      ],
+      "incidentTypes": ["Emergency", "Medical", "Accident"]
+    }
+  ]
+}

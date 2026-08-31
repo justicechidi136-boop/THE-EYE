@@ -41,20 +41,42 @@ async function main() {
     ) AS count
   `;
 
-  console.log("State/FCT\tEmergency Management\tFire/Rescue\tAmbulance/EMS\tTraffic\tPolice Command\tNSCDC Command\tFRSC Command\tEvidence");
+  console.log("State/FCT\tEmergency Management\tFire Structural\tFire Operational\tAmbulance/EMS\tTraffic\tPolice Structural\tPolice Operational\tNSCDC Structural\tNSCDC Operational\tFRSC Structural\tFRSC Operational\tVerified Emergency Contacts\tVerified Public Offices\tVerified Coordinates\tPending Research");
   for (const row of coverage.data) {
+    const cells = [
+      row.emergencyManagement,
+      row.fire,
+      row.ambulanceEms,
+      row.traffic,
+      row.policeCommand,
+      row.nscdcCommand,
+      row.frscCommand,
+    ];
+    const emergencyContacts = cells.reduce((sum, cell) => sum + cell.evidence.verifiedEmergencyContactCount, 0);
+    const publicOffices = cells.reduce((sum, cell) => sum + cell.evidence.verifiedPublicOfficeCount, 0);
+    const coordinates = cells.reduce((sum, cell) => sum + cell.evidence.verifiedCoordinatesCount, 0);
+    const pendingResearch = cells.some((cell) => cell.operationalStatus !== "VERIFIED") ? "YES" : "NO";
     console.log([
       row.state,
-      row.emergencyManagement.status,
-      row.fire.status,
-      row.ambulanceEms.status,
-      row.traffic.status,
-      row.policeCommand.status,
-      row.nscdcCommand.status,
-      row.frscCommand.status,
-      row.sourceEvidenceCount,
+      row.emergencyManagement.operationalStatus,
+      row.fire.structuralStatus,
+      row.fire.operationalStatus,
+      row.ambulanceEms.operationalStatus,
+      row.traffic.operationalStatus,
+      row.policeCommand.structuralStatus,
+      row.policeCommand.operationalStatus,
+      row.nscdcCommand.structuralStatus,
+      row.nscdcCommand.operationalStatus,
+      row.frscCommand.structuralStatus,
+      row.frscCommand.operationalStatus,
+      emergencyContacts,
+      publicOffices,
+      coordinates,
+      pendingResearch,
     ].join("\t"));
   }
+
+  const coverageCells = coverage.data.flatMap((row) => coverageColumnsForMetrics(row));
 
   const metrics = {
     agencies: agencies.length,
@@ -82,8 +104,23 @@ async function main() {
     automaticDispatchOrEscalationMappings: capabilities.filter((row) => row.canDispatch || row.canEscalate).length,
     orphanRelationships: Number(orphanResult.count),
     freshnessFindings: freshness.meta.findings,
+    structuralCoverageCells: coverageCells.filter((cell) => cell.structuralStatus === "VERIFIED").length,
+    operationalCoverageCells: coverageCells.filter((cell) => cell.operationalStatus === "VERIFIED").length,
+    routingReadyCoverageCells: coverageCells.filter((cell) => cell.routingReadiness === "READY").length,
   };
   console.log(`METRICS\t${JSON.stringify(metrics)}`);
+}
+
+function coverageColumnsForMetrics(row: Record<string, any>) {
+  return [
+    row.emergencyManagement,
+    row.fire,
+    row.ambulanceEms,
+    row.traffic,
+    row.policeCommand,
+    row.nscdcCommand,
+    row.frscCommand,
+  ];
 }
 
 main()

@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import {
   loadAgencySeed,
   normalizeFederalFormations,
+  preserveStrongerVerification,
   validateAgencySeed,
 } from "../src/modules/agencies/agency-reference";
 
@@ -39,9 +40,10 @@ async function main() {
     const coverageType = governmentLevel === "STATE" ? "STATE" : "NATIONAL";
 
     const currentAgency = await prisma.agency.findUnique({ where: { code: entry.code } });
-    const verificationStatus = currentAgency?.verificationStatus === "VERIFIED"
-      ? "VERIFIED"
-      : requestedVerificationStatus;
+    const verificationStatus = preserveStrongerVerification(
+      currentAgency?.verificationStatus,
+      requestedVerificationStatus,
+    );
     const agency = await prisma.agency.upsert({
       where: { code: entry.code },
       create: {
@@ -63,8 +65,8 @@ async function main() {
         isGovernment: true,
         isEmergencyResponder: true,
         isDispatchable: false,
-        isActive: true,
-        status: "Active",
+        isActive: verificationStatus !== "RETIRED",
+        status: verificationStatus === "RETIRED" ? "Inactive" : "Active",
       },
       update: {
         name: entry.officialName,
@@ -84,8 +86,8 @@ async function main() {
         isGovernment: true,
         isEmergencyResponder: true,
         isDispatchable: false,
-        isActive: true,
-        status: "Active",
+        isActive: verificationStatus !== "RETIRED",
+        status: verificationStatus === "RETIRED" ? "Inactive" : "Active",
       },
     });
 
@@ -94,9 +96,10 @@ async function main() {
       const existingOffice = await prisma.agencyOffice.findFirst({
         where: { agencyId: agency.id, name: entry.office.name, countryId: country.id },
       });
-      const officeVerificationStatus = existingOffice?.verificationStatus === "VERIFIED"
-        ? "VERIFIED"
-        : verificationStatus;
+      const officeVerificationStatus = preserveStrongerVerification(
+        existingOffice?.verificationStatus,
+        verificationStatus,
+      );
       office = existingOffice
         ? await prisma.agencyOffice.update({
             where: { id: existingOffice.id },
@@ -108,7 +111,7 @@ async function main() {
               verificationStatus: officeVerificationStatus,
               verifiedAt,
               sourceUrl: entry.sourceUrl,
-              isActive: true,
+              isActive: officeVerificationStatus !== "RETIRED",
             },
           })
         : await prisma.agencyOffice.create({
@@ -222,9 +225,10 @@ async function main() {
     const existingOffice = await prisma.agencyOffice.findFirst({
       where: { agencyId: agency.id, name: entry.name, countryId: country.id },
     });
-    const verificationStatus = existingOffice?.verificationStatus === "VERIFIED"
-      ? "VERIFIED"
-      : requestedStatus;
+    const verificationStatus = preserveStrongerVerification(
+      existingOffice?.verificationStatus,
+      requestedStatus,
+    );
     const office = existingOffice
       ? await prisma.agencyOffice.update({
           where: { id: existingOffice.id },
@@ -235,7 +239,7 @@ async function main() {
             verificationStatus,
             verifiedAt,
             sourceUrl: entry.sourceUrl,
-            isActive: true,
+            isActive: verificationStatus !== "RETIRED",
           },
         })
       : await prisma.agencyOffice.create({

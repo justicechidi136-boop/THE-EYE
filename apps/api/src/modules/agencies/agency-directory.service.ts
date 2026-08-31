@@ -45,6 +45,13 @@ const coverageColumns = [
 ] as const;
 type CoverageColumn = typeof coverageColumns[number];
 type CoverageStatus = "VERIFIED" | "PARTIAL" | "NOT_VERIFIED" | "NOT_APPLICABLE" | "UNKNOWN";
+type RoutingReadiness = "READY" | "NOT_READY";
+
+const operationalContactTypes = new Set([
+  "PHONE", "EMERGENCY_PHONE", "TOLL_FREE", "SMS", "WHATSAPP", "EMAIL", "REPORTING_PORTAL",
+]);
+const emergencyContactTypes = new Set(["EMERGENCY_PHONE", "TOLL_FREE"]);
+const verificationFreshnessDays = 365;
 
 const radians = (degrees: number) => degrees * Math.PI / 180;
 function distanceMeters(latA: number, lngA: number, latB: number, lngB: number) {
@@ -346,8 +353,29 @@ export class AgencyDirectoryService {
         code: true,
         name: true,
         type: true,
+        governmentLevel: true,
         stateCode: true,
+        isActive: true,
         verificationStatus: true,
+        verifiedAt: true,
+        directoryJurisdictions: {
+          where: { stateId: { in: stateIds }, isActive: true },
+          select: { stateId: true },
+        },
+        directoryContacts: {
+          where: { isActive: true, publiclyVerified: true, verificationStatus: "VERIFIED" },
+          select: {
+            id: true,
+            officeId: true,
+            type: true,
+            emergencyOnly: true,
+            lastVerifiedAt: true,
+          },
+        },
+        incidentCapabilities: {
+          where: { isActive: true, canReceiveReport: true },
+          select: { id: true },
+        },
         offices: {
           where: {
             isActive: true,
@@ -360,7 +388,23 @@ export class AgencyDirectoryService {
             id: true,
             stateId: true,
             name: true,
+            isActive: true,
+            physicalAddress: true,
+            latitude: true,
+            longitude: true,
+            coordinatesVerified: true,
             verificationStatus: true,
+            verifiedAt: true,
+            contacts: {
+              where: { isActive: true, publiclyVerified: true, verificationStatus: "VERIFIED" },
+              select: {
+                id: true,
+                officeId: true,
+                type: true,
+                emergencyOnly: true,
+                lastVerifiedAt: true,
+              },
+            },
             jurisdictions: {
               where: { stateId: { in: stateIds }, isActive: true },
               select: { stateId: true },
@@ -397,7 +441,13 @@ export class AgencyDirectoryService {
           NOT_VERIFIED: "THE EYE currently has no sufficiently verified directory record for this category; the service may still exist.",
           UNKNOWN: "A matching record exists, but available evidence is insufficient to classify it as verified or partial.",
           NOT_APPLICABLE: "The category is confirmed not to apply to the jurisdiction; absence alone never produces this status.",
+          STRUCTURAL_COVERAGE: "A verified organization or formation and its jurisdiction are authoritatively supported. This does not imply a usable local endpoint.",
+          OPERATIONAL_DIRECTORY_COVERAGE: "Structural coverage plus a verified public address or actionable public contact for the matching State agency or federal formation.",
+          ROUTING_READY: "Operational directory coverage, a current verification record, and an active report-receiving capability. This is directory readiness only and never authorizes dispatch or incident-data sharing.",
         },
+        verificationFreshnessDays,
+        automaticDispatchEnabled: false,
+        automaticEscalationEnabled: false,
       },
     };
   }
@@ -713,29 +763,113 @@ export class AgencyDirectoryService {
           agency.governmentLevel !== "FEDERAL"
           && agency.stateCode === stateName
           && stateTypeByColumn[column]?.includes(agency.type)
-        ))
+        )).map((agency) => ({ agency, office: null }))
       : [];
     const federalMatches = agencies.flatMap((agency) => federalTypesByColumn[column]?.includes(agency.type)
       ? agency.offices.filter((office: Record<string, any>) => (
           office.stateId === stateId
           || office.jurisdictions.some((jurisdiction: Record<string, any>) => jurisdiction.stateId === stateId)
-        )).map((office: Record<string, any>) => ({
-            ...office,
-            code: agency.code,
-            name: office.name,
-          }))
+        )).map((office: Record<string, any>) => ({ agency, office }))
       : []);
     const matches = [...stateMatches, ...federalMatches];
-    const status: CoverageStatus = matches.some((record) => record.verificationStatus === "VERIFIED")
+    const status: CoverageStatus = matches.some(({ agency, office }) => (
+      agency.verificationStatus === "VERIFIED" && (!office || office.verificationStatus === "VERIFIED")
+    ))
       ? "VERIFIED"
-      : matches.some((record) => record.verificationStatus === "PARTIALLY_VERIFIED")
+      : matches.some(({ agency, office }) => (
+          agency.verificationStatus === "PARTIALLY_VERIFIED"
+          || office?.verificationStatus === "PARTIALLY_VERIFIED"
+        ))
         ? "PARTIAL"
         : matches.length > 0
           ? "UNKNOWN"
           : "NOT_VERIFIED";
+    const evidence = matches.map(({ agency, office }) => {
+      const contacts = office ? (office.contacts ?? []) : (agency.directoryContacts ?? []);
+      const organizationVerified = agency.verificationStatus === "VERIFIED";
+      const formationVerified = !office || office.verificationStatus === "VERIFIED";
+      const jurisdictionVerified = office
+        ? office.jurisdictions.some((jurisdiction: Record<string, any>) => jurisdiction.stateId === stateId)
+          || office.stateId === stateId
+        : (agency.directoryJurisdictions ?? []).some((jurisdiction: Record<string, any>) => jurisdiction.stateId === stateId);
+      const publicOfficeVerified = Boolean(office && office.verificationStatus === "VERIFIED");
+      const publicAddressVerified = Boolean(publicOfficeVerified && office.physicalAddress?.trim());
+      const coordinatesVerified = Boolean(
+        publicOfficeVerified && office.coordinatesVerified && office.latitude != null && office.longitude != null,
+      );
+      const publicContactVerified = contacts.length > 0;
+      const operationalContactVerified = contacts.some((contact: Record<string, any>) => (
+        operationalContactTypes.has(contact.type)
+      ));
+      const emergencyContactVerified = contacts.some((contact: Record<string, any>) => (
+        contact.emergencyOnly && emergencyContactTypes.has(contact.type)
+      ));
+      const structuralVerified = organizationVerified && formationVerified && jurisdictionVerified;
+      const operationalVerified = structuralVerified && (publicAddressVerified || operationalContactVerified);
+      const freshAfter = Date.now() - verificationFreshnessDays * 24 * 60 * 60 * 1000;
+      const isCurrent = (value: unknown) => value instanceof Date && value.getTime() >= freshAfter;
+      const organizationCurrent = isCurrent(agency.verifiedAt);
+      const formationCurrent = !office || isCurrent(office.verifiedAt);
+      const endpointCurrent = (publicAddressVerified && isCurrent(office?.verifiedAt))
+        || contacts.some((contact: Record<string, any>) => (
+          operationalContactTypes.has(contact.type) && isCurrent(contact.lastVerifiedAt)
+        ));
+      const verificationCurrent = organizationCurrent && formationCurrent && endpointCurrent;
+      const routingReadiness: RoutingReadiness = operationalVerified
+        && verificationCurrent
+        && agency.isActive
+        && (agency.incidentCapabilities ?? []).length > 0
+        ? "READY"
+        : "NOT_READY";
+      return {
+        id: office?.id ?? agency.id,
+        code: agency.code,
+        name: office?.name ?? agency.name,
+        organizationVerified,
+        formationVerified,
+        jurisdictionVerified,
+        publicOfficeVerified,
+        publicAddressVerified,
+        coordinatesVerified,
+        publicContactVerified,
+        operationalContactVerified,
+        emergencyContactVerified,
+        verifiedPublicContactCount: contacts.length,
+        verifiedEmergencyContactCount: contacts.filter((contact: Record<string, any>) => (
+          contact.emergencyOnly && emergencyContactTypes.has(contact.type)
+        )).length,
+        verificationCurrent,
+        structuralStatus: structuralVerified ? "VERIFIED" as const : status,
+        operationalStatus: operationalVerified ? "VERIFIED" as const : structuralVerified ? "PARTIAL" as const : status,
+        routingReadiness,
+      };
+    });
+    const operationalStatus: CoverageStatus = evidence.some((record) => record.operationalStatus === "VERIFIED")
+      ? "VERIFIED"
+      : status === "NOT_VERIFIED"
+        ? "NOT_VERIFIED"
+        : "PARTIAL";
     return {
       status,
-      records: matches.map((record) => ({ id: record.id, code: record.code, name: record.name })),
+      structuralStatus: status,
+      operationalStatus,
+      routingReadiness: evidence.some((record) => record.routingReadiness === "READY")
+        ? "READY" as const
+        : "NOT_READY" as const,
+      evidence: {
+        organizationOrFormationVerified: evidence.some((record) => record.organizationVerified && record.formationVerified),
+        jurisdictionVerified: evidence.some((record) => record.jurisdictionVerified),
+        publicOfficeVerified: evidence.some((record) => record.publicOfficeVerified),
+        publicAddressVerified: evidence.some((record) => record.publicAddressVerified),
+        coordinatesVerified: evidence.some((record) => record.coordinatesVerified),
+        publicContactVerified: evidence.some((record) => record.publicContactVerified),
+        emergencyContactVerified: evidence.some((record) => record.emergencyContactVerified),
+        verifiedPublicContactCount: evidence.reduce((sum, record) => sum + record.verifiedPublicContactCount, 0),
+        verifiedEmergencyContactCount: evidence.reduce((sum, record) => sum + record.verifiedEmergencyContactCount, 0),
+        verifiedPublicOfficeCount: evidence.filter((record) => record.publicOfficeVerified).length,
+        verifiedCoordinatesCount: evidence.filter((record) => record.coordinatesVerified).length,
+      },
+      records: evidence,
     };
   }
 

@@ -159,6 +159,153 @@ describe("AgencyDirectoryService", () => {
     expect(result.data.map((row) => row.fire.status)).toEqual(["VERIFIED", "VERIFIED"]);
   });
 
+  it("does not equate a verified federal formation with an operational local endpoint", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "benue-id", code: "BE", name: "Benue", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([{
+      id: "ffs-id",
+      code: "NG-FFS",
+      name: "Federal Fire Service",
+      type: "FIRE_RESCUE",
+      governmentLevel: "FEDERAL",
+      stateCode: null,
+      isActive: true,
+      verificationStatus: "VERIFIED",
+      verifiedAt: new Date(),
+      directoryJurisdictions: [],
+      directoryContacts: [{ id: "hq-web", officeId: null, type: "WEBSITE", emergencyOnly: false, lastVerifiedAt: new Date() }],
+      incidentCapabilities: [{ id: "fire-capability" }],
+      offices: [{
+        id: "zone-a",
+        stateId: null,
+        name: "Federal Fire Service Zone A",
+        isActive: true,
+        physicalAddress: null,
+        latitude: null,
+        longitude: null,
+        coordinatesVerified: false,
+        verificationStatus: "VERIFIED",
+        verifiedAt: new Date(),
+        contacts: [],
+        jurisdictions: [{ stateId: "benue-id" }],
+      }],
+    }]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data[0].fire.structuralStatus).toBe("VERIFIED");
+    expect(result.data[0].fire.operationalStatus).toBe("PARTIAL");
+    expect(result.data[0].fire.routingReadiness).toBe("NOT_READY");
+    expect(result.data[0].fire.evidence.publicAddressVerified).toBe(false);
+    expect(result.data[0].fire.evidence.publicContactVerified).toBe(false);
+  });
+
+  it("reports a verified address without inventing coordinates or emergency contact status", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "oyo-id", code: "OY", name: "Oyo", type: "STATE" },
+    ]);
+    prisma.agency.findMany.mockResolvedValue([{
+      id: "oyo-fire-id",
+      code: "NG-OYO-FIRE",
+      name: "Oyo State Fire Services Agency",
+      type: "FIRE_RESCUE",
+      governmentLevel: "STATE",
+      stateCode: "Oyo",
+      isActive: true,
+      verificationStatus: "VERIFIED",
+      verifiedAt: new Date(),
+      directoryJurisdictions: [{ stateId: "oyo-id" }],
+      directoryContacts: [{
+        id: "ordinary-phone",
+        officeId: "oyo-fire-office",
+        type: "PHONE",
+        emergencyOnly: false,
+        lastVerifiedAt: new Date(),
+      }],
+      incidentCapabilities: [{ id: "fire-capability" }],
+      offices: [{
+        id: "oyo-fire-office",
+        stateId: "oyo-id",
+        name: "Oyo State Fire Services Agency Headquarters",
+        isActive: true,
+        physicalAddress: "Oyo State Government Secretariat Area, Ibadan, Oyo State",
+        latitude: null,
+        longitude: null,
+        coordinatesVerified: false,
+        verificationStatus: "VERIFIED",
+        verifiedAt: new Date(),
+        contacts: [{
+          id: "ordinary-phone",
+          officeId: "oyo-fire-office",
+          type: "PHONE",
+          emergencyOnly: false,
+          lastVerifiedAt: new Date(),
+        }],
+        jurisdictions: [{ stateId: "oyo-id" }],
+      }],
+    }]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data[0].fire.operationalStatus).toBe("VERIFIED");
+    expect(result.data[0].fire.routingReadiness).toBe("READY");
+    expect(result.data[0].fire.evidence.publicAddressVerified).toBe(true);
+    expect(result.data[0].fire.evidence.coordinatesVerified).toBe(false);
+    expect(result.data[0].fire.evidence.publicContactVerified).toBe(true);
+    expect(result.data[0].fire.evidence.emergencyContactVerified).toBe(false);
+    expect(result.meta.automaticDispatchEnabled).toBe(false);
+    expect(result.meta.automaticEscalationEnabled).toBe(false);
+  });
+
+  it("keeps independent State traffic separate from federal FRSC structural coverage", async () => {
+    const { prisma, service } = buildService();
+    prisma.administrativeState.findMany.mockResolvedValue([
+      { id: "lagos-id", code: "LA", name: "Lagos", type: "STATE" },
+    ]);
+    const common = {
+      isActive: true,
+      verifiedAt: new Date(),
+      directoryContacts: [],
+      incidentCapabilities: [],
+    };
+    prisma.agency.findMany.mockResolvedValue([
+      {
+        ...common,
+        id: "lastma-id", code: "NG-LAGOS-LASTMA", name: "LASTMA", type: "TRAFFIC_MANAGEMENT",
+        governmentLevel: "STATE", stateCode: "Lagos", verificationStatus: "VERIFIED",
+        directoryJurisdictions: [{ stateId: "lagos-id" }], offices: [],
+      },
+      {
+        ...common,
+        id: "frsc-id", code: "NG-FRSC", name: "FRSC", type: "ROAD_SAFETY",
+        governmentLevel: "FEDERAL", stateCode: null, verificationStatus: "VERIFIED",
+        directoryJurisdictions: [], offices: [{
+          id: "frsc-lagos", stateId: "lagos-id", name: "FRSC Lagos Sector Command",
+          isActive: true, physicalAddress: null, latitude: null, longitude: null,
+          coordinatesVerified: false, verificationStatus: "VERIFIED", verifiedAt: new Date(),
+          contacts: [], jurisdictions: [{ stateId: "lagos-id" }],
+        }],
+      },
+    ]);
+
+    const result = await service.getCoverageReport(
+      { typ: "admin", sub: "admin-1", role: "Super Admin" } as never,
+      {},
+    );
+
+    expect(result.data[0].traffic.records[0].code).toBe("NG-LAGOS-LASTMA");
+    expect(result.data[0].frscCommand.records[0].code).toBe("NG-FRSC");
+  });
+
   it("scopes coverage geography to the State admin's canonical State", async () => {
     const { prisma, service } = buildService();
     prisma.administrativeState.findMany.mockResolvedValue([

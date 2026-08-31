@@ -13,6 +13,15 @@ const phoneTypes = new Set(["PHONE", "EMERGENCY_PHONE", "WHATSAPP"]);
 const shortCodeTypes = new Set(["TOLL_FREE", "SMS"]);
 const urlTypes = new Set(["WEBSITE", "REPORTING_PORTAL", "SOCIAL_MEDIA_OFFICIAL"]);
 const incidentTypes = new Set<string>(Object.values(IncidentType));
+export function preserveStrongerVerification<T extends string>(
+  current: T | null | undefined,
+  requested: T,
+): T {
+  if (!current) return requested;
+  if (["VERIFIED", "DISPUTED", "RETIRED"].includes(current)) return current;
+  if (requested === "VERIFIED") return requested;
+  return current === "PARTIALLY_VERIFIED" ? current : requested;
+}
 
 export type AgencySeed = {
   code: string;
