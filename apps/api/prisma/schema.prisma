@@ -112,6 +112,16 @@ enum AgencyCoordinateEvidenceClass {
   UNKNOWN
 }
 
+enum AgencyRecommendationReviewOutcome {
+  ACCEPTED_AS_RELEVANT
+  NOT_RELEVANT
+  INSUFFICIENT_OPERATIONAL_DATA
+  WRONG_JURISDICTION
+  WRONG_CAPABILITY
+  OUTDATED_DIRECTORY_DATA
+  OTHER
+}
+
 enum AgencyCoverageType {
   NATIONAL
   STATE
@@ -763,6 +773,7 @@ model AdministrativeState {
   jurisdictions       Jurisdiction[]          @relation("JurisdictionStateRef")
   agencyOffices       AgencyOffice[]
   agencyJurisdictions AgencyJurisdiction[]
+  recommendationReviews AgencyRecommendationReview[]
 
   @@unique([countryId, code])
   @@unique([countryId, name])
@@ -919,6 +930,7 @@ model Agency {
   directoryJurisdictions   AgencyJurisdiction[]
   directoryContacts        AgencyContact[]
   incidentCapabilities     AgencyIncidentCapability[]
+  recommendationReviews    AgencyRecommendationReview[]
 
   @@index([jurisdictionId, type])
   @@index([jurisdictionId, isActive])
@@ -1043,6 +1055,48 @@ model AgencyIncidentCapability {
   @@map("agency_incident_capabilities")
 }
 
+model AgencyRecommendationReview {
+  id                         String                              @id @default(uuid()) @db.Uuid
+  incidentId                 String                              @map("incident_id") @db.Uuid
+  agencyId                   String                              @map("agency_id") @db.Uuid
+  stateId                    String                              @map("state_id") @db.Uuid
+  reviewerAdminId            String                              @map("reviewer_admin_id") @db.Uuid
+  previousReviewId           String?                             @map("previous_review_id") @db.Uuid
+  recommendationKey          String                              @map("recommendation_key")
+  recommendationRuleVersion  String                              @map("recommendation_rule_version")
+  agencyName                 String                              @map("agency_name")
+  endpointId                 String?                             @map("endpoint_id") @db.Uuid
+  endpointType               String                              @map("endpoint_type")
+  endpointName               String?                             @map("endpoint_name")
+  recommendationTier         String                              @map("recommendation_tier")
+  matchedCapability          String                              @map("matched_capability")
+  jurisdictionLevel          String                              @map("jurisdiction_level")
+  operationalReady           Boolean                             @map("operational_ready")
+  verificationState          String                              @map("verification_state")
+  qualifiedDistanceMeters    Int?                                @map("qualified_distance_meters")
+  reasons                    String[]                            @default([])
+  limitations                String[]                            @default([])
+  countryName                String                              @map("country_name")
+  stateName                  String                              @map("state_name")
+  incidentType               IncidentType                       @map("incident_type")
+  outcome                    AgencyRecommendationReviewOutcome
+  note                       String?
+  reviewedAt                 DateTime                            @default(now()) @map("reviewed_at") @db.Timestamptz(6)
+  incident                   Incident                            @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+  agency                     Agency                              @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  state                      AdministrativeState                 @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  reviewer                   AdminUser                           @relation(fields: [reviewerAdminId], references: [id], onDelete: Restrict)
+  previousReview             AgencyRecommendationReview?        @relation("AgencyRecommendationReviewHistory", fields: [previousReviewId], references: [id], onDelete: Restrict)
+  subsequentReviews          AgencyRecommendationReview[]        @relation("AgencyRecommendationReviewHistory")
+
+  @@index([incidentId, recommendationKey, reviewedAt])
+  @@index([recommendationRuleVersion, reviewedAt])
+  @@index([stateId, incidentType, reviewedAt])
+  @@index([agencyId, recommendationTier, outcome, reviewedAt])
+  @@index([reviewerAdminId, reviewedAt])
+  @@map("agency_recommendation_reviews")
+}
+
 model AdminRole {
   id          String      @id @default(uuid()) @db.Uuid
   name        String      @unique
@@ -1127,6 +1181,7 @@ model AdminUser {
   fieldPatrolEvents                 FieldPatrolEvent[]               @relation("FieldPatrolEventOfficer")
   fieldCheckpointObservations       FieldCheckpointObservation[]     @relation("FieldCheckpointObservationOfficer")
   broadcastMediaUploaded            BroadcastMedia[]                 @relation("BroadcastMediaAdminUploader")
+  recommendationReviews             AgencyRecommendationReview[]
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
@@ -1209,6 +1264,7 @@ model Incident {
   operationalResponses           OperationalResponse[]
   fieldBackupRequests            FieldBackupRequest[]
   dangerEvent                    DangerEvent?
+  agencyRecommendationReviews    AgencyRecommendationReview[]
 
   @@index([country, state, lga])
   @@index([status, priority, createdAt])

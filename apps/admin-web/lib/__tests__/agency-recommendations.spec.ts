@@ -7,6 +7,7 @@ import {
   formatRecommendationDistance,
   recommendationGroupLabel,
   recommendationNavigationUrl,
+  recommendationReviewLabel,
   type AgencyRecommendation,
   type AgencyRecommendationResponse,
 } from "../agency-recommendations";
@@ -155,5 +156,57 @@ describe("Agency recommendation presentation", () => {
     expect(control).toContain("Scroll table right");
     expect(control).toContain("pointer-events-none");
     expect(control).toContain("pointer-events-auto");
+  });
+
+  it("renders the admin-only review entry point for actionable and structural matches", () => {
+    const structural = { ...recommendation, officeId: null, tier: "STRUCTURAL_ONLY", operationalReady: false } as AgencyRecommendation;
+    const html = renderToStaticMarkup(createElement(RecommendationResults, {
+      incidentId: "incident-1",
+      data: response({ actionableRecommendations: [recommendation], structuralMatches: [structural] }),
+    }));
+    expect(html).toContain("Review Recommendation");
+    expect(html).toContain("Relevant agency structure verified");
+  });
+
+  it("displays an existing review without implying agency acceptance", () => {
+    const html = renderToStaticMarkup(createElement(RecommendationResults, {
+      incidentId: "incident-1",
+      data: response({ actionableRecommendations: [{
+        ...recommendation,
+        review: {
+          id: "review-1",
+          outcome: "INSUFFICIENT_OPERATIONAL_DATA",
+          note: "No verified phone.",
+          reviewerAdminId: "admin-1",
+          reviewedAt: "2026-08-31T15:00:00.000Z",
+          recommendationRuleVersion: "agency-recommendation-v1",
+          previousReviewId: null,
+        },
+      }] }),
+    }));
+    expect(html).toContain("Reviewed: Insufficient operational data");
+    expect(html.includes("Agency accepted")).toBe(false);
+  });
+
+  it("defines every outcome and the bounded save, failure, and loading states", () => {
+    const source = readFileSync(resolve(__dirname, "../../components/recommended-responders.tsx"), "utf8");
+    expect(recommendationReviewLabel("WRONG_JURISDICTION")).toBe("Wrong jurisdiction");
+    expect(source).toContain("Was this recommendation appropriate?");
+    expect(source).toContain("Internal note (optional)");
+    expect(source).toContain("maxLength={500}");
+    expect(source).toContain("Save Review");
+    expect(source).toContain("Saving review…");
+    expect(source).toContain("Recommendation review could not be saved");
+    expect(source).toContain("setReview(await response.json()");
+  });
+
+  it("provides an authorization-safe BFF and internal QA report", () => {
+    const route = readFileSync(resolve(__dirname, "../../app/api/admin/incidents/[id]/agency-recommendations/route.ts"), "utf8");
+    const report = readFileSync(resolve(__dirname, "../../app/agencies/recommendation-quality/page.tsx"), "utf8");
+    expect(route).toContain("Authentication required");
+    expect(route).toContain("/reviews");
+    expect(report).toContain("ACCEPTED_AS_RELEVANT / TOTAL REVIEWED");
+    expect(report).toContain("No directory record was changed automatically");
+    expect(report).toContain("Recommendation quality data is temporarily unavailable");
   });
 });
