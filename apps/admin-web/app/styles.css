@@ -104,6 +104,80 @@ summary:focus-visible {
   outline-offset: 2px;
 }
 
+.on-screen-navigation {
+  pointer-events: none;
+  position: fixed;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(3, 42px);
+  grid-template-rows: repeat(2, 42px);
+  gap: 4px;
+  transform: translateX(-50%);
+  opacity: 0.42;
+  transition: opacity 160ms ease;
+}
+
+.on-screen-navigation:hover,
+.on-screen-navigation:focus-within {
+  opacity: 0.92;
+}
+
+.on-screen-navigation-hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.nav-direction {
+  pointer-events: auto;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 38%, transparent);
+  color: color-mix(in srgb, var(--text) 86%, transparent);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+
+.nav-direction:hover,
+.nav-direction:focus-visible {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--text);
+}
+
+.nav-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.nav-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.nav-down {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.nav-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+@media (min-width: 1024px) {
+  .on-screen-navigation {
+    left: calc(50% + 140px);
+  }
+}
+
 .leaflet-grid {
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--text) 8%, transparent) 1px, transparent 1px),

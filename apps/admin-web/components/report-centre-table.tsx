@@ -36,26 +36,30 @@ export function ReportCentreTable({ reports }: { reports: Incident[] }) {
           </article>
         ))}
       </div>
-      <div data-admin-horizontal-scroll className="hidden overflow-x-auto rounded-lg border border-line lg:block">
-        <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-sm">
+      <div
+        data-admin-horizontal-scroll
+        data-horizontal-scroll-region="reports"
+        className="relative hidden w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible rounded-lg border border-line lg:block"
+      >
+        <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm">
           <colgroup>
-            <col className="w-[20%]" /><col className="w-[9%]" /><col className="w-[8%]" /><col className="w-[9%]" />
-            <col className="w-[12%]" /><col className="w-[16%]" /><col className="w-[15%]" /><col className="w-[11%]" />
+            <col className="w-[21%]" /><col className="w-[10%]" /><col className="w-[9%]" /><col className="w-[10%]" />
+            <col className="w-[12%]" /><col className="w-[15%]" /><col className="w-[13%]" /><col className="w-[10%]" />
           </colgroup>
           <thead className="bg-surfaceMuted text-xs uppercase tracking-wide text-muted">
-            <tr>{["Report", "Type", "Priority", "Status", "Reporter", "Location", "Captured", "Action"].map((column) => <th key={column} className={column === "Action" ? "sticky right-0 bg-surfaceMuted px-3 py-3 font-semibold" : "px-3 py-3 font-semibold"}>{column}</th>)}</tr>
+            <tr>{["Report", "Type", "Priority", "Status", "Reporter", "Location", "Captured", "Action"].map((column) => <th key={column} className={column === "Action" ? "sticky right-0 z-20 whitespace-nowrap border-l border-line bg-surfaceMuted px-2.5 py-3 font-semibold" : "px-2.5 py-3 font-semibold"}>{column}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-line">
             {reports.map((report) => (
-              <tr key={report.id} className="align-top hover:bg-surfaceMuted/70">
-                <td className="px-3 py-3"><ReportSummary report={report} /></td>
-                <td className="break-words px-3 py-3">{reportTypeLabel(report.type)}</td>
-                <td className="px-3 py-3"><StatusBadge tone={report.priority === "P1" ? "danger" : report.priority === "P2" ? "warning" : "info"}>{humanPriority(report.priority)}</StatusBadge></td>
-                <td className="break-words px-3 py-3">{report.status}</td>
-                <td className="break-words px-3 py-3">{reportReporterLabel(report)}</td>
-                <td className="break-words px-3 py-3"><span className="line-clamp-2">{report.location}</span></td>
-                <td className="break-words px-3 py-3 text-muted">{formatReportCapturedAt(report.createdAt)}</td>
-                <td className="sticky right-0 whitespace-nowrap bg-surface px-3 py-3"><Link href={`/incidents/${report.id}`} className="inline-flex min-h-10 items-center font-semibold text-eye hover:underline">View Report</Link></td>
+              <tr key={report.id} className="group align-top hover:bg-surfaceMuted/70">
+                <td className="min-w-0 px-2.5 py-3"><ReportSummary report={report} /></td>
+                <td className="min-w-0 break-normal whitespace-normal px-2.5 py-3">{reportTypeLabel(report.type)}</td>
+                <td className="min-w-0 whitespace-nowrap px-2.5 py-3"><StatusBadge tone={report.priority === "P1" ? "danger" : report.priority === "P2" ? "warning" : "info"}>{humanPriority(report.priority)}</StatusBadge></td>
+                <td className="min-w-0 whitespace-nowrap px-2.5 py-3">{report.status}</td>
+                <td className="min-w-0 truncate px-2.5 py-3" title={reportReporterLabel(report)}>{reportReporterLabel(report)}</td>
+                <td className="min-w-0 px-2.5 py-3"><span className="line-clamp-2" title={report.location}>{report.location}</span></td>
+                <td className="min-w-0 whitespace-nowrap px-2.5 py-3 text-muted">{formatReportCapturedAt(report.createdAt)}</td>
+                <td className="sticky right-0 z-10 whitespace-nowrap border-l border-line bg-surface px-2.5 py-3 group-hover:bg-surfaceMuted"><Link href={`/incidents/${report.id}`} className="inline-flex min-h-10 items-center font-semibold text-eye hover:underline">View Report</Link></td>
               </tr>
             ))}
           </tbody>
