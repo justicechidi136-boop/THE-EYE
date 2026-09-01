@@ -156,7 +156,7 @@ describe("AgencyRecommendationReviewService", () => {
     expect(result.recommendationTier).toBe("PRIMARY");
     expect(result.qualifiedDistanceMeters).toBe(850);
     expect(result.reviewerAdminId).toBe(actor.sub);
-    expect(result.reviewedAt).toMatch(/^2026-08-31T/);
+    expect(result.reviewedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     expect(prisma.agencyRecommendationReview.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         recommendationRuleVersion: "agency-recommendation-v1",
