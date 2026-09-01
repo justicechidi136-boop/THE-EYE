@@ -156,7 +156,9 @@ describe("AgencyRecommendationReviewService", () => {
     expect(result.recommendationTier).toBe("PRIMARY");
     expect(result.qualifiedDistanceMeters).toBe(850);
     expect(result.reviewerAdminId).toBe(actor.sub);
-    expect(result.reviewedAt).toMatch(/^2026-08-31T/);
+    const persistedReviewedAt = prisma.agencyRecommendationReview.create.mock.calls[0][0].data.reviewedAt;
+    expect(persistedReviewedAt).toBeInstanceOf(Date);
+    expect(result.reviewedAt).toBe(persistedReviewedAt.toISOString());
     expect(prisma.agencyRecommendationReview.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         recommendationRuleVersion: "agency-recommendation-v1",
