@@ -8,14 +8,29 @@ class ActiveEmergencyCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
+    this.flat = false,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
+  final bool flat;
 
   @override
   Widget build(BuildContext context) {
     final colors = EyeSemanticColors.of(context);
+    if (flat) {
+      return Padding(
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            child,
+            const SizedBox(height: 12),
+            Divider(color: colors.divider, height: 1),
+          ],
+        ),
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.cardSurface,

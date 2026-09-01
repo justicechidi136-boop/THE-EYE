@@ -2,8 +2,11 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:the_eye_mobile/contracts/the_eye_api_client.dart";
+import "package:the_eye_mobile/contracts/the_eye_enums.dart";
+import "package:the_eye_mobile/danger_trigger/danger_original_voice_capture.dart";
 import "package:the_eye_mobile/danger_trigger/danger_trigger_screen.dart";
 import "package:the_eye_mobile/danger_trigger/danger_trigger_service.dart";
+import "package:the_eye_mobile/evidence/local_evidence_attachment.dart";
 import "package:the_eye_mobile/live_video/live_video_api_models.dart";
 import "package:the_eye_mobile/live_video/live_video_session_controller.dart";
 import "package:the_eye_mobile/location/device_location_service.dart";
@@ -52,8 +55,12 @@ class _FakeLiveVoiceController extends LiveVideoSessionController {
 }
 
 class _FakeGateway implements DangerTriggerGateway {
+  _FakeGateway({this.operations});
+
+  final List<String>? operations;
   int activateCalls = 0;
   String? preparedDangerAlertCode;
+  String? preparedAreaName;
   String? preparedSpokenLocationName;
 
   @override
@@ -69,7 +76,9 @@ class _FakeGateway implements DangerTriggerGateway {
     String? areaName,
     String? spokenLocationName,
   }) async {
+    operations?.add("prepared");
     preparedDangerAlertCode = dangerAlertCode;
+    preparedAreaName = areaName;
     preparedSpokenLocationName = spokenLocationName;
     return PreparedDangerTrigger(
       eventId: "event-1",
@@ -100,6 +109,7 @@ class _FakeGateway implements DangerTriggerGateway {
     required String liveSessionId,
     required DateTime connectedAt,
   }) async {
+    operations?.add("activated");
     activateCalls += 1;
     return const DangerTriggerActivation(
       recipientCount: 3,
@@ -139,6 +149,13 @@ class _FakeGateway implements DangerTriggerGateway {
     required String eventId,
   }) async =>
       throw UnimplementedError();
+
+  @override
+  Future<DangerTriggerOriginalVoiceAccess> originalVoice({
+    required String accessToken,
+    required String eventId,
+  }) async =>
+      throw UnimplementedError();
 }
 
 class _FakeWatchRelay extends WatchDangerAlertRelay {
@@ -146,7 +163,71 @@ class _FakeWatchRelay extends WatchDangerAlertRelay {
   Future<bool> relayDangerAlert(Map<String, dynamic> fcmData) async => true;
 }
 
-Widget _app({required bool connects, required _FakeGateway gateway}) {
+class _FakeOriginalVoiceCapture implements DangerOriginalVoiceCapture {
+  _FakeOriginalVoiceCapture({this.operations, this.failsStart = false});
+
+  final List<String>? operations;
+  final bool failsStart;
+
+  @override
+  Future<void> start() async {
+    if (failsStart) throw StateError("synthetic capture failure");
+    operations?.add("captureStarted");
+  }
+
+  @override
+  Future<LocalEvidenceAttachment?> stop() async {
+    operations?.add("captureStopped");
+    return LocalEvidenceAttachment(
+      localId: "voice-1",
+      mediaType: IncidentMediaType.audio,
+      fileName: "danger-original.m4a",
+      originalPath: "danger-original.m4a",
+      uploadPath: "danger-original.m4a",
+      contentType: "audio/mp4",
+      fileHash: "hash",
+      originalFileHash: "hash",
+      sizeBytes: 128,
+      capturedAt: DateTime.utc(2026, 9),
+      durationSeconds: 4,
+      metadata: const {"provenance": "ORIGINAL_VOICE_NOTE"},
+    );
+  }
+
+  @override
+  Future<void> cancel() async => operations?.add("captureCancelled");
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _FakeOriginalVoiceUploader implements DangerOriginalVoiceUploader {
+  _FakeOriginalVoiceUploader({this.operations, this.fails = false});
+
+  final List<String>? operations;
+  final bool fails;
+  int uploadCalls = 0;
+
+  @override
+  Future<void> upload({
+    required String incidentId,
+    required LocalEvidenceAttachment attachment,
+    required String accessToken,
+    required double? latitude,
+    required double? longitude,
+  }) async {
+    uploadCalls += 1;
+    if (fails) throw StateError("synthetic upload failure");
+    operations?.add("voicePersisted");
+  }
+}
+
+Widget _app({
+  required bool connects,
+  required _FakeGateway gateway,
+  _FakeOriginalVoiceCapture? originalVoiceCapture,
+  _FakeOriginalVoiceUploader? originalVoiceUploader,
+}) {
   return MaterialApp(
     home: DangerTriggerScreen(
       apiClient: TheEyeApiClient(baseUrl: "https://api.example.com/v1"),
@@ -155,6 +236,9 @@ Widget _app({required bool connects, required _FakeGateway gateway}) {
       locationService: _FakeLocationService(),
       liveVoiceController: _FakeLiveVoiceController(connects: connects),
       watchRelay: _FakeWatchRelay(),
+      originalVoiceCapture: originalVoiceCapture ?? _FakeOriginalVoiceCapture(),
+      originalVoiceUploader:
+          originalVoiceUploader ?? _FakeOriginalVoiceUploader(),
     ),
     routes: {
       "/report/emergency": (_) =>
@@ -219,9 +303,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(
-          const Key(
-            "danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY",
-          ),
+          const Key("danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY"),
         ),
       );
       await tester.pumpAndSettle();
@@ -231,6 +313,7 @@ void main() {
       );
       await _scrollTo(tester, start);
       await tester.tap(start);
+      await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
 
       expect(find.text("Live voice broadcasting"), findsNothing);
@@ -245,13 +328,20 @@ void main() {
   testWidgets("shows broadcasting only after connection and activation", (
     tester,
   ) async {
-    final gateway = _FakeGateway();
-    await tester.pumpWidget(_app(connects: true, gateway: gateway));
+    final operations = <String>[];
+    final gateway = _FakeGateway(operations: operations);
+    final uploader = _FakeOriginalVoiceUploader(operations: operations);
+    await tester.pumpWidget(
+      _app(
+        connects: true,
+        gateway: gateway,
+        originalVoiceCapture: _FakeOriginalVoiceCapture(operations: operations),
+        originalVoiceUploader: uploader,
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(
-      find.byKey(
-        const Key("danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY"),
-      ),
+      find.byKey(const Key("danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY")),
     );
     await tester.pumpAndSettle();
     final start = find.widgetWithText(
@@ -260,10 +350,22 @@ void main() {
     );
     await _scrollTo(tester, start);
     await tester.tap(start);
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
     expect(gateway.activateCalls, 1);
+    expect(uploader.uploadCalls, 1);
+    expect(
+      operations,
+      containsAllInOrder([
+        "prepared",
+        "captureStopped",
+        "voicePersisted",
+        "activated",
+      ]),
+    );
     expect(gateway.preparedDangerAlertCode, "DANGER_ZONE_ARMED_ROBBERY_NEARBY");
+    expect(gateway.preparedAreaName, "Allen Avenue, Ikeja, Lagos");
     expect(gateway.preparedSpokenLocationName, "Allen Avenue");
     await _scrollTo(tester, find.text("Live voice broadcasting"));
     expect(find.text("Live voice broadcasting"), findsOneWidget);
@@ -279,6 +381,91 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(endVoice, findsOneWidget);
+  });
+
+  testWidgets("voice persistence failure keeps the urgent alert active", (
+    tester,
+  ) async {
+    final operations = <String>[];
+    final gateway = _FakeGateway(operations: operations);
+    final uploader = _FakeOriginalVoiceUploader(
+      operations: operations,
+      fails: true,
+    );
+    await tester.pumpWidget(
+      _app(
+        connects: true,
+        gateway: gateway,
+        originalVoiceCapture: _FakeOriginalVoiceCapture(operations: operations),
+        originalVoiceUploader: uploader,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key("danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY")),
+    );
+    await tester.pumpAndSettle();
+    final start = find.widgetWithText(
+      FilledButton,
+      "Start Live Danger Broadcast",
+    );
+    await _scrollTo(tester, start);
+    await tester.tap(start);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    expect(uploader.uploadCalls, 1);
+    expect(gateway.activateCalls, 1);
+    expect(operations, containsAllInOrder(["prepared", "activated"]));
+    final warning = find.textContaining(
+      "original voice recording could not be secured",
+    );
+    await _scrollTo(tester, warning);
+    expect(warning, findsOneWidget);
+    expect(
+      find.text("Original voice secured for authorized recipients."),
+      findsNothing,
+    );
+  });
+
+  testWidgets("voice capture failure keeps the urgent alert active", (
+    tester,
+  ) async {
+    final operations = <String>[];
+    final gateway = _FakeGateway(operations: operations);
+    final uploader = _FakeOriginalVoiceUploader(operations: operations);
+    await tester.pumpWidget(
+      _app(
+        connects: true,
+        gateway: gateway,
+        originalVoiceCapture: _FakeOriginalVoiceCapture(
+          operations: operations,
+          failsStart: true,
+        ),
+        originalVoiceUploader: uploader,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key("danger-category-DANGER_ZONE_ARMED_ROBBERY_NEARBY")),
+    );
+    await tester.pumpAndSettle();
+    final start = find.widgetWithText(
+      FilledButton,
+      "Start Live Danger Broadcast",
+    );
+    await _scrollTo(tester, start);
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+
+    expect(uploader.uploadCalls, 0);
+    expect(gateway.activateCalls, 1);
+    expect(operations, containsAllInOrder(["prepared", "activated"]));
+    final warning = find.textContaining(
+      "original voice recording could not be secured",
+    );
+    await _scrollTo(tester, warning);
+    expect(warning, findsOneWidget);
   });
 
   test("defines the exact trusted nine-category mapping", () {
@@ -308,9 +495,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(
-      _app(connects: true, gateway: _FakeGateway()),
-    );
+    await tester.pumpWidget(_app(connects: true, gateway: _FakeGateway()));
     await tester.pumpAndSettle();
 
     for (final category in dangerTriggerCategories) {
@@ -338,9 +523,7 @@ void main() {
       const Key("danger-category-DANGER_ZONE_COMMUNITY_CRISIS_NEARBY"),
     );
     await _scrollTo(tester, communityCrisis);
-    await tester.tap(
-      communityCrisis,
-    );
+    await tester.tap(communityCrisis);
     await tester.pump();
     await _scrollTo(tester, find.text("Selected danger: COMMUNITY CRISIS"));
     expect(find.text("Selected danger: COMMUNITY CRISIS"), findsOneWidget);

@@ -38,6 +38,7 @@ class EmergencyOverviewCard extends StatelessWidget {
     );
 
     return ActiveEmergencyCard(
+      flat: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

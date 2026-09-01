@@ -157,49 +157,52 @@ class _CommunityMembersScreenState extends State<CommunityMembersScreen> {
                         member.role
                             .replaceAll(RegExp(r"([a-z])([A-Z])"), r"$1 $2")
                       ];
-                return Card(
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      child: Text(
-                        member.displayName.isNotEmpty
-                            ? member.displayName[0].toUpperCase()
-                            : "?",
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: CircleAvatar(
+                        child: Text(
+                          member.displayName.isNotEmpty
+                              ? member.displayName[0].toUpperCase()
+                              : "?",
+                        ),
+                      ),
+                      title: Text(member.displayName),
+                      subtitle: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: badges
+                            .map(
+                              (badge) => Chip(
+                                label: Text(
+                                  badge,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                backgroundColor:
+                                    _badgeColor(badge).withValues(alpha: 0.15),
+                                side: BorderSide(color: _badgeColor(badge)),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.flag_outlined),
+                        onPressed: () {
+                          Navigator.of(context).pushNamed(
+                            "/neighborhood-watch/report",
+                            arguments: CommunityReportRouteArgs(
+                              communityId: widget.communityId,
+                              targetType: "Member",
+                              targetId: member.userId ?? member.id,
+                              targetLabel: member.displayName,
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    title: Text(member.displayName),
-                    subtitle: Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: badges
-                          .map(
-                            (badge) => Chip(
-                              label: Text(
-                                badge,
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              backgroundColor:
-                                  _badgeColor(badge).withValues(alpha: 0.15),
-                              side: BorderSide(color: _badgeColor(badge)),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.flag_outlined),
-                      onPressed: () {
-                        Navigator.of(context).pushNamed(
-                          "/neighborhood-watch/report",
-                          arguments: CommunityReportRouteArgs(
-                            communityId: widget.communityId,
-                            targetType: "Member",
-                            targetId: member.userId ?? member.id,
-                            targetLabel: member.displayName,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                    const Divider(height: 1),
+                  ],
                 );
               }),
             if (_nextCursor != null)

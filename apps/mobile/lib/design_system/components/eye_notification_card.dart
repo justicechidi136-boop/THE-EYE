@@ -29,28 +29,8 @@ class EyeNotificationCard extends StatelessWidget {
     final theme = Theme.of(context);
     final onSurface = theme.colorScheme.onSurface;
     final muted = onSurface.withValues(alpha: read ? 0.55 : 0.72);
-    final surface = read
-        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.72)
-        : theme.colorScheme.surfaceContainerHighest;
-    final child = Container(
-      width: double.infinity,
+    final child = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(EyeTokens.radiusSm),
-        border: read
-            ? null
-            : Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.35),
-              ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withValues(alpha: read ? 0.12 : 0.25),
-            blurRadius: 4,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

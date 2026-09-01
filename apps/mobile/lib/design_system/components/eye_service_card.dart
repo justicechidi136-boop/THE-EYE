@@ -20,25 +20,23 @@ class EyeServiceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
     return Material(
-      color: semantics.cardSurface,
-      borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
+      color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Column(
             children: [
               Container(
-                width: 38,
-                height: 36,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
                   color: semantics.elevatedSurface,
-                  borderRadius: BorderRadius.circular(8),
+                  shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 24, color: semantics.bodyText),
+                child: Icon(icon, size: 30, color: semantics.interactiveText),
               ),
               const SizedBox(height: 6),
               Text(

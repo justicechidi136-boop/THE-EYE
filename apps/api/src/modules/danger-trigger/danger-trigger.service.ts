@@ -646,7 +646,12 @@ export class DangerTriggerService {
     const event = await (this.prisma as any).dangerEvent.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException("Danger event not found");
     await this.assertCanAccess(event, actor);
-    return { data: this.publicEvent(event) };
+    const originalVoice = await this.findOriginalVoice(event);
+    return {
+      data: this.publicEvent(event, {
+        originalVoiceAvailable: originalVoice != null,
+      }),
+    };
   }
 
   async listenerToken(eventId: string, actor: JwtPayload) {
@@ -978,8 +983,17 @@ export class DangerTriggerService {
         uploaderId: event.initiatorUserId ?? undefined,
         mediaType: "Audio",
         deletedAt: null,
+        metadata: {
+          path: ["provenance"],
+          equals: "ORIGINAL_VOICE_NOTE",
+        },
       },
-      select: { id: true, objectKey: true },
+      select: {
+        id: true,
+        objectKey: true,
+        contentType: true,
+        sizeBytes: true,
+      },
       orderBy: { uploadedAt: "asc" },
     });
   }
@@ -1148,6 +1162,14 @@ export class DangerTriggerService {
     }
     if (actor.typ !== "user") throw new ForbiddenException("Citizen or authorized administrator required");
     if (event.initiatorUserId === actor.sub) return;
+    const delivery = await (this.prisma as any).dangerEventDelivery.findFirst({
+      where: {
+        dangerEventId: event.id,
+        recipientUserId: actor.sub,
+        status: "SENT",
+      },
+    });
+    if (delivery) return;
     const states = await (this.prisma as any).deviceGeoState.findMany({
       where: { userId: actor.sub },
       orderBy: { lastEvaluatedAt: "desc" },
@@ -1172,7 +1194,10 @@ export class DangerTriggerService {
     };
   }
 
-  private publicEvent(event: any) {
+  private publicEvent(
+    event: any,
+    options: { originalVoiceAvailable?: boolean } = {},
+  ) {
     return {
       id: event.id,
       incidentId: event.incidentId,
@@ -1183,6 +1208,7 @@ export class DangerTriggerService {
       maxRadiusMeters: Math.min(Number(event.maxRadiusMeters ?? 4_000), 4_000),
       liveVoiceSessionId: event.liveVoiceSessionId,
       liveVoiceEndedAt: event.liveVoiceEndedAt,
+      originalVoiceAvailable: options.originalVoiceAvailable === true,
       cancelledAt: event.cancelledAt,
       createdAt: event.createdAt,
       preciseReporterLocationExposed: false,

@@ -115,11 +115,30 @@ class DeviceLocationState {
     return message ?? "Current device location is unavailable.";
   }
 
+  /// Public, privacy-reduced place label for nearby danger recipients.
+  /// Building numbers, plus codes, exact coordinates, and reporter identity
+  /// are intentionally excluded.
+  String get dangerPublicArea {
+    final parts = <String>[];
+    final road = _publicRoadName(street);
+    final neighborhood = _publicPlaceName(subLocality);
+    final city = _publicPlaceName(locality) ?? _publicPlaceName(lga);
+    final region = _publicPlaceName(state);
+    for (final value in [road, neighborhood, city, region]) {
+      if (value == null ||
+          parts.any((part) => part.toLowerCase() == value.toLowerCase())) {
+        continue;
+      }
+      parts.add(value);
+    }
+    return parts.isEmpty ? "Nearby area" : parts.join(", ");
+  }
+
   /// Precise label for spoken danger warnings. City and state are excluded
   /// because they are too broad to identify a nearby danger location.
   String get dangerSpokenLocation {
-    final streetName = street?.trim();
-    if (streetName != null && streetName.isNotEmpty) return streetName;
+    final streetName = _publicRoadName(street);
+    if (streetName != null) return streetName;
 
     final nearbyLandmark = subLocality?.trim();
     if (nearbyLandmark != null &&
@@ -134,6 +153,28 @@ class DeviceLocationState {
 
   bool _sameLabel(String value, String? other) =>
       other != null && value.toLowerCase() == other.trim().toLowerCase();
+
+  String? _publicRoadName(String? value) {
+    final normalized = _publicPlaceName(value);
+    if (normalized == null) return null;
+    final withoutBuildingNumber = normalized.replaceFirst(
+      RegExp(r"^\d+[A-Za-z]?(?:\s*[-/]\s*\d+[A-Za-z]?)?[,\s]+"),
+      "",
+    );
+    return withoutBuildingNumber.isEmpty ? null : withoutBuildingNumber;
+  }
+
+  String? _publicPlaceName(String? value) {
+    final normalized = value?.trim().replaceAll(RegExp(r"\s+"), " ");
+    if (normalized == null || normalized.isEmpty) return null;
+    if (RegExp(
+      r"(?:^|\s)[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,}(?:\s|$)",
+      caseSensitive: false,
+    ).hasMatch(normalized)) {
+      return null;
+    }
+    return normalized;
+  }
 
   String get sourceLabel {
     switch (source) {

@@ -62,6 +62,7 @@ class EmergencyResponseProgressCard extends StatelessWidget {
             (steps.length - 1));
 
     return ActiveEmergencyCard(
+      flat: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

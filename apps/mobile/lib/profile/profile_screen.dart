@@ -11,7 +11,7 @@ import "../l10n/generated/app_localizations.dart";
 import "../settings/language_region_preference_store.dart";
 import "../settings/language_region_registry.dart";
 import "../settings/language_region_selector.dart";
-import "../widgets/section_card.dart";
+import "../widgets/flat_section.dart";
 import "avatar_upload_service.dart";
 import "profile_widgets.dart";
 
@@ -259,7 +259,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
 
   Widget _buildGuestGate() {
     final l10n = AppLocalizations.of(context);
-    return SectionCard(
+    return FlatSection(
       title: "Sign in required",
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -284,7 +284,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
 
   Widget _buildCompletionForm() {
     final l10n = AppLocalizations.of(context);
-    return SectionCard(
+    return FlatSection(
       title: l10n.completeYourProfile,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -488,7 +488,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
       profile.profile.country,
     ].where((part) => part != null && part.trim().isNotEmpty).join(", ");
 
-    return SectionCard(
+    return FlatSection(
       title: "Citizen profile",
       child: Column(
         children: [
@@ -571,7 +571,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: const [
-          SectionCard(
+          FlatSection(
             title: "Citizen profile",
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
@@ -586,7 +586,7 @@ class _ProfileScreenBodyState extends State<ProfileScreenBody> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
-          SectionCard(
+          FlatSection(
             title: "Citizen profile",
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

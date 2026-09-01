@@ -3,7 +3,7 @@ import "package:flutter/material.dart";
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../widgets/eye_scaffold.dart";
-import "../widgets/section_card.dart";
+import "../widgets/flat_section.dart";
 import "support_models.dart";
 import "support_service.dart";
 
@@ -44,7 +44,7 @@ class SupportHomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          SectionCard(
+          FlatSection(
             title: "Quick actions",
             child: Column(
               children: [
@@ -77,7 +77,7 @@ class SupportHomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          SectionCard(
+          FlatSection(
             title: "Your support",
             child: Column(
               children: [
@@ -169,15 +169,23 @@ class _FaqTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ExpansionTile(
-        title:
-            Text(question, style: const TextStyle(fontWeight: FontWeight.w600)),
-        children: [
-          Padding(padding: const EdgeInsets.all(16), child: Text(answer))
-        ],
-      ),
+    return Column(
+      children: [
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: Text(
+            question,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+              child: Text(answer),
+            ),
+          ],
+        ),
+        const Divider(height: 1),
+      ],
     );
   }
 }

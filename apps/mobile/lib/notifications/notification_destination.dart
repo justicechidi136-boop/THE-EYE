@@ -9,9 +9,16 @@ import "notification_inbox_service.dart";
 /// or a detail page with a missing/invalid id.
 String resolveInboxNotificationDestination(InboxNotificationItem alert) {
   final deepLink = alert.deepLink?.trim();
+  final dangerEventId = alert.metadata["dangerEventId"]?.toString().trim();
+  if (alert.type == "NearbyDangerWarning" &&
+      dangerEventId != null &&
+      dangerEventId.isNotEmpty) {
+    return "/danger-trigger/events/$dangerEventId";
+  }
   final broadcastId = alert.broadcastId?.trim();
-  final detailRoute =
-      broadcastId != null && broadcastId.isNotEmpty ? broadcastDetailRoute(broadcastId) : null;
+  final detailRoute = broadcastId != null && broadcastId.isNotEmpty
+      ? broadcastDetailRoute(broadcastId)
+      : null;
 
   if (detailRoute != null) {
     if (deepLink == null ||

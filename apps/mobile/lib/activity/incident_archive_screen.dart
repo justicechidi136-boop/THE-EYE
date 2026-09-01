@@ -513,6 +513,7 @@ class _ArchiveSectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = EyeSemanticColors.of(context);
     return ActiveEmergencyCard(
+      flat: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

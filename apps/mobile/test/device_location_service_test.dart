@@ -58,6 +58,65 @@ void main() {
       expect(cityOnly.dangerSpokenLocation, "the reported location");
     });
 
+    test("danger public area removes building numbers and keeps locality", () {
+      const state = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        street: "12 Allen Avenue",
+        subLocality: "Computer Village",
+        locality: "Ikeja",
+        state: "Lagos",
+      );
+
+      expect(
+        state.dangerPublicArea,
+        "Allen Avenue, Computer Village, Ikeja, Lagos",
+      );
+      expect(state.dangerSpokenLocation, "Allen Avenue");
+    });
+
+    test("danger public area falls back without inventing a street", () {
+      const neighborhood = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        subLocality: "Rumuola",
+        locality: "Port Harcourt",
+        state: "Rivers State",
+      );
+      const city = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        locality: "Port Harcourt",
+        state: "Rivers State",
+      );
+
+      expect(
+        neighborhood.dangerPublicArea,
+        "Rumuola, Port Harcourt, Rivers State",
+      );
+      expect(city.dangerPublicArea, "Port Harcourt, Rivers State");
+    });
+
+    test("danger public area excludes plus codes", () {
+      const state = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        street: "7F4M+3C",
+        subLocality: "Rumuola",
+        locality: "Port Harcourt",
+        state: "Rivers State",
+      );
+
+      expect(state.dangerPublicArea, "Rumuola, Port Harcourt, Rivers State");
+      expect(state.dangerPublicArea, isNot(contains("+")));
+    });
+
+    test("danger public area uses a neutral fallback for plus-code-only data",
+        () {
+      const state = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        locality: "7F4M+3C",
+      );
+
+      expect(state.dangerPublicArea, "Nearby area");
+    });
+
     test("profile jurisdiction display is explicit", () {
       const profile = ProfileJurisdictionDisplay(
         lga: "Ikeja",
@@ -89,25 +148,27 @@ void main() {
       expect(platform.readCount, 1);
     });
 
-    test("returns fresh Port Harcourt fix with reverse geocode labels",
-        () async {
-      resetSharedEmergencyLocationCoordinator();
-      final platform = _PortHarcourtLocationPlatform();
-      final service = DeviceLocationService(
-        geolocator: platform,
-        reverseGeocoder: _PortHarcourtGeocoder(),
-      );
+    test(
+      "returns fresh Port Harcourt fix with reverse geocode labels",
+      () async {
+        resetSharedEmergencyLocationCoordinator();
+        final platform = _PortHarcourtLocationPlatform();
+        final service = DeviceLocationService(
+          geolocator: platform,
+          reverseGeocoder: _PortHarcourtGeocoder(),
+        );
 
-      final result = await service.probeCurrentLocation(
-        timeout: const Duration(seconds: 2),
-      );
+        final result = await service.probeCurrentLocation(
+          timeout: const Duration(seconds: 2),
+        );
 
-      expect(result.status, DeviceLocationStatus.acquired);
-      expect(result.displayLocality, "Port Harcourt, Rivers State");
-      expect(result.source, DeviceLocationSourceKind.freshGps);
-      expect(result.isProfileFallback, isFalse);
-      expect(result.isJurisdictionFallback, isFalse);
-    });
+        expect(result.status, DeviceLocationStatus.acquired);
+        expect(result.displayLocality, "Port Harcourt, Rivers State");
+        expect(result.source, DeviceLocationSourceKind.freshGps);
+        expect(result.isProfileFallback, isFalse);
+        expect(result.isJurisdictionFallback, isFalse);
+      },
+    );
 
     test("returns denied without hanging", () async {
       resetSharedEmergencyLocationCoordinator();
@@ -164,8 +225,10 @@ void main() {
       final second = cache.lookup(latitude: 4.81562, longitude: 7.04982);
       final results = await Future.wait([first, second]);
 
-      expect(results.every((result) => result.locality == "Port Harcourt"),
-          isTrue);
+      expect(
+        results.every((result) => result.locality == "Port Harcourt"),
+        isTrue,
+      );
       expect(delegate.calls, 1);
     });
   });
@@ -229,8 +292,9 @@ class _PortHarcourtLocationPlatform extends GeolocatorPlatform {
   Future<bool> isLocationServiceEnabled() async => true;
 
   @override
-  Future<Position> getCurrentPosition(
-      {LocationSettings? locationSettings}) async {
+  Future<Position> getCurrentPosition({
+    LocationSettings? locationSettings,
+  }) async {
     readCount += 1;
     await Future<void>.delayed(const Duration(milliseconds: 50));
     return Position(

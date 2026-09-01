@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../presentation/citizen_presentation.dart";
+import "../eye_semantic_colors.dart";
 import "eye_status_chip.dart";
 
 /// Compact citizen incident list card (UI-007).
@@ -67,6 +68,7 @@ class EyeIncidentSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
     final reported = reportedAt == null
         ? "Time unavailable"
         : CitizenDateTimeFormatter.formatReportedAt(reportedAt!);
@@ -83,69 +85,92 @@ class EyeIncidentSummaryCard extends StatelessWidget {
     return Semantics(
       button: onTap != null,
       label: semanticsLabel,
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(leadingIcon, size: 28),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        publicReference,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Reported",
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.color
-                                  ?.withValues(alpha: 0.8),
-                            ),
-                      ),
-                      Text(
-                        reported,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    EyeStatusChip(label: statusLabel, compact: true),
-                    if (unreadCount > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Badge(label: Text("$unreadCount")),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: semantics.elevatedSurface,
+                        shape: BoxShape.circle,
                       ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        leadingIcon,
+                        size: 24,
+                        color: semantics.interactiveText,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            publicReference,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Reported",
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.color
+                                          ?.withValues(alpha: 0.8),
+                                    ),
+                          ),
+                          Text(
+                            reported,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        EyeStatusChip(label: statusLabel, compact: true),
+                        if (unreadCount > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Badge(label: Text("$unreadCount")),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          const Divider(height: 1),
+        ],
       ),
     );
   }
