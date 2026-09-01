@@ -54,22 +54,25 @@ export default async function AgenciesPage({
           ) : undefined
         }
       >
-        <form className="mb-4 grid gap-3 md:grid-cols-4" method="get">
-          <label className="grid gap-1 text-sm">
+        <form
+          className="mb-4 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1.2fr)_minmax(180px,1fr)_minmax(200px,1fr)_minmax(150px,0.8fr)]"
+          method="get"
+        >
+          <label className="grid min-w-0 gap-1 text-sm">
             <span className="font-medium text-ink">Search</span>
             <input
               name="search"
               defaultValue={params.search ?? ""}
               placeholder="Name or code"
-              className="h-11 rounded-md border border-line bg-surface px-3 text-sm"
+              className="h-11 min-w-0 w-full max-w-full rounded-md border border-line bg-surface px-3 text-sm"
             />
           </label>
-          <label className="grid gap-1 text-sm">
+          <label className="grid min-w-0 gap-1 text-sm">
             <span className="font-medium text-ink">Type</span>
             <select
               name="agencyType"
               defaultValue={params.agencyType ?? ""}
-              className="h-11 rounded-md border border-line bg-surface px-3 text-sm"
+              className="h-11 min-w-0 w-full max-w-full rounded-md border border-line bg-surface px-3 text-sm"
             >
               <option value="">All types</option>
               {AGENCY_TYPES.map((type) => (
@@ -79,31 +82,31 @@ export default async function AgenciesPage({
               ))}
             </select>
           </label>
-          <label className="grid gap-1 text-sm">
+          <label className="grid min-w-0 gap-1 text-sm">
             <span className="font-medium text-ink">Field operations</span>
             <select
               name="isFieldOperationsEnabled"
               defaultValue={params.isFieldOperationsEnabled ?? ""}
-              className="h-11 rounded-md border border-line bg-surface px-3 text-sm"
+              className="h-11 min-w-0 w-full max-w-full rounded-md border border-line bg-surface px-3 text-sm"
             >
               <option value="">Any</option>
               <option value="true">FO enabled</option>
               <option value="false">FO disabled</option>
             </select>
           </label>
-          <label className="grid gap-1 text-sm">
+          <label className="grid min-w-0 gap-1 text-sm">
             <span className="font-medium text-ink">Status</span>
             <select
               name="isActive"
               defaultValue={params.isActive ?? ""}
-              className="h-11 rounded-md border border-line bg-surface px-3 text-sm"
+              className="h-11 min-w-0 w-full max-w-full rounded-md border border-line bg-surface px-3 text-sm"
             >
               <option value="">Any</option>
               <option value="true">Active</option>
               <option value="false">Inactive</option>
             </select>
           </label>
-          <div className="md:col-span-4 flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2 sm:col-span-2 xl:col-span-4">
             <button type="submit" className="rounded-md bg-eye px-3 py-2 text-sm font-semibold text-white hover:bg-eyeDeep">
               Apply filters
             </button>
@@ -117,7 +120,7 @@ export default async function AgenciesPage({
           <p className="mb-4 text-sm text-muted">Your role can view agencies in scope. Creating or editing requires agency:manage.</p>
         ) : null}
 
-        <div className="overflow-x-auto">
+        <div className="max-w-full min-w-0 overflow-x-auto">
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="bg-surfaceMuted text-xs uppercase text-muted">
               <tr>
@@ -133,7 +136,10 @@ export default async function AgenciesPage({
               {agencies.map((agency) => (
                 <tr key={agency.id}>
                   <td className="px-4 py-3">
-                    <Link href={`/agencies/${agency.id}`} className="font-semibold text-eye hover:underline">
+                    <Link
+                      href={`/agencies/${agency.id}`}
+                      className="font-semibold text-eyeOrange hover:underline focus-visible:outline-eyeOrange"
+                    >
                       {agency.name}
                     </Link>
                     <p className="text-xs text-muted">{agency.code}</p>
