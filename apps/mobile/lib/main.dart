@@ -11741,88 +11741,92 @@ class _YourCarScreenState extends State<YourCarScreen> {
     return SafetyScaffold(
       title: "My Vehicles",
       useFigmaShell: true,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-        children: [
-          FlatSection(
-            title: "My Vehicles",
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (vehicles.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      "No vehicles added yet. Add a vehicle to speed up stolen vehicle broadcasts.",
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          children: [
+            FlatSection(
+              title: "My Vehicles",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (vehicles.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        "No vehicles added yet. Add a vehicle to speed up stolen vehicle broadcasts.",
+                      ),
                     ),
-                  ),
-                ...vehicles.map((vehicle) {
-                  final label = "${vehicle.make} ${vehicle.model}".trim();
-                  final subtitle = [
-                    if ((vehicle.color ?? "").trim().isNotEmpty)
-                      vehicle.color!.trim(),
-                    vehicle.plateNumber,
-                  ].join(" • ");
-                  return Column(
-                    children: [
-                      Material(
-                        color: Colors.transparent,
-                        child: ListTile(
-                          leading: const Icon(Icons.directions_car),
-                          title: Row(
-                            children: [
-                              Expanded(
-                                child: Text(label.isEmpty ? "Vehicle" : label),
-                              ),
-                              if (vehicle.isPrimary)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: BrandColors.green.withValues(
-                                      alpha: 0.16,
-                                    ),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: const Text(
-                                    "PRIMARY",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 11,
-                                    ),
-                                  ),
+                  ...vehicles.map((vehicle) {
+                    final label = "${vehicle.make} ${vehicle.model}".trim();
+                    final subtitle = [
+                      if ((vehicle.color ?? "").trim().isNotEmpty)
+                        vehicle.color!.trim(),
+                      vehicle.plateNumber,
+                    ].join(" • ");
+                    return Column(
+                      children: [
+                        Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            leading: const Icon(Icons.directions_car),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child:
+                                      Text(label.isEmpty ? "Vehicle" : label),
                                 ),
-                            ],
-                          ),
-                          subtitle: Text("$subtitle\nView details"),
-                          isThreeLine: true,
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(context).pushNamed(
-                            "/your-car/detail",
-                            arguments:
-                                _VehicleEditorArgs(vehicleId: vehicle.id),
+                                if (vehicle.isPrimary)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: BrandColors.green.withValues(
+                                        alpha: 0.16,
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: const Text(
+                                      "PRIMARY",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            subtitle: Text("$subtitle\nView details"),
+                            isThreeLine: true,
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(context).pushNamed(
+                              "/your-car/detail",
+                              arguments:
+                                  _VehicleEditorArgs(vehicleId: vehicle.id),
+                            ),
                           ),
                         ),
-                      ),
-                      const Divider(height: 1),
-                    ],
-                  );
-                }),
-                const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pushNamed(
-                    "/your-car/detail",
-                    arguments: const _VehicleEditorArgs(),
+                        const Divider(height: 1),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(context).pushNamed(
+                      "/your-car/detail",
+                      arguments: const _VehicleEditorArgs(),
+                    ),
+                    icon: const Icon(Icons.add),
+                    label: const Text("Add Vehicle"),
                   ),
-                  icon: const Icon(Icons.add),
-                  label: const Text("Add Vehicle"),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -13653,7 +13657,7 @@ class ActionTile extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
                     width: 48,

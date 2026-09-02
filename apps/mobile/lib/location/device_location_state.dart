@@ -101,10 +101,21 @@ class DeviceLocationState {
   }
 
   String get displayLocality {
-    final parts = <String>[
-      if (locality != null && locality!.trim().isNotEmpty) locality!.trim(),
-      if (state != null && state!.trim().isNotEmpty) state!.trim(),
-    ];
+    final parts = <String>[];
+    void addDistinct(String? value) {
+      final cleaned = value?.trim();
+      if (cleaned == null || cleaned.isEmpty) return;
+      if (parts.any((part) => part.toLowerCase() == cleaned.toLowerCase())) {
+        return;
+      }
+      parts.add(cleaned);
+    }
+
+    addDistinct(street);
+    addDistinct(subLocality);
+    addDistinct(locality);
+    addDistinct(lga);
+    addDistinct(state);
     if (parts.isNotEmpty) return parts.join(", ");
     if (hasCoordinates) return "Location acquired (address unavailable)";
     if (status == DeviceLocationStatus.unavailable ||
