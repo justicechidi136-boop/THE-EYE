@@ -93,6 +93,8 @@ else
   docker system df || true
   echo "STEP build-cache-prune-start"
   docker builder prune --all --force
+  # Reclaim stale THE EYE release images without touching running or unrelated images.
+  docker image prune --all --force --filter "label=com.docker.compose.project=the-eye"
   docker image prune --force --filter "until=24h"
   echo "STEP build-cache-prune-complete"
   df -h / || true
