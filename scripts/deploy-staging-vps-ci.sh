@@ -93,7 +93,8 @@ else
   docker system df || true
   echo "STEP build-cache-prune-start"
   docker builder prune --all --force
-  docker image prune --force --filter "until=24h"
+  # Preserve images used by running containers while reclaiming stale release images.
+  docker image prune --all --force
   echo "STEP build-cache-prune-complete"
   df -h / || true
   "${COMPOSE[@]}" pull api admin-web notification-worker || true
