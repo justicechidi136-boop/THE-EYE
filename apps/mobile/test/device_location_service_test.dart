@@ -32,6 +32,39 @@ void main() {
       expect(state.displayLocality, "Current device location is unavailable.");
     });
 
+    test("current location shows the most precise human-readable hierarchy",
+        () {
+      const state = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        street: "Stadium Road",
+        subLocality: "Rumuola",
+        locality: "Port Harcourt",
+        lga: "Obio-Akpor",
+        state: "Rivers State",
+      );
+
+      expect(
+        state.displayLocality,
+        "Stadium Road, Rumuola, Port Harcourt, Obio-Akpor, Rivers State",
+      );
+    });
+
+    test("current location removes duplicate geographic labels", () {
+      const state = DeviceLocationState(
+        status: DeviceLocationStatus.acquired,
+        street: "Ada-George Road",
+        subLocality: "Rumueme",
+        locality: "Port Harcourt",
+        lga: "Port Harcourt",
+        state: "Rivers State",
+      );
+
+      expect(
+        state.displayLocality,
+        "Ada-George Road, Rumueme, Port Harcourt, Rivers State",
+      );
+    });
+
     test("danger speech prefers street, then landmark, and never city", () {
       const street = DeviceLocationState(
         status: DeviceLocationStatus.acquired,
@@ -163,7 +196,10 @@ void main() {
         );
 
         expect(result.status, DeviceLocationStatus.acquired);
-        expect(result.displayLocality, "Port Harcourt, Rivers State");
+        expect(
+          result.displayLocality,
+          "Stadium Road, Rumuola, Port Harcourt, Obio-Akpor, Rivers State",
+        );
         expect(result.source, DeviceLocationSourceKind.freshGps);
         expect(result.isProfileFallback, isFalse);
         expect(result.isJurisdictionFallback, isFalse);
@@ -258,7 +294,10 @@ class _PortHarcourtGeocoder implements LocationReverseGeocoder {
     required double longitude,
   }) async {
     return const ReverseGeocodeResult(
+      street: "Stadium Road",
+      subLocality: "Rumuola",
       locality: "Port Harcourt",
+      lga: "Obio-Akpor",
       state: "Rivers State",
       country: "Nigeria",
     );

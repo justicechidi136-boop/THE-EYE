@@ -4,7 +4,9 @@ import "package:share_plus/share_plus.dart";
 
 import "../app/app_scope.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "../location/device_location_state.dart";
 import "../location/location_permission_service.dart";
+import "../location/location_reverse_geocode.dart";
 import "../widgets/section_card.dart";
 import "../incidents/incident_submission_service.dart";
 import "community_post_detail_screen.dart";
@@ -53,12 +55,15 @@ class _NeighborhoodWatchHomeScreenState
     extends State<NeighborhoodWatchHomeScreen> {
   late final NeighborhoodWatchService _service;
   final NwContextCache _contextCache = NwContextCache();
+  final LocationReverseGeocoder _reverseGeocoder =
+      CachedLocationReverseGeocoder();
 
   NwContextResponse? _context;
   String? _loadError;
   bool _loading = false;
   bool _capturingLocation = false;
   String? _locationCaptureMessage;
+  String? _preciseLocationLabel;
   bool _contextIsStale = false;
   DateTime? _contextCachedAt;
   List<CommunityPostItem> _feed = const [];
@@ -157,10 +162,26 @@ class _NeighborhoodWatchHomeScreenState
         accuracy = position.accuracy;
         capturedAt = position.timestamp.toUtc();
         _locationCaptureMessage = null;
+        final geocode = await _reverseGeocoder.lookup(
+          latitude: position.latitude,
+          longitude: position.longitude,
+        );
+        _preciseLocationLabel = geocode.hasAnyLabel
+            ? DeviceLocationState(
+                status: DeviceLocationStatus.acquired,
+                street: geocode.street,
+                subLocality: geocode.subLocality,
+                locality: geocode.locality,
+                lga: geocode.lga,
+                state: geocode.state,
+              ).displayLocality
+            : null;
       } else {
+        _preciseLocationLabel = null;
         _locationCaptureMessage = locationFailureMessage(outcome.result);
       }
     } catch (_) {
+      _preciseLocationLabel = null;
       _locationCaptureMessage = "Unable to read device location.";
     } finally {
       if (mounted) {
@@ -397,10 +418,16 @@ class _NeighborhoodWatchHomeScreenState
             isStale: _contextIsStale,
           )
         : null;
-    final locationParts = [
-      headerLocation?.areaTitle,
-      headerLocation?.areaSubtitle,
-    ].whereType<String>().where((part) => part.trim().isNotEmpty).toList();
+    final preciseLocation = _preciseLocationLabel?.trim();
+    final locationParts = preciseLocation != null && preciseLocation.isNotEmpty
+        ? [preciseLocation]
+        : [
+            headerLocation?.areaTitle,
+            headerLocation?.areaSubtitle,
+          ]
+            .whereType<String>()
+            .where((part) => part.trim().isNotEmpty)
+            .toList();
     return NwPrototypeScaffold(
       title: "Neighborhood Watch",
       subtitle: locationParts.isEmpty

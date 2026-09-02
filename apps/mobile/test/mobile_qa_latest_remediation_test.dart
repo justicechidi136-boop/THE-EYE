@@ -189,6 +189,13 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      final tileColumn = tester.widget<Column>(
+        find.descendant(
+          of: find.byType(ActionTile).first,
+          matching: find.byType(Column),
+        ),
+      );
+      expect(tileColumn.crossAxisAlignment, CrossAxisAlignment.center);
       expect(
           tester.getSize(find.byType(ActionTile).first).height, lessThan(115));
       expect(find.textContaining("Live emergency"), findsOneWidget);
@@ -236,6 +243,11 @@ void main() {
     test("My Vehicles and Vehicle Description strings exist in product UI", () {
       final source = File("lib/main.dart").readAsStringSync();
       expect(source.contains('title: "My Vehicles"'), isTrue);
+      final vehicleScreen = source.substring(
+        source.indexOf("class _YourCarScreenState"),
+        source.indexOf("class _VehicleEditorArgs"),
+      );
+      expect(vehicleScreen.contains("body: SafeArea("), isTrue);
       expect(source.contains('labelText: "Vehicle Description"'), isTrue);
       expect(source.contains('"My Cars"'), isFalse);
       expect(source.contains('_VehiclePhotoUploadState.local => "LOCAL"'),
