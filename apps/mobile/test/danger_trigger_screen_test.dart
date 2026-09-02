@@ -264,7 +264,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text("Select danger type"), findsOneWidget);
-      expect(find.text("Ikeja, Lagos"), findsOneWidget);
+      expect(find.text("Allen Avenue, Ikeja, Lagos"), findsOneWidget);
       final start = find.widgetWithText(
         FilledButton,
         "Start Live Danger Broadcast",
