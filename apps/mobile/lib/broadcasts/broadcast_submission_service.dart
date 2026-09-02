@@ -6,6 +6,8 @@ import "../incidents/incident_draft_factory.dart";
 import "../incidents/incident_submission_service.dart";
 import "broadcast_feed_service.dart";
 
+const broadcastVoiceCommentCompatibilityBody = "Voice message";
+
 class BroadcastSubmissionResult {
   const BroadcastSubmissionResult({
     required this.id,
@@ -244,8 +246,16 @@ class BroadcastSubmissionService {
     required String broadcastId,
     required String body,
     String? parentId,
+    Map<String, Object?>? voiceNote,
   }) async {
-    final fingerprint = "$broadcastId::$body";
+    final normalizedBody = body.trim();
+    final submittedBody = normalizedBody.isNotEmpty
+        ? normalizedBody
+        : voiceNote != null
+            ? broadcastVoiceCommentCompatibilityBody
+            : normalizedBody;
+    final fingerprint =
+        "$broadcastId::$submittedBody::${voiceNote?["objectKey"] ?? ""}";
     final now = DateTime.now().toUtc();
     if (_lastCommentFingerprint == fingerprint &&
         _lastCommentSubmittedAt != null &&
@@ -259,8 +269,9 @@ class BroadcastSubmissionService {
     final response = await _apiClient.postJson(
       TheEyeApiPaths.broadcastComments(broadcastId),
       {
-        "body": body,
+        "body": submittedBody,
         if (parentId != null && parentId.isNotEmpty) "parentId": parentId,
+        if (voiceNote != null) "voiceNote": voiceNote,
       },
       accessToken: accessToken,
     );

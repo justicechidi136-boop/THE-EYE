@@ -30,6 +30,7 @@ export type JurisdictionCorrectionResult = {
 
 const TERMINAL_STATUSES = new Set<string>([
   IncidentStatus.Resolved,
+  IncidentStatus.Ended,
   IncidentStatus.Closed,
   IncidentStatus.FalseReport,
 ]);

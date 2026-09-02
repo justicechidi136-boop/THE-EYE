@@ -28,6 +28,10 @@ class VoiceRecorder extends StatefulWidget {
     this.accessibilityVoiceGuidance = false,
     this.enabled = true,
     this.uploadProgress,
+    this.autoStart = false,
+    this.idleLabel = "Audio / Voice report",
+    this.recordingLabel = "Recording voice report…",
+    this.pausedLabel = "Voice report paused",
     super.key,
   });
 
@@ -37,6 +41,10 @@ class VoiceRecorder extends StatefulWidget {
   final bool accessibilityVoiceGuidance;
   final bool enabled;
   final double? uploadProgress;
+  final bool autoStart;
+  final String idleLabel;
+  final String recordingLabel;
+  final String pausedLabel;
 
   @override
   State<VoiceRecorder> createState() => _VoiceRecorderState();
@@ -53,6 +61,16 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
   double _uploadProgress = 0;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_startRecording());
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     unawaited(_recorder.dispose());
@@ -62,7 +80,8 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
 
   Future<void> _announce(String message) async {
     if (!mounted) return;
-    SemanticsService.sendAnnouncement(View.of(context), message, TextDirection.ltr);
+    SemanticsService.sendAnnouncement(
+        View.of(context), message, TextDirection.ltr);
     if (widget.accessibilityVoiceGuidance) {
       // Spoken guidance hook for future TTS integration.
     }
@@ -73,7 +92,8 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
     if (status.isGranted) return true;
     setState(() {
       _state = VoiceRecorderState.failed;
-      _errorMessage = "Microphone permission is required to record a voice report.";
+      _errorMessage =
+          "Microphone permission is required to record a voice report.";
     });
     await _announce("Microphone permission denied.");
     return false;
@@ -139,7 +159,8 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
   }
 
   Future<void> _stopRecording({bool autoStopped = false}) async {
-    if (_state != VoiceRecorderState.recording && _state != VoiceRecorderState.paused) {
+    if (_state != VoiceRecorderState.recording &&
+        _state != VoiceRecorderState.paused) {
       return;
     }
     _timer?.cancel();
@@ -254,7 +275,8 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
     final colors = EyeSemanticColors.of(context);
     final isRecording = _state == VoiceRecorderState.recording;
     final isPaused = _state == VoiceRecorderState.paused;
-    final hasRecording = _state == VoiceRecorderState.recorded || _state == VoiceRecorderState.playing;
+    final hasRecording = _state == VoiceRecorderState.recorded ||
+        _state == VoiceRecorderState.playing;
 
     return Semantics(
       container: true,
@@ -275,12 +297,16 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
                 Expanded(
                   child: Text(
                     _stateLabel(),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
                 Text(
                   formatVoiceDuration(_elapsedSeconds),
-                  semanticsLabel: "Recording duration ${formatVoiceDuration(_elapsedSeconds)}",
+                  semanticsLabel:
+                      "Recording duration ${formatVoiceDuration(_elapsedSeconds)}",
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ],
@@ -301,7 +327,8 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
                         ? null
                         : isRecording
                             ? _stopRecording
-                            : (_state == VoiceRecorderState.idle || _state == VoiceRecorderState.failed)
+                            : (_state == VoiceRecorderState.idle ||
+                                    _state == VoiceRecorderState.failed)
                                 ? _startRecording
                                 : null,
                     child: SizedBox(
@@ -363,7 +390,10 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
                   ),
                 ],
                 if (_state == VoiceRecorderState.failed)
-                  _ActionChip(label: "Retry", icon: Icons.replay_rounded, onPressed: _retry),
+                  _ActionChip(
+                      label: "Retry",
+                      icon: Icons.replay_rounded,
+                      onPressed: _retry),
               ],
             ),
             if ((widget.uploadProgress != null && widget.uploadProgress! > 0) ||
@@ -398,13 +428,13 @@ class _VoiceRecorderState extends State<VoiceRecorder> {
   String _stateLabel() {
     switch (_state) {
       case VoiceRecorderState.idle:
-        return "Audio / Voice report";
+        return widget.idleLabel;
       case VoiceRecorderState.recording:
-        return "Recording voice report…";
+        return widget.recordingLabel;
       case VoiceRecorderState.paused:
-        return "Voice report paused";
+        return widget.pausedLabel;
       case VoiceRecorderState.recorded:
-        return "Audio / Voice report";
+        return widget.idleLabel;
       case VoiceRecorderState.playing:
         return "Playing back";
       case VoiceRecorderState.uploading:
@@ -435,7 +465,9 @@ class _LevelIndicator extends StatelessWidget {
           width: 8,
           height: active ? 12 + (index % 3) * 8 : 8,
           decoration: BoxDecoration(
-            color: active ? EyeSemanticColors.of(context).primaryAction : EyeSemanticColors.of(context).border,
+            color: active
+                ? EyeSemanticColors.of(context).primaryAction
+                : EyeSemanticColors.of(context).border,
             borderRadius: BorderRadius.circular(4),
           ),
         );
@@ -460,7 +492,8 @@ class _ActionChip extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
-      child: OutlinedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label)),
+      child: OutlinedButton.icon(
+          onPressed: onPressed, icon: Icon(icon), label: Text(label)),
     );
   }
 }

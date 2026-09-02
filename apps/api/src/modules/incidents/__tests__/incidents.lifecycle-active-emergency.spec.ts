@@ -470,6 +470,9 @@ describe("ActiveEmergencyService contract", () => {
     expect(result.reportedLocation.locationLabel).toBe(
       "Ikeja, Lagos, Nigeria",
     );
+    expect(result.reportedLocation.lga).toBe("Ikeja");
+    expect(result.reportedLocation.state).toBe("Lagos");
+    expect(result.reportedLocation.country).toBe("Nigeria");
   });
 
   it("denies another citizen with 404", async () => {
@@ -507,6 +510,22 @@ describe("ActiveEmergencyService contract", () => {
     expect(result.resolutionSummary).toEqual(
       expect.objectContaining({ source: ResolutionSource.Agency }),
     );
+  });
+
+  it("returns terminal redirect contract for ended live emergencies", async () => {
+    const { service, prisma } = buildActiveEmergencyService();
+    prisma.incident.findFirst.mockResolvedValue({ id: "inc-1" });
+    prisma.incident.findUnique.mockResolvedValue({
+      ...activeIncident,
+      status: IncidentStatus.Ended,
+      endedAt: new Date("2026-08-05T10:10:00.000Z"),
+    });
+
+    const result = await service.getActiveEmergency("inc-1", reporter);
+
+    expect(result.isActive).toBe(false);
+    expect(result.routeType).toBe(TERMINAL_ROUTE_TYPE);
+    expect(result.status).toBe(IncidentStatus.Ended);
   });
 
   it("derives allowed actions before assignment", async () => {

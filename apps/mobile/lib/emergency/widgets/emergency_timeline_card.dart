@@ -48,6 +48,7 @@ class EmergencyTimelineCard extends StatelessWidget {
         .toList(growable: false);
 
     return ActiveEmergencyCard(
+      flat: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

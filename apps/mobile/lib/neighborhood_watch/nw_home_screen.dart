@@ -669,7 +669,7 @@ class _NeighborhoodFeedCard extends StatelessWidget {
         "SuspiciousActivity" => "Suspicious activity",
         "RoadHazard" => "Road hazard",
         "CommunityAnnouncement" => "Community update",
-        "Discussion" => "Community conversation",
+        "Discussion" => "Conversation",
         _ => post.type,
       };
 
@@ -695,33 +695,41 @@ class _NeighborhoodFeedCard extends StatelessWidget {
         onTap: onOpen,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   CircleAvatar(
-                    radius: 18,
+                    radius: 16,
                     backgroundColor: semantics.elevatedSurface,
                     child: Text(
                       _initials,
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(post.displayAuthor,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                          post.displayAuthor,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         Text(
                           "${formatNeighborhoodPostAge(post.createdAt)} · $_typeLabel",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: semantics.secondaryText,
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                         ),
                       ],
@@ -730,6 +738,7 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                   NwPrototypePill(
                     label: verificationLabel,
                     selected: true,
+                    compact: true,
                     color: verificationLabel == "Verified" ||
                             verificationLabel == "Confirmed"
                         ? semantics.verified
@@ -737,19 +746,26 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 post.title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
               ),
               if (post.body.trim().isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(post.body, maxLines: 4, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 3),
+                Text(
+                  post.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, height: 1.25),
+                ),
               ],
               if (_locationLabel != null) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     const Icon(Icons.place_outlined, size: 17),
@@ -759,14 +775,17 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                         _locationLabel!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: semantics.secondaryText),
+                        style: TextStyle(
+                          color: semantics.secondaryText,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ],
               if (post.media.isNotEmpty) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 5),
                 Wrap(
                   spacing: 12,
                   runSpacing: 6,
@@ -784,7 +803,7 @@ class _NeighborhoodFeedCard extends StatelessWidget {
                   ],
                 ),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   Expanded(
@@ -826,9 +845,10 @@ class _NeighborhoodFeedCard extends StatelessWidget {
   }
 
   ButtonStyle get _actionStyle => TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-        minimumSize: const Size(0, 40),
-        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        minimumSize: const Size(0, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
       );
 }
 

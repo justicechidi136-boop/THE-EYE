@@ -78,6 +78,7 @@ class DangerTriggerEventDetail {
     required this.state,
     required this.approximateArea,
     required this.liveAvailable,
+    required this.originalVoiceAvailable,
     required this.radiusMeters,
   });
 
@@ -85,7 +86,18 @@ class DangerTriggerEventDetail {
   final String state;
   final String approximateArea;
   final bool liveAvailable;
+  final bool originalVoiceAvailable;
   final int radiusMeters;
+}
+
+class DangerTriggerOriginalVoiceAccess {
+  const DangerTriggerOriginalVoiceAccess({
+    required this.signedUrl,
+    required this.expiresInSeconds,
+  });
+
+  final String signedUrl;
+  final int expiresInSeconds;
 }
 
 class DangerTriggerListenSession {
@@ -140,6 +152,11 @@ abstract class DangerTriggerGateway {
   });
 
   Future<DangerTriggerListenSession> listen({
+    required String accessToken,
+    required String eventId,
+  });
+
+  Future<DangerTriggerOriginalVoiceAccess> originalVoice({
     required String accessToken,
     required String eventId,
   });
@@ -306,6 +323,7 @@ class DangerTriggerApiService implements DangerTriggerGateway {
       approximateArea: data["approximateArea"]?.toString() ?? "Nearby area",
       liveAvailable:
           data["state"] == "ACTIVE" && data["liveVoiceEndedAt"] == null,
+      originalVoiceAvailable: data["originalVoiceAvailable"] == true,
       radiusMeters: (data["effectiveRadiusMeters"] as num?)?.toInt() ?? 4000,
     );
   }
@@ -343,6 +361,35 @@ class DangerTriggerApiService implements DangerTriggerGateway {
       serverUrl: serverUrl,
       token: token,
       roomName: roomName,
+    );
+  }
+
+  @override
+  Future<DangerTriggerOriginalVoiceAccess> originalVoice({
+    required String accessToken,
+    required String eventId,
+  }) async {
+    final response = await _apiClient.getJson(
+      TheEyeApiPaths.dangerTriggerOriginalVoice(eventId),
+      accessToken: accessToken,
+    );
+    final body = _decode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw DangerTriggerException(
+        _errorMessage(body, "Original voice recording is unavailable."),
+        statusCode: response.statusCode,
+      );
+    }
+    final data = Map<String, dynamic>.from((body["data"] as Map?) ?? const {});
+    final signedUrl = data["signedUrl"]?.toString() ?? "";
+    if (signedUrl.isEmpty) {
+      throw const DangerTriggerException(
+        "Original voice playback details were incomplete.",
+      );
+    }
+    return DangerTriggerOriginalVoiceAccess(
+      signedUrl: signedUrl,
+      expiresInSeconds: (data["expiresInSeconds"] as num?)?.toInt() ?? 0,
     );
   }
 

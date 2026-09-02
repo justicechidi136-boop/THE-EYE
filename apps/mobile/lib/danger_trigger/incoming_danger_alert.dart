@@ -55,11 +55,11 @@ class IncomingDangerAlert {
       expiresAt != null && !expiresAt!.isAfter(DateTime.now());
   String get spokenText => "Danger alert. $dangerType reported in $area.";
   int get priorityRank => switch (priority.toUpperCase()) {
-    "CRITICAL" => 4,
-    "HIGH" => 3,
-    "MEDIUM" => 2,
-    _ => 1,
-  };
+        "CRITICAL" => 4,
+        "HIGH" => 3,
+        "MEDIUM" => 2,
+        _ => 1,
+      };
 
   static IncomingDangerAlert? fromData(Map<String, dynamic> data) {
     if (data["type"]?.toString() != "NearbyDangerWarning") return null;
@@ -86,7 +86,8 @@ class IncomingDangerAlert {
       expiresAt: DateTime.tryParse(data["expiresAt"]?.toString() ?? ""),
       distanceMeters: int.tryParse(data["distanceMeters"]?.toString() ?? ""),
       liveAvailable: data["liveAvailable"]?.toString() == "true",
-      hasOriginalVoice: data["hasOriginalVoice"]?.toString() == "true",
+      hasOriginalVoice: data["hasOriginalVoice"]?.toString() == "true" ||
+          data["originalVoiceAvailable"]?.toString() == "true",
       priority: data["dangerAlertPriority"]?.toString() ?? "MEDIUM",
     );
     return parsed.isExpired ? null : parsed;

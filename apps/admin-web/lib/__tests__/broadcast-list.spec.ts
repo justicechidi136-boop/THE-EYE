@@ -56,6 +56,7 @@ describe("Broadcast list presentation", () => {
     const form = readFileSync(join(root, "components", "broadcast-create-form.tsx"), "utf8");
     const workspace = readFileSync(join(root, "components", "broadcast", "broadcast-workspace.tsx"), "utf8");
     const filters = readFileSync(join(root, "components", "broadcast", "broadcast-filters.tsx"), "utf8");
+    const page = readFileSync(join(root, "app", "broadcasts", "page.tsx"), "utf8");
     const list = readFileSync(join(root, "components", "broadcast", "broadcast-list.tsx"), "utf8");
     const listActions = readFileSync(join(root, "components", "broadcast", "broadcast-list-actions.tsx"), "utf8");
     expect(form.includes("Message / content")).toBe(true);
@@ -77,6 +78,12 @@ describe("Broadcast list presentation", () => {
     expect(workspace.includes("Cancelled")).toBe(true);
     expect(filters.includes("Last 7 days")).toBe(true);
     expect(filters.includes("Custom range")).toBe(true);
+    for (const name of ["search", "category", "status", "author", "country", "state", "lga", "communityId", "time"]) {
+      expect(filters.includes(`name="${name}"`)).toBe(true);
+    }
+    expect(filters.includes('<form method="get"')).toBe(true);
+    expect(filters.includes('href="/broadcasts"')).toBe(true);
+    expect(page.includes('page: readParam(params.page) ?? "1"')).toBe(true);
     expect(list.includes('>Delivery<')).toBe(false);
     expect(list.includes("visiblePages")).toBe(true);
     expect(listActions.includes('aria-label="More actions"')).toBe(true);

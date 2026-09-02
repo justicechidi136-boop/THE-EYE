@@ -3,11 +3,11 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 
-import "../contracts/the_eye_enums.dart";
 import "../design_system/eye_semantic_colors.dart";
 import "../evidence/evidence_attachment_picker.dart";
 import "../evidence/evidence_capture_controller.dart";
-import "../voice/voice_recorder.dart";
+import "../voice/chat_voice_composer.dart";
+import "../voice/voice_report_validation.dart";
 import "neighborhood_watch_prototype_chrome.dart";
 import "neighborhood_watch_service.dart";
 
@@ -157,65 +157,6 @@ class GeoCommunityChatView extends StatelessWidget {
     );
   }
 
-  Future<void> _showVoiceRecorder(BuildContext context) async {
-    final controller = evidenceController;
-    if (controller == null) return;
-    final existingVoice = controller.attachments
-        .where((item) => item.isAudio && item.metadata["voiceReport"] == true)
-        .toList(growable: false);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            8,
-            16,
-            16 + MediaQuery.viewInsetsOf(sheetContext).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      "Voice message",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: "Close voice recorder",
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              VoiceRecorder(
-                enabled: canSend &&
-                    !sending &&
-                    (controller.canAddMoreFor(IncidentMediaType.audio) ||
-                        existingVoice.isNotEmpty),
-                onRecordingReady: (result) {
-                  for (final existing in existingVoice) {
-                    controller.remove(existing.localId);
-                  }
-                  controller.addVoiceAttachment(result.attachment);
-                  Navigator.of(sheetContext).pop();
-                  if (!showAttachments) onToggleAttachments();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _insertKeyboardGif(
     BuildContext context,
     KeyboardInsertedContent content,
@@ -307,7 +248,17 @@ class GeoCommunityChatView extends StatelessWidget {
                         ),
                       ),
                     if (sendError != null) _failedSend(context),
-                    _composer(context),
+                    _ChatComposer(
+                      canSend: canSend,
+                      sending: sending,
+                      attachmentCount: attachmentCount,
+                      messageController: messageController,
+                      evidenceController: evidenceController,
+                      onToggleAttachments: onToggleAttachments,
+                      onSend: onSend,
+                      onKeyboardGif: (content) =>
+                          _insertKeyboardGif(context, content),
+                    ),
                   ],
                 ),
               ),
@@ -471,82 +422,143 @@ class GeoCommunityChatView extends StatelessWidget {
           ],
         ),
       );
+}
 
-  Widget _composer(BuildContext context) => Padding(
+class _ChatComposer extends StatefulWidget {
+  const _ChatComposer({
+    required this.canSend,
+    required this.sending,
+    required this.attachmentCount,
+    required this.messageController,
+    required this.evidenceController,
+    required this.onToggleAttachments,
+    required this.onSend,
+    required this.onKeyboardGif,
+  });
+
+  final bool canSend;
+  final bool sending;
+  final int attachmentCount;
+  final TextEditingController messageController;
+  final EvidenceCaptureController? evidenceController;
+  final VoidCallback onToggleAttachments;
+  final Future<void> Function() onSend;
+  final ValueChanged<KeyboardInsertedContent> onKeyboardGif;
+
+  @override
+  State<_ChatComposer> createState() => _ChatComposerState();
+}
+
+class _ChatComposerState extends State<_ChatComposer> {
+  bool _recordingVoice = false;
+
+  Future<void> _sendVoice(VoiceRecordingResult recording) async {
+    final controller = widget.evidenceController;
+    if (controller == null) return;
+    for (final existing in controller.attachments
+        .where(
+          (item) => item.isAudio,
+        )
+        .toList(growable: false)) {
+      controller.remove(existing.localId);
+    }
+    controller.addVoiceAttachment(recording.attachment);
+    if (!controller.attachments.any(
+      (item) => item.localId == recording.attachment.localId,
+    )) {
+      throw StateError(controller.lastError ?? "Voice message is unavailable.");
+    }
+    await widget.onSend();
+    if (mounted) setState(() => _recordingVoice = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_recordingVoice) {
+      return Padding(
         padding: const EdgeInsets.fromLTRB(8, 7, 8, 9),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            IconButton(
-              key: const Key("chat-attachment-button"),
-              tooltip: "Add photo, video, GIF, sticker, or voice note",
-              constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-              padding: EdgeInsets.zero,
-              onPressed: canSend ? onToggleAttachments : null,
-              icon: Badge(
-                isLabelVisible: attachmentCount > 0,
-                label: Text("$attachmentCount"),
-                child: const Icon(Icons.add_circle_outline, size: 23),
-              ),
-            ),
-            Expanded(
-              child: TextField(
-                controller: messageController,
-                enabled: canSend && !sending,
-                minLines: 1,
-                maxLines: 5,
-                autocorrect: true,
-                enableSuggestions: true,
-                spellCheckConfiguration: WidgetsBinding.instance
-                        .platformDispatcher.nativeSpellCheckServiceDefined
-                    ? const SpellCheckConfiguration()
-                    : const SpellCheckConfiguration.disabled(),
-                contentInsertionConfiguration: ContentInsertionConfiguration(
-                  allowedMimeTypes: const ["image/gif"],
-                  onContentInserted: (content) {
-                    unawaited(_insertKeyboardGif(context, content));
-                  },
-                ),
-                keyboardType: TextInputType.multiline,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: "Message your neighborhood...",
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => onSend(),
-              ),
-            ),
-            const SizedBox(width: 6),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: messageController,
-              builder: (context, value, _) {
-                final hasMessage = value.text.trim().isNotEmpty;
-                final hasContent = hasMessage || attachmentCount > 0;
-                if (!hasContent && !sending) {
-                  return IconButton.filled(
-                    tooltip: "Record voice message",
-                    onPressed: canSend && evidenceController != null
-                        ? () => _showVoiceRecorder(context)
-                        : null,
-                    icon: const Icon(Icons.mic_rounded),
-                  );
-                }
-                return IconButton.filled(
-                  tooltip: "Send message",
-                  onPressed: canSend && !sending ? onSend : null,
-                  icon: sending
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                );
-              },
-            ),
-          ],
+        child: ChatVoiceComposer(
+          sending: widget.sending,
+          onCancel: () => setState(() => _recordingVoice = false),
+          onSend: _sendVoice,
         ),
       );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 7, 8, 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          IconButton(
+            key: const Key("chat-attachment-button"),
+            tooltip: "Add photo, video, GIF, sticker, or voice note",
+            constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+            padding: EdgeInsets.zero,
+            onPressed: widget.canSend ? widget.onToggleAttachments : null,
+            icon: Badge(
+              isLabelVisible: widget.attachmentCount > 0,
+              label: Text("${widget.attachmentCount}"),
+              child: const Icon(Icons.add_circle_outline, size: 23),
+            ),
+          ),
+          Expanded(
+            child: TextField(
+              controller: widget.messageController,
+              enabled: widget.canSend && !widget.sending,
+              minLines: 1,
+              maxLines: 5,
+              autocorrect: true,
+              enableSuggestions: true,
+              spellCheckConfiguration: WidgetsBinding.instance
+                      .platformDispatcher.nativeSpellCheckServiceDefined
+                  ? const SpellCheckConfiguration()
+                  : const SpellCheckConfiguration.disabled(),
+              contentInsertionConfiguration: ContentInsertionConfiguration(
+                allowedMimeTypes: const ["image/gif"],
+                onContentInserted: widget.onKeyboardGif,
+              ),
+              keyboardType: TextInputType.multiline,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                hintText: "Message your neighborhood...",
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => widget.onSend(),
+            ),
+          ),
+          const SizedBox(width: 6),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: widget.messageController,
+            builder: (context, value, _) {
+              final hasMessage = value.text.trim().isNotEmpty;
+              final hasContent = hasMessage || widget.attachmentCount > 0;
+              if (!hasContent && !widget.sending) {
+                return IconButton.filled(
+                  tooltip: "Record voice message",
+                  onPressed: widget.canSend && widget.evidenceController != null
+                      ? () => setState(() => _recordingVoice = true)
+                      : null,
+                  icon: const Icon(Icons.mic_rounded),
+                );
+              }
+              return IconButton.filled(
+                tooltip: "Send message",
+                onPressed:
+                    widget.canSend && !widget.sending ? widget.onSend : null,
+                icon: widget.sending
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class RoomMessageBubble extends StatelessWidget {
@@ -590,12 +602,14 @@ class RoomMessageBubble extends StatelessWidget {
     final timeLabel = local == null
         ? ""
         : "${local.hour.toString().padLeft(2, "0")}:${local.minute.toString().padLeft(2, "0")}";
+    final bubbleMaxWidth =
+        (MediaQuery.sizeOf(context).width * 0.78).clamp(220.0, 286.0);
     return Align(
       alignment: ownMessage ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 310),
+        constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 5),
           child: Material(
             color: ownMessage
                 ? Theme.of(context).colorScheme.primaryContainer
@@ -606,18 +620,18 @@ class RoomMessageBubble extends StatelessWidget {
               onLongPress: onLongPress,
               borderRadius: BorderRadius.circular(8),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(11, 8, 11, 7),
+                padding: const EdgeInsets.fromLTRB(9, 6, 9, 5),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(author,
                         style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w800)),
+                            fontSize: 11, fontWeight: FontWeight.w800)),
                     if (replyText != null && replyText!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 3),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(7),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: semantics.background.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(4),
@@ -627,18 +641,18 @@ class RoomMessageBubble extends StatelessWidget {
                       ),
                     ],
                     if (body.trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         body,
                         style: _chatStickers.any(
                           (sticker) => sticker.value == body.trim(),
                         )
                             ? const TextStyle(fontSize: 32, height: 1.15)
-                            : null,
+                            : const TextStyle(fontSize: 14, height: 1.25),
                       ),
                     ],
                     if (media.isNotEmpty) ...[
-                      const SizedBox(height: 7),
+                      const SizedBox(height: 4),
                       _MediaPreview(media: media),
                     ] else if (mediaCount > 0) ...[
                       const SizedBox(height: 6),
@@ -651,32 +665,50 @@ class RoomMessageBubble extends StatelessWidget {
                         ],
                       ),
                     ],
-                    if (!pending && !failed)
-                      InkWell(
-                        onTap: onLike,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 5, bottom: 2),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (!pending && !failed)
+                          InkWell(
+                            onTap: onLike,
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                top: 2,
+                                right: 8,
+                                bottom: 1,
+                              ),
+                              child: Text(
+                                reactionCount > 0
+                                    ? "Like $reactionCount"
+                                    : "Like",
+                                style: TextStyle(
+                                  color: semantics.interactiveText,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        Flexible(
                           child: Text(
-                            reactionCount > 0 ? "Like $reactionCount" : "Like",
+                            [
+                              if (timeLabel.isNotEmpty) timeLabel,
+                              if (edited) "edited",
+                              if (pending) "sending",
+                              if (failed) "failed",
+                            ].join(" · "),
+                            textAlign: TextAlign.right,
                             style: TextStyle(
-                              color: semantics.interactiveText,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 10,
+                              color: semantics.secondaryText,
                             ),
                           ),
                         ),
-                      ),
-                    const SizedBox(height: 4),
-                    Text(
-                      [
-                        if (timeLabel.isNotEmpty) timeLabel,
-                        if (edited) "edited",
-                        if (pending) "sending",
-                        if (failed) "failed",
-                        if (reactionCount > 0) "$reactionCount reactions",
-                      ].join(" · "),
-                      style: TextStyle(
-                          fontSize: 10, color: semantics.secondaryText),
+                      ],
                     ),
                   ],
                 ),
@@ -858,6 +890,13 @@ class _MediaPreview extends StatelessWidget {
           errorBuilder: (_, __, ___) =>
               _fallback(Icons.image_not_supported_outlined),
         ),
+      );
+    }
+    if (first.isAudio && url != null && url.isNotEmpty) {
+      return ChatVoiceNotePlayer(
+        url: url,
+        durationSeconds: first.durationSeconds,
+        semanticLabel: "Neighborhood voice note",
       );
     }
     return _fallback(

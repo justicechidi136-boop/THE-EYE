@@ -5,10 +5,12 @@ import "package:the_eye_mobile/notifications/notification_inbox_service.dart";
 InboxNotificationItem item({
   String? deepLink,
   String? broadcastId,
+  String type = "BroadcastAlert",
+  Map<String, dynamic> metadata = const {},
 }) {
   return InboxNotificationItem(
     id: "n1",
-    type: "BroadcastAlert",
+    type: type,
     title: "Missing person alert",
     body: "Nearby alert",
     priority: "High",
@@ -17,6 +19,7 @@ InboxNotificationItem item({
     createdAt: DateTime.utc(2026, 8, 12),
     deepLink: deepLink,
     broadcastId: broadcastId,
+    metadata: metadata,
   );
 }
 
@@ -48,5 +51,18 @@ void main() {
 
   test("falls back to notifications when nothing resolvable", () {
     expect(resolveInboxNotificationDestination(item()), "/notifications");
+  });
+
+  test("routes a nearby danger warning by its authorized event id", () {
+    expect(
+      resolveInboxNotificationDestination(
+        item(
+          type: "NearbyDangerWarning",
+          deepLink: "/active-emergency",
+          metadata: const {"dangerEventId": "danger-event-1"},
+        ),
+      ),
+      "/danger-trigger/events/danger-event-1",
+    );
   });
 }

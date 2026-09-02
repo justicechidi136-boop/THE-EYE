@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AdminRoleName, IncidentStatus, IncidentType, ResolutionSource } from "@the-eye/shared";
+import { AdminRoleName, IncidentStatus, IncidentType } from "@the-eye/shared";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -441,13 +441,10 @@ export class LiveVideoService {
         const updatedIncident = await transaction.incident.update({
           where: { id: session.incidentId },
           data: {
-            status: IncidentStatus.Resolved,
+            status: IncidentStatus.Ended,
             statusVersion: { increment: 1 },
             lastTrustedUpdateAt: now,
-            resolvedAt: now,
-            resolvedById: actor.sub,
-            resolutionSource: ResolutionSource.Reporter,
-            resolutionReason: "Standalone live emergency video ended by reporter.",
+            endedAt: now,
             timeline: {
               create: {
                 actorId: actor.sub,
@@ -457,14 +454,14 @@ export class LiveVideoService {
                 metadata: {
                   sessionId,
                   fromStatus: currentStatus,
-                  toStatus: IncidentStatus.Resolved,
+                  toStatus: IncidentStatus.Ended,
                 },
               },
             },
             statusHistory: {
               create: {
                 fromStatus: currentStatus,
-                toStatus: IncidentStatus.Resolved,
+                toStatus: IncidentStatus.Ended,
                 changedById: actor.sub,
                 note: "Standalone live emergency video ended by reporter.",
               },

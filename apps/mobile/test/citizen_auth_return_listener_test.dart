@@ -21,6 +21,8 @@ void main() {
             );
           },
           "/home": (_) => const Scaffold(body: Text("citizen-home")),
+          "/broadcasts/broadcast-42": (_) =>
+              const Scaffold(body: Text("broadcast-detail")),
         },
       ),
     );
@@ -119,7 +121,8 @@ void main() {
     );
   });
 
-  test("public Broadcast link rejects unapproved hosts and malformed paths", () {
+  test("public Broadcast link rejects unapproved hosts and malformed paths",
+      () {
     expect(
       broadcastRouteForPublicUri(
         Uri.parse("https://example.com/share/broadcasts/broadcast-42"),
@@ -133,6 +136,37 @@ void main() {
         ),
       ),
       isNull,
+    );
+  });
+
+  testWidgets("authenticated Broadcast link opens detail in the warm app",
+      (tester) async {
+    final navKey = await pumpApp(tester);
+    navigateBroadcastLink(
+      nav: navKey.currentState!,
+      route: "/broadcasts/broadcast-42",
+      isAuthenticated: true,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text("broadcast-detail"), findsOneWidget);
+  });
+
+  testWidgets("unauthenticated Broadcast link preserves destination at sign in",
+      (tester) async {
+    final navKey = await pumpApp(tester);
+    navigateBroadcastLink(
+      nav: navKey.currentState!,
+      route: "/broadcasts/broadcast-42",
+      isAuthenticated: false,
+    );
+    await tester.pumpAndSettle();
+    final settings = ModalRoute.of(
+      tester.element(find.text("citizen-sign-in")),
+    )!
+        .settings;
+    expect(
+      (settings.arguments as Map)["postLoginRoute"],
+      "/broadcasts/broadcast-42",
     );
   });
 }

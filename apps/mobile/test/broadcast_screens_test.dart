@@ -1,7 +1,9 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:http/http.dart" as http;
 
 import "package:the_eye_mobile/broadcasts/broadcast_feed_service.dart";
 import "package:the_eye_mobile/broadcasts/broadcast_navigation.dart";
@@ -16,6 +18,7 @@ import "package:the_eye_mobile/design_system/eye_semantic_colors.dart";
 import "package:the_eye_mobile/l10n/generated/app_localizations.dart";
 import "package:the_eye_mobile/location/nigeria_location_catalog.dart";
 import "package:the_eye_mobile/location/device_location_state.dart";
+import "package:the_eye_mobile/voice/chat_voice_composer.dart";
 
 class _TestLocationProvider implements LocationSelectionProvider {
   const _TestLocationProvider();
@@ -29,6 +32,32 @@ class _TestLocationProvider implements LocationSelectionProvider {
         "Rivers" => const ["Port Harcourt"],
         _ => const [],
       };
+}
+
+class _CapturingApiClient extends TheEyeApiClient {
+  Map<String, Object?>? lastPayload;
+
+  @override
+  Future<http.Response> postJson(
+    String path,
+    Map<String, Object?> payload, {
+    String? accessToken,
+    String? clientSubmissionId,
+    String? clientTraceId,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    lastPayload = payload;
+    return http.Response(
+      jsonEncode({
+        "data": {
+          "id": "voice-comment",
+          "body": payload["body"],
+          "voiceNote": payload["voiceNote"],
+        },
+      }),
+      201,
+    );
+  }
 }
 
 class _FakeBroadcastFeedService extends BroadcastFeedService {
@@ -481,6 +510,42 @@ void main() {
     expect(comment.body, "Seen near the market.");
   });
 
+  test("BroadcastCommentItem parses signed voice comment playback", () {
+    final item = BroadcastCommentItem.fromJson({
+      "id": "voice-comment",
+      "body": "",
+      "voiceNote": {
+        "url": "https://storage.example/signed-voice",
+        "durationSeconds": 8,
+      },
+    });
+
+    expect(item.voiceNoteUrl, "https://storage.example/signed-voice");
+    expect(item.voiceNoteDurationSeconds, 8);
+  });
+
+  test("voice-only comments carry a body for deployed API compatibility",
+      () async {
+    final apiClient = _CapturingApiClient();
+    final service = BroadcastSubmissionService(apiClient: apiClient);
+
+    await service.addComment(
+      accessToken: "token",
+      broadcastId: "broadcast-1",
+      body: "",
+      voiceNote: const {
+        "objectKey": "voice/comment.m4a",
+        "url": "https://storage.example/signed-voice",
+      },
+    );
+
+    expect(
+      apiClient.lastPayload?["body"],
+      broadcastVoiceCommentCompatibilityBody,
+    );
+    expect(apiClient.lastPayload?["voiceNote"], isNotNull);
+  });
+
   testWidgets(
       "comments screen leaves loading state when session is unavailable",
       (tester) async {
@@ -541,8 +606,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("No comments yet"), findsOneWidget);
-    expect(find.text("Add a comment..."), findsOneWidget);
-    expect(find.byTooltip("Use voice typing"), findsOneWidget);
+    expect(find.text("Write a comment..."), findsOneWidget);
+    expect(find.byTooltip("Record voice comment"), findsOneWidget);
+    expect(find.byTooltip("Use voice typing"), findsNothing);
     expect(find.byTooltip("Send comment"), findsNothing);
 
     await tester.enterText(
@@ -556,6 +622,155 @@ void main() {
     expect(find.byIcon(Icons.emoji_emotions_outlined), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets("voice comments use a compact chat recorder", (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatVoiceComposer(
+            autoStart: false,
+            onCancel: () {},
+            onSend: (_) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key("chat-voice-composer")), findsOneWidget);
+    expect(find.byTooltip("Cancel voice message"), findsOneWidget);
+    expect(find.byTooltip("Pause recording"), findsOneWidget);
+    expect(find.byTooltip("Send voice message"), findsOneWidget);
+    expect(find.text("00:00"), findsOneWidget);
+    expect(find.text("Send voice comment"), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets("comments group replies under their parent and compose inline",
+      (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastCommentsScreen(broadcastId: "b1"),
+        session: _FakeBroadcastSession(
+          comments: [
+            BroadcastCommentItem(
+              id: "parent",
+              body: "Parent update",
+              createdAt: DateTime.utc(2026, 8, 22, 20, 12),
+              authorName: "John D.",
+            ),
+            BroadcastCommentItem(
+              id: "reply",
+              parentId: "parent",
+              body: "Nested reply",
+              createdAt: DateTime.utc(2026, 8, 22, 20, 15),
+              authorName: "Chioma K.",
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final thread = find.byKey(
+      const ValueKey("broadcast-comment-thread-parent"),
+    );
+    final replies = find.byKey(
+      const ValueKey("broadcast-comment-replies-parent"),
+    );
+    expect(thread, findsOneWidget);
+    expect(replies, findsOneWidget);
+    expect(
+      find.descendant(of: replies, matching: find.text("Nested reply")),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text("Reply").first);
+    await tester.pump();
+    expect(find.byKey(const Key("broadcast-reply-input")), findsOneWidget);
+    expect(find.byTooltip("Send reply"), findsOneWidget);
+    expect(find.text("Write a comment..."), findsOneWidget);
+  });
+
+  testWidgets("comments render compact voice-note playback", (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastCommentsScreen(broadcastId: "b1"),
+        session: _FakeBroadcastSession(
+          comments: [
+            BroadcastCommentItem(
+              id: "voice-comment",
+              body: broadcastVoiceCommentCompatibilityBody,
+              createdAt: null,
+              authorName: "Voice Citizen",
+              voiceNoteUrl: "https://storage.example/signed-voice",
+              voiceNoteDurationSeconds: 8,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip("Play voice comment"), findsOneWidget);
+    expect(
+      find.text(broadcastVoiceCommentCompatibilityBody),
+      findsNothing,
+    );
+    expect(find.text("00:08"), findsOneWidget);
+    expect(
+      find.byKey(const Key("broadcast-voice-message-bubble")),
+      findsOneWidget,
+    );
+    expect(find.byTooltip("Use voice typing"), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final size in const [
+    Size(390, 844),
+    Size(412, 915),
+    Size(480, 960),
+    Size(768, 1024),
+  ]) {
+    testWidgets("prototype comment hierarchy fits ${size.width.toInt()}px",
+        (tester) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        wrap(
+          const BroadcastCommentsScreen(broadcastId: "b1"),
+          session: _FakeBroadcastSession(
+            comments: [
+              BroadcastCommentItem(
+                id: "parent",
+                body:
+                    "Saw it near the estate junction and notified local security.",
+                createdAt: DateTime.utc(2026, 8, 22, 20, 12),
+                authorName: "A resident with a long display name",
+                helpfulReactions: 6,
+              ),
+              BroadcastCommentItem(
+                id: "reply",
+                parentId: "parent",
+                body: "Thanks, I can confirm the same location.",
+                createdAt: DateTime.utc(2026, 8, 22, 20, 15),
+                authorName: "Another resident",
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text(
+              "Saw it near the estate junction and notified local security."),
+          findsOneWidget);
+      expect(find.text("Thanks, I can confirm the same location."),
+          findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets("share screen invokes native share and clears loading state",
       (tester) async {
@@ -647,7 +862,11 @@ void main() {
     await tester.pump(); // post-frame callback
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text("Missing person: Ada"), findsWidgets);
+    expect(
+      find.byKey(const Key("broadcast-prototype-summary")),
+      findsOneWidget,
+    );
+    expect(find.text("Last seen near the market"), findsWidgets);
     expect(find.text("Broadcast unavailable"), findsNothing);
   });
 
@@ -768,10 +987,12 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text("STOLEN VEHICLE"), findsOneWidget);
-    expect(
-        find.text("Stolen Vehicle: Toyota Corolla LAG-123-XY"), findsOneWidget);
+    expect(find.text("Stolen vehicle"), findsOneWidget);
+    expect(find.text("Stolen Vehicle: Toyota Corolla"), findsOneWidget);
+    expect(find.text("Plate: LAG-123-XY"), findsOneWidget);
+    expect(find.byKey(const Key("broadcast-status-chip")), findsOneWidget);
     expect(find.text("Vehicle Information"), findsOneWidget);
+    expect(find.byKey(const Key("vehicle-information-grid")), findsOneWidget);
     expect(find.text("Year"), findsOneWidget);
     expect(find.text("2022"), findsOneWidget);
     expect(find.text("Plate Number"), findsOneWidget);
@@ -786,6 +1007,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text("Vehicle Photos"), findsOneWidget);
+    expect(find.byKey(const Key("broadcast-photo-gallery")), findsOneWidget);
     expect(find.text("Front photo"), findsOneWidget);
     expect(find.text("Last Seen"), findsOneWidget);
     expect(find.textContaining("PM"), findsWidgets);
@@ -844,7 +1066,7 @@ void main() {
     expect(find.text("Report Sighting"), findsOneWidget);
   });
 
-  testWidgets("broadcast detail groups available action buttons",
+  testWidgets("broadcast detail matches prototype summary and action hierarchy",
       (tester) async {
     final stolen = BroadcastFeedItem(
       id: "b-stolen",
@@ -865,12 +1087,117 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text("Actions"), findsOneWidget);
+    expect(
+      find.byKey(const Key("broadcast-prototype-summary")),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key("broadcast-prototype-actions")),
+      findsOneWidget,
+    );
+    expect(find.text("Actions"), findsNothing);
     expect(find.text("Share"), findsOneWidget);
     expect(find.text("Report Sighting"), findsOneWidget);
     expect(find.text("Comments"), findsOneWidget);
     expect(find.text("Report Broadcast"), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key("broadcast-action-comments"))).dx,
+      lessThan(
+        tester
+            .getTopLeft(find.byKey(const Key("broadcast-action-sighting")))
+            .dx,
+      ),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key("broadcast-action-sighting"))).dx,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key("broadcast-action-share"))).dx,
+      ),
+    );
   });
+
+  testWidgets("prototype broadcast detail fits a 390px viewport",
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final detail = BroadcastFeedItem(
+      id: "b-narrow",
+      type: "StolenVehicle",
+      title: "Stolen vehicle alert",
+      body: "Toyota Corolla taken from a driveway overnight.",
+      priority: "P2Urgent",
+      read: false,
+      publishedAt: DateTime.utc(2026, 8, 13, 13, 45),
+      status: "Active",
+      commentsCount: 4,
+      metadata: const {"lastKnownLocation": "Rumuola, Obio-Akpor"},
+    );
+
+    await tester.pumpWidget(
+      wrap(
+        const BroadcastDetailScreen(broadcastId: "b-narrow"),
+        detail: detail,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text("Rumuola, Obio-Akpor"), findsOneWidget);
+    expect(find.byKey(const Key("broadcast-action-comments")), findsOneWidget);
+    expect(find.byKey(const Key("broadcast-action-sighting")), findsOneWidget);
+    expect(find.byKey(const Key("broadcast-action-share")), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final size in const [
+    Size(412, 915),
+    Size(480, 960),
+    Size(768, 1024),
+  ]) {
+    testWidgets(
+        "structured vehicle detail fits ${size.width.toInt()}px without overflow",
+        (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final detail = BroadcastFeedItem(
+        id: "b-responsive",
+        type: "StolenVehicle",
+        title: "Stolen vehicle alert",
+        body: "Taken from a secure parking area.",
+        priority: "P2Urgent",
+        read: false,
+        publishedAt: DateTime.utc(2026, 8, 13, 13, 45),
+        status: "Active",
+        metadata: const {
+          "make": "Toyota",
+          "model": "Corolla",
+          "year": "2022",
+          "colour": "Red",
+          "registrationNumber": "LAG-123-XY",
+          "vin": "1HGCM82633A004352",
+          "distinguishingFeatures": "Rear bumper dent",
+        },
+      );
+
+      await tester.pumpWidget(
+        wrap(
+          const BroadcastDetailScreen(broadcastId: "b-responsive"),
+          detail: detail,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const Key("broadcast-status-chip")), findsOneWidget);
+      expect(find.byKey(const Key("vehicle-information-grid")), findsOneWidget);
+      expect(find.text("Plate: LAG-123-XY"), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets("active broadcast owner receives owner action set",
       (tester) async {
@@ -928,18 +1255,16 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text("Actions"),
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
 
     expect(find.text("Share"), findsOneWidget);
     expect(find.text("Report Sighting"), findsOneWidget);
     expect(find.text("Comments"), findsOneWidget);
+    expect(find.text("Report Broadcast"), findsNothing);
+
+    await tester.ensureVisible(find.text("Resolve"));
+    await tester.pumpAndSettle();
     expect(find.text("Resolve"), findsOneWidget);
     expect(find.text("Withdraw"), findsOneWidget);
-    expect(find.text("Report Broadcast"), findsNothing);
   });
 
   testWidgets("My broadcasts uses citizen-friendly card presentation",

@@ -58,6 +58,7 @@ export type CreateCitizenBroadcastCommentDto = {
   body: string;
   parentId?: string;
   isSighting?: boolean;
+  voiceNote?: Record<string, unknown>;
 };
 
 export type UpdateCitizenBroadcastCommentDto = {

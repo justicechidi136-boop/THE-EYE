@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button, TextInput } from "./form-primitives";
 
-const statusOptions = ["", "Submitted", "Received", "Verifying", "Verified", "Assigned", "Resolved", "Closed"];
+const statusOptions = ["", "Submitted", "Received", "Verifying", "Verified", "Assigned", "Ended", "Resolved", "Closed"];
 const priorityOptions = ["", "P1LifeThreatening", "P2ActiveCrimeAccident", "P3SuspiciousActivity", "P4GeneralSafety"];
 const typeOptions = ["", "Emergency", "Crime", "Accident", "Fire", "Kidnapping", "Abuse", "SuspiciousActivity", "SOS", "MissingPerson", "StolenVehicle"];
 

@@ -3,7 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 
 import "../app/app_scope.dart";
-import "../widgets/section_card.dart";
+import "../widgets/flat_section.dart";
 import "device_location_service.dart";
 import "device_location_state.dart";
 import "location_permission_service.dart";
@@ -65,8 +65,8 @@ class _LocationPermissionSettingsSectionState
 
   Future<void> _refreshPermissionOnly({bool requestIfDenied = false}) async {
     setState(() => _initialLoading = true);
-    final permission = await (widget.permissionResolver ??
-        resolveLocationPermissionState)(
+    final permission =
+        await (widget.permissionResolver ?? resolveLocationPermissionState)(
       requestIfDenied: requestIfDenied,
     );
     if (!mounted) return;
@@ -115,8 +115,7 @@ class _LocationPermissionSettingsSectionState
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor:
-              isError ? Theme.of(context).colorScheme.error : null,
+          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
         ),
       );
   }
@@ -224,7 +223,7 @@ class _LocationPermissionSettingsSectionState
   Widget _buildDeviceLocationCard(BuildContext context) {
     final device = _deviceLocation;
     final theme = Theme.of(context);
-    return SectionCard(
+    return FlatSection(
       title: "Device location",
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -290,9 +289,8 @@ class _LocationPermissionSettingsSectionState
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: _testInFlight || _initialLoading
-                    ? null
-                    : _retryPermission,
+                onPressed:
+                    _testInFlight || _initialLoading ? null : _retryPermission,
                 icon: Icon(
                   locationPermissionRecoveryAction(_permission) ==
                           LocationPermissionRecoveryAction.requestPermission
@@ -319,7 +317,7 @@ class _LocationPermissionSettingsSectionState
 
   Widget _buildProfileJurisdictionCard() {
     final profile = _profileJurisdiction;
-    return SectionCard(
+    return FlatSection(
       title: "Profile jurisdiction",
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -351,7 +349,7 @@ class _LocationPermissionSettingsSectionState
   }
 
   Widget _buildEmergencySharingCard() {
-    return SectionCard(
+    return FlatSection(
       title: "Emergency location sharing",
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -368,7 +366,7 @@ class _LocationPermissionSettingsSectionState
   }
 
   Widget _buildPermissionStatusCard() {
-    return SectionCard(
+    return FlatSection(
       title: "Permission & services",
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

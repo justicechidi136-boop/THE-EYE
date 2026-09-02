@@ -12,6 +12,7 @@ enum DangerAlertAudioState {
   alerting,
   speakingWarning,
   playingOriginalVoice,
+  originalVoiceFailed,
   completed,
 }
 
@@ -42,13 +43,14 @@ class FlutterDangerWarningSpeaker implements DangerWarningSpeaker {
 
 abstract interface class OriginalVoicePlayer {
   Future<void> play(String signedUrl);
+  Future<void> pause();
   Future<void> stop();
   Future<void> dispose();
 }
 
 class JustAudioOriginalVoicePlayer implements OriginalVoicePlayer {
   JustAudioOriginalVoicePlayer({AudioPlayer? player})
-    : _player = player ?? AudioPlayer();
+      : _player = player ?? AudioPlayer();
 
   final AudioPlayer _player;
 
@@ -57,6 +59,9 @@ class JustAudioOriginalVoicePlayer implements OriginalVoicePlayer {
     await _player.setUrl(signedUrl);
     await _player.play();
   }
+
+  @override
+  Future<void> pause() => _player.pause();
 
   @override
   Future<void> stop() => _player.stop();
@@ -93,21 +98,25 @@ class SharedPreferencesDangerAudioCompletionStore
 }
 
 typedef OriginalVoiceUrlLoader = Future<String?> Function();
+typedef DangerAudioTrace = void Function(String event);
 
 class DangerAlertAudioCoordinator {
   DangerAlertAudioCoordinator({
     DangerWarningSpeaker? warningSpeaker,
     OriginalVoicePlayer? originalVoicePlayer,
     DangerAudioCompletionStore? completionStore,
-  }) : _warningSpeaker = warningSpeaker ?? FlutterDangerWarningSpeaker(),
-       _originalVoicePlayer =
-           originalVoicePlayer ?? JustAudioOriginalVoicePlayer(),
-       _completionStore =
-           completionStore ?? SharedPreferencesDangerAudioCompletionStore();
+    DangerAudioTrace? trace,
+  })  : _warningSpeaker = warningSpeaker ?? FlutterDangerWarningSpeaker(),
+        _originalVoicePlayer =
+            originalVoicePlayer ?? JustAudioOriginalVoicePlayer(),
+        _completionStore =
+            completionStore ?? SharedPreferencesDangerAudioCompletionStore(),
+        _trace = trace;
 
   final DangerWarningSpeaker _warningSpeaker;
   final OriginalVoicePlayer _originalVoicePlayer;
   final DangerAudioCompletionStore _completionStore;
+  final DangerAudioTrace? _trace;
   final ValueNotifier<DangerAlertAudioState> state = ValueNotifier(
     DangerAlertAudioState.idle,
   );
@@ -120,7 +129,10 @@ class DangerAlertAudioCoordinator {
     required String locale,
     required OriginalVoiceUrlLoader loadOriginalVoice,
   }) async {
-    if (await _completionStore.contains(alert.dedupeKey)) return false;
+    if (await _completionStore.contains(alert.dedupeKey)) {
+      _trace?.call("AUTOPLAY_SUPPRESSED_COMPLETED");
+      return false;
+    }
     final active = _active;
     if (active != null && !_shouldInterrupt(active, alert)) return false;
 
@@ -132,21 +144,32 @@ class DangerAlertAudioCoordinator {
     if (!_isCurrent(generation, alert)) return false;
 
     state.value = DangerAlertAudioState.speakingWarning;
+    _trace?.call("SPEAKING_WARNING");
     await _warningSpeaker.speak(alert.spokenText, locale);
+    _trace?.call("TTS_COMPLETED");
     if (!_isCurrent(generation, alert)) return false;
+    await _warningSpeaker.stop();
 
     if (alert.hasOriginalVoice) {
-      final signedUrl = await loadOriginalVoice();
-      if (!_isCurrent(generation, alert)) return false;
-      if (signedUrl != null && signedUrl.isNotEmpty) {
-        state.value = DangerAlertAudioState.playingOriginalVoice;
-        await _originalVoicePlayer.play(signedUrl);
-        if (!_isCurrent(generation, alert)) return false;
+      final played = await _playOriginalVoice(
+        alert,
+        generation: generation,
+        loadOriginalVoice: loadOriginalVoice,
+      );
+      if (!played) {
+        if (_isCurrent(generation, alert)) {
+          state.value = DangerAlertAudioState.originalVoiceFailed;
+          _active = null;
+        }
+        return false;
       }
+    } else {
+      _trace?.call("VOICE_NOT_AVAILABLE");
     }
 
     state.value = DangerAlertAudioState.completed;
     await _completionStore.add(alert.dedupeKey);
+    _trace?.call("AUTOPLAY_COMPLETED");
     _active = null;
     return true;
   }
@@ -162,14 +185,13 @@ class DangerAlertAudioCoordinator {
     state.value = DangerAlertAudioState.speakingWarning;
     await _warningSpeaker.speak(alert.spokenText, locale);
     if (!_isCurrent(generation, alert)) return;
+    await _warningSpeaker.stop();
     if (alert.hasOriginalVoice) {
-      final signedUrl = await loadOriginalVoice();
-      if (signedUrl != null &&
-          signedUrl.isNotEmpty &&
-          _isCurrent(generation, alert)) {
-        state.value = DangerAlertAudioState.playingOriginalVoice;
-        await _originalVoicePlayer.play(signedUrl);
-      }
+      await _playOriginalVoice(
+        alert,
+        generation: generation,
+        loadOriginalVoice: loadOriginalVoice,
+      );
     }
     if (_isCurrent(generation, alert)) {
       state.value = DangerAlertAudioState.completed;
@@ -178,6 +200,54 @@ class DangerAlertAudioCoordinator {
   }
 
   Future<void> acknowledge() => stop();
+
+  Future<bool> playOriginalVoice(
+    IncomingDangerAlert alert, {
+    required OriginalVoiceUrlLoader loadOriginalVoice,
+  }) async {
+    await stop(markIdle: false);
+    _active = alert;
+    final generation = ++_generation;
+    final played = await _playOriginalVoice(
+      alert,
+      generation: generation,
+      loadOriginalVoice: loadOriginalVoice,
+    );
+    if (_isCurrent(generation, alert)) {
+      state.value = played
+          ? DangerAlertAudioState.completed
+          : DangerAlertAudioState.originalVoiceFailed;
+      _active = null;
+    }
+    return played;
+  }
+
+  Future<bool> _playOriginalVoice(
+    IncomingDangerAlert alert, {
+    required int generation,
+    required OriginalVoiceUrlLoader loadOriginalVoice,
+  }) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      _trace?.call("VOICE_ACCESS_REQUESTED");
+      final signedUrl = await loadOriginalVoice();
+      if (!_isCurrent(generation, alert)) return false;
+      if (signedUrl == null || signedUrl.isEmpty) {
+        _trace?.call("VOICE_ACCESS_UNAVAILABLE");
+        continue;
+      }
+      try {
+        state.value = DangerAlertAudioState.playingOriginalVoice;
+        _trace?.call("VOICE_PLAYING");
+        await _originalVoicePlayer.play(signedUrl);
+        _trace?.call("VOICE_COMPLETED");
+        return _isCurrent(generation, alert);
+      } catch (error) {
+        _trace?.call("VOICE_PLAYBACK_FAILED:${error.runtimeType}");
+        await _originalVoicePlayer.stop();
+      }
+    }
+    return false;
+  }
 
   Future<void> stop({bool markIdle = true}) async {
     _generation += 1;

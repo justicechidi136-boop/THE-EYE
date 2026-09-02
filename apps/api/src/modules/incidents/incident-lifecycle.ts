@@ -5,24 +5,28 @@ import type { JwtPayload } from "../../common/auth/jwt";
 export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]> = {
   [IncidentStatus.Submitted]: [
     IncidentStatus.Received,
+    IncidentStatus.Ended,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
     IncidentStatus.ExpiredAfterReview,
   ],
   [IncidentStatus.Received]: [
     IncidentStatus.Verifying,
+    IncidentStatus.Ended,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
     IncidentStatus.ExpiredAfterReview,
   ],
   [IncidentStatus.Verifying]: [
     IncidentStatus.Verified,
+    IncidentStatus.Ended,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
     IncidentStatus.ExpiredAfterReview,
   ],
   [IncidentStatus.Verified]: [
     IncidentStatus.Assigned,
+    IncidentStatus.Ended,
     IncidentStatus.Resolved,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
@@ -30,15 +34,18 @@ export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]
   ],
   [IncidentStatus.Assigned]: [
     IncidentStatus.Responding,
+    IncidentStatus.Ended,
     IncidentStatus.CancellationRequested,
     IncidentStatus.FalseReport,
   ],
   [IncidentStatus.Responding]: [
     IncidentStatus.UnderControl,
+    IncidentStatus.Ended,
     IncidentStatus.CancellationRequested,
     IncidentStatus.FalseReport,
   ],
   [IncidentStatus.UnderControl]: [
+    IncidentStatus.Ended,
     IncidentStatus.Resolved,
     IncidentStatus.CancellationRequested,
     IncidentStatus.FalseReport,
@@ -50,7 +57,9 @@ export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]
     IncidentStatus.UnderControl,
     IncidentStatus.Resolved,
     IncidentStatus.Closed,
+    IncidentStatus.Ended,
   ],
+  [IncidentStatus.Ended]: [IncidentStatus.Resolved, IncidentStatus.Closed],
   [IncidentStatus.Resolved]: [IncidentStatus.Closed],
   [IncidentStatus.Closed]: [],
   [IncidentStatus.FalseReport]: [],
@@ -59,6 +68,7 @@ export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]
 };
 
 const terminalStatuses = new Set<IncidentStatus>([
+  IncidentStatus.Ended,
   IncidentStatus.Closed,
   IncidentStatus.FalseReport,
   IncidentStatus.CancelledByReporter,

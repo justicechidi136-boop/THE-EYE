@@ -95,17 +95,14 @@ class PlatformLocationReverseGeocoder implements LocationReverseGeocoder {
         place.subAdministrativeArea,
         place.name,
       ]);
-      final lga = _firstNonEmpty([
-        place.subAdministrativeArea,
-        place.locality,
-      ]);
+      final lga = _firstNonEmpty([place.subAdministrativeArea, place.locality]);
       final state = _firstNonEmpty([
         place.administrativeArea,
         place.subAdministrativeArea,
       ]);
       final country = place.country?.trim();
       return ReverseGeocodeResult(
-        street: _firstNonEmpty([place.street, place.thoroughfare]),
+        street: _firstNonEmpty([place.thoroughfare, place.street]),
         subLocality: _firstNonEmpty([place.subLocality, place.name]),
         locality: locality,
         lga: lga,

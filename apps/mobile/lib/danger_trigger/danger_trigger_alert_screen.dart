@@ -5,7 +5,18 @@ import "package:livekit_client/livekit_client.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "danger_alert_audio_coordinator.dart";
 import "danger_trigger_service.dart";
+
+enum DangerOriginalVoiceState {
+  idle,
+  loading,
+  playing,
+  paused,
+  completed,
+  unavailable,
+  failed,
+}
 
 class DangerTriggerAlertScreen extends StatefulWidget {
   DangerTriggerAlertScreen({
@@ -13,12 +24,16 @@ class DangerTriggerAlertScreen extends StatefulWidget {
     required TheEyeApiClient apiClient,
     required this.accessTokenProvider,
     DangerTriggerGateway? gateway,
+    OriginalVoicePlayer? originalVoicePlayer,
     super.key,
-  }) : gateway = gateway ?? DangerTriggerApiService(apiClient);
+  })  : gateway = gateway ?? DangerTriggerApiService(apiClient),
+        originalVoicePlayer =
+            originalVoicePlayer ?? JustAudioOriginalVoicePlayer();
 
   final String eventId;
   final String? Function() accessTokenProvider;
   final DangerTriggerGateway gateway;
+  final OriginalVoicePlayer originalVoicePlayer;
 
   @override
   State<DangerTriggerAlertScreen> createState() =>
@@ -32,7 +47,9 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
   bool _loading = true;
   bool _connecting = false;
   bool _listening = false;
+  DangerOriginalVoiceState _voiceState = DangerOriginalVoiceState.idle;
   String? _error;
+  String? _voiceError;
   late final AnimationController _alertPulse;
   late final Animation<double> _alertOpacity;
 
@@ -43,9 +60,10 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
       vsync: this,
       duration: const Duration(milliseconds: 650),
     );
-    _alertOpacity = Tween<double>(begin: 0.35, end: 1).animate(
-      CurvedAnimation(parent: _alertPulse, curve: Curves.easeInOut),
-    );
+    _alertOpacity = Tween<double>(
+      begin: 0.35,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _alertPulse, curve: Curves.easeInOut));
     unawaited(_alertPulse.repeat(reverse: true, count: 8));
     unawaited(_load());
   }
@@ -53,7 +71,8 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
   @override
   void dispose() {
     _alertPulse.dispose();
-    unawaited(_disconnect());
+    unawaited(_disconnect(updateState: false));
+    unawaited(widget.originalVoicePlayer.dispose());
     super.dispose();
   }
 
@@ -75,11 +94,15 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
       if (!mounted) return;
       setState(() {
         _detail = detail;
+        _voiceState = detail.originalVoiceAvailable
+            ? DangerOriginalVoiceState.idle
+            : DangerOriginalVoiceState.unavailable;
         _loading = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
+        _voiceState = DangerOriginalVoiceState.unavailable;
         _loading = false;
         _error = error is DangerTriggerException
             ? error.message
@@ -100,14 +123,11 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
         eventId: widget.eventId,
       );
       final room = Room(
-        roomOptions: const RoomOptions(
-          adaptiveStream: true,
-          dynacast: true,
-        ),
+        roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true),
       );
-      await room.connect(session.serverUrl, session.token).timeout(
-            const Duration(seconds: 30),
-          );
+      await room
+          .connect(session.serverUrl, session.token)
+          .timeout(const Duration(seconds: 30));
       if (!mounted) {
         await room.disconnect();
         await room.dispose();
@@ -129,17 +149,68 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
     }
   }
 
-  Future<void> _disconnect() async {
+  Future<void> _disconnect({bool updateState = true}) async {
     final room = _room;
     _room = null;
     if (room != null) {
       await room.disconnect();
       await room.dispose();
     }
-    if (mounted) {
+    if (updateState && mounted) {
       setState(() => _listening = false);
     }
   }
+
+  Future<void> _playOriginalVoice() async {
+    final detail = _detail;
+    if (detail?.originalVoiceAvailable != true || _token.isEmpty) return;
+    setState(() {
+      _voiceState = DangerOriginalVoiceState.loading;
+      _voiceError = null;
+    });
+    try {
+      final access = await widget.gateway.originalVoice(
+        accessToken: _token,
+        eventId: widget.eventId,
+      );
+      if (!mounted) return;
+      setState(() => _voiceState = DangerOriginalVoiceState.playing);
+      await widget.originalVoicePlayer.play(access.signedUrl);
+      if (!mounted) return;
+      setState(() => _voiceState = DangerOriginalVoiceState.completed);
+    } catch (error) {
+      if (!mounted) return;
+      final authFailure = error is DangerTriggerException &&
+          (error.statusCode == 401 || error.statusCode == 403);
+      setState(() {
+        _voiceState = DangerOriginalVoiceState.failed;
+        _voiceError = authFailure
+            ? "Sign in again to play the original voice recording."
+            : "Original voice could not be played. Check your connection and retry.";
+      });
+    }
+  }
+
+  Future<void> _pauseOriginalVoice() async {
+    await widget.originalVoicePlayer.pause();
+    if (mounted) setState(() => _voiceState = DangerOriginalVoiceState.paused);
+  }
+
+  String get _voiceStatusText => _detail == null
+      ? "Original voice availability could not be verified"
+      : switch (_voiceState) {
+          DangerOriginalVoiceState.loading => "Loading voice message...",
+          DangerOriginalVoiceState.playing =>
+            "Playing the reporter's original voice",
+          DangerOriginalVoiceState.paused => "Original voice paused",
+          DangerOriginalVoiceState.completed =>
+            "Original voice playback completed",
+          DangerOriginalVoiceState.unavailable =>
+            "Original voice recording unavailable",
+          DangerOriginalVoiceState.failed =>
+            _voiceError ?? "Original voice playback failed",
+          DangerOriginalVoiceState.idle => "Original voice message available",
+        };
 
   @override
   Widget build(BuildContext context) {
@@ -172,31 +243,72 @@ class _DangerTriggerAlertScreenState extends State<DangerTriggerAlertScreen>
                     leading: const Icon(Icons.location_on_outlined),
                     title: Text(_detail?.approximateArea ?? "Nearby area"),
                     subtitle: const Text(
-                      "Approximate area only. The reporter's exact location is private.",
+                      "Approximate street area. The reporter's precise location remains private.",
                     ),
                   ),
+                  const Divider(),
                   ListTile(
                     leading: const Icon(Icons.shield_outlined),
                     title: Text(
-                        "Alert status: ${_detail?.state ?? "Unavailable"}"),
+                      "Alert status: ${_detail?.state ?? "Unavailable"}",
+                    ),
                     subtitle: const Text(
                       "Move to safety and follow official responder instructions.",
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.graphic_eq_rounded),
+                    title: const Text("Original voice message"),
+                    subtitle: Text(_voiceStatusText),
+                  ),
+                  if (_detail?.originalVoiceAvailable == true)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _voiceState == DangerOriginalVoiceState.playing
+                          ? TextButton.icon(
+                              onPressed: _pauseOriginalVoice,
+                              icon: const Icon(Icons.pause_rounded),
+                              label: const Text("Pause"),
+                            )
+                          : TextButton.icon(
+                              onPressed: _voiceState ==
+                                      DangerOriginalVoiceState.loading
+                                  ? null
+                                  : _playOriginalVoice,
+                              icon: Icon(
+                                _voiceState ==
+                                        DangerOriginalVoiceState.completed
+                                    ? Icons.replay_rounded
+                                    : Icons.play_arrow_rounded,
+                              ),
+                              label: Text(
+                                _voiceState ==
+                                        DangerOriginalVoiceState.completed
+                                    ? "Replay original voice"
+                                    : "Play original voice",
+                              ),
+                            ),
+                    ),
+                  const Divider(),
                   if (_detail?.liveAvailable == true)
                     FilledButton.icon(
                       onPressed: _listening
                           ? _disconnect
                           : (_connecting ? null : _listen),
                       icon: Icon(_listening ? Icons.stop : Icons.headphones),
-                      label: Text(_connecting
-                          ? "Connecting..."
-                          : (_listening ? "Stop listening" : "Listen Live")),
+                      label: Text(
+                        _connecting
+                            ? "Connecting..."
+                            : (_listening ? "Stop listening" : "Listen Live"),
+                      ),
                     )
                   else
                     const Center(
-                      child: Text("Live voice has ended or is unavailable."),
+                      child: Text(
+                        "Live broadcast ended. Recorded voice remains available when shown above.",
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   if (_listening) ...[
                     const SizedBox(height: 12),

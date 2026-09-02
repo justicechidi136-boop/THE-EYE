@@ -345,6 +345,37 @@ describe("AuthService login", () => {
       service.login({ email: "staging.citizen@theeye.local", password }),
     ).rejects.toBeInstanceOf(HttpException);
   });
+
+  it("returns the stable deactivated-account contract after valid credentials", async () => {
+    const password = "Password123!";
+    const { service } = createAuthService({
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "user-1",
+          email: "staging.citizen@theeye.local",
+          phone: null,
+          passwordHash: hashPassword(password),
+          status: "Deactivated",
+          trustedReporter: null,
+        }),
+      },
+    });
+
+    try {
+      await service.login({
+        email: "staging.citizen@theeye.local",
+        password,
+      });
+      throw new Error("Expected deactivated account login to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpException);
+      expect((error as HttpException).getStatus()).toBe(403);
+      expect((error as HttpException).getResponse()).toEqual({
+        message: "Your THE EYE account is deactivated.",
+        code: "ACCOUNT_DEACTIVATED",
+      });
+    }
+  });
 });
 
 describe("AuthService refresh rotation", () => {

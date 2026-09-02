@@ -5,17 +5,21 @@ import "package:uuid/uuid.dart";
 
 import "../contracts/the_eye_api_client.dart";
 import "../design_system/eye_semantic_colors.dart";
+import "../evidence/evidence_upload_service.dart";
+import "../evidence/local_evidence_attachment.dart";
 import "../live_video/live_video_connection_state.dart";
 import "../live_video/live_video_lifecycle_phase.dart";
 import "../live_video/live_video_session_controller.dart";
 import "../location/device_location_service.dart";
 import "../location/device_location_state.dart";
 import "../push/watch_danger_alert_relay.dart";
+import "danger_original_voice_capture.dart";
 import "danger_trigger_service.dart";
 
 enum DangerTriggerViewState {
   ready,
   locating,
+  capturingVoice,
   preparing,
   connecting,
   broadcasting,
@@ -32,18 +36,28 @@ class DangerTriggerScreen extends StatefulWidget {
     DeviceLocationService? locationService,
     LiveVideoSessionController? liveVoiceController,
     WatchDangerAlertRelay? watchRelay,
+    DangerOriginalVoiceCapture? originalVoiceCapture,
+    DangerOriginalVoiceUploader? originalVoiceUploader,
     super.key,
   })  : gateway = gateway ?? DangerTriggerApiService(apiClient),
         locationService = locationService ?? DeviceLocationService(),
         liveVoiceController =
             liveVoiceController ?? LiveVideoSessionController(audioOnly: true),
-        watchRelay = watchRelay ?? WatchDangerAlertRelay();
+        watchRelay = watchRelay ?? WatchDangerAlertRelay(),
+        originalVoiceCapture =
+            originalVoiceCapture ?? DeviceDangerOriginalVoiceCapture(),
+        originalVoiceUploader = originalVoiceUploader ??
+            EvidenceDangerOriginalVoiceUploader(
+              EvidenceUploadService(apiClient: apiClient),
+            );
 
   final String? Function() accessTokenProvider;
   final DangerTriggerGateway gateway;
   final DeviceLocationService locationService;
   final LiveVideoSessionController liveVoiceController;
   final WatchDangerAlertRelay watchRelay;
+  final DangerOriginalVoiceCapture originalVoiceCapture;
+  final DangerOriginalVoiceUploader originalVoiceUploader;
 
   @override
   State<DangerTriggerScreen> createState() => _DangerTriggerScreenState();
@@ -59,9 +73,12 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
   bool _ending = false;
   DangerTriggerActivation? _activation;
   bool _pairedWatchAlerted = false;
+  bool _originalVoiceSecured = false;
+  String? _originalVoiceWarning;
   String? _dangerAlertCode;
 
   bool get _isActive =>
+      _viewState == DangerTriggerViewState.capturingVoice ||
       _viewState == DangerTriggerViewState.preparing ||
       _viewState == DangerTriggerViewState.connecting ||
       _viewState == DangerTriggerViewState.broadcasting ||
@@ -86,6 +103,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
     _timer?.cancel();
     widget.liveVoiceController.removeListener(_handleVoiceLifecycle);
     widget.liveVoiceController.dispose();
+    unawaited(widget.originalVoiceCapture.dispose());
     super.dispose();
   }
 
@@ -161,6 +179,15 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
     }
 
     try {
+      setState(() => _viewState = DangerTriggerViewState.capturingVoice);
+      final captureStartedAt = DateTime.now();
+      var captureStarted = false;
+      try {
+        await widget.originalVoiceCapture.start();
+        captureStarted = true;
+      } catch (_) {
+        await widget.originalVoiceCapture.cancel();
+      }
       final prepared = await widget.gateway.prepare(
         accessToken: token,
         clientTriggerId: const Uuid().v4(),
@@ -170,12 +197,44 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
         locationCapturedAt: location.capturedAt ?? DateTime.now(),
         locationSource: _apiLocationSource(location.source),
         dangerAlertCode: dangerAlertCode,
-        areaName: location.displayLocality,
+        areaName: location.dangerPublicArea,
         spokenLocationName: location.dangerSpokenLocation,
       );
+      LocalEvidenceAttachment? originalVoice;
+      if (captureStarted) {
+        final remaining = const Duration(seconds: 4) -
+            DateTime.now().difference(captureStartedAt);
+        if (remaining > Duration.zero) await Future<void>.delayed(remaining);
+        try {
+          originalVoice = await widget.originalVoiceCapture.stop();
+        } catch (_) {
+          await widget.originalVoiceCapture.cancel();
+        }
+      }
+      var originalVoiceSecured = false;
+      if (originalVoice != null && prepared.liveVideo.incidentId.isNotEmpty) {
+        try {
+          await widget.originalVoiceUploader
+              .upload(
+                incidentId: prepared.liveVideo.incidentId,
+                attachment: originalVoice,
+                accessToken: token,
+                latitude: location.latitude,
+                longitude: location.longitude,
+              )
+              .timeout(const Duration(seconds: 15));
+          originalVoiceSecured = true;
+        } catch (_) {
+          // The urgent alert continues without claiming unavailable media.
+        }
+      }
       if (!mounted) return;
       setState(() {
         _prepared = prepared;
+        _originalVoiceSecured = originalVoiceSecured;
+        _originalVoiceWarning = originalVoiceSecured
+            ? null
+            : "The alert will continue, but the original voice recording could not be secured.";
         _viewState = DangerTriggerViewState.connecting;
       });
       final connected = await widget.liveVoiceController.startSession(
@@ -205,6 +264,7 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
       });
       unawaited(_relayToPairedWatch(activation));
     } catch (error) {
+      await widget.originalVoiceCapture.cancel();
       await widget.liveVoiceController.stop();
       if (!mounted) return;
       setState(() {
@@ -346,6 +406,8 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
         return "Ready";
       case DangerTriggerViewState.locating:
         return "Checking location";
+      case DangerTriggerViewState.capturingVoice:
+        return "Recording voice";
       case DangerTriggerViewState.preparing:
         return "Preparing";
       case DangerTriggerViewState.connecting:
@@ -563,6 +625,15 @@ class _DangerTriggerScreenState extends State<DangerTriggerScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
+                      const SizedBox(height: 8),
+                      Text(
+                        _originalVoiceSecured
+                            ? "Original voice secured for authorized recipients."
+                            : (_originalVoiceWarning ??
+                                "Securing original voice..."),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
                 ),

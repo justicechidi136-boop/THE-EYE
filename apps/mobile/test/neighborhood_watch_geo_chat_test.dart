@@ -11,6 +11,7 @@ import "package:the_eye_mobile/evidence/evidence_compressor.dart";
 import "package:the_eye_mobile/evidence/evidence_media_source.dart";
 import "package:the_eye_mobile/evidence/evidence_permission_service.dart";
 import "package:the_eye_mobile/neighborhood_watch/geo_community_chat_view.dart";
+import "package:the_eye_mobile/neighborhood_watch/neighborhood_watch_service.dart";
 
 void main() {
   Widget buildChat({
@@ -22,6 +23,7 @@ void main() {
     EvidenceCaptureController? evidenceController,
     VoidCallback? onToggleAttachments,
     bool showAttachments = false,
+    List<CommunityPostItem> messages = const [],
   }) {
     final theme = ThemeData.light().copyWith(
       extensions: const [EyeSemanticColors.light],
@@ -30,7 +32,7 @@ void main() {
       theme: theme,
       home: GeoCommunityChatView(
         title: "Ikeja Neighborhood Watch",
-        messages: const [],
+        messages: messages,
         canSend: true,
         loading: false,
         showAttachments: showAttachments,
@@ -129,7 +131,7 @@ void main() {
     expect(controller.text, "😀🛡️✅");
   });
 
-  testWidgets("empty composer opens the live voice-message recorder",
+  testWidgets("empty composer opens the inline live voice-message recorder",
       (tester) async {
     final evidence = _evidenceController();
     addTearDown(evidence.dispose);
@@ -139,10 +141,100 @@ void main() {
     ));
 
     await tester.tap(find.byTooltip("Record voice message"));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.text("Voice message"), findsOneWidget);
-    expect(find.text("Audio / Voice report"), findsOneWidget);
+    expect(find.byKey(const Key("chat-voice-composer")), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byTooltip("Cancel voice message"), findsOneWidget);
+    expect(find.byTooltip("Send voice message"), findsOneWidget);
+  });
+
+  testWidgets("received voice note renders a compact replay control",
+      (tester) async {
+    const voice = CommunityPostMediaReference(
+      id: "media-1",
+      mediaType: "Audio",
+      bucket: "private",
+      objectKey: "community/post-1/voice.m4a",
+      contentType: "audio/mp4",
+      fileHash: "hash",
+      signedGetUrl: "https://media.test/voice.m4a",
+      durationSeconds: 9,
+    );
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      messages: const [
+        CommunityPostItem(
+          id: "post-1",
+          title: "Neighborhood voice",
+          body: "",
+          type: "Discussion",
+          verificationStatus: "PendingVerification",
+          confidenceScore: 0,
+          createdAt: null,
+          authorName: "Amina",
+          media: [voice],
+        ),
+      ],
+    ));
+
+    expect(find.byKey(const Key("chat-voice-message-bubble")), findsOneWidget);
+    expect(find.byTooltip("Play neighborhood voice note"), findsOneWidget);
+    expect(find.text("00:09"), findsOneWidget);
+    final voiceBubble =
+        tester.getSize(find.byKey(const Key("chat-voice-message-bubble")));
+    expect(voiceBubble.width, 232);
+    expect(voiceBubble.height, 44);
+  });
+
+  testWidgets("text messages stay compact at phone width", (tester) async {
+    await tester.pumpWidget(buildChat(
+      onSend: () async {},
+      messages: const [
+        CommunityPostItem(
+          id: "post-compact",
+          title: "Short update",
+          body: "Road is clear now.",
+          type: "Discussion",
+          verificationStatus: "PendingVerification",
+          confidenceScore: 0,
+          createdAt: null,
+          authorName: "Amina",
+        ),
+      ],
+    ));
+
+    final bubbleConstraint = tester
+        .widgetList<ConstrainedBox>(
+          find.descendant(
+            of: find.byType(RoomMessageBubble),
+            matching: find.byType(ConstrainedBox),
+          ),
+        )
+        .firstWhere((widget) => widget.constraints.maxWidth <= 286);
+    expect(bubbleConstraint.constraints.maxWidth, lessThanOrEqualTo(286));
+  });
+
+  testWidgets("message footer keeps Like left and time right", (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RoomMessageBubble(
+            body: "Road is clear now.",
+            author: "Amina",
+            ownMessage: false,
+            time: DateTime(2026, 9, 2, 12, 7),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text("Like"), findsOneWidget);
+    expect(find.text("12:07"), findsOneWidget);
+    final likePosition = tester.getCenter(find.text("Like"));
+    final timePosition = tester.getCenter(find.text("12:07"));
+    expect(likePosition.dx, lessThan(timePosition.dx));
+    expect((likePosition.dy - timePosition.dy).abs(), lessThan(8));
   });
 
   testWidgets("Android keyboard GIF enters the private attachment pipeline",

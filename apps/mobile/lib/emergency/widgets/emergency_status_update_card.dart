@@ -34,6 +34,7 @@ class EmergencyStatusUpdateCard extends StatelessWidget {
     final canUnsafe = canOngoing || canResolved;
 
     return ActiveEmergencyCard(
+      flat: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

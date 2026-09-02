@@ -19,14 +19,16 @@ class _ArchiveService extends ActivityHistoryService {
   Future<IncidentArchiveContract> getIncidentArchiveContract({
     required String accessToken,
     required String incidentId,
-  }) async => archive;
+  }) async =>
+      archive;
 
   @override
   Future<Uri> getIncidentEvidenceViewUrl({
     required String accessToken,
     required String incidentId,
     required String mediaId,
-  }) async => Uri.parse("https://example.invalid/evidence/$mediaId");
+  }) async =>
+      Uri.parse("https://example.invalid/evidence/$mediaId");
 }
 
 class _PendingArchiveService extends ActivityHistoryService {
@@ -36,7 +38,8 @@ class _PendingArchiveService extends ActivityHistoryService {
   Future<IncidentArchiveContract> getIncidentArchiveContract({
     required String accessToken,
     required String incidentId,
-  }) => _pending.future;
+  }) =>
+      _pending.future;
 }
 
 class _FailingArchiveService extends ActivityHistoryService {
@@ -61,9 +64,12 @@ IncidentArchiveContract _archive({
     publicReference: "EYE-260820-1111",
     category: "Fire",
     title: "Fire emergency",
-    status: state == ArchivedEmergencyTerminalState.cancelled
-        ? "CancelledByReporter"
-        : "Resolved",
+    status: switch (state) {
+      ArchivedEmergencyTerminalState.ended => "Ended",
+      ArchivedEmergencyTerminalState.cancelled => "CancelledByReporter",
+      ArchivedEmergencyTerminalState.closed => "Closed",
+      _ => "Resolved",
+    },
     terminalState: state,
     reportedAt: DateTime.utc(2026, 8, 20, 8),
     terminalAt: DateTime.utc(2026, 8, 20, 9, 30),
@@ -206,6 +212,49 @@ void main() {
       archive.location.capturedAt,
       DateTime.parse("2026-08-20T07:59:30.000Z"),
     );
+  });
+
+  test("ended live emergency uses its own terminal status and timestamp", () {
+    final archive = IncidentArchiveContract.fromJson({
+      "incidentId": "11111111-1111-1111-1111-111111111111",
+      "category": "Emergency",
+      "status": "Ended",
+      "title": "Live emergency video",
+      "createdAt": "2026-08-20T08:00:00.000Z",
+      "endedAt": "2026-08-20T08:05:00.000Z",
+      "location": {"address": "12 Market Road"},
+      "communityVerificationSummary": {
+        "safeSummaryText": "Community verification is in progress.",
+      },
+      "timeline": const [],
+    });
+
+    expect(archive.terminalState, ArchivedEmergencyTerminalState.ended);
+    expect(archive.terminalLabel, "Ended");
+    expect(archive.terminalBannerLabel, "Live emergency ended");
+    expect(archive.terminalAt, DateTime.parse("2026-08-20T08:05:00.000Z"));
+    expect(
+      archive.communitySummary,
+      "Community verification is complete for this incident.",
+    );
+    expect(archive.progressSteps.last.label, "Ended");
+    expect(
+      archive.progressSteps.last.state,
+      ActiveEmergencyProgressStageState.complete,
+    );
+  });
+
+  testWidgets("ended archive displays distinct live-emergency language", (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_archive(state: ArchivedEmergencyTerminalState.ended)),
+    );
+    await tester.pump();
+
+    expect(find.text("Live emergency ended"), findsOneWidget);
+    await _show(tester, find.text("FINAL STATUS"));
+    expect(find.text("Ended"), findsWidgets);
   });
 
   test("resolved response completes only stages supported by history", () {

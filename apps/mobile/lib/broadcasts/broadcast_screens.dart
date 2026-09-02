@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
+import "package:just_audio/just_audio.dart";
 import "package:share_plus/share_plus.dart";
 
 import "../brand.dart";
@@ -25,6 +26,8 @@ import "../presentation/citizen_presentation.dart";
 import "../presentation/citizen_time_picker.dart";
 import "../theme/the_eye_theme.dart";
 import "../widgets/section_card.dart";
+import "../voice/chat_voice_composer.dart";
+import "../voice/voice_report_validation.dart";
 import "broadcast_feed_service.dart";
 import "broadcast_public_share.dart";
 import "broadcast_action_policy.dart";
@@ -580,51 +583,36 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
                     children: [
-                      SectionCard(
-                        title: item?.title ?? "Safety broadcast",
-                        child: _BroadcastDetailBody(item: item),
+                      _BroadcastPrototypeSummary(item: item!),
+                      const SizedBox(height: 14),
+                      _BroadcastPrimaryActions(
+                        item: item,
+                        policy: policy!,
+                        actionInFlight: _actionInFlight,
+                        onComments: () => Navigator.of(context).pushNamed(
+                          "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
+                        ),
+                        onSighting: () => Navigator.of(context).pushNamed(
+                          "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
+                          arguments: item,
+                        ),
+                        onShare: () => Navigator.of(context).pushNamed(
+                          "${BroadcastRoutes.center}/${widget.broadcastId}/share",
+                          arguments: item,
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      SectionCard(
-                        title: "Actions",
-                        child: Wrap(
+                      if (policy.canReportBroadcast ||
+                          policy.canResolve ||
+                          policy.canWithdraw) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          alignment: WrapAlignment.end,
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            if (policy?.canShare == true)
+                            if (policy.canReportBroadcast)
                               OutlinedButton.icon(
-                                onPressed: _actionInFlight
-                                    ? null
-                                    : () => Navigator.of(context).pushNamed(
-                                          "${BroadcastRoutes.center}/${widget.broadcastId}/share",
-                                          arguments: item,
-                                        ),
-                                icon: const Icon(Icons.share_outlined),
-                                label: Text(l10n.broadcastShare),
-                              ),
-                            if (policy?.canReportSighting == true)
-                              OutlinedButton.icon(
-                                onPressed: _actionInFlight
-                                    ? null
-                                    : () => Navigator.of(context).pushNamed(
-                                          "${BroadcastRoutes.center}/${widget.broadcastId}/sighting",
-                                          arguments: item,
-                                        ),
-                                icon: const Icon(Icons.visibility_outlined),
-                                label: Text(l10n.reportSighting),
-                              ),
-                            if (policy?.canComment == true)
-                              OutlinedButton.icon(
-                                onPressed: _actionInFlight
-                                    ? null
-                                    : () => Navigator.of(context).pushNamed(
-                                          "${BroadcastRoutes.center}/${widget.broadcastId}/comments",
-                                        ),
-                                icon: const Icon(Icons.chat_bubble_outline),
-                                label: Text(l10n.broadcastComments),
-                              ),
-                            if (policy?.canReportBroadcast == true)
-                              OutlinedButton.icon(
+                                style: _compactBroadcastOutlinedStyle(),
                                 onPressed: _actionInFlight
                                     ? null
                                     : () => Navigator.of(context).pushNamed(
@@ -634,27 +622,357 @@ class _BroadcastDetailScreenState extends State<BroadcastDetailScreen> {
                                 icon: const Icon(Icons.flag_outlined),
                                 label: Text(l10n.broadcastReport),
                               ),
-                            if (policy?.canResolve == true)
+                            if (policy.canResolve)
                               FilledButton.icon(
+                                style: _compactBroadcastFilledStyle(),
                                 onPressed: _actionInFlight ? null : _resolve,
                                 icon: const Icon(Icons.check_circle_outline),
                                 label: Text(l10n.broadcastResolve),
                               ),
-                            if (policy?.canWithdraw == true)
+                            if (policy.canWithdraw)
                               OutlinedButton.icon(
+                                style: _compactBroadcastOutlinedStyle(),
                                 onPressed: _actionInFlight ? null : _withdraw,
                                 icon: const Icon(Icons.unpublished_outlined),
                                 label: Text(l10n.broadcastWithdraw),
                               ),
                           ],
                         ),
-                      ),
+                      ],
+                      const SizedBox(height: 20),
+                      Divider(color: EyeSemanticColors.of(context).border),
+                      const SizedBox(height: 20),
+                      _BroadcastDetailBody(item: item),
                     ],
                   ),
       ),
     );
   }
 }
+
+class _BroadcastPrototypeSummary extends StatelessWidget {
+  const _BroadcastPrototypeSummary({required this.item});
+
+  final BroadcastFeedItem item;
+
+  String? _metaAny(List<String> keys) {
+    for (final key in keys) {
+      final value = item.metadata[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  String? _location() {
+    const keys = [
+      "locationDisplay",
+      "displayLocation",
+      "lastSeenAddress",
+      "lastKnownLocation",
+      "lastKnownAddress",
+      "address",
+      "city",
+      "lga",
+    ];
+    for (final key in keys) {
+      final value = item.metadata[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    final fallback = [item.state, item.country]
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .join(", ");
+    return fallback.isEmpty ? null : fallback;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
+    final presentation = CitizenBroadcastPresenter.present(
+      item,
+      AppLocalizations.of(context),
+    );
+    final expiry = BroadcastExpiryPresenter.present(
+      backendStatus: item.status,
+      expiresAt: item.expiresAt,
+    );
+    final normalizedType = item.type.toLowerCase();
+    final isVehicle = normalizedType.contains("vehicle") ||
+        _metaAny(const ["make", "vehicleMake"]) != null;
+    final isMissingPerson = normalizedType.contains("missing") ||
+        _metaAny(const ["fullName"]) != null;
+    final vehicleName = [
+      _metaAny(const ["make", "vehicleMake"]),
+      _metaAny(const ["model", "vehicleModel"]),
+    ].whereType<String>().join(" ");
+    final title = isVehicle && vehicleName.isNotEmpty
+        ? "Stolen Vehicle: $vehicleName"
+        : isMissingPerson
+            ? (_metaAny(const ["fullName"]) ?? item.title)
+            : item.title;
+    final plate = isVehicle
+        ? _metaAny(const [
+            "registrationNumber",
+            "plateNumber",
+            "licensePlate",
+            "registrationMasked",
+          ])
+        : null;
+    final statusColor = switch (presentation.statusLabel.toLowerCase()) {
+      "active" => colors.verified,
+      "resolved" => colors.information,
+      "cancelled" || "withdrawn" => colors.error,
+      _ => colors.warning,
+    };
+    final sourceLabel = item.authorLabel?.trim().isNotEmpty == true
+        ? item.authorLabel!.trim()
+        : "Citizen Broadcast";
+    final location = _location();
+
+    return Container(
+      key: const Key("broadcast-prototype-summary"),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  presentation.typeLabel,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              Container(
+                key: const Key("broadcast-status-chip"),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  presentation.statusLabel,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  height: 1.25,
+                ),
+          ),
+          if (item.body.trim().isNotEmpty && item.body.trim() != title) ...[
+            const SizedBox(height: 4),
+            Text(
+              item.body.trim(),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.secondaryText,
+                    height: 1.4,
+                  ),
+            ),
+          ],
+          if (plate != null) ...[
+            const SizedBox(height: 4),
+            SelectableText(
+              "Plate: $plate",
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.secondaryText,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            [
+              if (item.publishedAt != null)
+                CitizenDateTimeFormatter.formatDateTime(item.publishedAt!),
+              if (location != null) location,
+            ].join(" · "),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.mutedText,
+                ),
+          ),
+          if (expiry.detailLine != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              "$sourceLabel · ${expiry.detailLine!}",
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colors.mutedText,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BroadcastPrimaryActions extends StatelessWidget {
+  const _BroadcastPrimaryActions({
+    required this.item,
+    required this.policy,
+    required this.actionInFlight,
+    required this.onComments,
+    required this.onSighting,
+    required this.onShare,
+  });
+
+  final BroadcastFeedItem item;
+  final BroadcastActionPolicy policy;
+  final bool actionInFlight;
+  final VoidCallback onComments;
+  final VoidCallback onSighting;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
+    final actions = <Widget>[
+      if (policy.canComment)
+        _BroadcastDetailActionTile(
+          key: const Key("broadcast-action-comments"),
+          icon: Icons.chat_bubble_outline_rounded,
+          iconColor: colors.information,
+          label: "Comments",
+          detail: item.commentsCount > 0 ? "${item.commentsCount}" : null,
+          onPressed: actionInFlight ? null : onComments,
+        ),
+      if (policy.canReportSighting)
+        _BroadcastDetailActionTile(
+          key: const Key("broadcast-action-sighting"),
+          icon: Icons.check_rounded,
+          iconColor: colors.verified,
+          label: "Report Sighting",
+          onPressed: actionInFlight ? null : onSighting,
+        ),
+      if (policy.canShare)
+        _BroadcastDetailActionTile(
+          key: const Key("broadcast-action-share"),
+          icon: Icons.ios_share_rounded,
+          iconColor: colors.primaryAction,
+          label: "Share",
+          onPressed: actionInFlight ? null : onShare,
+        ),
+    ];
+
+    return SizedBox(
+      height: 104,
+      child: Row(
+        key: const Key("broadcast-prototype-actions"),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < actions.length; index++) ...[
+            if (index > 0) const SizedBox(width: 8),
+            Expanded(child: actions[index]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BroadcastDetailActionTile extends StatelessWidget {
+  const _BroadcastDetailActionTile({
+    super.key,
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.onPressed,
+    this.detail,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String? detail;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: colors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 92),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 20, color: iconColor),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.15,
+                      ),
+                ),
+                if (detail != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    detail!,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colors.mutedText,
+                        ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+ButtonStyle _compactBroadcastOutlinedStyle() => OutlinedButton.styleFrom(
+      minimumSize: const Size(0, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    );
+
+ButtonStyle _compactBroadcastFilledStyle() => FilledButton.styleFrom(
+      minimumSize: const Size(0, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    );
 
 class _BroadcastDetailBody extends StatelessWidget {
   const _BroadcastDetailBody({required this.item});
@@ -762,7 +1080,8 @@ class _BroadcastDetailBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = BrandColors.lightTextMuted;
+    final semantics = EyeSemanticColors.of(context);
+    final muted = semantics.mutedText;
     final fullName = _meta("fullName");
     final age = _meta("ageOrApproximateAge");
     final gender = _meta("gender");
@@ -778,8 +1097,6 @@ class _BroadcastDetailBody extends StatelessWidget {
         (item?.type.toLowerCase().contains("vehicle") ?? false) ||
             _metaAny(const ["make", "vehicleMake"]) != null ||
             _metaAny(const ["registrationNumber", "plateNumber"]) != null;
-    final vehicleMake = _metaAny(const ["make", "vehicleMake"]);
-    final vehicleModel = _metaAny(const ["model", "vehicleModel"]);
     final vehicleYear = _metaAny(const ["year", "vehicleYear"]);
     final vehicleColor = _metaAny(const ["colour", "color", "vehicleColor"]);
     final vehiclePlate = _metaAny(const [
@@ -814,55 +1131,7 @@ class _BroadcastDetailBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (item?.authorLabel != null)
-          Text(
-            item!.authorLabel!,
-            style: TextStyle(
-              color: item!.adminVerified
-                  ? EyeSemanticColors.of(context).verified
-                  : muted,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        Builder(
-          builder: (context) {
-            final expiry = BroadcastExpiryPresenter.present(
-              backendStatus: item?.status,
-              expiresAt: item?.expiresAt,
-            );
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  expiry.statusLabel,
-                  style: TextStyle(color: muted, fontWeight: FontWeight.w700),
-                ),
-                if (expiry.detailLine != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    expiry.detailLine!,
-                    style: TextStyle(color: muted),
-                  ),
-                ],
-              ],
-            );
-          },
-        ),
-        if (item?.publishedAt != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            "Published ${CitizenDateTimeFormatter.formatDateTime(item!.publishedAt!)}",
-            style: TextStyle(color: muted),
-          ),
-        ],
-        const SizedBox(height: 12),
         if (isMissingPerson) ...[
-          Text("MISSING PERSON",
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                  )),
-          const SizedBox(height: 12),
           AspectRatio(
             aspectRatio: 4 / 3,
             child: Container(
@@ -912,15 +1181,7 @@ class _BroadcastDetailBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          if (fullName != null)
-            Text(
-              fullName,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
           if (age != null) ...[
-            const SizedBox(height: 4),
             Text(
               RegExp(r"^\d{1,3}$").hasMatch(age)
                   ? "Age $age"
@@ -964,105 +1225,74 @@ class _BroadcastDetailBody extends StatelessWidget {
             ),
           ],
         ] else if (isStolenVehicle) ...[
-          Text(
-            "STOLEN VEHICLE",
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                ),
+          _BroadcastDetailSection(
+            title: "Vehicle Information",
+            child: _VehicleInformationGrid(
+              year: vehicleYear,
+              color: vehicleColor,
+              plate: vehiclePlate,
+              vin: vehicleVin,
+            ),
           ),
-          const SizedBox(height: 12),
-          if (vehicleMake != null || vehicleModel != null)
-            Text(
-              [
-                "Stolen Vehicle:",
-                vehicleMake,
-                vehicleModel,
-                vehiclePlate,
-              ].whereType<String>().join(" "),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-          const SizedBox(height: 16),
-          Text("Vehicle Information",
-              style: Theme.of(context).textTheme.titleMedium),
-          if (vehicleYear != null) ...[
-            const SizedBox(height: 8),
-            Text("Year", style: Theme.of(context).textTheme.titleSmall),
-            Text(vehicleYear),
-          ],
-          if (vehicleColor != null) ...[
-            const SizedBox(height: 8),
-            Text("Color", style: Theme.of(context).textTheme.titleSmall),
-            Text(vehicleColor),
-          ],
-          if (vehiclePlate != null) ...[
-            const SizedBox(height: 8),
-            Text("Plate Number", style: Theme.of(context).textTheme.titleSmall),
-            Row(
-              children: [
-                Expanded(child: SelectableText(vehiclePlate)),
-                IconButton(
-                  tooltip: "Copy plate number",
-                  onPressed: () => Clipboard.setData(
-                    ClipboardData(text: vehiclePlate),
-                  ),
-                  icon: const Icon(Icons.copy_outlined),
-                ),
-              ],
-            ),
-          ],
-          if (vehicleVin != null) ...[
-            const SizedBox(height: 8),
-            Text("VIN", style: Theme.of(context).textTheme.titleSmall),
-            Row(
-              children: [
-                Expanded(child: SelectableText(vehicleVin)),
-                IconButton(
-                  tooltip: "Copy VIN",
-                  onPressed: () => Clipboard.setData(
-                    ClipboardData(text: vehicleVin),
-                  ),
-                  icon: const Icon(Icons.copy_outlined),
-                ),
-              ],
-            ),
-          ],
           if (distinguishingFeatures != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              "Distinguishing Features",
-              style: Theme.of(context).textTheme.titleMedium,
+            const _BroadcastSectionDivider(),
+            _BroadcastDetailSection(
+              title: "Distinguishing Features",
+              child: SelectableText(
+                distinguishingFeatures,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      height: 1.45,
+                    ),
+              ),
             ),
-            const SizedBox(height: 4),
-            SelectableText(distinguishingFeatures),
           ],
-          const SizedBox(height: 16),
-          Text("Vehicle Photos",
-              style: Theme.of(context).textTheme.titleMedium),
-          ..._buildEvidenceWidgets(
-            context,
-            muted,
-            source: _vehiclePhotos,
-            emptyMessage: "No vehicle reference photos attached.",
+          const _BroadcastSectionDivider(),
+          _BroadcastDetailSection(
+            title: "Vehicle Photos",
+            child: _BroadcastPhotoGallery(
+              items: _evidenceItems(_vehiclePhotos),
+              emptyMessage: "No vehicle reference photos attached.",
+            ),
           ),
-          const SizedBox(height: 16),
-          Text("Last Seen", style: Theme.of(context).textTheme.titleMedium),
-          if (vehicleLastSeenAt != null)
-            Text(_formatDateTimeWithMeridiem(vehicleLastSeenAt)),
-          if (vehicleLastSeenAddress != null) Text(vehicleLastSeenAddress),
+          if (vehicleLastSeenAt != null || vehicleLastSeenAddress != null) ...[
+            const _BroadcastSectionDivider(),
+            _BroadcastDetailSection(
+              title: "Last Seen",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (vehicleLastSeenAt != null)
+                    Text(_formatDateTimeWithMeridiem(vehicleLastSeenAt)),
+                  if (vehicleLastSeenAt != null &&
+                      vehicleLastSeenAddress != null)
+                    const SizedBox(height: 4),
+                  if (vehicleLastSeenAddress != null)
+                    Text(vehicleLastSeenAddress),
+                ],
+              ),
+            ),
+          ],
           if (theftDescription != null ||
               (item?.body ?? "").trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text("Description of Theft",
-                style: Theme.of(context).textTheme.titleMedium),
-            Text(theftDescription ?? item?.body ?? ""),
+            const _BroadcastSectionDivider(),
+            _BroadcastDetailSection(
+              title: "Description of Theft",
+              child: Text(
+                theftDescription ?? item?.body ?? "",
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      height: 1.45,
+                    ),
+              ),
+            ),
           ],
-          const SizedBox(height: 12),
-          Text("Incident Evidence",
-              style: Theme.of(context).textTheme.titleMedium),
-          ..._buildEvidenceWidgets(context, muted),
+          const _BroadcastSectionDivider(),
+          _BroadcastDetailSection(
+            title: "Incident Evidence",
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: _buildEvidenceWidgets(context, muted).skip(1).toList(),
+            ),
+          ),
           if ((item?.commentsCount ?? 0) > 0) ...[
             const SizedBox(height: 12),
             Text(
@@ -1085,6 +1315,190 @@ class _BroadcastDetailBody extends StatelessWidget {
   }
 }
 
+class _BroadcastDetailSection extends StatelessWidget {
+  const _BroadcastDetailSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 10),
+        child,
+      ],
+    );
+  }
+}
+
+class _BroadcastSectionDivider extends StatelessWidget {
+  const _BroadcastSectionDivider();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Divider(height: 1, color: EyeSemanticColors.of(context).divider),
+      );
+}
+
+class _VehicleInformationGrid extends StatelessWidget {
+  const _VehicleInformationGrid({
+    this.year,
+    this.color,
+    this.plate,
+    this.vin,
+  });
+
+  final String? year;
+  final String? color;
+  final String? plate;
+  final String? vin;
+
+  @override
+  Widget build(BuildContext context) {
+    final fields = <_VehicleInformationField>[
+      if (year != null) _VehicleInformationField(label: "Year", value: year!),
+      if (color != null)
+        _VehicleInformationField(label: "Color", value: color!),
+      if (plate != null)
+        _VehicleInformationField(
+          label: "Plate Number",
+          value: plate!,
+          copyTooltip: "Copy plate number",
+        ),
+      if (vin != null)
+        _VehicleInformationField(
+          label: "VIN",
+          value: vin!,
+          copyTooltip: "Copy VIN",
+        ),
+    ];
+    if (fields.isEmpty) {
+      return Text(
+        "Vehicle details are not available.",
+        style: TextStyle(color: EyeSemanticColors.of(context).mutedText),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 16.0;
+        final columns = constraints.maxWidth >= 340 ? 2 : 1;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          key: const Key("vehicle-information-grid"),
+          spacing: gap,
+          runSpacing: 16,
+          children: [
+            for (final field in fields) SizedBox(width: width, child: field),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _VehicleInformationField extends StatelessWidget {
+  const _VehicleInformationField({
+    required this.label,
+    required this.value,
+    this.copyTooltip,
+  });
+
+  final String label;
+  final String value;
+  final String? copyTooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantics = EyeSemanticColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: semantics.mutedText,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              fit: FlexFit.loose,
+              child: SelectableText(
+                value,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+            if (copyTooltip != null) ...[
+              const SizedBox(width: 2),
+              IconButton(
+                tooltip: copyTooltip,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                onPressed: () => Clipboard.setData(ClipboardData(text: value)),
+                icon: const Icon(Icons.copy_outlined, size: 20),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _BroadcastPhotoGallery extends StatelessWidget {
+  const _BroadcastPhotoGallery({
+    required this.items,
+    required this.emptyMessage,
+  });
+
+  final List<EvidenceItem> items;
+  final String emptyMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Text(
+        emptyMessage,
+        style: TextStyle(color: EyeSemanticColors.of(context).mutedText),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 10.0;
+        final columns = constraints.maxWidth >= 640 ? 3 : 2;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          key: const Key("broadcast-photo-gallery"),
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final evidence in items)
+              SizedBox(
+                width: width,
+                height: width * 0.75,
+                child: EvidenceMediaTile(item: evidence),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class BroadcastCommentsScreen extends StatefulWidget {
   const BroadcastCommentsScreen({required this.broadcastId, super.key});
 
@@ -1098,12 +1512,17 @@ class BroadcastCommentsScreen extends StatefulWidget {
 class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
   final _commentController = TextEditingController();
   final _commentFocusNode = FocusNode();
+  final _replyController = TextEditingController();
+  final _replyFocusNode = FocusNode();
   List<BroadcastCommentItem> _comments = const [];
   bool _didLoad = false;
   bool _loading = true;
   bool _submitting = false;
+  bool _recordingVoice = false;
+  bool _sendingVoice = false;
   BroadcastCommentItem? _replyTo;
   String? _error;
+  String? _voiceError;
 
   @override
   void didChangeDependencies() {
@@ -1117,16 +1536,63 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
   void dispose() {
     _commentController.dispose();
     _commentFocusNode.dispose();
+    _replyController.dispose();
+    _replyFocusNode.dispose();
     super.dispose();
   }
 
-  void _startVoiceTyping() {
-    _commentFocusNode.requestFocus();
-    unawaited(SystemChannels.textInput.invokeMethod<void>("TextInput.show"));
-    showBroadcastSnackBar(
-      context,
-      "Use your keyboard microphone to dictate a comment.",
-    );
+  void _recordVoiceComment() {
+    _commentFocusNode.unfocus();
+    setState(() {
+      _recordingVoice = true;
+      _voiceError = null;
+    });
+  }
+
+  Future<void> _sendVoiceComment(VoiceRecordingResult recording) async {
+    if (_sendingVoice) return;
+    final session = BroadcastSession.require(context);
+    final accessToken = session.accessToken;
+    if (accessToken == null) return;
+    setState(() {
+      _sendingVoice = true;
+      _voiceError = null;
+    });
+    try {
+      final uploaded = await BroadcastMediaUploadService(
+        apiClient: session.apiClient,
+      ).uploadAttachments(
+        attachments: [recording.attachment],
+        accessToken: accessToken,
+      );
+      if (uploaded.isEmpty) {
+        throw BroadcastMediaUploadFailure("Voice upload did not complete.");
+      }
+      await session.broadcastSubmissionService.addComment(
+        accessToken: accessToken,
+        broadcastId: widget.broadcastId,
+        body: "",
+        voiceNote: uploaded.first,
+      );
+      if (!mounted) return;
+      setState(() => _recordingVoice = false);
+      await _load();
+      if (mounted) showBroadcastSnackBar(context, "Voice comment posted.");
+    } on BroadcastMediaUploadFailure catch (error) {
+      if (mounted) setState(() => _voiceError = error.message);
+      rethrow;
+    } on IncidentApiException catch (error) {
+      if (mounted) setState(() => _voiceError = error.userMessage);
+      rethrow;
+    } catch (_) {
+      if (mounted) {
+        setState(
+            () => _voiceError = "Unable to post voice comment. Try again.");
+      }
+      rethrow;
+    } finally {
+      if (mounted) setState(() => _sendingVoice = false);
+    }
   }
 
   Future<void> _load() async {
@@ -1167,8 +1633,17 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
     }
   }
 
-  Future<void> _submit() async {
-    final body = _commentController.text.trim();
+  void _startReply(BroadcastCommentItem comment) {
+    _replyController.clear();
+    setState(() => _replyTo = comment);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _replyFocusNode.requestFocus();
+    });
+  }
+
+  Future<void> _submit({BroadcastCommentItem? replyTo}) async {
+    final controller = replyTo == null ? _commentController : _replyController;
+    final body = controller.text.trim();
     if (body.isEmpty) {
       showBroadcastSnackBar(context, "Enter a comment.", isError: true);
       return;
@@ -1181,10 +1656,10 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
         accessToken: session.accessToken!,
         broadcastId: widget.broadcastId,
         body: body,
-        parentId: _replyTo?.id,
+        parentId: replyTo?.id,
       );
-      _commentController.clear();
-      setState(() => _replyTo = null);
+      controller.clear();
+      if (replyTo != null) setState(() => _replyTo = null);
       await _load();
       if (!mounted) return;
       showBroadcastSnackBar(context, "Comment posted.");
@@ -1295,8 +1770,19 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final roots = <BroadcastCommentItem>[];
+    final replies = <String, List<BroadcastCommentItem>>{};
+    final knownIds = _comments.map((comment) => comment.id).toSet();
+    for (final comment in _comments) {
+      final parentId = comment.parentId;
+      if (parentId == null || !knownIds.contains(parentId)) {
+        roots.add(comment);
+      } else {
+        replies.putIfAbsent(parentId, () => []).add(comment);
+      }
+    }
     return _BroadcastShell(
-      title: "Broadcast comments",
+      title: "Comments",
       child: Column(
         children: [
           Expanded(
@@ -1347,20 +1833,21 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
                               )
                             : ListView.separated(
                                 padding:
-                                    const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                                itemCount: _comments.length,
+                                    const EdgeInsets.fromLTRB(16, 14, 16, 20),
+                                itemCount: roots.length,
                                 separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 18),
                                 itemBuilder: (context, index) {
-                                  final comment = _comments[index];
+                                  final comment = roots[index];
                                   final currentUserId =
                                       BroadcastSession.require(
                                     context,
                                   ).cachedCitizenProfile?.id;
                                   final isOwner = currentUserId != null &&
                                       currentUserId == comment.authorUserId;
-                                  return _BroadcastCommentTile(
+                                  return _BroadcastCommentThread(
                                     comment: comment,
+                                    replies: replies[comment.id] ?? const [],
                                     isOwner: isOwner,
                                     onHelpful: () => unawaited(
                                       _react(comment, "Helpful"),
@@ -1368,16 +1855,25 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
                                     onThanks: () => unawaited(
                                       _react(comment, "Thanks"),
                                     ),
-                                    onReply: comment.parentId == null
-                                        ? () => setState(
-                                              () => _replyTo = comment,
-                                            )
-                                        : null,
+                                    onReply: () => _startReply(comment),
                                     onEdit: isOwner
                                         ? () => unawaited(_edit(comment))
                                         : null,
                                     onDelete: isOwner
                                         ? () => unawaited(_delete(comment))
+                                        : null,
+                                    replyComposer: _replyTo?.id == comment.id
+                                        ? _BroadcastInlineReplyComposer(
+                                            controller: _replyController,
+                                            focusNode: _replyFocusNode,
+                                            submitting: _submitting,
+                                            onCancel: () => setState(
+                                              () => _replyTo = null,
+                                            ),
+                                            onSend: () => unawaited(
+                                              _submit(replyTo: comment),
+                                            ),
+                                          )
                                         : null,
                                   );
                                 },
@@ -1399,83 +1895,103 @@ class _BroadcastCommentsScreenState extends State<BroadcastCommentsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_replyTo != null)
+                  if (_recordingVoice)
+                    ChatVoiceComposer(
+                      sending: _sendingVoice,
+                      onCancel: () => setState(() {
+                        _recordingVoice = false;
+                        _voiceError = null;
+                      }),
+                      onSend: _sendVoiceComment,
+                    )
+                  else
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
-                          child: Text(
-                            "Replying to ${_replyTo!.authorName}",
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelMedium,
+                          child: TextField(
+                            key: const Key("broadcast-comment-input"),
+                            controller: _commentController,
+                            focusNode: _commentFocusNode,
+                            enabled: !_submitting,
+                            minLines: 1,
+                            maxLines: 4,
+                            maxLength: 2000,
+                            autocorrect: true,
+                            enableSuggestions: true,
+                            keyboardType: TextInputType.multiline,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: InputDecoration(
+                              hintText: "Write a comment...",
+                              counterText: "",
+                              isDense: true,
+                              filled: true,
+                              fillColor:
+                                  EyeSemanticColors.of(context).inputFill,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 11,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide(
+                                  color: EyeSemanticColors.of(context).border,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide(
+                                  color: EyeSemanticColors.of(context).border,
+                                ),
+                              ),
+                            ),
+                            onSubmitted: (_) => unawaited(_submit()),
                           ),
                         ),
-                        IconButton(
-                          tooltip: "Cancel reply",
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => setState(() => _replyTo = null),
-                          icon: const Icon(Icons.close, size: 18),
+                        const SizedBox(width: 8),
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _commentController,
+                          builder: (context, value, _) {
+                            if (_submitting) {
+                              return const IconButton.filled(
+                                tooltip: "Posting comment",
+                                onPressed: null,
+                                icon: SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            }
+                            if (value.text.trim().isEmpty) {
+                              return IconButton.filled(
+                                tooltip: "Record voice comment",
+                                onPressed: _recordVoiceComment,
+                                icon: const Icon(Icons.mic_rounded),
+                              );
+                            }
+                            return IconButton.filled(
+                              tooltip: "Send comment",
+                              onPressed: _submit,
+                              icon: const Icon(Icons.send_rounded),
+                            );
+                          },
                         ),
                       ],
                     ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          key: const Key("broadcast-comment-input"),
-                          controller: _commentController,
-                          focusNode: _commentFocusNode,
-                          enabled: !_submitting,
-                          minLines: 1,
-                          maxLines: 4,
-                          maxLength: 2000,
-                          autocorrect: true,
-                          enableSuggestions: true,
-                          keyboardType: TextInputType.multiline,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: InputDecoration(
-                            hintText: _replyTo == null
-                                ? "Add a comment..."
-                                : "Write a reply...",
-                            counterText: "",
-                            isDense: true,
-                            border: const OutlineInputBorder(),
-                          ),
-                          onSubmitted: (_) => unawaited(_submit()),
-                        ),
+                  if (_voiceError != null) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _voiceError!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: EyeSemanticColors.of(context).error,
+                            ),
                       ),
-                      const SizedBox(width: 8),
-                      ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _commentController,
-                        builder: (context, value, _) {
-                          if (_submitting) {
-                            return const IconButton.filled(
-                              tooltip: "Posting comment",
-                              onPressed: null,
-                              icon: SizedBox.square(
-                                dimension: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            );
-                          }
-                          if (value.text.trim().isEmpty) {
-                            return IconButton.filled(
-                              tooltip: "Use voice typing",
-                              onPressed: _startVoiceTyping,
-                              icon: const Icon(Icons.mic_rounded),
-                            );
-                          }
-                          return IconButton.filled(
-                            tooltip: "Send comment",
-                            onPressed: _submit,
-                            icon: const Icon(Icons.send_rounded),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1492,6 +2008,7 @@ class _BroadcastCommentTile extends StatelessWidget {
     required this.isOwner,
     required this.onHelpful,
     required this.onThanks,
+    this.compact = false,
     this.onReply,
     this.onEdit,
     this.onDelete,
@@ -1504,119 +2021,462 @@ class _BroadcastCommentTile extends StatelessWidget {
   final VoidCallback? onReply;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
+    final showBody = comment.body.isNotEmpty &&
+        !(comment.voiceNoteUrl != null &&
+            comment.body == broadcastVoiceCommentCompatibilityBody);
     final initial = comment.authorName.trim().isEmpty
         ? "?"
         : comment.authorName.trim().characters.first.toUpperCase();
     return Padding(
-      padding: EdgeInsets.only(
-        left: comment.parentId == null ? 0 : 28,
-        bottom: 4,
-      ),
+      padding: EdgeInsets.zero,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
-            radius: 18,
-            backgroundColor: semantics.information.withAlpha(36),
+            radius: compact ? 13 : 16,
+            backgroundColor: isOwner
+                ? BrandColors.orange.withValues(alpha: 0.12)
+                : semantics.elevatedSurface,
             child: Text(
               initial,
-              style: TextStyle(color: semantics.information),
+              style: TextStyle(
+                color: isOwner ? BrandColors.orange : semantics.mutedText,
+                fontSize: compact ? 10 : 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: compact ? 8 : 10),
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
-              decoration: BoxDecoration(
-                color: semantics.elevatedSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Theme.of(context).dividerColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          comment.authorName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        comment.authorName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                       ),
-                      if (comment.createdAt != null)
-                        Text(
-                          formatBroadcastAge(comment.createdAt!),
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: semantics.mutedText,
-                                  ),
-                        ),
-                      if (isOwner)
-                        PopupMenuButton<String>(
-                          tooltip: "Comment options",
-                          padding: EdgeInsets.zero,
-                          onSelected: (value) {
-                            if (value == "edit") onEdit?.call();
-                            if (value == "delete") onDelete?.call();
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(value: "edit", child: Text("Edit")),
-                            PopupMenuItem(
-                              value: "delete",
-                              child: Text("Delete"),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  if (comment.isPinned || comment.isSighting) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      comment.isPinned ? "Pinned update" : "Sighting update",
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: semantics.warning,
-                            fontWeight: FontWeight.w700,
-                          ),
                     ),
+                    if (comment.createdAt != null)
+                      Text(
+                        formatBroadcastAge(comment.createdAt!),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: semantics.mutedText,
+                            ),
+                      ),
+                    if (isOwner)
+                      PopupMenuButton<String>(
+                        tooltip: "Comment options",
+                        padding: EdgeInsets.zero,
+                        iconSize: 18,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 36,
+                          height: 36,
+                        ),
+                        onSelected: (value) {
+                          if (value == "edit") onEdit?.call();
+                          if (value == "delete") onDelete?.call();
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: "edit", child: Text("Edit")),
+                          PopupMenuItem(
+                            value: "delete",
+                            child: Text("Delete"),
+                          ),
+                        ],
+                      ),
                   ],
-                  const SizedBox(height: 4),
-                  Text(comment.body),
+                ),
+                if (comment.isPinned || comment.isSighting) ...[
                   const SizedBox(height: 2),
-                  Wrap(
-                    spacing: 2,
-                    runSpacing: 0,
-                    children: [
-                      TextButton.icon(
-                        onPressed: onHelpful,
-                        icon: const Icon(Icons.thumb_up_outlined, size: 17),
-                        label: Text("Helpful ${comment.helpfulReactions}"),
-                      ),
-                      TextButton.icon(
-                        onPressed: onThanks,
-                        icon: const Icon(
-                          Icons.volunteer_activism_outlined,
-                          size: 17,
+                  Text(
+                    comment.isPinned ? "Pinned update" : "Sighting update",
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: semantics.warning,
+                          fontWeight: FontWeight.w700,
                         ),
-                        label: Text("Thanks ${comment.thanksReactions}"),
-                      ),
-                      if (onReply != null)
-                        TextButton(
-                          onPressed: onReply,
-                          child: const Text("Reply"),
-                        ),
-                    ],
                   ),
                 ],
-              ),
+                if (showBody) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    comment.body,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          height: 1.45,
+                        ),
+                  ),
+                ],
+                if (comment.voiceNoteUrl != null) ...[
+                  if (showBody) const SizedBox(height: 8),
+                  ChatVoiceNotePlayer(
+                    url: comment.voiceNoteUrl!,
+                    durationSeconds: comment.voiceNoteDurationSeconds,
+                    semanticLabel: "Voice comment",
+                    bubbleKey: const Key("broadcast-voice-message-bubble"),
+                  ),
+                ],
+                if (!compact) const SizedBox(height: 2),
+                if (!compact)
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 0,
+                    children: [
+                      _CommentAction(
+                        onPressed: onHelpful,
+                        icon: Icons.thumb_up_outlined,
+                        label: "${comment.helpfulReactions}",
+                      ),
+                      _CommentAction(
+                        onPressed: onThanks,
+                        icon: Icons.volunteer_activism_outlined,
+                        label: "${comment.thanksReactions}",
+                      ),
+                      if (onReply != null)
+                        _CommentAction(
+                          onPressed: onReply,
+                          icon: Icons.reply_rounded,
+                          label: "Reply",
+                        ),
+                    ],
+                  ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _BroadcastCommentThread extends StatelessWidget {
+  const _BroadcastCommentThread({
+    required this.comment,
+    required this.replies,
+    required this.isOwner,
+    required this.onHelpful,
+    required this.onThanks,
+    required this.onReply,
+    this.onEdit,
+    this.onDelete,
+    this.replyComposer,
+  });
+
+  final BroadcastCommentItem comment;
+  final List<BroadcastCommentItem> replies;
+  final bool isOwner;
+  final VoidCallback onHelpful;
+  final VoidCallback onThanks;
+  final VoidCallback onReply;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final Widget? replyComposer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: ValueKey("broadcast-comment-thread-${comment.id}"),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _BroadcastCommentTile(
+          comment: comment,
+          isOwner: isOwner,
+          onHelpful: onHelpful,
+          onThanks: onThanks,
+          onReply: onReply,
+          onEdit: onEdit,
+          onDelete: onDelete,
+        ),
+        if (replyComposer != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 42, top: 10),
+            child: replyComposer!,
+          ),
+        if (replies.isNotEmpty)
+          Container(
+            key: ValueKey("broadcast-comment-replies-${comment.id}"),
+            margin: const EdgeInsets.only(left: 42, top: 10),
+            padding: const EdgeInsets.only(left: 14),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: EyeSemanticColors.of(context).border),
+              ),
+            ),
+            child: Column(
+              children: [
+                for (var index = 0; index < replies.length; index++) ...[
+                  _BroadcastCommentTile(
+                    comment: replies[index],
+                    isOwner: false,
+                    onHelpful: () {},
+                    onThanks: () {},
+                    compact: true,
+                  ),
+                  if (index != replies.length - 1) const SizedBox(height: 12),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CommentAction extends StatelessWidget {
+  const _CommentAction({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+  });
+
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = EyeSemanticColors.of(context).mutedText;
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BroadcastInlineReplyComposer extends StatelessWidget {
+  const _BroadcastInlineReplyComposer({
+    required this.controller,
+    required this.focusNode,
+    required this.submitting,
+    required this.onCancel,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool submitting;
+  final VoidCallback onCancel;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            key: const Key("broadcast-reply-input"),
+            controller: controller,
+            focusNode: focusNode,
+            enabled: !submitting,
+            minLines: 1,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: "Write a reply...",
+              isDense: true,
+              filled: true,
+              fillColor: colors.inputFill,
+              suffixIcon: IconButton(
+                tooltip: "Cancel reply",
+                onPressed: onCancel,
+                icon: const Icon(Icons.close, size: 17),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide(color: colors.border),
+              ),
+            ),
+            onSubmitted: (_) => onSend(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filled(
+          tooltip: "Send reply",
+          onPressed: submitting ? null : onSend,
+          style: IconButton.styleFrom(
+            backgroundColor: BrandColors.orange,
+            foregroundColor: BrandColors.command,
+            minimumSize: const Size.square(40),
+          ),
+          icon: const Icon(Icons.send_rounded, size: 18),
+        ),
+      ],
+    );
+  }
+}
+
+class _BroadcastVoiceNotePlayer extends StatefulWidget {
+  const _BroadcastVoiceNotePlayer({
+    required this.url,
+    required this.durationSeconds,
+  });
+
+  final String url;
+  final int? durationSeconds;
+
+  @override
+  State<_BroadcastVoiceNotePlayer> createState() =>
+      _BroadcastVoiceNotePlayerState();
+}
+
+class _BroadcastVoiceNotePlayerState extends State<_BroadcastVoiceNotePlayer> {
+  final AudioPlayer _player = AudioPlayer();
+  StreamSubscription<PlayerState>? _subscription;
+  StreamSubscription<Duration>? _positionSubscription;
+  bool _loading = false;
+  bool _playing = false;
+  bool _failed = false;
+  String? _loadedUrl;
+  Duration _position = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = _player.playerStateStream.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _playing = state.playing;
+        if (state.processingState == ProcessingState.completed) {
+          _playing = false;
+        }
+      });
+    });
+    _positionSubscription = _player.positionStream.listen((position) {
+      if (mounted) setState(() => _position = position);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _BroadcastVoiceNotePlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _loadedUrl = null;
+      _position = Duration.zero;
+    }
+  }
+
+  @override
+  void dispose() {
+    final subscription = _subscription;
+    if (subscription != null) unawaited(subscription.cancel());
+    final positionSubscription = _positionSubscription;
+    if (positionSubscription != null) unawaited(positionSubscription.cancel());
+    unawaited(_player.dispose());
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_loading) return;
+    if (_playing) {
+      await _player.pause();
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    try {
+      if (_loadedUrl != widget.url) {
+        await _player.setUrl(widget.url);
+        _loadedUrl = widget.url;
+      }
+      if (_player.processingState == ProcessingState.completed) {
+        await _player.seek(Duration.zero);
+      }
+      unawaited(_player.play());
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
+    final seconds = widget.durationSeconds ?? 0;
+    final elapsedSeconds = _position.inSeconds.clamp(0, seconds);
+    final progress = seconds <= 0 ? 0.0 : elapsedSeconds / seconds;
+    final duration =
+        "${(elapsedSeconds ~/ 60).toString().padLeft(2, "0")}:${(elapsedSeconds % 60).toString().padLeft(2, "0")} / ${(seconds ~/ 60).toString().padLeft(2, "0")}:${(seconds % 60).toString().padLeft(2, "0")}";
+    return Semantics(
+      container: true,
+      label: "Voice comment, $duration",
+      child: DecoratedBox(
+        key: const Key("broadcast-voice-message-bubble"),
+        decoration: BoxDecoration(
+          color: colors.elevatedSurface,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip:
+                    _playing ? "Pause voice comment" : "Play voice comment",
+                onPressed: _toggle,
+                icon: _loading
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(_playing
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded),
+              ),
+              SizedBox(
+                width: 112,
+                height: 28,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(18, (index) {
+                    final filled = index / 18 <= progress;
+                    return Container(
+                      width: 3,
+                      height: 7.0 + ((index * 5) % 18),
+                      decoration: BoxDecoration(
+                        color: filled ? colors.primaryAction : colors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(_failed ? "Retry" : duration),
+            ],
+          ),
+        ),
       ),
     );
   }

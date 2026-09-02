@@ -41,12 +41,15 @@ ActiveEmergencyActiveContract _active({
     reportedLocation: const ActiveEmergencyLocation(
       latitude: "4.8",
       longitude: "7.0",
-      address: "Trans-Amadi, Port Harcourt",
+      address: "Stadium Road, Trans-Amadi",
       manualLocationAdjusted: false,
       source: "gps",
       quality: "good",
       liveLocationStale: false,
       locationLabel: "Trans-Amadi, Port Harcourt",
+      lga: "Port Harcourt",
+      state: "Rivers State",
+      country: "Nigeria",
     ),
     evidenceSummary: ActiveEmergencyEvidenceSummary(
       totalCount: evidence.length,
@@ -165,6 +168,10 @@ void main() {
     expect(find.text("EYE-260811-D1B6"), findsOneWidget);
     expect(find.text(active.incidentId), findsNothing);
     expect(find.textContaining("Trans-Amadi"), findsOneWidget);
+    expect(
+      find.text("Stadium Road, Trans-Amadi\nPort Harcourt, Rivers State"),
+      findsOneWidget,
+    );
     expect(find.textContaining("Rivers State EMA"), findsOneWidget);
     expect(find.text("Test"), findsOneWidget);
     expect(find.textContaining("statusVersion"), findsNothing);

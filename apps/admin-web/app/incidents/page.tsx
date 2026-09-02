@@ -55,6 +55,7 @@ export default async function IncidentsPage({ searchParams }: { searchParams: Pr
                 { value: "Submitted", label: "Submitted" }, { value: "Received", label: "Received" },
                 { value: "Verifying", label: "Verifying" }, { value: "Verified", label: "Verified" },
                 { value: "Assigned", label: "Assigned" }, { value: "Responding", label: "Responding" },
+                { value: "Ended", label: "Ended" },
                 { value: "Resolved", label: "Resolved" }, { value: "Closed", label: "Closed" },
               ]} />
               <ConsoleFilterSelect name="priority" label="Priority" defaultValue={params.priority} options={[

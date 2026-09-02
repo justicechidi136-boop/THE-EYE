@@ -385,68 +385,70 @@ class _PoliceStationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    station.name,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      station.name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                if (station.isVerifiedByTheEye)
-                  Chip(
-                    label: const Text("Verified"),
-                    visualDensity: VisualDensity.compact,
-                    backgroundColor: theme.colorScheme.primaryContainer
-                        .withValues(alpha: 0.7),
-                  )
-                else if (station.isGoogleResult)
-                  Chip(
-                    label: const Text("Google Maps result"),
-                    visualDensity: VisualDensity.compact,
+                  if (station.isVerifiedByTheEye)
+                    Chip(
+                      label: const Text("Verified"),
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: theme.colorScheme.primaryContainer
+                          .withValues(alpha: 0.7),
+                    )
+                  else if (station.isGoogleResult)
+                    Chip(
+                      label: const Text("Google Maps result"),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(station.address, style: theme.textTheme.bodySmall),
+              if (station.distanceLabel.isNotEmpty)
+                Text(station.distanceLabel, style: theme.textTheme.labelSmall),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: station.canCall
+                        ? () => launchUrl(Uri.parse("tel:${station.phone}"))
+                        : null,
+                    icon: const Icon(Icons.call),
+                    label: Text(
+                      station.canCall ? "Call" : "No phone on file",
+                    ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(station.address, style: theme.textTheme.bodySmall),
-            if (station.distanceLabel.isNotEmpty)
-              Text(station.distanceLabel, style: theme.textTheme.labelSmall),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: station.canCall
-                      ? () => launchUrl(Uri.parse("tel:${station.phone}"))
-                      : null,
-                  icon: const Icon(Icons.call),
-                  label: Text(
-                    station.canCall ? "Call" : "No phone on file",
+                  TextButton.icon(
+                    onPressed: () {
+                      final url = station.navigationUrl ??
+                          "https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}";
+                      launchUrl(Uri.parse(url),
+                          mode: LaunchMode.externalApplication);
+                    },
+                    icon: const Icon(Icons.map),
+                    label: const Text("Directions"),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    final url = station.navigationUrl ??
-                        "https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}";
-                    launchUrl(Uri.parse(url),
-                        mode: LaunchMode.externalApplication);
-                  },
-                  icon: const Icon(Icons.map),
-                  label: const Text("Directions"),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
+        const Divider(height: 1),
+      ],
     );
   }
 }

@@ -475,6 +475,72 @@ describe("DangerTriggerService", () => {
     expect(JSON.stringify(alert)).not.toContain("signedUrl");
   });
 
+  it("exposes only original voice availability in authorized event details", async () => {
+    const { service, prisma } = buildService();
+    prisma.incidentMedia.findFirst.mockResolvedValue({
+      id: "voice-media",
+      objectKey: "private/incident/original-voice.m4a",
+      contentType: "audio/mp4",
+      sizeBytes: 128,
+    });
+
+    const result = await service.detail("event-1", actor);
+
+    expect(result.data.originalVoiceAvailable).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("original-voice.m4a");
+    expect(JSON.stringify(result)).not.toContain("objectKey");
+    expect(prisma.incidentMedia.findFirst).toHaveBeenCalledWith({
+      where: {
+        incidentId: "incident-1",
+        uploaderId: actor.sub,
+        mediaType: "Audio",
+        deletedAt: null,
+        metadata: {
+          path: ["provenance"],
+          equals: "ORIGINAL_VOICE_NOTE",
+        },
+      },
+      select: {
+        id: true,
+        objectKey: true,
+        contentType: true,
+        sizeBytes: true,
+      },
+      orderBy: { uploadedAt: "asc" },
+    });
+  });
+
+  it("allows a notified mobile recipient to open delivered event details", async () => {
+    const { service, prisma } = buildService();
+    const recipient = {
+      ...actor,
+      sub: "22222222-2222-4222-8222-222222222222",
+    };
+    prisma.dangerEventDelivery.findFirst.mockResolvedValue({
+      id: "delivery-mobile-1",
+      recipientUserId: recipient.sub,
+      status: "SENT",
+    });
+    prisma.incidentMedia.findFirst.mockResolvedValue({
+      id: "voice-media",
+      objectKey: "private/incident/original-voice.m4a",
+      contentType: "audio/mp4",
+      sizeBytes: 128,
+    });
+
+    const result = await service.detail("event-1", recipient);
+
+    expect(result.data.originalVoiceAvailable).toBe(true);
+    expect(prisma.dangerEventDelivery.findFirst).toHaveBeenCalledWith({
+      where: {
+        dangerEventId: "event-1",
+        recipientUserId: recipient.sub,
+        status: "SENT",
+      },
+    });
+    expect(prisma.deviceGeoState.findMany).toHaveBeenCalledTimes(0);
+  });
+
   it("denies original voice access to a recipient outside the active zone", async () => {
     const { service, prisma } = buildService();
     prisma.deviceGeoState.findMany.mockResolvedValue([]);

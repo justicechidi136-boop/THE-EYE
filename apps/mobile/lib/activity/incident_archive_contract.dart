@@ -2,7 +2,13 @@ import "../emergency/active_emergency_contract.dart";
 import "../emergency/active_emergency_progress_presentation.dart";
 import "../presentation/citizen_presentation.dart";
 
-enum ArchivedEmergencyTerminalState { resolved, cancelled, closed, other }
+enum ArchivedEmergencyTerminalState {
+  ended,
+  resolved,
+  cancelled,
+  closed,
+  other
+}
 
 class IncidentArchiveContract {
   const IncidentArchiveContract({
@@ -46,13 +52,17 @@ class IncidentArchiveContract {
   final List<IncidentArchiveDispatchEntry> dispatchTimeline;
 
   String get terminalLabel => switch (terminalState) {
-    ArchivedEmergencyTerminalState.resolved => "Resolved",
-    ArchivedEmergencyTerminalState.cancelled => "Cancelled",
-    ArchivedEmergencyTerminalState.closed => "Closed",
-    ArchivedEmergencyTerminalState.other => _citizenStatus(status),
-  };
+        ArchivedEmergencyTerminalState.ended => "Ended",
+        ArchivedEmergencyTerminalState.resolved => "Resolved",
+        ArchivedEmergencyTerminalState.cancelled => "Cancelled",
+        ArchivedEmergencyTerminalState.closed => "Closed",
+        ArchivedEmergencyTerminalState.other => _citizenStatus(status),
+      };
 
-  String get terminalBannerLabel => "Incident ${terminalLabel.toLowerCase()}";
+  String get terminalBannerLabel =>
+      terminalState == ArchivedEmergencyTerminalState.ended
+          ? "Live emergency ended"
+          : "Incident ${terminalLabel.toLowerCase()}";
 
   List<ActiveEmergencyCitizenProgressStep> get progressSteps {
     bool timelineHas(Iterable<String> terms) {
@@ -70,11 +80,9 @@ class IncidentArchiveContract {
     }
 
     final verificationReached = timelineHas(["verif", "triage"]);
-    final agencyReached =
-        dispatchTimeline.isNotEmpty ||
+    final agencyReached = dispatchTimeline.isNotEmpty ||
         timelineHas(["agency assigned", "assignment.created"]);
-    final respondersReached =
-        dispatchHas([
+    final respondersReached = dispatchHas([
           "accepted",
           "en route",
           "on scene",
@@ -82,7 +90,7 @@ class IncidentArchiveContract {
           "completed",
         ]) ||
         timelineHas(["responder", "response en route", "response arrived"]);
-    final resolved =
+    final resolved = terminalState == ArchivedEmergencyTerminalState.ended ||
         terminalState == ArchivedEmergencyTerminalState.resolved ||
         terminalState == ArchivedEmergencyTerminalState.closed;
 
@@ -128,14 +136,16 @@ class IncidentArchiveContract {
     final status = _requiredString(json, "status");
     final terminalState = _terminalState(status);
     final reportedAt = _requiredDate(json, "createdAt");
-    final terminalAt =
-        _date(
-          json[terminalState == ArchivedEmergencyTerminalState.cancelled
-              ? "cancelledAt"
-              : terminalState == ArchivedEmergencyTerminalState.closed
-              ? "closedAt"
-              : "resolvedAt"],
+    final terminalAt = _date(
+          json[terminalState == ArchivedEmergencyTerminalState.ended
+              ? "endedAt"
+              : terminalState == ArchivedEmergencyTerminalState.cancelled
+                  ? "cancelledAt"
+                  : terminalState == ArchivedEmergencyTerminalState.closed
+                      ? "closedAt"
+                      : "resolvedAt"],
         ) ??
+        _date(json["endedAt"]) ??
         _date(json["closedAt"]) ??
         _date(json["resolvedAt"]) ??
         _date(json["cancelledAt"]);
@@ -178,18 +188,16 @@ class IncidentArchiveContract {
       evidence: _list(
         json["evidenceGallery"],
       ).map(IncidentArchiveEvidenceItem.fromJson).toList(growable: false),
-      timeline:
-          _list(json["timeline"])
-              .map(IncidentArchiveTimelineEntry.fromJson)
-              .where((entry) => entry.at != null)
-              .toList(growable: false)
-            ..sort((a, b) => a.at!.compareTo(b.at!)),
-      dispatchTimeline:
-          _list(json["dispatchTimeline"])
-              .map(IncidentArchiveDispatchEntry.fromJson)
-              .where((entry) => entry.at != null)
-              .toList(growable: false)
-            ..sort((a, b) => a.at!.compareTo(b.at!)),
+      timeline: _list(json["timeline"])
+          .map(IncidentArchiveTimelineEntry.fromJson)
+          .where((entry) => entry.at != null)
+          .toList(growable: false)
+        ..sort((a, b) => a.at!.compareTo(b.at!)),
+      dispatchTimeline: _list(json["dispatchTimeline"])
+          .map(IncidentArchiveDispatchEntry.fromJson)
+          .where((entry) => entry.at != null)
+          .toList(growable: false)
+        ..sort((a, b) => a.at!.compareTo(b.at!)),
     );
   }
 }
@@ -198,14 +206,18 @@ String? _terminalCommunitySummary(
   ArchivedEmergencyTerminalState state,
   String? summary,
 ) {
+  if (state == ArchivedEmergencyTerminalState.ended) {
+    return "Community verification is complete for this incident.";
+  }
   if (summary == null) return null;
   final lowered = summary.toLowerCase();
-  final soundsActive =
-      lowered.contains("in progress") ||
+  final soundsActive = lowered.contains("in progress") ||
       lowered.contains("continuing") ||
       lowered.contains("ongoing");
   if (!soundsActive) return summary;
   return switch (state) {
+    ArchivedEmergencyTerminalState.ended =>
+      "Community verification is complete for this incident.",
     ArchivedEmergencyTerminalState.cancelled =>
       "Community verification ended when this incident was cancelled.",
     ArchivedEmergencyTerminalState.resolved =>
@@ -310,6 +322,7 @@ class IncidentArchiveDispatchEntry {
 
 ArchivedEmergencyTerminalState _terminalState(String status) {
   final value = status.toLowerCase();
+  if (value == "ended") return ArchivedEmergencyTerminalState.ended;
   if (value.contains("cancel")) return ArchivedEmergencyTerminalState.cancelled;
   if (value.contains("resolve")) return ArchivedEmergencyTerminalState.resolved;
   if (value.contains("close")) return ArchivedEmergencyTerminalState.closed;
@@ -361,7 +374,7 @@ Map<String, dynamic>? _map(Object? value) =>
 
 List<Map<String, dynamic>> _list(Object? value) => value is List
     ? value
-          .whereType<Map>()
-          .map((entry) => Map<String, dynamic>.from(entry))
-          .toList(growable: false)
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList(growable: false)
     : const [];
