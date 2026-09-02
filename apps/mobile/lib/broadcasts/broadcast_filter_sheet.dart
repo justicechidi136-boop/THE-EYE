@@ -74,9 +74,13 @@ class _BroadcastFilterSheetState extends State<_BroadcastFilterSheet> {
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
-    return FractionallySizedBox(
-      heightFactor: 0.78,
+    final mediaQuery = MediaQuery.of(context);
+    final bottomSystemInset =
+        MediaQueryData.fromView(View.of(context)).viewPadding.bottom;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: mediaQuery.size.height * 0.88),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 10),
           Container(
@@ -88,7 +92,7 @@ class _BroadcastFilterSheetState extends State<_BroadcastFilterSheet> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+            padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
             child: Row(
               children: [
                 Expanded(
@@ -105,95 +109,102 @@ class _BroadcastFilterSheetState extends State<_BroadcastFilterSheet> {
               ],
             ),
           ),
-          Expanded(
+          Flexible(
+            fit: FlexFit.loose,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
               children: [
-                _FilterGroup(
-                  title: "Broadcast type",
-                  children: [
-                    ChoiceChip(
-                      label: const Text("All"),
-                      selected: _category == null,
-                      onSelected: (_) => setState(() => _category = null),
+                _FilterDropdown<String>(
+                  key: const Key("broadcast-filter-type"),
+                  label: "Broadcast type",
+                  value: _category ?? "all",
+                  options: const [
+                    _FilterOption(value: "all", label: "All"),
+                    _FilterOption(
+                      value: "StolenVehicle",
+                      label: "Stolen Vehicle",
                     ),
-                    ChoiceChip(
-                      label: const Text("Stolen Vehicle"),
-                      selected: _category == "StolenVehicle",
-                      onSelected: (_) =>
-                          setState(() => _category = "StolenVehicle"),
-                    ),
-                    ChoiceChip(
-                      label: const Text("Missing Person"),
-                      selected: _category == "MissingPerson",
-                      onSelected: (_) =>
-                          setState(() => _category = "MissingPerson"),
+                    _FilterOption(
+                      value: "MissingPerson",
+                      label: "Missing Person",
                     ),
                   ],
+                  onChanged: (value) => setState(
+                    () => _category = value == "all" ? null : value,
+                  ),
                 ),
-                const SizedBox(height: 20),
-                _FilterGroup(
-                  title: "Status",
-                  children: [
-                    for (final option in const <String?>[
-                      null,
-                      "Active",
-                      "Resolved",
-                      "Cancelled",
-                      "Expired",
-                    ])
-                      ChoiceChip(
-                        label: Text(option ?? "All"),
-                        selected: _status == option,
-                        onSelected: (_) => setState(() => _status = option),
-                      ),
+                const SizedBox(height: 16),
+                _FilterDropdown<String>(
+                  key: const Key("broadcast-filter-status"),
+                  label: "Status",
+                  value: _status ?? "all",
+                  options: const [
+                    _FilterOption(value: "all", label: "All"),
+                    _FilterOption(value: "Active", label: "Active"),
+                    _FilterOption(value: "Resolved", label: "Resolved"),
+                    _FilterOption(value: "Cancelled", label: "Cancelled"),
+                    _FilterOption(value: "Expired", label: "Expired"),
                   ],
+                  onChanged: (value) => setState(
+                    () => _status = value == "all" ? null : value,
+                  ),
                 ),
-                const SizedBox(height: 20),
-                _FilterGroup(
-                  title: "Location",
-                  children: [
-                    ChoiceChip(
-                      label: const Text("All locations"),
-                      selected:
-                          _location == BroadcastLocationFilter.allLocations,
-                      onSelected: (_) => setState(
-                        () => _location = BroadcastLocationFilter.allLocations,
-                      ),
+                const SizedBox(height: 16),
+                _FilterDropdown<BroadcastLocationFilter>(
+                  key: const Key("broadcast-filter-location"),
+                  label: "Location",
+                  value: _location,
+                  options: const [
+                    _FilterOption(
+                      value: BroadcastLocationFilter.allLocations,
+                      label: "All locations",
                     ),
-                    ChoiceChip(
-                      label: const Text("Near me"),
-                      selected: _location == BroadcastLocationFilter.nearMe,
-                      onSelected: (_) => setState(
-                        () => _location = BroadcastLocationFilter.nearMe,
-                      ),
+                    _FilterOption(
+                      value: BroadcastLocationFilter.nearMe,
+                      label: "Near me",
                     ),
                   ],
+                  onChanged: (value) => setState(() => _location = value),
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OutlinedButton(
-                  onPressed: _reset,
-                  child: const Text("Reset all"),
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(
-                    BroadcastFeedFilters(
-                      category: _category,
-                      status: _status,
-                      location: _location,
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: semantics.divider)),
+            ),
+            child: SafeArea(
+              top: false,
+              minimum: EdgeInsets.fromLTRB(
+                20,
+                10,
+                20,
+                10 + bottomSystemInset,
+              ),
+              child: Row(
+                children: [
+                  TextButton(
+                    key: const Key("broadcast-filter-reset"),
+                    onPressed: _reset,
+                    child: const Text("Reset all"),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key("broadcast-filter-show-results"),
+                      onPressed: () => Navigator.of(context).pop(
+                        BroadcastFeedFilters(
+                          category: _category,
+                          status: _status,
+                          location: _location,
+                        ),
+                      ),
+                      child: const Text("Show results"),
                     ),
                   ),
-                  child: const Text("Show results"),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -202,26 +213,63 @@ class _BroadcastFilterSheetState extends State<_BroadcastFilterSheet> {
   }
 }
 
-class _FilterGroup extends StatelessWidget {
-  const _FilterGroup({required this.title, required this.children});
+class _FilterOption<T> {
+  const _FilterOption({required this.value, required this.label});
 
-  final String title;
-  final List<Widget> children;
+  final T value;
+  final String label;
+}
+
+class _FilterDropdown<T> extends StatelessWidget {
+  const _FilterDropdown({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final T value;
+  final List<_FilterOption<T>> options;
+  final ValueChanged<T> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title.toUpperCase(),
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+    final semantics = EyeSemanticColors.of(context);
+    return DropdownButtonFormField<T>(
+      key: ValueKey("$label-$value"),
+      initialValue: value,
+      isExpanded: true,
+      menuMaxHeight: 320,
+      dropdownColor: semantics.surface,
+      icon: Icon(Icons.keyboard_arrow_down_rounded,
+          color: semantics.primaryAction),
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: semantics.surface,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: semantics.border),
         ),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: children),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: semantics.primaryAction, width: 1.5),
+        ),
+      ),
+      items: [
+        for (final option in options)
+          DropdownMenuItem<T>(
+            value: option.value,
+            child: Text(option.label, overflow: TextOverflow.ellipsis),
+          ),
       ],
+      onChanged: (next) {
+        if (next != null) onChanged(next);
+      },
     );
   }
 }

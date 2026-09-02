@@ -126,6 +126,9 @@ class ActiveEmergencyLocation {
     this.locationLabel,
     this.accuracyMeters,
     this.capturedAt,
+    this.lga,
+    this.state,
+    this.country,
   });
 
   final String? latitude;
@@ -139,6 +142,9 @@ class ActiveEmergencyLocation {
   final String? locationLabel;
   final double? accuracyMeters;
   final DateTime? capturedAt;
+  final String? lga;
+  final String? state;
+  final String? country;
 
   factory ActiveEmergencyLocation.fromJson(Map<String, dynamic> json) {
     return ActiveEmergencyLocation(
@@ -154,6 +160,9 @@ class ActiveEmergencyLocation {
       locationLabel: json["locationLabel"]?.toString(),
       accuracyMeters: (json["accuracyMeters"] as num?)?.toDouble(),
       capturedAt: _optionalDateTime(json["capturedAt"]),
+      lga: json["lga"]?.toString(),
+      state: json["state"]?.toString(),
+      country: json["country"]?.toString(),
     );
   }
 }

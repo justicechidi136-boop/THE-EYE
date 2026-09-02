@@ -253,19 +253,24 @@ class NwPrototypePill extends StatelessWidget {
     required this.label,
     this.selected = false,
     this.color,
+    this.compact = false,
     super.key,
   });
 
   final String label;
   final bool selected;
   final Color? color;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final semantics = EyeSemanticColors.of(context);
     final accent = color ?? const Color(0xFFFF9933);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 4 : 6,
+      ),
       decoration: BoxDecoration(
         color: selected
             ? accent.withValues(alpha: 0.14)
@@ -278,7 +283,7 @@ class NwPrototypePill extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              fontSize: 11,
+              fontSize: compact ? 10 : 11,
               fontWeight: FontWeight.w700,
               color: selected ? accent : semantics.secondaryText,
             ),

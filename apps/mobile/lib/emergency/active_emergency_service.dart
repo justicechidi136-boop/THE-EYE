@@ -31,38 +31,102 @@ class ActiveEmergencyService {
     String accessToken,
   ) async {
     final references = await _store.readReferences();
+    final silentByIncident = {
+      for (final reference in references)
+        reference.incidentId: reference.silent,
+    };
+    final rows = await _listAllAuthorizedIncidents(accessToken);
     final snapshots = <ActiveEmergencySnapshot>[];
-    for (final reference in references) {
+    for (final row in rows) {
+      final incidentId = row["id"]?.toString().trim() ?? "";
+      final status = row["status"]?.toString().trim() ?? "";
+      if (incidentId.isEmpty || !_activeIncidentStatuses.contains(status)) {
+        continue;
+      }
+      final silent = silentByIncident[incidentId] ?? false;
       try {
         final contract = await fetchActiveEmergencyContract(
-          reference.incidentId,
+          incidentId,
           accessToken,
-          silent: reference.silent,
+          silent: silent,
         );
         if (contract is ActiveEmergencyActiveContract) {
           snapshots.add(
             ActiveEmergencySnapshot.fromContract(
               contract,
-              silent: reference.silent,
+              silent: silent,
             ),
           );
         }
       } catch (_) {
         snapshots.add(
           ActiveEmergencySnapshot(
-            incidentId: reference.incidentId,
-            status: reference.lastKnownStatus ?? "Submitted",
-            title: "Emergency",
-            type: "Emergency",
-            agencyName: "",
+            incidentId: incidentId,
+            status: status,
+            title: row["title"]?.toString() ?? "Emergency",
+            type: row["type"]?.toString() ?? "Emergency",
+            agencyName: row["assignedAgencyId"]?.toString() ?? "",
             timeline: const [],
-            reportedAt: reference.activatedAt,
-            silent: reference.silent,
+            reportedAt: DateTime.tryParse(
+              row["submittedAt"]?.toString() ??
+                  row["createdAt"]?.toString() ??
+                  "",
+            ),
+            silent: silent,
           ),
         );
       }
     }
     return snapshots;
+  }
+
+  static const _activeIncidentStatuses = {
+    "Submitted",
+    "Received",
+    "Verifying",
+    "Verified",
+    "Assigned",
+    "Responding",
+    "UnderControl",
+    "CancellationRequested",
+  };
+
+  Future<List<Map<String, dynamic>>> _listAllAuthorizedIncidents(
+    String accessToken,
+  ) async {
+    final rows = <Map<String, dynamic>>[];
+    final seenCursors = <String>{};
+    String? cursor;
+    do {
+      final response = await _apiClient.getJson(
+        TheEyeApiPaths.incidents,
+        accessToken: accessToken,
+        query: {
+          "limit": "100",
+          if (cursor != null) "cursor": cursor,
+        },
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError("Unable to load active emergencies");
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map || decoded["data"] is! List) {
+        throw const FormatException("Malformed incident list response");
+      }
+      rows.addAll(
+        (decoded["data"] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row)),
+      );
+      final hasMore = decoded["hasMore"] == true;
+      final nextCursor = decoded["nextCursor"]?.toString().trim();
+      if (!hasMore || nextCursor == null || nextCursor.isEmpty) break;
+      if (!seenCursors.add(nextCursor)) {
+        throw StateError("Incident pagination cursor repeated");
+      }
+      cursor = nextCursor;
+    } while (true);
+    return rows;
   }
 
   Future<ActiveEmergencyContract?> fetchActiveEmergencyContract(

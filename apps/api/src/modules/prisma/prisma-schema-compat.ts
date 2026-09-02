@@ -44,7 +44,7 @@ export async function verifyIncidentLocationCreateOperation(
   prisma: Pick<PrismaClient, "incidentLocationUpdate" | "incident" | "$transaction">,
 ): Promise<{ createOperation: "ok" | "degraded" | "error"; detail?: string }> {
   const probeIncident = await (prisma as any).incident?.findFirst?.({
-    where: { status: { in: [IncidentStatus.Closed, IncidentStatus.FalseReport, IncidentStatus.Resolved] } },
+    where: { status: { in: [IncidentStatus.Closed, IncidentStatus.FalseReport, IncidentStatus.Resolved, IncidentStatus.Ended] } },
     orderBy: { createdAt: "desc" },
     select: { id: true },
   });

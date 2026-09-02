@@ -30,6 +30,7 @@ enum IncidentStatus {
   Responding
   UnderControl
   CancellationRequested
+  Ended
   Resolved
   Closed
   FalseReport
@@ -1219,6 +1220,7 @@ model Incident {
   metadata                       Json                                  @default("{}")
   createdAt                      DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                      DateTime                              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  endedAt                        DateTime?                             @map("ended_at") @db.Timestamptz(6)
   resolvedAt                     DateTime?                             @map("resolved_at") @db.Timestamptz(6)
   closedAt                       DateTime?                             @map("closed_at") @db.Timestamptz(6)
   resolutionSource               ResolutionSource?                     @map("resolution_source")

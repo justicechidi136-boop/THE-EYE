@@ -127,6 +127,8 @@ class BroadcastCommentItem {
     this.thanksReactions = 0,
     this.isSighting = false,
     this.isPinned = false,
+    this.voiceNoteUrl,
+    this.voiceNoteDurationSeconds,
   });
 
   final String id;
@@ -140,10 +142,13 @@ class BroadcastCommentItem {
   final int thanksReactions;
   final bool isSighting;
   final bool isPinned;
+  final String? voiceNoteUrl;
+  final int? voiceNoteDurationSeconds;
 
   factory BroadcastCommentItem.fromJson(Map<String, dynamic> json) {
     final metadata = json["metadata"];
     final isSighting = metadata is Map && metadata["isSighting"] == true;
+    final voiceNote = json["voiceNote"];
     return BroadcastCommentItem(
       id: (json["id"] as String?) ?? "",
       body: (json["body"] as String?) ?? "",
@@ -160,6 +165,10 @@ class BroadcastCommentItem {
           ((json["reactions"] as Map?)?["Thanks"] as num?)?.toInt() ?? 0,
       isSighting: isSighting || json["isSighting"] == true,
       isPinned: json["isPinned"] == true,
+      voiceNoteUrl: voiceNote is Map ? voiceNote["url"] as String? : null,
+      voiceNoteDurationSeconds: voiceNote is Map
+          ? (voiceNote["durationSeconds"] as num?)?.toInt()
+          : null,
     );
   }
 }

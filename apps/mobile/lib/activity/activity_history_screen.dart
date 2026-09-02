@@ -46,6 +46,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   static const _sections = [
     "All",
     "Active",
+    "Ended",
     "Resolved",
     "Cancelled",
     "Broadcasts",

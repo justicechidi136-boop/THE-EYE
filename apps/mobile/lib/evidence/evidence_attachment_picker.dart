@@ -28,6 +28,7 @@ class ManagedEvidenceSection extends StatefulWidget {
     this.title = "Evidence",
     this.description,
     this.figmaStyle = false,
+    this.primaryIdentificationStyle = false,
     this.onAttachmentsChanged,
     super.key,
   });
@@ -37,6 +38,7 @@ class ManagedEvidenceSection extends StatefulWidget {
   final String title;
   final String? description;
   final bool figmaStyle;
+  final bool primaryIdentificationStyle;
   final ValueChanged<int>? onAttachmentsChanged;
 
   @override
@@ -77,6 +79,9 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
       lowDataMode: widget.lowDataMode,
       policy: widget.policy,
     );
+    if (widget.primaryIdentificationStyle) {
+      return _PrimaryIdentificationPhotoPicker(controller: _controller!);
+    }
     return SectionCard(
       title: widget.title,
       child: Column(
@@ -98,6 +103,424 @@ class ManagedEvidenceSectionState extends State<ManagedEvidenceSection> {
       ),
     );
   }
+}
+
+class _PrimaryIdentificationPhotoPicker extends StatelessWidget {
+  const _PrimaryIdentificationPhotoPicker({required this.controller});
+
+  final EvidenceCaptureController controller;
+
+  Future<void> _showSourceSheet(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: EyeSemanticColors.of(sheetContext).border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                "Add photo",
+                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _PrimaryPhotoSourceAction(
+                      icon: Icons.photo_camera_outlined,
+                      label: "Camera",
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        controller.takePhoto();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _PrimaryPhotoSourceAction(
+                      icon: Icons.photo_library_outlined,
+                      label: "Gallery",
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        controller.pickImages();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openViewer(
+    BuildContext context,
+    LocalEvidenceAttachment attachment,
+  ) async {
+    final action = await Navigator.of(context).push<_PrimaryPhotoAction>(
+      MaterialPageRoute<_PrimaryPhotoAction>(
+        settings: const RouteSettings(name: "/missing-person/photo"),
+        builder: (context) => _PrimaryIdentificationPhotoViewer(
+          attachment: attachment,
+        ),
+      ),
+    );
+    if (!context.mounted) return;
+    if (action == _PrimaryPhotoAction.remove) {
+      controller.remove(attachment.localId);
+    } else if (action == _PrimaryPhotoAction.replace) {
+      controller.remove(attachment.localId);
+      await _showSourceSheet(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final colors = EyeSemanticColors.of(context);
+        final attachment =
+            controller.attachments.where((item) => item.isImage).firstOrNull;
+        return Column(
+          key: const Key("missing-person-primary-photo-section"),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              "A clear, recent photo is the most important detail for identification.",
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.mutedText,
+                    height: 1.5,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              button: true,
+              label: attachment == null
+                  ? "Add recent missing person photo"
+                  : "Open missing person photo",
+              child: Material(
+                color: colors.elevatedSurface,
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: controller.busy
+                      ? null
+                      : attachment == null
+                          ? () => _showSourceSheet(context)
+                          : () => _openViewer(context, attachment),
+                  child: AspectRatio(
+                    aspectRatio: 249 / 220,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (attachment != null)
+                          if (File(attachment.uploadPath).existsSync())
+                            Image.file(
+                              File(attachment.uploadPath),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Center(
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  color: colors.mutedText,
+                                  size: 42,
+                                ),
+                              ),
+                            )
+                          else
+                            Center(
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                color: colors.mutedText,
+                                size: 42,
+                              ),
+                            )
+                        else
+                          CustomPaint(
+                            painter: _DashedBorderPainter(color: colors.border),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 52,
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: colors.accentText.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.person_outline_rounded,
+                                      color: colors.accentText,
+                                      size: 28,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    "Add recent photo",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    "Clear face, good lighting",
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(color: colors.mutedText),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        if (attachment != null) ...[
+                          Positioned(
+                            left: 10,
+                            top: 10,
+                            child: _PhotoOverlayLabel(label: "ID PHOTO"),
+                          ),
+                          Positioned(
+                            right: 10,
+                            bottom: 10,
+                            child: _PhotoOverlayLabel(
+                              label: "Replace",
+                              icon: Icons.refresh_rounded,
+                            ),
+                          ),
+                        ],
+                        if (controller.busy)
+                          ColoredBox(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            child: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (controller.lastError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                controller.lastError!,
+                key: const Key("missing-person-primary-photo-error"),
+                style: TextStyle(
+                  color: colors.errorText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PrimaryPhotoSourceAction extends StatelessWidget {
+  const _PrimaryPhotoSourceAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = EyeSemanticColors.of(context);
+    return Material(
+      color: colors.elevatedSurface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: 96,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: colors.accentText, size: 28),
+              const SizedBox(height: 8),
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoOverlayLabel extends StatelessWidget {
+  const _PhotoOverlayLabel({required this.label, this.icon});
+
+  final String label;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.68),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: Colors.white),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _PrimaryPhotoAction { replace, remove }
+
+class _PrimaryIdentificationPhotoViewer extends StatelessWidget {
+  const _PrimaryIdentificationPhotoViewer({required this.attachment});
+
+  final LocalEvidenceAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text("Missing person photo"),
+      ),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: InteractiveViewer(
+                  child: File(attachment.uploadPath).existsSync()
+                      ? Image.file(File(attachment.uploadPath))
+                      : const Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.white70,
+                          size: 56,
+                        ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(
+                        _PrimaryPhotoAction.replace,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white54),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text("Replace"),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(
+                        _PrimaryPhotoAction.remove,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        side: const BorderSide(color: Colors.redAccent),
+                      ),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text("Remove"),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          const Radius.circular(16),
+        ),
+      );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(distance, distance + 7),
+          paint,
+        );
+        distance += 12;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 Future<bool> presentEvidencePermissionRationale(
@@ -151,15 +574,15 @@ EvidenceCaptureController createEvidenceCaptureController(
     lowDataMode: lowDataMode,
     latitude: latitude,
     longitude: longitude,
-    rationalePresenter:
-        ({required title, required message, required showSettingsLink}) {
-          return presentEvidencePermissionRationale(
-            context,
-            title: title,
-            message: message,
-            showSettingsLink: showSettingsLink,
-          );
-        },
+    rationalePresenter: (
+        {required title, required message, required showSettingsLink}) {
+      return presentEvidencePermissionRationale(
+        context,
+        title: title,
+        message: message,
+        showSettingsLink: showSettingsLink,
+      );
+    },
   );
 }
 
@@ -317,8 +740,8 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                               controller.remove(attachments[index].localId),
                           onRetry: presentations[index].canRetry
                               ? () => controller.retryFailedUpload(
-                                  attachments[index].localId,
-                                )
+                                    attachments[index].localId,
+                                  )
                               : null,
                         ),
                     ],
@@ -339,8 +762,8 @@ class _EvidenceAttachmentPickerState extends State<EvidenceAttachmentPicker> {
                   onRemove: () => controller.remove(attachments[index].localId),
                   onRetry: presentations[index].canRetry
                       ? () => controller.retryFailedUpload(
-                          attachments[index].localId,
-                        )
+                            attachments[index].localId,
+                          )
                       : null,
                 ),
                 if (index != audioIndexes.last) const SizedBox(height: 8),
@@ -564,8 +987,8 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                       child: Text(
                         "Add evidence",
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
                     ),
                     IconButton(
@@ -588,8 +1011,7 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.photo_camera_outlined,
                             label: "Camera",
-                            enabled:
-                                !controller.busy &&
+                            enabled: !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.image,
                                 ),
@@ -599,8 +1021,7 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.photo_library_outlined,
                             label: "Gallery",
-                            enabled:
-                                !controller.busy &&
+                            enabled: !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.image,
                                 ),
@@ -612,8 +1033,7 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.videocam_outlined,
                             label: "Video",
-                            enabled:
-                                !controller.busy &&
+                            enabled: !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.video,
                                 ),
@@ -624,8 +1044,7 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.mic_none_outlined,
                             label: "Record voice",
-                            enabled:
-                                !controller.busy &&
+                            enabled: !controller.busy &&
                                 (controller.canAddMoreFor(
                                       IncidentMediaType.audio,
                                     ) ||
@@ -636,8 +1055,7 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                             width: tileWidth,
                             icon: Icons.audio_file_outlined,
                             label: "Choose audio file",
-                            enabled:
-                                !controller.busy &&
+                            enabled: !controller.busy &&
                                 controller.canAddMoreFor(
                                   IncidentMediaType.audio,
                                 ),
@@ -651,8 +1069,7 @@ class _EvidenceActionSheetState extends State<_EvidenceActionSheet> {
                 if (_showRecorder) ...[
                   const SizedBox(height: 14),
                   VoiceRecorder(
-                    enabled:
-                        !controller.busy &&
+                    enabled: !controller.busy &&
                         (controller.canAddMoreFor(IncidentMediaType.audio) ||
                             voiceAttachments.isNotEmpty),
                     uploadProgress: voiceAttachments.isEmpty

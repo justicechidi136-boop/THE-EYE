@@ -182,6 +182,51 @@ void main() {
       expect(result.userMessage, contains("still here"));
     });
 
+    test("maps a deactivated login to the approved account message", () async {
+      final client = TheEyeApiClient(
+        httpClient: MockClient((_) async => http.Response(
+              jsonEncode({
+                "message": "Your THE EYE account is deactivated.",
+                "code": "ACCOUNT_DEACTIVATED",
+              }),
+              403,
+            )),
+      );
+      final result = await AuthService(
+        apiClient: client,
+        sessionStore: InMemoryAuthSessionStore(),
+      ).login(
+        identifier: "citizen@theeye.local",
+        password: "Password123!",
+      );
+
+      expect(result.status, AuthRequestStatus.accountDeactivated);
+      expect(result.userMessage, "Your THE EYE account is deactivated.");
+    });
+
+    test("maps a suspended login without exposing a generic error", () async {
+      final client = TheEyeApiClient(
+        httpClient: MockClient((_) async => http.Response(
+              jsonEncode({
+                "message":
+                    "Your THE EYE account is suspended. Contact support for assistance.",
+                "code": "ACCOUNT_SUSPENDED",
+              }),
+              403,
+            )),
+      );
+      final result = await AuthService(
+        apiClient: client,
+        sessionStore: InMemoryAuthSessionStore(),
+      ).login(
+        identifier: "citizen@theeye.local",
+        password: "Password123!",
+      );
+
+      expect(result.status, AuthRequestStatus.accountSuspended);
+      expect(result.userMessage, contains("suspended"));
+    });
+
     test("successful login stores session tokens", () async {
       final store = InMemoryAuthSessionStore();
       Map<String, dynamic>? requestBody;

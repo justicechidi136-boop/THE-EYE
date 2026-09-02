@@ -198,6 +198,7 @@ export enum IncidentStatus {
   Responding = "Responding",
   UnderControl = "UnderControl",
   CancellationRequested = "CancellationRequested",
+  Ended = "Ended",
   Resolved = "Resolved",
   Closed = "Closed",
   FalseReport = "FalseReport",

@@ -21,4 +21,15 @@ void main() {
   test("uses a safe fallback instead of technical coordinates", () {
     expect(const CitizenLocationPresentation().label, "Location unavailable");
   });
+
+  test("never exposes a Plus Code as the citizen street label", () {
+    const location = CitizenLocationPresentation(
+      streetAddress: "8FVC9G8F+5W",
+      lga: "Obio-Akpor",
+      state: "Rivers State",
+    );
+
+    expect(location.specificLine, isEmpty);
+    expect(location.label, "Obio-Akpor, Rivers State");
+  });
 }

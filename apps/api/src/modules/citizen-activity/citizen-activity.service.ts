@@ -42,7 +42,7 @@ type UnifiedActivityRow = {
   kind: ActivityKind;
   id: string;
   sortAt: Date;
-  lifecycle: "active" | "resolved" | "cancelled";
+  lifecycle: "active" | "ended" | "resolved" | "cancelled";
   payload: Record<string, unknown>;
 };
 
@@ -195,6 +195,7 @@ export class CitizenActivityService {
                 : "Reporter",
             },
         createdAt: incident.submittedAt.toISOString(),
+        endedAt: incident.endedAt?.toISOString() ?? null,
         resolvedAt: incident.resolvedAt?.toISOString() ?? null,
         closedAt: incident.closedAt?.toISOString() ?? null,
         cancelledAt: incident.cancelledAt?.toISOString() ?? null,
@@ -272,6 +273,8 @@ export class CitizenActivityService {
     const normalized = status.toLowerCase();
     const safeSummaryText = normalized.includes("cancel")
       ? "Community verification ended when this incident was cancelled."
+      : normalized.includes("ended")
+        ? "Community verification is complete for this incident."
       : normalized.includes("resolve")
         ? "Community verification is complete for this resolved incident."
         : normalized.includes("close")

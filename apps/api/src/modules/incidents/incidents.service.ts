@@ -1333,6 +1333,9 @@ export class IncidentsService {
       data.resolvedById = options.actor?.sub;
       data.resolutionSource = options.resolutionSource ?? this.inferResolutionSource(options.actor);
     }
+    if (nextStatus === IncidentStatus.Ended) {
+      data.endedAt = now;
+    }
     if (nextStatus === IncidentStatus.Closed) {
       data.closedAt = now;
       data.closureReviewAt = now;

@@ -1,4 +1,4 @@
-import { IncidentStatus, IncidentType, ResolutionSource } from "@the-eye/shared";
+import { IncidentStatus, IncidentType } from "@the-eye/shared";
 import { LiveVideoService } from "../live-video.service";
 
 const citizen = { typ: "user", sub: "user-1" } as any;
@@ -28,7 +28,7 @@ function buildService(options: { standalone?: boolean } = {}) {
     incident: {
       update: jest.fn().mockResolvedValue({
         ...incident,
-        status: IncidentStatus.Resolved,
+        status: IncidentStatus.Ended,
       }),
     },
   };
@@ -64,21 +64,21 @@ describe("LiveVideoService standalone emergency stop lifecycle", () => {
       expect.objectContaining({
         where: { id: "incident-1" },
         data: expect.objectContaining({
-          status: IncidentStatus.Resolved,
-          resolutionSource: ResolutionSource.Reporter,
+          status: IncidentStatus.Ended,
+          endedAt: expect.any(Date),
           timeline: expect.objectContaining({ create: expect.objectContaining({
             eventType: "live_video.emergency_ended",
           }) }),
           statusHistory: expect.objectContaining({ create: expect.objectContaining({
             fromStatus: IncidentStatus.Submitted,
-            toStatus: IncidentStatus.Resolved,
+            toStatus: IncidentStatus.Ended,
           }) }),
         }),
       }),
     );
     expect(result.incident).toEqual({
       id: "incident-1",
-      status: IncidentStatus.Resolved,
+      status: IncidentStatus.Ended,
       archived: true,
     });
   });

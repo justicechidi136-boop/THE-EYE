@@ -9,6 +9,7 @@ const STATUS_LABELS: Record<string, string> = {
   [IncidentStatus.Responding]: "Responders en route",
   [IncidentStatus.UnderControl]: "Situation under control",
   [IncidentStatus.CancellationRequested]: "Cancellation under review",
+  [IncidentStatus.Ended]: "Ended",
   [IncidentStatus.Resolved]: "Resolved",
   [IncidentStatus.Closed]: "Closed",
   [IncidentStatus.FalseReport]: "Marked as invalid",

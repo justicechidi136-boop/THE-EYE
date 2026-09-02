@@ -9,6 +9,22 @@ typedef CitizenAuthReturnHandler = void Function(String message);
 typedef BroadcastLinkHandler = void Function(String route);
 
 @visibleForTesting
+void navigateBroadcastLink({
+  required NavigatorState nav,
+  required String route,
+  required bool isAuthenticated,
+}) {
+  if (isAuthenticated) {
+    nav.pushNamed(route);
+    return;
+  }
+  nav.pushNamed(
+    CitizenAuthReturnLink.signInRoute,
+    arguments: {"postLoginRoute": route},
+  );
+}
+
+@visibleForTesting
 String? broadcastRouteForPublicUri(Uri uri) {
   const allowedHosts = {
     "staging-dashboard8jps.theeye.com.ng",
@@ -121,6 +137,7 @@ class CitizenAuthReturnHost extends StatefulWidget {
 class _CitizenAuthReturnHostState extends State<CitizenAuthReturnHost> {
   CitizenAuthReturnListener? _listener;
   String? _pendingMessage;
+  String? _pendingBroadcastRoute;
 
   @override
   void initState() {
@@ -149,8 +166,15 @@ class _CitizenAuthReturnHostState extends State<CitizenAuthReturnHost> {
 
   void _onBroadcastLink(String route) {
     final nav = widget.navigatorKey.currentState;
-    if (nav == null) return;
-    nav.pushNamed(route);
+    if (nav == null) {
+      _pendingBroadcastRoute = route;
+      return;
+    }
+    navigateBroadcastLink(
+      nav: nav,
+      route: route,
+      isAuthenticated: widget.isAuthenticated?.call() == true,
+    );
   }
 
   @override
@@ -174,6 +198,19 @@ class _CitizenAuthReturnHostState extends State<CitizenAuthReturnHost> {
         navigateCitizenAuthReturn(
           nav: nav,
           message: message,
+          isAuthenticated: widget.isAuthenticated?.call() == true,
+        );
+      });
+    }
+    if (_pendingBroadcastRoute != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final route = _pendingBroadcastRoute;
+        final nav = widget.navigatorKey.currentState;
+        if (route == null || nav == null) return;
+        _pendingBroadcastRoute = null;
+        navigateBroadcastLink(
+          nav: nav,
+          route: route,
           isAuthenticated: widget.isAuthenticated?.call() == true,
         );
       });

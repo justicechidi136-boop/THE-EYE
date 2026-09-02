@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../design_system/eye_semantic_colors.dart";
 import "../../location/citizen_location_details.dart";
+import "../../presentation/citizen_location_presentation.dart";
 import "../../presentation/citizen_presentation.dart";
 import "../active_emergency_contract.dart";
 import "active_emergency_tokens.dart";
@@ -36,6 +37,15 @@ class EmergencyOverviewCard extends StatelessWidget {
       displayLabel: active.displayLabel,
       status: active.status,
     );
+    final location = CitizenLocationPresentation(
+      streetAddress: active.reportedLocation.address,
+      lga: active.reportedLocation.lga,
+      state: active.reportedLocation.state,
+      country: active.reportedLocation.country,
+    );
+    final administrativeLocation = location.administrativeLine.isNotEmpty
+        ? location.administrativeLine
+        : active.reportedLocation.locationLabel;
 
     return ActiveEmergencyCard(
       flat: true,
@@ -63,8 +73,8 @@ class EmergencyOverviewCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     CitizenLocationDetails(
-                      address: active.reportedLocation.address,
-                      secondaryLocation: active.reportedLocation.locationLabel,
+                      address: location.specificLine,
+                      secondaryLocation: administrativeLocation,
                       accuracyMeters: active.reportedLocation.accuracyMeters,
                       capturedAt: active.reportedLocation.capturedAt,
                       compact: true,

@@ -14,6 +14,8 @@ enum AuthRequestStatus {
   success,
   validationError,
   invalidCredentials,
+  accountSuspended,
+  accountDeactivated,
   rateLimited,
   networkError,
   serverError,
@@ -625,6 +627,19 @@ class AuthService {
       return const AuthRequestResult(
         status: AuthRequestStatus.invalidCredentials,
         userMessage: "Email, phone, or password is incorrect.",
+      );
+    }
+    if (error.statusCode == 403 && code == "ACCOUNT_SUSPENDED") {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.accountSuspended,
+        userMessage:
+            "Your THE EYE account is suspended. Contact support for assistance.",
+      );
+    }
+    if (error.statusCode == 403 && code == "ACCOUNT_DEACTIVATED") {
+      return const AuthRequestResult(
+        status: AuthRequestStatus.accountDeactivated,
+        userMessage: "Your THE EYE account is deactivated.",
       );
     }
     if (error.statusCode == 409) {

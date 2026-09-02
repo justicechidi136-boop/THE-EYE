@@ -330,6 +330,7 @@ class CommunityPostMediaReference {
     required this.fileHash,
     this.createdAt,
     this.signedGetUrl,
+    this.durationSeconds,
   });
 
   final String id;
@@ -340,6 +341,7 @@ class CommunityPostMediaReference {
   final String fileHash;
   final DateTime? createdAt;
   final String? signedGetUrl;
+  final int? durationSeconds;
 
   bool get isImage => mediaType == IncidentMediaType.image;
   bool get isVideo => mediaType == IncidentMediaType.video;
@@ -355,6 +357,7 @@ class CommunityPostMediaReference {
       fileHash: (json["fileHash"] as String?) ?? "",
       createdAt: DateTime.tryParse((json["createdAt"] as String?) ?? ""),
       signedGetUrl: json["signedGetUrl"] as String?,
+      durationSeconds: (json["durationSeconds"] as num?)?.round(),
     );
   }
 }

@@ -164,6 +164,49 @@ describe("CitizenActivityService", () => {
     expect(page2.hasMore).toBe(false);
   });
 
+  it("lists ended live emergencies separately from active and resolved reports", async () => {
+    const { service, prisma } = buildService();
+    prisma.incident.findMany.mockResolvedValue([
+      {
+        id: "inc-ended",
+        type: IncidentType.Emergency,
+        status: IncidentStatus.Ended,
+        title: "Ended live emergency",
+        submittedAt: new Date("2026-08-01T10:00:00.000Z"),
+        metadata: { source: "live_emergency_video" },
+        address: "Market Road",
+        latitude: 6.5,
+        longitude: 3.3,
+        assignedAgency: null,
+        verifications: [],
+        media: [],
+      },
+    ]);
+
+    const ended = await service.listActivityHistory(citizen as any, {
+      section: "Ended",
+    });
+    const active = await service.listActivityHistory(citizen as any, {
+      section: "Active",
+    });
+    const resolved = await service.listActivityHistory(citizen as any, {
+      section: "Resolved",
+    });
+
+    expect(ended.data).toHaveLength(1);
+    expect(ended.data[0]).toEqual(
+      expect.objectContaining({
+        id: "inc-ended",
+        lifecycle: "ended",
+        isActive: false,
+        isTerminal: true,
+        navigation: expect.objectContaining({ destination: "incident-archive" }),
+      }),
+    );
+    expect(active.data).toHaveLength(0);
+    expect(resolved.data).toHaveLength(0);
+  });
+
   it("rejects invalid section and cursor values", async () => {
     const { service } = buildService();
     await expect(service.listActivityHistory(citizen as any, { section: "Invalid" })).rejects.toBeInstanceOf(
@@ -241,6 +284,50 @@ describe("CitizenActivityService", () => {
     expect(archive.data.communityVerificationSummary.requestsSent).toBe(2);
     expect(prisma.incident.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "inc-1", reporterId: "user-1" } }),
+    );
+  });
+
+  it("returns ended incident archive copy without claiming resolution", async () => {
+    const { service, prisma } = buildService();
+    prisma.incident.findFirst.mockResolvedValue({
+      id: "inc-ended",
+      type: IncidentType.Emergency,
+      status: IncidentStatus.Ended,
+      title: "Live emergency video",
+      description: null,
+      submittedAt: new Date("2026-08-01T09:00:00.000Z"),
+      endedAt: new Date("2026-08-01T09:05:00.000Z"),
+      resolvedAt: null,
+      closedAt: null,
+      cancelledAt: null,
+      metadata: { source: "live_emergency_video" },
+      address: "Market Road",
+      manualAddress: null,
+      latitude: 6.5,
+      longitude: 3.3,
+      manualLatitude: null,
+      manualLongitude: null,
+      lga: "Ikeja",
+      state: "Lagos",
+      country: "NG",
+      isAnonymous: false,
+      resolutionSource: null,
+      resolutionReason: null,
+      assignedAgency: null,
+      reporter: { profile: { firstName: "Ada", lastName: "Okoro" } },
+      media: [],
+      verifications: [],
+      broadcasts: [],
+      assignments: [],
+    });
+
+    const archive = await service.getIncidentArchive("inc-ended", citizen as any);
+
+    expect(archive.data.status).toBe(IncidentStatus.Ended);
+    expect(archive.data.endedAt).toBe("2026-08-01T09:05:00.000Z");
+    expect(archive.data.resolvedAt).toBe(null);
+    expect(archive.data.communityVerificationSummary.safeSummaryText).toBe(
+      "Community verification is complete for this incident.",
     );
   });
 

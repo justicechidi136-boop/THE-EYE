@@ -51,7 +51,8 @@ export function classifyBroadcastKind(type: string): ActivityKind {
   return "MissingPersonBroadcast";
 }
 
-export function incidentLifecycleBucket(status: IncidentStatus): "active" | "resolved" | "cancelled" {
+export function incidentLifecycleBucket(status: IncidentStatus): "active" | "ended" | "resolved" | "cancelled" {
+  if (status === IncidentStatus.Ended) return "ended";
   if (cancelledIncidentStatuses.has(status)) return "cancelled";
   if (resolvedIncidentStatuses.has(status)) return "resolved";
   if (isActiveIncidentStatus(status)) return "active";
@@ -127,11 +128,12 @@ export function matchesActivitySection(
   item: {
     sourceType: ActivitySourceType;
     kind: ActivityKind;
-    lifecycle: "active" | "resolved" | "cancelled";
+    lifecycle: "active" | "ended" | "resolved" | "cancelled";
   },
 ) {
   if (section === "All") return true;
   if (section === "Active") return item.lifecycle === "active";
+  if (section === "Ended") return item.lifecycle === "ended";
   if (section === "Resolved") return item.lifecycle === "resolved";
   if (section === "Cancelled") return item.lifecycle === "cancelled";
   if (section === "Broadcasts") return item.sourceType === "broadcast";

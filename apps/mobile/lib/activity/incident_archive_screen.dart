@@ -244,6 +244,7 @@ class _TerminalBanner extends StatelessWidget {
         : CitizenDateTimeFormatter.formatDateTime(archive.terminalAt!);
 
     final terminalLabel = switch (archive.terminalState) {
+      ArchivedEmergencyTerminalState.ended => archive.terminalBannerLabel,
       ArchivedEmergencyTerminalState.resolved => l10n.incidentResolved,
       ArchivedEmergencyTerminalState.cancelled => l10n.incidentCancelled,
       ArchivedEmergencyTerminalState.closed => l10n.incidentClosed,

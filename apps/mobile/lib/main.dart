@@ -3875,6 +3875,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
       const BiometricCapability.unavailable();
   SocialAuthProvider? activeSocialProvider;
   DateTime? _socialSignInStartedAt;
+  String? _postLoginRoute;
 
   bool get socialBusy => activeSocialProvider != null;
 
@@ -3902,6 +3903,21 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
         formSuccess = message;
       }
     }
+    if (args is Map && args["postLoginRoute"] is String) {
+      final route = (args["postLoginRoute"] as String).trim();
+      if (route.startsWith("/broadcasts/") && route.length > 12) {
+        _postLoginRoute = route;
+      }
+    }
+  }
+
+  void _openAfterAuthentication({required bool profileComplete}) {
+    final route = profileComplete ? _postLoginRoute : null;
+    Navigator.of(context).pushReplacementNamed(
+      route?.isNotEmpty == true
+          ? route!
+          : (profileComplete ? "/home" : "/profile"),
+    );
   }
 
   Future<void> _loadBiometricCapability(AppController controller) async {
@@ -3927,9 +3943,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     final result = await appOf(context).unlockWithBiometrics();
     if (!mounted) return;
     if (result.isSuccess) {
-      Navigator.of(
-        context,
-      ).pushReplacementNamed(result.profileComplete ? "/home" : "/profile");
+      _openAfterAuthentication(profileComplete: result.profileComplete);
       return;
     }
     setState(() {
@@ -4007,11 +4021,22 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
     if (result.isSuccess && result.session != null) {
       await controller.setSession(result.session!);
       if (!mounted) return;
-      if (!result.profileComplete) {
-        Navigator.of(context).pushReplacementNamed("/profile");
-        return;
-      }
-      Navigator.of(context).pushReplacementNamed("/home");
+      _openAfterAuthentication(profileComplete: result.profileComplete);
+      return;
+    }
+
+    if (result.status == AuthRequestStatus.accountSuspended ||
+        result.status == AuthRequestStatus.accountDeactivated) {
+      Navigator.of(context).pushReplacementNamed(
+        "/account-status",
+        arguments: AccountStatusArgs(
+          title: result.status == AuthRequestStatus.accountSuspended
+              ? "Account suspended"
+              : "Account deactivated",
+          message:
+              result.userMessage ?? "Your account cannot sign in right now.",
+        ),
+      );
       return;
     }
 
@@ -4057,11 +4082,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen>
       _socialSignInStartedAt = null;
       await controller.setSession(result.session!);
       if (!mounted) return;
-      if (!result.profileComplete) {
-        Navigator.of(context).pushReplacementNamed("/profile");
-        return;
-      }
-      Navigator.of(context).pushReplacementNamed("/home");
+      _openAfterAuthentication(profileComplete: result.profileComplete);
       return;
     }
 
@@ -6254,6 +6275,13 @@ class _MissingPersonBroadcastScreenState
                   onChanged: (value) => setState(() => _gender = value),
                 ),
                 const SizedBox(height: 12),
+                ManagedEvidenceSection(
+                  key: _primaryPhotoSectionKey,
+                  lowDataMode: appOf(context).lowDataMode,
+                  policy: EvidencePolicy.primaryPhoto,
+                  primaryIdentificationStyle: true,
+                ),
+                const SizedBox(height: 12),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text("Last seen date"),
@@ -6309,15 +6337,6 @@ class _MissingPersonBroadcastScreenState
                     labelText: "Additional information",
                     hintText: "Optional context that may help locate them",
                   ),
-                ),
-                const SizedBox(height: 12),
-                ManagedEvidenceSection(
-                  key: _primaryPhotoSectionKey,
-                  lowDataMode: appOf(context).lowDataMode,
-                  policy: EvidencePolicy.primaryPhoto,
-                  title: "Primary face photo",
-                  description:
-                      "Required. Add one clear, recent photo that responders can use to identify the missing person.",
                 ),
                 const SizedBox(height: 12),
                 ManagedEvidenceSection(

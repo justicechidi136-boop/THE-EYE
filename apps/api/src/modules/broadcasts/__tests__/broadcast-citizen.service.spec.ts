@@ -330,6 +330,68 @@ describe("BroadcastCitizenService", () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it("stores a securely scoped voice-only broadcast comment", async () => {
+    resetCitizenMocks();
+    prisma.broadcast.findFirst.mockResolvedValue({
+      id: "broadcast-1",
+      status: BroadcastStatus.Active,
+      commentsLocked: false,
+    });
+    prisma.broadcastComment.create.mockResolvedValue({ id: "comment-voice-1" });
+
+    await service.addComment(
+      "broadcast-1",
+      {
+        body: "",
+        voiceNote: {
+          mediaType: "audio",
+          bucket: "the-eye",
+          objectKey:
+            "evidence/broadcast-user-1/11111111-1111-4111-8111-111111111111.m4a",
+          contentType: "audio/mp4",
+          fileName: "voice-comment.m4a",
+          sizeBytes: 1024,
+          durationSeconds: 7,
+        },
+      },
+      reporter,
+    );
+
+    expect(prisma.broadcastComment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          body: "",
+          metadata: expect.objectContaining({
+            voiceNote: expect.objectContaining({
+              mediaType: "audio",
+              durationSeconds: 7,
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("rejects a broadcast voice comment outside the actor storage prefix", async () => {
+    resetCitizenMocks();
+    await expect(
+      service.addComment(
+        "broadcast-1",
+        {
+          body: "",
+          voiceNote: {
+            mediaType: "audio",
+            bucket: "the-eye",
+            objectKey:
+              "evidence/broadcast-another-user/11111111-1111-4111-8111-111111111111.m4a",
+            contentType: "audio/mp4",
+          },
+        },
+        reporter,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it("toggles duplicate comment reactions without creating duplicates", async () => {
     resetCitizenMocks();
     prisma.broadcastComment.findFirst.mockResolvedValue({

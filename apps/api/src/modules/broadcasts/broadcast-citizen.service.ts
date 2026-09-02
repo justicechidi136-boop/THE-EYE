@@ -13,6 +13,7 @@ import {
 } from "@the-eye/shared";
 import type { JwtPayload } from "../../common/auth/jwt";
 import {
+  assertEvidenceObjectKey,
   createStorageDownloadUrl,
   createStorageUploadUrl,
   evidenceObjectKey,
@@ -354,8 +355,18 @@ export class BroadcastCitizenService {
   async addComment(id: string, dto: CreateCitizenBroadcastCommentDto, actor: JwtPayload) {
     if (actor.typ !== "user") throw new ForbiddenException("Citizen access required");
     const body = dto.body?.trim();
-    if (!body) throw new BadRequestException("Comment body is required");
-    if (body.length > 2000) throw new BadRequestException("Comment body must not exceed 2000 characters");
+    const voiceNote = sanitizeBroadcastAttachments(dto.voiceNote ? [dto.voiceNote] : [])
+      .find((attachment) => attachment.mediaType === "audio");
+    if (!body && !voiceNote) throw new BadRequestException("Comment text or voice note is required");
+    if (body && body.length > 2000) throw new BadRequestException("Comment body must not exceed 2000 characters");
+    if (voiceNote) {
+      assertEvidenceObjectKey(
+        `broadcast-${actor.sub}`,
+        String(voiceNote.objectKey),
+        String(voiceNote.bucket),
+        String(voiceNote.contentType),
+      );
+    }
     const broadcast = await this.prisma.broadcast.findFirst({
       where: { id, deletedAt: null, commentsLocked: false },
     });
@@ -372,9 +383,12 @@ export class BroadcastCitizenService {
       data: {
         broadcastId: id,
         authorUserId: actor.sub,
-        body,
+        body: body ?? "",
         parentId: dto.parentId,
-        metadata: dto.isSighting ? { isSighting: true } : {},
+        metadata: {
+          ...(dto.isSighting ? { isSighting: true } : {}),
+          ...(voiceNote ? { voiceNote } : {}),
+        },
       } as never,
     });
     await this.recordAudit(actor, "broadcast.comment_added", id, { commentId: comment.id });
@@ -392,7 +406,7 @@ export class BroadcastCitizenService {
       orderBy: [{ isPinned: "desc" }, { createdAt: "asc" }],
       take: 100,
     });
-    return { data: comments.map((comment) => this.toPublicComment(comment)) };
+    return { data: await Promise.all(comments.map((comment) => this.toPublicComment(comment))) };
   }
 
   async updateComment(
@@ -660,7 +674,7 @@ export class BroadcastCitizenService {
     };
   }
 
-  private toPublicComment(comment: Record<string, unknown>) {
+  private async toPublicComment(comment: Record<string, unknown>) {
     const isOfficial = comment.isOfficial === true;
     const metadata = (comment.metadata as Record<string, unknown> | null) ?? {};
     const label = isOfficial
@@ -683,6 +697,15 @@ export class BroadcastCitizenService {
       if (key) counts[key] = (counts[key] ?? 0) + 1;
       return counts;
     }, {});
+    const voiceNote = sanitizeBroadcastAttachments(metadata.voiceNote ? [metadata.voiceNote] : [])
+      .find((attachment) => attachment.mediaType === "audio");
+    const publicVoiceNote = voiceNote
+      ? {
+          url: (await createStorageDownloadUrl(String(voiceNote.objectKey), 300)).url,
+          contentType: String(voiceNote.contentType),
+          durationSeconds: Number(voiceNote.durationSeconds) || null,
+        }
+      : null;
     return {
       id: comment.id,
       body: comment.body,
@@ -695,6 +718,7 @@ export class BroadcastCitizenService {
       isOfficial,
       isPinned: comment.isPinned === true,
       reactions: reactionCounts,
+      voiceNote: publicVoiceNote,
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
     };

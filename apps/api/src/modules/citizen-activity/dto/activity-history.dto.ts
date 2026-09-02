@@ -3,6 +3,7 @@ import { BadRequestException } from "@nestjs/common";
 export const ACTIVITY_HISTORY_SECTIONS = [
   "All",
   "Active",
+  "Ended",
   "Resolved",
   "Cancelled",
   "Broadcasts",

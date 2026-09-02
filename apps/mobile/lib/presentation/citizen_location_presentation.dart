@@ -18,8 +18,8 @@ class CitizenLocationPresentation {
   String get specificLine {
     final cleanedStreet = _clean(streetAddress);
     final cleanedSubLocality = _clean(subLocality);
-    final preferStreet = cleanedStreet != null &&
-        (!_looksLikePlusCode(cleanedStreet) || cleanedSubLocality == null);
+    final preferStreet =
+        cleanedStreet != null && !_looksLikePlusCode(cleanedStreet);
     return _unique([
       if (preferStreet) cleanedStreet,
       cleanedSubLocality,
