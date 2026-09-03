@@ -423,7 +423,7 @@ class AuthService {
         session: session,
       );
     } on AuthApiException catch (error) {
-      if (error.statusCode == 401) {
+      if (_invalidatesPersistedSession(error)) {
         await _sessionStore.clear();
         return const SessionRestoreResult(
           status: SessionRestoreStatus.unauthenticated,
@@ -453,7 +453,7 @@ class AuthService {
       await _sessionStore.save(profile.session);
       return profile.session;
     } on AuthApiException catch (error) {
-      if (error.statusCode == 401) {
+      if (_invalidatesPersistedSession(error)) {
         await _sessionStore.clear();
         return null;
       }
@@ -492,12 +492,19 @@ class AuthService {
       await _sessionStore.save(refreshed);
       return refreshed;
     } on AuthApiException catch (error) {
-      if (error.statusCode == 401) {
+      if (_invalidatesPersistedSession(error)) {
         await _sessionStore.clear();
         return null;
       }
       rethrow;
     }
+  }
+
+  bool _invalidatesPersistedSession(AuthApiException error) {
+    return error.statusCode == 401 ||
+        error.errorCode == "ACCOUNT_DEACTIVATED" ||
+        error.errorCode == "ACCOUNT_DELETED" ||
+        error.errorCode == "ACCOUNT_SUSPENDED";
   }
 
   /// Runs [action] with the current access token; refreshes once on 401 and retries.

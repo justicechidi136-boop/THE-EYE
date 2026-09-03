@@ -990,10 +990,33 @@ class TheEyeApiClient {
 
   Future<Map<String, dynamic>> requestAccountDeletion({
     required String accessToken,
+    required String confirmation,
+    String? currentPassword,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final response = await postJson(
       TheEyeApiPaths.usersMeDeletionRequest,
+      {
+        "confirm": true,
+        "confirmation": confirmation,
+        if (currentPassword != null && currentPassword.isNotEmpty)
+          "currentPassword": currentPassword,
+      },
+      accessToken: accessToken,
+      timeout: timeout,
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return _decodeMap(response.body);
+    }
+    throw AuthApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> deactivateAccount({
+    required String accessToken,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final response = await postJson(
+      TheEyeApiPaths.usersMeDeactivate,
       {"confirm": true},
       accessToken: accessToken,
       timeout: timeout,

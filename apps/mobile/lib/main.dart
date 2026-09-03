@@ -17,6 +17,7 @@ import "package:url_launcher/url_launcher.dart";
 import "package:uuid/uuid.dart";
 
 import "auth/auth_service.dart";
+import "auth/auth_safe_log.dart";
 import "auth/account_recovery_flow.dart";
 import "auth/biometric_auth_service.dart";
 import "auth/biometric_preference_store.dart";
@@ -655,6 +656,7 @@ class _TheEyeBootstrapState extends State<TheEyeBootstrap> {
         final appController = controller;
         if (refreshed == null) {
           appController?.clearCachedSession();
+          appController?._setAuthState(AppAuthState.unauthenticated);
           return null;
         }
         await appController?.applyRefreshedSession(refreshed);
@@ -1749,6 +1751,13 @@ typedef BackgroundPushContextPersister = Future<void> Function({
   required String apiBaseUrl,
 });
 
+enum AppAuthState {
+  initializing,
+  authenticated,
+  biometricLocked,
+  unauthenticated,
+}
+
 class AppController extends SessionAccessor
     implements
         ActiveEmergencyNavigationController,
@@ -1834,6 +1843,7 @@ class AppController extends SessionAccessor
   BiometricPreference _biometricPreference =
       const BiometricPreference.disabled();
   bool _biometricUnlockRequired = false;
+  AppAuthState _authState = AppAuthState.initializing;
   bool _remainSignedIn;
   final ThemeProvider _themeProvider;
   final VehicleGarageStore _vehicleGarageStore;
@@ -1940,6 +1950,19 @@ class AppController extends SessionAccessor
   bool get remainSignedIn => _remainSignedIn;
   bool get biometricUnlockEnabled => _biometricPreference.hasAccountBinding;
   bool get biometricUnlockRequired => _biometricUnlockRequired;
+  AppAuthState get authState => _authState;
+
+  void _setAuthState(AppAuthState state) {
+    if (_authState == state) return;
+    _authState = state;
+    final label = switch (state) {
+      AppAuthState.initializing => "INITIALIZING",
+      AppAuthState.authenticated => "AUTHENTICATED",
+      AppAuthState.biometricLocked => "BIOMETRIC_LOCKED",
+      AppAuthState.unauthenticated => "UNAUTHENTICATED",
+    };
+    logAuthEvent("AUTH_STATE $label");
+  }
 
   Future<BiometricCapability> biometricCapability() =>
       _biometricAuthService.capability();
@@ -1959,6 +1982,13 @@ class AppController extends SessionAccessor
     _biometricPreference = await _biometricPreferenceStore.load();
     _biometricUnlockRequired =
         session != null && _biometricPreference.hasAccountBinding;
+    _setAuthState(
+      session == null
+          ? AppAuthState.unauthenticated
+          : _biometricUnlockRequired
+              ? AppAuthState.biometricLocked
+              : AppAuthState.authenticated,
+    );
     _cachedSession = _biometricUnlockRequired ? null : session;
     _sessionAccessToken =
         _biometricUnlockRequired ? null : session?.accessToken;
@@ -1980,6 +2010,7 @@ class AppController extends SessionAccessor
     await _authSessionStore.save(session);
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
+    _setAuthState(AppAuthState.authenticated);
     clearCitizenProfileCache();
     await _reconcileBiometricBinding(session.accessToken);
     notifyListeners();
@@ -2058,23 +2089,27 @@ class AppController extends SessionAccessor
     if (!restore.isAuthenticated || restore.session == null) {
       await disableBiometricUnlock(notify: false);
       clearCachedSession();
+      _setAuthState(AppAuthState.unauthenticated);
       return const BiometricUnlockResult(
         status: BiometricAuthenticationStatus.error,
       );
     }
-    if (profile == null ||
-        profile.id.trim().isEmpty ||
-        profile.id != _biometricPreference.accountId) {
+    if (profile != null &&
+        (profile.id.trim().isEmpty ||
+            profile.id != _biometricPreference.accountId)) {
       await _authSessionStore.clear();
       await disableBiometricUnlock(notify: false);
       clearCachedSession();
+      _setAuthState(AppAuthState.unauthenticated);
       return const BiometricUnlockResult(
         status: BiometricAuthenticationStatus.error,
       );
     }
 
     _biometricUnlockRequired = false;
-    _cachedCitizenProfile = profile;
+    if (profile != null) {
+      _cachedCitizenProfile = profile;
+    }
     await _applyRestoredSession(restore.session!);
     return BiometricUnlockResult(
       status: BiometricAuthenticationStatus.success,
@@ -2086,6 +2121,7 @@ class AppController extends SessionAccessor
     final session = await _authService.ensureFreshSession();
     if (session == null) {
       clearCachedSession();
+      _setAuthState(AppAuthState.unauthenticated);
       return;
     }
     if (_sessionAccessToken != session.accessToken) {
@@ -2094,12 +2130,14 @@ class AppController extends SessionAccessor
     }
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
+    _setAuthState(AppAuthState.authenticated);
     notifyListeners();
   }
 
   Future<void> applyRefreshedSession(AuthSession session) async {
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
+    _setAuthState(AppAuthState.authenticated);
     clearCitizenProfileCache();
     notifyListeners();
     await _backgroundPushContextPersister(
@@ -2492,29 +2530,35 @@ class AppController extends SessionAccessor
     return updated;
   }
 
-  @override
-  Future<void> clearSession({bool preserveBiometricUnlock = true}) async {
+  Future<void> lockSessionForBiometrics() async {
     final cacheScope = _notificationCacheScope;
     final persistedSession = await _authSessionStore.load();
-    final canLockForBiometrics = preserveBiometricUnlock &&
-        _remainSignedIn &&
+    final canLockForBiometrics = _remainSignedIn &&
         _biometricPreference.hasAccountBinding &&
         persistedSession != null;
     if (canLockForBiometrics) {
       _biometricUnlockRequired = true;
       clearCachedSession();
+      _setAuthState(AppAuthState.biometricLocked);
+      notifyListeners();
       if (cacheScope != null) {
         await _notificationInboxCache.clear(cacheScope);
         await _broadcastFeedCache.clear(cacheScope);
       }
       return;
     }
+    await clearSession();
+  }
 
+  @override
+  Future<void> clearSession() async {
+    final cacheScope = _notificationCacheScope;
     await _pushNotifications?.deactivateCurrentToken();
     await _authService.logout();
     await _socialAuthService.signOutProviders();
     await disableBiometricUnlock(notify: false);
     clearCachedSession();
+    _setAuthState(AppAuthState.unauthenticated);
     if (cacheScope != null) {
       await _notificationInboxCache.clear(cacheScope);
       await _broadcastFeedCache.clear(cacheScope);
@@ -3170,6 +3214,7 @@ class AppController extends SessionAccessor
       await _applyRestoredSession(result.session!);
     } else if (result.status == SessionRestoreStatus.failed ||
         result.status == SessionRestoreStatus.unauthenticated) {
+      _setAuthState(AppAuthState.unauthenticated);
       _cachedSession = null;
       _sessionAccessToken = null;
       clearCitizenProfileCache();
@@ -3181,6 +3226,7 @@ class AppController extends SessionAccessor
   Future<void> _applyRestoredSession(AuthSession session) async {
     _cachedSession = session;
     _sessionAccessToken = session.accessToken;
+    _setAuthState(AppAuthState.authenticated);
     notifyListeners();
     await _backgroundPushContextPersister(
       accessToken: session.accessToken,
@@ -12730,13 +12776,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 }
 
-Future<void> _confirmAccountDeletion(BuildContext context) async {
+Future<void> _confirmAccountDeactivation(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text("Delete account?"),
+      title: const Text("Deactivate account?"),
       content: const Text(
-        "This deactivates your account and signs you out. Incident evidence and audit records may be retained where legally required. Continue?",
+        "Your account will be disabled and you will be signed out. Your data is retained and the account may be restored under the account policy.",
       ),
       actions: [
         TextButton(
@@ -12757,8 +12803,8 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
   if (token == null) return;
 
   try {
-    await controller.apiClient.requestAccountDeletion(accessToken: token);
-    await controller.clearSession(preserveBiometricUnlock: false);
+    await controller.apiClient.deactivateAccount(accessToken: token);
+    await controller.clearSession();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil("/login", (_) => false);
     showAppSnackBar(context, "Account deactivated.");
@@ -12769,7 +12815,103 @@ Future<void> _confirmAccountDeletion(BuildContext context) async {
     if (!context.mounted) return;
     showAppSnackBar(
       context,
-      "Unable to process deletion request.",
+      "Unable to deactivate the account. Try again.",
+      isError: true,
+    );
+  }
+}
+
+Future<void> _confirmAccountDeletion(BuildContext context) async {
+  final confirmationController = TextEditingController();
+  final passwordController = TextEditingController();
+  Map<String, String>? confirmation;
+  try {
+    confirmation = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text("Permanently delete account?"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "This permanently removes your sign-in identity, profile, contacts, saved vehicles, private device data, and sessions. Safety, security, legal, and fraud-prevention records may be retained without your normal account identity.",
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: confirmationController,
+                  autocorrect: false,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: "Type DELETE to confirm",
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: "Current password",
+                    helperText: "Required for password-based accounts",
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              ),
+              onPressed: confirmationController.text.trim() == "DELETE"
+                  ? () => Navigator.pop(context, {
+                        "confirmation": "DELETE",
+                        "currentPassword": passwordController.text,
+                      })
+                  : null,
+              child: const Text("Delete permanently"),
+            ),
+          ],
+        ),
+      ),
+    );
+  } finally {
+    confirmationController.dispose();
+    passwordController.dispose();
+  }
+  if (confirmation == null || !context.mounted) return;
+
+  final controller = appOf(context);
+  final token = controller.accessToken;
+  if (token == null) return;
+  try {
+    await controller.apiClient.requestAccountDeletion(
+      accessToken: token,
+      confirmation: confirmation["confirmation"]!,
+      currentPassword: confirmation["currentPassword"],
+    );
+    await controller.clearSession();
+    if (!context.mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil("/login", (_) => false);
+    showAppSnackBar(context, "Account permanently deleted.");
+  } on AuthApiException catch (error) {
+    if (!context.mounted) return;
+    showAppSnackBar(context, error.userMessage, isError: true);
+  } catch (_) {
+    if (!context.mounted) return;
+    showAppSnackBar(
+      context,
+      "Unable to delete the account safely. Try again.",
       isError: true,
     );
   }
@@ -12950,12 +13092,29 @@ class SettingsScreen extends StatelessWidget {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(
-                      Icons.delete_outline,
+                      Icons.person_off_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text("Deactivate account"),
+                    subtitle: const Text(
+                      "Disable sign-in while retaining your account data.",
+                    ),
+                    onTap: () => _confirmAccountDeactivation(context),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.delete_forever_outlined,
                       color: Theme.of(context).colorScheme.error,
                     ),
-                    title: const Text("Request account deletion"),
+                    title: Text(
+                      "Delete account",
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                     subtitle: const Text(
-                      "Deactivates your account. Full erasure follows legal retention rules.",
+                      "Permanently delete your identity and personal account data.",
                     ),
                     onTap: () => _confirmAccountDeletion(context),
                   ),

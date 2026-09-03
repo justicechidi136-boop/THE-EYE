@@ -238,15 +238,17 @@ export class AuthService {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
-    await this.prisma.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
-
     if (payload.typ === "admin" && stored.adminUserId) {
       const admin = await this.prisma.adminUser.findUnique({
         where: { id: stored.adminUserId },
         include: { role: true, preferences: true },
       });
       if (!admin) throw new UnauthorizedException("Admin not found");
-      return this.issueAdminSession(admin, stored.familyId);
+      return this.prisma.$transaction(async (tx) => {
+        const session = await this.issueAdminSession(admin, stored.familyId, tx);
+        await tx.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
+        return session;
+      });
     }
 
     if (stored.userId) {
@@ -256,11 +258,16 @@ export class AuthService {
       });
       if (!user) throw new UnauthorizedException("User not found");
       this.assertUserCanSignIn(user);
-      return this.issueUserSession(
-        user,
-        stored.familyId,
-        payload.authMode === "persistent",
-      );
+      return this.prisma.$transaction(async (tx) => {
+        const session = await this.issueUserSession(
+          user,
+          stored.familyId,
+          payload.authMode === "persistent",
+          tx,
+        );
+        await tx.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
+        return session;
+      });
     }
 
     throw new UnauthorizedException("Invalid refresh token owner");
@@ -440,6 +447,7 @@ export class AuthService {
     },
     familyId?: string,
     persistent = false,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
     const role = user.trustedReporter ? UserRole.TrustedReporter : UserRole.Citizen;
     const payload: JwtPayload = {
@@ -453,7 +461,7 @@ export class AuthService {
       preferredLocale: user.profile?.preferredLocale ?? undefined,
       effectivePreferredLocale: effectivePreferredLocale(user.profile?.preferredLocale),
     };
-    return this.issueSession(payload, { userId: user.id }, familyId, persistent);
+    return this.issueSession(payload, { userId: user.id }, familyId, persistent, db);
   }
 
   private async issueAdminSession(
@@ -469,6 +477,7 @@ export class AuthService {
       preferences?: { preferredLocale?: string | null } | null;
     },
     familyId?: string,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
     const role = admin.role.name as AdminRoleName;
     const preferredLocale = admin.preferences?.preferredLocale ?? null;
@@ -486,7 +495,7 @@ export class AuthService {
       agencyId: admin.agencyId ?? undefined,
       jurisdictionId: admin.jurisdictionId,
     };
-    return this.issueSession(payload, { adminUserId: admin.id }, familyId);
+    return this.issueSession(payload, { adminUserId: admin.id }, familyId, false, db);
   }
 
   private async verifyGoogleToken(idToken: string) {
@@ -516,6 +525,7 @@ export class AuthService {
     owner: { userId?: string; adminUserId?: string },
     familyId?: string,
     persistent = false,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
     const accessToken = signJwt(payload, requireJwtAccessSecret(this.config), this.config.get<string>("JWT_ACCESS_TTL", "15m"));
     const refreshPayload: JwtPayload = {
@@ -530,7 +540,7 @@ export class AuthService {
     const refreshToken = signJwt(refreshPayload, requireJwtRefreshSecret(this.config), refreshTtl);
     const expiresAt = new Date(Date.now() + parseTtl(refreshTtl, 30 * 24 * 60 * 60) * 1000);
 
-    await this.prisma.refreshToken.create({
+    await db.refreshToken.create({
       data: {
         ...owner,
         tokenHash: hashToken(refreshToken),
@@ -756,6 +766,12 @@ export class AuthService {
       throw new ForbiddenException({
         message: "Your THE EYE account is deactivated.",
         code: "ACCOUNT_DEACTIVATED",
+      });
+    }
+    if (user.status === "Deleted") {
+      throw new UnauthorizedException({
+        message: "This account is no longer available.",
+        code: "ACCOUNT_DELETED",
       });
     }
   }

@@ -243,7 +243,24 @@ export class UpdateUserAccountStatusDto {
 }
 
 export class RequestAccountDeletionDto {
-  @ApiProperty({ description: "Must be true to acknowledge irreversible account deactivation request" })
+  @ApiProperty({ description: "Must be true to acknowledge permanent account deletion" })
+  @IsBoolean()
+  confirm!: boolean;
+
+  @ApiProperty({ example: "DELETE", description: "Intentional destructive-action confirmation" })
+  @IsString()
+  @IsIn(["DELETE"])
+  confirmation!: "DELETE";
+
+  @ApiPropertyOptional({ writeOnly: true, description: "Required when the account has a password sign-in method" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  currentPassword?: string;
+}
+
+export class RequestAccountDeactivationDto {
+  @ApiProperty({ description: "Must be true to disable the account without deleting retained data" })
   @IsBoolean()
   confirm!: boolean;
 }

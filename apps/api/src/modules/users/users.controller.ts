@@ -19,6 +19,7 @@ import {
   AvatarConfirmDto,
   AvatarPresignDto,
   CreateOperationalAdminDto,
+  RequestAccountDeactivationDto,
   RequestAccountDeletionDto,
   ReviewKycDto,
   SubmitKycDto,
@@ -110,7 +111,15 @@ export class UsersController {
     @Req() request: { user: Parameters<UsersService["requestAccountDeletion"]>[0] },
     @Body() dto: RequestAccountDeletionDto,
   ) {
-    return this.users.requestAccountDeletion(request.user, dto.confirm);
+    return this.users.requestAccountDeletion(request.user, dto);
+  }
+
+  @Post("me/deactivate")
+  deactivateMe(
+    @Req() request: { user: Parameters<UsersService["deactivateOwnAccount"]>[0] },
+    @Body() dto: RequestAccountDeactivationDto,
+  ) {
+    return this.users.deactivateOwnAccount(request.user, dto.confirm);
   }
 
   @Get("directory")

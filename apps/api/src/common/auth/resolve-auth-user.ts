@@ -71,7 +71,25 @@ export async function resolveAuthenticatedUser(prisma: PrismaService, payload: J
     where: { id: payload.sub },
     include: { trustedReporter: true },
   });
-  if (!user || user.status !== "Active") throw new UnauthorizedException("User account is inactive or missing");
+  if (!user) throw new UnauthorizedException("User account is inactive or missing");
+  if (user.status === "Deleted") {
+    throw new UnauthorizedException({
+      message: "This account is no longer available.",
+      code: "ACCOUNT_DELETED",
+    });
+  }
+  if (user.status === "Deactivated") {
+    throw new UnauthorizedException({
+      message: "Your THE EYE account is deactivated.",
+      code: "ACCOUNT_DEACTIVATED",
+    });
+  }
+  if (user.status !== "Active") {
+    throw new UnauthorizedException({
+      message: "Your THE EYE account is suspended. Contact support for assistance.",
+      code: "ACCOUNT_SUSPENDED",
+    });
+  }
   const role = user.trustedReporter && !user.trustedReporter.revokedAt ? UserRole.TrustedReporter : UserRole.Citizen;
   const resolved: JwtPayload = {
     sub: user.id,
