@@ -1,4 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
+import { hashPassword } from "../../../common/auth/crypto";
+import type { JwtPayload } from "../../../common/auth/jwt";
 import { UsersService } from "../users.service";
 import { isCitizenProfileComplete } from "../profile-complete";
 
@@ -47,6 +49,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       findUnique: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     emergencyContact: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -55,6 +58,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     citizenVehicle: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -64,6 +68,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       update: jest.fn(),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       delete: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     citizenVehiclePhoto: {
       count: jest.fn().mockResolvedValue(0),
@@ -77,9 +82,28 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    refreshToken: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-    userPushToken: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    refreshToken: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }), deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    userPushToken: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }), deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    authAccount: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    phoneOtp: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    passwordResetToken: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    accountRecoveryChallenge: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    deviceGeoState: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    communityPresence: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    nwDynamicAreaPresence: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    communityMembership: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    broadcastRead: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    broadcastDelivery: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    broadcastCommentReaction: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    communityPostReaction: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    safetyAlertRecipient: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    incidentMediaAccessLog: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    trustedReporter: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    notification: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    smartwatchDevice: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn(async (arg: unknown) => {
       if (typeof arg === "function") return (arg as (tx: unknown) => Promise<unknown>)(prisma);
       if (Array.isArray(arg)) return Promise.all(arg);
@@ -96,6 +120,100 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
     audit,
   };
 }
+
+describe("UsersService account deletion", () => {
+  const citizen = {
+    sub: "11111111-1111-4111-8111-111111111111",
+    typ: "user",
+    role: "Citizen",
+    permissions: [],
+  } as JwtPayload;
+
+  it("keeps deactivation reversible and distinct from deletion", async () => {
+    const { service, prisma, audit } = createUsersService();
+
+    const result = await service.deactivateOwnAccount(citizen, true);
+
+    expect(result.status).toBe("Deactivated");
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: citizen.sub },
+      data: { status: "Deactivated" },
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "account.deactivated" }),
+    );
+  });
+
+  it("deletes identity data, sessions, private state, and device bindings", async () => {
+    const { service, prisma, audit } = createUsersService();
+    prisma.user.findUnique.mockResolvedValue({
+      id: citizen.sub,
+      status: "Active",
+      passwordHash: hashPassword("Password123!"),
+      profile: { avatarUrl: null },
+      citizenVehicles: [],
+    });
+
+    const result = await service.requestAccountDeletion(citizen, {
+      confirm: true,
+      confirmation: "DELETE",
+      currentPassword: "Password123!",
+    });
+
+    expect(result.status).toBe("Deleted");
+    expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: citizen.sub } });
+    expect(prisma.userPushToken.deleteMany).toHaveBeenCalledWith({ where: { userId: citizen.sub } });
+    expect(prisma.deviceGeoState.deleteMany).toHaveBeenCalledWith({ where: { userId: citizen.sub } });
+    expect(prisma.smartwatchDevice.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: citizen.sub },
+        data: expect.objectContaining({ userId: null, isActive: false, deviceSecretHash: null }),
+      }),
+    );
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: citizen.sub },
+        data: expect.objectContaining({
+          email: null,
+          phone: null,
+          passwordHash: null,
+          googleId: null,
+          status: "Deleted",
+          deletionRetentionVersion: "account-deletion-v1",
+        }),
+      }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "account.deleted", afterState: { status: "Deleted" } }),
+    );
+  });
+
+  it("requires the current password for password-based accounts", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.user.findUnique.mockResolvedValue({
+      id: citizen.sub,
+      status: "Active",
+      passwordHash: hashPassword("Password123!"),
+      profile: null,
+      citizenVehicles: [],
+    });
+
+    await expect(service.requestAccountDeletion(citizen, {
+      confirm: true,
+      confirmation: "DELETE",
+      currentPassword: "wrong-password",
+    })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("does not allow an admin token to use citizen self-deletion", async () => {
+    const { service } = createUsersService();
+    await expect(service.requestAccountDeletion(
+      { sub: "admin-1", typ: "admin", permissions: [] } as never,
+      { confirm: true, confirmation: "DELETE" },
+    )).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
 
 describe("UsersService operational account provisioning", () => {
   const stateAdmin = {

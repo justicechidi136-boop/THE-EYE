@@ -373,3 +373,67 @@ export async function createStorageDownloadUrl(objectKey: string, expiresSeconds
     expiresInSeconds: expiresSeconds,
   };
 }
+
+async function deleteS3Object(objectKey: string) {
+  validateStorageObjectKey(objectKey);
+  const endpoint = process.env.S3_ENDPOINT;
+  const bucket = process.env.S3_BUCKET;
+  const accessKey = process.env.S3_ACCESS_KEY;
+  const secretKey = process.env.S3_SECRET_KEY;
+  const region = process.env.S3_REGION ?? "us-east-1";
+  if (!endpoint || !bucket || !accessKey || !secretKey) {
+    throw new InternalServerErrorException("Evidence storage is not configured");
+  }
+
+  const now = new Date();
+  const date = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = date.slice(0, 8);
+  const scope = `${dateStamp}/${region}/s3/aws4_request`;
+  const url = new URL(endpoint);
+  const canonicalUri = `/${encodePath(`${bucket}/${objectKey}`)}`;
+  const payloadHash = createHash("sha256").update("").digest("hex");
+  const canonicalHeaders = `host:${url.host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${date}\n`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = ["DELETE", canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    date,
+    scope,
+    createHash("sha256").update(canonicalRequest).digest("hex"),
+  ].join("\n");
+  const signingKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, dateStamp), region), "s3"), "aws4_request");
+  const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const response = await fetch(`${url.origin}${canonicalUri}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: authorization,
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": date,
+    },
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new InternalServerErrorException(`Storage deletion failed (${response.status})`);
+  }
+}
+
+export async function deleteStorageObject(objectKey: string) {
+  validateStorageObjectKey(objectKey);
+  if (resolveStorageProviderName() === "firebase") {
+    assertFirebaseStorageConfiguration();
+    const credentials = resolveFcmCredentials(process.env);
+    if (!credentials?.clientEmail || !credentials.privateKey) {
+      throw new InternalServerErrorException("Firebase evidence storage credentials are not configured");
+    }
+    const storage = new Storage({
+      projectId: credentials.projectId || String(process.env.FIREBASE_PROJECT_ID ?? "").trim(),
+      credentials: {
+        client_email: credentials.clientEmail,
+        private_key: credentials.privateKey,
+      },
+    });
+    await storage.bucket(getConfiguredStorageBucket()).file(objectKey).delete({ ignoreNotFound: true });
+    return;
+  }
+  await deleteS3Object(objectKey);
+}

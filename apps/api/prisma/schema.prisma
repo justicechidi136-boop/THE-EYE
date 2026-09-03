@@ -12,6 +12,7 @@ enum UserStatus {
   Active
   Suspended
   Deactivated
+  Deleted
 }
 
 enum KycStatus {
@@ -574,6 +575,8 @@ model User {
   phoneVerifiedAt                DateTime?                        @map("phone_verified_at") @db.Timestamptz(6)
   status                         UserStatus                       @default(Active)
   isTrustedReporter              Boolean                          @default(false) @map("is_trusted_reporter")
+  deletedAt                      DateTime?                        @map("deleted_at") @db.Timestamptz(6)
+  deletionRetentionVersion       String?                          @map("deletion_retention_version")
   createdAt                      DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                      DateTime                         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   profile                        Profile?
@@ -637,6 +640,7 @@ model User {
   incidentMessageReceipts        IncidentMessageReceipt[]         @relation("IncidentMessageReceiptUser")
   dangerEventsInitiated          DangerEvent[]                    @relation("DangerEventInitiator")
 
+  @@index([deletedAt])
   @@map("users")
 }
 

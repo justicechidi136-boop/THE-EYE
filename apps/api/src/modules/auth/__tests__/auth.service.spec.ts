@@ -29,7 +29,12 @@ function createAuthService(overrides: Record<string, unknown> = {}) {
       findUnique: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
     },
-    $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
+    $transaction: jest.fn(async (arg: unknown) => {
+      if (typeof arg === "function") {
+        return (arg as (tx: unknown) => Promise<unknown>)(prisma);
+      }
+      return Promise.all(arg as Promise<unknown>[]);
+    }),
     ...overrides,
   };
 

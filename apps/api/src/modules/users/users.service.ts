@@ -20,7 +20,8 @@ import {
 import type { CitizenVehicle, CitizenVehiclePhoto, Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { adminCanAccessGeography } from "../../common/auth/admin-geography-scope";
-import { hashPassword } from "../../common/auth/crypto";
+import { hashPassword, verifyPassword } from "../../common/auth/crypto";
+import { clearCachedAuthUser } from "../../common/auth/auth-user-cache";
 import {
   buildCursorPage,
   dateIdCursorWhere,
@@ -36,6 +37,7 @@ import {
   avatarObjectKey,
   createStorageDownloadUrl,
   createStorageUploadUrl,
+  deleteStorageObject,
   getConfiguredStorageBucket,
   validateAvatarUpload,
   validateVehiclePhotoUpload,
@@ -54,6 +56,7 @@ import type {
   UpsertEmergencyContactDto,
   CreateCitizenVehicleDto,
   CreateOperationalAdminDto,
+  RequestAccountDeletionDto,
   UpdateUserAccountStatusDto,
 } from "./dto/users.dto";
 import { incompleteProfileLocation, isCitizenProfileComplete } from "./profile-complete";
@@ -949,15 +952,15 @@ export class UsersService {
       beforeState: { status: user.status },
       afterState: { status: dto.status },
     });
+    clearCachedAuthUser({ typ: "user", sub: userId });
     return { data: { id: userId, status: dto.status } };
   }
 
-  async requestAccountDeletion(actor: JwtPayload, confirm: boolean) {
+  async deactivateOwnAccount(actor: JwtPayload, confirm: boolean) {
     this.assertCitizen(actor);
     if (!confirm) {
-      throw new BadRequestException("Confirm account deletion to continue");
+      throw new BadRequestException("Confirm account deactivation to continue");
     }
-    // Policy/retention not finalized: deactivate account and revoke sessions only.
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: actor.sub },
@@ -980,12 +983,134 @@ export class UsersService {
       entityId: actor.sub,
       metadata: { mode: "self_request" },
     });
+    clearCachedAuthUser(actor);
 
     return {
       ok: true,
       status: "Deactivated",
-      message:
-        "Your account has been deactivated. Full erasure remains subject to legal retention requirements.",
+      message: "Your account has been deactivated.",
+    };
+  }
+
+  async requestAccountDeletion(actor: JwtPayload, dto: RequestAccountDeletionDto) {
+    this.assertCitizen(actor);
+    if (!dto.confirm || dto.confirmation !== "DELETE") {
+      throw new BadRequestException("Type DELETE to confirm permanent account deletion");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: actor.sub },
+      include: {
+        profile: { select: { avatarUrl: true } },
+        citizenVehicles: { include: { photos: { select: { objectKey: true } } } },
+      },
+    });
+    if (!user || user.status === "Deleted") {
+      throw new NotFoundException("Account is no longer available");
+    }
+    if (user.passwordHash && (!dto.currentPassword || !verifyPassword(dto.currentPassword, user.passwordHash))) {
+      throw new ForbiddenException({
+        message: "Enter your current password to delete your account.",
+        code: "RECENT_AUTH_REQUIRED",
+      });
+    }
+
+    const storageKeys = new Set<string>();
+    const avatarMatch = user.profile?.avatarUrl?.match(/^storage:\/\/[^/]+\/(.+)$/);
+    if (avatarMatch?.[1]) storageKeys.add(avatarMatch[1]);
+    for (const vehicle of user.citizenVehicles) {
+      for (const photo of vehicle.photos) storageKeys.add(photo.objectKey);
+    }
+    try {
+      for (const objectKey of storageKeys) await deleteStorageObject(objectKey);
+    } catch {
+      throw new ServiceUnavailableException(
+        "Account deletion could not safely remove private media. Try again shortly.",
+      );
+    }
+
+    const deletedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`UPDATE "smartwatch_devices" SET "last_gps_location" = NULL WHERE "user_id" = ${actor.sub}::uuid`;
+      await tx.smartwatchDevice.updateMany({
+        where: { userId: actor.sub },
+        data: {
+          userId: null,
+          isActive: false,
+          isOnline: false,
+          pairedPhoneDeviceId: null,
+          pairingCodeHash: null,
+          deviceSecretHash: null,
+          deviceCertificate: null,
+          publicKey: null,
+          simNumber: null,
+          phoneNumber: null,
+          lastLatitude: null,
+          lastLongitude: null,
+          lastGpsAccuracy: null,
+          lastGpsAt: null,
+          lastKnownState: null,
+          lastKnownLga: null,
+          securityDeactivatedAt: deletedAt,
+          deactivationReason: "ACCOUNT_DELETED",
+        },
+      });
+      await tx.notification.updateMany({ where: { userId: actor.sub }, data: { userId: null } });
+      await tx.authAccount.deleteMany({ where: { userId: actor.sub } });
+      await tx.refreshToken.deleteMany({ where: { userId: actor.sub } });
+      await tx.userPushToken.deleteMany({ where: { userId: actor.sub } });
+      await tx.phoneOtp.deleteMany({ where: { userId: actor.sub } });
+      await tx.passwordResetToken.deleteMany({ where: { userId: actor.sub } });
+      await tx.accountRecoveryChallenge.deleteMany({ where: { userId: actor.sub } });
+      await tx.deviceGeoState.deleteMany({ where: { userId: actor.sub } });
+      await tx.communityPresence.deleteMany({ where: { userId: actor.sub } });
+      await tx.nwDynamicAreaPresence.deleteMany({ where: { userId: actor.sub } });
+      await tx.communityMembership.deleteMany({ where: { userId: actor.sub } });
+      await tx.broadcastRead.deleteMany({ where: { userId: actor.sub } });
+      await tx.broadcastDelivery.deleteMany({ where: { userId: actor.sub } });
+      await tx.broadcastCommentReaction.deleteMany({ where: { userId: actor.sub } });
+      await tx.communityPostReaction.deleteMany({ where: { userId: actor.sub } });
+      await tx.safetyAlertRecipient.deleteMany({ where: { userId: actor.sub } });
+      await tx.incidentMediaAccessLog.deleteMany({ where: { accessorId: actor.sub } });
+      await tx.trustedReporter.deleteMany({ where: { userId: actor.sub } });
+      await tx.emergencyContact.deleteMany({ where: { userId: actor.sub } });
+      await tx.kycRecord.deleteMany({ where: { userId: actor.sub } });
+      await tx.citizenVehicle.deleteMany({ where: { userId: actor.sub } });
+      await tx.profile.deleteMany({ where: { userId: actor.sub } });
+      await tx.user.update({
+        where: { id: actor.sub },
+        data: {
+          email: null,
+          phone: null,
+          passwordHash: null,
+          googleId: null,
+          phoneVerifiedAt: null,
+          status: "Deleted",
+          isTrustedReporter: false,
+          deletedAt,
+          deletionRetentionVersion: "account-deletion-v1",
+        },
+      });
+    });
+
+    await this.audit.record({
+      actor,
+      action: "account.deleted",
+      entityType: "users",
+      entityId: actor.sub,
+      metadata: {
+        retentionPolicy: "account-deletion-v1",
+        privateStorageObjectsDeleted: storageKeys.size,
+      },
+      beforeState: { status: user.status },
+      afterState: { status: "Deleted" },
+    });
+    clearCachedAuthUser(actor);
+
+    return {
+      ok: true,
+      status: "Deleted",
+      message: "Your account has been permanently deleted.",
     };
   }
 
@@ -1035,6 +1160,7 @@ export class UsersService {
     } as never;
     const citizenWhere = {
       ...citizenScope,
+      status: { not: "Deleted" as const },
       ...(Object.keys(citizenProfileFilter).length ? { profile: { is: citizenProfileFilter } } : {}),
       ...dateIdCursorWhere(cursor),
       ...(query.status === "active"
@@ -1071,7 +1197,7 @@ export class UsersService {
       adminsPromise,
       citizensPromise,
       this.prisma.adminUser.count({ where: this.adminScopeWhere(actor) as never }),
-      this.prisma.user.count({ where: this.citizenScopeWhere(actor) as never }),
+      this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), status: { not: "Deleted" } } as never }),
       this.prisma.adminUser.count({ where: { ...this.adminScopeWhere(actor), isActive: true } as never }),
       this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), status: "Active" } as never }),
       this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), kycRecords: { some: { status: "Pending" } } } as never }),

@@ -7,7 +7,7 @@ const MAX_ENTRIES = 10_000;
 
 const cache = new Map<string, CacheEntry>();
 
-function cacheKey(payload: JwtPayload) {
+function cacheKey(payload: Pick<JwtPayload, "typ" | "sub">) {
   return `${payload.typ}:${payload.sub}`;
 }
 
@@ -39,4 +39,8 @@ export function setCachedAuthUser(payload: JwtPayload, resolved: JwtPayload) {
 
 export function clearAuthUserCache() {
   cache.clear();
+}
+
+export function clearCachedAuthUser(payload: Pick<JwtPayload, "typ" | "sub">) {
+  cache.delete(cacheKey(payload));
 }

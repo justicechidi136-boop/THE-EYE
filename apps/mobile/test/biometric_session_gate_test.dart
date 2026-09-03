@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io";
 
 import "package:connectivity_plus/connectivity_plus.dart";
 import "package:flutter/material.dart";
@@ -137,8 +138,25 @@ void main() {
     expect(await fixture.sessions.load(), isNotNull);
   });
 
-  test("manual password fallback preserves the biometric preference",
+  test("successful biometric unlock preserves and opens an offline session",
       () async {
+    final fixture = await _buildFixture(
+      biometricAccountId: "citizen-1",
+      profileFailure: const SocketException("offline"),
+    );
+    await fixture.controller.loadPersistedSession();
+
+    final result = await fixture.controller.unlockWithBiometrics();
+
+    expect(result.status, BiometricAuthenticationStatus.success);
+    expect(fixture.controller.isAuthenticated, isTrue);
+    expect(fixture.controller.authState, AppAuthState.authenticated);
+    expect(fixture.controller.biometricUnlockRequired, isFalse);
+    expect(await fixture.sessions.load(), isNotNull);
+    expect((await fixture.biometrics.load()).enabled, isTrue);
+  });
+
+  test("manual password fallback preserves the biometric preference", () async {
     final fixture = await _buildFixture(biometricAccountId: "citizen-1");
     await fixture.controller.loadPersistedSession();
 
@@ -172,11 +190,11 @@ void main() {
     expect((await fixture.biometrics.load()).enabled, isFalse);
   });
 
-  test("biometric-enabled sign-out locks the persisted session", () async {
+  test("explicit biometric lock preserves the persisted session", () async {
     final fixture = await _buildFixture(biometricAccountId: "citizen-1");
     await fixture.controller.loadPersistedSession();
 
-    await fixture.controller.clearSession();
+    await fixture.controller.lockSessionForBiometrics();
 
     expect(await fixture.sessions.load(), isNotNull);
     expect((await fixture.biometrics.load()).enabled, isTrue);
@@ -184,12 +202,12 @@ void main() {
     expect(fixture.controller.biometricUnlockRequired, isTrue);
   });
 
-  test("full sign-out revokes the session and clears biometric binding",
+  test("manual sign-out revokes the session and clears biometric binding",
       () async {
     final fixture = await _buildFixture(biometricAccountId: "citizen-1");
     await fixture.controller.loadPersistedSession();
 
-    await fixture.controller.clearSession(preserveBiometricUnlock: false);
+    await fixture.controller.clearSession();
 
     expect(await fixture.sessions.load(), isNull);
     expect((await fixture.biometrics.load()).enabled, isFalse);
@@ -224,6 +242,7 @@ Future<_Fixture> _buildFixture({
   String profileId = "citizen-1",
   bool remainSignedIn = true,
   Object authenticationResult = true,
+  Object? profileFailure,
 }) async {
   SharedPreferences.setMockInitialValues({
     AuthPersistencePreferenceStore.remainSignedInKey: remainSignedIn,
@@ -242,6 +261,8 @@ Future<_Fixture> _buildFixture({
     baseUrl: "http://localhost:4000/v1",
     httpClient: MockClient((request) async {
       if (request.url.path.endsWith(TheEyeApiPaths.usersMe)) {
+        if (profileFailure is Exception) throw profileFailure;
+        if (profileFailure is Error) throw profileFailure;
         return http.Response(
           jsonEncode({
             "id": profileId,

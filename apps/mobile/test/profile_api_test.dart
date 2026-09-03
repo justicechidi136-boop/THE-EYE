@@ -88,7 +88,8 @@ void main() {
     expect(contacts.first.phone, "+2348099990000");
   });
 
-  test("requestAccountDeletion posts confirm true", () async {
+  test("requestAccountDeletion posts intentional permanent confirmation",
+      () async {
     final client = TheEyeApiClient(
       baseUrl: "https://api.test/v1",
       httpClient: MockClient((request) async {
@@ -97,10 +98,12 @@ void main() {
             request.url.path, endsWith(TheEyeApiPaths.usersMeDeletionRequest));
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body["confirm"], isTrue);
+        expect(body["confirmation"], "DELETE");
+        expect(body["currentPassword"], "Password123!");
         return http.Response(
           jsonEncode({
             "ok": true,
-            "status": "Deactivated",
+            "status": "Deleted",
             "message": "done",
           }),
           200,
@@ -109,9 +112,13 @@ void main() {
       }),
     );
 
-    final result = await client.requestAccountDeletion(accessToken: "token");
+    final result = await client.requestAccountDeletion(
+      accessToken: "token",
+      confirmation: "DELETE",
+      currentPassword: "Password123!",
+    );
     expect(result["ok"], isTrue);
-    expect(result["status"], "Deactivated");
+    expect(result["status"], "Deleted");
   });
 
   test("vehicle garage endpoints support list/create/set primary/delete/photos",

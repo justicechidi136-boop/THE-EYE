@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
@@ -33,6 +35,7 @@ class SecureAuthSessionStore implements AuthSessionStore {
 
   static const accessTokenKey = "the_eye_access_token";
   static const refreshTokenKey = "the_eye_refresh_token";
+  static const sessionEnvelopeKey = "the_eye_auth_session_v2";
 
   final FlutterSecureStorage _secureStorage;
   final SharedPreferences _legacyPreferences;
@@ -46,10 +49,41 @@ class SecureAuthSessionStore implements AuthSessionStore {
 
   @override
   Future<AuthSession?> load() async {
+    final envelope = await _secureStorage.read(key: sessionEnvelopeKey);
+    if (envelope != null && envelope.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(envelope);
+        if (decoded is Map) {
+          final accessToken = decoded["accessToken"] as String?;
+          final refreshToken = decoded["refreshToken"] as String?;
+          if (accessToken != null &&
+              accessToken.isNotEmpty &&
+              refreshToken != null &&
+              refreshToken.isNotEmpty) {
+            return AuthSession(
+              accessToken: accessToken,
+              refreshToken: refreshToken,
+            );
+          }
+        }
+      } catch (_) {
+        // Fall through to one-time legacy migration.
+      }
+    }
     var accessToken = await _secureStorage.read(key: accessTokenKey);
     var refreshToken = await _secureStorage.read(key: refreshTokenKey);
-    if ((accessToken == null || refreshToken == null) &&
-        _legacyPreferences.containsKey(accessTokenKey)) {
+    if (accessToken != null &&
+        accessToken.isNotEmpty &&
+        refreshToken != null &&
+        refreshToken.isNotEmpty) {
+      final migrated = AuthSession(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
+      await save(migrated);
+      return migrated;
+    }
+    if (_legacyPreferences.containsKey(accessTokenKey)) {
       accessToken = _legacyPreferences.getString(accessTokenKey);
       refreshToken = _legacyPreferences.getString(refreshTokenKey);
       if (accessToken != null &&
@@ -74,18 +108,20 @@ class SecureAuthSessionStore implements AuthSessionStore {
   @override
   Future<void> save(AuthSession session) async {
     await _secureStorage.write(
-      key: accessTokenKey,
-      value: session.accessToken,
+      key: sessionEnvelopeKey,
+      value: jsonEncode({
+        "accessToken": session.accessToken,
+        "refreshToken": session.refreshToken,
+      }),
     );
-    await _secureStorage.write(
-      key: refreshTokenKey,
-      value: session.refreshToken,
-    );
+    await _secureStorage.delete(key: accessTokenKey);
+    await _secureStorage.delete(key: refreshTokenKey);
     await _clearLegacyValues();
   }
 
   @override
   Future<void> clear() async {
+    await _secureStorage.delete(key: sessionEnvelopeKey);
     await _secureStorage.delete(key: accessTokenKey);
     await _secureStorage.delete(key: refreshTokenKey);
     await _clearLegacyValues();
