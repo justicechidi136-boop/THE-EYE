@@ -1555,6 +1555,12 @@ export async function fetchBroadcastProgress(id: string) {
   return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/progress`, { token });
 }
 
+export async function previewBroadcast(id: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/preview`, { token });
+}
+
 export async function estimateBroadcastRecipients(id: string) {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");

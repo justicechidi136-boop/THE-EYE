@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Button, InlineAlert } from "../form-primitives";
 
 type BroadcastModerationActionsProps = {
@@ -10,6 +11,7 @@ type BroadcastModerationActionsProps = {
   adminVerified: boolean;
   authorLabel: "Citizen" | "Admin" | "Verified";
   showCommentForm?: boolean;
+  secondaryActions?: ReactNode;
 };
 
 export function BroadcastModerationActions({
@@ -18,6 +20,7 @@ export function BroadcastModerationActions({
   adminVerified,
   authorLabel,
   showCommentForm = false,
+  secondaryActions,
 }: BroadcastModerationActionsProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
@@ -26,7 +29,7 @@ export function BroadcastModerationActions({
   const [commentBody, setCommentBody] = useState("");
   const [pinComment, setPinComment] = useState(false);
 
-  async function runAction(action: string, body?: Record<string, unknown>, method: "POST" | "DELETE" = "POST") {
+  async function runAction(action: string, body?: Record<string, unknown>, method: "POST" | "PATCH" | "DELETE" = "POST") {
     setBusy(action);
     setError(null);
     setMessage(null);
@@ -67,6 +70,9 @@ export function BroadcastModerationActions({
             Restore
           </Button>
         ) : null}
+        {authorLabel === "Admin" && !isSuspended && !isTerminal ? (
+          <Button disabled={busy !== null} variant="danger" onClick={() => runAction("cancel", { reason: "Withdrawn from admin workspace" }, "PATCH")}>Withdraw</Button>
+        ) : null}
         {!adminVerified && authorLabel !== "Admin" ? (
           <Button disabled={busy !== null} onClick={() => runAction("verify", { note: "Verified from admin workspace" })}>
             Verify
@@ -77,12 +83,17 @@ export function BroadcastModerationActions({
             Resolve
           </Button>
         ) : null}
-        {!isTerminal ? (
+        {!isTerminal && authorLabel !== "Admin" ? (
           <Button disabled={busy !== null} variant="danger" onClick={() => runAction("delete", { reason: "Removed from admin workspace" }, "DELETE")}>
             Delete
           </Button>
         ) : null}
+        {authorLabel === "Admin" ? (
+          <Button disabled={busy !== null} onClick={() => runAction("preview")}>Preview</Button>
+        ) : null}
       </div>
+
+      {secondaryActions}
 
       {showCommentForm ? (
         <div className="grid gap-2 rounded-lg border border-line bg-surfaceMuted p-3">

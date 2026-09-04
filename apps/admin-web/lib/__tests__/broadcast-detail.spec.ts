@@ -45,6 +45,26 @@ describe("Broadcast Details presentation", () => {
     expect(view.stolenVehicle?.vin).toBe("VIN-123");
     expect(view.stolenVehicle?.theftAccount).toBe("Taken outside the office");
     expect(view.sightings?.[0]?.reviewStatus).toBe("Verified");
+    expect(view.type).toBe("StolenVehicle");
+  });
+
+  it("includes approval and sighting events in the authoritative activity timeline", () => {
+    const view = toBroadcastDetailView({
+      id: "broadcast-1",
+      type: "MissingPerson",
+      authorType: "Citizen",
+      requiresApproval: false,
+      createdAt: "2026-08-23T12:38:00.000Z",
+      publishedAt: "2026-08-23T12:40:00.000Z",
+      sightings: [{ id: "sighting-1", createdAt: "2026-08-24T08:02:00.000Z", anonymousPublic: true, media: [] }],
+    });
+    expect(view.timeline.map((entry) => entry.label)).toEqual([
+      "Broadcast submitted",
+      "Broadcast approved",
+      "Broadcast published",
+      "Sighting reported (#1)",
+    ]);
+    expect(view.timeline.at(-1)?.actor).toBe("Anonymous");
   });
 
   it("formats delivery and validates actual target coordinates", () => {
@@ -68,9 +88,26 @@ describe("Broadcast Details presentation", () => {
     expect(sightings).toContain("Review sighting");
     expect(sightings).toContain('role="dialog"');
     expect(sightings).toContain("Sighting evidence — separate from the original broadcast evidence");
-    expect(map).toContain("https://tile.openstreetmap.org");
+    expect(map).toContain('await import("leaflet")');
+    expect(map).toContain("https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+    expect(map).toContain("scrollWheelZoom: true");
     expect(map).toContain("Open Location");
     expect(map).toContain("© OpenStreetMap contributors");
+  });
+
+  it("matches the prototype action and section rules for citizen and Admin broadcasts", () => {
+    const workspace = readFileSync(join(process.cwd(), "components", "broadcast", "broadcast-detail-workspace.tsx"), "utf8");
+    const moderation = readFileSync(join(process.cwd(), "components", "broadcast", "broadcast-moderation-actions.tsx"), "utf8");
+    const actions = readFileSync(join(process.cwd(), "components", "broadcast-actions.tsx"), "utf8");
+    const actionRoute = readFileSync(join(process.cwd(), "app", "api", "admin", "broadcasts", "[id]", "[action]", "route.ts"), "utf8");
+    expect(workspace).toContain('broadcast.authorLabel === "Admin" ? <section');
+    expect(workspace).toContain('detailMode="citizen"');
+    expect(workspace).toContain("hideWhenEmpty");
+    expect(moderation).toContain('authorLabel !== "Admin"');
+    expect(actions).toContain('detailMode === "citizen"');
+    expect(moderation).toContain("Withdrawn from admin workspace");
+    expect(actions).toContain('"preview", "estimate", "progress"');
+    expect(actionRoute).toContain("previewBroadcast(id)");
   });
 
   it("provides a routed full sighting review view", () => {

@@ -11,6 +11,7 @@ type BroadcastActionsProps = {
   scheduledAt?: string | null;
   dispatchFailureReason?: string | null;
   autoDispatchStatus?: string;
+  detailMode?: "citizen";
 };
 
 export function BroadcastActions({
@@ -20,6 +21,7 @@ export function BroadcastActions({
   scheduledAt,
   dispatchFailureReason,
   autoDispatchStatus,
+  detailMode,
 }: BroadcastActionsProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
@@ -31,8 +33,9 @@ export function BroadcastActions({
     setError(null);
     setMessage(null);
     try {
+      const postActions = new Set(["dispatch", "retry", "preview", "estimate", "progress"]);
       const response = await fetch(`/api/admin/broadcasts/${broadcastId}/${action}`, {
-        method: action === "dispatch" || action === "retry" ? "POST" : "PATCH",
+        method: postActions.has(action) ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body ?? {}),
       });
@@ -53,6 +56,19 @@ export function BroadcastActions({
         ? "Due now"
         : `Scheduled ${new Date(scheduledAt).toLocaleString()}`
       : null;
+
+  const isLiveDetail = ["Published", "Active", "Updated"].includes(status);
+  if (detailMode === "citizen" && (isLiveDetail || status === "Resolved")) {
+    return <div className="grid gap-2">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("preview")}>Preview</Button>
+        <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("estimate")}>Estimate</Button>
+        <Button className="min-w-0 w-full whitespace-normal" disabled={busy !== null} onClick={() => runAction("progress")}>Progress</Button>
+      </div>
+      {message ? <InlineAlert tone="success">{message}</InlineAlert> : null}
+      {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+    </div>;
+  }
 
   return (
     <div className="grid gap-2">

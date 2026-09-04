@@ -6,6 +6,7 @@ import {
   dispatchBroadcast,
   estimateBroadcastRecipients,
   fetchBroadcastProgress,
+  previewBroadcast,
   rejectBroadcast,
   retryBroadcast,
   scheduleBroadcast,
@@ -65,8 +66,8 @@ export async function POST(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ ok: true, data: result });
     }
     if (action === "preview") {
-      const result = await estimateBroadcastRecipients(id);
-      return NextResponse.json({ ok: true, data: result, message: "Preview uses recipient estimation sample." });
+      const result = await previewBroadcast(id);
+      return NextResponse.json({ ok: true, data: result });
     }
     if (action === "estimate") {
       const result = await estimateBroadcastRecipients(id);
