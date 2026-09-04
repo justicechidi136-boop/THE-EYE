@@ -13,6 +13,6 @@ import { AccountRecoveryService } from "./account-recovery.service";
   imports: [AuditModule, PrismaModule, NotificationsModule],
   controllers: [AuthController],
   providers: [AuthService, AuthDeliveryService, AccountRecoveryService, JwtAuthGuard, FirebaseAuthVerifier],
-  exports: [AuthService, AccountRecoveryService],
+  exports: [AuthService, AuthDeliveryService, AccountRecoveryService],
 })
 export class AuthModule {}

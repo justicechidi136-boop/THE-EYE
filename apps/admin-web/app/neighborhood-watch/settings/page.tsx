@@ -4,6 +4,7 @@ import { ThemeSettingsPanel } from "../../../components/theme-settings-panel";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
 import { fetchPolicies } from "../../../lib/api/policies";
 import { getAdminSession } from "../../../lib/session";
+import { formatJurisdiction } from "../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export default async function CsocSettingsPage() {
           <div className="grid gap-2 text-sm">
             <p><span className="font-semibold">Email:</span> {session?.email ?? "—"}</p>
             <p><span className="font-semibold">Role:</span> {session?.role ?? "—"}</p>
-            <p><span className="font-semibold">Jurisdiction:</span> {[session?.country, session?.state, session?.lga].filter(Boolean).join(" / ") || "—"}</p>
+            <p><span className="font-semibold">Jurisdiction:</span> {formatJurisdiction([session?.country, session?.state, session?.lga], "—")}</p>
             <p><span className="font-semibold">Permissions:</span> {session?.permissions?.length ?? 0} granted</p>
           </div>
         </Panel>

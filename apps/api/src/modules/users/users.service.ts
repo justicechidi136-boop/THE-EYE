@@ -20,7 +20,7 @@ import {
 import type { CitizenVehicle, CitizenVehiclePhoto, Prisma } from "@prisma/client";
 import type { JwtPayload } from "../../common/auth/jwt";
 import { adminCanAccessGeography } from "../../common/auth/admin-geography-scope";
-import { hashPassword, verifyPassword } from "../../common/auth/crypto";
+import { hashPassword, hashToken, randomToken, verifyPassword } from "../../common/auth/crypto";
 import { clearCachedAuthUser } from "../../common/auth/auth-user-cache";
 import {
   buildCursorPage,
@@ -44,6 +44,7 @@ import {
   vehiclePhotoObjectKey,
 } from "../../common/storage/s3-presign";
 import { AuditService } from "../audit/audit.service";
+import { AuthDeliveryService } from "../auth/auth-delivery.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { isValidPhoneNumber, normalizePhoneNumber } from "../auth/phone-normalize";
 import type {
@@ -56,6 +57,7 @@ import type {
   UpsertEmergencyContactDto,
   CreateCitizenVehicleDto,
   CreateOperationalAdminDto,
+  AcceptOperationalAdminInvitationDto,
   RequestAccountDeletionDto,
   UpdateUserAccountStatusDto,
 } from "./dto/users.dto";
@@ -88,6 +90,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly authDelivery: AuthDeliveryService,
   ) {}
 
   async getMe(actor: JwtPayload) {
@@ -789,7 +792,7 @@ export class UsersService {
       this.prisma.broadcastSighting.findMany({
         where: { reporterUserId: userId },
         select: {
-          id: true, approximateArea: true, observedAt: true, createdAt: true,
+          id: true, approximateArea: true, metadata: true, observedAt: true, createdAt: true,
           broadcast: { select: { id: true, title: true, type: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -891,7 +894,7 @@ export class UsersService {
         broadcastId: sighting.broadcast.id,
         relatedBroadcast: sighting.broadcast.title,
         type: sighting.broadcast.type,
-        location: sighting.approximateArea ?? null,
+        location: this.bestSightingLocation(sighting.metadata, sighting.approximateArea),
         reportedAt: (sighting.observedAt ?? sighting.createdAt).toISOString(),
         reviewStatus: "Submitted",
       })),
@@ -1117,6 +1120,7 @@ export class UsersService {
   async listDirectory(
     actor: JwtPayload,
     query: CursorPageQuery & {
+      page?: string;
       q?: string;
       searchType?: string;
       searchBy?: string;
@@ -1126,17 +1130,26 @@ export class UsersService {
       country?: string;
       state?: string;
       lga?: string;
+      cityId?: string;
       communityId?: string;
     } = {},
   ) {
     if (actor.typ !== "admin") throw new ForbiddenException("Only admins can list users");
 
-    const limit = resolvePageLimit(query.limit);
+    const limit = [20, 50, 100].includes(Number(query.limit)) ? Number(query.limit) : 20;
+    const pageNumber = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
+    const usesNumberedPagination = Boolean(query.page || !query.cursor);
     if (query.cursor?.trim() && !decodeDateIdCursor(query.cursor)) {
       throw new BadRequestException("cursor is invalid");
     }
-    const cursor = decodeDateIdCursor(query.cursor);
-    const take = limit + 1;
+    const cursor = usesNumberedPagination ? null : decodeDateIdCursor(query.cursor);
+    const take = usesNumberedPagination ? pageNumber * limit : limit + 1;
+    const cityCommunityIds = query.cityId
+      ? (await this.prisma.community.findMany({
+          where: { OR: [{ id: query.cityId }, { parentId: query.cityId }] },
+          select: { id: true },
+        })).map((entry) => entry.id)
+      : [];
     const textFilter = this.buildDirectoryTextFilter(query.q, query.searchType, query.searchBy);
     const adminScope = this.adminScopeWhere(actor) as Record<string, unknown>;
     const citizenScope = this.citizenScopeWhere(actor) as { profile?: { is?: Record<string, unknown> }; [key: string]: unknown };
@@ -1145,13 +1158,18 @@ export class UsersService {
       ...(query.country ? { country: query.country } : {}),
       ...(query.state ? { state: query.state } : {}),
       ...(query.lga ? { lga: query.lga } : {}),
-      ...(query.communityId ? { homeCommunityId: query.communityId } : {}),
+      ...(query.communityId
+        ? { homeCommunityId: query.communityId }
+        : cityCommunityIds.length
+          ? { homeCommunityId: { in: cityCommunityIds } }
+          : {}),
     };
     const adminWhere = {
       ...adminScope,
       ...dateIdCursorWhere(cursor),
-      ...(query.status === "active" ? { isActive: true } : query.status === "deactivated" ? { isActive: false } : {}),
-      ...(query.status === "suspended" || query.communityId ? { id: "__deny_all__" } : {}),
+      ...(query.status === "active" ? { accountStatus: "Active" } : query.status === "deactivated" ? { accountStatus: "Deactivated" } : query.status === "pending" ? { accountStatus: "PendingActivation" } : {}),
+      ...(query.status === "suspended" ? { id: "__deny_all__" } : {}),
+      ...(query.communityId ? { communityId: query.communityId } : cityCommunityIds.length ? { communityId: { in: cityCommunityIds } } : {}),
       ...(query.role ? { role: { name: query.role } } : {}),
       ...(query.country ? { country: query.country } : {}),
       ...(query.state ? { state: query.state } : {}),
@@ -1177,7 +1195,7 @@ export class UsersService {
       ? Promise.resolve([])
       : this.prisma.adminUser.findMany({
           where: adminWhere,
-          include: { role: true, agency: true },
+          include: { role: true, agency: true, community: true },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take,
         });
@@ -1193,13 +1211,16 @@ export class UsersService {
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take,
         });
-    const [admins, citizens, totalAdmins, totalCitizens, activeAdmins, activeCitizens, pendingCitizens, deactivatedAdmins, deactivatedCitizens] = await Promise.all([
+    const [admins, citizens, filteredAdmins, filteredCitizens, totalAdmins, totalCitizens, activeAdmins, activeCitizens, pendingAdmins, pendingCitizens, deactivatedAdmins, deactivatedCitizens] = await Promise.all([
       adminsPromise,
       citizensPromise,
+      query.kind === "citizen" ? Promise.resolve(0) : this.prisma.adminUser.count({ where: adminWhere }),
+      query.kind === "admin" ? Promise.resolve(0) : this.prisma.user.count({ where: citizenWhere }),
       this.prisma.adminUser.count({ where: this.adminScopeWhere(actor) as never }),
       this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), status: { not: "Deleted" } } as never }),
       this.prisma.adminUser.count({ where: { ...this.adminScopeWhere(actor), isActive: true } as never }),
       this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), status: "Active" } as never }),
+      this.prisma.adminUser.count({ where: { ...this.adminScopeWhere(actor), accountStatus: "PendingActivation" } as never }),
       this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), kycRecords: { some: { status: "Pending" } } } as never }),
       this.prisma.adminUser.count({ where: { ...this.adminScopeWhere(actor), isActive: false } as never }),
       this.prisma.user.count({ where: { ...this.citizenScopeWhere(actor), status: "Deactivated" } as never }),
@@ -1213,8 +1234,8 @@ export class UsersService {
         name: admin.displayName,
         email: admin.email,
         role: admin.role.name,
-        status: admin.isActive ? "Active" : "Deactivated",
-        scope: [admin.country, admin.state, admin.lga].filter(Boolean).join(" / ") || "Global",
+        status: String(admin.accountStatus ?? (admin.isActive ? "Active" : "Deactivated")).replace("PendingActivation", "Pending activation"),
+        scope: [admin.country, admin.state, admin.lga, admin.community?.name].filter(Boolean).join(", ") || "Global",
         agency: admin.agency?.name ?? null,
       })),
       ...citizens.map((user) => ({
@@ -1225,7 +1246,7 @@ export class UsersService {
         email: user.email,
         role: user.trustedReporter ? "Trusted Reporter" : "Citizen",
         status: String(user.status),
-        scope: [user.profile?.country, user.profile?.state, user.profile?.lga, user.profile?.homeCommunity?.name].filter(Boolean).join(" / ") || "None / Not assigned",
+        scope: [user.profile?.country, user.profile?.state, user.profile?.lga, user.profile?.homeCommunity?.name].filter(Boolean).join(", ") || "Not assigned",
         agency: null,
       })),
     ].sort((left, right) => {
@@ -1234,15 +1255,25 @@ export class UsersService {
       return right.id.localeCompare(left.id);
     });
 
-    const page = buildCursorPage(merged, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    const selectedRows = usesNumberedPagination
+      ? merged.slice((pageNumber - 1) * limit, pageNumber * limit)
+      : merged;
+    const page = buildCursorPage(selectedRows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
+    const filteredTotal = filteredAdmins + filteredCitizens;
     return {
       ...page,
       data: page.data.map(({ createdAt: _createdAt, kind: _kind, agency, ...entry }) => entry),
       meta: {
         totalUsers: totalAdmins + totalCitizens,
         activeUsers: activeAdmins + activeCitizens,
-        pendingUsers: pendingCitizens,
+        pendingUsers: pendingAdmins + pendingCitizens,
         deactivatedUsers: deactivatedAdmins + deactivatedCitizens,
+      },
+      pagination: {
+        page: pageNumber,
+        limit,
+        total: filteredTotal,
+        pageCount: Math.max(1, Math.ceil(filteredTotal / limit)),
       },
     };
   }
@@ -1259,7 +1290,7 @@ export class UsersService {
       this.prisma.community.findMany({
         where: { ...geographyWhere, status: "Active" as never },
         orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }, { name: "asc" }],
-        select: { id: true, jurisdictionId: true, name: true, level: true, country: true, state: true, lga: true },
+        select: { id: true, parentId: true, jurisdictionId: true, name: true, level: true, country: true, state: true, lga: true },
       }),
     ]);
     return { data: { jurisdictions, communities } };
@@ -1270,15 +1301,30 @@ export class UsersService {
     const accountTypes = this.creatableOperationalAccountTypes(actor);
     const geographyWhere = this.adminJurisdictionWhere(actor);
     const agencyWhere = this.adminAgencyWhere(actor);
-    const [jurisdictions, agencies] = await Promise.all([
+    const [jurisdictions, communities, agencies] = await Promise.all([
       this.prisma.jurisdiction.findMany({
         where: geographyWhere,
         select: { id: true, country: true, state: true, lga: true, name: true },
         orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }],
         take: 500,
       }),
+      this.prisma.community.findMany({
+        where: { ...geographyWhere, status: "Active" as never },
+        select: {
+          id: true,
+          parentId: true,
+          jurisdictionId: true,
+          name: true,
+          level: true,
+          country: true,
+          state: true,
+          lga: true,
+        },
+        orderBy: [{ country: "asc" }, { state: "asc" }, { lga: "asc" }, { name: "asc" }],
+        take: 1000,
+      }),
       this.prisma.agency.findMany({
-        where: { ...agencyWhere, isActive: true, isFieldOperationsEnabled: true },
+        where: { ...agencyWhere, isActive: true },
         select: {
           id: true,
           name: true,
@@ -1286,12 +1332,13 @@ export class UsersService {
           stateCode: true,
           lgaCode: true,
           jurisdictionId: true,
+          isFieldOperationsEnabled: true,
         },
         orderBy: { name: "asc" },
         take: 500,
       }),
     ]);
-    return { data: { accountTypes, jurisdictions, agencies } };
+    return { data: { accountTypes, jurisdictions, communities, agencies } };
   }
 
   async createOperationalAdmin(actor: JwtPayload, dto: CreateOperationalAdminDto) {
@@ -1309,30 +1356,46 @@ export class UsersService {
     let roleName: AdminRoleName;
     let agencyId: string | null = null;
     let jurisdiction: { id: string; country: string; state: string; lga: string };
+    let communityId: string | null = null;
 
-    if (dto.accountType === "field_officer") {
-      if (!dto.agencyId) throw new BadRequestException("agencyId is required for a field officer");
+    if (dto.accountType === "field_officer" || dto.accountType === "agency_admin") {
+      if (!dto.agencyId) throw new BadRequestException("agencyId is required for this account type");
       const agency = await this.prisma.agency.findUnique({
         where: { id: dto.agencyId },
         include: { jurisdiction: true },
       });
-      if (!agency?.isActive || !agency.isFieldOperationsEnabled || !agency.jurisdiction) {
-        throw new BadRequestException("Select an active field-operations agency with a jurisdiction");
+      if (!agency?.isActive || !agency.jurisdiction || (dto.accountType === "field_officer" && !agency.isFieldOperationsEnabled)) {
+        throw new BadRequestException("Select an active eligible agency with a jurisdiction");
       }
       jurisdiction = agency.jurisdiction;
       agencyId = agency.id;
-      roleName = AdminRoleName.PoliceSecurityOfficer;
+      roleName = dto.accountType === "field_officer" ? AdminRoleName.PoliceSecurityOfficer : AdminRoleName.AgencyAdmin;
       if (actor.role === AdminRoleName.AgencyAdmin && actor.agencyId !== agency.id) {
         throw new ForbiddenException("Agency Admin cannot create an officer for another agency");
       }
     } else {
-      if (!dto.jurisdictionId) throw new BadRequestException("jurisdictionId is required for an LGA Admin");
+      if (!dto.jurisdictionId) throw new BadRequestException("jurisdictionId is required for this account type");
       const selected = await this.prisma.jurisdiction.findUnique({ where: { id: dto.jurisdictionId } });
-      if (!selected || !selected.lga || selected.lga === "All") {
+      if (!selected) throw new BadRequestException("Select a valid jurisdiction");
+      if (dto.accountType === "sub_state_admin" && (!selected.lga || selected.lga === "All")) {
         throw new BadRequestException("Select a specific LGA jurisdiction");
       }
+      if (dto.accountType === "state_admin" && (!selected.state || selected.state === "All" || selected.lga !== "All")) {
+        throw new BadRequestException("Select a state-wide jurisdiction");
+      }
       jurisdiction = selected;
-      roleName = AdminRoleName.LgaAdmin;
+      roleName = dto.accountType === "sub_state_admin" ? AdminRoleName.LgaAdmin : AdminRoleName.StateAdmin;
+      if (dto.communityId) {
+        if (dto.accountType !== "sub_state_admin") {
+          throw new BadRequestException("Community scope is only available to a Sub-State Admin");
+        }
+        const community = await this.prisma.community.findFirst({
+          where: { id: dto.communityId, jurisdictionId: selected.id, status: "Active" as never },
+          select: { id: true },
+        });
+        if (!community) throw new BadRequestException("Select a community within the chosen LGA");
+        communityId = community.id;
+      }
     }
 
     if (!adminCanAccessGeography(jurisdiction, actor)) {
@@ -1341,22 +1404,40 @@ export class UsersService {
     const role = await this.prisma.adminRole.findUnique({ where: { name: roleName } });
     if (!role) throw new ServiceUnavailableException(`Required role is not configured: ${roleName}`);
 
+    const phone = dto.phone?.trim() ? normalizePhoneNumber(dto.phone) : null;
+    if (phone && !isValidPhoneNumber(phone)) throw new BadRequestException("Enter a valid phone number");
+    const invitationToken = randomToken(32);
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     let created;
     try {
-      created = await this.prisma.adminUser.create({
-        data: {
-          email,
-          passwordHash: hashPassword(dto.password),
-          displayName,
-          roleId: role.id,
-          agencyId,
-          jurisdictionId: jurisdiction.id,
-          country: jurisdiction.country,
-          state: jurisdiction.state,
-          lga: jurisdiction.lga,
-          isActive: true,
-        },
-        include: { role: true, agency: true },
+      created = await this.prisma.$transaction(async (tx) => {
+        const admin = await tx.adminUser.create({
+          data: {
+            email,
+            passwordHash: hashPassword(randomToken(48)),
+            displayName,
+            phone,
+            roleId: role.id,
+            agencyId,
+            jurisdictionId: jurisdiction.id,
+            communityId,
+            country: jurisdiction.country,
+            state: jurisdiction.state,
+            lga: jurisdiction.lga,
+            isActive: false,
+            accountStatus: "PendingActivation",
+          },
+          include: { role: true, agency: true, community: true },
+        });
+        await tx.adminAccountInvitation.create({
+          data: {
+            adminUserId: admin.id,
+            createdByAdminId: actor.sub,
+            tokenHash: hashToken(invitationToken),
+            expiresAt,
+          },
+        });
+        return admin;
       });
     } catch (error: unknown) {
       if ((error as { code?: string }).code === "P2002") {
@@ -1370,8 +1451,50 @@ export class UsersService {
       action: "admin.account.created",
       entityType: "admin_user",
       entityId: created.id,
-      metadata: { accountType: dto.accountType, role: roleName, jurisdictionId: jurisdiction.id, agencyId },
+      metadata: { accountType: dto.accountType, role: roleName, jurisdictionId: jurisdiction.id, communityId, agencyId },
     });
+    await this.audit.record({
+      actor,
+      action: "admin.account.invitation_created",
+      entityType: "admin_user",
+      entityId: created.id,
+      metadata: { expiresAt: expiresAt.toISOString() },
+    });
+
+    try {
+      await this.authDelivery.sendAdminInvitationEmail(email, invitationToken, expiresAt, {
+        displayName: created.displayName,
+        role: roleName,
+        organisation: created.agency?.name ?? `${jurisdiction.state} administration`,
+        scope: [jurisdiction.country, jurisdiction.state, jurisdiction.lga === "All" ? null : jurisdiction.lga]
+          .filter(Boolean)
+          .join(", "),
+      });
+      await this.prisma.adminAccountInvitation.update({
+        where: { tokenHash: hashToken(invitationToken) },
+        data: { status: "Sent", sentAt: new Date() },
+      });
+      await this.audit.record({
+        actor,
+        action: "admin.account.invitation_sent",
+        entityType: "admin_user",
+        entityId: created.id,
+        metadata: { expiresAt: expiresAt.toISOString() },
+      });
+    } catch (error) {
+      await this.prisma.adminAccountInvitation.update({
+        where: { tokenHash: hashToken(invitationToken) },
+        data: { status: "Failed", failedAt: new Date() },
+      });
+      await this.audit.record({
+        actor,
+        action: "admin.account.invitation_failed",
+        entityType: "admin_user",
+        entityId: created.id,
+        metadata: { reason: "delivery_failed" },
+      });
+      throw error;
+    }
 
     return {
       data: {
@@ -1382,10 +1505,73 @@ export class UsersService {
         agencyId: created.agencyId,
         agencyName: created.agency?.name ?? null,
         jurisdictionId: created.jurisdictionId,
-        scope: [created.country, created.state, created.lga].filter(Boolean).join(" / "),
+        scope: [created.country, created.state, created.lga, created.community?.name].filter(Boolean).join(", "),
         isActive: created.isActive,
+        status: "PendingActivation",
+        invitation: "Sent",
       },
     };
+  }
+
+  async acceptOperationalAdminInvitation(dto: AcceptOperationalAdminInvitationDto) {
+    const tokenHash = hashToken(dto.token);
+    const invitation = await this.prisma.adminAccountInvitation.findUnique({
+      where: { tokenHash },
+      include: { adminUser: true },
+    });
+    if (!invitation || invitation.status !== "Sent" || invitation.acceptedAt) {
+      throw new BadRequestException("This activation link is invalid or has already been used");
+    }
+    if (
+      !invitation.adminUser ||
+      invitation.adminUser.accountStatus !== "PendingActivation" ||
+      invitation.adminUser.isActive
+    ) {
+      throw new BadRequestException("This account is no longer eligible for activation");
+    }
+    if (invitation.expiresAt.getTime() <= Date.now()) {
+      await this.prisma.adminAccountInvitation.update({ where: { id: invitation.id }, data: { status: "Expired" } });
+      throw new BadRequestException("This activation link has expired");
+    }
+
+    const activatedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.adminUser.update({
+        where: { id: invitation.adminUserId },
+        data: {
+          passwordHash: hashPassword(dto.password),
+          isActive: true,
+          accountStatus: "Active",
+          activatedAt,
+        },
+      }),
+      this.prisma.adminAccountInvitation.update({
+        where: { id: invitation.id },
+        data: { status: "Accepted", acceptedAt: activatedAt },
+      }),
+    ]);
+    const activationAudit = {
+      actorType: "system" as const,
+      entityType: "admin_user",
+      entityId: invitation.adminUserId,
+      metadata: { invitationId: invitation.id },
+    };
+    await this.audit.record({
+      ...activationAudit,
+      action: "admin.account.invitation_accepted",
+    });
+    await this.audit.record({
+      ...activationAudit,
+      action: "admin.account.password_established",
+      metadata: { invitationId: invitation.id, method: "invitation" },
+    });
+    await this.audit.record({
+      ...activationAudit,
+      action: "admin.account.activation_completed",
+      beforeState: { status: "PendingActivation" },
+      afterState: { status: "Active" },
+    });
+    return { data: { status: "Active", message: "Your operational account is active. You can now sign in." } };
   }
 
   private async buildCitizenProfileResponse(userId: string) {
@@ -1473,7 +1659,7 @@ export class UsersService {
     this.assertAdminWithUserManage(actor);
     const admin = await this.prisma.adminUser.findFirst({
       where: { id: adminId, ...this.adminScopeWhere(actor) },
-      include: { role: true, agency: true },
+      include: { role: true, agency: true, community: true },
     });
     if (!admin) throw new NotFoundException("Admin account not found");
 
@@ -1493,8 +1679,8 @@ export class UsersService {
       displayName: admin.displayName,
       email: admin.email,
       role: admin.role.name,
-      status: admin.isActive ? "Active" : "Deactivated",
-      scope: [admin.country, admin.state, admin.lga].filter(Boolean).join(" / ") || "Global",
+      status: String(admin.accountStatus ?? (admin.isActive ? "Active" : "Deactivated")).replace("PendingActivation", "Pending activation"),
+      scope: [admin.country, admin.state, admin.lga, admin.community?.name].filter(Boolean).join(", ") || "Global",
       agency: admin.agency?.name ?? null,
       createdAt: admin.createdAt.toISOString(),
       updatedAt: admin.updatedAt.toISOString(),
@@ -1518,13 +1704,16 @@ export class UsersService {
     if (dto.status === "Suspended") throw new BadRequestException("Operational accounts support Active or Deactivated status");
     const admin = await this.prisma.adminUser.findFirst({ where: { id: adminId, ...this.adminScopeWhere(actor) } });
     if (!admin) throw new NotFoundException("Admin account not found");
-    const currentStatus = admin.isActive ? "Active" : "Deactivated";
+    const currentStatus = String(admin.accountStatus ?? (admin.isActive ? "Active" : "Deactivated"));
+    if (currentStatus === "PendingActivation") {
+      throw new BadRequestException("Pending accounts must be activated through their secure invitation");
+    }
     if (currentStatus === dto.status) throw new ConflictException(`Account is already ${dto.status.toLowerCase()}`);
     const reason = dto.reason.trim();
     if (reason.length < 3) throw new BadRequestException("A reason is required");
 
     await this.prisma.$transaction([
-      this.prisma.adminUser.update({ where: { id: adminId }, data: { isActive: dto.status === "Active" } }),
+      this.prisma.adminUser.update({ where: { id: adminId }, data: { isActive: dto.status === "Active", accountStatus: dto.status } }),
       ...(dto.status === "Active" ? [] : [
         this.prisma.refreshToken.updateMany({ where: { adminUserId: adminId, revokedAt: null }, data: { revokedAt: new Date() } }),
       ]),
@@ -1547,6 +1736,37 @@ export class UsersService {
     return typeof candidate === "string" || typeof candidate === "number" || typeof candidate === "boolean"
       ? String(candidate)
       : null;
+  }
+
+  private bestSightingLocation(metadata: Prisma.JsonValue | null, approximateArea: string | null) {
+    const value = metadata && !Array.isArray(metadata) && typeof metadata === "object"
+      ? metadata as Record<string, unknown>
+      : {};
+    const values = [
+      value.street,
+      value.road,
+      value.landmark,
+      value.neighborhood,
+      value.community,
+      value.area,
+      value.town,
+      value.city,
+      value.lga,
+      value.state,
+      approximateArea,
+    ].filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    const parts: string[] = [];
+    const seen = new Set<string>();
+    for (const valuePart of values) {
+      for (const segment of valuePart.split(",")) {
+        const trimmed = segment.trim();
+        const key = trimmed.toLocaleLowerCase().replace(/\s+state$/, "");
+        if (!trimmed || seen.has(key)) continue;
+        seen.add(key);
+        parts.push(trimmed);
+      }
+    }
+    return parts.join(", ") || null;
   }
 
   private async resolveProfileAvatarUrl(value?: string | null) {
@@ -1680,9 +1900,15 @@ export class UsersService {
     }
   }
 
-  private creatableOperationalAccountTypes(actor: JwtPayload): Array<"field_officer" | "lga_admin"> {
-    if ([AdminRoleName.SuperAdmin, AdminRoleName.CountryAdmin, AdminRoleName.StateAdmin].includes(actor.role as AdminRoleName)) {
-      return ["field_officer", "lga_admin"];
+  private creatableOperationalAccountTypes(actor: JwtPayload): CreateOperationalAdminDto["accountType"][] {
+    if (actor.role === AdminRoleName.SuperAdmin) {
+      return ["field_officer", "sub_state_admin", "state_admin", "agency_admin"];
+    }
+    if (actor.role === AdminRoleName.CountryAdmin) {
+      return ["field_officer", "sub_state_admin", "state_admin", "agency_admin"];
+    }
+    if (actor.role === AdminRoleName.StateAdmin) {
+      return ["field_officer", "sub_state_admin", "agency_admin"];
     }
     if ([AdminRoleName.LgaAdmin, AdminRoleName.AgencyAdmin].includes(actor.role as AdminRoleName)) {
       return ["field_officer"];

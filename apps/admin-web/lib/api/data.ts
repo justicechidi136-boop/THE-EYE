@@ -248,6 +248,7 @@ export type BroadcastTargetOptions = {
   jurisdictions: Array<{ id: string; country: string; state: string; lga: string; name: string }>;
   communities: Array<{
     id: string;
+    parentId?: string | null;
     jurisdictionId: string | null;
     name: string;
     level: string;
@@ -422,15 +423,18 @@ export type UserDirectoryMetrics = {
   deactivatedUsers: number;
 };
 
-export type UserDirectoryPage = PaginatedResponse<UserDirectoryEntry> & { meta: UserDirectoryMetrics };
+export type UserDirectoryPage = PaginatedResponse<UserDirectoryEntry> & {
+  meta: UserDirectoryMetrics;
+  pagination: { page: number; limit: number; total: number; pageCount: number };
+};
 
 export async function fetchUsersDirectoryPage(
   query: Record<string, string | undefined> = {},
 ): Promise<UserDirectoryPage> {
   return withToken(async (token) => {
-    const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta: UserDirectoryMetrics }>("/users/directory", {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta: UserDirectoryMetrics; pagination: UserDirectoryPage["pagination"] }>("/users/directory", {
       token,
-      query: { ...query, limit: query.limit ?? "10" },
+      query: { ...query, limit: query.limit ?? "20" },
     });
     return {
       ...response,
@@ -440,7 +444,8 @@ export async function fetchUsersDirectoryPage(
     data: [],
     nextCursor: null,
     hasMore: false,
-    limit: 10,
+    limit: 20,
+    pagination: { page: 1, limit: 20, total: 0, pageCount: 1 },
     meta: { totalUsers: 0, activeUsers: 0, pendingUsers: 0, deactivatedUsers: 0 },
   });
 }

@@ -4,6 +4,7 @@ import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
 import { fetchFieldDevices } from "../../../lib/api/data";
 import { canManageFieldDevices } from "../../../lib/field-device-permissions";
 import { getAdminSession } from "../../../lib/session";
+import { formatJurisdiction } from "../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ export default async function FieldDevicesPage({
                   </td>
                   <td className="px-4 py-3">{device.assignedUserId ?? "Unassigned"}</td>
                   <td className="px-4 py-3">
-                    {[device.countryCode, device.stateCode, device.lgaCode].filter(Boolean).join(" / ") || "-"}
+                    {formatJurisdiction([device.countryCode, device.stateCode, device.lgaCode], "-")}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge tone={statusTone(device.registrationStatus)}>{device.registrationStatus}</StatusBadge>

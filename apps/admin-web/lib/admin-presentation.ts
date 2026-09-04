@@ -27,6 +27,18 @@ export function humanLocation(parts: unknown[]): string {
   return selected.join(", ") || "Location unavailable";
 }
 
+export function formatJurisdiction(parts: unknown[], fallback = "Not assigned"): string {
+  const values = parts
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0 && part.trim() !== "All")
+    .map((part) => part.trim());
+  return [...new Set(values)].join(", ") || fallback;
+}
+
+export function humanPriorityLabel(priority: unknown): "High" | "Mid" | "Low" {
+  const label = humanPriority(String(priority)).toLowerCase();
+  return (label.charAt(0).toUpperCase() + label.slice(1)) as "High" | "Mid" | "Low";
+}
+
 function radians(value: number) {
   return value * Math.PI / 180;
 }

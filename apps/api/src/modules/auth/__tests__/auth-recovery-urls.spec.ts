@@ -52,6 +52,18 @@ describe("AUTH-001/AUTH-006 auth recovery URL contract", () => {
     expect(url.pathname).not.toBe("/dashboard");
   });
 
+  it("builds a one-time operational account activation URL on the approved Admin origin", () => {
+    const link = buildAuthActionLink(
+      "https://staging-dashboard8jps.theeye.com.ng/activate-account",
+      "invitation-token",
+      "admin_invitation",
+      stagingEnv,
+    );
+    const url = new URL(link);
+    expect(url.pathname).toBe("/activate-account");
+    expect(url.searchParams.get("token")).toBe("invitation-token");
+  });
+
   it("rejects localhost and insecure schemes", () => {
     expectAuthUrlError(
       () =>
@@ -116,6 +128,7 @@ describe("AUTH-001/AUTH-006 auth recovery URL contract", () => {
         THE_EYE_APP_ENV: "staging",
         PASSWORD_RESET_LINK_BASE_URL: "https://staging-dashboard8jps.theeye.com.ng/reset-password",
         ACCOUNT_RECOVERY_LINK_BASE_URL: "https://staging-dashboard8jps.theeye.com.ng/account-recovery",
+        ADMIN_INVITATION_LINK_BASE_URL: "https://staging-dashboard8jps.theeye.com.ng/activate-account",
       }),
     ).not.toThrow();
   });

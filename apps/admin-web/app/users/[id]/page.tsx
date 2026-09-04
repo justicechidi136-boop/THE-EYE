@@ -4,6 +4,7 @@ import { AppShell } from "../../../components/app-shell";
 import { UserAccountActions } from "../../../components/users/user-account-actions";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
 import { fetchDirectoryDetail } from "../../../lib/api/data";
+import { humanPriorityLabel } from "../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -137,11 +138,11 @@ export default async function UserDetailPage({ params }: PageProps) {
 
         <Panel title="Jurisdiction and scope">
           {kind === "admin" ? (
-            <DetailList items={[["Jurisdiction / scope", detail.scope, "None / Not assigned"], ["Agency", detail.agency, "None / Not assigned"]]} />
+            <DetailList items={[["Jurisdiction and scope", detail.scope, "Not assigned"], ["Agency", detail.agency, "Not assigned"]]} />
           ) : (
             <DetailList items={[
-              ["Country", profile?.country, "None / Not assigned"], ["State", profile?.state, "None / Not assigned"],
-              ["LGA / City", profile?.lga, "None / Not assigned"], ["Community", community?.name, "None / Not assigned"],
+              ["Country", profile?.country, "Not assigned"], ["State", profile?.state, "Not assigned"],
+              ["LGA / Area Council", profile?.lga, "Not assigned"], ["Community / Neighborhood", community?.name, "Not assigned"],
               ["Address", profile?.address], ["Preferred language", profile?.effectivePreferredLocale ?? profile?.preferredLocale, "Not available"],
             ]} />
           )}
@@ -183,7 +184,7 @@ export default async function UserDetailPage({ params }: PageProps) {
           <Panel title="Reports">
             <div id="reports" className="overflow-x-auto">{reports.length ? (
               <table className="w-full min-w-[820px] text-left text-sm"><thead className="text-xs uppercase text-muted"><tr><th className="py-2 pr-4">Report</th><th className="pr-4">Type</th><th className="pr-4">Priority</th><th className="pr-4">Status</th><th className="pr-4">Location</th><th className="pr-4">Captured</th><th>Action</th></tr></thead>
-                <tbody className="divide-y divide-line">{reports.map((report) => <tr key={text(report.id)}><td className="py-3 pr-4 font-medium text-ink">{text(report.reference)}</td><td className="pr-4">{text(report.type)}</td><td className="pr-4">{text(report.priority)}</td><td className="pr-4"><StatusBadge tone={toneForStatus(text(report.status))}>{text(report.status)}</StatusBadge></td><td className="max-w-56 truncate pr-4">{text(report.location, "Not available")}</td><td className="whitespace-nowrap pr-4">{date(report.capturedAt)}</td><td><Link href={`/incidents/${encodeURIComponent(text(report.id))}`} className="font-semibold text-accent underline">Open</Link></td></tr>)}</tbody>
+<tbody className="divide-y divide-line">{reports.map((report) => <tr key={text(report.id)}><td className="py-3 pr-4 font-medium text-ink">{text(report.reference)}</td><td className="pr-4">{text(report.type)}</td><td className="pr-4">{humanPriorityLabel(report.priority)}</td><td className="pr-4"><StatusBadge tone={toneForStatus(text(report.status))}>{text(report.status)}</StatusBadge></td><td className="max-w-56 truncate pr-4">{text(report.location, "Not available")}</td><td className="whitespace-nowrap pr-4">{date(report.capturedAt)}</td><td><Link href={`/incidents/${encodeURIComponent(text(report.id))}`} className="font-semibold text-accent underline">Open</Link></td></tr>)}</tbody>
               </table>
             ) : <Empty>No reports submitted.</Empty>}</div>
           </Panel>

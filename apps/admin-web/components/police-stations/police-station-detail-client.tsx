@@ -8,6 +8,7 @@ import { PoliceStationForm } from "./police-station-form";
 import { PoliceStationVerificationPanel } from "./police-station-verification-panel";
 import { InlineAlert } from "../form-primitives";
 import { PageHeader, Panel, StatusBadge } from "../ui";
+import { formatJurisdiction } from "../../lib/admin-presentation";
 
 export function PoliceStationDetailClient({ station }: { station: PoliceStationView }) {
   const router = useRouter();
@@ -77,7 +78,7 @@ export function PoliceStationDetailClient({ station }: { station: PoliceStationV
         <Panel title="Station record">
           <dl className="grid gap-3 md:grid-cols-2 text-sm">
             <div><dt className="text-muted">Address</dt><dd className="font-medium">{station.address}</dd></div>
-            <div><dt className="text-muted">Jurisdiction</dt><dd className="font-medium">{station.country} / {station.state} / {station.lga}</dd></div>
+            <div><dt className="text-muted">Jurisdiction</dt><dd className="font-medium">{formatJurisdiction([station.country, station.state, station.lga])}</dd></div>
             <div><dt className="text-muted">Coordinates</dt><dd className="font-medium">{station.latitude}, {station.longitude}</dd></div>
             <div><dt className="text-muted">Phones</dt><dd className="font-medium">{station.officialPhone} · {station.emergencyPhone}</dd></div>
             <div><dt className="text-muted">Source</dt><dd className="font-medium">{station.source}</dd></div>

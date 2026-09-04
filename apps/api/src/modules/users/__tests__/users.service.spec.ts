@@ -24,6 +24,11 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       create: jest.fn(),
       update: jest.fn(),
     },
+    adminAccountInvitation: {
+      findUnique: jest.fn(),
+      create: jest.fn().mockResolvedValue({ id: "invite-1" }),
+      update: jest.fn().mockResolvedValue({ id: "invite-1" }),
+    },
     adminRole: {
       findUnique: jest.fn(),
     },
@@ -36,6 +41,7 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
       findMany: jest.fn().mockResolvedValue([]),
     },
     community: {
+      findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
     },
     incident: { findMany: jest.fn().mockResolvedValue([]) },
@@ -113,11 +119,13 @@ function createUsersService(overrides: Record<string, unknown> = {}) {
   };
 
   const audit = { record: jest.fn().mockResolvedValue(undefined) };
+  const authDelivery = { sendAdminInvitationEmail: jest.fn().mockResolvedValue(undefined) };
 
   return {
-    service: new UsersService(prisma as never, audit as never),
+    service: new UsersService(prisma as never, audit as never, authDelivery as never),
     prisma,
     audit,
+    authDelivery,
   };
 }
 
@@ -226,8 +234,8 @@ describe("UsersService operational account provisioning", () => {
     lga: "Ikeja",
   } as never;
 
-  it("creates a scoped field officer with a hashed password and audit record", async () => {
-    const { service, prisma, audit } = createUsersService();
+  it("creates a pending field officer and sends a secure invitation", async () => {
+    const { service, prisma, audit, authDelivery } = createUsersService();
     const jurisdiction = { id: "jur-1", country: "NG", state: "LA", lga: "Ikeja" };
     prisma.agency.findUnique.mockResolvedValue({
       id: "agency-1",
@@ -242,24 +250,38 @@ describe("UsersService operational account provisioning", () => {
       ...data,
       role: { name: "Police/Security Officer" },
       agency: { name: "Lagos Field Command" },
+      community: null,
     }));
 
     const result = await service.createOperationalAdmin(stateAdmin, {
       accountType: "field_officer",
       displayName: "Officer Ada Okeke",
       email: "Ada.Okeke@Agency.gov.ng",
-      password: "StrongPassword-123",
       agencyId: "agency-1",
     });
 
     const createCall = prisma.adminUser.create.mock.calls[0][0];
     expect(createCall.data.email).toBe("ada.okeke@agency.gov.ng");
-    expect(createCall.data.passwordHash === "StrongPassword-123").toBe(false);
+    expect(createCall.data.isActive).toBe(false);
+    expect(createCall.data.accountStatus).toBe("PendingActivation");
     expect(result.data.role).toBe("Police/Security Officer");
     expect(Object.prototype.hasOwnProperty.call(result.data, "password")).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(result.data, "passwordHash")).toBe(false);
-    expect(JSON.stringify(audit.record.mock.calls[0][0]).includes("StrongPassword-123")).toBe(false);
+    expect(authDelivery.sendAdminInvitationEmail).toHaveBeenCalledWith(
+      "ada.okeke@agency.gov.ng",
+      expect.any(String),
+      expect.any(Date),
+      {
+        displayName: "Officer Ada Okeke",
+        role: "Police/Security Officer",
+        organisation: "Lagos Field Command",
+        scope: "NG, LA, Ikeja",
+      },
+    );
+    expect(JSON.stringify(audit.record.mock.calls).includes("tokenHash")).toBe(false);
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.account.created" }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.account.invitation_created" }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.account.invitation_sent" }));
   });
 
   it("creates a Sub-State account using the existing LGA Admin role", async () => {
@@ -274,15 +296,15 @@ describe("UsersService operational account provisioning", () => {
     }));
 
     const result = await service.createOperationalAdmin(stateAdmin, {
-      accountType: "lga_admin",
+      accountType: "sub_state_admin",
       displayName: "Eti-Osa Administrator",
       email: "admin@eti-osa.gov.ng",
-      password: "StrongPassword-456",
       jurisdictionId: "jur-2",
     });
 
     expect(result.data.role).toBe("LGA Admin");
-    expect(result.data.scope).toBe("NG / LA / Eti-Osa");
+    expect(result.data.scope).toBe("NG, LA, Eti-Osa");
+    expect(result.data.status).toBe("PendingActivation");
   });
 
   it("rejects account creation outside the actor's state", async () => {
@@ -290,10 +312,9 @@ describe("UsersService operational account provisioning", () => {
     prisma.jurisdiction.findUnique.mockResolvedValue({ id: "jur-3", country: "NG", state: "FC", lga: "Abuja" });
 
     await expect(service.createOperationalAdmin(stateAdmin, {
-      accountType: "lga_admin",
+      accountType: "sub_state_admin",
       displayName: "Out of scope",
       email: "admin@outside.gov.ng",
-      password: "StrongPassword-789",
       jurisdictionId: "jur-3",
     })).rejects.toThrow("outside your admin scope");
     expect(prisma.adminUser.create).not.toHaveBeenCalled();
@@ -310,12 +331,163 @@ describe("UsersService operational account provisioning", () => {
       state: "LA",
       lga: "Ikeja",
     } as never, {
-      accountType: "lga_admin",
+      accountType: "sub_state_admin",
       displayName: "Peer Admin",
       email: "peer@ikeja.gov.ng",
-      password: "StrongPassword-000",
       jurisdictionId: "jur-1",
     })).rejects.toThrow("cannot create this account type");
+  });
+
+  it("activates a pending account once and records a system audit event", async () => {
+    const { service, prisma, audit } = createUsersService();
+    prisma.adminAccountInvitation.findUnique.mockResolvedValue({
+      id: "invite-1",
+      adminUserId: "admin-pending",
+      tokenHash: "stored-hash",
+      status: "Sent",
+      acceptedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      adminUser: { id: "admin-pending", accountStatus: "PendingActivation", isActive: false },
+    });
+
+    const result = await service.acceptOperationalAdminInvitation({
+      token: "secure-operational-invitation-token",
+      password: "A-strong-new-password-123",
+    });
+
+    expect(result.data.status).toBe("Active");
+    expect(prisma.adminUser.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "admin-pending" },
+      data: expect.objectContaining({ isActive: true, accountStatus: "Active" }),
+    }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ actorType: "system", action: "admin.account.invitation_accepted" }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ actorType: "system", action: "admin.account.password_established" }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ actorType: "system", action: "admin.account.activation_completed" }));
+    expect(JSON.stringify(audit.record.mock.calls)).not.toContain("A-strong-new-password-123");
+  });
+
+  it("rejects activation when the invited account is no longer pending", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.adminAccountInvitation.findUnique.mockResolvedValue({
+      id: "invite-1",
+      adminUserId: "admin-deactivated",
+      status: "Sent",
+      acceptedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      adminUser: { id: "admin-deactivated", accountStatus: "Deactivated", isActive: false },
+    });
+
+    await expect(service.acceptOperationalAdminInvitation({
+      token: "secure-operational-invitation-token",
+      password: "A-strong-new-password-123",
+    })).rejects.toThrow("no longer eligible for activation");
+    expect(prisma.adminUser.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired invitation without activating the account", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.adminAccountInvitation.findUnique.mockResolvedValue({
+      id: "invite-expired",
+      adminUserId: "admin-pending",
+      status: "Sent",
+      acceptedAt: null,
+      expiresAt: new Date(Date.now() - 60_000),
+      adminUser: { id: "admin-pending", accountStatus: "PendingActivation", isActive: false },
+    });
+
+    await expect(service.acceptOperationalAdminInvitation({
+      token: "secure-expired-invitation-token",
+      password: "A-strong-new-password-123",
+    })).rejects.toThrow("activation link has expired");
+    expect(prisma.adminAccountInvitation.update).toHaveBeenCalledWith({
+      where: { id: "invite-expired" },
+      data: { status: "Expired" },
+    });
+    expect(prisma.adminUser.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a previously accepted invitation", async () => {
+    const { service, prisma } = createUsersService();
+    prisma.adminAccountInvitation.findUnique.mockResolvedValue({
+      id: "invite-used",
+      adminUserId: "admin-active",
+      status: "Accepted",
+      acceptedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+      adminUser: { id: "admin-active", accountStatus: "Active", isActive: true },
+    });
+
+    await expect(service.acceptOperationalAdminInvitation({
+      token: "secure-accepted-invitation-token",
+      password: "A-strong-new-password-123",
+    })).rejects.toThrow("invalid or has already been used");
+    expect(prisma.adminUser.update).not.toHaveBeenCalled();
+  });
+
+  it("records a safe failure when invitation delivery fails", async () => {
+    const { service, prisma, audit, authDelivery } = createUsersService();
+    const jurisdiction = { id: "jur-1", country: "NG", state: "LA", lga: "Ikeja" };
+    prisma.agency.findUnique.mockResolvedValue({
+      id: "agency-1", name: "Lagos Field Command", isActive: true, isFieldOperationsEnabled: true, jurisdiction,
+    });
+    prisma.adminRole.findUnique.mockResolvedValue({ id: "role-officer", name: "Police/Security Officer" });
+    prisma.adminUser.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "officer-1", ...data, role: { name: "Police/Security Officer" }, agency: { name: "Lagos Field Command" }, community: null,
+    }));
+    authDelivery.sendAdminInvitationEmail.mockRejectedValueOnce(new Error("provider unavailable"));
+
+    await expect(service.createOperationalAdmin(stateAdmin, {
+      accountType: "field_officer",
+      displayName: "Officer Ada Okeke",
+      email: "ada.okeke@agency.gov.ng",
+      agencyId: "agency-1",
+    })).rejects.toThrow("provider unavailable");
+    expect(prisma.adminAccountInvitation.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "Failed" }) }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.account.invitation_failed",
+      metadata: { reason: "delivery_failed" },
+    }));
+    expect(JSON.stringify(audit.record.mock.calls)).not.toContain("provider unavailable");
+  });
+
+  it("creates State Admin and Agency Admin roles from authoritative scope", async () => {
+    const superAdmin = {
+      sub: "super-admin",
+      typ: "admin",
+      role: "Super Admin",
+      permissions: ["user:manage"],
+    } as never;
+
+    const stateFixture = createUsersService();
+    stateFixture.prisma.jurisdiction.findUnique.mockResolvedValue({ id: "state-jur", country: "NG", state: "LA", lga: "All" });
+    stateFixture.prisma.adminRole.findUnique.mockResolvedValue({ id: "state-role", name: "State Admin" });
+    stateFixture.prisma.adminUser.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "state-new", ...data, role: { name: "State Admin" }, agency: null, community: null,
+    }));
+    const stateResult = await stateFixture.service.createOperationalAdmin(superAdmin, {
+      accountType: "state_admin",
+      displayName: "Lagos State Administrator",
+      email: "state-admin@example.test",
+      jurisdictionId: "state-jur",
+    });
+    expect(stateResult.data.role).toBe("State Admin");
+
+    const agencyFixture = createUsersService();
+    agencyFixture.prisma.agency.findUnique.mockResolvedValue({
+      id: "agency-2", name: "State Fire Service", isActive: true, isFieldOperationsEnabled: false,
+      jurisdiction: { id: "agency-jur", country: "NG", state: "LA", lga: "Ikeja" },
+    });
+    agencyFixture.prisma.adminRole.findUnique.mockResolvedValue({ id: "agency-role", name: "Agency Admin" });
+    agencyFixture.prisma.adminUser.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "agency-new", ...data, role: { name: "Agency Admin" }, agency: { name: "State Fire Service" }, community: null,
+    }));
+    const agencyResult = await agencyFixture.service.createOperationalAdmin(superAdmin, {
+      accountType: "agency_admin",
+      displayName: "Agency Administrator",
+      email: "agency-admin@example.test",
+      agencyId: "agency-2",
+    });
+    expect(agencyResult.data.role).toBe("Agency Admin");
   });
 
   it("returns a scoped operational account without credential material", async () => {
@@ -401,7 +573,7 @@ describe("UsersService directory account-kind filtering", () => {
     });
 
     expect(prisma.adminUser.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: "__deny_all__", country: "Nigeria", state: "Lagos", lga: "Ikeja", isActive: true }),
+      where: expect.objectContaining({ communityId: "community-1", country: "Nigeria", state: "Lagos", lga: "Ikeja", accountStatus: "Active" }),
     }));
     expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
@@ -411,7 +583,7 @@ describe("UsersService directory account-kind filtering", () => {
     }));
     expect(result.meta.totalUsers).toBe(5);
     expect(result.meta.activeUsers).toBe(5);
-    expect(result.meta.pendingUsers).toBe(3);
+    expect(result.meta.pendingUsers).toBe(5);
     expect(result.meta.deactivatedUsers).toBe(5);
   });
 
@@ -508,7 +680,14 @@ describe("UsersService operational user details", () => {
       submittedAt: new Date("2026-08-20T10:00:00.000Z"),
     }]);
     prisma.broadcast.findMany.mockResolvedValue([]);
-    prisma.broadcastSighting.findMany.mockResolvedValue([]);
+    prisma.broadcastSighting.findMany.mockResolvedValue([{
+      id: "sighting-1",
+      approximateArea: "Ikeja, Lagos",
+      metadata: { street: "Allen Avenue", neighborhood: "Opebi", city: "Ikeja", state: "Lagos" },
+      observedAt: new Date("2026-08-21T10:00:00.000Z"),
+      createdAt: new Date("2026-08-21T10:01:00.000Z"),
+      broadcast: { id: "broadcast-1", title: "Missing person", type: "MissingPerson" },
+    }]);
     prisma.communityPost.findMany.mockResolvedValue([]);
     prisma.incidentVerification.findMany.mockResolvedValue([]);
     prisma.auditLog.findMany.mockResolvedValue([{
@@ -524,6 +703,7 @@ describe("UsersService operational user details", () => {
     expect(result.reports[0].assignedAgency).toBe("Ikeja Command");
     expect(result.auditHistory[0].actor).toBe("System");
     expect(result.lastActiveAt).toBe("2026-08-29T12:00:00.000Z");
+    expect(result.sightings[0].location).toBe("Allen Avenue, Opebi, Ikeja, Lagos");
     expect(JSON.stringify(result).includes("objectKey")).toBe(false);
   });
 

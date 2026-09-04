@@ -5,6 +5,7 @@ import { PageHeader, Panel, StatusBadge } from "../../components/ui";
 import { listAgencies } from "../../lib/api/agencies";
 import { canManageAgencies } from "../../lib/agency-permissions";
 import { getAdminSession } from "../../lib/session";
+import { formatJurisdiction } from "../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -146,7 +147,7 @@ export default async function AgenciesPage({
                   </td>
                   <td className="px-4 py-3">{formatAgencyType(agency.agencyType)}</td>
                   <td className="px-4 py-3">
-                    {[agency.countryCode, agency.stateCode, agency.lgaCode].filter(Boolean).join(" / ") || "-"}
+                    {formatJurisdiction([agency.countryCode, agency.stateCode, agency.lgaCode], "-")}
                     <p className="text-xs text-muted">{agency.jurisdictionLevel}</p>
                   </td>
                   <td className="px-4 py-3">{agency.capabilities.length}</td>

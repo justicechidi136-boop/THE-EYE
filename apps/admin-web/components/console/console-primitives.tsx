@@ -87,7 +87,7 @@ export function ConsolePagination({
     return (
       <div className="mt-4 grid gap-3 border-t border-line pt-4 lg:grid-cols-[auto_1fr_auto] lg:items-center">
         <p className="text-sm text-muted">Showing {start}–{end} of {totalItems}</p>
-        <nav className="flex flex-wrap items-center justify-center gap-1" aria-label="Report pages">
+        <nav className="flex flex-wrap items-center justify-center gap-1" aria-label="Pages">
           {previousHref ? <a href={previousHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Previous</a> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Previous</span>}
           {pageLinks.map((item, index) => item.href ? <a key={`${item.label}-${index}`} href={item.href} aria-current={item.current ? "page" : undefined} className={`grid min-h-10 min-w-10 place-items-center rounded-md border px-2 text-sm font-semibold ${item.current ? "border-eye bg-eye text-white" : "border-line text-ink hover:border-eye"}`}>{item.label}</a> : <span key={`${item.label}-${index}`} className="grid min-h-10 min-w-8 place-items-center text-muted">{item.label}</span>)}
           {nextHref ? <a href={nextHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Next</a> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Next</span>}

@@ -30,6 +30,7 @@ import type {
   ResidentView,
   WitnessConfirmationView,
 } from "../types/admin-views";
+import { formatJurisdiction } from "../admin-presentation";
 import { normalizeBroadcastAttachments } from "../admin-media";
 import { humanLocation, sanitizeLocationTrail } from "../admin-presentation";
 
@@ -538,7 +539,7 @@ export function toCommunityView(record: Record<string, unknown>): CommunityView 
     country: record.country ? String(record.country) : undefined,
     state: record.state ? String(record.state) : undefined,
     lga: record.lga ? String(record.lga) : undefined,
-    hierarchy: [record.country, record.state, record.lga, record.ward].filter(Boolean).join(" / "),
+    hierarchy: formatJurisdiction([record.country, record.state, record.lga, record.ward]),
     members: memberships.filter((item) => (item as Record<string, unknown>).status === "Approved").length,
     pending,
     posts: posts.length,

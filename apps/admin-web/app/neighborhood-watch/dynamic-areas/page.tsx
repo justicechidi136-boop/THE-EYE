@@ -1,6 +1,7 @@
 import { CsocDataTable } from "../../../components/csoc/csoc-data-table";
 import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
 import { fetchDynamicAreaPosts } from "../../../lib/api/data";
+import { formatJurisdiction } from "../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function DynamicAreasPage({
             post.title,
             post.type,
             post.areaLabel,
-            [post.country, post.state, post.lga].filter(Boolean).join(" / ") || "—",
+            formatJurisdiction([post.country, post.state, post.lga], "—"),
             post.hidden ? "Hidden" : "Visible",
             post.createdAt ? new Date(post.createdAt).toLocaleString() : "—",
           ])}

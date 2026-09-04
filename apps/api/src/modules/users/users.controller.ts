@@ -127,6 +127,7 @@ export class UsersController {
   directory(
     @Req() request: { user: Parameters<UsersService["listDirectory"]>[0] },
     @Query("cursor") cursor?: string,
+    @Query("page") page?: string,
     @Query("limit") limit?: string,
     @Query("q") q?: string,
     @Query("searchType") searchType?: string,
@@ -137,10 +138,11 @@ export class UsersController {
     @Query("country") country?: string,
     @Query("state") state?: string,
     @Query("lga") lga?: string,
+    @Query("cityId") cityId?: string,
     @Query("communityId") communityId?: string,
   ) {
     return this.users.listDirectory(request.user, {
-      cursor, limit, q, searchType, searchBy, status, role, kind, country, state, lga, communityId,
+      cursor, page, limit, q, searchType, searchBy, status, role, kind, country, state, lga, cityId, communityId,
     });
   }
 
