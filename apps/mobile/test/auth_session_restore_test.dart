@@ -137,7 +137,12 @@ void main() {
           }
           if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
             return http.Response(
-                jsonEncode({"message": "Invalid refresh token"}), 401);
+              jsonEncode({
+                "message": "Invalid refresh session.",
+                "code": "REFRESH_TOKEN_INVALID",
+              }),
+              401,
+            );
           }
           return http.Response("{}", 404);
         }),
@@ -148,6 +153,35 @@ void main() {
 
       expect(result.status, SessionRestoreStatus.unauthenticated);
       expect(await store.load(), isNull);
+    });
+
+    test("cold-start generic 401 preserves the biometric server session",
+        () async {
+      final store = InMemoryAuthSessionStore();
+      const session = AuthSession(
+        accessToken: "expired-access",
+        refreshToken: "refresh-token",
+      );
+      await store.save(session);
+
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.usersMe)) {
+            return http.Response(jsonEncode({"message": "Unauthorized"}), 401);
+          }
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            return http.Response(jsonEncode({"message": "Unauthorized"}), 401);
+          }
+          return http.Response("{}", 404);
+        }),
+      );
+
+      final service = AuthService(apiClient: client, sessionStore: store);
+      final result = await service.restorePersistedSession();
+
+      expect(result.status, SessionRestoreStatus.restored);
+      expect(result.session?.accessToken, session.accessToken);
+      expect((await store.load())?.refreshToken, session.refreshToken);
     });
 
     test("routes incomplete profiles to profile completion state", () async {
@@ -234,7 +268,8 @@ void main() {
       final service = AuthService(
         apiClient: TheEyeApiClient(
           httpClient: MockClient(
-            (_) async => http.Response(jsonEncode({"message": "Unavailable"}), 503),
+            (_) async =>
+                http.Response(jsonEncode({"message": "Unavailable"}), 503),
           ),
         ),
         sessionStore: store,
@@ -255,7 +290,8 @@ void main() {
       await store.save(session);
       final service = AuthService(
         apiClient: TheEyeApiClient(
-          httpClient: MockClient((_) async => throw TimeoutException("timeout")),
+          httpClient:
+              MockClient((_) async => throw TimeoutException("timeout")),
         ),
         sessionStore: store,
       );
@@ -568,7 +604,12 @@ void main() {
           }
           if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
             return http.Response(
-                jsonEncode({"message": "Invalid refresh token"}), 401);
+              jsonEncode({
+                "message": "Invalid refresh session.",
+                "code": "REFRESH_TOKEN_INVALID",
+              }),
+              401,
+            );
           }
           return http.Response("{}", 404);
         }),
@@ -584,6 +625,43 @@ void main() {
 
       expect(response.statusCode, 401);
       expect(await store.load(), isNull);
+    });
+
+    test("unclassified refresh 401 preserves the persisted session", () async {
+      final store = InMemoryAuthSessionStore();
+      const session = AuthSession(
+        accessToken: "expired-access",
+        refreshToken: "refresh-token",
+      );
+      await store.save(session);
+
+      late AuthService authService;
+      final client = TheEyeApiClient(
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith(TheEyeApiPaths.authRefresh)) {
+            return http.Response(
+              jsonEncode({"message": "Unauthorized"}),
+              401,
+            );
+          }
+          return http.Response("{}", 401);
+        }),
+        onUnauthorizedRefresh: (_) async {
+          final refreshed = await authService.refreshSessionSingleFlight();
+          return refreshed?.accessToken;
+        },
+      );
+      authService = AuthService(apiClient: client, sessionStore: store);
+
+      try {
+        await client.getJson(
+          TheEyeApiPaths.usersMe,
+          accessToken: session.accessToken,
+        );
+      } catch (_) {}
+
+      expect((await store.load())?.accessToken, session.accessToken);
+      expect((await store.load())?.refreshToken, session.refreshToken);
     });
 
     test("stale screen token uses the current token without another refresh",
