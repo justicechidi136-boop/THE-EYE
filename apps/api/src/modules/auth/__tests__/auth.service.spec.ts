@@ -490,7 +490,15 @@ describe("AuthService refresh rotation", () => {
     };
     const { service } = createAuthService({ refreshToken: refreshTokenStore });
 
-    await expect(service.refresh(refreshToken())).rejects.toBeInstanceOf(UnauthorizedException);
+    try {
+      await service.refresh(refreshToken());
+      throw new Error("Expected revoked refresh-token failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error as UnauthorizedException).getResponse()).toEqual(
+        expect.objectContaining({ code: "REFRESH_TOKEN_REVOKED" }),
+      );
+    }
     const revokeFamilyArgs = refreshTokenStore.updateMany.mock.calls[0][0];
     expect(revokeFamilyArgs.where).toEqual({ familyId: "family-1", revokedAt: null });
     expect(revokeFamilyArgs.data.revokedAt).toBeInstanceOf(Date);
@@ -512,7 +520,29 @@ describe("AuthService refresh rotation", () => {
       },
     });
 
-    await expect(service.refresh(refreshToken())).rejects.toBeInstanceOf(UnauthorizedException);
+    try {
+      await service.refresh(refreshToken());
+      throw new Error("Expected expired refresh-token failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error as UnauthorizedException).getResponse()).toEqual(
+        expect.objectContaining({ code: "REFRESH_TOKEN_EXPIRED" }),
+      );
+    }
+  });
+
+  it("classifies a malformed refresh token as definitively invalid", async () => {
+    const { service } = createAuthService();
+
+    try {
+      await service.refresh("not-a-refresh-token");
+      throw new Error("Expected invalid refresh-token failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect((error as UnauthorizedException).getResponse()).toEqual(
+        expect.objectContaining({ code: "REFRESH_TOKEN_INVALID" }),
+      );
+    }
   });
 
   it("does not refresh a suspended citizen session", async () => {

@@ -429,6 +429,13 @@ class AuthService {
           status: SessionRestoreStatus.unauthenticated,
         );
       }
+      // A nested refresh may have received an explicit terminal code and
+      // cleared the store before the original access-token 401 was rethrown.
+      if (error.statusCode == 401 && await _sessionStore.load() == null) {
+        return const SessionRestoreResult(
+          status: SessionRestoreStatus.unauthenticated,
+        );
+      }
       return SessionRestoreResult(
         status: SessionRestoreStatus.restored,
         session: session,
@@ -501,10 +508,15 @@ class AuthService {
   }
 
   bool _invalidatesPersistedSession(AuthApiException error) {
-    return error.statusCode == 401 ||
-        error.errorCode == "ACCOUNT_DEACTIVATED" ||
-        error.errorCode == "ACCOUNT_DELETED" ||
-        error.errorCode == "ACCOUNT_SUSPENDED";
+    return const {
+      "REFRESH_TOKEN_INVALID",
+      "REFRESH_TOKEN_REVOKED",
+      "REFRESH_TOKEN_EXPIRED",
+      "ACCOUNT_DEACTIVATED",
+      "ACCOUNT_DELETED",
+      "ACCOUNT_SUSPENDED",
+      "SECURITY_REVOCATION",
+    }.contains(error.errorCode);
   }
 
   /// Runs [action] with the current access token; refreshes once on 401 and retries.

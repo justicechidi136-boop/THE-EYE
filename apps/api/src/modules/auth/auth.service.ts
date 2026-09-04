@@ -224,18 +224,42 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    const payload = verifyJwt(refreshToken, requireJwtRefreshSecret(this.config));
+    let payload: ReturnType<typeof verifyJwt>;
+    try {
+      payload = verifyJwt(refreshToken, requireJwtRefreshSecret(this.config));
+    } catch (error) {
+      const expired = error instanceof Error && error.message === "Token expired";
+      throw new UnauthorizedException({
+        message: expired ? "Refresh session expired." : "Invalid refresh session.",
+        code: expired ? "REFRESH_TOKEN_EXPIRED" : "REFRESH_TOKEN_INVALID",
+      });
+    }
     const tokenHash = hashToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
 
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
-      if (stored?.revokedAt && stored.familyId) {
+    if (!stored) {
+      throw new UnauthorizedException({
+        message: "Invalid refresh session.",
+        code: "REFRESH_TOKEN_INVALID",
+      });
+    }
+    if (stored.revokedAt) {
+      if (stored.familyId) {
         await this.prisma.refreshToken.updateMany({
           where: { familyId: stored.familyId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
       }
-      throw new UnauthorizedException("Invalid refresh token");
+      throw new UnauthorizedException({
+        message: "Refresh session revoked.",
+        code: "REFRESH_TOKEN_REVOKED",
+      });
+    }
+    if (stored.expiresAt < new Date()) {
+      throw new UnauthorizedException({
+        message: "Refresh session expired.",
+        code: "REFRESH_TOKEN_EXPIRED",
+      });
     }
 
     if (payload.typ === "admin" && stored.adminUserId) {
@@ -243,7 +267,12 @@ export class AuthService {
         where: { id: stored.adminUserId },
         include: { role: true, preferences: true },
       });
-      if (!admin) throw new UnauthorizedException("Admin not found");
+      if (!admin) {
+        throw new UnauthorizedException({
+          message: "Refresh session is no longer valid.",
+          code: "SECURITY_REVOCATION",
+        });
+      }
       return this.prisma.$transaction(async (tx) => {
         const session = await this.issueAdminSession(admin, stored.familyId, tx);
         await tx.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
@@ -256,7 +285,12 @@ export class AuthService {
         where: { id: stored.userId },
         include: { trustedReporter: true, profile: true },
       });
-      if (!user) throw new UnauthorizedException("User not found");
+      if (!user) {
+        throw new UnauthorizedException({
+          message: "This account is no longer available.",
+          code: "ACCOUNT_DELETED",
+        });
+      }
       this.assertUserCanSignIn(user);
       return this.prisma.$transaction(async (tx) => {
         const session = await this.issueUserSession(
@@ -270,7 +304,10 @@ export class AuthService {
       });
     }
 
-    throw new UnauthorizedException("Invalid refresh token owner");
+    throw new UnauthorizedException({
+      message: "Invalid refresh session.",
+      code: "REFRESH_TOKEN_INVALID",
+    });
   }
 
   async logout(refreshToken: string) {
