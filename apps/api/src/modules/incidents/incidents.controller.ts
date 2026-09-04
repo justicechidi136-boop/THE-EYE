@@ -1,6 +1,7 @@
-﻿import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UseGuards, BadRequestException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { IncidentStatus } from "@the-eye/shared";
+import { IsEnum, IsOptional, IsString, Matches, MaxLength } from "class-validator";
 import { IncidentScopeGuard } from "../../common/auth/incident-scope.guard";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OptionalJwtAuthGuard } from "../../common/auth/optional-jwt-auth.guard";
@@ -12,14 +13,28 @@ import type { SosReportDto } from "../dispatch/dto/dispatch.dto";
 import { IncidentsService } from "./incidents.service";
 import { ActiveEmergencyService } from "./active-emergency.service";
 
-class UpdateIncidentStatusDto {
+export class UpdateIncidentStatusDto {
+  @IsEnum(IncidentStatus)
   status!: IncidentStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
   note?: string;
 }
 
-class AssignIncidentDto {
+export class AssignIncidentDto {
+  @IsOptional()
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
   agencyId?: string;
+
+  @IsOptional()
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
   adminId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
   reason?: string;
 }
 
@@ -93,12 +108,13 @@ export class IncidentsController {
     @Req() request: any,
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
+    @Query("page") page?: string,
     @Query("status") status?: string,
     @Query("priority") priority?: string,
     @Query("type") type?: string,
     @Query("q") q?: string,
   ) {
-    return this.incidentsService.list(request.user, { status, priority, type, q }, { cursor, limit });
+    return this.incidentsService.list(request.user, { status, priority, type, q }, { cursor, limit, page });
   }
 
   @Get(":id")

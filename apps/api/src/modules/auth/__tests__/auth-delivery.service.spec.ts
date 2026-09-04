@@ -189,4 +189,68 @@ describe("AuthDeliveryService", () => {
     expect(payload.html).not.toContain("Admin Dashboard");
     restore();
   });
+
+  it("renders an operational account invitation with a one-time activation link", async () => {
+    const sendMock = jest.fn().mockResolvedValue({ status: "ProviderAccepted" });
+    const { service, restore } = createService({
+      NODE_ENV: "staging",
+      THE_EYE_APP_ENV: "staging",
+      EMAIL_PROVIDER: "smtp",
+      SMTP_HOST: "smtp.example.com",
+      SMTP_USERNAME: "user",
+      SMTP_PASSWORD: "secret",
+      SMTP_FROM_EMAIL: "security@theeye.com.ng",
+      ADMIN_INVITATION_LINK_BASE_URL:
+        "https://staging-dashboard8jps.theeye.com.ng/activate-account",
+    });
+    (service as unknown as { smtp: { send: typeof sendMock } }).smtp.send = sendMock;
+
+    await service.sendAdminInvitationEmail(
+      "operator@agency.gov.ng",
+      "single-use-invitation-token",
+      new Date("2026-09-06T12:00:00.000Z"),
+      {
+        displayName: "Ada Operator",
+        role: "Field Officer",
+        organisation: "Rivers QA Response Agency",
+        scope: "Nigeria, Rivers",
+      },
+    );
+
+    const payload = sendMock.mock.calls[0]?.[0] as { html: string; text: string };
+    expect(payload.html).toContain("Activate account");
+    expect(payload.html).toContain(
+      "https://staging-dashboard8jps.theeye.com.ng/activate-account?token=single-use-invitation-token",
+    );
+    expect(payload.text).toContain("single-use-invitation-token");
+    expect(payload.text).toContain("Hello Ada Operator");
+    expect(payload.text).toContain("Assigned role: Field Officer");
+    expect(payload.text).toContain("Organisation: Rivers QA Response Agency");
+    expect(payload.text).toContain("Operational scope: Nigeria, Rivers");
+    expect(payload.html).toContain("THE EYE");
+    expect(payload.html).toContain("For help");
+    expect(payload.html).not.toContain("localhost");
+    restore();
+  });
+
+  it("fails closed when operational invitation delivery is not configured outside development", async () => {
+    const { service, restore } = createService({
+      NODE_ENV: "staging",
+      THE_EYE_APP_ENV: "staging",
+      ALLOW_DEV_AUTH_CODES: "false",
+    });
+
+    await expect(service.sendAdminInvitationEmail(
+      "operator@agency.gov.ng",
+      "single-use-invitation-token",
+      new Date(Date.now() + 60_000),
+      {
+        displayName: "Ada Operator",
+        role: "Field Officer",
+        organisation: "Rivers QA Response Agency",
+        scope: "Nigeria, Rivers",
+      },
+    )).rejects.toBeInstanceOf(ServiceUnavailableException);
+    restore();
+  });
 });

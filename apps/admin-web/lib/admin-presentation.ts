@@ -15,7 +15,28 @@ export function humanLocation(parts: unknown[]): string {
   const values = parts
     .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
     .map((part) => part.trim());
-  return [...new Set(values)].join(", ") || "Location unavailable";
+  const normalizedSegment = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+state$/, "");
+  const selected: string[] = [];
+  const covered = new Set<string>();
+  for (const value of values) {
+    const segments = value.split(",").map(normalizedSegment).filter(Boolean);
+    if (segments.length === 1 && covered.has(segments[0])) continue;
+    selected.push(value);
+    segments.forEach((segment) => covered.add(segment));
+  }
+  return selected.join(", ") || "Location unavailable";
+}
+
+export function formatJurisdiction(parts: unknown[], fallback = "Not assigned"): string {
+  const values = parts
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0 && part.trim() !== "All")
+    .map((part) => part.trim());
+  return [...new Set(values)].join(", ") || fallback;
+}
+
+export function humanPriorityLabel(priority: unknown): "High" | "Mid" | "Low" {
+  const label = humanPriority(String(priority)).toLowerCase();
+  return (label.charAt(0).toUpperCase() + label.slice(1)) as "High" | "Mid" | "Low";
 }
 
 function radians(value: number) {

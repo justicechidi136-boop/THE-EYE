@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button, InlineAlert } from "../form-primitives";
 import type { FieldDeviceView, FieldPairingIssueView } from "../../lib/types/admin-views";
 import { PairingQrCode } from "./pairing-qr-code";
+import { formatJurisdiction } from "../../lib/admin-presentation";
 
 type FieldDevicePairingPanelProps = {
   device: FieldDeviceView;
@@ -96,7 +97,7 @@ export function FieldDevicePairingPanel({ device, canManage, supervisorLabel }: 
       <div className="grid gap-1 text-sm">
         <p><span className="font-semibold">Device:</span> {device.deviceName}</p>
         <p><span className="font-semibold">Supervisor:</span> {supervisorLabel}</p>
-        <p><span className="font-semibold">Assignment:</span> {[device.countryCode, device.stateCode, device.lgaCode].filter(Boolean).join(" / ") || "Global scope"}</p>
+        <p><span className="font-semibold">Assignment:</span> {formatJurisdiction([device.countryCode, device.stateCode, device.lgaCode], "Global scope")}</p>
         <p><span className="font-semibold">Role:</span> {device.operationalRole ?? "Not set"}</p>
       </div>
 

@@ -12,7 +12,8 @@ describe("User Details", () => {
     }
     expect(page.includes("No KYC submissions")).toBe(true);
     expect(page.includes("No emergency contacts added.")).toBe(true);
-    expect(page.includes("None / Not assigned")).toBe(true);
+    expect(page.includes("Not assigned")).toBe(true);
+    expect(page.includes("humanPriorityLabel(report.priority)")).toBe(true);
     expect(page.includes("/incidents/")).toBe(true);
     expect(page.includes("/broadcasts/")).toBe(true);
     expect(actions.includes('role="dialog"')).toBe(true);

@@ -12,6 +12,7 @@ const publicPaths = [
   "/login",
   "/reset-password",
   "/account-recovery",
+  "/activate-account",
   "/app/sign-in",
   "/sign-in",
   "/share/broadcasts",
@@ -21,6 +22,7 @@ const publicPaths = [
   "/api/auth/refresh",
   "/api/auth/password-reset",
   "/api/auth/account-recovery",
+  "/api/auth/admin-invitation",
 ];
 
 export async function middleware(request: NextRequest) {

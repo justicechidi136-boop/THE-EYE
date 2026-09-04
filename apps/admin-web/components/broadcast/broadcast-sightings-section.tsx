@@ -83,7 +83,7 @@ export function BroadcastSightingsSection({ broadcast }: { broadcast: BroadcastD
   return <>
     <section className="rounded-lg border border-line bg-surface p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-ink">{broadcast.type === "StolenVehicle" ? "Vehicle sightings" : "Sightings"}</h2><p className="mt-1 text-sm text-muted">Reports are reviewed independently from the original broadcast evidence.</p></div><StatusBadge tone={sightings.length ? "info" : "neutral"}>{sightings.length} reported</StatusBadge></div>
-      {markers.length ? <div className="mt-4"><BroadcastDetailMap title="Sighting locations" description="Last-known location and reported sightings" latitude={broadcast.targetLatitude} longitude={broadcast.targetLongitude} location={broadcast.location} radiusMeters={broadcast.targetRadiusMeters} markers={markers} showOpenLocation={false} /></div> : null}
+      {markers.length ? <div className="mt-4"><BroadcastDetailMap title="Sighting locations" description="Last-known location and reported sightings" latitude={broadcast.targetLatitude} longitude={broadcast.targetLongitude} location={broadcast.location} radiusMeters={broadcast.targetRadiusMeters} markers={markers} showOpenLocation={false} embedded /></div> : null}
       {!sightings.length ? <div className="mt-4"><ConsoleEmptyState title="No sightings yet" detail="New authorized sightings will appear here." /></div> : <div className="mt-4 grid gap-3">{sightings.map((sighting, index) => {
         const distance = distanceKilometres(broadcast.targetLatitude, broadcast.targetLongitude, sighting);
         return <article id={`sighting-${sighting.id}`} key={sighting.id} className="border-l-2 border-eye bg-surfaceMuted p-4">

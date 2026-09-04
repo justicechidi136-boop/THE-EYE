@@ -3,6 +3,9 @@ import { Montserrat } from "next/font/google";
 import type { ReactNode } from "react";
 import { ThemeProvider } from "../components/theme-provider";
 import { BRAND_ASSETS } from "../lib/brand";
+import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import "./styles.css";
 
 const montserrat = Montserrat({

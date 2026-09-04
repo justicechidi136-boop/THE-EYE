@@ -1,35 +1,44 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import { AppShell } from "../../components/app-shell";
-import { ConsoleFilterBar, ConsoleFilterSelect, ConsoleMetrics, ConsolePageHeader, ConsoleSearchInput } from "../../components/console";
+import { ConsoleFilterBar, ConsoleFilterSelect, ConsoleMetrics, ConsolePageHeader, ConsolePagination, ConsoleSearchInput } from "../../components/console";
 import { ReportCentreMap } from "../../components/report-centre-map";
 import { ReportCentreTable } from "../../components/report-centre-table";
 import { StatusBadge } from "../../components/ui";
-import { fetchIncidentsPage } from "../../lib/api/data";
+import { fetchIncidents, fetchIncidentsPage } from "../../lib/api/data";
 import { getRouteById } from "../../lib/admin/admin-route-registry";
-import { encodeCursorHistory, parseCursorHistory, REPORT_TYPE_OPTIONS } from "../../lib/report-centre-presentation";
+import { reportPaginationItems, REPORT_TYPE_OPTIONS } from "../../lib/report-centre-presentation";
 
 export const dynamic = "force-dynamic";
 
-function pageHref(params: Record<string, string | undefined>, cursor: string | undefined, history: string[]) {
+function pageHref(params: Record<string, string | undefined>, page: number, limit: number) {
   const next = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value && key !== "cursor" && key !== "history") next.set(key, value);
+    if (value && !["cursor", "history", "page", "limit"].includes(key)) next.set(key, value);
   }
-  if (cursor) next.set("cursor", cursor);
-  if (history.length) next.set("history", encodeCursorHistory(history));
-  return `/incidents${next.size ? `?${next.toString()}` : ""}`;
+  next.set("page", String(page));
+  next.set("limit", String(limit));
+  return `/incidents?${next.toString()}`;
 }
 
 export default async function IncidentsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
   const route = getRouteById("incident-centre");
-  const page = await fetchIncidentsPage({ cursor: params.cursor, status: params.status, priority: params.priority, type: params.type, q: params.q });
-  const history = parseCursorHistory(params.history);
-  const previousEntry = history.at(-1);
-  const previousHref = previousEntry ? pageHref(params, previousEntry === "first" ? undefined : previousEntry, history.slice(0, -1)) : undefined;
-  const nextHref = page.hasMore && page.nextCursor ? pageHref(params, page.nextCursor, [...history, params.cursor ?? "first"]) : undefined;
-  const currentPage = history.length + 1;
+  const requestedPage = Number.parseInt(params.page ?? "1", 10);
+  const currentPage = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const requestedLimit = Number.parseInt(params.limit ?? "20", 10);
+  const pageSize = [20, 50, 100].includes(requestedLimit) ? requestedLimit : 20;
+  const filters = { status: params.status, priority: params.priority, type: params.type, q: params.q };
+  const [page, mappedReports] = await Promise.all([
+    fetchIncidentsPage({ ...filters, page: String(currentPage), limit: String(pageSize) }),
+    fetchIncidents(filters),
+  ]);
+  const totalPages = page.totalPages ?? Math.max(1, Math.ceil(page.meta.totalReports / pageSize));
+  const previousHref = currentPage > 1 ? pageHref(params, currentPage - 1, pageSize) : undefined;
+  const nextHref = currentPage < totalPages ? pageHref(params, currentPage + 1, pageSize) : undefined;
+  const pageLinks = reportPaginationItems(currentPage, totalPages).map((item) => item === "ellipsis"
+    ? { label: "…" }
+    : { label: String(item), href: pageHref(params, item, pageSize), current: item === currentPage });
+  const pageSizeLinks = [20, 50, 100].map((size) => ({ size, href: pageHref(params, 1, size), current: size === pageSize }));
 
   return (
     <AppShell>
@@ -55,8 +64,7 @@ export default async function IncidentsPage({ searchParams }: { searchParams: Pr
                 { value: "Submitted", label: "Submitted" }, { value: "Received", label: "Received" },
                 { value: "Verifying", label: "Verifying" }, { value: "Verified", label: "Verified" },
                 { value: "Assigned", label: "Assigned" }, { value: "Responding", label: "Responding" },
-                { value: "Ended", label: "Ended" },
-                { value: "Resolved", label: "Resolved" }, { value: "Closed", label: "Closed" },
+                { value: "Ended", label: "Ended" }, { value: "Resolved", label: "Resolved" }, { value: "Closed", label: "Closed" },
               ]} />
               <ConsoleFilterSelect name="priority" label="Priority" defaultValue={params.priority} options={[
                 { value: "P1LifeThreatening", label: "HIGH" }, { value: "P2ActiveCrimeAccident", label: "MID" },
@@ -67,15 +75,13 @@ export default async function IncidentsPage({ searchParams }: { searchParams: Pr
           </Suspense>
         </section>
 
-        <ReportCentreMap reports={page.data} />
+        <ReportCentreMap reports={mappedReports} />
 
         <section className="min-w-0 max-w-full rounded-lg border border-line bg-surface p-4 shadow-sm">
           <ReportCentreTable reports={page.data} />
-          <nav data-onscreen-navigation-avoid className="relative z-50 mt-4 flex items-center justify-between gap-3 border-t border-line bg-surface pt-4" aria-label="Report pages">
-            {previousHref ? <Link href={previousHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Previous</Link> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Previous</span>}
-            <span className="text-sm font-semibold text-ink" aria-current="page">Page {currentPage}</span>
-            {nextHref ? <Link href={nextHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Next</Link> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Next</span>}
-          </nav>
+          <div data-onscreen-navigation-avoid className="relative z-50 bg-surface">
+            <ConsolePagination currentPage={currentPage} totalItems={page.meta.totalReports} pageSize={pageSize} previousHref={previousHref} nextHref={nextHref} pageLinks={pageLinks} pageSizeLinks={pageSizeLinks} />
+          </div>
         </section>
       </div>
     </AppShell>

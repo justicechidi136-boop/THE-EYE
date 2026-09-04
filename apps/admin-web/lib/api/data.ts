@@ -104,6 +104,8 @@ export type PaginatedResponse<T> = {
   nextCursor: string | null;
   hasMore: boolean;
   limit: number;
+  page?: number;
+  totalPages?: number;
 };
 
 export type IncidentPageMetrics = {
@@ -154,12 +156,13 @@ async function withNwToken<T>(fn: (token: string) => Promise<T>): Promise<T> {
   return fn(token);
 }
 
-export async function fetchIncidents(filters: { status?: string; priority?: string; type?: string } = {}): Promise<Incident[]> {
+export async function fetchIncidents(filters: { status?: string; priority?: string; type?: string; q?: string } = {}): Promise<Incident[]> {
   return withToken(async (token) => {
     const rows = await fetchAllPages<Record<string, unknown>>("/incidents", token, {
       status: filters.status,
       priority: filters.priority,
       type: filters.type,
+      q: filters.q,
     });
     return rows.map(toIncidentView);
   }, []);
@@ -171,7 +174,7 @@ export async function fetchIncidentsPage(
   return withToken(async (token) => {
     const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta?: IncidentPageMetrics }>("/incidents", {
       token,
-      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+      query: { ...query, limit: query.limit ?? "20" },
     });
     return {
       ...response,
@@ -245,6 +248,7 @@ export type BroadcastTargetOptions = {
   jurisdictions: Array<{ id: string; country: string; state: string; lga: string; name: string }>;
   communities: Array<{
     id: string;
+    parentId?: string | null;
     jurisdictionId: string | null;
     name: string;
     level: string;
@@ -419,15 +423,18 @@ export type UserDirectoryMetrics = {
   deactivatedUsers: number;
 };
 
-export type UserDirectoryPage = PaginatedResponse<UserDirectoryEntry> & { meta: UserDirectoryMetrics };
+export type UserDirectoryPage = PaginatedResponse<UserDirectoryEntry> & {
+  meta: UserDirectoryMetrics;
+  pagination: { page: number; limit: number; total: number; pageCount: number };
+};
 
 export async function fetchUsersDirectoryPage(
   query: Record<string, string | undefined> = {},
 ): Promise<UserDirectoryPage> {
   return withToken(async (token) => {
-    const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta: UserDirectoryMetrics }>("/users/directory", {
+    const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta: UserDirectoryMetrics; pagination: UserDirectoryPage["pagination"] }>("/users/directory", {
       token,
-      query: { ...query, limit: query.limit ?? "10" },
+      query: { ...query, limit: query.limit ?? "20" },
     });
     return {
       ...response,
@@ -437,7 +444,8 @@ export async function fetchUsersDirectoryPage(
     data: [],
     nextCursor: null,
     hasMore: false,
-    limit: 10,
+    limit: 20,
+    pagination: { page: 1, limit: 20, total: 0, pageCount: 1 },
     meta: { totalUsers: 0, activeUsers: 0, pendingUsers: 0, deactivatedUsers: 0 },
   });
 }
@@ -1550,6 +1558,12 @@ export async function fetchBroadcastProgress(id: string) {
   const token = await getAccessToken();
   if (!token) throw new Error("Authentication required");
   return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/progress`, { token });
+}
+
+export async function previewBroadcast(id: string) {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Authentication required");
+  return apiRequest<Record<string, unknown>>(`/broadcasts/${id}/preview`, { token });
 }
 
 export async function estimateBroadcastRecipients(id: string) {

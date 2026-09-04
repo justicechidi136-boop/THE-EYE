@@ -66,11 +66,36 @@ export function ConsolePagination({
   hasMore,
   nextHref,
   previousHref,
+  currentPage,
+  totalItems,
+  pageSize,
+  pageLinks,
+  pageSizeLinks,
 }: {
   hasMore?: boolean;
   nextHref?: string;
   previousHref?: string;
+  currentPage?: number;
+  totalItems?: number;
+  pageSize?: number;
+  pageLinks?: Array<{ label: string; href?: string; current?: boolean }>;
+  pageSizeLinks?: Array<{ size: number; href: string; current: boolean }>;
 }) {
+  if (currentPage && totalItems != null && pageSize && pageLinks && pageSizeLinks) {
+    const start = totalItems ? (currentPage - 1) * pageSize + 1 : 0;
+    const end = Math.min(currentPage * pageSize, totalItems);
+    return (
+      <div className="mt-4 grid gap-3 border-t border-line pt-4 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+        <p className="text-sm text-muted">Showing {start}–{end} of {totalItems}</p>
+        <nav className="flex flex-wrap items-center justify-center gap-1" aria-label="Pages">
+          {previousHref ? <a href={previousHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Previous</a> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Previous</span>}
+          {pageLinks.map((item, index) => item.href ? <a key={`${item.label}-${index}`} href={item.href} aria-current={item.current ? "page" : undefined} className={`grid min-h-10 min-w-10 place-items-center rounded-md border px-2 text-sm font-semibold ${item.current ? "border-eye bg-eye text-white" : "border-line text-ink hover:border-eye"}`}>{item.label}</a> : <span key={`${item.label}-${index}`} className="grid min-h-10 min-w-8 place-items-center text-muted">{item.label}</span>)}
+          {nextHref ? <a href={nextHref} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:border-eye">Next</a> : <span aria-disabled="true" className="cursor-not-allowed rounded-md border border-line px-3 py-2 text-sm font-semibold text-muted opacity-50">Next</span>}
+        </nav>
+        <div className="flex items-center gap-2 text-sm"><span className="text-muted">Rows</span>{pageSizeLinks.map((item) => <a key={item.size} href={item.href} aria-current={item.current ? "true" : undefined} className={`rounded-md border px-2.5 py-2 font-semibold ${item.current ? "border-eye text-eye" : "border-line text-ink hover:border-eye"}`}>{item.size}</a>)}</div>
+      </div>
+    );
+  }
   if (!hasMore && !previousHref) return null;
   return (
     <div className="flex items-center justify-between gap-3 border-t border-line pt-4">

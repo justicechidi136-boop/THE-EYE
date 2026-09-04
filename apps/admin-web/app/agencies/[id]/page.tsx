@@ -7,6 +7,7 @@ import { PageHeader, Panel, StatusBadge } from "../../../components/ui";
 import { fetchAgency, listAgencies, listAgencyUnits } from "../../../lib/api/agencies";
 import { canManageAgencies } from "../../../lib/agency-permissions";
 import { getAdminSession } from "../../../lib/session";
+import { formatJurisdiction } from "../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export default async function AgencyDetailPage({ params }: { params: Promise<{ i
         <div className="rounded-lg border border-line bg-surfaceMuted p-4 text-sm">
           <p className="text-xs uppercase text-muted">Jurisdiction</p>
           <p className="mt-1 font-semibold">
-            {[agency.countryCode, agency.stateCode, agency.lgaCode].filter(Boolean).join(" / ") || "-"}
+            {formatJurisdiction([agency.countryCode, agency.stateCode, agency.lgaCode], "-")}
           </p>
         </div>
         <div className="rounded-lg border border-line bg-surfaceMuted p-4 text-sm">
@@ -105,7 +106,7 @@ export default async function AgencyDetailPage({ params }: { params: Promise<{ i
                   <td className="px-4 py-3"><code className="text-xs">{unit.unitIdentifier}</code></td>
                   <td className="px-4 py-3">{unit.unitKind}</td>
                   <td className="px-4 py-3">
-                    {[unit.countryCode, unit.stateCode, unit.lgaCode].filter(Boolean).join(" / ") || "-"}
+                    {formatJurisdiction([unit.countryCode, unit.stateCode, unit.lgaCode], "-")}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge tone={unit.isActive ? "success" : "danger"}>

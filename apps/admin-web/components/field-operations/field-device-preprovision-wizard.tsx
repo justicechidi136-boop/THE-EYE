@@ -14,6 +14,7 @@ import type {
 } from "../../lib/types/admin-views";
 import { PermissionGroupPicker } from "./permission-group-picker";
 import { PermissionSummaryList } from "./permission-summary-list";
+import { formatJurisdiction } from "../../lib/admin-presentation";
 
 type WizardValues = {
   deviceName: string;
@@ -516,7 +517,7 @@ export function FieldDevicePreprovisionWizard() {
           {selectedAgency ? (
             <p className="text-sm text-muted">
               Jurisdiction from agency:{" "}
-              {[selectedAgency.countryCode, selectedAgency.stateCode, selectedAgency.lgaCode].filter(Boolean).join(" / ") || "—"}
+              {formatJurisdiction([selectedAgency.countryCode, selectedAgency.stateCode, selectedAgency.lgaCode], "—")}
             </p>
           ) : null}
           {unitsError ? <InlineAlert tone="warning">{unitsError}</InlineAlert> : null}
@@ -695,7 +696,7 @@ export function FieldDevicePreprovisionWizard() {
             </p>
             <p>
               <span className="font-semibold">Jurisdiction:</span>{" "}
-              {[values.countryCode, values.stateCode, values.lgaCode].filter(Boolean).join(" / ") || "-"}
+              {formatJurisdiction([values.countryCode, values.stateCode, values.lgaCode], "-")}
             </p>
             <p><span className="font-semibold">Assigned officer:</span> {selectedAssignedUser ? `${selectedAssignedUser.displayName} (${selectedAssignedUser.role})` : "Assign later"}</p>
             <p>

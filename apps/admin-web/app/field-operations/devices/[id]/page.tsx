@@ -8,6 +8,7 @@ import { PageHeader, Panel, StatusBadge } from "../../../../components/ui";
 import { fetchFieldDevice } from "../../../../lib/api/data";
 import { canManageFieldDevices } from "../../../../lib/field-device-permissions";
 import { getAdminSession } from "../../../../lib/session";
+import { formatJurisdiction } from "../../../../lib/admin-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export default async function FieldDeviceDetailPage({ params }: { params: Promis
             <p><span className="font-semibold">Assigned officer:</span> {device.assignedUserId ?? "Unassigned"}</p>
             <p><span className="font-semibold">Agency:</span> {device.agencyId ?? "-"}</p>
             <p><span className="font-semibold">Unit:</span> {device.assignedUnitId ?? "-"}</p>
-            <p><span className="font-semibold">Jurisdiction:</span> {[device.countryCode, device.stateCode, device.lgaCode].filter(Boolean).join(" / ") || "-"}</p>
+            <p><span className="font-semibold">Jurisdiction:</span> {formatJurisdiction([device.countryCode, device.stateCode, device.lgaCode], "-")}</p>
             <p><span className="font-semibold">Model:</span> {device.manufacturer} · {device.model}</p>
             <p><span className="font-semibold">Android:</span> {device.androidVersion}</p>
             <p><span className="font-semibold">App version:</span> {device.appVersion}</p>

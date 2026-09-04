@@ -351,6 +351,17 @@ describe("IncidentsService cancellation and lifecycle", () => {
     );
   });
 
+  it("allows an authorized admin to resolve an early active report with a reason", async () => {
+    const { service, prisma, incidentUpdate } = buildIncidentsService();
+    prisma.incident.findFirst.mockResolvedValue({ ...baseIncident, status: IncidentStatus.Submitted });
+
+    await service.updateStatus("inc-1", IncidentStatus.Resolved, "Confirmed safely concluded", lgaAdmin);
+
+    const data = incidentUpdate.mock.calls[0][0].data;
+    expect(data.status).toBe(IncidentStatus.Resolved);
+    expect(data.statusHistory.create.changedById).toBe(undefined);
+  });
+
   it("requires a resolution summary before an admin resolves a report", async () => {
     const { service, prisma } = buildIncidentsService();
 
@@ -360,12 +371,37 @@ describe("IncidentsService cancellation and lifecycle", () => {
     expect(prisma.incident.findFirst).not.toHaveBeenCalled();
   });
 
+  it("marks an active report false and records the audited reason", async () => {
+    const { service, prisma, audit, incidentUpdate } = buildIncidentsService();
+    prisma.incident.findFirst.mockResolvedValue({ ...baseIncident, status: IncidentStatus.Verifying });
+
+    await service.updateStatus("inc-1", IncidentStatus.FalseReport, "Evidence disproved the report", lgaAdmin);
+
+    expect(incidentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: IncidentStatus.FalseReport }) }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "incident.marked_false", reason: "Evidence disproved the report" }),
+    );
+  });
+
   it("requires both an agency and reason before reassignment", async () => {
     const { service, prisma } = buildIncidentsService();
 
     await expect(service.assign("inc-1", { reason: "Coverage change" }, lgaAdmin)).rejects.toThrow(BadRequestException);
     await expect(service.assign("inc-1", { agencyId: "agency-1" }, lgaAdmin)).rejects.toThrow(BadRequestException);
     expect(prisma.incident.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("reassigns an active response without moving its lifecycle status backwards", async () => {
+    const { service, prisma, incidentUpdate } = buildIncidentsService();
+    prisma.incident.findFirst.mockResolvedValue({ ...baseIncident, status: IncidentStatus.Responding, assignedAgencyId: "agency-old" });
+
+    await service.assign("inc-1", { agencyId: "agency-new", reason: "Closer response team available" }, lgaAdmin);
+
+    const data = incidentUpdate.mock.calls[0][0].data;
+    expect(data.assignedAgencyId).toBe("agency-new");
+    expect(data.status).toBeUndefined();
   });
 
   it("increments status version on transition", async () => {

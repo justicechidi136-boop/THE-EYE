@@ -30,6 +30,7 @@ import type {
   ResidentView,
   WitnessConfirmationView,
 } from "../types/admin-views";
+import { formatJurisdiction } from "../admin-presentation";
 import { normalizeBroadcastAttachments } from "../admin-media";
 import { humanLocation, sanitizeLocationTrail } from "../admin-presentation";
 
@@ -86,6 +87,12 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
   const reporterProfile = (reporter.profile as Record<string, unknown> | undefined) ?? {};
   const reporterName = [reporterProfile.firstName, reporterProfile.lastName].filter(Boolean).join(" ");
   const anonymous = Boolean(record.isAnonymous);
+  const metadata = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+    ? record.metadata as Record<string, unknown>
+    : {};
+  const metadataLocation = metadata.location && typeof metadata.location === "object" && !Array.isArray(metadata.location)
+    ? metadata.location as Record<string, unknown>
+    : {};
 
   return {
     id: String(record.id),
@@ -113,7 +120,24 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
     reportingMode: anonymous ? "Anonymous" : "Identified",
     assignedAgency: String((record.assignedAgency as { name?: string } | undefined)?.name ?? record.assignedAgencyId ?? "Unassigned"),
     responseStatus: String(record.status ?? "Submitted"),
-    location: humanLocation([record.address, record.lga, record.state, record.country]),
+    location: humanLocation([
+      record.manualAddress,
+      record.address,
+      metadata.communityName,
+      metadata.community,
+      metadata.neighborhood,
+      metadata.neighbourhood,
+      metadataLocation.community,
+      metadataLocation.neighborhood,
+      metadataLocation.neighbourhood,
+      metadata.town,
+      metadata.city,
+      metadataLocation.town,
+      metadataLocation.city,
+      record.lga,
+      record.state,
+      record.country,
+    ]),
     timeline: [...timeline.map((entry) => {
       const item = entry as Record<string, unknown>;
       return {
@@ -266,7 +290,7 @@ export function toBroadcastView(record: Record<string, unknown>): BroadcastView 
 
   return {
     id: String(record.id),
-    type: `${String(record.type ?? "Broadcast")} broadcast`,
+    type: String(record.type ?? "Broadcast"),
     title: String(record.title ?? "Untitled broadcast"),
     severity: priorityLabel(String(record.priority ?? "P4GeneralSafety")),
     status: status === "PendingApproval" ? "Pending approval" : status,
@@ -312,13 +336,27 @@ export function toBroadcastDetailView(record: Record<string, unknown>): Broadcas
   }
   const approver = (record.approver as { displayName?: string } | undefined)?.displayName ?? null;
   const verifier = (record.verifiedBy as { displayName?: string } | undefined)?.displayName ?? null;
+  const authorView = toBroadcastView(record);
+  const sightingTimeline = sightingsRaw.flatMap((entry, index) => {
+    const row = entry as Record<string, unknown>;
+    if (!row.createdAt) return [];
+    const profile = ((row.reporter as { profile?: { firstName?: string; lastName?: string } } | undefined)?.profile);
+    const reporterName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ").trim();
+    return [{
+      at: String(row.createdAt),
+      label: `Sighting reported (#${index + 1})`,
+      actor: row.anonymousPublic ? "Anonymous" : reporterName || "Identified citizen",
+    }];
+  });
   const timeline = [
-    record.createdAt ? { at: String(record.createdAt), label: "Broadcast created", actor: toBroadcastView(record).author } : null,
-    record.publishedAt ? { at: String(record.publishedAt), label: "Broadcast published", actor: approver ?? toBroadcastView(record).author } : null,
+    record.createdAt ? { at: String(record.createdAt), label: authorView.authorLabel === "Admin" ? "Broadcast created" : "Broadcast submitted", actor: authorView.author } : null,
+    record.publishedAt && (approver || !record.requiresApproval) ? { at: String(record.approvedAt ?? record.publishedAt), label: "Broadcast approved", actor: approver ?? "System (auto-approved)" } : null,
+    record.publishedAt ? { at: String(record.publishedAt), label: "Broadcast published", actor: approver ?? (authorView.authorLabel === "Admin" ? authorView.author : "System") } : null,
     record.verifiedAt ? { at: String(record.verifiedAt), label: "Broadcast verified", actor: verifier ?? "Authorized administrator" } : null,
     record.suspendedAt ? { at: String(record.suspendedAt), label: "Broadcast suspended", actor: "Authorized administrator" } : null,
     record.resolvedAt ? { at: String(record.resolvedAt), label: "Broadcast resolved", actor: "Authorized actor" } : null,
     record.withdrawnAt ? { at: String(record.withdrawnAt), label: "Broadcast withdrawn", actor: "Broadcast owner" } : null,
+    ...sightingTimeline,
   ].filter((entry): entry is { at: string; label: string; actor: string } => entry !== null)
     .sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime());
   const location = humanLocation([
@@ -501,7 +539,7 @@ export function toCommunityView(record: Record<string, unknown>): CommunityView 
     country: record.country ? String(record.country) : undefined,
     state: record.state ? String(record.state) : undefined,
     lga: record.lga ? String(record.lga) : undefined,
-    hierarchy: [record.country, record.state, record.lga, record.ward].filter(Boolean).join(" / "),
+    hierarchy: formatJurisdiction([record.country, record.state, record.lga, record.ward]),
     members: memberships.filter((item) => (item as Record<string, unknown>).status === "Approved").length,
     pending,
     posts: posts.length,

@@ -7,6 +7,7 @@ type AccountStatus = "Active" | "Suspended" | "Deactivated";
 type Action = { label: string; status: AccountStatus; tone: "primary" | "danger" };
 
 function actionsFor(kind: "admin" | "citizen", status: string): Action[] {
+  if (status === "Pending activation") return [];
   if (status === "Deactivated") return [{ label: "Reactivate", status: "Active", tone: "primary" }];
   if (kind === "admin") return [{ label: "Deactivate", status: "Deactivated", tone: "danger" }];
   if (status === "Suspended") {

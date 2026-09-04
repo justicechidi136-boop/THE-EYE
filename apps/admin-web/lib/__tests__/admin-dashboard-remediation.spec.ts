@@ -4,6 +4,11 @@ import { humanLocation, humanPriority, sanitizeLocationTrail } from "../admin-pr
 import { toBroadcastDetailView, toIncidentView, toLiveVideoSessionView } from "../mappers";
 
 describe("admin dashboard remediation", () => {
+  it("deduplicates geographic hierarchy already present in a resolved address", () => {
+    expect(humanLocation(["Woji Market Road, Obio-Akpor, Rivers", "Obio-Akpor", "Rivers", "Nigeria"]))
+      .toBe("Woji Market Road, Obio-Akpor, Rivers, Nigeria");
+  });
+
   it("uses human-readable priority without changing stored operational values", () => {
     expect(humanPriority("P1LifeThreatening")).toBe("HIGH");
     expect(humanPriority("P2")).toBe("MID");

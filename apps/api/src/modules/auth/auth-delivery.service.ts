@@ -9,6 +9,7 @@ import {
   authLinkHostname,
   buildAuthActionLink,
   resolveAccountRecoveryBaseUrl,
+  resolveAdminInvitationBaseUrl,
   resolvePasswordResetBaseUrl,
 } from "./auth-recovery-urls";
 
@@ -24,11 +25,33 @@ type AuthDeliveryPayload =
       token: string;
     }
   | {
+      type: "admin_invitation";
+      email: string;
+      token: string;
+      expiresAt: string;
+    }
+  | {
       type: "phone_otp";
       phone: string;
       code: string;
       purpose: string;
     };
+
+type AdminInvitationContext = {
+  displayName: string;
+  role: string;
+  organisation: string;
+  scope: string;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 @Injectable()
 export class AuthDeliveryService {
@@ -161,6 +184,79 @@ export class AuthDeliveryService {
       this.config.get<string>("AUTH_ACCOUNT_RECOVERY_WEBHOOK_URL"),
       { type: "account_recovery", email, token },
       "account recovery email",
+    );
+  }
+
+  async sendAdminInvitationEmail(
+    email: string,
+    token: string,
+    expiresAt: Date,
+    context: AdminInvitationContext,
+  ): Promise<void> {
+    const invitationBase = resolveAdminInvitationBaseUrl({
+      ADMIN_INVITATION_LINK_BASE_URL: this.config.get<string>("ADMIN_INVITATION_LINK_BASE_URL"),
+    });
+    if (this.smtp.isConfigured()) {
+      if (!invitationBase) {
+        throw new ServiceUnavailableException({
+          message: "Operational account invitations are not configured for this environment.",
+          code: "AUTH_ADMIN_INVITATION_LINK_BASE_MISSING",
+        });
+      }
+      let invitationLink: string;
+      try {
+        invitationLink = buildAuthActionLink(invitationBase, token, "admin_invitation", process.env);
+      } catch (error) {
+        throw this.toDeliveryConfigException(error);
+      }
+      const expiryText = formatCitizenEmailTimestamp(expiresAt);
+      const safeName = escapeHtml(context.displayName);
+      const safeRole = escapeHtml(context.role);
+      const safeOrganisation = escapeHtml(context.organisation);
+      const safeScope = escapeHtml(context.scope);
+      const result = await this.smtp.send({
+        to: email,
+        subject: "Activate your THE EYE operational account",
+        text: [
+          "THE EYE operational account",
+          "",
+          `Hello ${context.displayName},`,
+          "An administrator created a THE EYE operational account for you.",
+          `Assigned role: ${context.role}`,
+          `Organisation: ${context.organisation}`,
+          `Operational scope: ${context.scope}`,
+          "",
+          `Use this secure one-time link before ${expiryText} to set your password and activate the account:`,
+          invitationLink,
+          "",
+          "For help, contact the administrator who invited you or THE EYE support through the official support channel.",
+          "If you were not expecting this invitation, do not use the link.",
+        ].join("\n"),
+        html: [
+          "<p><strong>THE EYE</strong></p>",
+          `<p>Hello ${safeName},</p>`,
+          "<p>An administrator created a THE EYE operational account for you.</p>",
+          `<p><strong>Assigned role:</strong> ${safeRole}<br/><strong>Organisation:</strong> ${safeOrganisation}<br/><strong>Operational scope:</strong> ${safeScope}</p>`,
+          `<p><a href="${invitationLink}" style="display:inline-block;padding:12px 18px;background:#FF9933;color:#0B0F14;text-decoration:none;border-radius:8px;font-weight:700;">Activate account</a></p>`,
+          `<p>This one-time link expires at ${expiryText}.</p>`,
+          "<p>For help, contact the administrator who invited you or THE EYE support through the official support channel.</p>",
+          "<p>If you were not expecting this invitation, do not use the link.</p>",
+        ].join(""),
+      });
+      if (result.status === "ProviderAccepted") {
+        this.logger.log(`Operational account invitation accepted by SMTP for ${maskEmail(email)} host=${authLinkHostname(invitationBase) ?? "unknown"}`);
+        return;
+      }
+      throw new ServiceUnavailableException({
+        message: "Operational account invitation could not be sent. Try again shortly.",
+        code: "AUTH_DELIVERY_FAILED",
+      });
+    }
+
+    await this.dispatchWebhook(
+      this.config.get<string>("AUTH_ADMIN_INVITATION_WEBHOOK_URL"),
+      { type: "admin_invitation", email, token, expiresAt: expiresAt.toISOString() },
+      "operational account invitation",
     );
   }
 

@@ -288,10 +288,25 @@ enum CommunityLevel {
   Country
   State
   LGA
+  CityTown
   Ward
   Community
   Estate
   Street
+}
+
+enum AdminAccountStatus {
+  PendingActivation
+  Active
+  Deactivated
+}
+
+enum AdminInvitationStatus {
+  Pending
+  Sent
+  Accepted
+  Failed
+  Expired
 }
 
 enum CommunityVisibility {
@@ -759,25 +774,25 @@ model Country {
 }
 
 model AdministrativeState {
-  id                  String                  @id @default(uuid()) @db.Uuid
-  countryId           String                  @map("country_id") @db.Uuid
-  sourceId            String?                 @map("source_id") @db.Uuid
-  sourceRecordId      String?                 @map("source_record_id")
-  code                String
-  name                String
-  officialName        String                  @map("official_name")
-  type                AdministrativeStateType
-  slug                String
-  aliases             String[]                @default([])
-  isActive            Boolean                 @default(true) @map("is_active")
-  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  country             Country                 @relation(fields: [countryId], references: [id], onDelete: Restrict)
-  source              ReferenceDataSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  lgas                LocalGovernmentArea[]
-  jurisdictions       Jurisdiction[]          @relation("JurisdictionStateRef")
-  agencyOffices       AgencyOffice[]
-  agencyJurisdictions AgencyJurisdiction[]
+  id                    String                       @id @default(uuid()) @db.Uuid
+  countryId             String                       @map("country_id") @db.Uuid
+  sourceId              String?                      @map("source_id") @db.Uuid
+  sourceRecordId        String?                      @map("source_record_id")
+  code                  String
+  name                  String
+  officialName          String                       @map("official_name")
+  type                  AdministrativeStateType
+  slug                  String
+  aliases               String[]                     @default([])
+  isActive              Boolean                      @default(true) @map("is_active")
+  createdAt             DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  country               Country                      @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  source                ReferenceDataSource?         @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  lgas                  LocalGovernmentArea[]
+  jurisdictions         Jurisdiction[]               @relation("JurisdictionStateRef")
+  agencyOffices         AgencyOffice[]
+  agencyJurisdictions   AgencyJurisdiction[]
   recommendationReviews AgencyRecommendationReview[]
 
   @@unique([countryId, code])
@@ -1061,38 +1076,38 @@ model AgencyIncidentCapability {
 }
 
 model AgencyRecommendationReview {
-  id                         String                              @id @default(uuid()) @db.Uuid
-  incidentId                 String                              @map("incident_id") @db.Uuid
-  agencyId                   String                              @map("agency_id") @db.Uuid
-  stateId                    String                              @map("state_id") @db.Uuid
-  reviewerAdminId            String                              @map("reviewer_admin_id") @db.Uuid
-  previousReviewId           String?                             @map("previous_review_id") @db.Uuid
-  recommendationKey          String                              @map("recommendation_key")
-  recommendationRuleVersion  String                              @map("recommendation_rule_version")
-  agencyName                 String                              @map("agency_name")
-  endpointId                 String?                             @map("endpoint_id") @db.Uuid
-  endpointType               String                              @map("endpoint_type")
-  endpointName               String?                             @map("endpoint_name")
-  recommendationTier         String                              @map("recommendation_tier")
-  matchedCapability          String                              @map("matched_capability")
-  jurisdictionLevel          String                              @map("jurisdiction_level")
-  operationalReady           Boolean                             @map("operational_ready")
-  verificationState          String                              @map("verification_state")
-  qualifiedDistanceMeters    Int?                                @map("qualified_distance_meters")
-  reasons                    String[]                            @default([])
-  limitations                String[]                            @default([])
-  countryName                String                              @map("country_name")
-  stateName                  String                              @map("state_name")
-  incidentType               IncidentType                       @map("incident_type")
-  outcome                    AgencyRecommendationReviewOutcome
-  note                       String?
-  reviewedAt                 DateTime                            @default(now()) @map("reviewed_at") @db.Timestamptz(6)
-  incident                   Incident                            @relation(fields: [incidentId], references: [id], onDelete: Restrict)
-  agency                     Agency                              @relation(fields: [agencyId], references: [id], onDelete: Restrict)
-  state                      AdministrativeState                 @relation(fields: [stateId], references: [id], onDelete: Restrict)
-  reviewer                   AdminUser                           @relation(fields: [reviewerAdminId], references: [id], onDelete: Restrict)
-  previousReview             AgencyRecommendationReview?        @relation("AgencyRecommendationReviewHistory", fields: [previousReviewId], references: [id], onDelete: Restrict)
-  subsequentReviews          AgencyRecommendationReview[]        @relation("AgencyRecommendationReviewHistory")
+  id                        String                            @id @default(uuid()) @db.Uuid
+  incidentId                String                            @map("incident_id") @db.Uuid
+  agencyId                  String                            @map("agency_id") @db.Uuid
+  stateId                   String                            @map("state_id") @db.Uuid
+  reviewerAdminId           String                            @map("reviewer_admin_id") @db.Uuid
+  previousReviewId          String?                           @map("previous_review_id") @db.Uuid
+  recommendationKey         String                            @map("recommendation_key")
+  recommendationRuleVersion String                            @map("recommendation_rule_version")
+  agencyName                String                            @map("agency_name")
+  endpointId                String?                           @map("endpoint_id") @db.Uuid
+  endpointType              String                            @map("endpoint_type")
+  endpointName              String?                           @map("endpoint_name")
+  recommendationTier        String                            @map("recommendation_tier")
+  matchedCapability         String                            @map("matched_capability")
+  jurisdictionLevel         String                            @map("jurisdiction_level")
+  operationalReady          Boolean                           @map("operational_ready")
+  verificationState         String                            @map("verification_state")
+  qualifiedDistanceMeters   Int?                              @map("qualified_distance_meters")
+  reasons                   String[]                          @default([])
+  limitations               String[]                          @default([])
+  countryName               String                            @map("country_name")
+  stateName                 String                            @map("state_name")
+  incidentType              IncidentType                      @map("incident_type")
+  outcome                   AgencyRecommendationReviewOutcome
+  note                      String?
+  reviewedAt                DateTime                          @default(now()) @map("reviewed_at") @db.Timestamptz(6)
+  incident                  Incident                          @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+  agency                    Agency                            @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  state                     AdministrativeState               @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  reviewer                  AdminUser                         @relation(fields: [reviewerAdminId], references: [id], onDelete: Restrict)
+  previousReview            AgencyRecommendationReview?       @relation("AgencyRecommendationReviewHistory", fields: [previousReviewId], references: [id], onDelete: Restrict)
+  subsequentReviews         AgencyRecommendationReview[]      @relation("AgencyRecommendationReviewHistory")
 
   @@index([incidentId, recommendationKey, reviewedAt])
   @@index([recommendationRuleVersion, reviewedAt])
@@ -1117,18 +1132,25 @@ model AdminUser {
   roleId                            String                           @map("role_id") @db.Uuid
   agencyId                          String?                          @map("agency_id") @db.Uuid
   jurisdictionId                    String                           @map("jurisdiction_id") @db.Uuid
+  communityId                       String?                          @map("community_id") @db.Uuid
   email                             String                           @unique
   passwordHash                      String                           @map("password_hash")
   displayName                       String                           @map("display_name")
+  phone                             String?
   country                           String
   state                             String
   lga                               String
   isActive                          Boolean                          @default(true) @map("is_active")
+  accountStatus                     AdminAccountStatus               @default(Active) @map("account_status")
+  activatedAt                       DateTime?                        @map("activated_at") @db.Timestamptz(6)
   createdAt                         DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                         DateTime                         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   role                              AdminRole                        @relation(fields: [roleId], references: [id])
   agency                            Agency?                          @relation(fields: [agencyId], references: [id])
   jurisdiction                      Jurisdiction                     @relation(fields: [jurisdictionId], references: [id])
+  community                         Community?                       @relation(fields: [communityId], references: [id])
+  operationalInvitations            AdminAccountInvitation[]         @relation("OperationalAccountInvitee")
+  operationalInvitationsCreated     AdminAccountInvitation[]         @relation("OperationalAccountInviter")
   assignedIncidents                 Incident[]                       @relation("IncidentAssignedAdmin")
   broadcastsCreated                 Broadcast[]                      @relation("BroadcastCreator")
   broadcastsApproved                Broadcast[]                      @relation("BroadcastApprover")
@@ -1190,7 +1212,29 @@ model AdminUser {
 
   @@index([country, state, lga])
   @@index([jurisdictionId])
+  @@index([communityId])
+  @@index([accountStatus])
   @@map("admin_users")
+}
+
+model AdminAccountInvitation {
+  id               String                @id @default(uuid()) @db.Uuid
+  adminUserId      String                @map("admin_user_id") @db.Uuid
+  createdByAdminId String                @map("created_by_admin_id") @db.Uuid
+  tokenHash        String                @unique @map("token_hash")
+  status           AdminInvitationStatus @default(Pending)
+  expiresAt        DateTime              @map("expires_at") @db.Timestamptz(6)
+  sentAt           DateTime?             @map("sent_at") @db.Timestamptz(6)
+  acceptedAt       DateTime?             @map("accepted_at") @db.Timestamptz(6)
+  failedAt         DateTime?             @map("failed_at") @db.Timestamptz(6)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  adminUser        AdminUser             @relation("OperationalAccountInvitee", fields: [adminUserId], references: [id], onDelete: Cascade)
+  createdByAdmin   AdminUser             @relation("OperationalAccountInviter", fields: [createdByAdminId], references: [id])
+
+  @@index([adminUserId, status])
+  @@index([expiresAt])
+  @@map("admin_account_invitations")
 }
 
 model Incident {
@@ -2176,6 +2220,7 @@ model Community {
   alerts               CommunityAlert[]
   pinnedSafetyInfo     CommunityPinnedSafetyInfo[]
   homeProfiles         Profile[]                                    @relation("ProfileHomeCommunity")
+  operationalAdmins    AdminUser[]
 
   @@index([parentId])
   @@index([country, state, lga, ward])

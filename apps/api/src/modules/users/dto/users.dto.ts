@@ -16,10 +16,10 @@ import {
 } from "class-validator";
 
 export class CreateOperationalAdminDto {
-  @ApiProperty({ enum: ["field_officer", "lga_admin"] })
+  @ApiProperty({ enum: ["field_officer", "sub_state_admin", "state_admin", "agency_admin"] })
   @IsString()
-  @IsIn(["field_officer", "lga_admin"])
-  accountType!: "field_officer" | "lga_admin";
+  @IsIn(["field_officer", "sub_state_admin", "state_admin", "agency_admin"])
+  accountType!: "field_officer" | "sub_state_admin" | "state_admin" | "agency_admin";
 
   @ApiProperty({ example: "Officer Ada Okeke" })
   @IsString()
@@ -32,11 +32,11 @@ export class CreateOperationalAdminDto {
   @MaxLength(240)
   email!: string;
 
-  @ApiProperty({ minLength: 12, maxLength: 128, writeOnly: true })
+  @ApiPropertyOptional({ example: "+2348012345678" })
+  @IsOptional()
   @IsString()
-  @MinLength(12)
-  @MaxLength(128)
-  password!: string;
+  @MaxLength(20)
+  phone?: string;
 
   @ApiPropertyOptional({ description: "Required for field officer accounts" })
   @IsOptional()
@@ -47,6 +47,25 @@ export class CreateOperationalAdminDto {
   @IsOptional()
   @IsUUID()
   jurisdictionId?: string;
+
+  @ApiPropertyOptional({ description: "Optional canonical community/neighborhood scope for a Sub-State Admin" })
+  @IsOptional()
+  @IsUUID()
+  communityId?: string;
+}
+
+export class AcceptOperationalAdminInvitationDto {
+  @ApiProperty({ writeOnly: true })
+  @IsString()
+  @MinLength(20)
+  @MaxLength(512)
+  token!: string;
+
+  @ApiProperty({ minLength: 12, maxLength: 128, writeOnly: true })
+  @IsString()
+  @MinLength(12)
+  @MaxLength(128)
+  password!: string;
 }
 
 export class UpdateCitizenProfileDto {

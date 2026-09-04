@@ -10,6 +10,8 @@ export const AUTH_URL_ERROR_CODES = {
   WRONG_ENVIRONMENT_HOST: "AUTH-URL-004",
   MISSING_RESET_BASE: "AUTH-URL-005",
   MISSING_RECOVERY_BASE: "AUTH-URL-006",
+  INVALID_ADMIN_INVITATION_BASE: "AUTH-URL-007",
+  MISSING_ADMIN_INVITATION_BASE: "AUTH-URL-008",
 } as const;
 
 export type AuthUrlErrorCode = (typeof AUTH_URL_ERROR_CODES)[keyof typeof AUTH_URL_ERROR_CODES];
@@ -24,7 +26,7 @@ export class AuthRecoveryUrlError extends Error {
   }
 }
 
-export type AuthLinkKind = "password_reset" | "account_recovery";
+export type AuthLinkKind = "password_reset" | "account_recovery" | "admin_invitation";
 
 /** Hosts with validated citizen-facing TLS for staging recovery pages. */
 const STAGING_ALLOWED_HOSTS = new Set([
@@ -62,6 +64,10 @@ export function resolveAccountRecoveryBaseUrl(env: Record<string, unknown> | Nod
       env.AUTH_RECOVERY_DEEP_LINK_BASE ??
       "",
   ).trim();
+}
+
+export function resolveAdminInvitationBaseUrl(env: Record<string, unknown> | NodeJS.ProcessEnv): string {
+  return String(env.ADMIN_INVITATION_LINK_BASE_URL ?? "").trim();
 }
 
 function appEnvironment(env: Record<string, unknown> | NodeJS.ProcessEnv = process.env): string {
@@ -112,13 +118,19 @@ function assertAllowedHost(hostname: string, envKey: string, env: Record<string,
 }
 
 function assertPath(kind: AuthLinkKind, pathname: string, envKey: string): void {
-  const expected = kind === "password_reset" ? "/reset-password" : "/account-recovery";
+  const expected = kind === "password_reset"
+    ? "/reset-password"
+    : kind === "account_recovery"
+      ? "/account-recovery"
+      : "/activate-account";
   const normalized = pathname.replace(/\/$/, "") || "/";
   if (normalized !== expected) {
     throw new AuthRecoveryUrlError(
       kind === "password_reset"
         ? AUTH_URL_ERROR_CODES.INVALID_RESET_BASE
-        : AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE,
+        : kind === "account_recovery"
+          ? AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE
+          : AUTH_URL_ERROR_CODES.INVALID_ADMIN_INVITATION_BASE,
       `${envKey}: path must be ${expected}`,
     );
   }
@@ -135,7 +147,11 @@ export function validateAuthLinkBaseUrl(
 ): URL {
   const envKey =
     options.envKey ??
-    (kind === "password_reset" ? "PASSWORD_RESET_LINK_BASE_URL" : "ACCOUNT_RECOVERY_LINK_BASE_URL");
+    (kind === "password_reset"
+      ? "PASSWORD_RESET_LINK_BASE_URL"
+      : kind === "account_recovery"
+        ? "ACCOUNT_RECOVERY_LINK_BASE_URL"
+        : "ADMIN_INVITATION_LINK_BASE_URL");
   const env = options.env ?? process.env;
   const trimmed = baseUrl.trim();
 
@@ -144,10 +160,14 @@ export function validateAuthLinkBaseUrl(
       options.requirePresent
         ? kind === "password_reset"
           ? AUTH_URL_ERROR_CODES.MISSING_RESET_BASE
-          : AUTH_URL_ERROR_CODES.MISSING_RECOVERY_BASE
+          : kind === "account_recovery"
+            ? AUTH_URL_ERROR_CODES.MISSING_RECOVERY_BASE
+            : AUTH_URL_ERROR_CODES.MISSING_ADMIN_INVITATION_BASE
         : kind === "password_reset"
           ? AUTH_URL_ERROR_CODES.INVALID_RESET_BASE
-          : AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE,
+          : kind === "account_recovery"
+            ? AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE
+            : AUTH_URL_ERROR_CODES.INVALID_ADMIN_INVITATION_BASE,
       `${envKey} is empty`,
     );
   }
@@ -159,7 +179,9 @@ export function validateAuthLinkBaseUrl(
     throw new AuthRecoveryUrlError(
       kind === "password_reset"
         ? AUTH_URL_ERROR_CODES.INVALID_RESET_BASE
-        : AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE,
+        : kind === "account_recovery"
+          ? AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE
+          : AUTH_URL_ERROR_CODES.INVALID_ADMIN_INVITATION_BASE,
       `${envKey} must be a valid URL`,
     );
   }
@@ -178,7 +200,9 @@ export function validateAuthLinkBaseUrl(
     throw new AuthRecoveryUrlError(
       kind === "password_reset"
         ? AUTH_URL_ERROR_CODES.INVALID_RESET_BASE
-        : AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE,
+        : kind === "account_recovery"
+          ? AUTH_URL_ERROR_CODES.INVALID_RECOVERY_BASE
+          : AUTH_URL_ERROR_CODES.INVALID_ADMIN_INVITATION_BASE,
       `${envKey} must not include query or hash (token is appended at send time)`,
     );
   }
@@ -205,6 +229,7 @@ export function buildAuthActionLink(
 export function assertStagingAuthLinkBases(config: Record<string, unknown>): void {
   const resetBase = resolvePasswordResetBaseUrl(config);
   const recoveryBase = resolveAccountRecoveryBaseUrl(config);
+  const invitationBase = resolveAdminInvitationBaseUrl(config);
 
   if (resetBase) {
     validateAuthLinkBaseUrl(resetBase, "password_reset", {
@@ -215,6 +240,12 @@ export function assertStagingAuthLinkBases(config: Record<string, unknown>): voi
   if (recoveryBase) {
     validateAuthLinkBaseUrl(recoveryBase, "account_recovery", {
       envKey: "ACCOUNT_RECOVERY_LINK_BASE_URL",
+      env: config,
+    });
+  }
+  if (invitationBase) {
+    validateAuthLinkBaseUrl(invitationBase, "admin_invitation", {
+      envKey: "ADMIN_INVITATION_LINK_BASE_URL",
       env: config,
     });
   }
