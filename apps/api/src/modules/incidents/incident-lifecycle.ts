@@ -5,6 +5,7 @@ import type { JwtPayload } from "../../common/auth/jwt";
 export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]> = {
   [IncidentStatus.Submitted]: [
     IncidentStatus.Received,
+    IncidentStatus.Resolved,
     IncidentStatus.Ended,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
@@ -12,6 +13,7 @@ export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]
   ],
   [IncidentStatus.Received]: [
     IncidentStatus.Verifying,
+    IncidentStatus.Resolved,
     IncidentStatus.Ended,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
@@ -19,6 +21,7 @@ export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]
   ],
   [IncidentStatus.Verifying]: [
     IncidentStatus.Verified,
+    IncidentStatus.Resolved,
     IncidentStatus.Ended,
     IncidentStatus.FalseReport,
     IncidentStatus.CancelledByReporter,
@@ -34,12 +37,14 @@ export const allowedIncidentTransitions: Record<IncidentStatus, IncidentStatus[]
   ],
   [IncidentStatus.Assigned]: [
     IncidentStatus.Responding,
+    IncidentStatus.Resolved,
     IncidentStatus.Ended,
     IncidentStatus.CancellationRequested,
     IncidentStatus.FalseReport,
   ],
   [IncidentStatus.Responding]: [
     IncidentStatus.UnderControl,
+    IncidentStatus.Resolved,
     IncidentStatus.Ended,
     IncidentStatus.CancellationRequested,
     IncidentStatus.FalseReport,

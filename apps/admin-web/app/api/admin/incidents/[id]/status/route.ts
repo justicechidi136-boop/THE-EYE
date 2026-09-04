@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiRequest } from "../../../../../../lib/api/client";
+import { ApiError, apiRequest } from "../../../../../../lib/api/client";
 import { getAccessToken } from "../../../../../../lib/session";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -23,6 +23,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ ok: true, data: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Status update failed";
-    return NextResponse.json({ message }, { status: 400 });
+    return NextResponse.json({ message }, { status: error instanceof ApiError ? error.status : 500 });
   }
 }

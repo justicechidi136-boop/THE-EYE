@@ -104,6 +104,8 @@ export type PaginatedResponse<T> = {
   nextCursor: string | null;
   hasMore: boolean;
   limit: number;
+  page?: number;
+  totalPages?: number;
 };
 
 export type IncidentPageMetrics = {
@@ -154,12 +156,13 @@ async function withNwToken<T>(fn: (token: string) => Promise<T>): Promise<T> {
   return fn(token);
 }
 
-export async function fetchIncidents(filters: { status?: string; priority?: string; type?: string } = {}): Promise<Incident[]> {
+export async function fetchIncidents(filters: { status?: string; priority?: string; type?: string; q?: string } = {}): Promise<Incident[]> {
   return withToken(async (token) => {
     const rows = await fetchAllPages<Record<string, unknown>>("/incidents", token, {
       status: filters.status,
       priority: filters.priority,
       type: filters.type,
+      q: filters.q,
     });
     return rows.map(toIncidentView);
   }, []);
@@ -171,7 +174,7 @@ export async function fetchIncidentsPage(
   return withToken(async (token) => {
     const response = await apiRequest<PaginatedResponse<Record<string, unknown>> & { meta?: IncidentPageMetrics }>("/incidents", {
       token,
-      query: { ...query, limit: query.limit ?? ADMIN_LIST_PAGE_SIZE },
+      query: { ...query, limit: query.limit ?? "20" },
     });
     return {
       ...response,

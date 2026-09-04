@@ -96,6 +96,10 @@ export class IncidentsService {
     query: CursorPageQuery = {},
   ) {
     const limit = resolvePageLimit(query.limit);
+    const requestedPage = Number.parseInt(String(query.page ?? ""), 10);
+    const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : undefined;
+    if (query.page != null && page == null) throw new BadRequestException("page must be a positive integer");
+    if (page && query.cursor?.trim()) throw new BadRequestException("page and cursor cannot be combined");
     if (query.cursor?.trim() && !decodeDateIdCursor(query.cursor)) {
       throw new BadRequestException("cursor is invalid");
     }
@@ -121,18 +125,6 @@ export class IncidentsService {
       : {};
     const scopeWhere = this.incidentScopeWhere(actor);
     const filteredScopeWhere = { AND: [scopeWhere, filterWhere, searchWhere] };
-    const rows = await this.prisma.incident.findMany({
-      where: { AND: [scopeWhere, filterWhere, searchWhere, dateIdCursorWhere(cursor)] } as never,
-      include: {
-        media: true,
-        reporter: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
-        timeline: { orderBy: { createdAt: "desc" }, take: 10 },
-        statusHistory: { orderBy: { createdAt: "desc" }, take: 5 },
-        locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 },
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: limit + 1,
-    });
     const activeStatuses = [
       IncidentStatus.Submitted,
       IncidentStatus.Received,
@@ -143,14 +135,29 @@ export class IncidentsService {
       IncidentStatus.UnderControl,
       IncidentStatus.CancellationRequested,
     ];
-    const [totalReports, activeReports, criticalReports, verifyingReports] = await Promise.all([
+    const [rows, totalReports, activeReports, criticalReports, verifyingReports] = await Promise.all([
+      this.prisma.incident.findMany({
+        where: { AND: [scopeWhere, filterWhere, searchWhere, page ? {} : dateIdCursorWhere(cursor)] } as never,
+        include: {
+          media: true,
+          reporter: { select: { id: true, profile: { select: { firstName: true, lastName: true } } } },
+          timeline: { orderBy: { createdAt: "desc" }, take: 10 },
+          statusHistory: { orderBy: { createdAt: "desc" }, take: 5 },
+          locationUpdates: { orderBy: { capturedAt: "desc" }, take: 1 },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        ...(page ? { skip: (page - 1) * limit, take: limit } : { take: limit + 1 }),
+      }),
       this.prisma.incident.count({ where: filteredScopeWhere as never }),
       this.prisma.incident.count({ where: { AND: [filteredScopeWhere, { status: { in: activeStatuses } }] } as never }),
       this.prisma.incident.count({ where: { AND: [filteredScopeWhere, { priority: IncidentPriority.P1LifeThreatening }] } as never }),
       this.prisma.incident.count({ where: { AND: [filteredScopeWhere, { status: IncidentStatus.Verifying }] } as never }),
     ]);
+    const result = page
+      ? { data: rows, nextCursor: null, hasMore: page * limit < totalReports, limit, page, totalPages: Math.max(1, Math.ceil(totalReports / limit)) }
+      : buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id));
     return {
-      ...buildCursorPage(rows, limit, (item) => encodeDateIdCursor(item.createdAt, item.id)),
+      ...result,
       meta: { totalReports, activeReports, criticalReports, verifyingReports },
     };
   }
@@ -638,7 +645,8 @@ export class IncidentsService {
     if (!dto.reason?.trim()) throw new BadRequestException("A reassignment reason is required");
     const incident = await this.get(id, actor);
     const currentStatus = incident.status as IncidentStatus;
-    const nextStatus = IncidentStatus.Assigned;
+    const keepOperationalStatus = [IncidentStatus.Assigned, IncidentStatus.Responding, IncidentStatus.UnderControl, IncidentStatus.CancellationRequested].includes(currentStatus);
+    const nextStatus = keepOperationalStatus ? currentStatus : IncidentStatus.Assigned;
     if (currentStatus !== nextStatus && !canTransitionIncident(currentStatus, nextStatus)) {
       throw new BadRequestException(`Incident cannot move from ${currentStatus} to ${nextStatus}`);
     }
@@ -1321,7 +1329,7 @@ export class IncidentsService {
         create: {
           fromStatus: currentStatus as never,
           toStatus: nextStatus as never,
-          changedById: options.actor?.sub,
+          changedById: options.actor?.typ === "user" ? options.actor.sub : undefined,
           note: options.note ?? `Status changed from ${currentStatus} to ${nextStatus}`,
         },
       },

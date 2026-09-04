@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./form-primitives";
 import type { AgencyView } from "../lib/types/admin-views";
 
@@ -21,6 +21,10 @@ export function IncidentAdminActions({ incidentId, currentStatus, agencies }: Pr
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [action, setAction] = useState<ActionKind | null>(null);
+
+  useEffect(() => {
+    setStatus(currentStatus);
+  }, [currentStatus]);
 
   const actionCopy = action === "assign"
     ? { title: "Reassign agency", label: "Reason for reassignment", confirm: "Confirm reassignment" }

@@ -86,6 +86,12 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
   const reporterProfile = (reporter.profile as Record<string, unknown> | undefined) ?? {};
   const reporterName = [reporterProfile.firstName, reporterProfile.lastName].filter(Boolean).join(" ");
   const anonymous = Boolean(record.isAnonymous);
+  const metadata = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+    ? record.metadata as Record<string, unknown>
+    : {};
+  const metadataLocation = metadata.location && typeof metadata.location === "object" && !Array.isArray(metadata.location)
+    ? metadata.location as Record<string, unknown>
+    : {};
 
   return {
     id: String(record.id),
@@ -113,7 +119,24 @@ export function toIncidentView(record: Record<string, unknown>): Incident {
     reportingMode: anonymous ? "Anonymous" : "Identified",
     assignedAgency: String((record.assignedAgency as { name?: string } | undefined)?.name ?? record.assignedAgencyId ?? "Unassigned"),
     responseStatus: String(record.status ?? "Submitted"),
-    location: humanLocation([record.address, record.lga, record.state, record.country]),
+    location: humanLocation([
+      record.manualAddress,
+      record.address,
+      metadata.communityName,
+      metadata.community,
+      metadata.neighborhood,
+      metadata.neighbourhood,
+      metadataLocation.community,
+      metadataLocation.neighborhood,
+      metadataLocation.neighbourhood,
+      metadata.town,
+      metadata.city,
+      metadataLocation.town,
+      metadataLocation.city,
+      record.lga,
+      record.state,
+      record.country,
+    ]),
     timeline: [...timeline.map((entry) => {
       const item = entry as Record<string, unknown>;
       return {

@@ -69,6 +69,23 @@ describe("IncidentsService.list pagination", () => {
     );
   });
 
+  it("supports numbered Admin pages with an authoritative total", async () => {
+    const { service, prisma } = createListService();
+    prisma.incident.findMany.mockResolvedValue([{ id: "page-two", createdAt: new Date(), priority: "P2ActiveCrimeAccident" }]);
+    prisma.incident.count.mockResolvedValueOnce(41).mockResolvedValueOnce(20).mockResolvedValueOnce(4).mockResolvedValueOnce(3);
+
+    const result = await service.list(undefined, {}, { page: "2", limit: "20" });
+
+    expect(result).toEqual(expect.objectContaining({ page: 2, totalPages: 3, limit: 20, hasMore: true }));
+    expect(prisma.incident.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 20, take: 20 }));
+  });
+
+  it("rejects mixed cursor and numbered pagination", async () => {
+    const { service, prisma } = createListService();
+    await expect(service.list(undefined, {}, { page: "2", cursor: "opaque" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.incident.findMany).not.toHaveBeenCalled();
+  });
+
   it("returns HTTP 400 for malformed cursors instead of Prisma 500", async () => {
     const { service, prisma } = createListService();
 

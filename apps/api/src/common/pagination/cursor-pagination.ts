@@ -4,6 +4,7 @@ export const MAX_PAGE_LIMIT = 100;
 export type CursorPageQuery = {
   cursor?: string;
   limit?: string | number;
+  page?: string | number;
 };
 
 export type CursorPage<T> = {
